@@ -15,7 +15,9 @@ interface PropertyCardProps {
   apartment: Apartment;
   userPreferences?: UserPreferences;
   onContact?: () => void;
+  onViewProfile?: () => void;
   showContactButton?: boolean;
+  showViewProfileButton?: boolean;
   className?: string;
   showFullTitle?: boolean;
   showFullDescription?: boolean;
@@ -27,7 +29,9 @@ export const PropertyCard = ({
   apartment, 
   userPreferences, 
   onContact, 
+  onViewProfile,
   showContactButton = true,
+  showViewProfileButton = false,
   className = "",
   showFullTitle = false,
   showFullDescription = false,
@@ -205,6 +209,15 @@ export const PropertyCard = ({
               onClick={onContact}
             >
               Contact
+            </Button>
+          )}
+          {showViewProfileButton && onViewProfile && (
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={onViewProfile}
+            >
+              View Profile
             </Button>
           )}
         </div>

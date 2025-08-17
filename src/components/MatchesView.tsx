@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/pages/Index';
 import { PropertyCard } from '@/components/PropertyCard';
 import { ContactModal } from '@/components/ContactModal';
+import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
@@ -26,6 +27,7 @@ interface MatchesViewProps {
 
 export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) => {
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null);
+  const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
   const { renterMatches, isLoadingMatches, removeMatch, isRemovingMatch } = useMatches();
 
@@ -96,8 +98,9 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
                 <PropertyCard
                   apartment={apartment}
                   userPreferences={userPreferences}
-                  onContact={() => setSelectedApartment(apartment)}
-                  showContactButton={true}
+                  onViewProfile={() => setSelectedRealtorId(apartment.realtor.id)}
+                  showContactButton={false}
+                  showViewProfileButton={true}
                   showFullTitle={true}
                   showFullDescription={false}
                   showAllHighlights={true}
@@ -146,6 +149,14 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
           apartment={selectedApartment}
           onClose={() => setSelectedApartment(null)}
           userProfile={userProfile}
+        />
+      )}
+
+      {selectedRealtorId && (
+        <RealtorProfileModal
+          realtorId={selectedRealtorId}
+          isOpen={!!selectedRealtorId}
+          onClose={() => setSelectedRealtorId(null)}
         />
       )}
 
