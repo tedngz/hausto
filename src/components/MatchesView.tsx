@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, MessageCircle } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/pages/Index';
 import { PropertyCard } from '@/components/PropertyCard';
 import { ContactModal } from '@/components/ContactModal';
@@ -8,6 +8,7 @@ import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
+import { DirectMessagingModal } from '@/components/DirectMessagingModal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +30,7 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null);
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
+  const [directMessageMatchId, setDirectMessageMatchId] = useState<string | null>(null);
   const { renterMatches, isLoadingMatches, removeMatch, isRemovingMatch } = useMatches();
 
   const transformMatchToApartment = (match: any): Apartment => {
@@ -99,7 +101,8 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
                   apartment={apartment}
                   userPreferences={userPreferences}
                   onViewProfile={() => setSelectedRealtorId(apartment.realtor.id)}
-                  showContactButton={false}
+                  onContact={() => setDirectMessageMatchId(apartment.matchId!)}
+                  showContactButton={true}
                   showViewProfileButton={true}
                   showFullTitle={true}
                   showFullDescription={false}
@@ -166,6 +169,14 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
           isOpen={!!detailModalApartment}
           onClose={() => setDetailModalApartment(null)}
           userPreferences={userPreferences}
+        />
+      )}
+
+      {directMessageMatchId && (
+        <DirectMessagingModal
+          isOpen={!!directMessageMatchId}
+          onClose={() => setDirectMessageMatchId(null)}
+          initialMatchId={directMessageMatchId}
         />
       )}
     </div>

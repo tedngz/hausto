@@ -10,6 +10,8 @@ import { Apartment } from '@/pages/Index';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { RenterProfileModal } from '@/components/RenterProfileModal';
+import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +33,8 @@ interface DirectMessagingModalProps {
 export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: DirectMessagingModalProps) => {
   const { user } = useAuth();
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
+  const [selectedRenterId, setSelectedRenterId] = useState<string | null>(null);
+  const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const {
     conversations,
     messages,
@@ -148,11 +152,21 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                             <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm">
                               {isRealtor ? 'R' : 'O'}
                             </AvatarFallback>
-                          </Avatar>
-                           <div className="flex-1 min-w-0">
-                             <p className="font-medium text-sm text-gray-900 truncate">
-                               {isRealtor ? 'Interested Renter' : 'Property Owner'}
-                             </p>
+                           </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isRealtor) {
+                                    setSelectedRenterId(match?.renter_id || '');
+                                  } else {
+                                    setSelectedRealtorId(match?.realtor_id || '');
+                                  }
+                                }}
+                                className="font-medium text-sm text-gray-900 truncate hover:text-blue-600 hover:underline text-left block"
+                              >
+                                {isRealtor ? (conversation as any).renter_name || 'Interested Renter' : (conversation as any).realtor_name || 'Property Owner'}
+                              </button>
                                <button 
                                  onClick={() => {
                                    if (property) {
@@ -206,11 +220,24 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                       <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm">
                         {user?.id === currentMatch.realtor_id ? 'R' : 'O'}
                       </AvatarFallback>
-                    </Avatar>
-                     <div>
-                       <h4 className="font-medium text-gray-900 text-sm">
-                         {user?.id === currentMatch.realtor_id ? 'Interested Renter' : 'Property Owner'}
-                       </h4>
+                     </Avatar>
+                      <div>
+                        <button 
+                          onClick={() => {
+                            const isUserRealtor = user?.id === currentMatch.realtor_id;
+                            if (isUserRealtor) {
+                              setSelectedRenterId(currentMatch.renter_id);
+                            } else {
+                              setSelectedRealtorId(currentMatch.realtor_id);
+                            }
+                          }}
+                          className="font-medium text-gray-900 text-sm hover:text-blue-600 hover:underline text-left block"
+                        >
+                          {user?.id === currentMatch.realtor_id ? 
+                            (currentConversation as any).renter_name || 'Interested Renter' : 
+                            (currentConversation as any).realtor_name || 'Property Owner'
+                          }
+                        </button>
                             <button 
                               onClick={() => {
                                 if (currentMatch.properties) {
@@ -349,6 +376,22 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
           apartment={detailModalApartment}
           isOpen={!!detailModalApartment}
           onClose={() => setDetailModalApartment(null)}
+        />
+      )}
+
+      {selectedRenterId && (
+        <RenterProfileModal
+          userId={selectedRenterId}
+          isOpen={!!selectedRenterId}
+          onClose={() => setSelectedRenterId(null)}
+        />
+      )}
+
+      {selectedRealtorId && (
+        <RealtorProfileModal
+          realtorId={selectedRealtorId}
+          isOpen={!!selectedRealtorId}
+          onClose={() => setSelectedRealtorId(null)}
         />
       )}
     </div>

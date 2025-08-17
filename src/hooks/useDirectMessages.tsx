@@ -76,6 +76,30 @@ export const useDirectMessages = () => {
         console.error('Error fetching conversations:', error);
         throw error;
       }
+
+      // Get names for all users in conversations
+      if (data && data.length > 0) {
+        const userIds = data.flatMap(conv => [
+          conv.property_matches?.renter_id,
+          conv.property_matches?.realtor_id
+        ]).filter(Boolean) as string[];
+
+        const { data: profiles, error: profilesError } = await supabase
+          .rpc('get_matched_public_profiles', { user_ids: userIds });
+
+        if (profilesError) {
+          console.error('Error fetching user profiles:', profilesError);
+        }
+
+        // Map names to conversations
+        const conversationsWithNames = data.map(conv => ({
+          ...conv,
+          renter_name: profiles?.find(p => p.id === conv.property_matches?.renter_id)?.name || 'Interested Renter',
+          realtor_name: profiles?.find(p => p.id === conv.property_matches?.realtor_id)?.name || 'Property Owner'
+        }));
+
+        return conversationsWithNames as MatchConversation[];
+      }
       
       console.log('Conversations fetched successfully:', data);
       return data as MatchConversation[];
