@@ -8,7 +8,7 @@ import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
-import { DirectMessagingModal } from '@/components/DirectMessagingModal';
+import { AIChatAgent } from '@/components/AIChatAgent';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +30,8 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null);
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
-  const [directMessageMatchId, setDirectMessageMatchId] = useState<string | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const { renterMatches, isLoadingMatches, removeMatch, isRemovingMatch } = useMatches();
 
   const transformMatchToApartment = (match: any): Apartment => {
@@ -101,7 +102,10 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
                   apartment={apartment}
                   userPreferences={userPreferences}
                   onViewProfile={() => setSelectedRealtorId(apartment.realtor.id)}
-                  onContact={() => setDirectMessageMatchId(apartment.matchId!)}
+                  onContact={() => {
+                    setSelectedMatchId(apartment.matchId!);
+                    setIsChatOpen(true);
+                  }}
                   showContactButton={true}
                   showViewProfileButton={true}
                   showFullTitle={true}
@@ -172,13 +176,16 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
         />
       )}
 
-      {directMessageMatchId && (
-        <DirectMessagingModal
-          isOpen={!!directMessageMatchId}
-          onClose={() => setDirectMessageMatchId(null)}
-          initialMatchId={directMessageMatchId}
-        />
-      )}
+      <AIChatAgent
+        isOpen={isChatOpen}
+        onClose={() => {
+          setIsChatOpen(false);
+          setSelectedMatchId(null);
+        }}
+        userPreferences={userPreferences}
+        userType="renter"
+        initialMatchId={selectedMatchId}
+      />
     </div>
   );
 };

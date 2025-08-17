@@ -19,6 +19,7 @@ interface AIChatAgentProps {
   userPreferences?: any;
   userType: 'renter' | 'realtor';
   propertyImages?: string[];
+  initialMatchId?: string | null;
 }
 
 export const AIChatAgent = ({ 
@@ -26,7 +27,8 @@ export const AIChatAgent = ({
   onClose, 
   userPreferences, 
   userType,
-  propertyImages = [] 
+  propertyImages = [],
+  initialMatchId = null
 }: AIChatAgentProps) => {
   const [inputMessage, setInputMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'ai' | 'messages'>('messages');
@@ -98,6 +100,14 @@ export const AIChatAgent = ({
       markAsRead(selectedMatch);
     }
   }, [activeTab, selectedMatch, directMessages.length, markAsRead]);
+
+  // Set initial match when provided
+  useEffect(() => {
+    if (initialMatchId && isOpen) {
+      setSelectedMatch(initialMatchId);
+      setActiveTab('messages');
+    }
+  }, [initialMatchId, isOpen]);
 
   const handleSendMessage = () => {
     if (!inputMessage.trim()) return;
