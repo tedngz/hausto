@@ -11,6 +11,8 @@ import { useMatches } from '@/hooks/useMatches';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { RealtorProfileModal } from '@/components/RealtorProfileModal';
+import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { Apartment } from '@/pages/Index';
 
 interface AIChatAgentProps {
@@ -35,6 +37,8 @@ export const AIChatAgent = ({
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string>('');
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
+  const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
+  const [selectedRenterId, setSelectedRenterId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { formatPrice } = useCurrency();
@@ -227,7 +231,8 @@ export const AIChatAgent = ({
                   {/* User conversations */}
                   {matches.map((match) => {
                     const isRealtor = userType === 'realtor';
-                    const otherUserName = isRealtor ? 'Interested Renter' : 'Property Owner';
+                    const otherUserName = isRealtor ? match.renter_name : match.realtor_name;
+                    const otherUserId = isRealtor ? match.renter_id : match.realtor_id;
                     
                     return (
                       <div
@@ -240,8 +245,18 @@ export const AIChatAgent = ({
                             {isRealtor ? 'R' : 'P'}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 mb-1">
-                              {otherUserName}
+                            <p 
+                              className="font-medium text-gray-900 mb-1 hover:text-orange-600 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isRealtor) {
+                                  setSelectedRenterId(otherUserId);
+                                } else {
+                                  setSelectedRealtorId(otherUserId);
+                                }
+                              }}
+                            >
+                              {otherUserName || (isRealtor ? 'Interested Renter' : 'Property Owner')}
                             </p>
                             <p className="text-sm text-gray-600 truncate mb-2">{match.properties?.title}</p>
                             <div className="flex items-center mb-2">
@@ -431,9 +446,29 @@ export const AIChatAgent = ({
                     {userType === 'realtor' ? 'R' : 'P'}
                   </div>
                   <div>
-                    <h4 className="font-semibold text-gray-900">
-                      {userType === 'realtor' ? 'Interested Renter' : 'Property Owner'}
-                    </h4>
+                    {(() => {
+                      const currentMatch = matches.find(m => m.id === selectedMatch);
+                      const isRealtor = userType === 'realtor';
+                      const otherUserName = isRealtor ? currentMatch?.renter_name : currentMatch?.realtor_name;
+                      const otherUserId = isRealtor ? currentMatch?.renter_id : currentMatch?.realtor_id;
+                      
+                      return (
+                        <>
+                          <h4 
+                            className="font-semibold text-gray-900 hover:text-orange-600 cursor-pointer"
+                            onClick={() => {
+                              if (isRealtor) {
+                                setSelectedRenterId(otherUserId);
+                              } else {
+                                setSelectedRealtorId(otherUserId);
+                              }
+                            }}
+                          >
+                            {otherUserName || (isRealtor ? 'Interested Renter' : 'Property Owner')}
+                          </h4>
+                        </>
+                      );
+                    })()}
                     <button
                       onClick={() => {
                         const currentMatch = matches.find(m => m.id === selectedMatch);
@@ -482,7 +517,7 @@ export const AIChatAgent = ({
                       const isRealtor = userType === 'realtor';
                       const senderName = isOwnMessage 
                         ? 'You' 
-                        : (isRealtor ? 'Renter' : 'Property Owner');
+                        : (isRealtor ? (currentMatch?.renter_name || 'Renter') : (currentMatch?.realtor_name || 'Property Owner'));
                       
                       return (
                         <div
@@ -549,6 +584,22 @@ export const AIChatAgent = ({
             userPreferences={userPreferences}
             isOpen={!!detailModalApartment}
             onClose={() => setDetailModalApartment(null)}
+          />
+        )}
+
+        {selectedRealtorId && (
+          <RealtorProfileModal
+            realtorId={selectedRealtorId}
+            isOpen={!!selectedRealtorId}
+            onClose={() => setSelectedRealtorId(null)}
+          />
+        )}
+
+        {selectedRenterId && (
+          <RenterProfileModal
+            userId={selectedRenterId}
+            isOpen={!!selectedRenterId}
+            onClose={() => setSelectedRenterId(null)}
           />
         )}
       </DialogContent>
