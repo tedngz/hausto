@@ -10,6 +10,8 @@ export interface PropertyMatch {
   realtor_id: string;
   created_at: string;
   updated_at: string;
+  renter_name?: string;
+  realtor_name?: string;
   properties?: {
     id: string;
     title: string;
@@ -17,6 +19,11 @@ export interface PropertyMatch {
     price: number;
     vibe: string | null;
     images: string[] | null;
+    description?: string;
+    highlights?: string[];
+    size?: string;
+    realtor_id?: string;
+    vibe_analysis?: any;
   };
 }
 
@@ -31,7 +38,7 @@ export const useMatches = () => {
     queryFn: async () => {
       if (!user?.id) return [];
       
-      const { data, error } = await supabase
+      const { data: matches, error } = await supabase
         .from('property_matches')
         .select(`
           *,
@@ -53,7 +60,27 @@ export const useMatches = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as PropertyMatch[];
+
+      // Get renter names for all matches
+      if (matches && matches.length > 0) {
+        const renterIds = matches.map(match => match.renter_id);
+        const { data: profiles, error: profilesError } = await supabase
+          .rpc('get_matched_public_profiles', { user_ids: renterIds });
+
+        if (profilesError) {
+          console.error('Error fetching renter profiles:', profilesError);
+        }
+
+        // Map names to matches
+        const matchesWithNames = matches.map(match => ({
+          ...match,
+          renter_name: profiles?.find(p => p.id === match.renter_id)?.name || 'Anonymous Renter'
+        }));
+
+        return matchesWithNames as PropertyMatch[];
+      }
+
+      return matches as PropertyMatch[];
     },
     enabled: !!user?.id,
   });
@@ -64,7 +91,7 @@ export const useMatches = () => {
     queryFn: async () => {
       if (!user?.id) return [];
       
-      const { data, error } = await supabase
+      const { data: matches, error } = await supabase
         .from('property_matches')
         .select(`
           *,
@@ -86,7 +113,27 @@ export const useMatches = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as PropertyMatch[];
+
+      // Get realtor names for all matches
+      if (matches && matches.length > 0) {
+        const realtorIds = matches.map(match => match.properties?.realtor_id).filter(Boolean);
+        const { data: profiles, error: profilesError } = await supabase
+          .rpc('get_matched_public_profiles', { user_ids: realtorIds });
+
+        if (profilesError) {
+          console.error('Error fetching realtor profiles:', profilesError);
+        }
+
+        // Map names to matches
+        const matchesWithNames = matches.map(match => ({
+          ...match,
+          realtor_name: profiles?.find(p => p.id === match.properties?.realtor_id)?.name || 'Property Owner'
+        }));
+
+        return matchesWithNames as PropertyMatch[];
+      }
+
+      return matches as PropertyMatch[];
     },
     enabled: !!user?.id,
   });

@@ -216,9 +216,14 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                       <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center text-white font-semibold text-sm lg:text-base">
                         R
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-medium text-slate-900 text-sm lg:text-base">Interested Renter</h3>
-                        <p className="text-xs lg:text-sm text-slate-600">{match.properties?.title}</p>
+                       <div className="flex-1">
+                         <button 
+                           className="font-medium text-slate-900 text-sm lg:text-base hover:text-primary transition-colors text-left"
+                           onClick={() => handleViewProfile(match)}
+                         >
+                           {match.renter_name || 'Anonymous Renter'}
+                         </button>
+                         <p className="text-xs lg:text-sm text-slate-600">{match.properties?.title}</p>
                         <div className="flex items-center text-xs lg:text-sm text-slate-600 mt-1">
                           <MapPin className="w-3 h-3 mr-1" />
                           {match.properties?.location}

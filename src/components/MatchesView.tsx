@@ -50,7 +50,7 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
       vibe_analysis: parsedVA,
       realtor: {
         id: match.properties.realtor_id || '',
-        name: match.properties.profiles?.name || 'Licensed Realtor',
+        name: match.realtor_name || 'Property Owner',
         phone: '+1-234-567-8900',
         email: 'contact@realtor.com'
       },

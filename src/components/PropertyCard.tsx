@@ -197,7 +197,16 @@ export const PropertyCard = ({
               <User className="w-4 h-4 text-white" />
             </div>
             <div>
-              <span className="text-sm font-medium text-gray-900">{apartment.realtor.name}</span>
+              {onViewProfile ? (
+                <button 
+                  className="text-sm font-medium text-gray-900 hover:text-primary transition-colors"
+                  onClick={onViewProfile}
+                >
+                  {apartment.realtor.name}
+                </button>
+              ) : (
+                <span className="text-sm font-medium text-gray-900">{apartment.realtor.name}</span>
+              )}
               <p className="text-xs text-gray-500">Licensed Realtor</p>
             </div>
           </div>
