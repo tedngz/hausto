@@ -64,9 +64,12 @@ export const useMatches = () => {
       // Get renter names for all matches
       if (matches && matches.length > 0) {
         const renterIds = matches.map(match => match.renter_id);
+        console.log('Realtor matches - renter IDs:', renterIds);
+        
         const { data: profiles, error: profilesError } = await supabase
           .rpc('get_matched_public_profiles', { user_ids: renterIds });
 
+        console.log('Realtor matches - fetched profiles:', profiles);
         if (profilesError) {
           console.error('Error fetching renter profiles:', profilesError);
         }
@@ -77,6 +80,7 @@ export const useMatches = () => {
           renter_name: profiles?.find(p => p.id === match.renter_id)?.name || 'Anonymous Renter'
         }));
 
+        console.log('Realtor matches with names:', matchesWithNames);
         return matchesWithNames as PropertyMatch[];
       }
 
@@ -116,10 +120,13 @@ export const useMatches = () => {
 
       // Get realtor names for all matches
       if (matches && matches.length > 0) {
-        const realtorIds = matches.map(match => match.properties?.realtor_id).filter(Boolean);
+        const realtorIds = matches.map(match => match.realtor_id).filter(Boolean);
+        console.log('Renter matches - realtor IDs:', realtorIds);
+        
         const { data: profiles, error: profilesError } = await supabase
           .rpc('get_matched_public_profiles', { user_ids: realtorIds });
 
+        console.log('Renter matches - fetched profiles:', profiles);
         if (profilesError) {
           console.error('Error fetching realtor profiles:', profilesError);
         }
@@ -127,9 +134,10 @@ export const useMatches = () => {
         // Map names to matches
         const matchesWithNames = matches.map(match => ({
           ...match,
-          realtor_name: profiles?.find(p => p.id === match.properties?.realtor_id)?.name || 'Property Owner'
+          realtor_name: profiles?.find(p => p.id === match.realtor_id)?.name || 'Property Owner'
         }));
 
+        console.log('Renter matches with names:', matchesWithNames);
         return matchesWithNames as PropertyMatch[];
       }
 
