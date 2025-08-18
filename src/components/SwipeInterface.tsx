@@ -12,6 +12,7 @@ import { useMatches } from '@/hooks/useMatches';
 import { PropertyImageModal } from '@/components/PropertyImageModal';
 import { PropertyCard } from '@/components/PropertyCard';
 import { Card } from '@/components/ui/card';
+import { VibeScore } from '@/components/VibeScore';
 interface SwipeInterfaceProps {
   userPreferences: UserPreferences;
   onMatch: (apartment: Apartment) => void;
@@ -320,15 +321,11 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   return (
     <div className="pt-20 px-4">
       <div className="max-w-md mx-auto">
-        {/* Verified Listing Badge - positioned over the PropertyCard */}
+        {/* Vibe Ranking Overlay - positioned over the PropertyCard */}
         <div className="relative">
-          {isRealProperty && (
-            <div className="absolute top-4 left-4 z-10">
-              <Badge className="bg-green-500 text-white text-xs">
-                ✓ Verified Listing
-              </Badge>
-            </div>
-          )}
+          <div className="absolute top-4 left-4 z-10">
+            <VibeScore score={vibeScore} size="sm" />
+          </div>
           
           <PropertyCard
             apartment={modifiedApartment}

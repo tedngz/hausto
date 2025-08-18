@@ -89,6 +89,12 @@ export const PropertyCard = ({
           className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
           onClick={() => setIsImageModalOpen(true)}
         />
+        {/* Vibe Ranking Overlay */}
+        {vibeScore && (
+          <div className="absolute top-3 left-3 z-10">
+            <VibeScore score={vibeScore} size="sm" />
+          </div>
+        )}
       </div>
       
       <div className="p-4 sm:p-6">

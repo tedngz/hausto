@@ -54,6 +54,7 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
             showFullDescription
             showAllHighlights
             showContactButton={false}
+            showViewProfileButton={false}
           />
         </div>
       </Card>
