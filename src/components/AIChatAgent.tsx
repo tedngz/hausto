@@ -473,22 +473,30 @@ export const AIChatAgent = ({
                       onClick={() => {
                         const currentMatch = matches.find(m => m.id === selectedMatch);
                         if (currentMatch) {
+                          // Transform match data exactly like in MatchesView for consistent vibe scoring
+                          const rawVA = currentMatch.properties?.vibe_analysis;
+                          let parsedVA = rawVA;
+                          if (rawVA && typeof rawVA === 'string') {
+                            try { parsedVA = JSON.parse(rawVA); } catch { parsedVA = null; }
+                          }
                           setDetailModalApartment({
                             id: currentMatch.properties.id,
                             images: currentMatch.properties.images || [],
                             title: currentMatch.properties.title,
                             location: currentMatch.properties.location,
                             price: Number(currentMatch.properties.price),
-                            size: '',
+                            size: currentMatch.properties.size || '',
                             vibe: currentMatch.properties.vibe || '',
-                            description: '',
-                            highlights: [],
+                            description: currentMatch.properties.description || '',
+                            highlights: currentMatch.properties.highlights || [],
+                            vibe_analysis: parsedVA,
                             realtor: {
-                              id: currentMatch.realtor_id,
-                              name: 'Licensed Realtor',
+                              id: currentMatch.properties.realtor_id || '',
+                              name: currentMatch.realtor_name || 'Property Owner',
                               phone: '+1-234-567-8900',
                               email: 'contact@realtor.com'
-                            }
+                            },
+                            matchId: currentMatch.id
                           });
                         }
                       }}
