@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { Apartment } from '@/pages/Index';
 
 interface PropertyImageModalProps {
@@ -47,10 +47,11 @@ export const PropertyImageModal = ({
 
             {/* AI Highlights overlay */}
             {selectedHighlight && (
-              <div className="absolute top-3 left-3 z-10">
-                <span className="text-sm text-orange-600">
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
+                <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 text-center">
+                  <Sparkles className="w-3 h-3" />
                   {selectedHighlight}
-                </span>
+                </Badge>
               </div>
             )}
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/pages/Index';
 import { VibeScore } from '@/components/VibeScore';
 import { VibeScoreBar } from '@/components/VibeScoreBar';
@@ -165,9 +165,10 @@ export const PropertyCard = ({
                     return (
                       <div key={index} className="space-y-2">
                         {associatedHighlight && (
-                        <span className="text-xs text-primary">
-                          {associatedHighlight}
-                        </span>
+                        <div className="flex items-center gap-1 text-xs text-primary">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          <span>{associatedHighlight}</span>
+                        </div>
                         )}
                         <div className="relative h-48">
                           <img
