@@ -105,17 +105,9 @@ export const PropertyCard = ({
           </div>
           
           <div className="flex items-start justify-between mb-2">
-            {/* Desktop: Title inline with vibe score */}
+            {/* Desktop: Title */}
             <h2 className={`hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
-            {vibeScore && <VibeScore score={vibeScore} size="sm" />}
           </div>
-          
-          {/* Detailed Score Breakdown */}
-          {vibeScore && (
-            <div className="bg-gray-50 p-3 rounded-lg mb-3">
-              <VibeScoreBar score={vibeScore} showBreakdown={true} apartment={apartment} />
-            </div>
-          )}
         </div>
         
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm mb-3 gap-2">

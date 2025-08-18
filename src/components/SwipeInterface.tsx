@@ -321,13 +321,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   return (
     <div className="pt-20 px-4">
       <div className="max-w-md mx-auto">
-        {/* Vibe Ranking Overlay - positioned over the PropertyCard */}
-        <div className="relative">
-          <div className="absolute top-4 left-4 z-10">
-            <VibeScore score={vibeScore} size="sm" />
-          </div>
-          
-          <PropertyCard
+        <PropertyCard
             apartment={modifiedApartment}
             userPreferences={userPreferences}
             showContactButton={false}
@@ -336,7 +330,6 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
             showAllHighlights={false}
             className="mb-6"
           />
-        </div>
 
         {/* Action buttons */}
         <div className="flex justify-center space-x-4">
