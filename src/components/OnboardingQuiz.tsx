@@ -32,6 +32,8 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   useEffect(() => {
     setShowContent(true);
     setIsAnimating(false);
+    // Scroll to top on mobile when step changes
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentStep]);
 
   const handleNext = () => {
