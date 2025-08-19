@@ -22,13 +22,16 @@ import {
   Home,
   Palette,
   Activity,
-  DollarSign
+  DollarSign,
+  Upload,
+  Camera
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface ProfileProps {
   userType: 'renter' | 'realtor';
@@ -41,6 +44,7 @@ interface UserProfile {
   phone?: string;
   bio?: string;
   location?: string;
+  avatar_url?: string;
   preferences?: any;
 }
 
@@ -230,6 +234,7 @@ export const Profile = ({ userType }: ProfileProps) => {
     bio: '',
     location: ''
   });
+  const [uploading, setUploading] = useState(false);
 
   // Fetch user profile
   const { data: profile, isLoading } = useQuery({
@@ -304,6 +309,9 @@ export const Profile = ({ userType }: ProfileProps) => {
           email: updates.email || user?.email || '',
           name: updates.name || '',
           phone: updates.phone || null,
+          bio: updates.bio || null,
+          location: updates.location || null,
+          avatar_url: updates.avatar_url || null,
         })
         .select()
         .single();
@@ -340,6 +348,48 @@ export const Profile = ({ userType }: ProfileProps) => {
     }
   }, [profile]);
 
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true);
+      
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.');
+      }
+
+      const file = event.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.id}/avatar.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      
+      await updateProfileMutation.mutateAsync({ 
+        ...profile, 
+        avatar_url: data.publicUrl 
+      });
+
+      toast({
+        title: "Avatar Updated",
+        description: "Your profile picture has been updated successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSave = () => {
     updateProfileMutation.mutate({
       ...editForm,
@@ -375,12 +425,34 @@ export const Profile = ({ userType }: ProfileProps) => {
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                  userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'
-                }`}>
-                  <User className={`w-8 h-8 ${
-                    userType === 'realtor' ? 'text-blue-600' : 'text-green-600'
-                  }`} />
+                <div className="relative group">
+                  <Avatar className="w-16 h-16">
+                    <AvatarImage src={profile?.avatar_url} />
+                    <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
+                      <User className={`w-8 h-8 ${
+                        userType === 'realtor' ? 'text-blue-600' : 'text-green-600'
+                      }`} />
+                    </AvatarFallback>
+                  </Avatar>
+                  <label 
+                    htmlFor="avatar-upload" 
+                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                  >
+                    <Camera className="w-5 h-5 text-white" />
+                    <input
+                      id="avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      disabled={uploading}
+                      className="hidden"
+                    />
+                  </label>
+                  {uploading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
+                      <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <CardTitle className="text-2xl">
@@ -496,37 +568,37 @@ export const Profile = ({ userType }: ProfileProps) => {
                       </div>
                     </div>
                     
-                    {profile?.location && (
-                      <div className="flex items-center space-x-3">
-                        <MapPin className="w-4 h-4 text-gray-500" />
-                        <div>
-                          <p className="text-sm text-gray-500">Location</p>
-                          <p className="font-medium">{profile.location}</p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {profile?.bio && (
-                      <div>
-                        <p className="text-sm text-gray-500 mb-2">Bio</p>
-                        <p className="text-gray-700 whitespace-pre-wrap">{profile.bio}</p>
-                      </div>
-                    )}
-                    
-                    {!profile?.phone && !profile?.location && !profile?.bio && (
-                      <div className="text-center py-8 text-gray-500">
-                        <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Complete your profile to help others connect with you!</p>
-                        <Button 
-                          variant="outline" 
-                          className="mt-4"
-                          onClick={() => setIsEditing(true)}
-                        >
-                          <Edit3 className="w-4 h-4 mr-2" />
-                          Edit Profile
-                        </Button>
-                      </div>
-                    )}
+                     {profile?.location && (
+                       <div className="flex items-center space-x-3">
+                         <MapPin className="w-4 h-4 text-gray-500" />
+                         <div>
+                           <p className="text-sm text-gray-500">Location</p>
+                           <p className="font-medium">{profile.location}</p>
+                         </div>
+                       </div>
+                     )}
+                     
+                     {profile?.bio && (
+                       <div>
+                         <p className="text-sm text-gray-500 mb-2">About Me</p>
+                         <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
+                       </div>
+                     )}
+                     
+                     {!profile?.phone && !profile?.location && !profile?.bio && (
+                       <div className="text-center py-8 text-gray-500">
+                         <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                         <p>Complete your profile to help others connect with you!</p>
+                         <Button 
+                           variant="outline" 
+                           className="mt-4"
+                           onClick={() => setIsEditing(true)}
+                         >
+                           <Edit3 className="w-4 h-4 mr-2" />
+                           Edit Profile
+                         </Button>
+                       </div>
+                     )}
                   </div>
                 )}
               </CardContent>

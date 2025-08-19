@@ -19,13 +19,15 @@ import {
   TrendingUp,
   Upload,
   Calendar,
-  Star
+  Star,
+  Camera
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface RealtorProfileProps {
   userId?: string;
@@ -38,6 +40,7 @@ interface UserProfile {
   phone?: string;
   bio?: string;
   location?: string;
+  avatar_url?: string;
 }
 
 export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
@@ -52,6 +55,7 @@ export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
     bio: '',
     location: ''
   });
+  const [uploading, setUploading] = useState(false);
 
   const profileId = userId || user?.id;
   const isOwnProfile = profileId === user?.id;
@@ -157,6 +161,9 @@ export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
           email: updates.email || user?.email || '',
           name: updates.name || '',
           phone: updates.phone || null,
+          bio: updates.bio || null,
+          location: updates.location || null,
+          avatar_url: updates.avatar_url || null,
         })
         .select()
         .single();
@@ -193,6 +200,48 @@ export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
     }
   }, [profile]);
 
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true);
+      
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.');
+      }
+
+      const file = event.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.id}/avatar.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      
+      await updateProfileMutation.mutateAsync({ 
+        ...profile, 
+        avatar_url: data.publicUrl 
+      });
+
+      toast({
+        title: "Avatar Updated",
+        description: "Your profile picture has been updated successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSave = () => {
     updateProfileMutation.mutate({
       ...editForm,
@@ -228,8 +277,36 @@ export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
-                  <User className="w-8 h-8 text-blue-600" />
+                <div className="relative group">
+                  <Avatar className="w-16 h-16">
+                    <AvatarImage src={profile?.avatar_url} />
+                    <AvatarFallback className="bg-blue-100">
+                      <User className="w-8 h-8 text-blue-600" />
+                    </AvatarFallback>
+                  </Avatar>
+                  {isOwnProfile && (
+                    <>
+                      <label 
+                        htmlFor="avatar-upload-realtor" 
+                        className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                      >
+                        <Camera className="w-5 h-5 text-white" />
+                        <input
+                          id="avatar-upload-realtor"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleAvatarUpload}
+                          disabled={uploading}
+                          className="hidden"
+                        />
+                      </label>
+                      {uploading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
+                          <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
                 <div>
                   <CardTitle className="text-2xl">

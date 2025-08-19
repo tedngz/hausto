@@ -220,6 +220,7 @@ export type Database = {
       profiles: {
         Row: {
           allow_contact_sharing: boolean | null
+          avatar_url: string | null
           bio: string | null
           created_at: string
           email: string
@@ -230,6 +231,7 @@ export type Database = {
         }
         Insert: {
           allow_contact_sharing?: boolean | null
+          avatar_url?: string | null
           bio?: string | null
           created_at?: string
           email: string
@@ -240,6 +242,7 @@ export type Database = {
         }
         Update: {
           allow_contact_sharing?: boolean | null
+          avatar_url?: string | null
           bio?: string | null
           created_at?: string
           email?: string
@@ -352,6 +355,16 @@ export type Database = {
           name: string
         }[]
       }
+      get_realtor_contact_for_renter: {
+        Args: { realtor_id: string }
+        Returns: {
+          bio: string
+          email: string
+          id: string
+          name: string
+          phone: string
+        }[]
+      }
       get_realtor_matched_renter_contact: {
         Args: { renter_id: string }
         Returns: {
@@ -359,6 +372,14 @@ export type Database = {
           id: string
           name: string
           phone: string
+        }[]
+      }
+      get_renter_profile_for_realtor: {
+        Args: { renter_id: string }
+        Returns: {
+          bio: string
+          id: string
+          name: string
         }[]
       }
     }
