@@ -106,12 +106,12 @@ export const PropertyHighlightTags = ({
       {categorizedHighlights.style.length > 0 && (
         <div>
           <div className="flex items-center mb-1">
-            {showIcons && <Home className="w-3 h-3 text-primary mr-1" />}
-            <h5 className="text-xs font-medium text-foreground">Style</h5>
+            {showIcons && <Home className="w-3 h-3 text-blue-500 mr-1" />}
+            <h5 className="text-xs font-medium text-gray-700">Style</h5>
           </div>
           <div className="flex flex-wrap gap-1">
             {categorizedHighlights.style.slice(0, maxTagsPerCategory).map((highlight, index) => (
-              <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-primary/10 text-primary border-primary/20">
+              <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border-blue-200">
                 {highlight}
               </Badge>
             ))}
@@ -123,12 +123,12 @@ export const PropertyHighlightTags = ({
       {categorizedHighlights.color.length > 0 && (
         <div>
           <div className="flex items-center mb-1">
-            {showIcons && <Palette className="w-3 h-3 text-accent mr-1" />}
-            <h5 className="text-xs font-medium text-foreground">Color</h5>
+            {showIcons && <Palette className="w-3 h-3 text-purple-500 mr-1" />}
+            <h5 className="text-xs font-medium text-gray-700">Colors & Ambiance</h5>
           </div>
           <div className="flex flex-wrap gap-1">
             {categorizedHighlights.color.slice(0, maxTagsPerCategory).map((highlight, index) => (
-              <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-accent/10 text-accent border-accent/20">
+              <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-purple-50 text-purple-700 border-purple-200">
                 {highlight}
               </Badge>
             ))}
@@ -140,12 +140,12 @@ export const PropertyHighlightTags = ({
       {categorizedHighlights.activity.length > 0 && (
         <div>
           <div className="flex items-center mb-1">
-            {showIcons && <Activity className="w-3 h-3 text-secondary-foreground mr-1" />}
-            <h5 className="text-xs font-medium text-foreground">Activities</h5>
+            {showIcons && <Activity className="w-3 h-3 text-green-500 mr-1" />}
+            <h5 className="text-xs font-medium text-gray-700">Activities</h5>
           </div>
           <div className="flex flex-wrap gap-1">
             {categorizedHighlights.activity.slice(0, maxTagsPerCategory).map((highlight, index) => (
-              <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-secondary/50 text-secondary-foreground border-secondary/30">
+              <Badge key={index} variant="secondary" className="text-xs px-2 py-1 bg-green-50 text-green-700 border-green-200">
                 {highlight}
               </Badge>
             ))}
