@@ -12,9 +12,10 @@ interface UserMenuProps {
   onSwitchUserType: () => void;
   onRestartOnboarding?: () => void;
   onViewProfile?: () => void;
+  isAdmin?: boolean;
 }
 
-export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onViewProfile }: UserMenuProps) => {
+export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onViewProfile, isAdmin = false }: UserMenuProps) => {
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -53,10 +54,12 @@ export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onVi
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem onClick={onSwitchUserType}>
-          <User className="w-4 h-4 mr-2" />
-          Switch to {userType === 'renter' ? 'Realtor' : 'Renter'}
-        </DropdownMenuItem>
+        {isAdmin && (
+          <DropdownMenuItem onClick={onSwitchUserType}>
+            <User className="w-4 h-4 mr-2" />
+            Switch to {userType === 'renter' ? 'Realtor' : 'Renter'}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>
           <LogOut className="w-4 h-4 mr-2" />

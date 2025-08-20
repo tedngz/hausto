@@ -280,6 +280,7 @@ const Index = () => {
             onSwitchUserType={switchUserType}
             onOpenAIChat={() => setIsAIChatOpen(true)}
             onRestartOnboarding={userType === 'renter' ? handleRestartOnboarding : undefined}
+            isAdmin={isAdmin}
           />
         )}
 
