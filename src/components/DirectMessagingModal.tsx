@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Apartment } from '@/pages/Index';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import {
@@ -312,8 +312,15 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                         return (
                           <div
                             key={message.id}
-                            className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                            className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} items-end space-x-2`}
                           >
+                            {!isOwnMessage && (
+                              <Avatar className="w-8 h-8 mb-1">
+                                <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs">
+                                  {user?.id === currentMatch?.realtor_id ? 'R' : 'O'}
+                                </AvatarFallback>
+                              </Avatar>
+                            )}
                             <div
                               className={`max-w-xs px-4 py-2 rounded-2xl ${
                                 isOwnMessage
@@ -331,6 +338,13 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                                 })}
                               </p>
                             </div>
+                            {isOwnMessage && (
+                              <Avatar className="w-8 h-8 mb-1">
+                                <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs">
+                                  You
+                                </AvatarFallback>
+                              </Avatar>
+                            )}
                           </div>
                         );
                       })}
