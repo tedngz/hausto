@@ -294,7 +294,7 @@ const Index = () => {
           />
         )}
 
-        {userType === 'realtor' && isAdmin && (currentView === 'dashboard' || currentView === 'profile') && (
+        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && (
           <RealtorNavigation
             currentView={currentView as 'dashboard' | 'profile'}
             setCurrentView={(view) => setCurrentView(view)}
@@ -305,7 +305,7 @@ const Index = () => {
           />
         )}
         
-        {!userType && isAdmin && (
+        {!userType && (
           <UserTypeSelector onSelect={handleUserTypeSelect} />
         )}
         
@@ -330,7 +330,7 @@ const Index = () => {
         )}
 
         {currentView === 'profile' && userType && (
-          userType === 'realtor' && isAdmin ? (
+          userType === 'realtor' ? (
             <RealtorProfile />
           ) : (
             <Profile userType={userType} />
@@ -341,7 +341,7 @@ const Index = () => {
           <SocialFeed />
         )}
 
-        {userType === 'realtor' && isAdmin && currentView === 'dashboard' && (
+        {userType === 'realtor' && currentView === 'dashboard' && (
           <RealtorDashboard 
             onSwitchUserType={switchUserType}
             onViewProfile={() => setCurrentView('profile')}
