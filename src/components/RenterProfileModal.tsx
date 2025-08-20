@@ -15,6 +15,7 @@ import {
   Activity,
   DollarSign
 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
@@ -29,23 +30,27 @@ interface RenterProfileModalProps {
 interface PublicProfile {
   id: string;
   name: string;
+  avatar_url?: string;
 }
 
 export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileModalProps) => {
   const { formatPrice } = useCurrency();
 
-  // Fetch limited profile (only name) for matched users
+  // Fetch limited profile (name and avatar) for matched users
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['renter-profile', userId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .rpc('get_matched_public_profiles', { user_ids: [userId] });
+        .from('profiles')
+        .select('id, name, avatar_url')
+        .eq('id', userId)
+        .single();
 
       if (error) {
         throw error;
       }
       
-      return data?.[0] || null;
+      return data || null;
     },
     enabled: !!userId && isOpen,
   });
@@ -122,9 +127,12 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
             <Card>
               <CardHeader className="pb-4">
                 <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-                    <User className="w-8 h-8 text-green-600" />
-                  </div>
+                  <Avatar className="w-16 h-16">
+                    <AvatarImage src={profile?.avatar_url} alt="Profile picture" />
+                    <AvatarFallback className="bg-green-100 text-green-600">
+                      <User className="w-8 h-8" />
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
                     <h3 className="text-2xl font-semibold">
                       {profile?.name || 'Renter Profile'}
