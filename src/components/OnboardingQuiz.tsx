@@ -229,13 +229,13 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
           {/* Clean Header */}
           <div className="p-8 text-center">
             <div className={`transition-all duration-500 ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-              <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+              <div className="w-16 h-16 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
                 {currentStepData.icon && (
-                  <currentStepData.icon className="w-8 h-8 text-white" />
+                  <currentStepData.icon className="w-8 h-8 text-primary-foreground" />
                 )}
               </div>
-              <h2 className="text-2xl font-bold mb-3 text-gray-800">{currentStepData.title}</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto leading-relaxed">{currentStepData.subtitle}</p>
+              <h2 className="text-2xl font-bold mb-3 text-foreground">{currentStepData.title}</h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto leading-relaxed">{currentStepData.subtitle}</p>
             </div>
             
             {/* Elegant progress indicator */}
@@ -244,7 +244,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                 <div 
                   key={index}
                   className={`w-2 h-2 rounded-full transition-all duration-500 ${
-                    index <= currentStep ? 'bg-orange-500 scale-110' : 'bg-gray-300'
+                    index <= currentStep ? 'bg-primary scale-110' : 'bg-muted'
                   }`}
                 />
               ))}
@@ -265,7 +265,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                             key={option.id}
                             onClick={() => handleMultiSelect(option.id, currentStepData.key)}
                             className={`relative group cursor-pointer rounded-2xl overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-xl ${
-                              isSelected ? 'ring-4 ring-orange-500 ring-offset-2' : ''
+                              isSelected ? 'ring-4 ring-primary ring-offset-2' : ''
                             }`}
                           >
                             <div className="aspect-[3/2] sm:aspect-[4/3] relative">
@@ -275,12 +275,12 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                                 className="w-full h-full object-cover object-center"
                               />
                               <div className={`absolute inset-0 transition-all duration-300 ${
-                                isSelected ? 'bg-orange-500/20' : 'bg-black/20 group-hover:bg-black/10'
+                                isSelected ? 'bg-primary/20' : 'bg-black/20 group-hover:bg-black/10'
                               }`}></div>
                               {isSelected && (
                                 <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-                                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                                    <span className="text-white text-xs sm:text-sm font-bold">✓</span>
+                                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                                    <span className="text-primary-foreground text-xs sm:text-sm font-bold">✓</span>
                                   </div>
                                 </div>
                               )}
@@ -303,8 +303,8 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                             onClick={() => handleMultiSelect(option.id, currentStepData.key)}
                             className={`group cursor-pointer rounded-2xl p-4 sm:p-6 text-center transition-all duration-300 hover:scale-105 border-2 ${
                               isSelected 
-                                ? 'bg-orange-50 border-orange-500 shadow-lg' 
-                                : 'bg-white border-gray-200 hover:border-orange-300 hover:shadow-md'
+                                ? 'bg-primary/10 border-primary shadow-lg' 
+                                : 'bg-card border-border hover:border-primary/30 hover:shadow-md'
                             }`}
                             style={{ animationDelay: `${index * 100}ms` }}
                           >
@@ -312,12 +312,12 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                               {option.emoji}
                             </div>
                             <h3 className={`font-bold text-lg mb-2 transition-colors ${
-                              isSelected ? 'text-orange-600' : 'text-gray-800'
+                              isSelected ? 'text-primary' : 'text-foreground'
                             }`}>
                               {option.label}
                             </h3>
                             <p className={`text-sm transition-colors ${
-                              isSelected ? 'text-orange-500' : 'text-gray-600'
+                              isSelected ? 'text-primary/80' : 'text-muted-foreground'
                             }`}>
                               {option.description}
                             </p>
@@ -339,8 +339,8 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                         onClick={() => handleSingleSelect(option.id, currentStepData.key)}
                         className={`group cursor-pointer rounded-2xl p-4 sm:p-6 text-center transition-all duration-300 hover:scale-105 border-2 ${
                           isSelected 
-                            ? 'bg-orange-50 border-orange-500 shadow-lg' 
-                            : 'bg-white border-gray-200 hover:border-orange-300 hover:shadow-md'
+                            ? 'bg-primary/10 border-primary shadow-lg' 
+                            : 'bg-card border-border hover:border-primary/30 hover:shadow-md'
                         }`}
                         style={{ animationDelay: `${index * 100}ms` }}
                       >
@@ -348,19 +348,19 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                           {option.emoji}
                         </div>
                         <h3 className={`font-bold text-lg mb-2 transition-colors ${
-                          isSelected ? 'text-orange-600' : 'text-gray-800'
+                          isSelected ? 'text-primary' : 'text-foreground'
                         }`}>
                           {option.label}
                         </h3>
                         <p className={`text-sm transition-colors ${
-                          isSelected ? 'text-orange-500' : 'text-gray-600'
+                          isSelected ? 'text-primary/80' : 'text-muted-foreground'
                         }`}>
                           {option.description}
                         </p>
                         {isSelected && (
                           <div className="absolute top-3 right-3">
-                            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                              <span className="text-white text-xs font-bold">✓</span>
+                            <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                              <span className="text-primary-foreground text-xs font-bold">✓</span>
                             </div>
                           </div>
                         )}
@@ -395,7 +395,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
                 variant="outline" 
                 onClick={handleBack}
                 disabled={currentStep === 0}
-                className="px-6 py-3 rounded-full border-2 hover:bg-gray-50 transition-all duration-200 disabled:opacity-50"
+                className="px-6 py-3 rounded-full border-2 hover:bg-muted transition-all duration-200 disabled:opacity-50"
               >
                 ← Back
               </Button>
@@ -403,14 +403,14 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
               {currentStep < totalSteps - 1 ? (
                 <Button 
                   onClick={handleNext} 
-                  className="px-8 py-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 hover:shadow-lg transition-all duration-200 text-white font-medium"
+                  className="px-8 py-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg transition-all duration-200 font-medium"
                 >
                   Continue
                 </Button>
               ) : (
                 <Button 
                   onClick={handleSubmit}
-                  className="px-8 py-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 hover:shadow-lg transition-all duration-200 text-white font-medium"
+                  className="px-8 py-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg transition-all duration-200 font-medium"
                 >
                   Get Started
                 </Button>

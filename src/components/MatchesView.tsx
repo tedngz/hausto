@@ -68,7 +68,7 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
   if (isLoadingMatches) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full"></div>
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
       </div>
     );
   }
@@ -78,11 +78,11 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
   if (apartments.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="w-24 h-24 bg-gradient-to-r from-orange-400 to-red-400 rounded-full flex items-center justify-center mx-auto mb-6">
-          <span className="text-white text-3xl">💕</span>
+        <div className="w-24 h-24 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center mx-auto mb-6">
+          <span className="text-primary-foreground text-3xl">💕</span>
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">No matches yet</h3>
-        <p className="text-gray-600 mb-6">Start swiping to find your perfect place!</p>
+        <h3 className="text-xl font-semibold text-foreground mb-2">No matches yet</h3>
+        <p className="text-muted-foreground mb-6">Start swiping to find your perfect place!</p>
       </div>
     );
   }
@@ -90,8 +90,8 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
   return (
     <div className="container mx-auto px-4 py-8 pt-20">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Matches</h2>
-        <p className="text-gray-600">Properties that match your preferences</p>
+        <h2 className="text-2xl font-bold text-foreground mb-2">Your Matches</h2>
+        <p className="text-muted-foreground">Properties that match your preferences</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -120,7 +120,7 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
                       <Button 
                         size="sm" 
                         variant="outline"
-                        className="text-red-600 hover:text-red-800 hover:bg-red-50 w-8 h-8 p-0 bg-white/90 backdrop-blur-sm"
+                        className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 w-8 h-8 p-0 bg-background/90 backdrop-blur-sm"
                         disabled={isRemovingMatch}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -137,7 +137,7 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction 
                           onClick={() => handleRemoveMatch(apartment.matchId!)}
-                          className="bg-red-600 hover:bg-red-700"
+                          className="bg-destructive hover:bg-destructive/90"
                         >
                           Remove
                         </AlertDialogAction>

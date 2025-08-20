@@ -259,10 +259,10 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   if (isLoading || isLoadingMatches) {
     return (
       <div className="pt-20 px-4 flex items-center justify-center min-h-screen">
-        <Card className="p-8 text-center bg-white/70 backdrop-blur-md max-w-md">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+        <Card className="p-8 text-center bg-card/70 backdrop-blur-md max-w-md">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <h3 className="text-xl font-semibold mb-2">Finding your perfect match</h3>
-          <p className="text-gray-600">Searching through available properties...</p>
+          <p className="text-muted-foreground">Searching through available properties...</p>
         </Card>
       </div>
     );
@@ -273,17 +273,17 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     
     return (
       <div className="pt-20 px-4 flex items-center justify-center min-h-screen">
-        <Card className="p-8 text-center bg-white/70 backdrop-blur-md max-w-md">
-          <Heart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+        <Card className="p-8 text-center bg-card/70 backdrop-blur-md max-w-md">
+          <Heart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-xl font-semibold mb-2">{noMatchInfo.title}</h3>
-          <p className="text-gray-600 mb-6 leading-relaxed">{noMatchInfo.message}</p>
-          <p className="text-sm text-orange-600 mb-6 font-medium">{noMatchInfo.suggestion}</p>
+          <p className="text-muted-foreground mb-6 leading-relaxed">{noMatchInfo.message}</p>
+          <p className="text-sm text-primary mb-6 font-medium">{noMatchInfo.suggestion}</p>
           
           <div className="space-y-3">
             {onRestartOnboarding && (
               <Button 
                 onClick={onRestartOnboarding}
-                className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white w-full"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 w-full"
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Adjust Preferences
@@ -292,7 +292,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
             
             <Button 
               variant="outline"
-              className="w-full border-orange-300 text-orange-600 hover:bg-orange-50"
+              className="w-full border-primary/30 text-primary hover:bg-primary/10"
               onClick={() => {
                 // Trigger AI chat opening
                 window.dispatchEvent(new CustomEvent('openAIChat'));
@@ -336,14 +336,14 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           <Button
             size="lg"
             variant="outline"
-            className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400"
+            className="w-16 h-16 rounded-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:border-destructive/40"
             onClick={handleDislike}
           >
             <X className="w-8 h-8" />
           </Button>
           <Button
             size="lg"
-            className="w-16 h-16 rounded-full bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-white"
+            className="w-16 h-16 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={handleLike}
           >
             <Heart className="w-8 h-8" />

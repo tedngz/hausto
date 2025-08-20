@@ -82,12 +82,12 @@ export const CityDistrictSelector = ({ value, onChange }: CityDistrictSelectorPr
               <ChevronRight className="w-4 h-4 rotate-180" />
             </Button>
             <div>
-              <h4 className="font-medium text-slate-900">Select Districts in {selectedCity}</h4>
-              <p className="text-sm text-slate-600">Choose multiple preferred areas</p>
+              <h4 className="font-medium text-foreground">Select Districts in {selectedCity}</h4>
+              <p className="text-sm text-muted-foreground">Choose multiple preferred areas</p>
             </div>
           </div>
           {getSelectedCount() > 0 && (
-            <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 leading-tight">
+            <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 leading-tight">
               {getSelectedCount()}
             </Badge>
           )}
@@ -103,20 +103,20 @@ export const CityDistrictSelector = ({ value, onChange }: CityDistrictSelectorPr
                 key={district.name}
                 className={`p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
                   isSelected
-                    ? 'border-orange-300 bg-orange-50'
-                    : 'border-gray-200 hover:border-orange-200 hover:bg-orange-25'
+                    ? 'border-primary/30 bg-primary/10'
+                    : 'border-border hover:border-primary/20 hover:bg-primary/5'
                 }`}
                 onClick={() => handleDistrictToggle(district.name)}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
-                      <span className="font-medium text-slate-900">{district.name}</span>
+                      <span className="font-medium text-foreground">{district.name}</span>
                       {isSelected && (
-                        <Badge className="bg-orange-500 text-white text-xs">Selected</Badge>
+                        <Badge className="bg-primary text-primary-foreground text-xs">Selected</Badge>
                       )}
                     </div>
-                    <p className="text-sm text-slate-600 leading-relaxed">{district.vibe}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{district.vibe}</p>
                   </div>
                 </div>
               </div>
@@ -130,11 +130,11 @@ export const CityDistrictSelector = ({ value, onChange }: CityDistrictSelectorPr
   return (
     <div className="space-y-4">
       <div>
-        <h4 className="font-medium text-slate-900 mb-2">Select City</h4>
-        <p className="text-sm text-slate-600 mb-4">Choose your preferred location</p>
+        <h4 className="font-medium text-foreground mb-2">Select City</h4>
+        <p className="text-sm text-muted-foreground mb-4">Choose your preferred location</p>
         {value.length > 0 && (
           <div className="mb-3">
-            <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 leading-tight">
+            <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 leading-tight">
               {value.length} area{value.length !== 1 ? 's' : ''}
             </Badge>
           </div>
@@ -146,7 +146,7 @@ export const CityDistrictSelector = ({ value, onChange }: CityDistrictSelectorPr
           <Button
             key={city}
             variant="outline"
-            className="justify-between p-4 hover:bg-orange-50 hover:border-orange-300 transition-all duration-200"
+            className="justify-between p-4 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
             onClick={() => handleCityClick(city)}
           >
             <div className="flex items-center space-x-3">

@@ -55,7 +55,7 @@ export const BudgetRangeSelector = ({ value, onChange }: BudgetRangeSelectorProp
 
       {/* Quick Presets */}
       <div className="space-y-4">
-        <Label className="text-base font-medium text-slate-900 block text-center">Budget Range</Label>
+        <Label className="text-base font-medium text-foreground block text-center">Budget Range</Label>
         <div className="space-y-3">
           {PRESET_RANGES.map((preset) => (
             <Button
@@ -65,8 +65,8 @@ export const BudgetRangeSelector = ({ value, onChange }: BudgetRangeSelectorProp
               onClick={() => handlePresetClick(preset)}
               className={`w-full h-auto py-4 transition-all duration-200 ${
                 activePreset === preset.label || currentPreset?.label === preset.label
-                  ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg border-none'
-                  : 'hover:bg-orange-50 hover:border-orange-300 hover:shadow-md'
+                  ? 'bg-primary text-primary-foreground shadow-lg border-none'
+                  : 'hover:bg-primary/10 hover:border-primary/30 hover:shadow-md'
               }`}
             >
               <div className="text-center w-full">
@@ -83,7 +83,7 @@ export const BudgetRangeSelector = ({ value, onChange }: BudgetRangeSelectorProp
 
       {/* Custom Slider */}
       <div className="space-y-4">
-        <Label className="text-base font-medium text-slate-900 block text-center">Custom Range</Label>
+        <Label className="text-base font-medium text-foreground block text-center">Custom Range</Label>
         <div className="px-2">
           <Slider
             value={value}
@@ -94,13 +94,13 @@ export const BudgetRangeSelector = ({ value, onChange }: BudgetRangeSelectorProp
             className="w-full"
           />
           
-          <div className="flex justify-between text-sm text-slate-600 mt-3 font-medium">
+          <div className="flex justify-between text-sm text-muted-foreground mt-3 font-medium">
             <div className="text-center">
-              <div className="font-semibold text-orange-600">{formatPrice(value[0])}</div>
+              <div className="font-semibold text-primary">{formatPrice(value[0])}</div>
               <div className="text-xs opacity-75">Min</div>
             </div>
             <div className="text-center">
-              <div className="font-semibold text-orange-600">{formatPrice(value[1])}</div>
+              <div className="font-semibold text-primary">{formatPrice(value[1])}</div>
               <div className="text-xs opacity-75">Max</div>
             </div>
           </div>
