@@ -13,6 +13,7 @@ interface NavigationProps {
   onSwitchUserType: () => void;
   onOpenAIChat: () => void;
   onRestartOnboarding?: () => void;
+  isAdmin?: boolean;
 }
 
 export const Navigation = ({ 
@@ -22,14 +23,15 @@ export const Navigation = ({
   userType, 
   onSwitchUserType,
   onOpenAIChat,
-  onRestartOnboarding
+  onRestartOnboarding,
+  isAdmin = false
 }: NavigationProps) => {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
+    <nav className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
       <div className="max-w-4xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
               Hausto
             </h1>
           </div>
@@ -71,6 +73,7 @@ export const Navigation = ({
               onSwitchUserType={onSwitchUserType}
               onRestartOnboarding={onRestartOnboarding}
               onViewProfile={() => setCurrentView('profile')}
+              isAdmin={isAdmin}
             />
           </div>
         </div>

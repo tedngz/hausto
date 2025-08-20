@@ -30,7 +30,7 @@ export const RealtorNavigation = ({
     navigate('/auth');
   };
   return (
-    <nav className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
+    <nav className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
       <div className="max-w-4xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
@@ -40,7 +40,7 @@ export const RealtorNavigation = ({
                 alt="Hausto Logo" 
                 className="w-6 h-6"
               />
-              <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
                 Hausto
               </h1>
             </div>
@@ -77,7 +77,7 @@ export const RealtorNavigation = ({
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-popover border shadow-lg z-50">
+              <DropdownMenuContent align="end" className="w-48 bg-white border shadow-lg z-50">
                 {onAddProperty && (
                   <>
                     <DropdownMenuItem onClick={onAddProperty}>
