@@ -11,7 +11,6 @@ import {
   Calendar,
   MapPin
 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -25,27 +24,23 @@ interface RealtorProfileModalProps {
 interface PublicProfile {
   id: string;
   name: string;
-  avatar_url?: string;
 }
 
 export const RealtorProfileModal = ({ realtorId, isOpen, onClose }: RealtorProfileModalProps) => {
   const { formatPrice } = useCurrency();
 
-  // Fetch limited profile (name and avatar) for matched users
+  // Fetch limited profile (only name) for matched users
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['realtor-profile', realtorId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name, avatar_url')
-        .eq('id', realtorId)
-        .single();
+        .rpc('get_matched_public_profiles', { user_ids: [realtorId] });
 
       if (error) {
         throw error;
       }
       
-      return data || null;
+      return data?.[0] || null;
     },
     enabled: !!realtorId && isOpen,
   });
@@ -111,12 +106,9 @@ export const RealtorProfileModal = ({ realtorId, isOpen, onClose }: RealtorProfi
             <Card>
               <CardHeader className="pb-4">
                 <div className="flex items-center space-x-4">
-                  <Avatar className="w-16 h-16">
-                    <AvatarImage src={profile?.avatar_url} alt="Profile picture" />
-                    <AvatarFallback className="bg-blue-100 text-blue-600">
-                      <User className="w-8 h-8" />
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                    <User className="w-8 h-8 text-blue-600" />
+                  </div>
                   <div>
                     <h3 className="text-2xl font-semibold">
                       {profile?.name || 'Property Owner'}

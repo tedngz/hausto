@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { X, Send, MessageCircle, Bot, MapPin, ArrowLeft } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useChat } from '@/hooks/useChat';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useMatches } from '@/hooks/useMatches';
@@ -242,11 +241,9 @@ export const AIChatAgent = ({
                         className="p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200"
                       >
                         <div className="flex items-start space-x-3">
-                          <Avatar className="w-12 h-12 flex-shrink-0">
-                            <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold">
-                              {isRealtor ? 'R' : 'P'}
-                            </AvatarFallback>
-                          </Avatar>
+                          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
+                            {isRealtor ? 'R' : 'P'}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <p 
                               className="font-medium text-gray-900 mb-1 hover:text-orange-600 cursor-pointer"
