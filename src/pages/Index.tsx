@@ -62,6 +62,9 @@ const Index = () => {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
+
+  // Check if user is admin
+  const isAdmin = user?.email === 'ted.ngz@gmail.com';
   const [currentView, setCurrentView] = useState<'onboarding' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'feed'>('onboarding');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [matches, setMatches] = useState<Apartment[]>([]);
@@ -76,10 +79,29 @@ const Index = () => {
       const savedUserType = localStorage.getItem(`userType_${user.id}`);
       const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
       
-      if (savedUserType) {
+      // Force non-admin users to renter flow
+      if (!isAdmin && savedUserType === 'realtor') {
+        localStorage.removeItem(`userType_${user.id}`);
+        setUserType('renter');
+        if (savedPreferences) {
+          try {
+            const preferences = JSON.parse(savedPreferences);
+            setUserPreferences(preferences);
+            setCurrentView('swipe');
+          } catch (error) {
+            console.error('Error parsing saved preferences:', error);
+            setCurrentView('swipe');
+          }
+        } else {
+          setCurrentView('swipe');
+        }
+        return;
+      }
+      
+      if (savedUserType && (savedUserType === 'renter' || isAdmin)) {
         setUserType(savedUserType as 'renter' | 'realtor');
         
-        if (savedUserType === 'realtor') {
+        if (savedUserType === 'realtor' && isAdmin) {
           setCurrentView('dashboard');
         } else if (savedPreferences) {
           try {
@@ -88,14 +110,30 @@ const Index = () => {
             setCurrentView('swipe');
           } catch (error) {
             console.error('Error parsing saved preferences:', error);
-            setCurrentView('onboarding');
+            setCurrentView('swipe');
           }
         } else {
-          setCurrentView('onboarding');
+          setCurrentView('swipe');
+        }
+      } else if (!isAdmin) {
+        // Auto-set non-admin users as renters
+        setUserType('renter');
+        localStorage.setItem(`userType_${user.id}`, 'renter');
+        if (savedPreferences) {
+          try {
+            const preferences = JSON.parse(savedPreferences);
+            setUserPreferences(preferences);
+            setCurrentView('swipe');
+          } catch (error) {
+            console.error('Error parsing saved preferences:', error);
+            setCurrentView('swipe');
+          }
+        } else {
+          setCurrentView('swipe');
         }
       }
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     // Listen for AI chat opening event from SwipeInterface
@@ -114,12 +152,17 @@ const Index = () => {
   }, [user, loading, navigate]);
 
   const handleUserTypeSelect = (type: 'renter' | 'realtor') => {
+    // Only allow admin to select realtor
+    if (type === 'realtor' && !isAdmin) {
+      type = 'renter';
+    }
+    
     setUserType(type);
     if (user) {
       localStorage.setItem(`userType_${user.id}`, type);
     }
     
-    if (type === 'realtor') {
+    if (type === 'realtor' && isAdmin) {
       setCurrentView('dashboard');
     } else {
       // Auto skip to swipe if user has completed quiz before
@@ -251,7 +294,7 @@ const Index = () => {
           />
         )}
         
-        {!userType && (
+        {!userType && isAdmin && (
           <UserTypeSelector onSelect={handleUserTypeSelect} />
         )}
         
