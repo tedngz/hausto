@@ -80,7 +80,7 @@ export const PropertyCard = ({
   };
 
   return (
-    <Card className={`bg-card/70 backdrop-blur-md overflow-hidden ${className}`}>
+    <Card className={`bg-white/70 backdrop-blur-md overflow-hidden ${className}`}>
       {/* Representative Property Image */}
       <div className="relative h-48">
         <img
@@ -101,17 +101,17 @@ export const PropertyCard = ({
         <div className="mb-2">
           {/* Mobile: Title above vibe score */}
           <div className="block sm:hidden mb-3">
-            <h2 className={`text-xl font-semibold text-foreground ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
+            <h2 className={`text-xl font-semibold text-gray-900 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
           </div>
           
           <div className="flex items-start justify-between mb-2">
             {/* Desktop: Title */}
-            <h2 className={`hidden sm:block text-xl font-semibold text-foreground flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
+            <h2 className={`hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
           </div>
         </div>
         
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm mb-3 gap-2">
-          <div className="flex items-center text-muted-foreground">
+          <div className="flex items-center text-gray-600">
             <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
             <span className="line-clamp-1">{apartment.location}</span>
           </div>
@@ -129,14 +129,14 @@ export const PropertyCard = ({
 
         {apartment.description && (
           <div className="mb-4">
-            <div className={`text-muted-foreground text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
+            <div className={`text-gray-700 text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
               {apartment.description}
             </div>
             {apartment.description && apartment.description.length > 150 && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="p-0 h-auto text-primary hover:text-primary/80 mt-1"
+                className="p-0 h-auto text-orange-600 hover:text-orange-700 mt-1"
                 onClick={() => setExpandedDescription(!expandedDescription)}
               >
                 {expandedDescription ? (
@@ -190,7 +190,7 @@ export const PropertyCard = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-3 border-t border-border">
+        <div className="flex items-center justify-between pt-3 border-t border-gray-200">
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
               <User className="w-4 h-4 text-white" />
@@ -198,15 +198,15 @@ export const PropertyCard = ({
             <div>
               {onViewProfile ? (
                 <button 
-                  className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                  className="text-sm font-medium text-gray-900 hover:text-primary transition-colors"
                   onClick={onViewProfile}
                 >
                   {apartment.realtor.name}
                 </button>
               ) : (
-                <span className="text-sm font-medium text-foreground">{apartment.realtor.name}</span>
+                <span className="text-sm font-medium text-gray-900">{apartment.realtor.name}</span>
               )}
-              <p className="text-xs text-muted-foreground">Licensed Realtor</p>
+              <p className="text-xs text-gray-500">Licensed Realtor</p>
             </div>
           </div>
           
@@ -214,7 +214,7 @@ export const PropertyCard = ({
             {showContactButton && onContact && (
               <Button 
                 size="sm" 
-                className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md"
                 onClick={onContact}
               >
                 Contact
