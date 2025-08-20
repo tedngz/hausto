@@ -13,7 +13,6 @@ interface NavigationProps {
   onSwitchUserType: () => void;
   onOpenAIChat: () => void;
   onRestartOnboarding?: () => void;
-  isAdmin?: boolean;
 }
 
 export const Navigation = ({ 
@@ -23,8 +22,7 @@ export const Navigation = ({
   userType, 
   onSwitchUserType,
   onOpenAIChat,
-  onRestartOnboarding,
-  isAdmin = false
+  onRestartOnboarding
 }: NavigationProps) => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
@@ -73,7 +71,6 @@ export const Navigation = ({
               onSwitchUserType={onSwitchUserType}
               onRestartOnboarding={onRestartOnboarding}
               onViewProfile={() => setCurrentView('profile')}
-              isAdmin={isAdmin}
             />
           </div>
         </div>
