@@ -221,6 +221,16 @@ const Index = () => {
   };
 
   const switchUserType = () => {
+    // Only allow admin to switch to realtor
+    if (!isAdmin) {
+      setUserType('renter');
+      setCurrentView('swipe');
+      if (user) {
+        localStorage.setItem(`userType_${user.id}`, 'renter');
+      }
+      return;
+    }
+    
     setUserType(null);
     setCurrentView('onboarding');
     setUserPreferences(null);
@@ -284,7 +294,7 @@ const Index = () => {
           />
         )}
 
-        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && (
+        {userType === 'realtor' && isAdmin && (currentView === 'dashboard' || currentView === 'profile') && (
           <RealtorNavigation
             currentView={currentView as 'dashboard' | 'profile'}
             setCurrentView={(view) => setCurrentView(view)}
@@ -320,7 +330,7 @@ const Index = () => {
         )}
 
         {currentView === 'profile' && userType && (
-          userType === 'realtor' ? (
+          userType === 'realtor' && isAdmin ? (
             <RealtorProfile />
           ) : (
             <Profile userType={userType} />
@@ -331,7 +341,7 @@ const Index = () => {
           <SocialFeed />
         )}
 
-        {userType === 'realtor' && currentView === 'dashboard' && (
+        {userType === 'realtor' && isAdmin && currentView === 'dashboard' && (
           <RealtorDashboard 
             onSwitchUserType={switchUserType}
             onViewProfile={() => setCurrentView('profile')}
