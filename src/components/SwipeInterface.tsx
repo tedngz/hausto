@@ -9,8 +9,10 @@ import { calculateVibeScore } from '@/utils/vibeScoring';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useMatches } from '@/hooks/useMatches';
+import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { PropertyImageModal } from '@/components/PropertyImageModal';
 import { PropertyCard } from '@/components/PropertyCard';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Card } from '@/components/ui/card';
 import { VibeScore } from '@/components/VibeScore';
 interface SwipeInterfaceProps {
@@ -26,9 +28,12 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   const [likedApartmentIds, setLikedApartmentIds] = useState<string[]>([]);
   const [imageIndices, setImageIndices] = useState<Record<string, number>>({});
   const [noMatchReason, setNoMatchReason] = useState<string>('');
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [subscriptionReason, setSubscriptionReason] = useState<'views' | 'matches' | 'quiz'>('views');
   const { formatPrice } = useCurrency();
   const { properties: realProperties, isLoading } = useProperties();
   const { renterMatches, isLoadingMatches } = useMatches();
+  const { canPerformAction, updateUsage } = useUsageTracking();
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   // Transform Property to Apartment
@@ -152,6 +157,14 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
 
   const handleLike = async () => {
     if (apartments.length === 0) return;
+    
+    // Check if user can create more matches
+    if (!canPerformAction('match')) {
+      setSubscriptionReason('matches');
+      setShowSubscriptionModal(true);
+      return;
+    }
+    
     const currentApartment = apartments[currentApartmentIndex];
     setLikedApartmentIds(prev => [...prev, currentApartment.id]);
     
@@ -166,6 +179,9 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
             property_id: currentApartment.id,
             realtor_id: currentApartment.realtor.id
           });
+        
+        // Track the match
+        await updateUsage('match');
       }
     } catch (error) {
       console.error('Error saving match:', error);
@@ -179,7 +195,17 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     nextApartment();
   };
 
-  const nextApartment = () => {
+  const nextApartment = async () => {
+    // Check if user can view more properties
+    if (!canPerformAction('view')) {
+      setSubscriptionReason('views');
+      setShowSubscriptionModal(true);
+      return;
+    }
+    
+    // Track property view
+    await updateUsage('view');
+    
     if (currentApartmentIndex < apartments.length - 1) {
       setCurrentApartmentIndex(currentApartmentIndex + 1);
     } else {
@@ -356,6 +382,13 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           isOpen={isImageModalOpen}
           onClose={() => setIsImageModalOpen(false)}
           initialImageIndex={currentImageIndex}
+        />
+        
+        {/* Subscription Modal */}
+        <SubscriptionModal
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
+          reason={subscriptionReason}
         />
       </div>
     </div>
