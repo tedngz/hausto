@@ -16,7 +16,20 @@ interface OnboardingQuizProps {
 }
 
 export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
+  // All hooks must be called before any conditional logic or early returns
   const { canPerformAction, updateUsage, getRemainingActions, subscriptionStatus } = useUsageTracking();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [showContent, setShowContent] = useState(true);
+  const [preferences, setPreferences] = useState<Partial<UserPreferences>>({
+    styles: [],
+    colors: [],
+    activities: [],
+    priceRange: [8000000, 15000000],
+    size: '',
+    location: [],
+    moveInDate: ''
+  });
   
   // Check if user has reached quiz limit
   const hasReachedQuizLimit = !canPerformAction('quiz');
@@ -47,18 +60,6 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       </Card>
     );
   }
-  const [currentStep, setCurrentStep] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [showContent, setShowContent] = useState(true);
-  const [preferences, setPreferences] = useState<Partial<UserPreferences>>({
-    styles: [],
-    colors: [],
-    activities: [],
-    priceRange: [8000000, 15000000],
-    size: '',
-    location: [],
-    moveInDate: ''
-  });
 
   const totalSteps = 7;
 
