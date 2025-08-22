@@ -95,7 +95,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
 
   const handleSubmit = async () => {
     if (!canPerformAction('quiz')) {
-      toast.error(`You've reached your quiz retake limit. You have ${getRemainingActions('quiz')} retakes remaining this week.`);
+      toast.error(`You've reached your weekly quiz retake limit (${getRemainingActions('quiz')} remaining). Upgrade to Premium for unlimited access!`);
       return;
     }
 

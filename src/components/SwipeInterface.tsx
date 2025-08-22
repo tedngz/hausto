@@ -171,7 +171,10 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     // Save match to database
     try {
       const { data: userData } = await supabase.auth.getUser();
+      console.log('Match creation - user data:', userData?.user?.id);
+      
       if (userData?.user?.id) {
+        console.log('Inserting match for property:', currentApartment.id);
         await supabase
           .from('property_matches')
           .insert({
@@ -180,8 +183,12 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
             realtor_id: currentApartment.realtor.id
           });
         
+        console.log('Match inserted successfully, now tracking usage...');
         // Track the match
-        await updateUsage('match');
+        const trackingResult = await updateUsage('match');
+        console.log('Usage tracking result:', trackingResult);
+      } else {
+        console.error('No user ID available for match creation');
       }
     } catch (error) {
       console.error('Error saving match:', error);
