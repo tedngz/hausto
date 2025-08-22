@@ -99,48 +99,60 @@ export const useUsageTracking = () => {
   }, [user?.id]);
 
   const updateUsage = async (type: 'view' | 'match' | 'quiz') => {
-    if (!user?.id) return false;
+    if (!user?.id) {
+      console.error('No user ID available for usage tracking');
+      return false;
+    }
 
     const today = new Date().toISOString().split('T')[0];
     
     try {
-      let updateData = {};
+      // Calculate new values
+      let newViews = todayUsage.propertiesViewed;
+      let newMatches = todayUsage.propertiesMatched;
+      let newQuizRetakes = todayUsage.quizRetakes;
+
       switch (type) {
         case 'view':
-          updateData = { properties_viewed: todayUsage.propertiesViewed + 1 };
+          newViews += 1;
           break;
         case 'match':
-          updateData = { properties_matched: todayUsage.propertiesMatched + 1 };
+          newMatches += 1;
           break;
         case 'quiz':
-          updateData = { quiz_retakes: todayUsage.quizRetakes + 1 };
+          newQuizRetakes += 1;
           break;
       }
+
+      console.log('Updating usage:', { type, user_id: user.id, usage_date: today, newViews, newMatches, newQuizRetakes });
 
       const { error } = await supabase
         .from('daily_usage')
         .upsert({
           user_id: user.id,
           usage_date: today,
-          properties_viewed: todayUsage.propertiesViewed,
-          properties_matched: todayUsage.propertiesMatched,
-          quiz_retakes: todayUsage.quizRetakes,
-          ...updateData,
+          properties_viewed: newViews,
+          properties_matched: newMatches,
+          quiz_retakes: newQuizRetakes,
         }, { 
           onConflict: 'user_id,usage_date',
           ignoreDuplicates: false 
         });
 
       if (error) {
-        console.error('Error updating usage:', error);
-        throw error;
+        console.error('Supabase error updating usage:', error);
+        toast.error(`Failed to track ${type}: ${error.message}`);
+        return false;
       }
 
+      console.log('Successfully updated usage tracking');
+
       // Update local state
-      setTodayUsage(prev => ({
-        ...prev,
-        ...updateData,
-      }));
+      setTodayUsage({
+        propertiesViewed: newViews,
+        propertiesMatched: newMatches,
+        quizRetakes: newQuizRetakes,
+      });
 
       if (type === 'match') {
         setWeeklyMatches(prev => prev + 1);
