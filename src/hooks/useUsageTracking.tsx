@@ -49,7 +49,7 @@ export const useUsageTracking = () => {
         .select('*')
         .eq('user_id', user.id)
         .eq('usage_date', today)
-        .single();
+        .maybeSingle();
 
       if (todayData) {
         setTodayUsage({
@@ -78,7 +78,7 @@ export const useUsageTracking = () => {
         .from('subscribers')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (subData) {
         setSubscriptionStatus({
