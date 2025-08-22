@@ -15,6 +15,7 @@ import { PropertyCard } from '@/components/PropertyCard';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Card } from '@/components/ui/card';
 import { VibeScore } from '@/components/VibeScore';
+import { toast } from 'sonner';
 interface SwipeInterfaceProps {
   userPreferences: UserPreferences;
   onMatch: (apartment: Apartment) => void;
@@ -175,23 +176,39 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       
       if (userData?.user?.id) {
         console.log('Inserting match for property:', currentApartment.id);
-        await supabase
+        const { data: matchData, error: matchError } = await supabase
           .from('property_matches')
           .insert({
             renter_id: userData.user.id,
             property_id: currentApartment.id,
             realtor_id: currentApartment.realtor.id
-          });
+          })
+          .select();
         
-        console.log('Match inserted successfully, now tracking usage...');
-        // Track the match
+        if (matchError) {
+          console.error('Error inserting match:', matchError);
+          toast.error('Failed to save match');
+          return;
+        }
+        
+        console.log('Match inserted successfully:', matchData);
+        console.log('Now tracking usage...');
+        
+        // Track the match - this is critical for weekly counting
         const trackingResult = await updateUsage('match');
         console.log('Usage tracking result:', trackingResult);
+        
+        if (!trackingResult) {
+          console.error('Failed to track match usage');
+        }
       } else {
         console.error('No user ID available for match creation');
+        return;
       }
     } catch (error) {
       console.error('Error saving match:', error);
+      toast.error('Failed to create match');
+      return;
     }
     
     onMatch(currentApartment);

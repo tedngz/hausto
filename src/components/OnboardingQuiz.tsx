@@ -16,7 +16,37 @@ interface OnboardingQuizProps {
 }
 
 export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
-  const { canPerformAction, updateUsage, getRemainingActions } = useUsageTracking();
+  const { canPerformAction, updateUsage, getRemainingActions, subscriptionStatus } = useUsageTracking();
+  
+  // Check if user has reached quiz limit
+  const hasReachedQuizLimit = !canPerformAction('quiz');
+  
+  // If user has reached limit and is not premium, show limit message instead of quiz
+  if (hasReachedQuizLimit && !subscriptionStatus.subscribed) {
+    return (
+      <Card className="max-w-2xl mx-auto p-8 text-center">
+        <div className="space-y-4">
+          <div className="text-6xl">🚫</div>
+          <h2 className="text-2xl font-bold">Quiz Limit Reached</h2>
+          <p className="text-muted-foreground">
+            You've used all {2} of your weekly quiz retakes. 
+            Upgrade to Premium for unlimited quiz access!
+          </p>
+          <div className="flex gap-4 justify-center mt-6">
+            <Button 
+              variant="outline" 
+              onClick={onSkip}
+            >
+              Skip for Now
+            </Button>
+            <Button>
+              Upgrade to Premium
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
   const [currentStep, setCurrentStep] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showContent, setShowContent] = useState(true);
