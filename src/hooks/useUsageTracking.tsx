@@ -170,7 +170,7 @@ export const useUsageTracking = () => {
         return false;
       }
 
-      console.log('Successfully updated usage tracking');
+      console.log('Successfully updated usage tracking for', type);
 
       // Update local state
       setTodayUsage({
@@ -179,10 +179,13 @@ export const useUsageTracking = () => {
         quizRetakes: newQuizRetakes,
       });
 
+      // Update weekly counters immediately
       if (type === 'match') {
+        console.log('Incrementing weekly matches from', weeklyMatches, 'to', weeklyMatches + 1);
         setWeeklyMatches(prev => prev + 1);
       }
       if (type === 'quiz') {
+        console.log('Incrementing weekly quiz retakes from', weeklyQuizRetakes, 'to', weeklyQuizRetakes + 1);
         setWeeklyQuizRetakes(prev => prev + 1);
       }
 
