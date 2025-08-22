@@ -37,19 +37,32 @@ export const useUsageTracking = () => {
   const [loading, setLoading] = useState(true);
 
   const fetchUsage = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log('No user available for fetchUsage, user:', user);
+      return;
+    }
+
+    console.log('Fetching usage for user:', user.id);
 
     try {
       const today = new Date().toISOString().split('T')[0];
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+      console.log('Fetching usage for date:', today);
+
       // Get today's usage
-      const { data: todayData } = await supabase
+      const { data: todayData, error: todayError } = await supabase
         .from('daily_usage')
         .select('*')
         .eq('user_id', user.id)
         .eq('usage_date', today)
         .maybeSingle();
+
+      if (todayError) {
+        console.error('Error fetching today\'s usage:', todayError);
+      } else {
+        console.log('Today\'s usage data:', todayData);
+      }
 
       if (todayData) {
         setTodayUsage({
@@ -60,11 +73,17 @@ export const useUsageTracking = () => {
       }
 
       // Get weekly matches and quiz retakes
-      const { data: weeklyData } = await supabase
+      const { data: weeklyData, error: weeklyError } = await supabase
         .from('daily_usage')
         .select('properties_matched, quiz_retakes')
         .eq('user_id', user.id)
         .gte('usage_date', weekAgo);
+
+      if (weeklyError) {
+        console.error('Error fetching weekly usage:', weeklyError);
+      } else {
+        console.log('Weekly usage data:', weeklyData);
+      }
 
       if (weeklyData) {
         const weeklyMatchesSum = weeklyData.reduce((sum, day) => sum + day.properties_matched, 0);
@@ -74,11 +93,17 @@ export const useUsageTracking = () => {
       }
 
       // Get subscription status
-      const { data: subData } = await supabase
+      const { data: subData, error: subError } = await supabase
         .from('subscribers')
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle();
+
+      if (subError) {
+        console.error('Error fetching subscription:', subError);
+      } else {
+        console.log('Subscription data:', subData);
+      }
 
       if (subData) {
         setSubscriptionStatus({
