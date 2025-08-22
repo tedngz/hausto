@@ -122,11 +122,19 @@ export const useUsageTracking = () => {
         .upsert({
           user_id: user.id,
           usage_date: today,
-          ...todayUsage,
+          properties_viewed: todayUsage.propertiesViewed,
+          properties_matched: todayUsage.propertiesMatched,
+          quiz_retakes: todayUsage.quizRetakes,
           ...updateData,
-        }, { onConflict: 'user_id,usage_date' });
+        }, { 
+          onConflict: 'user_id,usage_date',
+          ignoreDuplicates: false 
+        });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating usage:', error);
+        throw error;
+      }
 
       // Update local state
       setTodayUsage(prev => ({
