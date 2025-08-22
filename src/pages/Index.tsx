@@ -16,6 +16,9 @@ import { SocialFeed } from '@/components/SocialFeed';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { UsageMeter } from '@/components/UsageMeter';
+import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { Loader2, LogOut, Building } from 'lucide-react';
 
 export type UserPreferences = {
@@ -72,6 +75,7 @@ const Index = () => {
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
   // Load saved preferences from localStorage
   useEffect(() => {
@@ -333,7 +337,15 @@ const Index = () => {
           userType === 'realtor' && isAdmin ? (
             <RealtorProfile />
           ) : (
-            <Profile userType={userType} />
+            <div className="space-y-6">
+              <Profile userType={userType} />
+              <div className="max-w-4xl mx-auto px-4 pb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <UsageMeter />
+                  <SubscriptionStatus onUpgrade={() => setIsSubscriptionModalOpen(true)} />
+                </div>
+              </div>
+            </div>
           )
         )}
 
@@ -363,6 +375,11 @@ const Index = () => {
         <PropertyUploadModal 
           isOpen={isUploadModalOpen}
           onClose={() => setIsUploadModalOpen(false)}
+        />
+
+        <SubscriptionModal
+          isOpen={isSubscriptionModalOpen}
+          onClose={() => setIsSubscriptionModalOpen(false)}
         />
       </div>
     </CurrencyProvider>

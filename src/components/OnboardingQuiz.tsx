@@ -6,7 +6,9 @@ import { Progress } from '@/components/ui/progress';
 import { UserPreferences } from '@/pages/Index';
 import { BudgetRangeSelector } from '@/components/BudgetRangeSelector';
 import { CityDistrictSelector } from '@/components/CityDistrictSelector';
+import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { Heart, Sparkles, Home, MapPin, Calendar, DollarSign, Ruler } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface OnboardingQuizProps {
   onComplete: (preferences: UserPreferences) => void;
@@ -14,6 +16,7 @@ interface OnboardingQuizProps {
 }
 
 export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
+  const { canPerformAction, updateUsage, getRemainingActions } = useUsageTracking();
   const [currentStep, setCurrentStep] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showContent, setShowContent] = useState(true);
@@ -90,7 +93,12 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
     }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!canPerformAction('quiz')) {
+      toast.error(`You've reached your quiz retake limit. You have ${getRemainingActions('quiz')} retakes remaining this week.`);
+      return;
+    }
+
     const finalPreferences: UserPreferences = {
       styles: preferences.styles as string[],
       colors: preferences.colors as string[],
@@ -100,6 +108,9 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       location: preferences.location as string[],
       moveInDate: preferences.moveInDate as string
     };
+
+    // Track quiz completion
+    await updateUsage('quiz');
     onComplete(finalPreferences);
   };
 
