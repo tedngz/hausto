@@ -12,7 +12,11 @@ export const LandingPage = () => {
       <header className="container mx-auto px-4 py-6">
         <nav className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Home className="h-8 w-8 text-primary" />
+            <img 
+              src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
+              alt="Hausto Logo" 
+              className="h-8 w-8"
+            />
             <span className="text-2xl font-bold text-foreground">Hausto</span>
           </div>
           <Button 
@@ -54,13 +58,6 @@ export const LandingPage = () => {
             >
               Get Started
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button 
-              variant="outline"
-              size="lg"
-              className="border-primary text-primary hover:bg-primary hover:text-primary-foreground px-8 py-6 text-lg"
-            >
-              Learn More
             </Button>
           </div>
         </div>
@@ -163,7 +160,11 @@ export const LandingPage = () => {
       <footer className="bg-card border-t border-border py-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center space-x-2">
-            <Home className="h-6 w-6 text-primary" />
+            <img 
+              src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
+              alt="Hausto Logo" 
+              className="h-6 w-6"
+            />
             <span className="text-lg font-semibold text-foreground">Hausto</span>
           </div>
           <p className="text-center text-muted-foreground mt-2">

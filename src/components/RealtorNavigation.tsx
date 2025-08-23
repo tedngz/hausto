@@ -36,7 +36,7 @@ export const RealtorNavigation = ({
           <div className="flex items-center min-w-0">
             <div className="flex items-center space-x-1.5 md:space-x-2">
               <img 
-                src="/lovable-uploads/e6e36f1b-c1ac-4aa8-a584-dac48543e870.png" 
+                src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
                 alt="Hausto Logo" 
                 className="w-5 h-5 md:w-6 md:h-6"
               />

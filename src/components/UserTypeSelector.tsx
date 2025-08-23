@@ -14,7 +14,7 @@ export const UserTypeSelector = ({ onSelect }: UserTypeSelectorProps) => {
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-6">
             <img 
-              src="/lovable-uploads/e6e36f1b-c1ac-4aa8-a584-dac48543e870.png" 
+              src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
               alt="Hausto Logo" 
               className="w-16 h-16 mr-4"
             />
