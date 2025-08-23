@@ -55,35 +55,35 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Crown className="h-6 w-6 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
+            <Crown className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             Upgrade to Premium
           </DialogTitle>
-          <DialogDescription className="text-lg">
+          <DialogDescription className="text-sm sm:text-lg">
             {reason && reasonMessages[reason]}
             {" "}Unlock unlimited access with our premium plan.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid md:grid-cols-2 gap-6 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
           {/* Free Plan */}
           <Card className="relative">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                Free Plan
+            <CardHeader className="pb-4">
+              <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <span>Free Plan</span>
                 <Badge variant="secondary">Current</Badge>
               </CardTitle>
               <CardDescription>Perfect for getting started</CardDescription>
-              <div className="text-3xl font-bold">$0<span className="text-sm font-normal">/month</span></div>
+              <div className="text-2xl sm:text-3xl font-bold">$0<span className="text-sm font-normal">/month</span></div>
             </CardHeader>
-            <CardContent>
-              <ul className="space-y-3">
+            <CardContent className="pt-0">
+              <ul className="space-y-2 sm:space-y-3">
                 {freeFeatures.map((feature, index) => (
                   <li key={index} className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{feature}</span>
+                    <Check className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-xs sm:text-sm">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -95,20 +95,20 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
             <div className="absolute -top-2 left-1/2 -translate-x-1/2">
               <Badge className="bg-primary text-primary-foreground">Recommended</Badge>
             </div>
-            <CardHeader>
+            <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
-                <Crown className="h-5 w-5 text-primary" />
+                <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 Premium Plan
               </CardTitle>
               <CardDescription>Unlimited access to everything</CardDescription>
-              <div className="text-3xl font-bold">$5<span className="text-sm font-normal">/month</span></div>
+              <div className="text-2xl sm:text-3xl font-bold">$5<span className="text-sm font-normal">/month</span></div>
             </CardHeader>
-            <CardContent>
-              <ul className="space-y-3">
+            <CardContent className="pt-0">
+              <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
                 {premiumFeatures.map((feature, index) => (
                   <li key={index} className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">{feature}</span>
+                    <Check className="h-4 w-4 text-primary shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -128,7 +128,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
           </Card>
         </div>
 
-        <div className="text-center text-sm text-muted-foreground mt-4">
+        <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
           <p>✓ Cancel anytime • ✓ Secure PayPal payment • ✓ Instant activation</p>
         </div>
       </DialogContent>

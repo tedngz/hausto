@@ -34,15 +34,19 @@ export const PropertyImageModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[95vw] sm:max-w-4xl h-[85vh] sm:h-[90vh] p-0 overflow-hidden bg-transparent border-none shadow-none">
+      <DialogContent className="w-[95vw] sm:max-w-6xl h-[85vh] sm:h-[90vh] p-2 sm:p-4 overflow-hidden bg-background/95 backdrop-blur-sm border shadow-xl">
         <div className="relative w-full h-full bg-transparent">
 
           {/* Main image */}
-          <div className="relative w-full h-full flex items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-lg">
             <img
               src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'}
               alt={apartment.title}
-              className="max-w-full max-h-full object-contain"
+              className="w-full h-full object-contain max-w-full max-h-full"
+              style={{ 
+                maxHeight: 'calc(85vh - 4rem)',
+                maxWidth: 'calc(95vw - 2rem)'
+              }}
             />
 
             {/* AI Highlights overlay */}
