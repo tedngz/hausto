@@ -423,13 +423,13 @@ export const Profile = ({ userType }: ProfileProps) => {
         {/* Header */}
         <Card>
           <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center space-x-3 md:space-x-4">
                 <div className="relative group">
-                  <Avatar className="w-16 h-16">
+                  <Avatar className="w-14 h-14 md:w-16 md:h-16">
                     <AvatarImage src={profile?.avatar_url} />
                     <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
-                      <User className={`w-8 h-8 ${
+                      <User className={`w-7 h-7 md:w-8 md:h-8 ${
                         userType === 'realtor' ? 'text-blue-600' : 'text-green-600'
                       }`} />
                     </AvatarFallback>
@@ -438,7 +438,7 @@ export const Profile = ({ userType }: ProfileProps) => {
                     htmlFor="avatar-upload" 
                     className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
                   >
-                    <Camera className="w-5 h-5 text-white" />
+                    <Camera className="w-4 h-4 md:w-5 md:h-5 text-white" />
                     <input
                       id="avatar-upload"
                       type="file"
@@ -450,15 +450,22 @@ export const Profile = ({ userType }: ProfileProps) => {
                   </label>
                   {uploading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
-                      <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                      <div className="animate-spin w-4 h-4 md:w-5 md:h-5 border-2 border-white border-t-transparent rounded-full"></div>
                     </div>
                   )}
                 </div>
-                <div>
-                  <CardTitle className="text-2xl">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-lg md:text-xl lg:text-2xl font-semibold text-foreground truncate">
                     {profile?.name || user?.email || 'User Profile'}
                   </CardTitle>
-                  <Badge variant="secondary" className="mt-1">
+                  <Badge 
+                    variant="secondary" 
+                    className={`mt-1 text-xs ${
+                      userType === 'realtor' 
+                        ? 'bg-orange-100 text-orange-700 border-orange-200' 
+                        : 'bg-orange-100 text-orange-700 border-orange-200'
+                    }`}
+                  >
                     {userType === 'realtor' ? 'Property Owner' : 'Property Seeker'}
                   </Badge>
                 </div>
@@ -466,10 +473,12 @@ export const Profile = ({ userType }: ProfileProps) => {
               <Button
                 onClick={() => setIsEditing(!isEditing)}
                 variant={isEditing ? "ghost" : "outline"}
-                className={isEditing ? "text-red-600 hover:text-red-700" : ""}
+                className={`w-full sm:w-auto text-sm ${isEditing ? "text-red-600 hover:text-red-700" : ""}`}
+                size="sm"
               >
                 {isEditing ? <X className="w-4 h-4 mr-2" /> : <Edit3 className="w-4 h-4 mr-2" />}
-                {isEditing ? 'Cancel' : 'Edit Profile'}
+                <span className="hidden xs:inline">{isEditing ? 'Cancel' : 'Edit Profile'}</span>
+                <span className="xs:hidden">{isEditing ? 'Cancel' : 'Edit'}</span>
               </Button>
             </div>
           </CardHeader>
