@@ -13,6 +13,7 @@ import { FloatingAIButton } from '@/components/FloatingAIButton';
 import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
 import { SocialFeed } from '@/components/SocialFeed';
+import { LandingPage } from '@/components/LandingPage';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
@@ -149,11 +150,7 @@ const Index = () => {
     return () => window.removeEventListener('openAIChat', handleOpenAIChat);
   }, []);
 
-  useEffect(() => {
-    if (!loading && !user) {
-      navigate('/auth');
-    }
-  }, [user, loading, navigate]);
+  // Removed automatic redirect to /auth - now showing landing page instead
 
   const handleUserTypeSelect = (type: 'renter' | 'realtor') => {
     // Only allow admin to select realtor
@@ -271,7 +268,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return null;
+    return <LandingPage />;
   }
 
   return (
