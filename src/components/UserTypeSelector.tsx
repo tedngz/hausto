@@ -18,7 +18,7 @@ export const UserTypeSelector = ({ onSelect }: UserTypeSelectorProps) => {
               alt="Hausto Logo" 
               className="w-16 h-16 mr-4"
             />
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
+            <h1 className="text-5xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent flex items-center">
               Hausto
             </h1>
           </div>

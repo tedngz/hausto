@@ -31,7 +31,7 @@ export const Navigation = ({
       <div className="max-w-4xl mx-auto px-3 md:px-4 py-2 md:py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center min-w-0">
-            <div className="flex items-center space-x-1.5 md:space-x-2">
+            <div className="flex items-center justify-center space-x-1.5 md:space-x-2">
               <img 
                 src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
                 alt="Hausto Logo" 
