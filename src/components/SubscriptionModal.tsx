@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +14,8 @@ interface SubscriptionModalProps {
 }
 
 export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModalProps) => {
-  const { createSubscription, loading } = useSubscription();
-  const [upgrading, setUpgrading] = useState(false);
+  const { checkSubscription } = useSubscription();
+  const [paypalLoaded, setPaypalLoaded] = useState(false);
 
   const reasonMessages = {
     views: "You've reached your daily limit of 10 property views.",
@@ -23,17 +23,49 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
     quiz: "You've used both weekly quiz retakes.",
   };
 
-  const handleUpgrade = async () => {
-    setUpgrading(true);
-    try {
-      const approvalUrl = await createSubscription();
-      if (approvalUrl) {
-        window.location.href = approvalUrl;
-      }
-    } catch (error) {
-      toast.error('Failed to start upgrade process');
-    } finally {
-      setUpgrading(false);
+  useEffect(() => {
+    if (isOpen && !paypalLoaded) {
+      const script = document.createElement('script');
+      script.src = 'https://www.paypal.com/sdk/js?client-id=Af9M7zFD7HxgpMjHpmRHK7AhVEF0NSTan-3UXW5CRJA8OsT1A2p2D6hWFv6r049S4Bc6IrmQDsw9q3t_&vault=true&intent=subscription';
+      script.onload = () => {
+        setPaypalLoaded(true);
+        initializePayPalButton();
+      };
+      document.body.appendChild(script);
+      
+      return () => {
+        const existingScript = document.querySelector('script[src*="paypal.com/sdk"]');
+        if (existingScript) {
+          document.body.removeChild(existingScript);
+        }
+      };
+    }
+  }, [isOpen, paypalLoaded]);
+
+  const initializePayPalButton = () => {
+    if ((window as any).paypal) {
+      (window as any).paypal.Buttons({
+        style: {
+          shape: 'pill',
+          color: 'white',
+          layout: 'vertical',
+          label: 'paypal'
+        },
+        createSubscription: function(data: any, actions: any) {
+          return actions.subscription.create({
+            plan_id: 'P-3RL93059D68804616NCU6CSI'
+          });
+        },
+        onApprove: function(data: any, actions: any) {
+          toast.success('Subscription activated! You now have premium access.');
+          checkSubscription(); // Refresh subscription status
+          onClose(); // Close the modal
+        },
+        onError: function(err: any) {
+          toast.error('Payment failed. Please try again.');
+          console.error('PayPal error:', err);
+        }
+      }).render('#paypal-button-container-P-3RL93059D68804616NCU6CSI');
     }
   };
 
@@ -113,16 +145,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
                 ))}
               </ul>
               <div className="w-full mt-6">
-                <style dangerouslySetInnerHTML={{
-                  __html: `.pp-8E258XS72JNSU{text-align:center;border:none;border-radius:0.25rem;min-width:11.625rem;padding:0 2rem;height:2.625rem;font-weight:bold;background-color:#FFD140;color:#000000;font-family:"Helvetica Neue",Arial,sans-serif;font-size:1rem;line-height:1.25rem;cursor:pointer;}`
-                }} />
-                <form action="https://www.paypal.com/ncp/payment/8E258XS72JNSU" method="post" target="_blank" style={{display:'inline-grid', justifyItems:'center', alignContent:'start', gap:'0.5rem', width:'100%'}}>
-                  <input className="pp-8E258XS72JNSU" type="submit" value="Buy Now" style={{width:'100%'}} />
-                  <img src="https://www.paypalobjects.com/images/Debit_Credit.svg" alt="cards" />
-                  <section style={{fontSize: '0.75rem'}}> 
-                    Powered by <img src="https://www.paypalobjects.com/paypal-ui/logos/svg/paypal-wordmark-color.svg" alt="paypal" style={{height:'0.875rem', verticalAlign:'middle'}}/>
-                  </section>
-                </form>
+                <div id="paypal-button-container-P-3RL93059D68804616NCU6CSI"></div>
               </div>
             </CardContent>
           </Card>
