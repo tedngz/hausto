@@ -1,9 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Crown, Calendar, RefreshCw, CreditCard, History } from 'lucide-react';
+import { Crown, Calendar, RefreshCw, CreditCard } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
-import { SubscriptionHistory } from '@/components/SubscriptionHistory';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -16,7 +15,6 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
   const { subscribed, subscription_tier, subscription_end, loading, checkSubscription, cancelSubscription } = useSubscription();
   const [cancelling, setCancelling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [showHistoryPanel, setShowHistoryPanel] = useState(showHistory);
 
   const isPremium = subscribed && subscription_tier === 'premium';
 
@@ -66,13 +64,6 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
               )}
             </span>
             <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-              >
-                <History className="h-4 w-4" />
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -134,7 +125,7 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
         </CardContent>
       </Card>
 
-      {showHistoryPanel && <SubscriptionHistory />}
+      
     </div>
   );
 };
