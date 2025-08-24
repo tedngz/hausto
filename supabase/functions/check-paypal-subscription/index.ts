@@ -37,10 +37,9 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header provided");
     
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
     
-    const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
@@ -67,7 +66,7 @@ serve(async (req) => {
       .from("subscribers")
       .select("*")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     let subscriptionStatus = {
       subscribed: false,
@@ -114,7 +113,7 @@ serve(async (req) => {
       subscription_tier: subscriptionStatus.subscribed ? "premium" : "free",
       subscription_end: subscriptionStatus.subscription_end,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
+    }, { onConflict: 'email' });
 
     logStep("Updated subscriber record", subscriptionStatus);
 

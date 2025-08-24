@@ -413,6 +413,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_user_subscription: {
+        Args: { user_email: string }
+        Returns: undefined
+      }
       get_matched_public_profiles: {
         Args: { user_ids: string[] }
         Returns: {
