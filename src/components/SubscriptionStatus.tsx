@@ -1,19 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Crown, Calendar, RefreshCw, CreditCard } from 'lucide-react';
+import { Crown, Calendar, RefreshCw, CreditCard, History } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
+import { SubscriptionHistory } from '@/components/SubscriptionHistory';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface SubscriptionStatusProps {
   onUpgrade?: () => void;
+  showHistory?: boolean;
 }
 
-export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
+export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: SubscriptionStatusProps) => {
   const { subscribed, subscription_tier, subscription_end, loading, checkSubscription, cancelSubscription } = useSubscription();
   const [cancelling, setCancelling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(showHistory);
 
   const isPremium = subscribed && subscription_tier === 'premium';
 
@@ -48,77 +51,90 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            {isPremium ? (
-              <>
-                <Crown className="h-5 w-5 text-primary" />
-                Premium Plan
-              </>
-            ) : (
-              'Free Plan'
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              {isPremium ? (
+                <>
+                  <Crown className="h-5 w-5 text-primary" />
+                  Premium Plan
+                </>
+              ) : (
+                'Free Plan'
+              )}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+              >
+                <History className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Badge variant={isPremium ? 'default' : 'secondary'} className="text-sm">
+              {isPremium ? 'Premium' : 'Free'}
+            </Badge>
+            {isPremium && subscription_end && (
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Calendar className="h-3 w-3" />
+                Renews {new Date(subscription_end).toLocaleDateString()}
+              </div>
             )}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </Button>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Badge variant={isPremium ? 'default' : 'secondary'} className="text-sm">
-            {isPremium ? 'Premium' : 'Free'}
-          </Badge>
-          {isPremium && subscription_end && (
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Calendar className="h-3 w-3" />
-              Renews {new Date(subscription_end).toLocaleDateString()}
+          </div>
+
+          {isPremium ? (
+            <div className="space-y-3">
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="flex items-center gap-2 text-primary font-medium">
+                  <Crown className="h-4 w-4" />
+                  Premium Benefits Active
+                </div>
+                <ul className="text-sm text-muted-foreground mt-2 space-y-1">
+                  <li>• Unlimited property views</li>
+                  <li>• Unlimited matches</li>
+                  <li>• Unlimited quiz retakes</li>
+                </ul>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="w-full"
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-sm text-muted-foreground">
+                Upgrade to unlock unlimited access to all features
+              </div>
+              <Button onClick={onUpgrade} className="w-full">
+                <Crown className="h-4 w-4 mr-2" />
+                Upgrade to Premium
+              </Button>
             </div>
           )}
-        </div>
+        </CardContent>
+      </Card>
 
-        {isPremium ? (
-          <div className="space-y-3">
-            <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
-              <div className="flex items-center gap-2 text-primary font-medium">
-                <Crown className="h-4 w-4" />
-                Premium Benefits Active
-              </div>
-              <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                <li>• Unlimited property views</li>
-                <li>• Unlimited matches</li>
-                <li>• Unlimited quiz retakes</li>
-              </ul>
-            </div>
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="w-full"
-            >
-              <CreditCard className="h-4 w-4 mr-2" />
-              {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">
-              Upgrade to unlock unlimited access to all features
-            </div>
-            <Button onClick={onUpgrade} className="w-full">
-              <Crown className="h-4 w-4 mr-2" />
-              Upgrade to Premium
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {showHistoryPanel && <SubscriptionHistory />}
+    </div>
   );
 };

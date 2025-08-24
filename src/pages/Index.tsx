@@ -339,7 +339,10 @@ const Index = () => {
               <div className="max-w-4xl mx-auto px-4 pb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <UsageMeter />
-                  <SubscriptionStatus onUpgrade={() => setIsSubscriptionModalOpen(true)} />
+                  <SubscriptionStatus 
+                    onUpgrade={() => setIsSubscriptionModalOpen(true)} 
+                    showHistory={true}
+                  />
                 </div>
               </div>
             </div>

@@ -111,6 +111,12 @@ export const useUsageTracking = () => {
           subscription_tier: subData.subscription_tier,
           subscription_end: subData.subscription_end,
         });
+      } else {
+        // If no subscription record, ensure user shows as free tier
+        setSubscriptionStatus({
+          subscribed: false,
+          subscription_tier: 'free',
+        });
       }
     } catch (error) {
       console.error('Error fetching usage data:', error);
@@ -198,19 +204,34 @@ export const useUsageTracking = () => {
   };
 
   const canPerformAction = (type: 'view' | 'match' | 'quiz'): boolean => {
+    console.log(`Checking if can perform ${type}:`, {
+      subscribed: subscriptionStatus.subscribed,
+      tier: subscriptionStatus.subscription_tier,
+      todayViews: todayUsage.propertiesViewed,
+      weeklyMatches,
+      weeklyQuizRetakes
+    });
+
     // Premium users have unlimited access
     if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
+      console.log('Premium user - unlimited access');
       return true;
     }
 
     // Check free tier limits
     switch (type) {
       case 'view':
-        return todayUsage.propertiesViewed < FREE_TIER_LIMITS.dailyViews;
+        const canView = todayUsage.propertiesViewed < FREE_TIER_LIMITS.dailyViews;
+        console.log(`Can view: ${canView} (${todayUsage.propertiesViewed}/${FREE_TIER_LIMITS.dailyViews})`);
+        return canView;
       case 'match':
-        return weeklyMatches < FREE_TIER_LIMITS.weeklyMatches;
+        const canMatch = weeklyMatches < FREE_TIER_LIMITS.weeklyMatches;
+        console.log(`Can match: ${canMatch} (${weeklyMatches}/${FREE_TIER_LIMITS.weeklyMatches})`);
+        return canMatch;
       case 'quiz':
-        return weeklyQuizRetakes < FREE_TIER_LIMITS.weeklyQuizRetakes;
+        const canQuiz = weeklyQuizRetakes < FREE_TIER_LIMITS.weeklyQuizRetakes;
+        console.log(`Can quiz: ${canQuiz} (${weeklyQuizRetakes}/${FREE_TIER_LIMITS.weeklyQuizRetakes})`);
+        return canQuiz;
       default:
         return false;
     }

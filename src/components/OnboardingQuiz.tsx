@@ -35,14 +35,14 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   const hasReachedQuizLimit = !canPerformAction('quiz');
   
   // If user has reached limit and is not premium, show limit message instead of quiz
-  if (hasReachedQuizLimit && !subscriptionStatus.subscribed) {
+  if (hasReachedQuizLimit && (!subscriptionStatus.subscribed || subscriptionStatus.subscription_tier !== 'premium')) {
     return (
       <Card className="max-w-2xl mx-auto p-8 text-center">
         <div className="space-y-4">
           <div className="text-6xl">🚫</div>
           <h2 className="text-2xl font-bold">Quiz Limit Reached</h2>
           <p className="text-muted-foreground">
-            You've used all {2} of your weekly quiz retakes. 
+            You've used all {getRemainingActions('quiz')} of your weekly quiz retakes. 
             Upgrade to Premium for unlimited quiz access!
           </p>
           <div className="flex gap-4 justify-center mt-6">
@@ -52,7 +52,12 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
             >
               Skip for Now
             </Button>
-            <Button>
+            <Button
+              onClick={() => {
+                // Trigger subscription modal
+                window.dispatchEvent(new CustomEvent('openSubscriptionModal', { detail: { reason: 'quiz' } }));
+              }}
+            >
               Upgrade to Premium
             </Button>
           </div>
