@@ -30,12 +30,22 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
     location: [],
     moveInDate: ''
   });
-  
-  // Check if user has reached quiz limit
+
+  const totalSteps = 7;
+
+  useEffect(() => {
+    setShowContent(true);
+    setIsAnimating(false);
+    // Scroll to top on mobile when step changes
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentStep]);
+
+  // Check if user has reached quiz limit AFTER all hooks are called
   const hasReachedQuizLimit = !canPerformAction('quiz');
+  const isPremium = subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium';
   
   // If user has reached limit and is not premium, show limit message instead of quiz
-  if (hasReachedQuizLimit && (!subscriptionStatus.subscribed || subscriptionStatus.subscription_tier !== 'premium')) {
+  if (hasReachedQuizLimit && !isPremium) {
     return (
       <Card className="max-w-2xl mx-auto p-8 text-center">
         <div className="space-y-4">
@@ -65,15 +75,6 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       </Card>
     );
   }
-
-  const totalSteps = 7;
-
-  useEffect(() => {
-    setShowContent(true);
-    setIsAnimating(false);
-    // Scroll to top on mobile when step changes
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentStep]);
 
   const handleNext = () => {
     setIsAnimating(true);
