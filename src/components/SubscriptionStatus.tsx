@@ -124,8 +124,6 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
           )}
         </CardContent>
       </Card>
-
-      
     </div>
   );
 };
