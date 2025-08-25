@@ -16,7 +16,16 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
   const [cancelling, setCancelling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const isPremium = subscribed && subscription_tier === 'premium';
+  const isPremium = subscribed || subscription_tier === 'premium';
+  
+  // Debug logging
+  console.log('Subscription Status Debug:', {
+    subscribed,
+    subscription_tier,
+    subscription_end,
+    isPremium,
+    loading
+  });
 
   const handleRefresh = async () => {
     setRefreshing(true);
