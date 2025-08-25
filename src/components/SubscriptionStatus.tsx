@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge';
 import { Crown, Calendar, RefreshCw, CreditCard } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface SubscriptionStatusProps {
@@ -47,24 +46,6 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
     setCancelling(false);
   };
 
-  const handleSetPremiumTest = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('set-premium-test', {
-        headers: {
-          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      toast.success('Set as premium for testing');
-      await checkSubscription();
-    } catch (error) {
-      console.error('Error setting premium test:', error);
-      toast.error('Failed to set premium test');
-    }
-  };
-
   if (loading) {
     return (
       <Card>
@@ -101,15 +82,6 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
                 disabled={refreshing}
               >
                 <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              </Button>
-              {/* Debug button for testing - remove in production */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSetPremiumTest}
-                className="text-xs"
-              >
-                Test Premium
               </Button>
             </div>
           </CardTitle>

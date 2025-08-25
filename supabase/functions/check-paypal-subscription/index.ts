@@ -43,54 +43,23 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
-    // Try both sandbox and production endpoints
-    let authResponse;
-    let authData;
-    let accessToken;
-    let baseUrl;
-    
-    // First try sandbox
-    try {
-      baseUrl = "https://api.sandbox.paypal.com";
-      authResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-        },
-        body: "grant_type=client_credentials",
-      });
+    // Get PayPal access token
+    const authResponse = await fetch("https://api.sandbox.paypal.com/v1/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: "grant_type=client_credentials",
+    });
 
-      authData = await authResponse.json();
-      if (authResponse.ok) {
-        accessToken = authData.access_token;
-        logStep("PayPal sandbox access token obtained");
-      } else {
-        logStep("Sandbox auth failed, trying production", { error: authData.error_description });
-        
-        // Try production
-        baseUrl = "https://api.paypal.com";
-        authResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-          },
-          body: "grant_type=client_credentials",
-        });
-
-        authData = await authResponse.json();
-        if (authResponse.ok) {
-          accessToken = authData.access_token;
-          logStep("PayPal production access token obtained");
-        } else {
-          throw new Error(`PayPal auth failed on both sandbox and production: ${authData.error_description}`);
-        }
-      }
-    } catch (error) {
-      throw new Error(`PayPal authentication error: ${error.message}`);
+    const authData = await authResponse.json();
+    if (!authResponse.ok) {
+      throw new Error(`PayPal auth failed: ${authData.error_description}`);
     }
     logStep("PayPal access token obtained");
+
+    const accessToken = authData.access_token;
 
     // Check existing subscriber record
     const { data: subscriberData } = await supabaseClient
@@ -108,9 +77,9 @@ serve(async (req) => {
     if (subscriberData?.paypal_subscription_id) {
       logStep("Found PayPal subscription ID", { subscriptionId: subscriberData.paypal_subscription_id });
       
-      // Check subscription status with PayPal using the same base URL that worked for auth
+      // Check subscription status with PayPal
       const subscriptionResponse = await fetch(
-        `${baseUrl}/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}`,
+        `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}`,
         {
           headers: {
             "Authorization": `Bearer ${accessToken}`,

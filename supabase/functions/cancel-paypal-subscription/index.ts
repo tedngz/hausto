@@ -54,57 +54,26 @@ serve(async (req) => {
       throw new Error("No active subscription found");
     }
 
-    // Try both sandbox and production endpoints for PayPal auth
-    let authResponse;
-    let authData;
-    let accessToken;
-    let baseUrl;
-    
-    // First try sandbox
-    try {
-      baseUrl = "https://api.sandbox.paypal.com";
-      authResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-        },
-        body: "grant_type=client_credentials",
-      });
+    // Get PayPal access token
+    const authResponse = await fetch("https://api.sandbox.paypal.com/v1/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: "grant_type=client_credentials",
+    });
 
-      authData = await authResponse.json();
-      if (authResponse.ok) {
-        accessToken = authData.access_token;
-        logStep("PayPal sandbox access token obtained");
-      } else {
-        logStep("Sandbox auth failed, trying production", { error: authData.error_description });
-        
-        // Try production
-        baseUrl = "https://api.paypal.com";
-        authResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-          },
-          body: "grant_type=client_credentials",
-        });
-
-        authData = await authResponse.json();
-        if (authResponse.ok) {
-          accessToken = authData.access_token;
-          logStep("PayPal production access token obtained");
-        } else {
-          throw new Error(`PayPal auth failed on both sandbox and production: ${authData.error_description}`);
-        }
-      }
-    } catch (error) {
-      throw new Error(`PayPal authentication error: ${error.message}`);
+    const authData = await authResponse.json();
+    if (!authResponse.ok) {
+      throw new Error(`PayPal auth failed: ${authData.error_description}`);
     }
 
-    // Cancel PayPal subscription using the same base URL that worked for auth
+    const accessToken = authData.access_token;
+
+    // Cancel PayPal subscription
     const cancelResponse = await fetch(
-      `${baseUrl}/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
+      `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
       {
         method: "POST",
         headers: {
