@@ -118,7 +118,7 @@ export const LandingPage = () => {
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-3 gap-8 text-center">
             <div>
-              <div className="text-4xl font-bold text-primary mb-2">10K+</div>
+              <div className="text-4xl font-bold text-primary mb-2">1K+</div>
               <div className="text-muted-foreground">Properties Listed</div>
             </div>
             <div>
@@ -144,14 +144,16 @@ export const LandingPage = () => {
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
               Join thousands of renters who have found their perfect match. Start your journey today.
             </p>
-            <Button 
-              onClick={() => navigate('/auth')}
-              size="lg"
-              className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold"
-            >
-              Start Matching Now
-              <ArrowRight className="ml-2 h-6 w-6" />
-            </Button>
+            <div className="flex justify-center">
+              <Button 
+                onClick={() => navigate('/auth')}
+                size="lg"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto"
+              >
+                Start Matching Now
+                <ArrowRight className="ml-2 h-6 w-6" />
+              </Button>
+            </div>
           </div>
         </div>
       </section>
