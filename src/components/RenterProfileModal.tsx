@@ -27,30 +27,28 @@ interface RenterProfileModalProps {
   onClose: () => void;
 }
 
-interface PublicProfile {
+interface RenterProfile {
   id: string;
   name: string;
-  avatar_url?: string;
+  bio: string;
 }
 
 export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileModalProps) => {
   const { formatPrice } = useCurrency();
 
-  // Fetch limited profile (name and avatar) for matched users
+  // Fetch renter profile using secure function for matched users
   const { data: profile, isLoading: profileLoading } = useQuery({
-    queryKey: ['renter-profile', userId],
+    queryKey: ['renter-profile-for-realtor', userId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name, avatar_url')
-        .eq('id', userId)
-        .single();
+        .rpc('get_renter_profile_for_realtor', { renter_id: userId });
 
       if (error) {
+        console.error('Error fetching renter profile:', error);
         throw error;
       }
       
-      return data || null;
+      return data?.[0] || null;
     },
     enabled: !!userId && isOpen,
   });
@@ -128,7 +126,6 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
               <CardHeader className="pb-4">
                 <div className="flex items-center space-x-4">
                   <Avatar className="w-16 h-16">
-                    <AvatarImage src={profile?.avatar_url} alt="Profile picture" />
                     <AvatarFallback className="bg-green-100 text-green-600">
                       <User className="w-8 h-8" />
                     </AvatarFallback>

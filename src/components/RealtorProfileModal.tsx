@@ -22,30 +22,30 @@ interface RealtorProfileModalProps {
   onClose: () => void;
 }
 
-interface PublicProfile {
+interface RealtorPublicProfile {
   id: string;
   name: string;
-  avatar_url?: string;
+  bio: string;
+  avatar_url: string;
+  location: string;
 }
 
 export const RealtorProfileModal = ({ realtorId, isOpen, onClose }: RealtorProfileModalProps) => {
   const { formatPrice } = useCurrency();
 
-  // Fetch limited profile (name and avatar) for matched users
+  // Fetch public profile using secure function
   const { data: profile, isLoading: profileLoading } = useQuery({
-    queryKey: ['realtor-profile', realtorId],
+    queryKey: ['realtor-public-profile', realtorId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name, avatar_url')
-        .eq('id', realtorId)
-        .single();
+        .rpc('get_realtor_public_profile', { realtor_id: realtorId });
 
       if (error) {
+        console.error('Error fetching realtor profile:', error);
         throw error;
       }
       
-      return data || null;
+      return data?.[0] || null;
     },
     enabled: !!realtorId && isOpen,
   });
