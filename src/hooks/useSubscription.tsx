@@ -26,10 +26,12 @@ export const useSubscription = () => {
 
       if (error) throw error;
 
+      console.log('Subscription function response:', data);
+
       setSubscriptionStatus({
-        subscribed: data.subscribed || false,
-        subscription_tier: data.subscription_tier || 'free',
-        subscription_end: data.subscription_end || null,
+        subscribed: data?.subscribed === true,
+        subscription_tier: data?.subscription_tier || 'free',
+        subscription_end: data?.subscription_end || null,
         loading: false,
       });
     } catch (error) {
