@@ -84,21 +84,22 @@ export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
         // For other users, only return basic public info
         // Use the secure function to get limited public data
         const { data, error } = await supabase
-          .rpc('get_matched_public_profiles', { user_ids: [profileId] });
+          .rpc('get_realtor_public_profile', { realtor_id: profileId });
 
         if (error) {
           console.error('Error fetching public profile:', error);
           return null; // Don't throw, just return null for other users
         }
 
-        // Return limited profile structure
+        // Return limited profile structure with only public data
         return data?.[0] ? {
           id: data[0].id,
           name: data[0].name,
           email: '', // Hidden for privacy
           phone: '', // Hidden for privacy
-          bio: '', // Hidden for privacy
-          location: '' // Hidden for privacy
+          bio: data[0].bio || '', // Public bio allowed
+          location: data[0].location || '', // Public location allowed
+          avatar_url: data[0].avatar_url || '' // Public avatar allowed
         } as UserProfile : null;
       }
     },

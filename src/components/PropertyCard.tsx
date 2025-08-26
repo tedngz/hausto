@@ -191,7 +191,7 @@ export const PropertyCard = ({
         )}
 
         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-          <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
               <User className="w-4 h-4 text-white" />
             </div>
@@ -201,10 +201,10 @@ export const PropertyCard = ({
                   className="text-sm font-medium text-gray-900 hover:text-primary transition-colors"
                   onClick={onViewProfile}
                 >
-                  {apartment.realtor.name}
+                  {apartment.realtor.name || 'Realtor'}
                 </button>
               ) : (
-                <span className="text-sm font-medium text-gray-900">{apartment.realtor.name}</span>
+                <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
               )}
               <p className="text-xs text-gray-500">Licensed Realtor</p>
             </div>

@@ -450,6 +450,16 @@ export type Database = {
           phone: string
         }[]
       }
+      get_realtor_public_profile: {
+        Args: { realtor_id: string }
+        Returns: {
+          avatar_url: string
+          bio: string
+          id: string
+          location: string
+          name: string
+        }[]
+      }
       get_renter_profile_for_realtor: {
         Args: { renter_id: string }
         Returns: {

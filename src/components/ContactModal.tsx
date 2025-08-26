@@ -167,8 +167,7 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
           <div className="bg-gray-50 p-3 rounded-lg">
             <p className="text-sm font-medium">{apartment.realtor.name}</p>
             <p className="text-xs text-gray-600">Licensed Realtor</p>
-            <p className="text-xs text-gray-600">{apartment.realtor.phone}</p>
-            <p className="text-xs text-gray-600">{apartment.realtor.email}</p>
+            <p className="text-xs text-gray-500 mt-1">Contact details will be shared after your message is sent</p>
           </div>
         </div>
 
