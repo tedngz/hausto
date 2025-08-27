@@ -122,6 +122,11 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
               <div className="text-sm text-muted-foreground">
                 Upgrade to unlock unlimited access to all features
               </div>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Unlimited property views</li>
+                <li>• Unlimited matches</li>
+                <li>• Unlimited quiz retakes</li>
+              </ul>
               <Button onClick={onUpgrade} className="w-full">
                 <Crown className="h-4 w-4 mr-2" />
                 Upgrade to Premium

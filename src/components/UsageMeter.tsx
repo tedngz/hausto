@@ -91,12 +91,6 @@ export const UsageMeter = () => {
             </div>
           );
         })}
-        
-        {!isPremium && (
-          <div className="pt-2 text-xs text-muted-foreground">
-            Upgrade to Premium for unlimited access to all features
-          </div>
-        )}
       </CardContent>
     </Card>
   );
