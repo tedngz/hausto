@@ -53,8 +53,29 @@ serve(async (req) => {
       
       try {
         const basePrompt = generateContent 
-          ? `Analyze this rental property image and describe what you see. Focus on unique architectural features, design elements, lighting, space characteristics, and any special amenities or highlights visible. Be detailed and specific about what makes this property special. After your analysis, return a JSON object with vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus a 'detailed_analysis' field with your observations.`
-          : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant. Also provide a brief description of the overall vibe.`;
+          ? `Analyze this rental property image using our AI-powered evaluation framework focused on three core factors:
+
+1. INTERIOR DESIGN (Rate 1-5): Evaluate style coherence, aesthetic appeal, and material quality. Consider furniture arrangement, design consistency, and overall visual appeal.
+2. COLOR PALETTE (Rate 1-5): Assess color harmony, mood evoked, and suitability to the space. Analyze color choices, contrast, and emotional impact.
+3. FUNCTIONALITY (Rate 1-5): Examine practical layout, space utilization, flow, and ergonomic features. Consider usability and efficiency.
+
+Return a JSON object with:
+- "interior_design": score 1-5
+- "color_palette": score 1-5  
+- "functionality": score 1-5
+- "image_summary": one concise sentence highlighting how all three factors contribute to this room's vibe
+- "detailed_analysis": detailed observations about architectural features, design elements, and special amenities`
+          : `Analyze this rental property image using our three-factor evaluation framework:
+
+1. INTERIOR DESIGN (1-5): Style coherence, aesthetic appeal, material quality
+2. COLOR PALETTE (1-5): Harmony, mood, suitability to space
+3. FUNCTIONALITY (1-5): Layout, space utilization, flow, ergonomics
+
+Return JSON with:
+- "interior_design": score 1-5
+- "color_palette": score 1-5
+- "functionality": score 1-5
+- "image_summary": one sentence about how these factors create the room's vibe`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
@@ -81,7 +102,7 @@ serve(async (req) => {
                 ]
               }
             ],
-            max_tokens: generateContent ? 500 : 300,
+            max_tokens: generateContent ? 600 : 400,
           }),
         });
 
@@ -94,17 +115,10 @@ serve(async (req) => {
           
           // Use fallback for this image instead of failing completely
           analyses.push({
-            modern: 5,
-            cozy: 5,
-            luxurious: 5,
-            minimalist: 5,
-            colorful: 5,
-            spacious: 5,
-            natural_light: 5,
-            urban: 5,
-            rustic: 5,
-            elegant: 5,
-            description: 'Unable to analyze image',
+            interior_design: 3,
+            color_palette: 3,
+            functionality: 3,
+            image_summary: 'Unable to analyze this image due to API error',
             detailed_analysis: generateContent ? 'Analysis failed due to API error' : 'Analysis failed',
             image_index: index,
             raw_analysis: 'API Error'
@@ -118,17 +132,10 @@ serve(async (req) => {
         if (!data || !data.choices || data.choices.length === 0) {
           console.error(`No choices in OpenAI response for image ${index + 1}:`, data);
           analyses.push({
-            modern: 5,
-            cozy: 5,
-            luxurious: 5,
-            minimalist: 5,
-            colorful: 5,
-            spacious: 5,
-            natural_light: 5,
-            urban: 5,
-            rustic: 5,
-            elegant: 5,
-            description: 'Unable to analyze image',
+            interior_design: 3,
+            color_palette: 3,
+            functionality: 3,
+            image_summary: 'Unable to analyze this image',
             detailed_analysis: generateContent ? 'No analysis returned' : 'Analysis failed',
             image_index: index,
             raw_analysis: 'No Response'
@@ -139,17 +146,10 @@ serve(async (req) => {
         if (!data.choices[0] || !data.choices[0].message) {
           console.error(`No message in OpenAI choice for image ${index + 1}:`, data.choices[0]);
           analyses.push({
-            modern: 5,
-            cozy: 5,
-            luxurious: 5,
-            minimalist: 5,
-            colorful: 5,
-            spacious: 5,
-            natural_light: 5,
-            urban: 5,
-            rustic: 5,
-            elegant: 5,
-            description: 'Unable to analyze image',
+            interior_design: 3,
+            color_palette: 3,
+            functionality: 3,
+            image_summary: 'Unable to analyze this image',
             detailed_analysis: generateContent ? 'Invalid response format' : 'Analysis failed',
             image_index: index,
             raw_analysis: 'Invalid Format'
@@ -179,17 +179,10 @@ serve(async (req) => {
           
           // Fallback if JSON parsing fails
           analyses.push({
-            modern: 5,
-            cozy: 5,
-            luxurious: 5,
-            minimalist: 5,
-            colorful: 5,
-            spacious: 5,
-            natural_light: 5,
-            urban: 5,
-            rustic: 5,
-            elegant: 5,
-            description: 'Unable to analyze image',
+            interior_design: 3,
+            color_palette: 3,
+            functionality: 3,
+            image_summary: 'Unable to analyze this image',
             detailed_analysis: generateContent ? content : 'Analysis failed',
             image_index: index,
             raw_analysis: content
@@ -198,17 +191,10 @@ serve(async (req) => {
       } catch (imageError) {
         console.error(`Error processing image ${index + 1}:`, imageError);
         analyses.push({
-          modern: 5,
-          cozy: 5,
-          luxurious: 5,
-          minimalist: 5,
-          colorful: 5,
-          spacious: 5,
-          natural_light: 5,
-          urban: 5,
-          rustic: 5,
-          elegant: 5,
-          description: 'Unable to analyze image',
+          interior_design: 3,
+          color_palette: 3,
+          functionality: 3,
+          image_summary: 'Unable to analyze this image',
           detailed_analysis: generateContent ? 'Processing error' : 'Analysis failed',
           image_index: index,
           raw_analysis: 'Processing Error'
@@ -216,23 +202,32 @@ serve(async (req) => {
       }
     }
 
-    // Aggregate the analyses and generate content if requested
+    // Calculate aggregated scores and overall vibe
+    const avgInteriorDesign = analyses.reduce((sum, a) => sum + (a.interior_design || 3), 0) / analyses.length;
+    const avgColorPalette = analyses.reduce((sum, a) => sum + (a.color_palette || 3), 0) / analyses.length;
+    const avgFunctionality = analyses.reduce((sum, a) => sum + (a.functionality || 3), 0) / analyses.length;
+    
+    // Calculate overall vibe score (equal weight to all factors)
+    const overallScore = (avgInteriorDesign + avgColorPalette + avgFunctionality) / 3;
+    
+    // Determine vibe level
+    let vibeLevel = 'casual';
+    if (overallScore >= 4.0) vibeLevel = 'perfect';
+    else if (overallScore >= 3.25) vibeLevel = 'strong';
+    else if (overallScore >= 2.5) vibeLevel = 'good';
+
     const aggregated = {
-      modern: Math.round(analyses.reduce((sum, a) => sum + (a.modern || 5), 0) / analyses.length),
-      cozy: Math.round(analyses.reduce((sum, a) => sum + (a.cozy || 5), 0) / analyses.length),
-      luxurious: Math.round(analyses.reduce((sum, a) => sum + (a.luxurious || 5), 0) / analyses.length),
-      minimalist: Math.round(analyses.reduce((sum, a) => sum + (a.minimalist || 5), 0) / analyses.length),
-      colorful: Math.round(analyses.reduce((sum, a) => sum + (a.colorful || 5), 0) / analyses.length),
-      spacious: Math.round(analyses.reduce((sum, a) => sum + (a.spacious || 5), 0) / analyses.length),
-      natural_light: Math.round(analyses.reduce((sum, a) => sum + (a.natural_light || 5), 0) / analyses.length),
-      urban: Math.round(analyses.reduce((sum, a) => sum + (a.urban || 5), 0) / analyses.length),
-      rustic: Math.round(analyses.reduce((sum, a) => sum + (a.rustic || 5), 0) / analyses.length),
-      elegant: Math.round(analyses.reduce((sum, a) => sum + (a.elegant || 5), 0) / analyses.length),
+      interior_design: Math.round(avgInteriorDesign * 10) / 10,
+      color_palette: Math.round(avgColorPalette * 10) / 10,
+      functionality: Math.round(avgFunctionality * 10) / 10,
+      overall_score: Math.round(overallScore * 10) / 10,
+      vibe_level: vibeLevel,
       image_analyses: analyses
     };
 
-    // Generate unique title and description if requested
+    // Generate content if requested
     if (generateContent) {
+      const imageSummaries = analyses.map(a => a.image_summary).filter(s => s && !s.includes('Unable')).join(' ');
       const detailedAnalyses = analyses.map(a => a.detailed_analysis || a.raw_analysis).join('\n\n');
       console.log('Generating content with analysis:', detailedAnalyses.length, 'characters of analysis');
       
@@ -257,45 +252,50 @@ Property Details:
           messages: [
             {
               role: 'system',
-              content: `You are an expert real estate marketing specialist creating compelling rental listings. Based on detailed visual analysis of property images, you create unique, engaging content that highlights specific architectural features, design elements, and lifestyle benefits visible in the photos.
+              content: `You are an expert real estate marketing specialist. Based on our AI-powered vibe evaluation framework that analyzes properties across Interior Design, Color Palette, and Functionality, create compelling rental listings that highlight specific strengths and address any weaknesses.
 
-IMPORTANT RULES:
-- Create titles that are catchy and unique, not generic
-- Descriptions should mention specific visual features you can see in the images
-- Highlight unique selling points and lifestyle benefits
-- Make each listing feel distinct and memorable
-- Use engaging, descriptive language that appeals to potential renters
-- Focus on what makes THIS specific property special`
+EVALUATION FRAMEWORK:
+- Interior Design: Style coherence, aesthetic appeal, material quality (1-5 scale)
+- Color Palette: Harmony, mood evoked, suitability to space (1-5 scale) 
+- Functionality: Layout, space utilization, flow, ergonomics (1-5 scale)
+
+RULES:
+- Create unique, memorable titles that reflect the property's vibe level
+- Write descriptions that mention specific visual strengths from the analysis
+- Address lifestyle benefits based on the functionality scores
+- Highlight color and design elements that create the right mood
+- For lower scores, focus on potential and unique character rather than flaws`
             },
             {
               role: 'user',
-              content: `Create a compelling rental listing based on this visual analysis:
+              content: `Create a compelling rental listing based on our AI vibe analysis:
 
 ${propertyContext}
 
-Detailed Image Analysis:
-${detailedAnalyses}
+AI VIBE ANALYSIS RESULTS:
+- Interior Design Score: ${aggregated.interior_design}/5 (style coherence, aesthetic appeal, material quality)
+- Color Palette Score: ${aggregated.color_palette}/5 (harmony, mood, suitability)  
+- Functionality Score: ${aggregated.functionality}/5 (layout, space utilization, flow)
+- Overall Vibe Level: ${aggregated.vibe_level.toUpperCase()} (${aggregated.overall_score}/5)
 
-Visual Characteristics (1-10 scale):
-- Modern: ${aggregated.modern}/10
-- Cozy: ${aggregated.cozy}/10  
-- Luxurious: ${aggregated.luxurious}/10
-- Minimalist: ${aggregated.minimalist}/10
-- Spacious: ${aggregated.spacious}/10
-- Natural Light: ${aggregated.natural_light}/10
-- Urban: ${aggregated.urban}/10
-- Elegant: ${aggregated.elegant}/10
+Per-Image Insights: ${imageSummaries}
 
-Based on what you can see in the images and the property details, create:
+Detailed Analysis: ${detailedAnalyses}
 
-1. A unique, catchy title (50-80 characters) that captures the property's distinctive features
-2. An engaging description (150-250 words) that mentions specific visual elements, architectural features, and lifestyle benefits you observed
-3. 4-6 compelling highlights that represent the most attractive features visible in the images
+Based on these specific scores and insights, create:
+
+1. A catchy title (50-80 characters) that reflects the ${aggregated.vibe_level} vibe level
+2. A compelling description (150-250 words) that:
+   - Emphasizes the strongest scoring factors
+   - Mentions specific design and color elements from the analysis  
+   - Highlights functional benefits for lifestyle needs
+   - Addresses the overall ${aggregated.vibe_level} vibe in an appealing way
+3. 4-6 highlights that showcase the property's best features based on the scores
 
 Return JSON format:
 {
-  "title": "your unique title",
-  "description": "your detailed description mentioning specific visual features",
+  "title": "your unique title reflecting the vibe level",
+  "description": "your detailed description emphasizing strong factors and lifestyle benefits",
   "highlights": ["highlight1", "highlight2", "highlight3", "highlight4"]
 }`
             }

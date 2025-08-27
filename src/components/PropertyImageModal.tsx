@@ -28,9 +28,10 @@ export const PropertyImageModal = ({
     setCurrentImageIndex((prev) => (prev - 1 + apartment.images.length) % apartment.images.length);
   };
 
-  // Get AI generated highlights for overlay
-  const aiHighlights = apartment.vibe_analysis?.generated_content?.highlights || [];
-  const selectedHighlight = aiHighlights.length > 0 ? aiHighlights[currentImageIndex % aiHighlights.length] : null;
+  // Get AI assessment note for current image
+  const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
+  const currentImageAnalysis = imageAnalyses.find((analysis: any) => analysis.image_index === currentImageIndex);
+  const aiAssessmentNote = currentImageAnalysis?.image_summary;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -49,12 +50,12 @@ export const PropertyImageModal = ({
               }}
             />
 
-            {/* AI Highlights overlay */}
-            {selectedHighlight && (
-              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
-                <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 text-center">
+            {/* AI Assessment overlay */}
+            {aiAssessmentNote && (
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 max-w-[90%]">
+                <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 text-center text-xs px-3 py-2">
                   <Sparkles className="w-3 h-3" />
-                  {selectedHighlight}
+                  {aiAssessmentNote}
                 </Badge>
               </div>
             )}

@@ -3,40 +3,53 @@ import { UserPreferences, Apartment } from '@/pages/Index';
 
 export interface VibeScore {
   overall: number;
+  vibe_level: 'casual' | 'good' | 'strong' | 'perfect';
   breakdown: {
-    style: number;
-    color: number;
-    activities: number;
+    interior_design: number;
+    color_palette: number;
+    functionality: number;
     price: number;
   };
 }
 
 export const calculateVibeScore = (apartment: Apartment, preferences: UserPreferences): VibeScore => {
-  // Style matching (40% weight)
-  const styleScore = calculateStyleMatch(apartment, preferences.styles);
+  const vibeAnalysis = (apartment as any).vibe_analysis;
   
-  // Color matching (25% weight)
-  const colorScore = calculateColorMatch(apartment, preferences.colors);
+  let interiorDesignScore = 50;
+  let colorPaletteScore = 50; 
+  let functionalityScore = 50;
   
-  // Activities matching (25% weight)
-  const activityScore = calculateActivityMatch(apartment, preferences.activities);
+  if (vibeAnalysis) {
+    // Convert AI scores (1-5) to percentage (20-100)
+    interiorDesignScore = Math.round(((vibeAnalysis.interior_design || 3) - 1) * 25 + 20);
+    colorPaletteScore = Math.round(((vibeAnalysis.color_palette || 3) - 1) * 25 + 20);
+    functionalityScore = Math.round(((vibeAnalysis.functionality || 3) - 1) * 25 + 20);
+  }
   
   // Price matching (10% weight)
   const priceScore = calculatePriceMatch(apartment.price, preferences.priceRange);
   
+  // Calculate overall score with emphasis on the three core factors
   const overall = Math.round(
-    styleScore * 0.4 + 
-    colorScore * 0.25 + 
-    activityScore * 0.25 + 
-    priceScore * 0.1
+    interiorDesignScore * 0.35 + 
+    colorPaletteScore * 0.35 + 
+    functionalityScore * 0.20 + 
+    priceScore * 0.10
   );
+
+  // Determine vibe level based on overall score
+  let vibeLevel: 'casual' | 'good' | 'strong' | 'perfect' = 'casual';
+  if (overall >= 80) vibeLevel = 'perfect';
+  else if (overall >= 65) vibeLevel = 'strong';  
+  else if (overall >= 50) vibeLevel = 'good';
 
   return {
     overall,
+    vibe_level: vibeLevel,
     breakdown: {
-      style: Math.round(styleScore),
-      color: Math.round(colorScore),
-      activities: Math.round(activityScore),
+      interior_design: interiorDesignScore,
+      color_palette: colorPaletteScore,
+      functionality: functionalityScore,
       price: Math.round(priceScore)
     }
   };
