@@ -18,16 +18,39 @@ export const useSubscription = () => {
     try {
       setSubscriptionStatus(prev => ({ ...prev, loading: true }));
       
+      // First, try to get data from PayPal
       const { data, error } = await supabase.functions.invoke('check-paypal-subscription', {
         headers: {
           Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
       });
 
-      if (error) throw error;
-
       console.log('Subscription function response:', data);
 
+      // If PayPal auth failed but we have a subscription error, fall back to database
+      if (error || data?.error) {
+        console.log('PayPal check failed, falling back to database:', data?.error || error);
+        
+        // Fallback: Check the database directly for subscription status
+        const { data: dbData, error: dbError } = await supabase
+          .from('subscribers')
+          .select('subscribed, subscription_tier, subscription_end')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!dbError && dbData) {
+          console.log('Database subscription data:', dbData);
+          setSubscriptionStatus({
+            subscribed: dbData.subscribed === true,
+            subscription_tier: dbData.subscription_tier || 'free',
+            subscription_end: dbData.subscription_end || null,
+            loading: false,
+          });
+          return;
+        }
+      }
+
+      // Use PayPal data if successful
       setSubscriptionStatus({
         subscribed: data?.subscribed === true,
         subscription_tier: data?.subscription_tier || 'free',
