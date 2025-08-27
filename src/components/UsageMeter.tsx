@@ -58,12 +58,6 @@ export const UsageMeter = () => {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-lg">
           Usage Overview
-          {isPremium && (
-            <Badge className="bg-primary text-primary-foreground">
-              <Crown className="h-3 w-3 mr-1" />
-              Premium
-            </Badge>
-          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

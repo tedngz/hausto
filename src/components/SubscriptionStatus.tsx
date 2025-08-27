@@ -87,17 +87,12 @@ export const SubscriptionStatus = ({ onUpgrade, showHistory = false }: Subscript
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Badge variant={isPremium ? 'default' : 'secondary'} className="text-sm">
-              {isPremium ? 'Premium' : 'Free'}
-            </Badge>
-            {isPremium && subscription_end && (
-              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                <Calendar className="h-3 w-3" />
-                Renews {new Date(subscription_end).toLocaleDateString()}
-              </div>
-            )}
-          </div>
+          {isPremium && subscription_end && (
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <Calendar className="h-3 w-3" />
+              Renews {new Date(subscription_end).toLocaleDateString()}
+            </div>
+          )}
 
           {isPremium ? (
             <div className="space-y-3">
