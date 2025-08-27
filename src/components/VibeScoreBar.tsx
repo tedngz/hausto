@@ -19,47 +19,47 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
   };
 
   // Helper function to categorize highlights
-  const categorizeHighlight = (highlight: string): 'interior_design' | 'color' | 'functionality' => {
+  const categorizeHighlight = (highlight: string): 'style' | 'color' | 'activity' => {
     const lowerHighlight = highlight.toLowerCase();
     
-    // Interior Design keywords
-    const designKeywords = ['modern', 'traditional', 'minimalist', 'bohemian', 'industrial', 'scandinavian', 'contemporary', 'rustic', 'vintage', 'luxury', 'urban', 'cozy', 'sleek', 'elegant', 'chic', 'style', 'design', 'aesthetic', 'materials', 'quality', 'furniture', 'decor'];
+    // Style keywords
+    const styleKeywords = ['modern', 'traditional', 'minimalist', 'bohemian', 'industrial', 'scandinavian', 'contemporary', 'rustic', 'vintage', 'luxury', 'urban', 'cozy', 'sleek', 'elegant', 'chic'];
     
     // Color keywords  
-    const colorKeywords = ['warm', 'cool', 'neutral', 'bold', 'bright', 'dark', 'colorful', 'white', 'black', 'grey', 'beige', 'wood', 'natural', 'light', 'palette', 'harmony', 'mood', 'color', 'lighting'];
+    const colorKeywords = ['warm', 'cool', 'neutral', 'bold', 'bright', 'dark', 'colorful', 'white', 'black', 'grey', 'beige', 'wood', 'natural', 'light'];
     
-    // Functionality keywords
-    const functionalityKeywords = ['spacious', 'layout', 'flow', 'practical', 'functional', 'organized', 'efficient', 'ergonomic', 'accessible', 'storage', 'space', 'room', 'open', 'convenient', 'usable'];
+    // Activity keywords
+    const activityKeywords = ['working', 'entertaining', 'relaxing', 'cooking', 'exercising', 'reading', 'creating', 'dining', 'sleeping', 'studying', 'socializing'];
     
-    for (const keyword of designKeywords) {
-      if (lowerHighlight.includes(keyword)) return 'interior_design';
+    for (const keyword of styleKeywords) {
+      if (lowerHighlight.includes(keyword)) return 'style';
     }
     
     for (const keyword of colorKeywords) {
       if (lowerHighlight.includes(keyword)) return 'color';
     }
     
-    for (const keyword of functionalityKeywords) {
-      if (lowerHighlight.includes(keyword)) return 'functionality';
+    for (const keyword of activityKeywords) {
+      if (lowerHighlight.includes(keyword)) return 'activity';
     }
     
-    // Default to interior_design if no match
-    return 'interior_design';
+    // Default to style if no match
+    return 'style';
   };
 
   const getCategorizedHighlights = (apartment?: any) => {
     if (!apartment?.highlights || !Array.isArray(apartment.highlights)) {
       return {
-        interior_design: ['Quality Design', 'Stylish'],
-        color: ['Harmonious', 'Warm'],
-        functionality: ['Well-designed', 'Practical']
+        style: ['Stylish', 'Modern'],
+        color: ['Neutral', 'Warm'],
+        activity: ['Relaxing', 'Reading']
       };
     }
 
     const categorized = {
-      interior_design: [] as string[],
+      style: [] as string[],
       color: [] as string[],
-      functionality: [] as string[]
+      activity: [] as string[]
     };
 
     apartment.highlights.forEach((highlight: string) => {
@@ -70,9 +70,9 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
     });
 
     // Fill with fallbacks if categories are empty
-    if (categorized.interior_design.length === 0) categorized.interior_design = ['Quality Design', 'Stylish'];
-    if (categorized.color.length === 0) categorized.color = ['Harmonious', 'Warm'];
-    if (categorized.functionality.length === 0) categorized.functionality = ['Well-designed', 'Practical'];
+    if (categorized.style.length === 0) categorized.style = ['Stylish', 'Modern'];
+    if (categorized.color.length === 0) categorized.color = ['Neutral', 'Warm'];
+    if (categorized.activity.length === 0) categorized.activity = ['Relaxing', 'Comfortable'];
 
     return categorized;
   };
@@ -97,9 +97,9 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
       <div className="space-y-2">
         <div className="flex items-center space-x-2">
           <Home className="w-3 h-3 text-blue-500" />
-          <span className="text-xs text-gray-600 flex-1">Interior Design</span>
+          <span className="text-xs text-gray-600 flex-1">Style</span>
           <div className="flex flex-wrap gap-1">
-            {categorizedHighlights.interior_design.map((tag, index) => (
+            {categorizedHighlights.style.map((tag, index) => (
               <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
                 {tag}
               </Badge>
@@ -109,7 +109,7 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
 
         <div className="flex items-center space-x-2">
           <Palette className="w-3 h-3 text-purple-500" />
-          <span className="text-xs text-gray-600 flex-1">Color Palette</span>
+          <span className="text-xs text-gray-600 flex-1">Color</span>
           <div className="flex flex-wrap gap-1">
             {categorizedHighlights.color.map((color, index) => (
               <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
@@ -121,11 +121,11 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
 
         <div className="flex items-center space-x-2">
           <Activity className="w-3 h-3 text-green-500" />
-          <span className="text-xs text-gray-600 flex-1">Functionality</span>
+          <span className="text-xs text-gray-600 flex-1">Activities</span>
           <div className="flex flex-wrap gap-1">
-            {categorizedHighlights.functionality.map((functionality, index) => (
+            {categorizedHighlights.activity.map((activity, index) => (
               <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700 border-green-200">
-                {functionality}
+                {activity}
               </Badge>
             ))}
           </div>
