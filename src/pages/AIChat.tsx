@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LandingChatBox } from "@/components/LandingChatBox";
 import { useAuth } from "@/hooks/useAuth";
+import { CurrencyProvider } from "@/contexts/CurrencyContext";
 
 export const AIChat = () => {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export const AIChat = () => {
   };
 
   return (
+    <CurrencyProvider>
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background">
       {/* Header */}
       <header className="container mx-auto px-4 py-6">
@@ -104,5 +106,6 @@ export const AIChat = () => {
         </div>
       </section>
     </div>
+    </CurrencyProvider>
   );
 };
