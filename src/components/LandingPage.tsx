@@ -21,7 +21,7 @@ export const LandingPage = () => {
 
   const handleDiscover = () => {
     if (user) {
-      // For authenticated users, set them as renter and stay on landing page initially
+      // For authenticated users, set them as renter and enter discover interface
       localStorage.setItem(`userType_${user.id}`, 'renter');
       navigate('/', { state: { showSwipeInterface: true } });
     }

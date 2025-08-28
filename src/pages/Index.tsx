@@ -71,12 +71,13 @@ const Index = () => {
 
   // Check if user is admin
   const isAdmin = user?.email === 'ted.ngz@gmail.com';
-  const [currentView, setCurrentView] = useState<'onboarding' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'feed' | 'ai-chat'>('onboarding');
+  const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'feed'>('onboarding');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [matches, setMatches] = useState<Apartment[]>([]);
   const [realtorMatches, setRealtorMatches] = useState<Match[]>([]);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [isInDiscoverMode, setIsInDiscoverMode] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
@@ -94,13 +95,13 @@ const Index = () => {
           try {
             const preferences = JSON.parse(savedPreferences);
             setUserPreferences(preferences);
-            setCurrentView('swipe');
+            setCurrentView('ai-chat'); // Start with AI chat instead of swipe
           } catch (error) {
             console.error('Error parsing saved preferences:', error);
-            setCurrentView('swipe');
+            setCurrentView('ai-chat'); // Start with AI chat instead of swipe
           }
         } else {
-          setCurrentView('swipe');
+          setCurrentView('ai-chat'); // Start with AI chat instead of swipe
         }
         return;
       }
@@ -114,13 +115,13 @@ const Index = () => {
           try {
             const preferences = JSON.parse(savedPreferences);
             setUserPreferences(preferences);
-            setCurrentView('swipe');
+            setCurrentView('ai-chat'); // Start with AI chat instead of swipe
           } catch (error) {
             console.error('Error parsing saved preferences:', error);
-            setCurrentView('swipe');
+            setCurrentView('ai-chat'); // Start with AI chat instead of swipe
           }
         } else {
-          setCurrentView('swipe');
+          setCurrentView('ai-chat'); // Start with AI chat instead of swipe
         }
       } else if (!isAdmin) {
         // Auto-set non-admin users as renters
@@ -130,13 +131,13 @@ const Index = () => {
           try {
             const preferences = JSON.parse(savedPreferences);
             setUserPreferences(preferences);
-            setCurrentView('swipe');
+            setCurrentView('ai-chat'); // Start with AI chat instead of swipe
           } catch (error) {
             console.error('Error parsing saved preferences:', error);
-            setCurrentView('swipe');
+            setCurrentView('ai-chat'); // Start with AI chat instead of swipe
           }
         } else {
-          setCurrentView('swipe');
+          setCurrentView('ai-chat'); // Start with AI chat instead of swipe
         }
       }
     }
@@ -155,11 +156,12 @@ const Index = () => {
   // Handle navigation from landing page discover button
   useEffect(() => {
     if (user && location.state?.showSwipeInterface) {
-      // Set user as renter and navigate to swipe interface
+      // Set user as renter and enter discover mode with AI chat first
       setUserType('renter');
+      setIsInDiscoverMode(true);
       localStorage.setItem(`userType_${user.id}`, 'renter');
       
-      // Check if they have saved preferences, if not use defaults for swipe
+      // Check if they have saved preferences, if not use defaults for AI chat
       const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
       if (savedPreferences) {
         try {
@@ -169,7 +171,7 @@ const Index = () => {
           console.error('Error parsing saved preferences:', error);
         }
       }
-      setCurrentView('swipe');
+      setCurrentView('ai-chat'); // Start with AI chat when entering discover mode
       // Clear the state to prevent re-triggering
       navigate('/', { replace: true, state: {} });
     }
@@ -197,16 +199,16 @@ const Index = () => {
         if (savedPreferences) {
           try {
             setUserPreferences(JSON.parse(savedPreferences));
-            setCurrentView('swipe');
+            setCurrentView('ai-chat'); // Start with AI chat instead of swipe
           } catch (error) {
             console.error('Error parsing saved preferences:', error);
-            setCurrentView('swipe'); // Skip to swipe even if preferences are corrupted
+            setCurrentView('ai-chat'); // Skip directly to AI chat interface
           }
         } else {
-          setCurrentView('swipe'); // Skip directly to swipe interface
+          setCurrentView('ai-chat'); // Skip directly to AI chat interface
         }
       } else {
-        setCurrentView('swipe'); // Skip directly to swipe interface
+        setCurrentView('ai-chat'); // Skip directly to AI chat interface
       }
     }
   };
@@ -217,7 +219,7 @@ const Index = () => {
     if (user) {
       localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(preferences));
     }
-    setCurrentView('swipe');
+    setCurrentView('ai-chat'); // Start with AI chat instead of swipe
   };
 
   const handleRestartOnboarding = () => {
@@ -250,7 +252,7 @@ const Index = () => {
     // Only allow admin to switch to realtor
     if (!isAdmin) {
       setUserType('renter');
-      setCurrentView('swipe');
+      setCurrentView('ai-chat'); // Start with AI chat instead of swipe
       if (user) {
         localStorage.setItem(`userType_${user.id}`, 'renter');
       }
@@ -292,8 +294,8 @@ const Index = () => {
     );
   }
 
-  // Always show landing page if no user type is selected (keep authenticated users on landing page)
-  const showLandingPage = !userType && !location.state?.showSwipeInterface;
+  // Show landing page if no user type is selected AND not in discover mode
+  const showLandingPage = !userType && !isInDiscoverMode;
 
   if (showLandingPage) {
     return (
@@ -306,7 +308,7 @@ const Index = () => {
   return (
     <CurrencyProvider>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-        {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && currentView !== 'ai-chat' && (
+        {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && (
           <Navigation 
             currentView={currentView}
             setCurrentView={(view) => {
@@ -384,7 +386,7 @@ const Index = () => {
         )}
 
         {currentView === 'ai-chat' && userType && (
-          <AIChatView />
+          <AIChatView showNavigation={true} />
         )}
 
         {currentView === 'feed' && userType && (
