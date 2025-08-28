@@ -290,7 +290,11 @@ const Index = () => {
   }
 
   if (!user) {
-    return <LandingPage />;
+    return (
+      <CurrencyProvider>
+        <LandingPage />
+      </CurrencyProvider>
+    );
   }
 
   return (
