@@ -30,26 +30,27 @@ export const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background">
       {/* Header */}
-      <header className="container mx-auto px-4 py-6">
+      <header className="container mx-auto px-4 py-4 md:py-6">
         <nav className="flex items-center justify-between">
-          <div className="flex items-center justify-center space-x-2">
+          <div className="flex items-center space-x-2">
             <img 
               src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
               alt="Hausto Logo" 
-              className="h-8 w-8"
+              className="h-6 w-6 md:h-8 md:w-8"
             />
-            <span className="text-2xl font-bold text-foreground">Hausto</span>
+            <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             {user ? (
               <>
-                <span className="text-sm text-muted-foreground">
+                <span className="hidden sm:block text-xs md:text-sm text-muted-foreground truncate max-w-32 md:max-w-none">
                   Welcome back, {user.user_metadata?.name || user.email?.split('@')[0]}!
                 </span>
                 <Button 
                   onClick={handleDiscover}
                   variant="outline"
-                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                  size="sm"
+                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground text-xs md:text-sm px-3 md:px-4"
                 >
                   Discover
                 </Button>
@@ -57,17 +58,18 @@ export const LandingPage = () => {
                   onClick={handleSignOut}
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground p-2 md:px-3"
                 >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
+                  <LogOut className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Sign Out</span>
                 </Button>
               </>
             ) : (
               <Button 
                 onClick={() => navigate('/auth')}
                 variant="outline"
-                className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                size="sm"
+                className="border-primary text-primary hover:bg-primary hover:text-primary-foreground text-xs md:text-sm px-3 md:px-4"
               >
                 Sign In
               </Button>
