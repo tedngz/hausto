@@ -16,12 +16,14 @@ export const LandingPage = () => {
   };
 
   const handleGetStarted = () => {
+    navigate('/auth');
+  };
+
+  const handleDiscover = () => {
     if (user) {
       // For authenticated users, set them as renter and go to swipe interface
       localStorage.setItem(`userType_${user.id}`, 'renter');
       navigate('/', { state: { showSwipeInterface: true } });
-    } else {
-      navigate('/auth');
     }
   };
 
@@ -45,11 +47,11 @@ export const LandingPage = () => {
                   Welcome back, {user.user_metadata?.name || user.email?.split('@')[0]}!
                 </span>
                 <Button 
-                  onClick={handleGetStarted}
+                  onClick={handleDiscover}
                   variant="outline"
                   className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
                 >
-                  Browse Properties
+                  Discover
                 </Button>
                 <Button 
                   onClick={handleSignOut}
