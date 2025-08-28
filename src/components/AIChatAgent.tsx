@@ -224,43 +224,12 @@ export const AIChatAgent = ({
               <div className="p-3 border-b bg-gray-50">
                 <h3 className="font-semibold text-gray-900">Your Conversations</h3>
                 <p className="text-sm text-gray-600">
-                  Chat with AI assistant or {matches.length} conversation{matches.length !== 1 ? 's' : ''}
+                  {matches.length} conversation{matches.length !== 1 ? 's' : ''} with matched users
                 </p>
               </div>
               
               <ScrollArea className="flex-1 p-3">
                 <div className="space-y-3">
-                  {/* AI Assistant as first profile */}
-                  <div
-                    onClick={() => setActiveTab('ai')}
-                    className="p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200"
-                  >
-                    <div className="flex items-start space-x-3">
-                      <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-                        <Bot className="w-6 h-6" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 mb-1">
-                          Hausto AI Assistant
-                        </p>
-                        <p className="text-sm text-gray-600 truncate mb-2">
-                          {userType === 'realtor' 
-                            ? 'Help with property marketing and descriptions'
-                            : 'Ask about properties and neighborhoods'
-                          }
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800">
-                            AI Assistant
-                          </Badge>
-                          <span className="text-xs text-green-500 font-medium">
-                            Always Online
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
                   {/* User conversations */}
                   {matches.map((match) => {
                     const isRealtor = userType === 'realtor';
