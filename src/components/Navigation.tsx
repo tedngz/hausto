@@ -48,7 +48,7 @@ export const Navigation = ({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onOpenAIChat}
+                onClick={() => window.location.href = '/ai-chat'}
                 className="text-xs px-2 py-1.5 h-8"
               >
                 <Sparkles className="w-3.5 h-3.5 mr-1" />

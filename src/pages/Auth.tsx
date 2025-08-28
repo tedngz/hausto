@@ -34,7 +34,7 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        navigate('/');
+        navigate('/'); // Navigate to landing page instead of onboarding
       }
     });
 
@@ -42,7 +42,7 @@ const Auth = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        navigate('/');
+        navigate('/'); // Navigate to landing page instead of onboarding
       }
     });
 
@@ -103,7 +103,7 @@ const Auth = () => {
         title: "Welcome back!",
         description: "You've been signed in successfully.",
       });
-      navigate('/');
+      navigate('/'); // Navigate to landing page instead of onboarding
     }
 
     setLoading(false);
