@@ -289,7 +289,10 @@ const Index = () => {
     );
   }
 
-  if (!user) {
+  // Always show landing page if no user type is selected or if explicitly requested
+  const showLandingPage = !user || (!userType && !location.state?.showSwipeInterface);
+
+  if (showLandingPage) {
     return (
       <CurrencyProvider>
         <LandingPage />

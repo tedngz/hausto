@@ -1,11 +1,29 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare } from "lucide-react";
+import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LandingChatBox } from "@/components/LandingChatBox";
+import { useAuth } from "@/hooks/useAuth";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    // Force reload to reset any app state
+    window.location.reload();
+  };
+
+  const handleGetStarted = () => {
+    if (user) {
+      // For authenticated users, set them as renter and go to swipe interface
+      localStorage.setItem(`userType_${user.id}`, 'renter');
+      navigate('/', { state: { showSwipeInterface: true } });
+    } else {
+      navigate('/auth');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background">
@@ -20,13 +38,39 @@ export const LandingPage = () => {
             />
             <span className="text-2xl font-bold text-foreground">Hausto</span>
           </div>
-          <Button 
-            onClick={() => navigate('/auth')}
-            variant="outline"
-            className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-          >
-            Sign In
-          </Button>
+          <div className="flex items-center gap-4">
+            {user ? (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  Welcome back, {user.user_metadata?.name || user.email?.split('@')[0]}!
+                </span>
+                <Button 
+                  onClick={handleGetStarted}
+                  variant="outline"
+                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                >
+                  Browse Properties
+                </Button>
+                <Button 
+                  onClick={handleSignOut}
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Button 
+                onClick={() => navigate('/auth')}
+                variant="outline"
+                className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+              >
+                Sign In
+              </Button>
+            )}
+          </div>
         </nav>
       </header>
 
@@ -48,16 +92,19 @@ export const LandingPage = () => {
           </h1>
           
           <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed">
-            Discover your dream rental with AI-powered matching. Swipe through curated properties that match your lifestyle and preferences.
+            {user 
+              ? "Continue your search for the perfect rental with AI-powered matching and personalized recommendations." 
+              : "Discover your dream rental with AI-powered matching. Swipe through curated properties that match your lifestyle and preferences."
+            }
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
-              onClick={() => navigate('/auth')}
+              onClick={handleGetStarted}
               size="lg"
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg font-semibold"
             >
-              Get Started
+              {user ? "Browse Properties" : "Get Started"}
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </div>
@@ -73,10 +120,13 @@ export const LandingPage = () => {
       <section className="container mx-auto px-4 py-20">
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold text-foreground mb-4">
-            Why Choose Hausto?
+            {user ? "Your AI-Powered Search Experience" : "Why Choose Hausto?"}
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Experience the future of rental searching with our innovative platform
+            {user 
+              ? "Use our advanced AI to find properties that perfectly match your preferences and lifestyle." 
+              : "Experience the future of rental searching with our innovative platform"
+            }
           </p>
         </div>
 
@@ -151,14 +201,14 @@ export const LandingPage = () => {
               Join thousands of renters who have found their perfect match. Start your journey today.
             </p>
             <div className="flex justify-center">
-              <Button 
-                onClick={() => navigate('/auth')}
-                size="lg"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto"
-              >
-                Start Matching Now
-                <ArrowRight className="ml-2 h-6 w-6" />
-              </Button>
+            <Button 
+              onClick={handleGetStarted}
+              size="lg"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto"
+            >
+              {user ? "Start Browsing" : "Start Matching Now"}
+              <ArrowRight className="ml-2 h-6 w-6" />
+            </Button>
             </div>
           </div>
         </div>
