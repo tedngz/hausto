@@ -46,11 +46,13 @@ export const LandingChatBox = () => {
   // Check for stored search query on component mount
   useEffect(() => {
     const storedQuery = localStorage.getItem('pendingSearchQuery');
-    if (storedQuery && user) {
+    if (storedQuery) {
       setQuery(storedQuery);
-      localStorage.removeItem('pendingSearchQuery');
-      // Auto-trigger search with stored query
-      handleSearch(storedQuery);
+      if (user) {
+        localStorage.removeItem('pendingSearchQuery');
+        // Auto-trigger search with stored query after a brief delay
+        setTimeout(() => handleSearch(storedQuery), 100);
+      }
     }
   }, [user]);
 
