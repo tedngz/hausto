@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { X, Send, MessageCircle, Bot, MapPin, ArrowLeft } from 'lucide-react';
+import { X, Send, MessageCircle, Bot, MapPin, ArrowLeft, Plus, Upload, Image as ImageIcon, Trash2, History } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useChat } from '@/hooks/useChat';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
@@ -34,13 +34,16 @@ export const AIChatAgent = ({
   initialMatchId = null
 }: AIChatAgentProps) => {
   const [inputMessage, setInputMessage] = useState('');
-  const [activeTab, setActiveTab] = useState<'ai' | 'messages'>('messages');
+  const [activeTab, setActiveTab] = useState<'ai' | 'messages' | 'history'>('messages');
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string>('');
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [selectedRenterId, setSelectedRenterId] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [showChatHistory, setShowChatHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
@@ -124,7 +127,7 @@ export const AIChatAgent = ({
           conversationId: currentConversationId,
           userType,
           userPreferences,
-          propertyImages,
+          propertyImages: [...propertyImages, ...uploadedImages],
         });
       } else {
         setPendingMessage(inputMessage.trim());
@@ -144,6 +147,7 @@ export const AIChatAgent = ({
     }
     
     setInputMessage('');
+    setUploadedImages([]); // Clear uploaded images after sending
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -155,6 +159,34 @@ export const AIChatAgent = ({
 
   const handleMatchSelect = (matchId: string) => {
     setSelectedMatch(matchId);
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setUploadedImages(prev => [...prev, result]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeUploadedImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleNewChat = () => {
+    createConversation('New Conversation');
+    setUploadedImages([]);
+  };
+
+  const handleConversationSelect = (conversationId: string) => {
+    setCurrentConversationId(conversationId);
+    setShowChatHistory(false);
   };
 
   const getPlaceholder = () => {
@@ -283,29 +315,128 @@ export const AIChatAgent = ({
               </ScrollArea>
             </div>
           ) : activeTab === 'ai' ? (
-            /* AI Chat Interface */
             <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
-                <div className="flex items-center space-x-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setActiveTab('messages')}
-                    className="hover:bg-white/50 p-1"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </Button>
-                  <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
-                    <Bot className="w-5 h-5" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveTab('messages')}
+                      className="hover:bg-white/50 p-1"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </Button>
+                    <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
+                      <Bot className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">
+                        Hausto AI Assistant
+                      </h4>
+                      <p className="text-sm text-green-600">Always online to help</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">
-                      Hausto AI Assistant
-                    </h4>
-                    <p className="text-sm text-green-600">Always online to help</p>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowChatHistory(!showChatHistory)}
+                      className="text-xs"
+                    >
+                      <History className="w-4 h-4 mr-1" />
+                      History ({conversations.length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleNewChat}
+                      className="text-xs"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      New Chat
+                    </Button>
                   </div>
                 </div>
+
+                {/* Chat History Dropdown */}
+                {showChatHistory && (
+                  <div className="mt-4 p-3 bg-white rounded-lg border shadow-lg max-h-40 overflow-y-auto">
+                    <h5 className="text-sm font-medium text-gray-900 mb-2">Your Chat History</h5>
+                    {conversations.length === 0 ? (
+                      <p className="text-xs text-gray-500">No previous conversations</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {conversations.map((conv) => (
+                          <button
+                            key={conv.id}
+                            onClick={() => handleConversationSelect(conv.id)}
+                            className={`w-full text-left p-2 rounded text-xs hover:bg-gray-50 transition-colors ${
+                              currentConversationId === conv.id ? 'bg-orange-50 text-orange-800' : 'text-gray-700'
+                            }`}
+                          >
+                            <div className="font-medium truncate">
+                              {conv.title || 'Untitled Conversation'}
+                            </div>
+                            <div className="text-gray-500 text-xs mt-1">
+                              {new Date(conv.updated_at).toLocaleDateString()}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {userType === 'renter' && (
+                <div className="p-3 border-b bg-blue-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <ImageIcon className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-800">Upload property images to find similar apartments</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
+                    >
+                      <Upload className="w-3 h-3 mr-1" />
+                      Upload Images
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </div>
+                  
+                  {/* Image Preview */}
+                  {uploadedImages.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {uploadedImages.map((image, index) => (
+                        <div key={index} className="relative">
+                          <img
+                            src={image}
+                            alt={`Uploaded ${index + 1}`}
+                            className="w-16 h-16 object-cover rounded-lg border border-blue-200"
+                          />
+                          <button
+                            onClick={() => removeUploadedImage(index)}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <ScrollArea className="flex-1">
                 <div className="p-2 md:p-4 space-y-3 md:space-y-4">
@@ -314,6 +445,18 @@ export const AIChatAgent = ({
                       <Bot className="w-8 md:w-12 h-8 md:h-12 mx-auto mb-2 md:mb-4 opacity-50" />
                       <p className="text-base md:text-lg font-medium mb-1 md:mb-2">{getWelcomeMessage()}</p>
                       <p className="text-xs md:text-sm">Ask me anything about properties, neighborhoods, or your search preferences!</p>
+                      
+                      {userType === 'renter' && (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center justify-center space-x-2 mb-2">
+                            <ImageIcon className="w-5 h-5 text-blue-600" />
+                            <span className="text-sm font-medium text-blue-800">Image-Based Property Search</span>
+                          </div>
+                          <p className="text-xs text-blue-700">
+                            Upload photos of apartments you like, and I'll help you find similar properties in our database!
+                          </p>
+                        </div>
+                      )}
                       
                       {/* Quick Chat Suggestions */}
                       <div className="mt-6 space-y-2">
@@ -355,6 +498,14 @@ export const AIChatAgent = ({
                                 className="text-xs"
                               >
                                 "Help me find properties in my budget"
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => setInputMessage("Find apartments similar to uploaded images")}
+                                className="text-xs"
+                              >
+                                "Find apartments similar to uploaded images"
                               </Button>
                               <Button 
                                 variant="outline" 
