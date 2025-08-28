@@ -14,7 +14,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
-import { Apartment } from '@/pages/Index';
+import { Apartment } from '@/types';
 
 interface AIChatAgentProps {
   isOpen: boolean;

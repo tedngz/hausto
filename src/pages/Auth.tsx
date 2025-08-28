@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +15,7 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const [signUpData, setSignUpData] = useState({
@@ -34,13 +35,8 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        // Check if there's a pending search query to continue conversation
-        const pendingQuery = localStorage.getItem('pendingSearchQuery');
-        if (pendingQuery) {
-          navigate('/', { state: { view: 'chat' } });
-        } else {
-          navigate('/');
-        }
+        const returnTo = location.state?.returnTo || '/';
+        navigate(returnTo, { replace: true });
       }
     });
 
@@ -48,18 +44,13 @@ const Auth = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        // Check if there's a pending search query to continue conversation
-        const pendingQuery = localStorage.getItem('pendingSearchQuery');
-        if (pendingQuery) {
-          navigate('/', { state: { view: 'chat' } });
-        } else {
-          navigate('/');
-        }
+        const returnTo = location.state?.returnTo || '/';
+        navigate(returnTo, { replace: true });
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, location]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,9 +109,11 @@ const Auth = () => {
       // Check if there's a pending search query to continue conversation
       const pendingQuery = localStorage.getItem('pendingSearchQuery');
       if (pendingQuery) {
-        navigate('/', { state: { view: 'chat' } });
+        const returnTo = location.state?.returnTo || '/discover';
+        navigate(returnTo, { replace: true });
       } else {
-        navigate('/');
+        const returnTo = location.state?.returnTo || '/';
+        navigate(returnTo, { replace: true });
       }
     }
 

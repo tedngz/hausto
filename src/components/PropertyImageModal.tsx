@@ -3,7 +3,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
-import { Apartment } from '@/pages/Index';
+import { Apartment } from '@/types';
 
 interface PropertyImageModalProps {
   apartment: Apartment;

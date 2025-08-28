@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import { Property } from '@/hooks/useProperties';
 import { PropertyCard } from '@/components/PropertyCard';
-import { Apartment } from '@/pages/Index';
+import { Apartment } from '@/types';
 
 interface PropertyPreviewModalProps {
   isOpen: boolean;

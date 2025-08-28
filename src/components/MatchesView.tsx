@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2, MessageCircle } from 'lucide-react';
-import { Apartment, UserPreferences } from '@/pages/Index';
+import { Apartment, UserPreferences } from '@/types';
 import { PropertyCard } from '@/components/PropertyCard';
 import { ContactModal } from '@/components/ContactModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';

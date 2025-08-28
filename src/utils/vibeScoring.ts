@@ -1,5 +1,5 @@
 
-import { UserPreferences, Apartment } from '@/pages/Index';
+import { UserPreferences, Apartment } from '@/types';
 
 export interface VibeScore {
   overall: number;

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Heart, X, RotateCcw, MessageCircle } from 'lucide-react';
-import { UserPreferences, Apartment } from '@/pages/Index';
+import { UserPreferences, Apartment } from '@/types';
 import { UserProfile } from '@/components/LoginModal';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { calculateVibeScore } from '@/utils/vibeScoring';

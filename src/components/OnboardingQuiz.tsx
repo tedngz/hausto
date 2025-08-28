@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { UserPreferences } from '@/pages/Index';
+import { UserPreferences } from '@/types';
 import { BudgetRangeSelector } from '@/components/BudgetRangeSelector';
 import { CityDistrictSelector } from '@/components/CityDistrictSelector';
 import { useUsageTracking } from '@/hooks/useUsageTracking';

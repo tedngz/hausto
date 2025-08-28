@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { X, Send, User, MapPin } from 'lucide-react';
-import { Match, Apartment } from '@/pages/Index';
+import { Match, Apartment } from '@/types';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 

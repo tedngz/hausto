@@ -1,4 +1,4 @@
-import { Apartment } from '@/pages/Index';
+import { Apartment } from '@/types';
 
 export const sampleProperties: Apartment[] = [
   {

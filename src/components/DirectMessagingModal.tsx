@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { X, Send, User, MapPin, Trash2, MessageCircle } from 'lucide-react';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useAuth } from '@/hooks/useAuth';
-import { Apartment } from '@/pages/Index';
+import { Apartment } from '@/types';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

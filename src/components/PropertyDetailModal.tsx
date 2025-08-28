@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Heart, X } from 'lucide-react';
-import { Apartment, UserPreferences } from '@/pages/Index';
+import { Apartment, UserPreferences } from '@/types';
 import { PropertyCard } from '@/components/PropertyCard';
 
 interface PropertyDetailModalProps {

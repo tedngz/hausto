@@ -120,10 +120,7 @@ export const LandingChatBox = () => {
   };
 
   const handleBrowseAll = () => {
-    // Store user preferences in localStorage and navigate to swipe interface
-    localStorage.setItem('searchQuery', query);
-    localStorage.setItem('userType', 'renter');
-    navigate('/', { state: { view: 'swipe' } });
+    navigate('/discover');
   };
 
   const handlePropertyClick = (property: PropertyMatch) => {
@@ -193,7 +190,7 @@ export const LandingChatBox = () => {
                   Sign in to search for your perfect home match!
                 </p>
                 <Button 
-                  onClick={() => navigate('/auth')}
+                  onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   Sign In to Continue
