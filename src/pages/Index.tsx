@@ -151,7 +151,7 @@ const Index = () => {
     return () => window.removeEventListener('openAIChat', handleOpenAIChat);
   }, []);
 
-  // Handle navigation from landing page chat box
+  // Handle navigation from landing page discover button
   useEffect(() => {
     if (user && location.state?.showSwipeInterface) {
       // Set user as renter and navigate to swipe interface
@@ -169,8 +169,10 @@ const Index = () => {
         }
       }
       setCurrentView('swipe');
+      // Clear the state to prevent re-triggering
+      navigate('/', { replace: true, state: {} });
     }
-  }, [user, location.state]);
+  }, [user, location.state, navigate]);
 
   // Removed automatic redirect to /auth - now showing landing page instead
 
@@ -289,8 +291,8 @@ const Index = () => {
     );
   }
 
-  // Always show landing page if no user type is selected or if explicitly requested
-  const showLandingPage = !user || (!userType && !location.state?.showSwipeInterface);
+  // Always show landing page if no user type is selected (keep authenticated users on landing page)
+  const showLandingPage = !userType && !location.state?.showSwipeInterface;
 
   if (showLandingPage) {
     return (

@@ -1,7 +1,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageSquare, User, Users } from 'lucide-react';
+import { Heart, MessageSquare, User, Users, Sparkles } from 'lucide-react';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { UserMenu } from '@/components/UserMenu';
 
@@ -45,6 +45,16 @@ export const Navigation = ({
           
           <div className="flex items-center justify-center flex-1 px-2 md:px-4">
             <div className="flex items-center space-x-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onOpenAIChat}
+                className="text-xs px-2 py-1.5 h-8"
+              >
+                <Sparkles className="w-3.5 h-3.5 mr-1" />
+                <span className="hidden xs:inline text-xs">AI Chat</span>
+              </Button>
+              
               <Button
                 variant={currentView === 'swipe' ? 'default' : 'ghost'}
                 size="sm"
