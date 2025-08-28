@@ -95,7 +95,7 @@ export const LandingPage = () => {
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
-              onClick={handleGetStarted}
+              onClick={user ? handleDiscover : handleGetStarted}
               size="lg"
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg font-semibold"
             >
@@ -197,7 +197,7 @@ export const LandingPage = () => {
             </p>
             <div className="flex justify-center">
             <Button 
-              onClick={handleGetStarted}
+              onClick={user ? handleDiscover : handleGetStarted}
               size="lg"
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto"
             >
