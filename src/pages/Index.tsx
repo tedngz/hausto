@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { OnboardingQuiz } from '@/components/OnboardingQuiz';
 import { SwipeInterface } from '@/components/SwipeInterface';
 import { MatchesView } from '@/components/MatchesView';
@@ -65,6 +65,7 @@ export type Match = {
 const Index = () => {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
 
   // Check if user is admin
@@ -149,6 +150,27 @@ const Index = () => {
     window.addEventListener('openAIChat', handleOpenAIChat);
     return () => window.removeEventListener('openAIChat', handleOpenAIChat);
   }, []);
+
+  // Handle navigation from landing page chat box
+  useEffect(() => {
+    if (user && location.state?.showSwipeInterface) {
+      // Set user as renter and navigate to swipe interface
+      setUserType('renter');
+      localStorage.setItem(`userType_${user.id}`, 'renter');
+      
+      // Check if they have saved preferences, if not use defaults for swipe
+      const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
+      if (savedPreferences) {
+        try {
+          const preferences = JSON.parse(savedPreferences);
+          setUserPreferences(preferences);
+        } catch (error) {
+          console.error('Error parsing saved preferences:', error);
+        }
+      }
+      setCurrentView('swipe');
+    }
+  }, [user, location.state]);
 
   // Removed automatic redirect to /auth - now showing landing page instead
 

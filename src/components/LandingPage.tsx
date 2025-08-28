@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { LandingChatBox } from "@/components/LandingChatBox";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -61,6 +62,11 @@ export const LandingPage = () => {
             </Button>
           </div>
         </div>
+      </section>
+
+      {/* AI Chat Search Section */}
+      <section className="container mx-auto px-4 py-16">
+        <LandingChatBox />
       </section>
 
       {/* Features Section */}
