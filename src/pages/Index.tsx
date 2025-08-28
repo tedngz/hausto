@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { OnboardingQuiz } from '@/components/OnboardingQuiz';
 import { SwipeInterface } from '@/components/SwipeInterface';
 import { MatchesView } from '@/components/MatchesView';
+import { AIChatView } from '@/components/AIChatView';
 import { Navigation } from '@/components/Navigation';
 import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';
@@ -70,7 +71,7 @@ const Index = () => {
 
   // Check if user is admin
   const isAdmin = user?.email === 'ted.ngz@gmail.com';
-  const [currentView, setCurrentView] = useState<'onboarding' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'feed'>('onboarding');
+  const [currentView, setCurrentView] = useState<'onboarding' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'feed' | 'ai-chat'>('onboarding');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [matches, setMatches] = useState<Apartment[]>([]);
   const [realtorMatches, setRealtorMatches] = useState<Match[]>([]);
@@ -305,14 +306,16 @@ const Index = () => {
   return (
     <CurrencyProvider>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-        {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && (
+        {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && currentView !== 'ai-chat' && (
           <Navigation 
-            currentView={currentView === 'profile' ? 'profile' : currentView} 
+            currentView={currentView}
             setCurrentView={(view) => {
               if (view === 'profile') {
                 setCurrentView('profile');
               } else if (view === 'feed') {
                 setCurrentView('feed');
+              } else if (view === 'ai-chat') {
+                setCurrentView('ai-chat');
               } else {
                 setCurrentView(view as 'swipe' | 'matches');
               }
@@ -320,7 +323,7 @@ const Index = () => {
             matchCount={matches.length}
             userType={userType}
             onSwitchUserType={switchUserType}
-            onOpenAIChat={() => setIsAIChatOpen(true)}
+            onOpenAIChat={() => setCurrentView('ai-chat')}
             onRestartOnboarding={userType === 'renter' ? handleRestartOnboarding : undefined}
             isAdmin={isAdmin}
           />
@@ -378,6 +381,10 @@ const Index = () => {
               </div>
             </div>
           )
+        )}
+
+        {currentView === 'ai-chat' && userType && (
+          <AIChatView />
         )}
 
         {currentView === 'feed' && userType && (

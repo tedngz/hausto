@@ -7,7 +7,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
-import { AIChat } from "./pages/AIChat";
 import NotFound from "./pages/NotFound";
 import SocialFeedPage from "./pages/SocialFeed";
 
@@ -23,7 +22,6 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/ai-chat" element={<AIChat />} />
             <Route path="/feed" element={<SocialFeedPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

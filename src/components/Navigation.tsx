@@ -6,8 +6,8 @@ import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { UserMenu } from '@/components/UserMenu';
 
 interface NavigationProps {
-  currentView: 'swipe' | 'matches' | 'profile' | 'feed';
-  setCurrentView: (view: 'swipe' | 'matches' | 'profile' | 'feed') => void;
+  currentView: 'swipe' | 'matches' | 'profile' | 'feed' | 'ai-chat';
+  setCurrentView: (view: 'swipe' | 'matches' | 'profile' | 'feed' | 'ai-chat') => void;
   matchCount: number;
   userType: 'renter' | 'realtor';
   onSwitchUserType: () => void;
@@ -46,10 +46,10 @@ export const Navigation = ({
           <div className="flex items-center justify-center flex-1 px-2 md:px-4">
             <div className="flex items-center space-x-1">
               <Button
-                variant="ghost"
+                variant={currentView === 'ai-chat' ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => window.location.href = '/ai-chat'}
-                className="text-xs px-2 py-1.5 h-8"
+                onClick={() => setCurrentView('ai-chat')}
+                className={`text-xs px-2 py-1.5 h-8 ${currentView === 'ai-chat' ? 'bg-primary text-primary-foreground' : ''}`}
               >
                 <Sparkles className="w-3.5 h-3.5 mr-1" />
                 <span className="hidden xs:inline text-xs">AI Chat</span>
