@@ -77,15 +77,6 @@ export const LandingPage = () => {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="text-center max-w-4xl mx-auto">
-          <div className="flex justify-center mb-8">
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl"></div>
-              <div className="relative bg-primary/10 p-4 rounded-full">
-                <Sparkles className="h-12 w-12 text-primary" />
-              </div>
-            </div>
-          </div>
-          
           <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 leading-tight">
             Find Your Perfect
             <span className="text-primary block">Home Match</span>
