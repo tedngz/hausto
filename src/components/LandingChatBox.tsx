@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
+import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 
 interface PropertyMatch {
   id: string;
@@ -35,18 +36,35 @@ export const LandingChatBox = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState<PropertyMatch | null>(null);
+  const [showPropertyModal, setShowPropertyModal] = useState(false);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { toast } = useToast();
 
-  const handleSearch = async () => {
+  // Check for stored search query on component mount
+  useEffect(() => {
+    const storedQuery = localStorage.getItem('pendingSearchQuery');
+    if (storedQuery && user) {
+      setQuery(storedQuery);
+      localStorage.removeItem('pendingSearchQuery');
+      // Auto-trigger search with stored query
+      handleSearch(storedQuery);
+    }
+  }, [user]);
+
+  const handleSearch = async (searchQuery?: string) => {
+    const queryToUse = searchQuery || query;
+    
     if (!user) {
+      // Store query for after login
+      localStorage.setItem('pendingSearchQuery', queryToUse);
       setShowAuthPrompt(true);
       return;
     }
 
-    if (!query.trim()) {
+    if (!queryToUse.trim()) {
       toast({
         title: "Please describe your ideal home",
         description: "Tell us what you're looking for to get personalized suggestions",
@@ -60,7 +78,7 @@ export const LandingChatBox = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-property-search', {
-        body: { query: query.trim() }
+        body: { query: queryToUse.trim() }
       });
 
       if (error) {
@@ -103,7 +121,12 @@ export const LandingChatBox = () => {
     // Store user preferences in localStorage and navigate to swipe interface
     localStorage.setItem('searchQuery', query);
     localStorage.setItem('userType', 'renter');
-    navigate('/', { state: { showSwipeInterface: true } });
+    navigate('/', { state: { view: 'swipe' } });
+  };
+
+  const handlePropertyClick = (property: PropertyMatch) => {
+    setSelectedProperty(property);
+    setShowPropertyModal(true);
   };
 
   if (loading) {
@@ -146,7 +169,7 @@ export const LandingChatBox = () => {
             disabled={isSearching}
           />
           <Button
-            onClick={handleSearch}
+            onClick={() => handleSearch()}
             disabled={isSearching || !query.trim()}
             size="sm"
             className="absolute bottom-3 right-3 h-8 w-8 p-0"
@@ -190,77 +213,83 @@ export const LandingChatBox = () => {
             {searchResults.results.length > 0 ? (
               <div className="space-y-3">
                 <h4 className="font-semibold text-foreground">Top Matches for You:</h4>
-                {searchResults.results.map((property) => (
-                  <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200">
-                    <CardContent className="p-4">
-                      <div className="flex gap-4">
-                        {/* Property Image */}
-                        <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                          {property.images && property.images.length > 0 ? (
-                            <img 
-                              src={property.images[0]} 
-                              alt={property.title}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Home className="h-8 w-8 text-muted-foreground" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Property Details */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <h5 className="font-semibold text-foreground line-clamp-1">{property.title}</h5>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                                <MapPin className="h-3 w-3" />
-                                <span className="line-clamp-1">{property.location}</span>
+                <div className="grid gap-3 sm:grid-cols-1">
+                  {searchResults.results.map((property) => (
+                    <Card 
+                      key={property.id} 
+                      className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer"
+                      onClick={() => handlePropertyClick(property)}
+                    >
+                      <CardContent className="p-3 sm:p-4">
+                        <div className="flex gap-3 sm:gap-4">
+                          {/* Property Image */}
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                            {property.images && property.images.length > 0 ? (
+                              <img 
+                                src={property.images[0]} 
+                                alt={property.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Home className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
                               </div>
-                            </div>
-                            <Badge variant="secondary" className="ml-2 bg-primary/10 text-primary border-primary/20">
-                              {property.matchScore}% match
-                            </Badge>
-                          </div>
-
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
-                            <div className="flex items-center gap-1">
-                              <DollarSign className="h-3 w-3" />
-                              <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
-                            </div>
-                            {property.size && (
-                              <span>{property.size}</span>
-                            )}
-                            {property.vibe && (
-                              <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
                             )}
                           </div>
 
-                          <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                            <strong>Why it matches:</strong> {property.matchReason}
-                          </p>
+                          {/* Property Details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1 min-w-0 pr-2">
+                                <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                                  <MapPin className="h-3 w-3 flex-shrink-0" />
+                                  <span className="line-clamp-1">{property.location}</span>
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                                {property.matchScore}% match
+                              </Badge>
+                            </div>
 
-                          {/* Property Highlights */}
-                          {property.highlights && property.highlights.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {property.highlights.slice(0, 3).map((highlight, index) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {highlight}
-                                </Badge>
-                              ))}
-                              {property.highlights.length > 3 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{property.highlights.length - 3} more
-                                </Badge>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-3 w-3" />
+                                <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
+                              </div>
+                              {property.size && (
+                                <span>{property.size}</span>
+                              )}
+                              {property.vibe && (
+                                <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
                               )}
                             </div>
-                          )}
+
+                            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                              <strong>Why it matches:</strong> {property.matchReason}
+                            </p>
+
+                            {/* Property Highlights */}
+                            {property.highlights && property.highlights.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {property.highlights.slice(0, 2).map((highlight, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs">
+                                    {highlight}
+                                  </Badge>
+                                ))}
+                                {property.highlights.length > 2 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{property.highlights.length - 2} more
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
 
                 {/* Browse All Button */}
                 <div className="text-center pt-4">
@@ -291,6 +320,32 @@ export const LandingChatBox = () => {
           </div>
         )}
       </div>
+
+      {/* Property Detail Modal */}
+      <PropertyDetailModal
+        apartment={selectedProperty ? {
+          id: selectedProperty.id,
+          title: selectedProperty.title,
+          location: selectedProperty.location,
+          price: selectedProperty.price,
+          size: selectedProperty.size,
+          vibe: selectedProperty.vibe,
+          description: selectedProperty.description,
+          highlights: selectedProperty.highlights,
+          images: selectedProperty.images,
+          realtor: {
+            id: "contact",
+            name: "Contact for details",
+            phone: "",
+            email: "",
+          }
+        } : null}
+        isOpen={showPropertyModal}
+        onClose={() => {
+          setShowPropertyModal(false);
+          setSelectedProperty(null);
+        }}
+      />
     </div>
   );
 };

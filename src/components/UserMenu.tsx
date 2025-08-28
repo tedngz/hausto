@@ -21,7 +21,7 @@ export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onVi
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/auth');
+    navigate('/');
   };
 
   return (

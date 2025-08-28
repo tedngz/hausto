@@ -34,7 +34,13 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        navigate('/'); // Navigate to landing page instead of onboarding
+        // Check if there's a pending search query to continue conversation
+        const pendingQuery = localStorage.getItem('pendingSearchQuery');
+        if (pendingQuery) {
+          navigate('/', { state: { view: 'chat' } });
+        } else {
+          navigate('/');
+        }
       }
     });
 
@@ -42,7 +48,13 @@ const Auth = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        navigate('/'); // Navigate to landing page instead of onboarding
+        // Check if there's a pending search query to continue conversation
+        const pendingQuery = localStorage.getItem('pendingSearchQuery');
+        if (pendingQuery) {
+          navigate('/', { state: { view: 'chat' } });
+        } else {
+          navigate('/');
+        }
       }
     });
 
@@ -103,7 +115,13 @@ const Auth = () => {
         title: "Welcome back!",
         description: "You've been signed in successfully.",
       });
-      navigate('/'); // Navigate to landing page instead of onboarding
+      // Check if there's a pending search query to continue conversation
+      const pendingQuery = localStorage.getItem('pendingSearchQuery');
+      if (pendingQuery) {
+        navigate('/', { state: { view: 'chat' } });
+      } else {
+        navigate('/');
+      }
     }
 
     setLoading(false);
