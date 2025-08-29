@@ -356,7 +356,7 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{session.title}</p>
                             <p className="text-xs text-muted-foreground">
-                              {session.timestamp.toLocaleDateString()}
+                              {new Date(session.timestamp).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
