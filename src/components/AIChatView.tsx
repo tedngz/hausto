@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, MapPin, Home, DollarSign, ArrowRight, Sparkles, Upload, X, MessageSquare, Plus, History } from 'lucide-react';
+import { Loader2, Send, MapPin, Home, DollarSign, ArrowRight, Sparkles, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -59,6 +59,9 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [showHistory, setShowHistory] = useState(false);
   const [messages, setMessages] = useState<ChatSession['messages']>([]);
+  const [searchCount, setSearchCount] = useState(0);
+  const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
+  const [allResults, setAllResults] = useState<PropertyMatch[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -135,7 +138,38 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
     setQuery('');
     setUploadedImages([]);
     setSearchResults(null);
+    setAllResults([]);
+    setSearchCount(0);
     setShowHistory(false);
+  };
+
+  const handleLikeProperty = async (propertyId: string) => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to like properties",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setLikedProperties(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(propertyId)) {
+        newSet.delete(propertyId);
+        toast({
+          title: "Removed from favorites",
+          description: "Property removed from your favorites"
+        });
+      } else {
+        newSet.add(propertyId);
+        toast({
+          title: "Added to favorites!",
+          description: "You can view your matches in your profile"
+        });
+      }
+      return newSet;
+    });
   };
 
   const switchToSession = (sessionId: string) => {
@@ -172,6 +206,16 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
     if (!user) {
       localStorage.setItem('pendingSearchQuery', queryToUse);
       setShowAuthPrompt(true);
+      return;
+    }
+
+    // Check search limit
+    if (searchCount >= 3) {
+      toast({
+        title: "Search limit reached",
+        description: "You've used 3 free searches. Upgrade to premium for unlimited AI searches.",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -223,6 +267,16 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       }
 
       setSearchResults(data);
+      setSearchCount(prev => prev + 1);
+      
+      // Add new results to all results
+      if (data.results && data.results.length > 0) {
+        setAllResults(prev => {
+          const existing = new Map(prev.map(p => [p.id, p]));
+          data.results.forEach((p: PropertyMatch) => existing.set(p.id, p));
+          return Array.from(existing.values());
+        });
+      }
       
       // Add AI response message
       const aiMessage = {
@@ -238,7 +292,7 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       if (data.results && data.results.length > 0) {
         toast({
           title: "Found matches!",
-          description: `We found ${data.totalMatches} properties that might be perfect for you`,
+          description: `We found ${data.totalMatches} properties that might be perfect for you. ${3 - searchCount - 1} searches remaining.`,
         });
       } else {
         toast({
@@ -295,44 +349,46 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
   return (
     <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto relative">
+          {/* Floating buttons outside the box */}
+          <div className="absolute -top-2 right-0 flex gap-2 z-10">
+            <Button
+              onClick={() => setShowHistory(!showHistory)}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 bg-card shadow-md"
+            >
+              <History className="h-4 w-4" />
+              History
+            </Button>
+            <Button
+              onClick={createNewChat}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 bg-card shadow-md"
+            >
+              <Plus className="h-4 w-4" />
+              New Chat
+            </Button>
+          </div>
+
           <div className="w-full p-6 bg-card border border-border rounded-2xl shadow-xl">
-            {/* Header with Chat History */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="text-center flex-1">
-                <div className="flex justify-center mb-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-primary/20 rounded-full blur-lg"></div>
-                    <div className="relative bg-primary/10 p-3 rounded-full">
-                      <Sparkles className="h-8 w-8 text-primary" />
-                    </div>
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="flex justify-center mb-4">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/20 rounded-full blur-lg"></div>
+                  <div className="relative bg-primary/10 p-3 rounded-full">
+                    <Sparkles className="h-8 w-8 text-primary" />
                   </div>
                 </div>
-                <h3 className="text-2xl font-bold text-foreground mb-2">AI Property Assistant</h3>
-                <p className="text-muted-foreground">
-                  Describe your dream home or upload reference images
-                </p>
               </div>
-              
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => setShowHistory(!showHistory)}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <History className="h-4 w-4" />
-                  History
-                </Button>
-                <Button
-                  onClick={createNewChat}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  New Chat
-                </Button>
+              <h3 className="text-2xl font-bold text-foreground mb-2">AI Property Assistant</h3>
+              <p className="text-muted-foreground">
+                Describe your dream home or upload reference images
+              </p>
+              <div className="text-xs text-muted-foreground mt-2">
+                {3 - searchCount} free searches remaining
               </div>
             </div>
 
@@ -439,7 +495,7 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                     {isSearching ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Send className="h-4 w-4" />
+                      <PlaneTakeoff className="h-4 w-4" />
                     )}
                   </Button>
                 </div>
@@ -518,54 +574,71 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                                   )}
                                 </div>
 
-                                {/* Property Details */}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1 min-w-0 pr-2">
-                                      <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
-                                      <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
-                                        <MapPin className="h-3 w-3 flex-shrink-0" />
-                                        <span className="line-clamp-1">{property.location}</span>
-                                      </div>
-                                    </div>
-                                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
-                                      {property.matchScore}% match
-                                    </Badge>
-                                  </div>
+                                 {/* Property Details */}
+                                 <div className="flex-1 min-w-0">
+                                   <div className="flex items-start justify-between mb-2">
+                                     <div className="flex-1 min-w-0 pr-2">
+                                       <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
+                                       <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                                         <MapPin className="h-3 w-3 flex-shrink-0" />
+                                         <span className="line-clamp-1">{property.location}</span>
+                                       </div>
+                                     </div>
+                                     <div className="flex items-center gap-2">
+                                       <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                                         {property.matchScore}% match
+                                       </Badge>
+                                       <Button
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           handleLikeProperty(property.id);
+                                         }}
+                                         size="sm"
+                                         variant={likedProperties.has(property.id) ? "default" : "outline"}
+                                         className={`h-7 w-7 p-0 ${
+                                           likedProperties.has(property.id) 
+                                             ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                             : 'hover:bg-red-50 hover:text-red-500'
+                                         }`}
+                                       >
+                                         <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                                       </Button>
+                                     </div>
+                                   </div>
 
-                                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
-                                    <div className="flex items-center gap-1">
-                                      <DollarSign className="h-3 w-3" />
-                                      <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
-                                    </div>
-                                    {property.size && (
-                                      <span>{property.size}</span>
-                                    )}
-                                    {property.vibe && (
-                                      <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
-                                    )}
-                                  </div>
+                                   <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
+                                     <div className="flex items-center gap-1">
+                                       <DollarSign className="h-3 w-3" />
+                                       <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
+                                     </div>
+                                     {property.size && (
+                                       <span>{property.size}</span>
+                                     )}
+                                     {property.vibe && (
+                                       <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
+                                     )}
+                                   </div>
 
-                                  <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                                    <strong>Why it matches:</strong> {property.matchReason}
-                                  </p>
+                                   <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                                     <strong>Why it matches:</strong> {property.matchReason}
+                                   </p>
 
-                                  {/* Property Highlights */}
-                                  {property.highlights && property.highlights.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {property.highlights.slice(0, 2).map((highlight, index) => (
-                                        <Badge key={index} variant="outline" className="text-xs">
-                                          {highlight}
-                                        </Badge>
-                                      ))}
-                                      {property.highlights.length > 2 && (
-                                        <Badge variant="outline" className="text-xs">
-                                          +{property.highlights.length - 2} more
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
+                                   {/* Property Highlights */}
+                                   {property.highlights && property.highlights.length > 0 && (
+                                     <div className="flex flex-wrap gap-1">
+                                       {property.highlights.slice(0, 2).map((highlight, index) => (
+                                         <Badge key={index} variant="outline" className="text-xs">
+                                           {highlight}
+                                         </Badge>
+                                       ))}
+                                       {property.highlights.length > 2 && (
+                                         <Badge variant="outline" className="text-xs">
+                                           +{property.highlights.length - 2} more
+                                         </Badge>
+                                       )}
+                                     </div>
+                                   )}
+                                 </div>
                               </div>
                             </CardContent>
                           </Card>
@@ -598,6 +671,107 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                       </Button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* All Previous Results */}
+              {allResults.length > 0 && !searchResults && (
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-foreground">All Your Previous Matches:</h4>
+                  <div className="grid gap-3 sm:grid-cols-1 max-h-96 overflow-y-auto">
+                    {allResults.map((property) => (
+                      <Card 
+                        key={property.id} 
+                        className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer"
+                        onClick={() => handlePropertyClick(property)}
+                      >
+                        <CardContent className="p-3 sm:p-4">
+                          <div className="flex gap-3 sm:gap-4">
+                            {/* Property Image */}
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                              {property.images && property.images.length > 0 ? (
+                                <img 
+                                  src={property.images[0]} 
+                                  alt={property.title}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Home className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Property Details */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1 min-w-0 pr-2">
+                                  <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
+                                  <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                                    <MapPin className="h-3 w-3 flex-shrink-0" />
+                                    <span className="line-clamp-1">{property.location}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                                    {property.matchScore}% match
+                                  </Badge>
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleLikeProperty(property.id);
+                                    }}
+                                    size="sm"
+                                    variant={likedProperties.has(property.id) ? "default" : "outline"}
+                                    className={`h-7 w-7 p-0 ${
+                                      likedProperties.has(property.id) 
+                                        ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                        : 'hover:bg-red-50 hover:text-red-500'
+                                    }`}
+                                  >
+                                    <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
+                                <div className="flex items-center gap-1">
+                                  <DollarSign className="h-3 w-3" />
+                                  <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
+                                </div>
+                                {property.size && (
+                                  <span>{property.size}</span>
+                                )}
+                                {property.vibe && (
+                                  <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
+                                )}
+                              </div>
+
+                              <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                                <strong>Why it matches:</strong> {property.matchReason}
+                              </p>
+
+                              {/* Property Highlights */}
+                              {property.highlights && property.highlights.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {property.highlights.slice(0, 2).map((highlight, index) => (
+                                    <Badge key={index} variant="outline" className="text-xs">
+                                      {highlight}
+                                    </Badge>
+                                  ))}
+                                  {property.highlights.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{property.highlights.length - 2} more
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
