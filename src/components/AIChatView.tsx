@@ -383,7 +383,7 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                           {message.images.map((image, imgIndex) => (
                             <img
                               key={imgIndex}
-                              src={URL.createObjectURL(image)}
+                              src={image instanceof File ? URL.createObjectURL(image) : ''}
                               alt={`Upload ${imgIndex + 1}`}
                               className="w-12 h-12 object-cover rounded"
                             />
@@ -449,12 +449,12 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
               {uploadedImages.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   {uploadedImages.map((image, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={URL.createObjectURL(image)}
-                        alt={`Upload ${index + 1}`}
-                        className="w-16 h-16 object-cover rounded-lg border border-border"
-                      />
+                     <div key={index} className="relative">
+                       <img
+                         src={URL.createObjectURL(image)}
+                         alt={`Upload ${index + 1}`}
+                         className="w-16 h-16 object-cover rounded-lg border border-border"
+                       />
                       <Button
                         onClick={() => removeImage(index)}
                         size="sm"
