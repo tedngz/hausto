@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, MapPin, Home, DollarSign, ArrowRight, Sparkles } from 'lucide-react';
+import { Loader2, Send, MapPin, Home, DollarSign, ArrowRight, Sparkles, Upload, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,6 +38,8 @@ export const LandingChatBox = () => {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<PropertyMatch | null>(null);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
@@ -56,6 +58,27 @@ export const LandingChatBox = () => {
     }
   }, [user]);
 
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      const newImages = Array.from(files).slice(0, 3); // Limit to 3 images
+      setUploadedImages(prev => [...prev, ...newImages].slice(0, 3));
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const convertImageToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
     
@@ -66,10 +89,10 @@ export const LandingChatBox = () => {
       return;
     }
 
-    if (!queryToUse.trim()) {
+    if (!queryToUse.trim() && uploadedImages.length === 0) {
       toast({
-        title: "Please describe your ideal home",
-        description: "Tell us what you're looking for to get personalized suggestions",
+        title: "Please describe your ideal home or upload an image",
+        description: "Tell us what you're looking for or show us a reference image",
         variant: "destructive"
       });
       return;
@@ -79,8 +102,26 @@ export const LandingChatBox = () => {
     setSearchResults(null);
 
     try {
+      let searchBody: any = { query: queryToUse.trim() };
+
+      // Convert uploaded images to base64 if present
+      if (uploadedImages.length > 0) {
+        const imageData = await Promise.all(
+          uploadedImages.map(async (file) => ({
+            name: file.name,
+            data: await convertImageToBase64(file)
+          }))
+        );
+        searchBody.images = imageData;
+        
+        // If only images without text, provide a default query
+        if (!queryToUse.trim()) {
+          searchBody.query = "Find similar apartments to the uploaded images";
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke('ai-property-search', {
-        body: { query: queryToUse.trim() }
+        body: searchBody
       });
 
       if (error) {
@@ -164,22 +205,64 @@ export const LandingChatBox = () => {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyPress}
             placeholder="I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..."
-            className="min-h-[100px] pr-16 resize-none"
+            className="min-h-[100px] pr-20 resize-none"
             disabled={isSearching}
           />
-          <Button
-            onClick={() => handleSearch()}
-            disabled={isSearching || !query.trim()}
-            size="sm"
-            className="absolute bottom-3 right-3 h-8 w-8 p-0"
-          >
-            {isSearching ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
+          <div className="absolute bottom-3 right-3 flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSearching || uploadedImages.length >= 3}
+              size="sm"
+              variant="outline"
+              className="h-8 w-8 p-0"
+            >
+              <Upload className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={() => handleSearch()}
+              disabled={isSearching || (!query.trim() && uploadedImages.length === 0)}
+              size="sm"
+              className="h-8 w-8 p-0"
+            >
+              {isSearching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
+
+        {/* Image Preview */}
+        {uploadedImages.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {uploadedImages.map((image, index) => (
+              <div key={index} className="relative">
+                <img
+                  src={URL.createObjectURL(image)}
+                  alt={`Upload ${index + 1}`}
+                  className="w-16 h-16 object-cover rounded-lg border border-border"
+                />
+                <Button
+                  onClick={() => removeImage(index)}
+                  size="sm"
+                  variant="destructive"
+                  className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Auth Prompt */}
         {showAuthPrompt && !user && (
