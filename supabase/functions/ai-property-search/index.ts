@@ -14,6 +14,20 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication first
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ 
+        error: 'Missing authorization header',
+        results: [],
+        summary: 'Authentication required',
+        totalMatches: 0
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { query } = await req.json();
     
     if (!query) {
@@ -32,8 +46,27 @@ serve(async (req) => {
       throw new Error('Supabase configuration missing');
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase client and verify user
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify user authentication
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error('Authentication failed:', authError);
+      return new Response(JSON.stringify({ 
+        error: 'Invalid or expired token',
+        results: [],
+        summary: 'Authentication failed',
+        totalMatches: 0
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('Authenticated user requesting property search:', user.id);
 
     // Fetch all properties from the database
     const { data: properties, error: propertiesError } = await supabase

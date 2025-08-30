@@ -12,10 +12,22 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Chat AI function called');
+    // Verify authentication first
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      );
+    }
+
+    console.log('Chat AI function called by authenticated user');
     
     const requestBody = await req.text();
-    console.log('Raw request body:', requestBody);
+    console.log('Raw request body length:', requestBody.length);
     
     if (!requestBody) {
       console.error('Empty request body');
@@ -76,12 +88,29 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client
+    // Create Supabase client and verify user
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Verify user authentication
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error('Authentication failed:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      );
+    }
+
+    console.log('Authenticated user:', user.id);
 
     // Fetch properties from database
     const { data: properties, error: propertiesError } = await supabase
@@ -94,6 +123,25 @@ serve(async (req) => {
     }
 
     console.log(`Found ${properties?.length || 0} properties in database`);
+
+    // Verify conversation belongs to user and get history
+    const { data: conversation, error: convError } = await supabase
+      .from('chat_conversations')
+      .select('user_id')
+      .eq('id', conversationId)
+      .eq('user_id', user.id)
+      .single();
+    
+    if (convError || !conversation) {
+      console.error('Conversation access denied:', convError);
+      return new Response(
+        JSON.stringify({ error: 'Conversation not found or access denied' }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 403,
+        }
+      );
+    }
 
     // Get conversation history
     const { data: chatHistory, error: historyError } = await supabase

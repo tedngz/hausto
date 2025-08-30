@@ -1,7 +1,22 @@
 project_id = "gbgrwjdmytaksrztcyzs"
 
 [functions.chat-ai]
-verify_jwt = false
+verify_jwt = true
 
 [functions.analyze-vibe]
+verify_jwt = true
+
+[functions.ai-property-search]
+verify_jwt = true
+
+[functions.create-paypal-subscription]
+verify_jwt = true
+
+[functions.cancel-paypal-subscription]
+verify_jwt = true
+
+[functions.check-paypal-subscription]
+verify_jwt = true
+
+[functions.handle-paypal-webhooks]
 verify_jwt = false
