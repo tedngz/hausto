@@ -108,8 +108,10 @@ serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR in cancel-paypal-subscription", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    logStep("ERROR in cancel-paypal-subscription", { message: "Cancellation failed" });
+    
+    // Don't expose internal error details
+    return new Response(JSON.stringify({ error: "Unable to cancel subscription" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

@@ -31,19 +31,16 @@ export const useSubscription = () => {
       if (error || data?.error) {
         console.log('PayPal check failed, falling back to database:', data?.error || error);
         
-        // Fallback: Check the database directly for subscription status
+        // Fallback: Check the database directly for subscription status using secure function
         const { data: dbData, error: dbError } = await supabase
-          .from('subscribers')
-          .select('subscribed, subscription_tier, subscription_end')
-          .eq('user_id', user.id)
-          .single();
+          .rpc('get_user_subscription_status');
 
-        if (!dbError && dbData) {
-          console.log('Database subscription data:', dbData);
+        if (!dbError && dbData && dbData.length > 0) {
+          console.log('Database subscription data:', dbData[0]);
           setSubscriptionStatus({
-            subscribed: dbData.subscribed === true,
-            subscription_tier: dbData.subscription_tier || 'free',
-            subscription_end: dbData.subscription_end || null,
+            subscribed: dbData[0].subscribed === true,
+            subscription_tier: dbData[0].subscription_tier || 'free',
+            subscription_end: dbData[0].subscription_end || null,
             loading: false,
           });
           return;

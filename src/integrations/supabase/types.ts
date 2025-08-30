@@ -468,6 +468,14 @@ export type Database = {
           name: string
         }[]
       }
+      get_user_subscription_status: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          subscribed: boolean
+          subscription_end: string
+          subscription_tier: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

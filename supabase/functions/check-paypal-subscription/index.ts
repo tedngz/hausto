@@ -124,12 +124,14 @@ serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR in check-paypal-subscription", { message: errorMessage });
+    logStep("ERROR in check-paypal-subscription", { message: "Error occurred" });
+    
+    // Don't expose internal error details to prevent information leakage
     return new Response(JSON.stringify({ 
       subscribed: false,
       subscription_tier: "free",
       subscription_end: null,
-      error: errorMessage 
+      error: "Unable to verify subscription status"
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
