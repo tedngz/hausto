@@ -78,7 +78,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       
       const vibeScore = calculateVibeScore(apartment, userPreferences);
       console.log(`Vibe score for ${apartment.title}: ${vibeScore.overall}`);
-      const hasGoodVibeMatch = vibeScore.overall > 10; // Further lowered threshold
+      const hasGoodVibeMatch = vibeScore.overall > 5; // Further lowered threshold for better matches
       
       const [, maxPrice] = userPreferences.priceRange;
       const priceInRange = apartment.price <= maxPrice * 2; // Very flexible price range
@@ -345,8 +345,9 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
               variant="outline"
               className="w-full border-orange-300 text-orange-600 hover:bg-orange-50"
               onClick={() => {
-                // Trigger AI chat opening
-                window.dispatchEvent(new CustomEvent('openAIChat'));
+                // Navigate to AI chat view on discover page
+                window.location.href = '/discover#ai-chat';
+                window.location.reload();
               }}
             >
               <MessageCircle className="w-4 h-4 mr-2" />
