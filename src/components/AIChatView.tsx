@@ -14,7 +14,7 @@ import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { useMatches } from '@/hooks/useMatches';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
-import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
+import { VibeScore } from '@/components/VibeScore';
 import { UserPreferences } from '@/types';
 
 interface PropertyMatch {
@@ -507,7 +507,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder="I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..."
+                  placeholder={messages.length === 0 ? "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..." : "Ask me about properties, neighborhoods, or anything else..."}
                   className="min-h-[100px] pr-20 resize-none"
                   disabled={isSearching}
                 />
@@ -631,114 +631,24 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                         <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                           {property.matchScore}% match
                                         </Badge>
-                                     {userPreferences && (
-                                       <Badge variant="outline" className={`text-xs px-2 py-1 shadow-lg border ${
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 85 ? 'bg-emerald-500 text-white border-emerald-400' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 70 ? 'bg-blue-500 text-white border-blue-400' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 55 ? 'bg-orange-500 text-white border-orange-400' : 'bg-gray-500 text-white border-gray-400'
-                                       }`}>
-                                         {calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 85 ? '🔥' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 70 ? '✨' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 55 ? '⭐' : '💭'
-                                         } {getVibeRatingLabel(calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall).charAt(0).toUpperCase() + getVibeRatingLabel(calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall).slice(1)} vibe
-                                       </Badge>
-                                     )}
+                                      {userPreferences && (
+                                        <VibeScore 
+                                          score={calculateVibeScore({
+                                            id: property.id,
+                                            images: property.images,
+                                            title: property.title,
+                                            location: property.location,
+                                            price: property.price,
+                                            size: property.size,
+                                            vibe: property.vibe,
+                                            description: property.description,
+                                            highlights: property.highlights,
+                                            realtor: { id: '', name: '', phone: '', email: '' },
+                                            vibe_analysis: property.vibe_analysis
+                                          }, userPreferences)}
+                                          size="sm"
+                                        />
+                                      )}
                           <Button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -867,114 +777,24 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                      {property.matchScore}% match
                                    </Badge>
-                                     {userPreferences && (
-                                       <Badge variant="outline" className={`text-xs px-2 py-1 shadow-lg border ${
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 85 ? 'bg-emerald-500 text-white border-emerald-400' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 70 ? 'bg-blue-500 text-white border-blue-400' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 55 ? 'bg-orange-500 text-white border-orange-400' : 'bg-gray-500 text-white border-gray-400'
-                                       }`}>
-                                         {calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 85 ? '🔥' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 70 ? '✨' :
-                                         calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall >= 55 ? '⭐' : '💭'
-                                         } {getVibeRatingLabel(calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall).charAt(0).toUpperCase() + getVibeRatingLabel(calculateVibeScore({
-                                           id: property.id,
-                                           images: property.images,
-                                           title: property.title,
-                                           location: property.location,
-                                           price: property.price,
-                                           size: property.size,
-                                           vibe: property.vibe,
-                                           description: property.description,
-                                           highlights: property.highlights,
-                                           realtor: { id: '', name: '', phone: '', email: '' },
-                                           vibe_analysis: property.vibe_analysis
-                                         }, userPreferences).overall).slice(1)} vibe
-                                       </Badge>
-                                     )}
+                                      {userPreferences && (
+                                        <VibeScore 
+                                          score={calculateVibeScore({
+                                            id: property.id,
+                                            images: property.images,
+                                            title: property.title,
+                                            location: property.location,
+                                            price: property.price,
+                                            size: property.size,
+                                            vibe: property.vibe,
+                                            description: property.description,
+                                            highlights: property.highlights,
+                                            realtor: { id: '', name: '', phone: '', email: '' },
+                                            vibe_analysis: property.vibe_analysis
+                                          }, userPreferences)}
+                                          size="sm"
+                                        />
+                                      )}
                                      <Button
                                        onClick={(e) => {
                                          e.stopPropagation();
