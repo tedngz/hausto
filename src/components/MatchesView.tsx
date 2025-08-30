@@ -94,10 +94,10 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
         <p className="text-gray-600">Properties that match your preferences</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
         {apartments.map((apartment) => {
           return (
-            <div key={apartment.id} className="relative">
+            <div key={apartment.id} className="relative mb-6 break-inside-avoid">
                 <PropertyCard
                   apartment={apartment}
                   userPreferences={userPreferences}
