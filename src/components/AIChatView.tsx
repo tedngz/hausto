@@ -13,6 +13,8 @@ import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { useMatches } from '@/hooks/useMatches';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { calculateVibeScore } from '@/utils/vibeScoring';
+import { UserPreferences } from '@/types';
 
 interface PropertyMatch {
   id: string;
@@ -27,6 +29,7 @@ interface PropertyMatch {
   matchScore: number;
   matchReason: string;
   realtor_id?: string;
+  vibe_analysis?: any;
 }
 
 interface SearchResult {
@@ -49,9 +52,10 @@ interface ChatSession {
 
 interface AIChatViewProps {
   showNavigation?: boolean;
+  userPreferences?: UserPreferences;
 }
 
-export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
+export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatViewProps) => {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
@@ -164,7 +168,9 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       
       // Find the actual realtor ID from the search results
       const property = allResults.find(p => p.id === propertyId);
-      const actualRealtorId = property?.realtor_id;
+      const actualRealtorId = property?.realtor_id || realtorId;
+      
+      console.log('Creating match for property:', propertyId, 'with realtor:', actualRealtorId);
       
       if (actualRealtorId) {
         await createMatch(propertyId, actualRealtorId);
@@ -173,9 +179,11 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
           description: "Added to your matches"
         });
       } else {
+        console.error('No realtor ID found for property:', propertyId);
         toast({
-          title: "Property liked!",
-          description: "Property saved to your favorites"
+          title: "Error",
+          description: "Could not create match - realtor information missing",
+          variant: "destructive"
         });
       }
     } catch (error) {
@@ -602,26 +610,43 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                                          <span className="line-clamp-1">{property.location}</span>
                                        </div>
                                      </div>
-                                     <div className="flex items-center gap-2">
-                                       <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
-                                         {property.matchScore}% match
-                                       </Badge>
-                         <Button
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             handleLikeProperty(property.id);
-                           }}
-                          size="sm"
-                          variant={likedProperties.has(property.id) ? "default" : "outline"}
-                          className={`h-7 w-7 p-0 ${
-                            likedProperties.has(property.id) 
-                              ? 'bg-red-500 hover:bg-red-600 text-white' 
-                              : 'hover:bg-red-50 hover:text-red-500'
-                          }`}
-                        >
-                          <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
-                        </Button>
-                                     </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                                          {property.matchScore}% match
+                                        </Badge>
+                                        {userPreferences && (
+                                          <Badge variant="outline" className="bg-secondary/50 border-secondary text-xs">
+                                            {Math.round(calculateVibeScore({
+                                              id: property.id,
+                                              images: property.images,
+                                              title: property.title,
+                                              location: property.location,
+                                              price: property.price,
+                                              size: property.size,
+                                              vibe: property.vibe,
+                                              description: property.description,
+                                              highlights: property.highlights,
+                                              realtor: { id: '', name: '', phone: '', email: '' },
+                                              vibe_analysis: property.vibe_analysis
+                                            }, userPreferences).overall)}% vibe
+                                          </Badge>
+                                        )}
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLikeProperty(property.id);
+                            }}
+                           size="sm"
+                           variant={likedProperties.has(property.id) ? "default" : "outline"}
+                           className={`h-7 w-7 p-0 ${
+                             likedProperties.has(property.id) 
+                               ? 'bg-red-500 hover:bg-red-600 text-white' 
+                               : 'hover:bg-red-50 hover:text-red-500'
+                           }`}
+                         >
+                           <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                         </Button>
+                                      </div>
                                    </div>
 
                                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
@@ -730,26 +755,43 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                                     <span className="line-clamp-1">{property.location}</span>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
-                                    {property.matchScore}% match
-                                  </Badge>
-                                    <Button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleLikeProperty(property.id);
-                                      }}
-                                     size="sm"
-                                     variant={likedProperties.has(property.id) ? "default" : "outline"}
-                                     className={`h-7 w-7 p-0 ${
-                                       likedProperties.has(property.id) 
-                                         ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                         : 'hover:bg-red-50 hover:text-red-500'
-                                     }`}
-                                   >
-                                     <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
-                                   </Button>
-                                </div>
+                                 <div className="flex items-center gap-2">
+                                   <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                                     {property.matchScore}% match
+                                   </Badge>
+                                   {userPreferences && (
+                                     <Badge variant="outline" className="bg-secondary/50 border-secondary text-xs">
+                                       {Math.round(calculateVibeScore({
+                                         id: property.id,
+                                         images: property.images,
+                                         title: property.title,
+                                         location: property.location,
+                                         price: property.price,
+                                         size: property.size,
+                                         vibe: property.vibe,
+                                         description: property.description,
+                                         highlights: property.highlights,
+                                         realtor: { id: '', name: '', phone: '', email: '' },
+                                         vibe_analysis: property.vibe_analysis
+                                       }, userPreferences).overall)}% vibe
+                                     </Badge>
+                                   )}
+                                     <Button
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         handleLikeProperty(property.id);
+                                       }}
+                                      size="sm"
+                                      variant={likedProperties.has(property.id) ? "default" : "outline"}
+                                      className={`h-7 w-7 p-0 ${
+                                        likedProperties.has(property.id) 
+                                          ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                          : 'hover:bg-red-50 hover:text-red-500'
+                                      }`}
+                                    >
+                                      <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                                    </Button>
+                                 </div>
                               </div>
 
                               <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
@@ -811,8 +853,10 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                   name: "Contact for details",
                   phone: "",
                   email: "",
-                }
+                },
+                vibe_analysis: selectedProperty.vibe_analysis
               } : null}
+              userPreferences={userPreferences}
               isOpen={showPropertyModal}
               onClose={() => {
                 setShowPropertyModal(false);

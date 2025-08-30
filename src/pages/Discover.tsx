@@ -306,7 +306,7 @@ const Discover = () => {
         )}
 
         {currentView === 'ai-chat' && userType && (
-          <AIChatView showNavigation={true} />
+          <AIChatView showNavigation={true} userPreferences={userPreferences} />
         )}
 
         {currentView === 'feed' && userType && (

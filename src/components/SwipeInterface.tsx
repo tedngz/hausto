@@ -371,14 +371,14 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   return (
     <div className="pt-20 px-4">
       <div className="max-w-md mx-auto">
-        <PropertyCard
+          <PropertyCard
             apartment={modifiedApartment}
             userPreferences={userPreferences}
             showContactButton={false}
             showFullTitle={true}
             showFullDescription={false}
             showAllHighlights={false}
-            className="mb-6"
+            className="mb-6 max-w-md"
           />
 
         {/* Action buttons */}

@@ -163,7 +163,9 @@ Response format (JSON):
       return {
         ...property,
         matchScore: match.matchScore,
-        matchReason: match.reason
+        matchReason: match.reason,
+        // Ensure realtor_id is properly included
+        realtor_id: property?.realtor_id
       };
     }).slice(0, 3); // Ensure max 3 results
 

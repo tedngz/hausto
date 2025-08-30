@@ -53,7 +53,7 @@ export const PropertyDetailModal = ({
             showAllHighlights={true}
             showContactButton={false}
             showViewProfileButton={false}
-            className="max-w-none shadow-none border-0"
+            className="max-w-md mx-auto shadow-none border-0"
           />
 
           {/* Action Buttons */}
