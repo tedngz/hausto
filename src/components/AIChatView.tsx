@@ -26,6 +26,7 @@ interface PropertyMatch {
   images: string[];
   matchScore: number;
   matchReason: string;
+  realtor_id?: string;
 }
 
 interface SearchResult {
@@ -158,33 +159,38 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       return;
     }
 
-    if (likedProperties.has(propertyId)) {
-      // Unlike property - remove from likes
+    try {
+      setLikedProperties(prev => new Set([...prev, propertyId]));
+      
+      // Find the actual realtor ID from the search results
+      const property = allResults.find(p => p.id === propertyId);
+      const actualRealtorId = property?.realtor_id;
+      
+      if (actualRealtorId) {
+        await createMatch(propertyId, actualRealtorId);
+        toast({
+          title: "Property liked!",
+          description: "Added to your matches"
+        });
+      } else {
+        toast({
+          title: "Property liked!",
+          description: "Property saved to your favorites"
+        });
+      }
+    } catch (error) {
+      console.error('Error liking property:', error);
       setLikedProperties(prev => {
         const newSet = new Set(prev);
         newSet.delete(propertyId);
         return newSet;
       });
+      
       toast({
-        title: "Removed from favorites",
-        description: "Property removed from your favorites"
+        title: "Error",
+        description: "Failed to like property",
+        variant: "destructive"
       });
-    } else {
-      // Like property - add to matches
-      setLikedProperties(prev => {
-        const newSet = new Set(prev);
-        newSet.add(propertyId);
-        return newSet;
-      });
-
-      // Create match in database if realtor ID is available
-      if (realtorId) {
-        try {
-          createMatch(propertyId, realtorId);
-        } catch (error) {
-          console.error('Error creating match:', error);
-        }
-      }
     }
   };
 
@@ -600,13 +606,11 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                                        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                          {property.matchScore}% match
                                        </Badge>
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Get realtor ID from property - need to find it from allResults
-                            const fullProperty = allResults.find(p => p.id === property.id);
-                            handleLikeProperty(property.id, fullProperty ? 'realtor-id-placeholder' : undefined);
-                          }}
+                         <Button
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             handleLikeProperty(property.id);
+                           }}
                           size="sm"
                           variant={likedProperties.has(property.id) ? "default" : "outline"}
                           className={`h-7 w-7 p-0 ${
@@ -730,11 +734,11 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                                   <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                     {property.matchScore}% match
                                   </Badge>
-                                   <Button
-                                     onClick={(e) => {
-                                       e.stopPropagation();
-                                       handleLikeProperty(property.id, 'realtor-id-placeholder');
-                                     }}
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleLikeProperty(property.id);
+                                      }}
                                      size="sm"
                                      variant={likedProperties.has(property.id) ? "default" : "outline"}
                                      className={`h-7 w-7 p-0 ${
