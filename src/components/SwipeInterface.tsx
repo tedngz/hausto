@@ -6,6 +6,7 @@ import { UserPreferences, Apartment } from '@/types';
 import { UserProfile } from '@/components/LoginModal';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { calculateVibeScore } from '@/utils/vibeScoring';
+import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useMatches } from '@/hooks/useMatches';

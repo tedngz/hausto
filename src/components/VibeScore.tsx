@@ -2,6 +2,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { VibeScore as VibeScoreType } from '@/utils/vibeScoring';
+import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { Sparkles } from 'lucide-react';
 
 interface VibeScoreProps {
@@ -12,10 +13,13 @@ interface VibeScoreProps {
 
 export const VibeScore = ({ score, showBreakdown = false, size = 'md' }: VibeScoreProps) => {
   const getVibeLevel = (scoreValue: number) => {
-    if (scoreValue >= 80) return { level: 'Perfect Vibe', color: 'bg-emerald-500 text-white border-emerald-400', emoji: '🔥' };
-    if (scoreValue >= 65) return { level: 'Strong Vibe', color: 'bg-blue-500 text-white border-blue-400', emoji: '✨' };
-    if (scoreValue >= 50) return { level: 'Good Vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
-    return { level: 'Casual Vibe', color: 'bg-gray-500 text-white border-gray-400', emoji: '💭' };
+    const label = getVibeRatingLabel(scoreValue);
+    const colorClass = getVibeRatingColor(scoreValue);
+    
+    if (scoreValue >= 85) return { level: 'perfect vibe', color: 'bg-emerald-500 text-white border-emerald-400', emoji: '🔥' };
+    if (scoreValue >= 70) return { level: 'strong vibe', color: 'bg-blue-500 text-white border-blue-400', emoji: '✨' };
+    if (scoreValue >= 55) return { level: 'good vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
+    return { level: 'casual vibe', color: 'bg-gray-500 text-white border-gray-400', emoji: '💭' };
   };
 
   const getStyleTags = (styleScore: number, apartment: any) => {

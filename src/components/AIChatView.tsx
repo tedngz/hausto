@@ -14,6 +14,7 @@ import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { useMatches } from '@/hooks/useMatches';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
+import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { UserPreferences } from '@/types';
 
 interface PropertyMatch {
@@ -171,19 +172,35 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
       const actualRealtorId = property?.realtor_id || realtorId;
       
       console.log('Creating match for property:', propertyId, 'with realtor:', actualRealtorId);
+      console.log('Property data:', property);
       
-      if (actualRealtorId) {
+      if (!actualRealtorId) {
+        // Fallback: try to get realtor_id from database
+        const { data: propertyData } = await supabase
+          .from('properties')
+          .select('realtor_id')
+          .eq('id', propertyId)
+          .single();
+        
+        if (propertyData?.realtor_id) {
+          await createMatch(propertyId, propertyData.realtor_id);
+          toast({
+            title: "Property liked!",
+            description: "Added to your matches"
+          });
+        } else {
+          console.error('No realtor ID found for property:', propertyId);
+          toast({
+            title: "Error",
+            description: "Could not create match - realtor information missing",
+            variant: "destructive"
+          });
+        }
+      } else {
         await createMatch(propertyId, actualRealtorId);
         toast({
           title: "Property liked!",
           description: "Added to your matches"
-        });
-      } else {
-        console.error('No realtor ID found for property:', propertyId);
-        toast({
-          title: "Error",
-          description: "Could not create match - realtor information missing",
-          variant: "destructive"
         });
       }
     } catch (error) {
@@ -614,23 +631,35 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                         <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                           {property.matchScore}% match
                                         </Badge>
-                                        {userPreferences && (
-                                          <Badge variant="outline" className="bg-secondary/50 border-secondary text-xs">
-                                            {Math.round(calculateVibeScore({
-                                              id: property.id,
-                                              images: property.images,
-                                              title: property.title,
-                                              location: property.location,
-                                              price: property.price,
-                                              size: property.size,
-                                              vibe: property.vibe,
-                                              description: property.description,
-                                              highlights: property.highlights,
-                                              realtor: { id: '', name: '', phone: '', email: '' },
-                                              vibe_analysis: property.vibe_analysis
-                                            }, userPreferences).overall)}% vibe
-                                          </Badge>
-                                        )}
+                                    {userPreferences && (
+                                      <Badge variant="outline" className={`bg-secondary/50 border-secondary text-xs ${getVibeRatingColor(calculateVibeScore({
+                                        id: property.id,
+                                        images: property.images,
+                                        title: property.title,
+                                        location: property.location,
+                                        price: property.price,
+                                        size: property.size,
+                                        vibe: property.vibe,
+                                        description: property.description,
+                                        highlights: property.highlights,
+                                        realtor: { id: '', name: '', phone: '', email: '' },
+                                        vibe_analysis: property.vibe_analysis
+                                      }, userPreferences).overall)}`}>
+                                        {getVibeRatingLabel(calculateVibeScore({
+                                          id: property.id,
+                                          images: property.images,
+                                          title: property.title,
+                                          location: property.location,
+                                          price: property.price,
+                                          size: property.size,
+                                          vibe: property.vibe,
+                                          description: property.description,
+                                          highlights: property.highlights,
+                                          realtor: { id: '', name: '', phone: '', email: '' },
+                                          vibe_analysis: property.vibe_analysis
+                                        }, userPreferences).overall)} vibe
+                                      </Badge>
+                                    )}
                           <Button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -759,23 +788,35 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                      {property.matchScore}% match
                                    </Badge>
-                                   {userPreferences && (
-                                     <Badge variant="outline" className="bg-secondary/50 border-secondary text-xs">
-                                       {Math.round(calculateVibeScore({
-                                         id: property.id,
-                                         images: property.images,
-                                         title: property.title,
-                                         location: property.location,
-                                         price: property.price,
-                                         size: property.size,
-                                         vibe: property.vibe,
-                                         description: property.description,
-                                         highlights: property.highlights,
-                                         realtor: { id: '', name: '', phone: '', email: '' },
-                                         vibe_analysis: property.vibe_analysis
-                                       }, userPreferences).overall)}% vibe
-                                     </Badge>
-                                   )}
+                                    {userPreferences && (
+                                      <Badge variant="outline" className={`bg-secondary/50 border-secondary text-xs ${getVibeRatingColor(calculateVibeScore({
+                                        id: property.id,
+                                        images: property.images,
+                                        title: property.title,
+                                        location: property.location,
+                                        price: property.price,
+                                        size: property.size,
+                                        vibe: property.vibe,
+                                        description: property.description,
+                                        highlights: property.highlights,
+                                        realtor: { id: '', name: '', phone: '', email: '' },
+                                        vibe_analysis: property.vibe_analysis
+                                      }, userPreferences).overall)}`}>
+                                        {getVibeRatingLabel(calculateVibeScore({
+                                          id: property.id,
+                                          images: property.images,
+                                          title: property.title,
+                                          location: property.location,
+                                          price: property.price,
+                                          size: property.size,
+                                          vibe: property.vibe,
+                                          description: property.description,
+                                          highlights: property.highlights,
+                                          realtor: { id: '', name: '', phone: '', email: '' },
+                                          vibe_analysis: property.vibe_analysis
+                                        }, userPreferences).overall)} vibe
+                                      </Badge>
+                                    )}
                                      <Button
                                        onClick={(e) => {
                                          e.stopPropagation();

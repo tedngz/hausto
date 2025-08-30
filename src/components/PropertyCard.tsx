@@ -9,6 +9,7 @@ import { VibeScoreBar } from '@/components/VibeScoreBar';
 import { PropertyHighlightTags } from '@/components/PropertyHighlightTags';
 import { PropertyImageModal } from '@/components/PropertyImageModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
+import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface PropertyCardProps {
