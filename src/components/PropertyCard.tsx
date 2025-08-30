@@ -52,7 +52,17 @@ export const PropertyCard = ({
     }
   }, [externalImageIndex]);
   
-  const vibeScore = userPreferences ? calculateVibeScore(apartment, userPreferences) : null;
+  // Always calculate vibe score - use default preferences if none provided
+  const defaultPreferences: UserPreferences = {
+    styles: ['modern', 'minimalist'],
+    colors: ['neutral', 'warm'],
+    activities: ['relaxing', 'working'],
+    priceRange: [1000, 5000] as [number, number],
+    size: '1-2 bedrooms',
+    location: ['any'],
+    moveInDate: new Date().toISOString()
+  };
+  const vibeScore = calculateVibeScore(apartment, userPreferences || defaultPreferences);
 
   // Highlight categorization and styling
   const getHighlightCategory = (highlight: string): 'style' | 'color' | 'activity' => {

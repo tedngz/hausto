@@ -95,9 +95,11 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     }
   }, [currentSessionId]);
 
-  // Load stored sessions
+  // Load stored sessions (user-specific)
   useEffect(() => {
-    const storedSessions = localStorage.getItem('aiChatSessions');
+    if (!user?.id) return;
+    
+    const storedSessions = localStorage.getItem(`aiChatSessions-${user.id}`);
     if (storedSessions) {
       const sessions = JSON.parse(storedSessions);
       setChatSessions(sessions);
@@ -106,14 +108,14 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
         setMessages(sessions[0].messages);
       }
     }
-  }, []);
+  }, [user?.id]);
 
-  // Save sessions to localStorage
+  // Save sessions to localStorage (user-specific)
   useEffect(() => {
-    if (chatSessions.length > 0) {
-      localStorage.setItem('aiChatSessions', JSON.stringify(chatSessions));
+    if (chatSessions.length > 0 && user?.id) {
+      localStorage.setItem(`aiChatSessions-${user.id}`, JSON.stringify(chatSessions));
     }
-  }, [chatSessions]);
+  }, [chatSessions, user?.id]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
