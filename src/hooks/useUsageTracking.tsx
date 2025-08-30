@@ -7,6 +7,7 @@ interface UsageLimits {
   propertiesViewed: number;
   propertiesMatched: number;
   quizRetakes: number;
+  aiSearches: number;
 }
 
 interface SubscriptionStatus {
@@ -19,6 +20,7 @@ const FREE_TIER_LIMITS = {
   dailyViews: 10,
   weeklyMatches: 20,
   weeklyQuizRetakes: 2,
+  dailyAiSearches: 3,
 };
 
 export const useUsageTracking = () => {
@@ -27,6 +29,7 @@ export const useUsageTracking = () => {
     propertiesViewed: 0,
     propertiesMatched: 0,
     quizRetakes: 0,
+    aiSearches: 0,
   });
   const [weeklyMatches, setWeeklyMatches] = useState(0);
   const [weeklyQuizRetakes, setWeeklyQuizRetakes] = useState(0);
@@ -69,6 +72,7 @@ export const useUsageTracking = () => {
           propertiesViewed: todayData.properties_viewed,
           propertiesMatched: todayData.properties_matched,
           quizRetakes: todayData.quiz_retakes,
+          aiSearches: 0, // Will be tracked in separate table/logic
         });
       }
 
@@ -129,7 +133,7 @@ export const useUsageTracking = () => {
     fetchUsage();
   }, [user?.id]);
 
-  const updateUsage = async (type: 'view' | 'match' | 'quiz') => {
+  const updateUsage = async (type: 'view' | 'match' | 'quiz' | 'ai-search') => {
     if (!user?.id) {
       console.error('No user ID available for usage tracking');
       return false;
@@ -142,6 +146,7 @@ export const useUsageTracking = () => {
       let newViews = todayUsage.propertiesViewed;
       let newMatches = todayUsage.propertiesMatched;
       let newQuizRetakes = todayUsage.quizRetakes;
+      let newAiSearches = todayUsage.aiSearches;
 
       switch (type) {
         case 'view':
@@ -152,6 +157,9 @@ export const useUsageTracking = () => {
           break;
         case 'quiz':
           newQuizRetakes += 1;
+          break;
+        case 'ai-search':
+          newAiSearches += 1;
           break;
       }
 
@@ -183,6 +191,7 @@ export const useUsageTracking = () => {
         propertiesViewed: newViews,
         propertiesMatched: newMatches,
         quizRetakes: newQuizRetakes,
+        aiSearches: newAiSearches,
       });
 
       // Update weekly counters immediately
@@ -203,7 +212,7 @@ export const useUsageTracking = () => {
     }
   };
 
-  const canPerformAction = (type: 'view' | 'match' | 'quiz'): boolean => {
+  const canPerformAction = (type: 'view' | 'match' | 'quiz' | 'ai-search'): boolean => {
     console.log(`Checking if can perform ${type}:`, {
       subscribed: subscriptionStatus.subscribed,
       tier: subscriptionStatus.subscription_tier,
@@ -232,12 +241,16 @@ export const useUsageTracking = () => {
         const canQuiz = weeklyQuizRetakes < FREE_TIER_LIMITS.weeklyQuizRetakes;
         console.log(`Can quiz: ${canQuiz} (${weeklyQuizRetakes}/${FREE_TIER_LIMITS.weeklyQuizRetakes})`);
         return canQuiz;
+      case 'ai-search':
+        const canAiSearch = todayUsage.aiSearches < FREE_TIER_LIMITS.dailyAiSearches;
+        console.log(`Can AI search: ${canAiSearch} (${todayUsage.aiSearches}/${FREE_TIER_LIMITS.dailyAiSearches})`);
+        return canAiSearch;
       default:
         return false;
     }
   };
 
-  const getRemainingActions = (type: 'view' | 'match' | 'quiz'): number => {
+  const getRemainingActions = (type: 'view' | 'match' | 'quiz' | 'ai-search'): number => {
     if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
       return Infinity;
     }
@@ -249,6 +262,8 @@ export const useUsageTracking = () => {
         return Math.max(0, FREE_TIER_LIMITS.weeklyMatches - weeklyMatches);
       case 'quiz':
         return Math.max(0, FREE_TIER_LIMITS.weeklyQuizRetakes - weeklyQuizRetakes);
+      case 'ai-search':
+        return Math.max(0, FREE_TIER_LIMITS.dailyAiSearches - todayUsage.aiSearches);
       default:
         return 0;
     }

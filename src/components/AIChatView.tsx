@@ -10,6 +10,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { useUsageTracking } from '@/hooks/useUsageTracking';
+import { useMatches } from '@/hooks/useMatches';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 
 interface PropertyMatch {
   id: string;
@@ -62,11 +65,14 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
   const [searchCount, setSearchCount] = useState(0);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [allResults, setAllResults] = useState<PropertyMatch[]>([]);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { toast } = useToast();
+  const { canPerformAction, updateUsage } = useUsageTracking();
+  const { createMatch } = useMatches();
 
   // Initialize first chat session
   useEffect(() => {
@@ -139,11 +145,10 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
     setUploadedImages([]);
     setSearchResults(null);
     setAllResults([]);
-    setSearchCount(0);
     setShowHistory(false);
   };
 
-  const handleLikeProperty = async (propertyId: string) => {
+  const handleLikeProperty = async (propertyId: string, realtorId?: string) => {
     if (!user) {
       toast({
         title: "Sign in required",
@@ -153,23 +158,34 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       return;
     }
 
-    setLikedProperties(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(propertyId)) {
+    if (likedProperties.has(propertyId)) {
+      // Unlike property - remove from likes
+      setLikedProperties(prev => {
+        const newSet = new Set(prev);
         newSet.delete(propertyId);
-        toast({
-          title: "Removed from favorites",
-          description: "Property removed from your favorites"
-        });
-      } else {
+        return newSet;
+      });
+      toast({
+        title: "Removed from favorites",
+        description: "Property removed from your favorites"
+      });
+    } else {
+      // Like property - add to matches
+      setLikedProperties(prev => {
+        const newSet = new Set(prev);
         newSet.add(propertyId);
-        toast({
-          title: "Added to favorites!",
-          description: "You can view your matches in your profile"
-        });
+        return newSet;
+      });
+
+      // Create match in database if realtor ID is available
+      if (realtorId) {
+        try {
+          createMatch(propertyId, realtorId);
+        } catch (error) {
+          console.error('Error creating match:', error);
+        }
       }
-      return newSet;
-    });
+    }
   };
 
   const switchToSession = (sessionId: string) => {
@@ -209,13 +225,9 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       return;
     }
 
-    // Check search limit
-    if (searchCount >= 3) {
-      toast({
-        title: "Search limit reached",
-        description: "You've used 3 free searches. Upgrade to premium for unlimited AI searches.",
-        variant: "destructive"
-      });
+    // Check search limit using usage tracking
+    if (!canPerformAction('ai-search')) {
+      setShowSubscriptionModal(true);
       return;
     }
 
@@ -267,7 +279,9 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       }
 
       setSearchResults(data);
-      setSearchCount(prev => prev + 1);
+      
+      // Update AI search usage
+      await updateUsage('ai-search');
       
       // Add new results to all results
       if (data.results && data.results.length > 0) {
@@ -292,7 +306,7 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
       if (data.results && data.results.length > 0) {
         toast({
           title: "Found matches!",
-          description: `We found ${data.totalMatches} properties that might be perfect for you. ${3 - searchCount - 1} searches remaining.`,
+          description: `We found ${data.totalMatches} properties that might be perfect for you.`,
         });
       } else {
         toast({
@@ -387,9 +401,7 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
               <p className="text-muted-foreground">
                 Describe your dream home or upload reference images
               </p>
-              <div className="text-xs text-muted-foreground mt-2">
-                {3 - searchCount} free searches remaining
-              </div>
+              {/* Remove the hardcoded search count display */}
             </div>
 
             {/* Chat History Dropdown */}
@@ -588,21 +600,23 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                                        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                          {property.matchScore}% match
                                        </Badge>
-                                       <Button
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           handleLikeProperty(property.id);
-                                         }}
-                                         size="sm"
-                                         variant={likedProperties.has(property.id) ? "default" : "outline"}
-                                         className={`h-7 w-7 p-0 ${
-                                           likedProperties.has(property.id) 
-                                             ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                             : 'hover:bg-red-50 hover:text-red-500'
-                                         }`}
-                                       >
-                                         <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
-                                       </Button>
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Get realtor ID from property - need to find it from allResults
+                            const fullProperty = allResults.find(p => p.id === property.id);
+                            handleLikeProperty(property.id, fullProperty ? 'realtor-id-placeholder' : undefined);
+                          }}
+                          size="sm"
+                          variant={likedProperties.has(property.id) ? "default" : "outline"}
+                          className={`h-7 w-7 p-0 ${
+                            likedProperties.has(property.id) 
+                              ? 'bg-red-500 hover:bg-red-600 text-white' 
+                              : 'hover:bg-red-50 hover:text-red-500'
+                          }`}
+                        >
+                          <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                        </Button>
                                      </div>
                                    </div>
 
@@ -716,21 +730,21 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                                   <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
                                     {property.matchScore}% match
                                   </Badge>
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleLikeProperty(property.id);
-                                    }}
-                                    size="sm"
-                                    variant={likedProperties.has(property.id) ? "default" : "outline"}
-                                    className={`h-7 w-7 p-0 ${
-                                      likedProperties.has(property.id) 
-                                        ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                        : 'hover:bg-red-50 hover:text-red-500'
-                                    }`}
-                                  >
-                                    <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
-                                  </Button>
+                                   <Button
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       handleLikeProperty(property.id, 'realtor-id-placeholder');
+                                     }}
+                                     size="sm"
+                                     variant={likedProperties.has(property.id) ? "default" : "outline"}
+                                     className={`h-7 w-7 p-0 ${
+                                       likedProperties.has(property.id) 
+                                         ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                         : 'hover:bg-red-50 hover:text-red-500'
+                                     }`}
+                                   >
+                                     <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                                   </Button>
                                 </div>
                               </div>
 
@@ -800,6 +814,12 @@ export const AIChatView = ({ showNavigation = true }: AIChatViewProps) => {
                 setShowPropertyModal(false);
                 setSelectedProperty(null);
               }}
+            />
+
+            {/* Subscription Modal */}
+            <SubscriptionModal
+              isOpen={showSubscriptionModal}
+              onClose={() => setShowSubscriptionModal(false)}
             />
           </div>
         </div>

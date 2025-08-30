@@ -172,8 +172,41 @@ export const useMatches = () => {
     },
   });
 
+  // Create match mutation
+  const createMatchMutation = useMutation({
+    mutationFn: async ({ propertyId, realtorId }: { propertyId: string; realtorId: string }) => {
+      const { error } = await supabase
+        .from('property_matches')
+        .insert({
+          renter_id: user?.id,
+          property_id: propertyId,
+          realtor_id: realtorId,
+        });
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['renter-matches'] });
+      toast({
+        title: "Property liked!",
+        description: "Property has been added to your matches.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to like property. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const removeMatch = (matchId: string) => {
     removeMatchMutation.mutate(matchId);
+  };
+
+  const createMatch = (propertyId: string, realtorId: string) => {
+    createMatchMutation.mutate({ propertyId, realtorId });
   };
 
   return {
@@ -182,5 +215,7 @@ export const useMatches = () => {
     isLoadingMatches: isLoadingMatches || isLoadingRenterMatches,
     removeMatch,
     isRemovingMatch: removeMatchMutation.isPending,
+    createMatch,
+    isCreatingMatch: createMatchMutation.isPending,
   };
 };
