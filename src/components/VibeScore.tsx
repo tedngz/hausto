@@ -16,10 +16,10 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md' }: VibeSco
     const label = getVibeRatingLabel(scoreValue);
     const colorClass = getVibeRatingColor(scoreValue);
     
-    if (scoreValue >= 85) return { level: 'perfect vibe', color: 'bg-emerald-500 text-white border-emerald-400', emoji: '🔥' };
-    if (scoreValue >= 70) return { level: 'strong vibe', color: 'bg-blue-500 text-white border-blue-400', emoji: '✨' };
-    if (scoreValue >= 55) return { level: 'good vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
-    return { level: 'casual vibe', color: 'bg-gray-500 text-white border-gray-400', emoji: '💭' };
+    if (scoreValue >= 85) return { level: 'Perfect vibe', color: 'bg-emerald-500 text-white border-emerald-400', emoji: '🔥' };
+    if (scoreValue >= 70) return { level: 'Strong vibe', color: 'bg-blue-500 text-white border-blue-400', emoji: '✨' };
+    if (scoreValue >= 55) return { level: 'Good vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
+    return { level: 'Casual vibe', color: 'bg-gray-500 text-white border-gray-400', emoji: '💭' };
   };
 
   const getStyleTags = (styleScore: number, apartment: any) => {
@@ -104,7 +104,6 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md' }: VibeSco
   return (
     <div className="space-y-2">
       <Badge className={`${vibeLevel.color} ${sizeClasses[size]} font-semibold flex items-center gap-1 shadow-lg border`}>
-        <Sparkles className={size === 'sm' ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
         {vibeLevel.emoji} {vibeLevel.level}
       </Badge>
 
