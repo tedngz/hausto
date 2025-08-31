@@ -176,7 +176,7 @@ export const PropertyCard = ({
                     
                     // Extract specific features from the analysis
                     let specificHighlight = '';
-                    if (detailedAnalysis) {
+                    if (detailedAnalysis && typeof detailedAnalysis === 'string') {
                       // Look for specific architectural features, amenities, or design elements
                       const analysisLower = detailedAnalysis.toLowerCase();
                       if (analysisLower.includes('kitchen') && analysisLower.includes('modern')) {
