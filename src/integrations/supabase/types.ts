@@ -420,6 +420,7 @@ export type Database = {
       get_matched_public_profiles: {
         Args: { user_ids: string[] }
         Returns: {
+          avatar_url: string
           id: string
           name: string
         }[]

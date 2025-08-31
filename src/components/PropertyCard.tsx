@@ -170,15 +170,44 @@ export const PropertyCard = ({
                 <p className="text-xs font-medium text-muted-foreground">More Photos</p>
                 <div className="space-y-4">
                   {apartment.images.slice(1).map((image, index) => {
-                    const highlights = apartment.vibe_analysis?.generated_content?.highlights || [];
-                    const associatedHighlight = highlights[index % highlights.length];
+                    const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
+                    const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
+                    const detailedAnalysis = analysisForImage?.detailed_analysis;
+                    
+                    // Extract specific features from the analysis
+                    let specificHighlight = '';
+                    if (detailedAnalysis) {
+                      // Look for specific architectural features, amenities, or design elements
+                      const analysisLower = detailedAnalysis.toLowerCase();
+                      if (analysisLower.includes('kitchen') && analysisLower.includes('modern')) {
+                        specificHighlight = 'Modern equipped kitchen';
+                      } else if (analysisLower.includes('bathroom') && analysisLower.includes('luxury')) {
+                        specificHighlight = 'Luxurious bathroom facilities';
+                      } else if (analysisLower.includes('bedroom') && analysisLower.includes('spacious')) {
+                        specificHighlight = 'Spacious bedroom with natural light';
+                      } else if (analysisLower.includes('living') && analysisLower.includes('open')) {
+                        specificHighlight = 'Open plan living space';
+                      } else if (analysisLower.includes('balcony') || analysisLower.includes('terrace')) {
+                        specificHighlight = 'Private outdoor space';
+                      } else if (analysisLower.includes('view') && analysisLower.includes('city')) {
+                        specificHighlight = 'Stunning city views';
+                      } else if (analysisLower.includes('natural light') || analysisLower.includes('bright')) {
+                        specificHighlight = 'Excellent natural lighting';
+                      } else if (analysisLower.includes('storage') || analysisLower.includes('closet')) {
+                        specificHighlight = 'Built-in storage solutions';
+                      } else {
+                        // Fallback to generic highlights
+                        const highlights = apartment.vibe_analysis?.generated_content?.highlights || apartment.highlights || [];
+                        specificHighlight = highlights[index % highlights.length] || 'Beautiful interior feature';
+                      }
+                    }
                     
                     return (
                       <div key={index} className="space-y-2">
-                        {associatedHighlight && (
+                        {specificHighlight && (
                         <div className="flex items-center gap-1 text-xs text-primary">
                           <Sparkles className="w-2.5 h-2.5" />
-                          <span>{associatedHighlight}</span>
+                          <span>{specificHighlight}</span>
                         </div>
                         )}
                         <div className="relative h-48">
