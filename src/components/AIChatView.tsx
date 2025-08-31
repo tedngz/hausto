@@ -297,8 +297,8 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto relative">
-          {/* Floating buttons outside the box */}
-          <div className="absolute -top-2 right-0 flex gap-2 z-10">
+          {/* History and New Chat buttons above the chat area */}
+          <div className="flex justify-center gap-2 mb-6">
             <Button
               onClick={() => setShowHistory(!showHistory)}
               variant="outline"
@@ -330,7 +330,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   </div>
                 </div>
               </div>
-              <h3 className="text-2xl font-bold text-foreground mb-2">AI Property Assistant</h3>
+              <h3 className="text-2xl font-bold text-foreground mb-2">Haus Finder</h3>
               <p className="text-muted-foreground">
                 Describe your dream home or upload reference images
               </p>
