@@ -23,6 +23,7 @@ export type Apartment = {
     name: string;
     phone: string;
     email: string;
+    avatar?: string;
   };
   matchId?: string;
   vibe_analysis?: any;
