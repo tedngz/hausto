@@ -161,58 +161,73 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         // Store detailed vibe analysis for preview
         setVibeAnalysis(analysis);
         
-        // Auto-select vibes based on comprehensive AI analysis
+        // Auto-select vibes based on comprehensive AI analysis with improved accuracy
         const aiVibes = [];
         
-        // Style analysis
-        if (analysis.modern > 6) aiVibes.push('Modern');
-        if (analysis.cozy > 6) aiVibes.push('Cozy');
-        if (analysis.luxurious > 6) aiVibes.push('Luxury');
-        if (analysis.urban > 6) aiVibes.push('Urban');
-        if (analysis.minimalist > 6) aiVibes.push('Minimalist');
-        if (analysis.elegant > 6) aiVibes.push('Contemporary');
-        if (analysis.rustic > 5) aiVibes.push('Rustic');
-        if (analysis.colorful > 6) aiVibes.push('Bohemian');
-        if (analysis.natural_light > 7) aiVibes.push('Natural Light');
+        // More accurate style analysis based on AI scores
+        if (analysis.modern >= 5) aiVibes.push('Modern');
+        if (analysis.cozy >= 5) aiVibes.push('Cozy');
+        if (analysis.luxurious >= 6) aiVibes.push('Luxury');
+        if (analysis.urban >= 5) aiVibes.push('Urban');
+        if (analysis.minimalist >= 5) aiVibes.push('Minimalist');
+        if (analysis.elegant >= 5) aiVibes.push('Contemporary');
+        if (analysis.rustic >= 4) aiVibes.push('Rustic');
+        if (analysis.colorful >= 5) aiVibes.push('Bohemian');
+        if (analysis.natural_light >= 5) aiVibes.push('Natural Light');
+        if (analysis.spacious >= 5) aiVibes.push('Open Plan');
+        if (analysis.industrial >= 4) aiVibes.push('Industrial');
         
-        // Functionality analysis
-        if (analysis.spacious > 6) aiVibes.push('Open Plan');
-        if (analysis.industrial > 5) aiVibes.push('Industrial');
+        // Additional feature detection from analysis
+        if (analysis.furnished >= 5) aiVibes.push('Furnished');
+        if (analysis.pet_friendly >= 5) aiVibes.push('Pet Friendly');
+        if (analysis.gym_access >= 5) aiVibes.push('Gym Access');
+        if (analysis.pool >= 5) aiVibes.push('Pool');
+        if (analysis.parking >= 5) aiVibes.push('Parking');
+        if (analysis.balcony >= 5) aiVibes.push('Balcony');
+        if (analysis.garden >= 5) aiVibes.push('Garden');
+        if (analysis.elevator >= 5) aiVibes.push('Elevator');
+        if (analysis.security >= 5) aiVibes.push('Security');
+        if (analysis.air_conditioning >= 5) aiVibes.push('Air Conditioning');
+        if (analysis.washing_machine >= 5) aiVibes.push('Washing Machine');
+        if (analysis.high_ceilings >= 5) aiVibes.push('High Ceilings');
+        if (analysis.walk_in_closet >= 5) aiVibes.push('Walk-in Closet');
+        if (analysis.ensuite_bathroom >= 5) aiVibes.push('En-suite Bathroom');
+        if (analysis.kitchen_island >= 5) aiVibes.push('Kitchen Island');
+        if (analysis.hardwood_floors >= 5) aiVibes.push('Hardwood Floors');
+        if (analysis.marble_counters >= 5) aiVibes.push('Marble Counters');
+        if (analysis.smart_home >= 5) aiVibes.push('Smart Home');
         
-        // Location-based vibes
-        if (location.includes('District 1') || location.includes('Hoan Kiem')) {
+        // Location-based vibes with broader criteria
+        if (location.toLowerCase().includes('district 1') || location.toLowerCase().includes('hoan kiem')) {
           aiVibes.push('City Center');
-        } else if (location.includes('District 2') || location.includes('Cau Giay')) {
+        } else if (location.toLowerCase().includes('district 2') || location.toLowerCase().includes('cau giay')) {
           aiVibes.push('Near Metro');
+        } else if (location.toLowerCase().includes('quiet') || location.toLowerCase().includes('district 7')) {
+          aiVibes.push('Quiet Neighborhood');
         }
         
-        // Price-based vibes
-        const priceNum = parseInt(price);
-        if (priceNum > 20000000) {
-          aiVibes.push('Luxury');
-        } else if (priceNum > 15000000) {
-          aiVibes.push('Contemporary');
-        }
+        // Remove duplicates and ensure we have good vibes
+        let uniqueVibes = [...new Set(aiVibes)];
         
-        // Smart fallback if no vibes detected
-        if (aiVibes.length === 0) {
-          if (location.includes('District 1') || location.includes('Hoan Kiem')) {
-            aiVibes.push('Urban', 'City Center');
-          } else if (priceNum > 20000000) {
-            aiVibes.push('Luxury', 'Modern');
-          } else {
-            aiVibes.push('Cozy', 'Natural Light');
+        // If we have too few vibes, add some based on price and location
+        if (uniqueVibes.length < 2) {
+          const priceNum = parseInt(price);
+          if (priceNum > 20000000 && !uniqueVibes.includes('Luxury')) {
+            uniqueVibes.push('Luxury');
+          }
+          if (priceNum > 15000000 && !uniqueVibes.includes('Contemporary')) {
+            uniqueVibes.push('Contemporary');
+          }
+          if (!uniqueVibes.includes('Modern')) {
+            uniqueVibes.push('Modern');
+          }
+          if (!uniqueVibes.includes('Natural Light')) {
+            uniqueVibes.push('Natural Light');
           }
         }
         
-        // Ensure we have 2-5 vibes
-        if (aiVibes.length === 1) {
-          aiVibes.push(priceNum > 15000000 ? 'Luxury' : 'Cozy');
-        }
-        
-        // Remove duplicates and limit to 5 vibes
-        const uniqueVibes = [...new Set(aiVibes)].slice(0, 5);
-        setSelectedVibes(uniqueVibes);
+        // Limit to 5 vibes and prioritize the most relevant ones
+        setSelectedVibes(uniqueVibes.slice(0, 5));
       } else {
         // Fallback content if AI generation fails
         const locationShort = location.split(',')[0];
@@ -456,6 +471,45 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                       {vibe}
                     </Badge>
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-base font-semibold">AI Generated Highlights</Label>
+                <p className="text-sm text-gray-600 mb-3">Edit these highlights to match your images accurately</p>
+                <div className="space-y-2">
+                  {imageHighlights.map((highlight, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <Input
+                        value={highlight}
+                        onChange={(e) => {
+                          const newHighlights = [...imageHighlights];
+                          newHighlights[index] = e.target.value;
+                          setImageHighlights(newHighlights);
+                        }}
+                        placeholder={`Highlight ${index + 1}`}
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setImageHighlights(prev => prev.filter((_, i) => i !== index));
+                        }}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setImageHighlights(prev => [...prev, 'New highlight'])}
+                    className="text-blue-500 hover:text-blue-700"
+                  >
+                    + Add Highlight
+                  </Button>
                 </div>
               </div>
 
