@@ -297,31 +297,9 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto relative">
-          {/* History and New Chat buttons above the chat area */}
-          <div className="flex justify-center gap-2 mb-6">
-            <Button
-              onClick={() => setShowHistory(!showHistory)}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2 bg-card shadow-md"
-            >
-              <History className="h-4 w-4" />
-              History
-            </Button>
-            <Button
-              onClick={createNewChat}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2 bg-card shadow-md"
-            >
-              <Plus className="h-4 w-4" />
-              New Chat
-            </Button>
-          </div>
-
           <div className="w-full p-6 bg-card border border-border rounded-2xl shadow-xl">
             {/* Header */}
-            <div className="text-center mb-6">
+            <div className="text-center mb-6 relative">
               <div className="flex justify-center mb-4">
                 <div className="relative">
                   <div className="absolute inset-0 bg-primary/20 rounded-full blur-lg"></div>
@@ -330,11 +308,31 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   </div>
                 </div>
               </div>
+              
+              {/* History and New Chat buttons positioned at sparkle level */}
+              <div className="absolute top-0 right-0 flex gap-2">
+                <Button
+                  onClick={() => setShowHistory(!showHistory)}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-secondary/50"
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={createNewChat}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-secondary/50"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              
               <h3 className="text-2xl font-bold text-foreground mb-2">Haus Finder</h3>
               <p className="text-muted-foreground">
                 Describe your dream home or upload reference images
               </p>
-              {/* Remove the hardcoded search count display */}
             </div>
 
             {/* Chat History Dropdown */}
