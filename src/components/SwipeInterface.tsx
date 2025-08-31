@@ -17,6 +17,8 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Card } from '@/components/ui/card';
 import { VibeScore } from '@/components/VibeScore';
 import { toast } from 'sonner';
+import { sampleProperties } from '@/data/sampleProperties';
+
 interface SwipeInterfaceProps {
   userPreferences: UserPreferences;
   onMatch: (apartment: Apartment) => void;
@@ -52,37 +54,68 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       highlights: property.highlights || [],
       realtor: {
         id: property.realtor_id,
-        name: 'Licensed Realtor',
-        phone: '+1-234-567-8900',
-        email: 'contact@realtor.com'
+        name: 'Property Manager',
+        phone: '',
+        email: ''
       },
-      vibe_analysis: property.vibe_analysis // Pass through AI analysis data
+      vibe_analysis: property.vibe_analysis
     };
   };
 
   useEffect(() => {
-    const transformedRealProperties = (realProperties || []).map(transformPropertyToApartment);
-    const allProperties = transformedRealProperties;
+    console.log('SwipeInterface useEffect triggered:', { 
+      userPreferences, 
+      realPropertiesCount: realProperties?.length || 0,
+      isLoading 
+    });
+    
+    if (isLoading) {
+      console.log('Still loading properties...');
+      return;
+    }
 
-    // First filter by user preferences (location, vibe score, price)
-    const preferredApartments = allProperties.filter(apartment => {
+    // Convert sample properties to apartments format
+    const sampleApartments: Apartment[] = sampleProperties.map(property => ({
+      id: property.id,
+      images: property.images,
+      title: property.title,
+      location: property.location,
+      price: property.price,
+      size: property.size,
+      vibe: property.vibe,
+      description: property.description,
+      highlights: property.highlights,
+      realtor: property.realtor
+    }));
+
+    // Transform real properties
+    const transformedRealProperties = (realProperties || []).map(transformPropertyToApartment);
+    
+    // Combine real and sample properties
+    const allProperties = [...transformedRealProperties, ...sampleApartments];
+    console.log('Total properties available:', allProperties.length);
+
+    // Filter by user preferences with very lenient criteria
+    const filteredApartments = allProperties.filter(apartment => {
       console.log('Filtering apartment:', apartment.title, apartment.location, apartment.price);
       
-      // Check location match - make it more flexible
+      // Very lenient location matching
       const locationMatch = !userPreferences.location.length || 
         userPreferences.location.some(loc => {
-          const locMatch = apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0]);
+          const locMatch = apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0]) ||
+                          apartment.location.toLowerCase().includes('ho chi minh') ||
+                          apartment.location.toLowerCase().includes('district');
           console.log(`Location match for ${apartment.location} vs ${loc}: ${locMatch}`);
           return locMatch;
         });
       
       const vibeScore = calculateVibeScore(apartment, userPreferences);
       console.log(`Vibe score for ${apartment.title}: ${vibeScore.overall}`);
-      const hasGoodVibeMatch = vibeScore.overall > 5; // Further lowered threshold for better matches
+      const hasGoodVibeMatch = vibeScore.overall > 2; // Very low threshold
       
       const [, maxPrice] = userPreferences.priceRange;
-      const priceInRange = apartment.price <= maxPrice * 2; // Very flexible price range
-      console.log(`Price check for ${apartment.title}: ${apartment.price} <= ${maxPrice * 2} = ${priceInRange}`);
+      const priceInRange = apartment.price <= maxPrice * 4; // Very flexible price range
+      console.log(`Price check for ${apartment.title}: ${apartment.price} <= ${maxPrice * 4} = ${priceInRange}`);
       
       const passes = locationMatch && hasGoodVibeMatch && priceInRange;
       console.log(`Property ${apartment.title} passes filters: location=${locationMatch}, vibe=${hasGoodVibeMatch}, price=${priceInRange}, overall=${passes}`);
@@ -90,95 +123,24 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return passes;
     });
 
-    // Exclude properties already matched by this renter (and ones liked in this session)
-    const matchedIds = new Set<string>([
-      ...(renterMatches || []).map(m => m.property_id),
-      ...likedApartmentIds,
-    ]);
+    console.log('Filtered apartments:', filteredApartments.length);
 
-    const filteredApartments = preferredApartments
-      .filter(apartment => !matchedIds.has(apartment.id))
-      .sort((a, b) => {
-        const scoreA = calculateVibeScore(a, userPreferences).overall;
-        const scoreB = calculateVibeScore(b, userPreferences).overall;
-        
-        const aIsReal = realProperties?.some(p => p.id === a.id) || false;
-        const bIsReal = realProperties?.some(p => p.id === b.id) || false;
-        
-        if (aIsReal && !bIsReal) return -1;
-        if (!aIsReal && bIsReal) return 1;
-        
-        return scoreB - scoreA;
-      });
-    
-    console.log(`Preferred apartments: ${preferredApartments.length}, after excluding matched: ${filteredApartments.length}`);
-
-    // Only update state if apartments array actually changed
-    setApartments(prevApartments => {
-      if (JSON.stringify(prevApartments.map(a => a.id)) === JSON.stringify(filteredApartments.map(a => a.id))) {
-        return prevApartments;
-      }
-      return filteredApartments;
-    });
-    
-    if (filteredApartments.length === 0) {
-      // If there are preferred apartments but all are already matched
-      if (preferredApartments.length > 0) {
-        setNoMatchReason('no-more-available');
-        return;
-      }
-
-      console.log('No real properties match, falling back to sample properties');
-      
-      // Import and use sample properties as fallback
-      import('@/data/sampleProperties').then(({ sampleProperties }) => {
-        const sampleApartments: Apartment[] = sampleProperties.map(property => ({
-          id: property.id,
-          images: property.images,
-          title: property.title,
-          location: property.location,
-          price: property.price,
-          size: property.size,
-          vibe: property.vibe,
-          description: property.description,
-          highlights: property.highlights,
-          realtor: property.realtor
-        }));
-        
-        // Filter sample properties with more lenient criteria
-        const filteredSamples = sampleApartments.filter(apartment => {
-          const locationMatch = !userPreferences.location.length || 
-            userPreferences.location.some(loc => 
-              apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
-            );
-          
-          const vibeScore = calculateVibeScore(apartment, userPreferences);
-          const hasVibeMatch = vibeScore.overall > 3; // Very low threshold for samples
-          
-          const [, maxPrice] = userPreferences.priceRange;
-          const priceInRange = apartment.price <= maxPrice * 3; // Very flexible price
-          
-          return locationMatch && hasVibeMatch && priceInRange;
-        });
-        
-        if (filteredSamples.length > 0) {
-          setApartments(filteredSamples);
-          setCurrentApartmentIndex(0);
-          setNoMatchReason('');
-        } else {
-          // If even samples don't match, set a reason
-          if (!userPreferences.location.length) {
-            setNoMatchReason('no-location');
-          } else if (realProperties?.length === 0) {
-            setNoMatchReason('limited-listings');
-          } else {
-            setNoMatchReason('style-mismatch');
-          }
-        }
-      });
-      return; // Early return to avoid setting apartments to empty array
+    // If we have filtered apartments, use them
+    if (filteredApartments.length > 0) {
+      setApartments(filteredApartments);
+      setCurrentApartmentIndex(0);
+      setNoMatchReason('');
+      console.log('Using filtered properties:', filteredApartments.length);
+      return;
     }
-  }, [userPreferences, realProperties, renterMatches, likedApartmentIds]);
+
+    // If no properties match even with lenient criteria, use all sample properties
+    console.log('No properties match, using all sample properties as fallback');
+    setApartments(sampleApartments);
+    setCurrentApartmentIndex(0);
+    setNoMatchReason('');
+
+  }, [userPreferences, realProperties, renterMatches, likedApartmentIds, isLoading]);
 
   const handleLike = async () => {
     if (apartments.length === 0) return;
@@ -191,90 +153,70 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     }
     
     const currentApartment = apartments[currentApartmentIndex];
-    setLikedApartmentIds(prev => [...prev, currentApartment.id]);
     
-    // Save match to database
+    console.log('Liking apartment:', currentApartment.title);
+    
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      console.log('Match creation - user data:', userData?.user?.id);
+      // Update usage tracking
+      await updateUsage('match');
       
-      if (userData?.user?.id) {
-        console.log('Inserting match for property:', currentApartment.id);
-        const { data: matchData, error: matchError } = await supabase
-          .from('property_matches')
-          .insert({
-            renter_id: userData.user.id,
-            property_id: currentApartment.id,
-            realtor_id: currentApartment.realtor.id
-          })
-          .select();
+      // Add to liked apartments
+      setLikedApartmentIds(prev => [...prev, currentApartment.id]);
+      
+      // Call parent onMatch function
+      onMatch(currentApartment);
+      
+      // Try to create a match in the database if it's a real property
+      const realProperty = realProperties?.find(p => p.id === currentApartment.id);
+      if (realProperty) {
+        const { data: user } = await supabase.auth.getUser();
         
-        if (matchError) {
-          console.error('Error inserting match:', matchError);
-          toast.error('Failed to save match');
-          return;
-        }
-        
-        console.log('Match inserted successfully:', matchData);
-        console.log('Now tracking usage...');
-        
-        // Track the match - this is critical for weekly counting
-        const trackingResult = await updateUsage('match');
-        console.log('Usage tracking result:', trackingResult);
-        
-        if (!trackingResult) {
-          console.error('Failed to track match usage');
+        if (user.user) {
+          const { error } = await supabase
+            .from('property_matches')
+            .insert({
+              renter_id: user.user.id,
+              property_id: currentApartment.id,
+              realtor_id: realProperty.realtor_id
+            });
+          
+          if (error) {
+            console.error('Error creating match:', error);
+          } else {
+            console.log('Match created successfully');
+            toast.success('Match created! Check your matches to connect with the realtor.');
+          }
         }
       } else {
-        console.error('No user ID available for match creation');
-        return;
+        // For sample properties, show a message
+        toast.success('Great choice! This is a sample property. Create an account to see real listings and connect with realtors.');
       }
+      
+      moveToNext();
     } catch (error) {
-      console.error('Error saving match:', error);
-      toast.error('Failed to create match');
-      return;
+      console.error('Error handling like:', error);
+      toast.error('Something went wrong. Please try again.');
     }
-    
-    onMatch(currentApartment);
-    nextApartment();
   };
 
   const handleDislike = () => {
-    nextApartment();
+    console.log('Disliking apartment:', apartments[currentApartmentIndex]?.title);
+    moveToNext();
   };
 
-  const nextApartment = async () => {
-    // Check if user can view more properties
-    if (!canPerformAction('view')) {
-      setSubscriptionReason('views');
-      setShowSubscriptionModal(true);
-      return;
-    }
-    
-    // Track property view
-    await updateUsage('view');
-    
+  const moveToNext = () => {
     if (currentApartmentIndex < apartments.length - 1) {
-      setCurrentApartmentIndex(currentApartmentIndex + 1);
+      setCurrentApartmentIndex(prev => prev + 1);
     } else {
+      // No more apartments
       setNoMatchReason('no-more-matches');
     }
   };
 
-  const prevImage = (apartmentId: string, totalImages: number) => {
-    setImageIndices(prev => ({
-      ...prev,
-      [apartmentId]: prev[apartmentId] === 0 || !prev[apartmentId] 
-        ? totalImages - 1 
-        : prev[apartmentId] - 1
-    }));
-  };
-
-  const nextImage = (apartmentId: string, totalImages: number) => {
-    setImageIndices(prev => ({
-      ...prev,
-      [apartmentId]: ((prev[apartmentId] || 0) + 1) % totalImages
-    }));
+  const handleRetry = () => {
+    setCurrentApartmentIndex(0);
+    setLikedApartmentIds([]);
+    setNoMatchReason('');
   };
 
   const getNoMatchMessage = () => {
@@ -303,68 +245,61 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           message: "You haven't selected any preferred locations. We need to know where you'd like to live to find suitable properties.",
           suggestion: "Restart your preferences to select your preferred areas."
         };
-      case 'no-location-match':
-        return {
-          title: "No properties in selected areas",
-          message: "We couldn't find any properties in your selected districts. Our realtor network is expanding to cover more areas.",
-          suggestion: "Try selecting additional districts or ask Hausto AI about upcoming listings in your preferred areas."
-        };
-      case 'budget-mismatch':
-        return {
-          title: "Budget constraints",
-          message: "Available properties in your selected areas are outside your budget range. Consider adjusting your budget or exploring different districts.",
-          suggestion: "Restart your preferences to adjust your budget or ask Hausto AI for budget-friendly alternatives."
-        };
-      case 'style-mismatch':
-        return {
-          title: "Style preferences too specific",
-          message: "Your style and lifestyle preferences are quite specific. While we have properties in your area and budget, none match your vibe preferences closely enough.",
-          suggestion: "Consider broadening your style preferences or ask Hausto AI to find properties that might surprise you."
-        };
       default:
         return {
           title: "No matches found",
-          message: "We couldn't find properties that match all your criteria. This could be due to limited inventory or very specific preferences.",
-          suggestion: "Try adjusting your preferences or ask Hausto AI for personalized recommendations."
+          message: "We couldn't find properties matching your current preferences.",
+          suggestion: "Try adjusting your preferences or ask Hausto AI for recommendations."
         };
     }
   };
 
-  if (isLoading || isLoadingMatches) {
+  // Show loading state
+  if (isLoading) {
     return (
-      <div className="pt-20 px-4 flex items-center justify-center min-h-screen">
-        <Card className="p-8 text-center bg-white/70 backdrop-blur-md max-w-md">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
-          <h3 className="text-xl font-semibold mb-2">Finding your perfect match</h3>
-          <p className="text-gray-600">Searching through available properties...</p>
-        </Card>
+      <div className="pt-20 px-4">
+        <div className="max-w-md mx-auto text-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Finding properties for you...</p>
+        </div>
       </div>
     );
   }
 
-  if (apartments.length === 0 || currentApartmentIndex >= apartments.length) {
-    const noMatchInfo = getNoMatchMessage();
+  // Show no match message if applicable
+  if (apartments.length === 0 || noMatchReason) {
+    const { title, message, suggestion } = getNoMatchMessage();
     
     return (
-      <div className="pt-20 px-4 flex items-center justify-center min-h-screen">
-        <Card className="p-8 text-center bg-white/70 backdrop-blur-md max-w-md">
-          <Heart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">{noMatchInfo.title}</h3>
-          <p className="text-gray-600 mb-6 leading-relaxed">{noMatchInfo.message}</p>
-          <p className="text-sm text-orange-600 mb-6 font-medium">{noMatchInfo.suggestion}</p>
+      <div className="pt-20 px-4">
+        <Card className="max-w-md mx-auto p-8 text-center">
+          <h3 className="text-xl font-semibold mb-4">{title}</h3>
+          <p className="text-muted-foreground mb-4">{message}</p>
+          <p className="text-sm text-muted-foreground mb-6">{suggestion}</p>
           
           <div className="space-y-3">
-            {onRestartOnboarding && (
-              <Button 
-                onClick={onRestartOnboarding}
-                className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white w-full"
+            {noMatchReason === 'no-more-matches' && (
+              <Button
+                onClick={handleRetry}
+                variant="outline"
+                className="w-full border-orange-300 text-orange-600 hover:bg-orange-50"
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
+                Review Again
+              </Button>
+            )}
+            
+            {onRestartOnboarding && (
+              <Button
+                onClick={onRestartOnboarding}
+                variant="outline"
+                className="w-full border-blue-300 text-blue-600 hover:bg-blue-50"
+              >
                 Adjust Preferences
               </Button>
             )}
             
-            <Button 
+            <Button
               variant="outline"
               className="w-full border-orange-300 text-orange-600 hover:bg-orange-50"
               onClick={() => {
