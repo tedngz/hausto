@@ -155,6 +155,7 @@ export const useProperties = () => {
       vibe?: string;
       highlights: string[];
       imageFiles: File[];
+      vibeAnalysis?: any;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -186,8 +187,8 @@ export const useProperties = () => {
         }
       }
 
-      // Analyze vibes and generate content from uploaded images
-      const vibeAnalysis = await analyzeImageVibes(imageUrls, true);
+      // Use provided vibe analysis or analyze vibes from uploaded images
+      const vibeAnalysis = propertyData.vibeAnalysis || await analyzeImageVibes(imageUrls, true);
 
       // Use AI-generated content if available and fields are empty/generic
       const finalTitle = propertyData.title && propertyData.title.trim() && propertyData.title !== 'New Property' ? 

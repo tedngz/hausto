@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,12 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, Sparkles, MapPin, Loader2 } from 'lucide-react';
+import { X, Upload, Sparkles, MapPin, Loader2, Eye } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
+import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 
 interface PropertyUploadModalProps {
   isOpen: boolean;
@@ -29,6 +29,9 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [imageHighlights, setImageHighlights] = useState<string[]>([]);
+  const [vibeAnalysis, setVibeAnalysis] = useState<any>(null);
 
   const { createProperty, isCreating } = useProperties();
   const { toast } = useToast();
@@ -150,46 +153,65 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         setTitle(generated.title || `Beautiful ${size}m² Property in ${location.split(',')[0]}`);
         setDescription(generated.description || 'A wonderful space perfect for your next home.');
         
-        // Auto-select vibes based on AI analysis of images, using only predefined vibe options
+        // Store image highlights if available
+        if (generated.highlights && Array.isArray(generated.highlights)) {
+          setImageHighlights(generated.highlights);
+        }
+        
+        // Store detailed vibe analysis for preview
+        setVibeAnalysis(analysis);
+        
+        // Auto-select vibes based on comprehensive AI analysis
         const aiVibes = [];
+        
+        // Style analysis
         if (analysis.modern > 6) aiVibes.push('Modern');
         if (analysis.cozy > 6) aiVibes.push('Cozy');
         if (analysis.luxurious > 6) aiVibes.push('Luxury');
         if (analysis.urban > 6) aiVibes.push('Urban');
-        if (analysis.spacious > 6) aiVibes.push('Natural Light');
         if (analysis.minimalist > 6) aiVibes.push('Minimalist');
         if (analysis.elegant > 6) aiVibes.push('Contemporary');
-        if (analysis.natural_light > 7) aiVibes.push('Natural Light');
-        
-        // Add amenity-based vibes from image analysis
         if (analysis.rustic > 5) aiVibes.push('Rustic');
         if (analysis.colorful > 6) aiVibes.push('Bohemian');
+        if (analysis.natural_light > 7) aiVibes.push('Natural Light');
         
-        // Smart fallback vibes based on location and price if no image analysis vibes match
+        // Functionality analysis
+        if (analysis.spacious > 6) aiVibes.push('Open Plan');
+        if (analysis.industrial > 5) aiVibes.push('Industrial');
+        
+        // Location-based vibes
+        if (location.includes('District 1') || location.includes('Hoan Kiem')) {
+          aiVibes.push('City Center');
+        } else if (location.includes('District 2') || location.includes('Cau Giay')) {
+          aiVibes.push('Near Metro');
+        }
+        
+        // Price-based vibes
+        const priceNum = parseInt(price);
+        if (priceNum > 20000000) {
+          aiVibes.push('Luxury');
+        } else if (priceNum > 15000000) {
+          aiVibes.push('Contemporary');
+        }
+        
+        // Smart fallback if no vibes detected
         if (aiVibes.length === 0) {
-          const priceNum = parseInt(price);
           if (location.includes('District 1') || location.includes('Hoan Kiem')) {
             aiVibes.push('Urban', 'City Center');
-          } else if (location.includes('District 2') || location.includes('Cau Giay')) {
-            aiVibes.push('Modern', 'Pet Friendly');
           } else if (priceNum > 20000000) {
             aiVibes.push('Luxury', 'Modern');
           } else {
-            aiVibes.push('Cozy', 'Traditional');
+            aiVibes.push('Cozy', 'Natural Light');
           }
         }
         
-        // Always ensure at least 2 vibes are selected
+        // Ensure we have 2-5 vibes
         if (aiVibes.length === 1) {
-          if (parseInt(price) > 15000000) {
-            aiVibes.push('Luxury');
-          } else {
-            aiVibes.push('Cozy');
-          }
+          aiVibes.push(priceNum > 15000000 ? 'Luxury' : 'Cozy');
         }
         
-        // Remove duplicates and limit to 4 vibes
-        const uniqueVibes = [...new Set(aiVibes)].slice(0, 4);
+        // Remove duplicates and limit to 5 vibes
+        const uniqueVibes = [...new Set(aiVibes)].slice(0, 5);
         setSelectedVibes(uniqueVibes);
       } else {
         // Fallback content if AI generation fails
@@ -223,6 +245,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       setTitle(`Beautiful ${size}m² Property in ${locationShort}`);
       setDescription(`Discover this amazing ${size}m² property in ${location}. A perfect space for modern living.`);
       setSelectedVibes(['Modern', 'Natural Light']);
+      setImageHighlights(['Natural Light', 'Modern Design']);
       setHasGenerated(true);
     } finally {
       setIsGenerating(false);
@@ -249,8 +272,9 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       price: priceInVND,
       size: `${size}m²`,
       vibe: selectedVibes[0] || null,
-      highlights: selectedVibes,
+      highlights: imageHighlights.length > 0 ? imageHighlights : selectedVibes,
       imageFiles,
+      vibeAnalysis,
     });
 
     // Reset form
@@ -262,6 +286,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     setSelectedVibes([]);
     setImageFiles([]);
     setImagePreviews([]);
+    setImageHighlights([]);
+    setVibeAnalysis(null);
     setHasGenerated(false);
     onClose();
   };
@@ -447,20 +473,58 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             </>
           )}
 
-          {/* Submit Button */}
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSubmit}
-              disabled={isCreating || !hasGenerated || !title || !location || !price || imageFiles.length === 0}
-              className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600"
-            >
-              {isCreating ? 'Listing...' : 'List Property'}
-            </Button>
-          </div>
+          {/* Preview and Submit Buttons */}
+          {hasGenerated && (
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => setShowPreview(true)}
+                className="border-blue-500 text-blue-500 hover:bg-blue-50"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                Preview Listing
+              </Button>
+              <Button 
+                onClick={handleSubmit}
+                disabled={isCreating}
+                className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  'Publish Property'
+                )}
+              </Button>
+            </div>
+          )}
         </div>
+
+        {/* Property Preview Modal */}
+        <PropertyPreviewModal
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          property={{
+            id: 'preview',
+            title,
+            description,
+            location,
+            price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
+            size: `${size}m²`,
+            vibe: selectedVibes[0] || '',
+            highlights: imageHighlights.length > 0 ? imageHighlights : selectedVibes,
+            images: imagePreviews,
+            realtor_id: 'preview',
+            vibe_analysis: vibeAnalysis,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }}
+        />
       </Card>
     </div>
   );
