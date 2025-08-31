@@ -16,6 +16,7 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
 import { UserPreferences } from '@/types';
+import { useChat } from '@/hooks/useChat';
 
 interface PropertyMatch {
   id: string;
@@ -64,11 +65,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   const [selectedProperty, setSelectedProperty] = useState<PropertyMatch | null>(null);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [showHistory, setShowHistory] = useState(false);
-  const [messages, setMessages] = useState<ChatSession['messages']>([]);
-  const [searchCount, setSearchCount] = useState(0);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [allResults, setAllResults] = useState<PropertyMatch[]>([]);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -79,43 +76,27 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   const { toast } = useToast();
   const { canPerformAction, updateUsage } = useUsageTracking();
   const { createMatch } = useMatches();
+  
+  // Use the proper chat hook for database-backed conversations
+  const {
+    conversations,
+    messages,
+    currentConversationId,
+    setCurrentConversationId,
+    createConversation,
+    isCreatingConversation,
+    sendMessage,
+    isSendingMessage,
+    deleteConversation,
+    isDeletingConversation,
+  } = useChat();
 
-  // Initialize first chat session
+  // Initialize first conversation if needed
   useEffect(() => {
-    if (!currentSessionId) {
-      const newSessionId = `session-${Date.now()}`;
-      setCurrentSessionId(newSessionId);
-      const newSession: ChatSession = {
-        id: newSessionId,
-        title: 'New Chat',
-        timestamp: new Date(),
-        messages: []
-      };
-      setChatSessions([newSession]);
+    if (user && conversations.length === 0 && !currentConversationId) {
+      createConversation('AI Property Search');
     }
-  }, [currentSessionId]);
-
-  // Load stored sessions (user-specific)
-  useEffect(() => {
-    if (!user?.id) return;
-    
-    const storedSessions = localStorage.getItem(`aiChatSessions-${user.id}`);
-    if (storedSessions) {
-      const sessions = JSON.parse(storedSessions);
-      setChatSessions(sessions);
-      if (sessions.length > 0 && !currentSessionId) {
-        setCurrentSessionId(sessions[0].id);
-        setMessages(sessions[0].messages);
-      }
-    }
-  }, [user?.id]);
-
-  // Save sessions to localStorage (user-specific)
-  useEffect(() => {
-    if (chatSessions.length > 0 && user?.id) {
-      localStorage.setItem(`aiChatSessions-${user.id}`, JSON.stringify(chatSessions));
-    }
-  }, [chatSessions, user?.id]);
+  }, [user, conversations.length, currentConversationId, createConversation]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -139,16 +120,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   };
 
   const createNewChat = () => {
-    const newSessionId = `session-${Date.now()}`;
-    const newSession: ChatSession = {
-      id: newSessionId,
-      title: 'New Chat',
-      timestamp: new Date(),
-      messages: []
-    };
-    setChatSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSessionId);
-    setMessages([]);
+    createConversation('New AI Search');
     setQuery('');
     setUploadedImages([]);
     setSearchResults(null);
@@ -221,32 +193,9 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     }
   };
 
-  const switchToSession = (sessionId: string) => {
-    const session = chatSessions.find(s => s.id === sessionId);
-    if (session) {
-      setCurrentSessionId(sessionId);
-      setMessages(session.messages);
-      const lastUserMessage = session.messages.filter(m => m.type === 'user').pop();
-      const lastAiMessage = session.messages.filter(m => m.type === 'ai').pop();
-      if (lastAiMessage?.results) {
-        setSearchResults(lastAiMessage.results);
-      }
-    }
+  const switchToConversation = (conversationId: string) => {
+    setCurrentConversationId(conversationId);
     setShowHistory(false);
-  };
-
-  const updateCurrentSession = (newMessages: ChatSession['messages']) => {
-    setChatSessions(prev => prev.map(session => 
-      session.id === currentSessionId 
-        ? { 
-            ...session, 
-            messages: newMessages,
-            title: newMessages.length > 0 
-              ? newMessages[0].content.slice(0, 30) + (newMessages[0].content.length > 30 ? '...' : '')
-              : 'New Chat'
-          }
-        : session
-    ));
   };
 
   const handleSearch = async (searchQuery?: string) => {
@@ -276,77 +225,28 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     setIsSearching(true);
     setSearchResults(null);
 
-    // Add user message
-    const userMessage = {
-      type: 'user' as const,
-      content: queryToUse,
-      images: uploadedImages.length > 0 ? [...uploadedImages] : undefined
+    // Send message using the chat hook
+    const messageData = {
+      message: queryToUse,
+      conversationId: currentConversationId!,
+      userType: 'renter' as const,
+      userPreferences,
+      propertyImages: uploadedImages.length > 0 ? await Promise.all(
+        uploadedImages.map(async (file) => await convertImageToBase64(file))
+      ) : []
     };
-    
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
 
     try {
-      let searchBody: any = { query: queryToUse.trim() };
-
-      if (uploadedImages.length > 0) {
-        const imageData = await Promise.all(
-          uploadedImages.map(async (file) => ({
-            name: file.name,
-            data: await convertImageToBase64(file)
-          }))
-        );
-        searchBody.images = imageData;
-        
-        if (!queryToUse.trim()) {
-          searchBody.query = "Find similar apartments to the uploaded images";
-        }
-      }
-
-      const { data, error } = await supabase.functions.invoke('ai-property-search', {
-        body: searchBody
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      setSearchResults(data);
+      // Send message to AI chat
+      sendMessage(messageData);
       
       // Update AI search usage
       await updateUsage('ai-search');
       
-      // Add new results to all results
-      if (data.results && data.results.length > 0) {
-        setAllResults(prev => {
-          const existing = new Map(prev.map(p => [p.id, p]));
-          data.results.forEach((p: PropertyMatch) => existing.set(p.id, p));
-          return Array.from(existing.values());
-        });
-      }
-      
-      // Add AI response message
-      const aiMessage = {
-        type: 'ai' as const,
-        content: data.summary || 'Here are the properties I found for you:',
-        results: data
-      };
-
-      const finalMessages = [...updatedMessages, aiMessage];
-      setMessages(finalMessages);
-      updateCurrentSession(finalMessages);
-      
-      if (data.results && data.results.length > 0) {
-        toast({
-          title: "Found matches!",
-          description: `We found ${data.totalMatches} properties that might be perfect for you.`,
-        });
-      } else {
-        toast({
-          title: "No matches found",
-          description: "Try describing different preferences or browse all properties",
-        });
-      }
+      toast({
+        title: "Message sent!",
+        description: "Your AI assistant is processing your request.",
+      });
     } catch (error) {
       console.error('Search error:', error);
       toast({
@@ -442,12 +342,12 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
               <Card className="mb-6 border-border">
                 <CardContent className="p-4">
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {chatSessions.map((session) => (
+                    {conversations.map((conversation) => (
                       <div
-                        key={session.id}
-                        onClick={() => switchToSession(session.id)}
+                        key={conversation.id}
+                        onClick={() => switchToConversation(conversation.id)}
                         className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                          session.id === currentSessionId 
+                          conversation.id === currentConversationId 
                             ? 'bg-primary/10 border border-primary/20' 
                             : 'hover:bg-secondary/50'
                         }`}
@@ -455,9 +355,9 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                         <div className="flex items-center gap-2">
                           <MessageSquare className="h-4 w-4 text-muted-foreground" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{session.title}</p>
+                            <p className="text-sm font-medium truncate">{conversation.title || 'Untitled Chat'}</p>
                             <p className="text-xs text-muted-foreground">
-                              {new Date(session.timestamp).toLocaleDateString()}
+                              {new Date(conversation.created_at).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
@@ -472,30 +372,13 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
             {messages.length > 0 && (
               <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
                 {messages.map((message, index) => (
-                  <div key={index} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] p-3 rounded-lg ${
-                      message.type === 'user' 
+                      message.role === 'user' 
                         ? 'bg-primary text-primary-foreground' 
                         : 'bg-secondary text-secondary-foreground'
                     }`}>
                       <p className="text-sm">{message.content}</p>
-                      {message.images && message.images.length > 0 && (
-                        <div className="flex gap-2 mt-2">
-                          {message.images.map((image, imgIndex) => (
-                            <img
-                              key={imgIndex}
-                              src={image instanceof File ? URL.createObjectURL(image) : ''}
-                              alt={`Upload ${imgIndex + 1}`}
-                              className="w-12 h-12 object-cover rounded"
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {message.results && message.results.results.length > 0 && (
-                        <div className="mt-2 text-xs">
-                          Found {message.results.totalMatches} matching properties
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -524,7 +407,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   />
                   <Button
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={isSearching || uploadedImages.length >= 3}
+                    disabled={isSendingMessage || uploadedImages.length >= 3}
                     size="sm"
                     variant="outline"
                     className="h-8 w-8 p-0"
@@ -533,11 +416,11 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   </Button>
                   <Button
                     onClick={() => handleSearch()}
-                    disabled={isSearching || (!query.trim() && uploadedImages.length === 0)}
+                    disabled={isSendingMessage || (!query.trim() && uploadedImages.length === 0)}
                     size="sm"
                     className="h-8 w-8 p-0"
                   >
-                    {isSearching ? (
+                    {isSendingMessage ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <PlaneTakeoff className="h-4 w-4" />

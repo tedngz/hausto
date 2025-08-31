@@ -128,32 +128,55 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
         return;
       }
 
-      if (!realProperties || realProperties.length === 0) {
-        setNoMatchReason('limited-listings');
-      } else if (!userPreferences.location.length) {
-        setNoMatchReason('no-location');
-      } else {
-        const locationMatch = allProperties.filter(apartment => 
-          userPreferences.location.some(loc => 
-            apartment.location.toLowerCase().includes(loc.toLowerCase())
-          )
-        );
+      console.log('No real properties match, falling back to sample properties');
+      
+      // Import and use sample properties as fallback
+      import('@/data/sampleProperties').then(({ sampleProperties }) => {
+        const sampleApartments: Apartment[] = sampleProperties.map(property => ({
+          id: property.id,
+          images: property.images,
+          title: property.title,
+          location: property.location,
+          price: property.price,
+          size: property.size,
+          vibe: property.vibe,
+          description: property.description,
+          highlights: property.highlights,
+          realtor: property.realtor
+        }));
         
-        if (locationMatch.length === 0) {
-          setNoMatchReason('no-location-match');
-        } else {
-          const [, maxPrice] = userPreferences.priceRange;
-          const budgetMatch = locationMatch.filter(apartment => 
-            apartment.price <= maxPrice * 1.3
-          );
+        // Filter sample properties with more lenient criteria
+        const filteredSamples = sampleApartments.filter(apartment => {
+          const locationMatch = !userPreferences.location.length || 
+            userPreferences.location.some(loc => 
+              apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
+            );
           
-          if (budgetMatch.length === 0) {
-            setNoMatchReason('budget-mismatch');
+          const vibeScore = calculateVibeScore(apartment, userPreferences);
+          const hasVibeMatch = vibeScore.overall > 3; // Very low threshold for samples
+          
+          const [, maxPrice] = userPreferences.priceRange;
+          const priceInRange = apartment.price <= maxPrice * 3; // Very flexible price
+          
+          return locationMatch && hasVibeMatch && priceInRange;
+        });
+        
+        if (filteredSamples.length > 0) {
+          setApartments(filteredSamples);
+          setCurrentApartmentIndex(0);
+          setNoMatchReason('');
+        } else {
+          // If even samples don't match, set a reason
+          if (!userPreferences.location.length) {
+            setNoMatchReason('no-location');
+          } else if (realProperties?.length === 0) {
+            setNoMatchReason('limited-listings');
           } else {
             setNoMatchReason('style-mismatch');
           }
         }
-      }
+      });
+      return; // Early return to avoid setting apartments to empty array
     }
   }, [userPreferences, realProperties, renterMatches, likedApartmentIds]);
 
