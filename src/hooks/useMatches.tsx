@@ -12,6 +12,8 @@ export interface PropertyMatch {
   updated_at: string;
   renter_name?: string;
   realtor_name?: string;
+  renter_avatar?: string;
+  realtor_avatar?: string;
   properties?: {
     id: string;
     title: string;
@@ -74,11 +76,15 @@ export const useMatches = () => {
           console.error('Error fetching renter profiles:', profilesError);
         }
 
-        // Map names to matches
-        const matchesWithNames = matches.map(match => ({
-          ...match,
-          renter_name: profiles?.find(p => p.id === match.renter_id)?.name || 'Anonymous Renter'
-        }));
+        // Map names and avatars to matches
+        const matchesWithNames = matches.map(match => {
+          const profile = profiles?.find(p => p.id === match.renter_id);
+          return {
+            ...match,
+            renter_name: profile?.name || 'Anonymous Renter',
+            renter_avatar: profile?.avatar_url
+          };
+        });
 
         console.log('Realtor matches with names:', matchesWithNames);
         return matchesWithNames as PropertyMatch[];
@@ -131,11 +137,15 @@ export const useMatches = () => {
           console.error('Error fetching realtor profiles:', profilesError);
         }
 
-        // Map names to matches
-        const matchesWithNames = matches.map(match => ({
-          ...match,
-          realtor_name: profiles?.find(p => p.id === match.realtor_id)?.name || 'Property Owner'
-        }));
+        // Map names and avatars to matches
+        const matchesWithNames = matches.map(match => {
+          const profile = profiles?.find(p => p.id === match.realtor_id);
+          return {
+            ...match,
+            realtor_name: profile?.name || 'Property Owner',
+            realtor_avatar: profile?.avatar_url
+          };
+        });
 
         console.log('Renter matches with names:', matchesWithNames);
         return matchesWithNames as PropertyMatch[];

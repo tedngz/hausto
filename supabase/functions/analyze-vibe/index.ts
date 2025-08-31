@@ -88,7 +88,16 @@ serve(async (req) => {
       
       try {
         const basePrompt = generateContent 
-          ? `Analyze this rental property image and describe what you see. Focus on unique architectural features, design elements, lighting, space characteristics, and any special amenities or highlights visible. Be detailed and specific about what makes this property special. After your analysis, return a JSON object with vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus a 'detailed_analysis' field with your observations.`
+          ? `Analyze this rental property image and describe EXACTLY what you can see in detail. Focus on:
+            - Specific architectural features (ceiling height, windows, doors, structural elements)
+            - Visible design elements (furniture, colors, textures, patterns)
+            - Lighting conditions (natural light sources, artificial lighting, brightness)
+            - Space characteristics (layout, room size, functionality)
+            - Specific amenities or highlights visible (appliances, fixtures, storage, special features)
+            
+            Be very detailed and specific about what makes this particular space unique and attractive. Mention specific items, colors, materials, and features that a potential renter would notice and appreciate.
+            
+            Return a JSON object with vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus a 'detailed_analysis' field with your detailed observations.`
           : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant. Also provide a brief description of the overall vibe.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
@@ -325,7 +334,7 @@ Based on what you can see in the images and the property details, create:
 
 1. A unique, catchy title (50-80 characters) that captures the property's distinctive features
 2. An engaging description (150-250 words) that mentions specific visual elements, architectural features, and lifestyle benefits you observed
-3. 4-6 compelling highlights that represent the most attractive features visible in the images
+3. 4-6 compelling highlights that are SPECIFIC to what is visible in the images (not generic features). Each highlight should be 3-5 words and describe something you can actually see in the photos.
 
 Return JSON format:
 {

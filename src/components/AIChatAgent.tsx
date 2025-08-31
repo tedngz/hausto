@@ -243,6 +243,7 @@ export const AIChatAgent = ({
                       >
                         <div className="flex items-start space-x-3">
                           <Avatar className="w-12 h-12 flex-shrink-0">
+                            <AvatarImage src={isRealtor ? match.renter_avatar : match.realtor_avatar} />
                             <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold">
                               {isRealtor ? 'R' : 'P'}
                             </AvatarFallback>

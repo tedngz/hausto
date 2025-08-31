@@ -56,21 +56,45 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     'Dong Da, Hanoi'
   ];
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
       const newFiles = Array.from(files);
-      setImageFiles(prev => [...prev, ...newFiles]);
       
-      newFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (e.target?.result) {
-            setImagePreviews(prev => [...prev, e.target!.result as string]);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+      // Limit to 10 images max for better performance
+      const remainingSlots = 10 - imageFiles.length;
+      const filesToAdd = newFiles.slice(0, remainingSlots);
+      
+      if (newFiles.length > remainingSlots) {
+        toast({
+          title: "Image Limit",
+          description: `Only ${remainingSlots} more images can be added. Maximum 10 images allowed.`,
+          variant: "destructive"
+        });
+      }
+      
+      setImageFiles(prev => [...prev, ...filesToAdd]);
+      
+      // Process previews sequentially to avoid memory issues
+      for (const file of filesToAdd) {
+        try {
+          const reader = new FileReader();
+          const result = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          
+          setImagePreviews(prev => [...prev, result]);
+        } catch (error) {
+          console.error('Error reading file:', error);
+          toast({
+            title: "File Error",
+            description: "Failed to process one or more images.",
+            variant: "destructive"
+          });
+        }
+      }
     }
   };
 

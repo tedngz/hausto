@@ -25,34 +25,88 @@ export const useProperties = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch all properties
+  // Fetch all properties with realtor profile data
   const { data: properties = [], isLoading } = useQuery({
     queryKey: ['properties'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First get properties
+      const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return data as Property[];
+      if (propertiesError) throw propertiesError;
+      
+      if (!propertiesData?.length) return [];
+
+      // Get all unique realtor IDs
+      const realtorIds = [...new Set(propertiesData.map(p => p.realtor_id))];
+      
+      // Get realtor profiles
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, email, phone, avatar_url')
+        .in('id', realtorIds);
+
+      if (profilesError) throw profilesError;
+      
+      // Create a map of profiles for quick lookup
+      const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+      
+      // Transform data to match Apartment interface
+      return propertiesData.map(property => {
+        const profile = profilesMap.get(property.realtor_id);
+        return {
+          ...property,
+          realtor: {
+            id: property.realtor_id,
+            name: profile?.name || 'Realtor',
+            email: profile?.email || '',
+            phone: profile?.phone || '',
+            avatar: profile?.avatar_url || ''
+          }
+        };
+      });
     },
   });
 
-  // Fetch properties by realtor
+  // Fetch realtor's own properties with profile data
   const { data: realtorProperties = [] } = useQuery({
     queryKey: ['realtor-properties', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
       
-      const { data, error } = await supabase
+      // Get properties for this realtor
+      const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
         .select('*')
         .eq('realtor_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return data as Property[];
+      if (propertiesError) throw propertiesError;
+      
+      if (!propertiesData?.length) return [];
+
+      // Get the realtor's profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, email, phone, avatar_url')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+      
+      // Transform data to match Apartment interface
+      return propertiesData.map(property => ({
+        ...property,
+        realtor: {
+          id: property.realtor_id,
+          name: profileData?.name || 'Realtor',
+          email: profileData?.email || '',
+          phone: profileData?.phone || '',
+          avatar: profileData?.avatar_url || ''
+        }
+      }));
     },
     enabled: !!user?.id,
   });
@@ -104,10 +158,33 @@ export const useProperties = () => {
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
-      // Upload images first
-      const imageUrls = await Promise.all(
-        propertyData.imageFiles.map(file => uploadImage(file))
-      );
+      // Upload images with error handling and retry logic
+      const imageUrls: string[] = [];
+      
+      for (let i = 0; i < propertyData.imageFiles.length; i++) {
+        const file = propertyData.imageFiles[i];
+        let retries = 3;
+        let uploaded = false;
+        
+        while (retries > 0 && !uploaded) {
+          try {
+            const url = await uploadImage(file);
+            imageUrls.push(url);
+            uploaded = true;
+            console.log(`Successfully uploaded image ${i + 1}/${propertyData.imageFiles.length}`);
+          } catch (error) {
+            retries--;
+            console.error(`Failed to upload image ${i + 1}, retries left: ${retries}`, error);
+            
+            if (retries === 0) {
+              throw new Error(`Failed to upload image ${i + 1} after 3 attempts`);
+            }
+            
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
 
       // Analyze vibes and generate content from uploaded images
       const vibeAnalysis = await analyzeImageVibes(imageUrls, true);
@@ -182,12 +259,27 @@ export const useProperties = () => {
 
       let imageUrls = propertyData.existingImages || [];
 
-      // Upload new images if any
+      // Upload new images if any with retry logic
       if (propertyData.newImageFiles && propertyData.newImageFiles.length > 0) {
-        const newImageUrls = await Promise.all(
-          propertyData.newImageFiles.map(file => uploadImage(file))
-        );
-        imageUrls = [...imageUrls, ...newImageUrls];
+        for (let i = 0; i < propertyData.newImageFiles.length; i++) {
+          const file = propertyData.newImageFiles[i];
+          let retries = 3;
+          let uploaded = false;
+          
+          while (retries > 0 && !uploaded) {
+            try {
+              const url = await uploadImage(file);
+              imageUrls.push(url);
+              uploaded = true;
+            } catch (error) {
+              retries--;
+              if (retries === 0) {
+                throw new Error(`Failed to upload new image ${i + 1} after 3 attempts`);
+              }
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }
       }
 
       // Update property record
