@@ -30,7 +30,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [imageHighlights, setImageHighlights] = useState<string[]>([]);
+  const [imageHighlights, setImageHighlights] = useState<{text: string, imageIndexes: number[]}[]>([]);
   const [vibeAnalysis, setVibeAnalysis] = useState<any>(null);
 
   const { createProperty, isCreating } = useProperties();
@@ -153,9 +153,13 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         setTitle(generated.title || `Beautiful ${size}m² Property in ${location.split(',')[0]}`);
         setDescription(generated.description || 'A wonderful space perfect for your next home.');
         
-        // Store image highlights if available
+        // Store image highlights if available - convert to new format with image associations
         if (generated.highlights && Array.isArray(generated.highlights)) {
-          setImageHighlights(generated.highlights);
+          const highlightsWithImages = generated.highlights.map((highlight: string, index: number) => ({
+            text: highlight,
+            imageIndexes: [Math.min(index, imageFiles.length - 1)] // Associate with corresponding image, fallback to last image
+          }));
+          setImageHighlights(highlightsWithImages);
         }
         
         // Store detailed vibe analysis for preview
@@ -260,7 +264,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       setTitle(`Beautiful ${size}m² Property in ${locationShort}`);
       setDescription(`Discover this amazing ${size}m² property in ${location}. A perfect space for modern living.`);
       setSelectedVibes(['Modern', 'Natural Light']);
-      setImageHighlights(['Natural Light', 'Modern Design']);
+      setImageHighlights([{ text: 'Natural Light', imageIndexes: [0] }, { text: 'Modern Design', imageIndexes: [0] }]);
       setHasGenerated(true);
     } finally {
       setIsGenerating(false);
@@ -287,7 +291,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       price: priceInVND,
       size: `${size}m²`,
       vibe: selectedVibes[0] || null,
-      highlights: imageHighlights.length > 0 ? imageHighlights : selectedVibes,
+      highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
       imageFiles,
       vibeAnalysis,
     });
@@ -477,35 +481,84 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               <div>
                 <Label className="text-base font-semibold">AI Generated Highlights</Label>
                 <p className="text-sm text-gray-600 mb-3">Edit these highlights to match your images accurately</p>
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {imageHighlights.map((highlight, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <Input
-                        value={highlight}
-                        onChange={(e) => {
-                          const newHighlights = [...imageHighlights];
-                          newHighlights[index] = e.target.value;
-                          setImageHighlights(newHighlights);
-                        }}
-                        placeholder={`Highlight ${index + 1}`}
-                        className="flex-1"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setImageHighlights(prev => prev.filter((_, i) => i !== index));
-                        }}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                    <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Input
+                          value={highlight.text}
+                          onChange={(e) => {
+                            const newHighlights = [...imageHighlights];
+                            newHighlights[index] = { ...newHighlights[index], text: e.target.value };
+                            setImageHighlights(newHighlights);
+                          }}
+                          placeholder={`Highlight ${index + 1}`}
+                          className="flex-1"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setImageHighlights(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="mb-2">
+                        <Label className="text-sm font-medium text-gray-700">Associated Images:</Label>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2">
+                        {imagePreviews.map((img, imgIndex) => (
+                          <div
+                            key={imgIndex}
+                            className={`relative cursor-pointer border-2 rounded transition-all ${
+                              highlight.imageIndexes.includes(imgIndex)
+                                ? 'border-blue-500 ring-2 ring-blue-200'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                            onClick={() => {
+                              const newHighlights = [...imageHighlights];
+                              const isSelected = highlight.imageIndexes.includes(imgIndex);
+                              if (isSelected) {
+                                newHighlights[index] = {
+                                  ...newHighlights[index],
+                                  imageIndexes: newHighlights[index].imageIndexes.filter(i => i !== imgIndex)
+                                };
+                              } else {
+                                newHighlights[index] = {
+                                  ...newHighlights[index],
+                                  imageIndexes: [...newHighlights[index].imageIndexes, imgIndex]
+                                };
+                              }
+                              setImageHighlights(newHighlights);
+                            }}
+                          >
+                            <img 
+                              src={img} 
+                              alt={`Property ${imgIndex + 1}`} 
+                              className="w-full h-16 object-cover rounded" 
+                            />
+                            {highlight.imageIndexes.includes(imgIndex) && (
+                              <div className="absolute top-1 right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs">✓</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center py-1 rounded-b">
+                              {imgIndex + 1}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setImageHighlights(prev => [...prev, 'New highlight'])}
+                    onClick={() => setImageHighlights(prev => [...prev, { text: 'New highlight', imageIndexes: [0] }])}
                     className="text-blue-500 hover:text-blue-700"
                   >
                     + Add Highlight
@@ -571,7 +624,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
             size: `${size}m²`,
             vibe: selectedVibes[0] || '',
-            highlights: imageHighlights.length > 0 ? imageHighlights : selectedVibes,
+            highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
             images: imagePreviews,
             realtor_id: 'preview',
             vibe_analysis: vibeAnalysis,
