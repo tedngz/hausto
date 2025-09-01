@@ -74,30 +74,14 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return;
     }
 
-    // Convert sample properties to apartments format
-    const sampleApartments: Apartment[] = sampleProperties.map(property => ({
-      id: property.id,
-      images: property.images,
-      title: property.title,
-      location: property.location,
-      price: property.price,
-      size: property.size,
-      vibe: property.vibe,
-      description: property.description,
-      highlights: property.highlights,
-      realtor: property.realtor
-    }));
-
-    // Transform real properties
+    // Transform real properties only - no sample properties
     const transformedRealProperties = (realProperties || []).map(transformPropertyToApartment);
     
-    // Combine real and sample properties
-    const allProperties = [...transformedRealProperties, ...sampleApartments];
-    console.log('Total properties available:', allProperties.length);
+    console.log('Real properties available:', transformedRealProperties.length);
 
-    // If no properties available at all, show error
-    if (allProperties.length === 0) {
-      console.log('No properties available at all');
+    // If no real properties available at all, show error
+    if (transformedRealProperties.length === 0) {
+      console.log('No real properties available');
       setNoMatchReason('no-properties');
       setApartments([]);
       return;
@@ -107,21 +91,21 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     if (!userPreferences) {
       console.log('No user preferences available');
       setNoMatchReason('invalid-preferences');
-      // Don't clear apartments here, let user still see sample properties
+      // Don't clear apartments here, let user still see properties
       if (apartments.length === 0) {
-        setApartments(sampleApartments);
+        setApartments(transformedRealProperties);
         setCurrentApartmentIndex(0);
       }
       return;
     }
 
     // Try filtering by user preferences with very lenient criteria
-    let filteredApartments = allProperties;
+    let filteredApartments = transformedRealProperties;
     
     try {
       // Only filter if we have valid price range
       if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
-        filteredApartments = allProperties.filter(apartment => {
+        filteredApartments = transformedRealProperties.filter(apartment => {
           console.log('Filtering apartment:', apartment.title, apartment.location, apartment.price);
           
           // Ultra-lenient location matching - if no location specified, show all
@@ -153,8 +137,8 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       }
     } catch (error) {
       console.error('Error filtering apartments:', error);
-      // If filtering fails, show all properties
-      filteredApartments = allProperties;
+      // If filtering fails, show all real properties
+      filteredApartments = transformedRealProperties;
     }
 
     console.log('Filtered apartments:', filteredApartments.length);
@@ -168,9 +152,9 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return;
     }
 
-    // If filtering is too strict, show all sample properties as fallback
-    console.log('Filtering too strict, showing all sample properties');
-    setApartments(sampleApartments);
+    // If no properties pass filters, show all real properties anyway
+    console.log('No properties pass filters, showing all real properties');
+    setApartments(transformedRealProperties);
     setCurrentApartmentIndex(0);
     setNoMatchReason('');
 
@@ -222,8 +206,8 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           }
         }
       } else {
-        // For sample properties, show a message
-        toast.success('Great choice! This is a sample property. Create an account to see real listings and connect with realtors.');
+        // For real properties only, show a message about connecting with realtors
+        toast.success('Match created! Check your matches to connect with the realtor.');
       }
       
       moveToNext();
@@ -264,19 +248,19 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       case 'no-properties':
         return {
           title: "No Properties Available",
-          message: "We're currently loading our property database. This usually takes just a moment.",
-          suggestion: "Try refreshing the page or ask Hausto AI for assistance."
+          message: "There are currently no properties listed by realtors in our database.",
+          suggestion: "Check back later as new properties are added regularly, or ask Hausto AI for assistance."
         };
       case 'no-more-available':
         return {
           title: "No more properties available",
-          message: "You've already reviewed all properties that meet your preferences. New listings arrive regularly.",
+          message: "You've already reviewed all properties from our realtors. New listings arrive regularly.",
           suggestion: "Check back soon or adjust your preferences to expand your options."
         };
       case 'no-more-matches':
         return {
           title: "You've seen all available matches!",
-          message: "You've reviewed all properties that match your current preferences. Great job exploring your options!",
+          message: "You've reviewed all properties from our realtors that match your current preferences.",
           suggestion: "Consider adjusting your preferences to discover more properties, or ask Hausto AI for personalized recommendations."
         };
       case 'limited-listings':
@@ -294,7 +278,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       default:
         return {
           title: "No matches found",
-          message: "We couldn't find properties matching your current preferences.",
+          message: "We couldn't find properties from our realtors matching your current preferences.",
           suggestion: "Try adjusting your preferences or ask Hausto AI for recommendations."
         };
     }
