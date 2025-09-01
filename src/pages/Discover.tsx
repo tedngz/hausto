@@ -117,11 +117,18 @@ const Discover = () => {
       setIsSubscriptionModalOpen(true);
     };
 
+    // Listen for AI chat switch event from SwipeInterface
+    const handleSwitchToAIChat = () => {
+      setCurrentView('ai-chat');
+    };
+
     window.addEventListener('openAIChat', handleOpenAIChat);
     window.addEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
+    window.addEventListener('switchToAIChat', handleSwitchToAIChat);
     return () => {
       window.removeEventListener('openAIChat', handleOpenAIChat);
       window.removeEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
+      window.removeEventListener('switchToAIChat', handleSwitchToAIChat);
     };
   }, []);
 
@@ -282,7 +289,7 @@ const Discover = () => {
           />
         )}
         
-        {userType === 'renter' && currentView === 'swipe' && userPreferences && (
+        {userType === 'renter' && currentView === 'swipe' && (
           <SwipeInterface 
             userPreferences={userPreferences}
             onMatch={handleMatch}

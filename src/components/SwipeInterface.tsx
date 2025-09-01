@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { sampleProperties } from '@/data/sampleProperties';
 
 interface SwipeInterfaceProps {
-  userPreferences: UserPreferences;
+  userPreferences: UserPreferences | null;
   onMatch: (apartment: Apartment) => void;
   userProfile?: UserProfile;
   onRestartOnboarding?: () => void;
@@ -74,6 +74,14 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return;
     }
 
+    // Validate userPreferences - if incomplete, show error state
+    if (!userPreferences || !userPreferences.priceRange || userPreferences.priceRange.length !== 2) {
+      console.log('Invalid user preferences, showing error state');
+      setNoMatchReason('invalid-preferences');
+      setApartments([]);
+      return;
+    }
+
     // Convert sample properties to apartments format
     const sampleApartments: Apartment[] = sampleProperties.map(property => ({
       id: property.id,
@@ -95,33 +103,52 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     const allProperties = [...transformedRealProperties, ...sampleApartments];
     console.log('Total properties available:', allProperties.length);
 
-    // Filter by user preferences with very lenient criteria
-    const filteredApartments = allProperties.filter(apartment => {
-      console.log('Filtering apartment:', apartment.title, apartment.location, apartment.price);
-      
-      // Very lenient location matching
-      const locationMatch = !userPreferences.location.length || 
-        userPreferences.location.some(loc => {
-          const locMatch = apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0]) ||
-                          apartment.location.toLowerCase().includes('ho chi minh') ||
-                          apartment.location.toLowerCase().includes('district');
-          console.log(`Location match for ${apartment.location} vs ${loc}: ${locMatch}`);
-          return locMatch;
-        });
-      
-      const vibeScore = calculateVibeScore(apartment, userPreferences);
-      console.log(`Vibe score for ${apartment.title}: ${vibeScore.overall}`);
-      const hasGoodVibeMatch = vibeScore.overall > 2; // Very low threshold
-      
-      const [, maxPrice] = userPreferences.priceRange;
-      const priceInRange = apartment.price <= maxPrice * 4; // Very flexible price range
-      console.log(`Price check for ${apartment.title}: ${apartment.price} <= ${maxPrice * 4} = ${priceInRange}`);
-      
-      const passes = locationMatch && hasGoodVibeMatch && priceInRange;
-      console.log(`Property ${apartment.title} passes filters: location=${locationMatch}, vibe=${hasGoodVibeMatch}, price=${priceInRange}, overall=${passes}`);
-      
-      return passes;
-    });
+    // Always ensure we have properties to show
+    if (allProperties.length === 0) {
+      console.log('No properties available at all');
+      setNoMatchReason('no-properties');
+      setApartments([]);
+      return;
+    }
+
+    // Try filtering by user preferences with very lenient criteria
+    let filteredApartments = allProperties;
+    
+    try {
+      filteredApartments = allProperties.filter(apartment => {
+        console.log('Filtering apartment:', apartment.title, apartment.location, apartment.price);
+        
+        // Ultra-lenient location matching - if no location specified, show all
+        const locationMatch = !userPreferences.location?.length || 
+          userPreferences.location.some(loc => {
+            const locMatch = apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0]) ||
+                            apartment.location.toLowerCase().includes('ho chi minh') ||
+                            apartment.location.toLowerCase().includes('district') ||
+                            apartment.location.toLowerCase().includes('saigon');
+            console.log(`Location match for ${apartment.location} vs ${loc}: ${locMatch}`);
+            return locMatch;
+          });
+        
+        // Very permissive vibe scoring - only filter out extremely poor matches
+        const vibeScore = calculateVibeScore(apartment, userPreferences);
+        console.log(`Vibe score for ${apartment.title}: ${vibeScore.overall}`);
+        const hasGoodVibeMatch = vibeScore.overall > 1; // Even lower threshold
+        
+        // Very flexible price range - up to 5x the max budget
+        const [, maxPrice] = userPreferences.priceRange;
+        const priceInRange = apartment.price <= maxPrice * 5;
+        console.log(`Price check for ${apartment.title}: ${apartment.price} <= ${maxPrice * 5} = ${priceInRange}`);
+        
+        const passes = locationMatch && hasGoodVibeMatch && priceInRange;
+        console.log(`Property ${apartment.title} passes filters: location=${locationMatch}, vibe=${hasGoodVibeMatch}, price=${priceInRange}, overall=${passes}`);
+        
+        return passes;
+      });
+    } catch (error) {
+      console.error('Error filtering apartments:', error);
+      // If filtering fails, show all properties
+      filteredApartments = allProperties;
+    }
 
     console.log('Filtered apartments:', filteredApartments.length);
 
@@ -134,8 +161,8 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return;
     }
 
-    // If no properties match even with lenient criteria, use all sample properties
-    console.log('No properties match, using all sample properties as fallback');
+    // If filtering is too strict, show all sample properties as fallback
+    console.log('Filtering too strict, showing all sample properties');
     setApartments(sampleApartments);
     setCurrentApartmentIndex(0);
     setNoMatchReason('');
@@ -221,6 +248,18 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
 
   const getNoMatchMessage = () => {
     switch (noMatchReason) {
+      case 'invalid-preferences':
+        return {
+          title: "Setup Required",
+          message: "Your preferences need to be set up to find matching properties.",
+          suggestion: "Complete the quick quiz to get personalized property recommendations."
+        };
+      case 'no-properties':
+        return {
+          title: "No Properties Available",
+          message: "We're currently loading our property database. This usually takes just a moment.",
+          suggestion: "Try refreshing the page or ask Hausto AI for assistance."
+        };
       case 'no-more-available':
         return {
           title: "No more properties available",
@@ -278,6 +317,15 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           <p className="text-sm text-muted-foreground mb-6">{suggestion}</p>
           
           <div className="space-y-3">
+            {(noMatchReason === 'invalid-preferences' || !userPreferences) && onRestartOnboarding && (
+              <Button
+                onClick={onRestartOnboarding}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                Complete Setup Quiz
+              </Button>
+            )}
+            
             {noMatchReason === 'no-more-matches' && (
               <Button
                 onClick={handleRetry}
@@ -289,7 +337,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
               </Button>
             )}
             
-            {onRestartOnboarding && (
+            {onRestartOnboarding && noMatchReason !== 'invalid-preferences' && (
               <Button
                 onClick={onRestartOnboarding}
                 variant="outline"
@@ -303,9 +351,8 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
               variant="outline"
               className="w-full border-orange-300 text-orange-600 hover:bg-orange-50"
               onClick={() => {
-                // Navigate to AI chat view on discover page
-                window.location.href = '/discover#ai-chat';
-                window.location.reload();
+                // Dispatch custom event to switch to AI chat view
+                window.dispatchEvent(new CustomEvent('switchToAIChat'));
               }}
             >
               <MessageCircle className="w-4 h-4 mr-2" />
@@ -318,7 +365,9 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   }
 
   const currentApartment = apartments[currentApartmentIndex];
-  const vibeScore = calculateVibeScore(currentApartment, userPreferences);
+  if (!currentApartment) return null;
+  
+  const vibeScore = userPreferences ? calculateVibeScore(currentApartment, userPreferences) : { overall: 5, breakdown: {} };
   const currentImageIndex = imageIndices[currentApartment.id] || 0;
   const isRealProperty = realProperties?.some(p => p.id === currentApartment.id) || false;
 
