@@ -112,8 +112,17 @@ const Discover = () => {
       setIsAIChatOpen(true);
     };
 
+    // Listen for subscription modal opening event
+    const handleOpenSubscriptionModal = (event: CustomEvent) => {
+      setIsSubscriptionModalOpen(true);
+    };
+
     window.addEventListener('openAIChat', handleOpenAIChat);
-    return () => window.removeEventListener('openAIChat', handleOpenAIChat);
+    window.addEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
+    return () => {
+      window.removeEventListener('openAIChat', handleOpenAIChat);
+      window.removeEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
+    };
   }, []);
 
   const handleUserTypeSelect = (type: 'renter' | 'realtor') => {
@@ -267,7 +276,10 @@ const Discover = () => {
         )}
         
         {userType === 'renter' && currentView === 'onboarding' && (
-          <OnboardingQuiz onComplete={handleOnboardingComplete} />
+          <OnboardingQuiz 
+            onComplete={handleOnboardingComplete} 
+            onSkip={() => setCurrentView('ai-chat')}
+          />
         )}
         
         {userType === 'renter' && currentView === 'swipe' && userPreferences && (

@@ -52,7 +52,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
           <div className="text-6xl">🚫</div>
           <h2 className="text-2xl font-bold">Quiz Limit Reached</h2>
           <p className="text-muted-foreground">
-            You've used all {getRemainingActions('quiz')} of your weekly quiz retakes. 
+            You've used all your weekly quiz retakes. 
             Upgrade to Premium for unlimited quiz access!
           </p>
           <div className="flex gap-4 justify-center mt-6">
