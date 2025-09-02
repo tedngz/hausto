@@ -88,16 +88,41 @@ serve(async (req) => {
       
       try {
         const basePrompt = generateContent 
-          ? `Analyze this rental property image and describe EXACTLY what you can see in detail. Focus on:
-            - Specific architectural features (ceiling height, windows, doors, structural elements)
-            - Visible design elements (furniture, colors, textures, patterns)
-            - Lighting conditions (natural light sources, artificial lighting, brightness)
-            - Space characteristics (layout, room size, functionality)
-            - Specific amenities or highlights visible (appliances, fixtures, storage, special features)
+          ? `Analyze this rental property image in extreme detail for a real estate listing. Focus on SPECIFIC, VISIBLE features:
+
+            ARCHITECTURAL FEATURES:
+            - Windows (type, size, placement, views)
+            - Ceilings (height, exposed beams, molding, lighting fixtures)
+            - Floors (material, pattern, condition)
+            - Walls (materials, finishes, built-ins)
+            - Doors and entryways
             
-            Be very detailed and specific about what makes this particular space unique and attractive. Mention specific items, colors, materials, and features that a potential renter would notice and appreciate.
+            DESIGN ELEMENTS:
+            - Furniture pieces and their style
+            - Color palette and materials
+            - Textures and patterns visible
+            - Storage solutions
+            - Art and decorative elements
             
-            Return a JSON object with vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus a 'detailed_analysis' field with your detailed observations.`
+            FUNCTIONAL FEATURES:
+            - Kitchen appliances and fixtures (brands, materials, layout)
+            - Bathroom fixtures and finishes
+            - Built-in storage and closets
+            - Technology and smart features visible
+            
+            LIGHTING & AMBIANCE:
+            - Natural light sources and quality
+            - Light fixtures and their style
+            - Overall brightness and atmosphere
+            
+            UNIQUE SELLING POINTS:
+            - What makes this space special and memorable?
+            - Premium features or luxury touches
+            - Views or outdoor spaces visible
+            
+            Be extremely specific - mention exact materials, finishes, appliance types, lighting fixtures, and architectural details that a potential renter would notice and value.
+            
+            Return a JSON object with vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus a 'detailed_analysis' field with your specific observations.`
           : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant. Also provide a brief description of the overall vibe.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
@@ -334,13 +359,20 @@ Based on what you can see in the images and the property details, create:
 
 1. A unique, catchy title (50-80 characters) that captures the property's distinctive features
 2. An engaging description (150-250 words) that mentions specific visual elements, architectural features, and lifestyle benefits you observed
-3. 4-6 compelling highlights that are SPECIFIC to what is visible in the images (not generic features). Each highlight should be 3-5 words and describe something you can actually see in the photos.
+3. 6-8 compelling highlights that are SPECIFIC to what is visible in the images. Focus on:
+   - Specific architectural features (e.g., "Floor-to-ceiling windows", "Exposed brick walls", "Vaulted ceilings")
+   - Unique design elements (e.g., "Industrial steel beams", "Marble kitchen island", "Built-in wardrobes")
+   - Visible amenities (e.g., "Stainless steel appliances", "Walk-in shower", "Private balcony")
+   - Lighting and ambiance (e.g., "Abundant natural light", "Designer pendant lighting", "Panoramic city views")
+   - Materials and finishes (e.g., "Hardwood flooring", "Granite countertops", "Custom millwork")
+
+Each highlight should be 2-4 words describing something you can actually SEE in the photos. Avoid generic terms like "great location" or "modern amenities".
 
 Return JSON format:
 {
   "title": "your unique title",
   "description": "your detailed description mentioning specific visual features",
-  "highlights": ["highlight1", "highlight2", "highlight3", "highlight4"]
+  "highlights": ["specific feature 1", "specific feature 2", "specific feature 3", "specific feature 4", "specific feature 5", "specific feature 6"]
 }`
             }
           ],
@@ -390,7 +422,7 @@ Return JSON format:
         aggregated.generated_content = {
           title: `Stunning ${sizeText} Property in ${locationName}`,
           description: `Discover this beautiful ${sizeText} property offering modern living in ${locationName}. Features contemporary design elements and excellent natural lighting, perfect for comfortable urban living.`,
-          highlights: ["Prime location", "Modern design", "Natural lighting", "Contemporary finishes"]
+          highlights: ["Contemporary design", "Natural lighting", "Modern fixtures", "Quality finishes", "Urban location", "Well-maintained"]
         };
       }
       } catch (contentError) {
@@ -402,7 +434,7 @@ Return JSON format:
         aggregated.generated_content = {
           title: `Beautiful ${sizeText} Property in ${locationName}`,
           description: `Discover this amazing ${sizeText} property in ${locationName}. Perfect for modern living with great features and amenities.`,
-          highlights: ["Prime location", "Modern design", "Great amenities", "Perfect for living"]
+          highlights: ["Spacious layout", "Modern amenities", "Premium location", "Quality construction", "Natural light", "Updated features"]
         };
       }
     }

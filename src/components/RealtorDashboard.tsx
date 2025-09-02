@@ -4,8 +4,10 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye } from 'lucide-react';
-import { PropertyUploadModal } from '@/components/PropertyUploadModal';
+import { PropertyCard } from '@/components/PropertyCard';
 import { PropertyEditModal } from '@/components/PropertyEditModal';
+import { PropertyUploadModal } from '@/components/PropertyUploadModal';
+import { HighlightRegenerationButton } from '@/components/HighlightRegenerationButton';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { AIChatAgent } from '@/components/AIChatAgent';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
@@ -106,8 +108,22 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
         {/* My Properties */}
         <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
           <div className="p-6 border-b border-slate-200">
-            <h2 className="text-xl font-semibold text-slate-900">My Properties</h2>
-            <p className="text-slate-600 text-sm">Manage your listed properties</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">My Properties</h2>
+                <p className="text-slate-600 text-sm">Manage your listed properties</p>
+              </div>
+              <div className="flex gap-3">
+                <HighlightRegenerationButton />
+                <Button 
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Add Property
+                </Button>
+              </div>
+            </div>
           </div>
           
           <div className="p-6">
