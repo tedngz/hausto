@@ -28,9 +28,10 @@ export const PropertyImageModal = ({
     setCurrentImageIndex((prev) => (prev - 1 + apartment.images.length) % apartment.images.length);
   };
 
-  // Get AI generated highlights for overlay
-  const aiHighlights = apartment.vibe_analysis?.generated_content?.highlights || [];
-  const selectedHighlight = aiHighlights.length > 0 ? aiHighlights[currentImageIndex % aiHighlights.length] : null;
+  // Get image-specific highlight
+  const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
+  const analysisForImage = imageAnalyses.find(a => a.image_index === currentImageIndex);
+  const selectedHighlight = analysisForImage?.image_highlight || null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

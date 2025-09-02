@@ -4,15 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Wand2, Save, X, Plus, Trash2, Image, Eye, EyeOff } from 'lucide-react';
+import { Wand2, Save, X, Edit, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Property } from '@/hooks/useProperties';
 
-interface HighlightWithImages {
-  text: string;
-  associatedImages: number[];
+interface ImageHighlight {
+  imageIndex: number;
+  highlight: string;
 }
 
 interface PropertyHighlightEditorProps {
@@ -28,17 +27,47 @@ export const PropertyHighlightEditor = ({
   onHighlightsUpdate, 
   onClose 
 }: PropertyHighlightEditorProps) => {
-  const [highlightsWithImages, setHighlightsWithImages] = useState<HighlightWithImages[]>(() => {
-    const currentHighlights = property.vibe_analysis?.generated_content?.highlights || property.highlights || [];
-    return currentHighlights.map(text => ({
-      text,
-      associatedImages: []
-    }));
+  // Initialize with image-specific highlights from AI analysis
+  const [imageHighlights, setImageHighlights] = useState<ImageHighlight[]>(() => {
+    if (!property.images) return [];
+    
+    return property.images.map((_, index) => {
+      const imageAnalyses = property.vibe_analysis?.image_analyses || [];
+      const analysisForImage = imageAnalyses.find(a => a.image_index === index);
+      
+      // Get AI-generated highlight for this image or fallback
+      let highlight = '';
+      if (analysisForImage?.image_highlight) {
+        highlight = analysisForImage.image_highlight;
+      } else if (analysisForImage?.detailed_analysis) {
+        // Extract feature from detailed analysis
+        const analysis = analysisForImage.detailed_analysis.toLowerCase();
+        if (analysis.includes('kitchen') && analysis.includes('modern')) {
+          highlight = 'Modern equipped kitchen';
+        } else if (analysis.includes('bathroom') && analysis.includes('luxury')) {
+          highlight = 'Luxurious bathroom facilities';
+        } else if (analysis.includes('bedroom') && analysis.includes('spacious')) {
+          highlight = 'Spacious bedroom design';
+        } else if (analysis.includes('living') && analysis.includes('open')) {
+          highlight = 'Open plan living space';
+        } else if (analysis.includes('natural light') || analysis.includes('bright')) {
+          highlight = 'Abundant natural light';
+        } else {
+          highlight = 'Beautiful interior feature';
+        }
+      } else {
+        // Use general highlights if available
+        const generalHighlights = property.vibe_analysis?.generated_content?.highlights || property.highlights || [];
+        highlight = generalHighlights[index % generalHighlights.length] || 'Notable feature';
+      }
+      
+      return { imageIndex: index, highlight };
+    });
   });
+  
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [newHighlight, setNewHighlight] = useState('');
-  const [selectedHighlight, setSelectedHighlight] = useState<number | null>(null);
-  const [showPreview, setShowPreview] = useState(true);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
   const { toast } = useToast();
 
   const handleRegenerateHighlights = async () => {
@@ -55,8 +84,7 @@ export const PropertyHighlightEditor = ({
     try {
       const { data, error } = await supabase.functions.invoke('analyze-vibe', {
         body: {
-          property_id: property.id,
-          images: property.images,
+          imageUrls: property.images,
           property_info: {
             title: property.title,
             description: property.description,
@@ -64,21 +92,26 @@ export const PropertyHighlightEditor = ({
             price: property.price,
             size: property.size
           },
-          generate_content: true
+          generateContent: true
         }
       });
 
       if (error) throw error;
 
-      if (data?.vibe_analysis?.generated_content?.highlights) {
-        const newHighlights = data.vibe_analysis.generated_content.highlights;
-        setHighlightsWithImages(newHighlights.map((text: string) => ({
-          text,
-          associatedImages: []
-        })));
+      if (data?.vibe_analysis?.image_analyses) {
+        // Create new highlights from image-specific analysis
+        const newHighlights = property.images.map((_, index) => {
+          const analysisForImage = data.vibe_analysis.image_analyses.find((a: any) => a.image_index === index);
+          return {
+            imageIndex: index,
+            highlight: analysisForImage?.image_highlight || `Feature ${index + 1}`
+          };
+        });
+        
+        setImageHighlights(newHighlights);
         toast({
           title: "Highlights Generated",
-          description: "AI has generated new property highlights. Associate them with images below.",
+          description: "AI has generated new image-specific highlights.",
         });
       }
     } catch (error) {
@@ -93,71 +126,56 @@ export const PropertyHighlightEditor = ({
     }
   };
 
-  const addHighlight = () => {
-    if (newHighlight.trim()) {
-      setHighlightsWithImages([...highlightsWithImages, {
-        text: newHighlight.trim(),
-        associatedImages: []
-      }]);
-      setNewHighlight('');
+  const startEditing = (index: number, currentText: string) => {
+    setEditingIndex(index);
+    setEditingText(currentText);
+  };
+
+  const saveEdit = () => {
+    if (editingIndex !== null && editingText.trim()) {
+      const updated = imageHighlights.map((h, i) => 
+        i === editingIndex ? { ...h, highlight: editingText.trim() } : h
+      );
+      setImageHighlights(updated);
+      setEditingIndex(null);
+      setEditingText('');
     }
   };
 
-  const removeHighlight = (index: number) => {
-    setHighlightsWithImages(highlightsWithImages.filter((_, i) => i !== index));
-    if (selectedHighlight === index) setSelectedHighlight(null);
-  };
-
-  const updateHighlight = (index: number, value: string) => {
-    const updated = highlightsWithImages.map((h, i) => 
-      i === index ? { ...h, text: value } : h
-    );
-    setHighlightsWithImages(updated);
-  };
-
-  const toggleImageAssociation = (highlightIndex: number, imageIndex: number) => {
-    const updated = highlightsWithImages.map((h, i) => {
-      if (i === highlightIndex) {
-        const associated = h.associatedImages.includes(imageIndex);
-        return {
-          ...h,
-          associatedImages: associated 
-            ? h.associatedImages.filter(idx => idx !== imageIndex)
-            : [...h.associatedImages, imageIndex]
-        };
-      }
-      return h;
-    });
-    setHighlightsWithImages(updated);
+  const cancelEdit = () => {
+    setEditingIndex(null);
+    setEditingText('');
   };
 
   const handleSave = () => {
-    const validHighlights = highlightsWithImages
-      .filter(h => h.text.trim() && h.associatedImages.length > 0)
-      .map(h => h.text);
-    onHighlightsUpdate(validHighlights);
+    const highlights = imageHighlights
+      .filter(h => h.highlight.trim())
+      .map(h => h.highlight);
+    onHighlightsUpdate(highlights);
     onClose();
   };
 
   if (!isOpen) return null;
 
-  const validHighlights = highlightsWithImages.filter(h => h.text.trim() && h.associatedImages.length > 0);
+  const validHighlights = imageHighlights.filter(h => h.highlight.trim());
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-background">
+      <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-background">
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-xl font-bold">Smart Highlight Editor</h2>
-            <p className="text-muted-foreground text-sm">Associate highlights with specific images for accurate representation</p>
+            <h2 className="text-xl font-bold">Image Highlights Editor</h2>
+            <p className="text-muted-foreground text-sm">Each image has one specific highlight that captures its most notable feature</p>
           </div>
           <div className="flex items-center space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setShowPreview(!showPreview)}
+            <Button
+              onClick={handleRegenerateHighlights}
+              disabled={isRegenerating}
+              size="sm"
+              variant="outline"
             >
-              {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              <Wand2 className="w-4 h-4 mr-2" />
+              {isRegenerating ? 'Generating...' : 'Regenerate All'}
             </Button>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="w-5 h-5" />
@@ -166,186 +184,92 @@ export const PropertyHighlightEditor = ({
         </div>
 
         <div className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Column - Highlights Management */}
-            <div className="space-y-6">
-              {/* AI Regeneration */}
-              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg border">
-                <div>
-                  <h3 className="font-medium">AI-Generated Highlights</h3>
-                  <p className="text-sm text-muted-foreground">Generate new highlights from your images</p>
-                </div>
-                <Button
-                  onClick={handleRegenerateHighlights}
-                  disabled={isRegenerating}
-                  size="sm"
-                >
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  {isRegenerating ? 'Generating...' : 'Generate'}
-                </Button>
-              </div>
-
-              {/* Highlights List */}
-              <div>
-                <Label className="text-base font-semibold">Highlights</Label>
-                <div className="space-y-3 mt-3">
-                  {highlightsWithImages.map((highlight, index) => (
-                    <div 
-                      key={index} 
-                      className={`p-3 border rounded-lg transition-all ${
-                        selectedHighlight === index ? 'border-primary bg-primary/5' : ''
-                      }`}
-                    >
-                      <div className="flex items-start space-x-3">
-                        <Textarea
-                          value={highlight.text}
-                          onChange={(e) => updateHighlight(index, e.target.value)}
-                          className="flex-1 min-h-[40px] resize-none"
-                          placeholder="Enter highlight description..."
-                          onClick={() => setSelectedHighlight(index)}
-                        />
-                        <div className="flex flex-col items-center space-y-2">
-                          <Badge variant="outline" className="text-xs">
-                            {highlight.associatedImages.length} images
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => removeHighlight(index)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+          {/* Image Grid with Highlights */}
+          <div className="space-y-6">
+            {property.images && property.images.length > 0 ? (
+              <div className="space-y-4">
+                {property.images.map((image, index) => {
+                  const imageHighlight = imageHighlights.find(h => h.imageIndex === index);
+                  const isEditing = editingIndex === index;
                   
-                  {highlightsWithImages.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>No highlights yet. Add some or generate with AI.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Add New Highlight */}
-              <div>
-                <Label className="text-base font-semibold">Add New Highlight</Label>
-                <div className="flex items-center space-x-3 mt-3">
-                  <Textarea
-                    value={newHighlight}
-                    onChange={(e) => setNewHighlight(e.target.value)}
-                    placeholder="Enter a new highlight..."
-                    className="flex-1 min-h-[40px] resize-none"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        addHighlight();
-                      }
-                    }}
-                  />
-                  <Button
-                    onClick={addHighlight}
-                    disabled={!newHighlight.trim()}
-                    size="sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column - Image Association */}
-            <div className="space-y-6">
-              {/* Image Gallery */}
-              <div>
-                <Label className="text-base font-semibold">Associate Images</Label>
-                {selectedHighlight !== null && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Select images for: "{highlightsWithImages[selectedHighlight]?.text.substring(0, 40)}..."
-                  </p>
-                )}
-                
-                {property.images && property.images.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    {property.images.map((image, imageIndex) => (
-                      <div key={imageIndex} className="relative group">
-                        <img
-                          src={image}
-                          alt={`Property image ${imageIndex + 1}`}
-                          className="w-full h-24 object-cover rounded-lg border"
-                        />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                          <span className="text-white text-sm font-medium">#{imageIndex + 1}</span>
+                  return (
+                    <div key={index} className="border rounded-lg p-4 bg-background">
+                      <div className="flex gap-4">
+                        {/* Image */}
+                        <div className="relative w-48 h-32 flex-shrink-0">
+                          <img
+                            src={image}
+                            alt={`Property image ${index + 1}`}
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                          <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                            #{index + 1}
+                          </div>
                         </div>
                         
-                        {/* Association checkboxes for each highlight */}
-                        <div className="absolute top-2 right-2 flex flex-col space-y-1">
-                          {highlightsWithImages.map((highlight, highlightIndex) => (
-                            <div
-                              key={highlightIndex}
-                              className={`w-5 h-5 rounded border-2 cursor-pointer transition-all ${
-                                highlight.associatedImages.includes(imageIndex)
-                                  ? 'bg-primary border-primary'
-                                  : 'bg-background border-border'
-                              } ${selectedHighlight === highlightIndex ? 'ring-2 ring-primary/50' : ''}`}
-                              onClick={() => toggleImageAssociation(highlightIndex, imageIndex)}
-                              title={`Associate with: ${highlight.text.substring(0, 30)}${highlight.text.length > 30 ? '...' : ''}`}
-                            >
-                              {highlight.associatedImages.includes(imageIndex) && (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <div className="w-2 h-2 bg-primary-foreground rounded-full" />
-                                </div>
-                              )}
+                        {/* Highlight */}
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-primary" />
+                            <Label className="font-medium">Image Highlight</Label>
+                          </div>
+                          
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editingText}
+                                onChange={(e) => setEditingText(e.target.value)}
+                                placeholder="Enter specific highlight for this image..."
+                                className="min-h-[60px]"
+                              />
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={saveEdit}>Save</Button>
+                                <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                              </div>
                             </div>
-                          ))}
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <Badge 
+                                variant="secondary" 
+                                className="text-sm px-3 py-1 cursor-pointer hover:bg-secondary/80"
+                                onClick={() => startEditing(index, imageHighlight?.highlight || '')}
+                              >
+                                {imageHighlight?.highlight || 'Click to add highlight'}
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => startEditing(index, imageHighlight?.highlight || '')}
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Image className="w-12 h-12 mx-auto mb-2" />
-                    <p>No images available for association</p>
-                  </div>
-                )}
+                    </div>
+                  );
+                })}
               </div>
-
-              {/* Preview */}
-              {showPreview && validHighlights.length > 0 && (
-                <div>
-                  <Label className="text-base font-semibold">Preview (Highlights with Images)</Label>
-                  <div className="flex flex-wrap gap-2 mt-3 p-4 bg-muted/50 rounded-lg">
-                    {validHighlights.map((highlight, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {highlight.text.length > 25 ? highlight.text.substring(0, 25) + '...' : highlight.text}
-                      </Badge>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Only highlights with associated images will be saved ({validHighlights.length} of {highlightsWithImages.length})
-                  </p>
-                </div>
-              )}
-            </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No images available</p>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
           <div className="flex justify-between items-center pt-6 border-t mt-6">
             <div className="text-sm text-muted-foreground">
-              {validHighlights.length} highlights ready to save
+              {validHighlights.length} of {property.images?.length || 0} images have highlights
             </div>
             <div className="flex space-x-3">
               <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button 
-                onClick={handleSave}
-                disabled={validHighlights.length === 0}
-              >
+              <Button onClick={handleSave}>
                 <Save className="w-4 h-4 mr-2" />
-                Save {validHighlights.length} Highlights
+                Save Highlights
               </Button>
             </div>
           </div>

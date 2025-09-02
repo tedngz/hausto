@@ -87,43 +87,31 @@ serve(async (req) => {
       const imageUrl = imageUrls[index];
       
       try {
-        const basePrompt = generateContent 
-          ? `Analyze this rental property image in extreme detail for a real estate listing. Focus on SPECIFIC, VISIBLE features:
+          const basePrompt = generateContent 
+            ? `Analyze this rental property image for a real estate listing. Create ONE specific, compelling highlight that captures the most notable feature visible in this image.
 
-            ARCHITECTURAL FEATURES:
-            - Windows (type, size, placement, views)
-            - Ceilings (height, exposed beams, molding, lighting fixtures)
-            - Floors (material, pattern, condition)
-            - Walls (materials, finishes, built-ins)
-            - Doors and entryways
+            Focus on what makes THIS specific image special:
+            - Unique architectural features (floor-to-ceiling windows, exposed beams, vaulted ceilings)
+            - Premium materials (marble countertops, hardwood floors, stainless steel appliances)
+            - Design elements (built-in storage, designer lighting, custom finishes)
+            - Functional features (walk-in closets, spa-like bathrooms, gourmet kitchens)
+            - Views and lighting (panoramic views, abundant natural light, designer fixtures)
+            - Luxury touches (high-end appliances, premium finishes, smart features)
+
+            Return a JSON object with:
+            1. Vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant
+            2. "image_highlight": ONE specific 2-4 word phrase describing the most compelling feature visible
+            3. "detailed_analysis": Brief description of what makes this image notable
             
-            DESIGN ELEMENTS:
-            - Furniture pieces and their style
-            - Color palette and materials
-            - Textures and patterns visible
-            - Storage solutions
-            - Art and decorative elements
-            
-            FUNCTIONAL FEATURES:
-            - Kitchen appliances and fixtures (brands, materials, layout)
-            - Bathroom fixtures and finishes
-            - Built-in storage and closets
-            - Technology and smart features visible
-            
-            LIGHTING & AMBIANCE:
-            - Natural light sources and quality
-            - Light fixtures and their style
-            - Overall brightness and atmosphere
-            
-            UNIQUE SELLING POINTS:
-            - What makes this space special and memorable?
-            - Premium features or luxury touches
-            - Views or outdoor spaces visible
-            
-            Be extremely specific - mention exact materials, finishes, appliance types, lighting fixtures, and architectural details that a potential renter would notice and value.
-            
-            Return a JSON object with vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus a 'detailed_analysis' field with your specific observations.`
-          : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant. Also provide a brief description of the overall vibe.`;
+            Examples of good highlights:
+            - "Floor-to-ceiling windows"
+            - "Marble kitchen island" 
+            - "Built-in wardrobes"
+            - "Designer pendant lighting"
+            - "Panoramic city views"
+            - "Spa-like bathroom"
+            - "Hardwood flooring"`
+            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
@@ -342,7 +330,10 @@ IMPORTANT RULES:
 
 ${propertyContext}
 
-Detailed Image Analysis:
+Image-Specific Highlights:
+${analyses.map((a, i) => `Image ${i + 1}: ${a.image_highlight || 'Notable feature'}`).join('\n')}
+
+Detailed Analysis:
 ${detailedAnalyses}
 
 Visual Characteristics (1-10 scale):
@@ -355,24 +346,15 @@ Visual Characteristics (1-10 scale):
 - Urban: ${aggregated.urban}/10
 - Elegant: ${aggregated.elegant}/10
 
-Based on what you can see in the images and the property details, create:
+Based on the image-specific highlights and visual analysis, create:
 
 1. A unique, catchy title (50-80 characters) that captures the property's distinctive features
-2. An engaging description (150-250 words) that mentions specific visual elements, architectural features, and lifestyle benefits you observed
-3. 6-8 compelling highlights that are SPECIFIC to what is visible in the images. Focus on:
-   - Specific architectural features (e.g., "Floor-to-ceiling windows", "Exposed brick walls", "Vaulted ceilings")
-   - Unique design elements (e.g., "Industrial steel beams", "Marble kitchen island", "Built-in wardrobes")
-   - Visible amenities (e.g., "Stainless steel appliances", "Walk-in shower", "Private balcony")
-   - Lighting and ambiance (e.g., "Abundant natural light", "Designer pendant lighting", "Panoramic city views")
-   - Materials and finishes (e.g., "Hardwood flooring", "Granite countertops", "Custom millwork")
-
-Each highlight should be 2-4 words describing something you can actually SEE in the photos. Avoid generic terms like "great location" or "modern amenities".
+2. An engaging description (150-250 words) that mentions the specific visual elements from each image
 
 Return JSON format:
 {
   "title": "your unique title",
-  "description": "your detailed description mentioning specific visual features",
-  "highlights": ["specific feature 1", "specific feature 2", "specific feature 3", "specific feature 4", "specific feature 5", "specific feature 6"]
+  "description": "your detailed description mentioning specific visual features"
 }`
             }
           ],
