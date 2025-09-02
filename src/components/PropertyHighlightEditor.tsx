@@ -39,8 +39,8 @@ export const PropertyHighlightEditor = ({
       let highlight = '';
       if (analysisForImage?.image_highlight) {
         highlight = analysisForImage.image_highlight;
-      } else if (analysisForImage?.detailed_analysis) {
-        // Extract feature from detailed analysis
+      } else if (analysisForImage?.detailed_analysis && typeof analysisForImage.detailed_analysis === 'string') {
+        // Extract feature from detailed analysis (only if it's a string)
         const analysis = analysisForImage.detailed_analysis.toLowerCase();
         if (analysis.includes('kitchen') && analysis.includes('modern')) {
           highlight = 'Modern equipped kitchen';
