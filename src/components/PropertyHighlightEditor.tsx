@@ -173,8 +173,12 @@ export const PropertyHighlightEditor = ({
         </div>
 
         <div className="p-6">
-          {/* Same layout as "More Photos" section in PropertyCard */}
           <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold mb-2">AI Generated Highlights</h3>
+              <p className="text-sm text-muted-foreground mb-4">Edit these highlights to match your images accurately</p>
+            </div>
+
             {property.images && property.images.length > 0 ? (
               <div className="space-y-4">
                 {property.images.map((image, index) => {
@@ -182,67 +186,73 @@ export const PropertyHighlightEditor = ({
                   const isEditing = editingIndex === index;
                   
                   return (
-                    <div key={index} className="space-y-2">
-                      {isEditing ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="w-3 h-3 text-primary" />
-                            <Label className="text-sm font-medium">Edit Highlight</Label>
-                          </div>
-                          <Textarea
-                            value={editingText}
-                            onChange={(e) => setEditingText(e.target.value)}
-                            placeholder="Enter specific highlight for this image..."
-                            className="text-sm"
-                          />
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={saveEdit}>
-                              <Save className="w-3 h-3 mr-1" />
-                              Save
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="w-3 h-3 text-primary" />
-                            <span 
-                              className="text-sm text-primary cursor-pointer hover:underline"
-                              onClick={() => startEditing(index, imageHighlight?.highlight || '')}
-                            >
-                              {imageHighlight?.highlight || 'Click to add highlight'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0"
-                              onClick={() => startEditing(index, imageHighlight?.highlight || '')}
-                            >
-                              <Edit className="w-3 h-3" />
-                            </Button>
-                            {imageHighlight?.highlight && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                onClick={() => deleteHighlight(index)}
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="relative h-48">
+                    <div key={index} className="flex gap-4 p-4 border rounded-lg">
+                      {/* Medium-sized image */}
+                      <div className="flex-shrink-0">
                         <img
                           src={image}
                           alt={`${property.title} - Image ${index + 1}`}
-                          className="w-full h-full object-cover rounded-md"
+                          className="w-32 h-24 object-cover rounded-md"
                         />
+                      </div>
+                      
+                      {/* Highlight content */}
+                      <div className="flex-1 space-y-2">
+                        {isEditing ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-primary" />
+                              <Label className="text-sm font-medium">Edit Highlight</Label>
+                            </div>
+                            <Textarea
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              placeholder="Enter specific highlight for this image..."
+                              className="text-sm"
+                            />
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={saveEdit}>
+                                <Save className="w-3 h-3 mr-1" />
+                                Save
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                                <p 
+                                  className="text-sm cursor-pointer hover:text-primary transition-colors"
+                                  onClick={() => startEditing(index, imageHighlight?.highlight || '')}
+                                >
+                                  {imageHighlight?.highlight || 'Click to add highlight'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 ml-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => startEditing(index, imageHighlight?.highlight || '')}
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                {imageHighlight?.highlight && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                    onClick={() => deleteHighlight(index)}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
