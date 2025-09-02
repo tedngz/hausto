@@ -7,7 +7,7 @@ import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye } from 'lu
 import { PropertyCard } from '@/components/PropertyCard';
 import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
-import { HighlightRegenerationButton } from '@/components/HighlightRegenerationButton';
+
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { AIChatAgent } from '@/components/AIChatAgent';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
@@ -113,16 +113,13 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                 <h2 className="text-xl font-semibold text-slate-900">My Properties</h2>
                 <p className="text-slate-600 text-sm">Manage your listed properties</p>
               </div>
-              <div className="flex gap-3">
-                <HighlightRegenerationButton />
-                <Button 
-                  onClick={() => setIsUploadModalOpen(true)}
-                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Add Property
-                </Button>
-              </div>
+              <Button 
+                onClick={() => setIsUploadModalOpen(true)}
+                className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Add Property
+              </Button>
             </div>
           </div>
           

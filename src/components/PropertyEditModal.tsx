@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, MapPin } from 'lucide-react';
+import { X, Upload, MapPin, Wand2 } from 'lucide-react';
+import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
@@ -27,6 +28,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
+  const [isHighlightEditorOpen, setIsHighlightEditorOpen] = useState(false);
+  const [currentHighlights, setCurrentHighlights] = useState<string[]>([]);
 
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
@@ -57,6 +60,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setPrice(convertPrice(property.price).toString());
       setSize(property.size?.replace('m²', '') || '');
       setSelectedVibes(property.highlights || []);
+      setCurrentHighlights(property.vibe_analysis?.generated_content?.highlights || property.highlights || []);
       setExistingImages(property.images || []);
     }
   }, [property, convertPrice]);
@@ -109,7 +113,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       price: priceInVND,
       size: size ? `${size}m²` : undefined,
       vibe: selectedVibes[0] || null,
-      highlights: selectedVibes,
+      highlights: currentHighlights.length > 0 ? currentHighlights : selectedVibes,
       newImageFiles,
       existingImages,
     });
@@ -252,6 +256,43 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
+          {/* AI-Generated Highlights */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <Label className="text-base font-semibold">Property Highlights</Label>
+                <p className="text-sm text-gray-600">AI-generated and custom highlights</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsHighlightEditorOpen(true)}
+                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                <Wand2 className="w-4 h-4 mr-2" />
+                Edit Highlights
+              </Button>
+            </div>
+            {currentHighlights.length > 0 ? (
+              <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg">
+                {currentHighlights.slice(0, 6).map((highlight, index) => (
+                  <Badge key={index} variant="secondary" className="text-xs">
+                    {highlight.length > 25 ? highlight.substring(0, 25) + '...' : highlight}
+                  </Badge>
+                ))}
+                {currentHighlights.length > 6 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{currentHighlights.length - 6} more
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center">
+                <p className="text-gray-500">No highlights yet. Click "Edit Highlights" to add or generate them.</p>
+              </div>
+            )}
+          </div>
+
           {/* Vibe Selection */}
           <div>
             <Label className="text-base font-semibold">Property Vibes</Label>
@@ -308,6 +349,18 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           </div>
         </div>
       </Card>
+
+      {property && (
+        <PropertyHighlightEditor
+          property={property}
+          isOpen={isHighlightEditorOpen}
+          onClose={() => setIsHighlightEditorOpen(false)}
+          onHighlightsUpdate={(highlights) => {
+            setCurrentHighlights(highlights);
+            setIsHighlightEditorOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };
