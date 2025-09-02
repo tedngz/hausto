@@ -39,26 +39,10 @@ export const PropertyHighlightEditor = ({
       let highlight = '';
       if (analysisForImage?.image_highlight) {
         highlight = analysisForImage.image_highlight;
-      } else if (analysisForImage?.detailed_analysis && typeof analysisForImage.detailed_analysis === 'string') {
-        // Extract feature from detailed analysis (only if it's a string)
-        const analysis = analysisForImage.detailed_analysis.toLowerCase();
-        if (analysis.includes('kitchen') && analysis.includes('modern')) {
-          highlight = 'Modern equipped kitchen';
-        } else if (analysis.includes('bathroom') && analysis.includes('luxury')) {
-          highlight = 'Luxurious bathroom facilities';
-        } else if (analysis.includes('bedroom') && analysis.includes('spacious')) {
-          highlight = 'Spacious bedroom design';
-        } else if (analysis.includes('living') && analysis.includes('open')) {
-          highlight = 'Open plan living space';
-        } else if (analysis.includes('natural light') || analysis.includes('bright')) {
-          highlight = 'Abundant natural light';
-        } else {
-          highlight = 'Beautiful interior feature';
-        }
       } else {
         // Use general highlights if available
         const generalHighlights = property.vibe_analysis?.generated_content?.highlights || property.highlights || [];
-        highlight = generalHighlights[index % generalHighlights.length] || 'Notable feature';
+        highlight = generalHighlights[index % generalHighlights.length] || `Feature ${index + 1}`;
       }
       
       return { imageIndex: index, highlight };
@@ -147,6 +131,13 @@ export const PropertyHighlightEditor = ({
     setEditingText('');
   };
 
+  const deleteHighlight = (index: number) => {
+    const updated = imageHighlights.map((h, i) => 
+      i === index ? { ...h, highlight: '' } : h
+    );
+    setImageHighlights(updated);
+  };
+
   const handleSave = () => {
     const highlights = imageHighlights
       .filter(h => h.highlight.trim())
@@ -157,15 +148,13 @@ export const PropertyHighlightEditor = ({
 
   if (!isOpen) return null;
 
-  const validHighlights = imageHighlights.filter(h => h.highlight.trim());
-
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-background">
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-xl font-bold">Image Highlights Editor</h2>
-            <p className="text-muted-foreground text-sm">Each image has one specific highlight that captures its most notable feature</p>
+            <h2 className="text-xl font-bold">Property Highlights</h2>
+            <p className="text-muted-foreground text-sm">AI-generated and custom highlights for each image</p>
           </div>
           <div className="flex items-center space-x-2">
             <Button
@@ -175,7 +164,7 @@ export const PropertyHighlightEditor = ({
               variant="outline"
             >
               <Wand2 className="w-4 h-4 mr-2" />
-              {isRegenerating ? 'Generating...' : 'Regenerate All'}
+              {isRegenerating ? 'Regenerate All' : 'Regenerate All'}
             </Button>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="w-5 h-5" />
@@ -184,7 +173,7 @@ export const PropertyHighlightEditor = ({
         </div>
 
         <div className="p-6">
-          {/* Image Grid with Highlights */}
+          {/* Same layout as "More Photos" section in PropertyCard */}
           <div className="space-y-6">
             {property.images && property.images.length > 0 ? (
               <div className="space-y-4">
@@ -193,59 +182,67 @@ export const PropertyHighlightEditor = ({
                   const isEditing = editingIndex === index;
                   
                   return (
-                    <div key={index} className="border rounded-lg p-4 bg-background">
-                      <div className="flex gap-4">
-                        {/* Image */}
-                        <div className="relative w-48 h-32 flex-shrink-0">
-                          <img
-                            src={image}
-                            alt={`Property image ${index + 1}`}
-                            className="w-full h-full object-cover rounded-lg"
+                    <div key={index} className="space-y-2">
+                      {isEditing ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-3 h-3 text-primary" />
+                            <Label className="text-sm font-medium">Edit Highlight</Label>
+                          </div>
+                          <Textarea
+                            value={editingText}
+                            onChange={(e) => setEditingText(e.target.value)}
+                            placeholder="Enter specific highlight for this image..."
+                            className="text-sm"
                           />
-                          <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                            #{index + 1}
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={saveEdit}>
+                              <Save className="w-3 h-3 mr-1" />
+                              Save
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
                           </div>
                         </div>
-                        
-                        {/* Highlight */}
-                        <div className="flex-1 space-y-2">
+                      ) : (
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-primary" />
-                            <Label className="font-medium">Image Highlight</Label>
+                            <Sparkles className="w-3 h-3 text-primary" />
+                            <span 
+                              className="text-sm text-primary cursor-pointer hover:underline"
+                              onClick={() => startEditing(index, imageHighlight?.highlight || '')}
+                            >
+                              {imageHighlight?.highlight || 'Click to add highlight'}
+                            </span>
                           </div>
-                          
-                          {isEditing ? (
-                            <div className="space-y-2">
-                              <Textarea
-                                value={editingText}
-                                onChange={(e) => setEditingText(e.target.value)}
-                                placeholder="Enter specific highlight for this image..."
-                                className="min-h-[60px]"
-                              />
-                              <div className="flex gap-2">
-                                <Button size="sm" onClick={saveEdit}>Save</Button>
-                                <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between">
-                              <Badge 
-                                variant="secondary" 
-                                className="text-sm px-3 py-1 cursor-pointer hover:bg-secondary/80"
-                                onClick={() => startEditing(index, imageHighlight?.highlight || '')}
-                              >
-                                {imageHighlight?.highlight || 'Click to add highlight'}
-                              </Badge>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() => startEditing(index, imageHighlight?.highlight || '')}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            {imageHighlight?.highlight && (
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => startEditing(index, imageHighlight?.highlight || '')}
+                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                                onClick={() => deleteHighlight(index)}
                               >
-                                <Edit className="w-3 h-3" />
+                                <X className="w-3 h-3" />
                               </Button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
+                      )}
+                      
+                      <div className="relative h-48">
+                        <img
+                          src={image}
+                          alt={`${property.title} - Image ${index + 1}`}
+                          className="w-full h-full object-cover rounded-md"
+                        />
                       </div>
                     </div>
                   );
@@ -261,7 +258,7 @@ export const PropertyHighlightEditor = ({
           {/* Action Buttons */}
           <div className="flex justify-between items-center pt-6 border-t mt-6">
             <div className="text-sm text-muted-foreground">
-              {validHighlights.length} of {property.images?.length || 0} images have highlights
+              {imageHighlights.filter(h => h.highlight.trim()).length} of {property.images?.length || 0} images have highlights
             </div>
             <div className="flex space-x-3">
               <Button variant="outline" onClick={onClose}>
