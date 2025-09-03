@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useCurrency } from '@/contexts/CurrencyContext';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { useMatches } from '@/hooks/useMatches';
@@ -17,111 +17,6 @@ import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
 import { UserPreferences } from '@/types';
 import { useChat } from '@/hooks/useChat';
-
-// AI Response Renderer Component
-interface AIResponseRendererProps {
-  content: string;
-  onPropertyClick: (property: PropertyMatch) => void;
-  onLikeProperty: (propertyId: string) => void;
-  likedProperties: Set<string>;
-  formatPrice: (price: number) => string;
-  userPreferences?: UserPreferences;
-}
-
-const AIResponseRenderer = ({ content, onPropertyClick, onLikeProperty, likedProperties, formatPrice, userPreferences }: AIResponseRendererProps) => {
-  try {
-    // Try to parse the content as JSON to extract property results
-    const parsed = JSON.parse(content);
-    
-    if (parsed.results && Array.isArray(parsed.results)) {
-      return (
-        <div className="space-y-3">
-          {parsed.summary && (
-            <p className="text-sm mb-3">{parsed.summary}</p>
-          )}
-          
-          <div className="space-y-2">
-            {parsed.results.map((property: PropertyMatch) => (
-              <Card 
-                key={property.id} 
-                className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer"
-                onClick={() => onPropertyClick(property)}
-              >
-                <CardContent className="p-3">
-                  <div className="flex gap-3">
-                    {/* Property Image */}
-                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                      {property.images && property.images.length > 0 ? (
-                        <img 
-                          src={property.images[0]} 
-                          alt={property.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Home className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Property Details */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between mb-1">
-                        <div className="flex-1 min-w-0 pr-2">
-                          <h5 className="font-semibold text-foreground line-clamp-1 text-sm">{property.title}</h5>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <MapPin className="h-3 w-3 flex-shrink-0" />
-                            <span className="line-clamp-1">{property.location}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
-                            {property.matchScore}% match
-                          </Badge>
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onLikeProperty(property.id);
-                            }}
-                            size="sm"
-                            variant={likedProperties.has(property.id) ? "default" : "outline"}
-                            className={`h-6 w-6 p-0 ${
-                              likedProperties.has(property.id) 
-                                ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                : 'hover:bg-red-50 hover:text-red-500'
-                            }`}
-                          >
-                            <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                        <div className="flex items-center gap-1">
-                          <DollarSign className="h-3 w-3" />
-                          <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
-                        </div>
-                        {property.size && <span>{property.size}</span>}
-                      </div>
-
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        <strong>Why it matches:</strong> {property.matchReason}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      );
-    }
-  } catch (e) {
-    // If content is not JSON or doesn't have expected structure, show as text
-  }
-  
-  return <p className="text-sm whitespace-pre-wrap">{content}</p>;
-};
 
 interface PropertyMatch {
   id: string;
@@ -474,33 +369,178 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
             {/* Chat Messages */}
             {messages.length > 0 && (
               <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
-                {messages.map((message, index) => (
-                  <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] p-3 rounded-lg ${
-                      message.role === 'user' 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'bg-secondary text-secondary-foreground'
-                    }`}>
-                      {message.role === 'assistant' ? (
-                        <AIResponseRenderer content={message.content} onPropertyClick={handlePropertyClick} onLikeProperty={handleLikeProperty} likedProperties={likedProperties} formatPrice={formatPrice} userPreferences={userPreferences} />
-                      ) : (
-                        <p className="text-sm">{message.content}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                {messages.map((message, index) => {
+                  if (message.role === 'user') {
+                    return (
+                      <div key={index} className="flex justify-end">
+                        <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+                          <p className="text-sm">{message.content}</p>
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // AI message - try to parse for property results
+                    let searchResults: SearchResult | null = null;
+                    try {
+                      const parsed = JSON.parse(message.content);
+                      if (parsed.results && Array.isArray(parsed.results)) {
+                        searchResults = parsed;
+                      }
+                    } catch (e) {
+                      // Not JSON, treat as regular text
+                    }
+
+                    if (searchResults) {
+                      return (
+                        <div key={index} className="flex justify-start">
+                          <div className="max-w-[95%] space-y-4">
+                            {searchResults.summary && (
+                              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                                <p className="text-sm">{searchResults.summary}</p>
+                              </div>
+                            )}
+                            
+                            {searchResults.results.length > 0 && (
+                              <div className="space-y-3">
+                                <h4 className="font-semibold text-foreground">Properties for you:</h4>
+                                <div className="grid gap-3">
+                                  {searchResults.results.map((property) => (
+                                    <Card 
+                                      key={property.id} 
+                                      className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer"
+                                      onClick={() => handlePropertyClick(property)}
+                                    >
+                                      <CardContent className="p-3 sm:p-4">
+                                        <div className="flex gap-3 sm:gap-4">
+                                          {/* Property Image */}
+                                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                                            {property.images && property.images.length > 0 ? (
+                                              <img 
+                                                src={property.images[0]} 
+                                                alt={property.title}
+                                                className="w-full h-full object-cover"
+                                              />
+                                            ) : (
+                                              <div className="w-full h-full flex items-center justify-center">
+                                                <Home className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Property Details */}
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between mb-2">
+                                              <div className="flex-1 min-w-0 pr-2">
+                                                <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
+                                                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                                                  <MapPin className="h-3 w-3 flex-shrink-0" />
+                                                  <span className="line-clamp-1">{property.location}</span>
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-2">
+                                                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                                                  {property.matchScore}% match
+                                                </Badge>
+                                                {userPreferences && (
+                                                  <VibeScore 
+                                                    score={calculateVibeScore({
+                                                      id: property.id,
+                                                      images: property.images,
+                                                      title: property.title,
+                                                      location: property.location,
+                                                      price: property.price,
+                                                      size: property.size,
+                                                      vibe: property.vibe,
+                                                      description: property.description,
+                                                      highlights: property.highlights,
+                                                      realtor: { id: '', name: '', phone: '', email: '' },
+                                                      vibe_analysis: property.vibe_analysis
+                                                    }, userPreferences)}
+                                                    size="sm"
+                                                  />
+                                                )}
+                                                <Button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleLikeProperty(property.id);
+                                                  }}
+                                                  size="sm"
+                                                  variant={likedProperties.has(property.id) ? "default" : "outline"}
+                                                  className={`h-7 w-7 p-0 ${
+                                                    likedProperties.has(property.id) 
+                                                      ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                                      : 'hover:bg-red-50 hover:text-red-500'
+                                                  }`}
+                                                >
+                                                  <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                                                </Button>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
+                                              <div className="flex items-center gap-1">
+                                                <DollarSign className="h-3 w-3" />
+                                                <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
+                                              </div>
+                                              {property.size && (
+                                                <span>{property.size}</span>
+                                              )}
+                                              {property.vibe && (
+                                                <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
+                                              )}
+                                            </div>
+
+                                            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                                              <strong>Why it matches:</strong> {property.matchReason}
+                                            </p>
+
+                                            {/* Property Highlights */}
+                                            {property.highlights && property.highlights.length > 0 && (
+                                              <div className="flex flex-wrap gap-1">
+                                                {property.highlights.slice(0, 2).map((highlight, index) => (
+                                                  <Badge key={index} variant="outline" className="text-xs">
+                                                    {highlight}
+                                                  </Badge>
+                                                ))}
+                                                {property.highlights.length > 2 && (
+                                                  <Badge variant="outline" className="text-xs">
+                                                    +{property.highlights.length - 2} more
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // Regular AI text response
+                      return (
+                        <div key={index} className="flex justify-start">
+                          <div className="max-w-[80%] p-3 rounded-lg bg-secondary text-secondary-foreground">
+                            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+                })}
                 
                 {/* AI Thinking Animation */}
                 {isSendingMessage && (
                   <div className="flex justify-start">
                     <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <div className="flex space-x-1">
-                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                        </div>
-                        <span className="text-sm text-muted-foreground">AI is thinking...</span>
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
                     </div>
                   </div>
