@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -55,7 +55,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
-  const [allResults, setAllResults] = useState<PropertyMatch[]>([]);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, loading } = useAuth();
@@ -78,6 +77,24 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     deleteConversation,
     isDeletingConversation,
   } = useChat();
+
+  // Compute all results from messages to avoid infinite re-renders
+  const allResults = useMemo(() => {
+    const results: PropertyMatch[] = [];
+    messages.forEach(message => {
+      if (message.role === 'assistant') {
+        try {
+          const parsed = JSON.parse(message.content);
+          if (parsed.results && Array.isArray(parsed.results)) {
+            results.push(...parsed.results);
+          }
+        } catch (e) {
+          // Not JSON, ignore
+        }
+      }
+    });
+    return results;
+  }, [messages]);
 
   // Initialize first conversation if needed
   useEffect(() => {
@@ -112,7 +129,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     setQuery('');
     setUploadedImages([]);
     setSearchResults(null);
-    setAllResults([]);
     setShowHistory(false);
   };
 
@@ -365,7 +381,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                       const parsed = JSON.parse(message.content);
                       if (parsed.results && Array.isArray(parsed.results)) {
                         searchResults = parsed;
-                        setAllResults(parsed.results); // Store results for like functionality
                       }
                     } catch (e) {
                       // Not JSON, treat as regular text
