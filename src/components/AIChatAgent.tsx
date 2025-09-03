@@ -59,7 +59,6 @@ export const AIChatAgent = ({
     sendMessage: sendDirectMessage,
     isSendingMessage: isSendingDirectMessage,
     messages: directMessages,
-    conversations: directConversations,
     setCurrentMatchId,
     loadingMessages: loadingDirectMessages,
     markAsRead,
@@ -132,11 +131,10 @@ export const AIChatAgent = ({
         createConversation('New Conversation');
       }
     } else if (activeTab === 'messages' && selectedMatch) {
-      const currentConversation = directConversations.find(conv => conv.match_id === selectedMatch);
-      if (currentConversation) {
-        const receiverId = user?.id === currentConversation.property_matches?.realtor_id 
-          ? currentConversation.property_matches.renter_id 
-          : currentConversation.property_matches.realtor_id;
+      const matches = userType === 'renter' ? renterMatches : realtorMatches;
+      const match = matches.find(m => m.id === selectedMatch);
+      if (match) {
+        const receiverId = user?.id === match.realtor_id ? match.renter_id : match.realtor_id;
         sendDirectMessage({
           matchId: selectedMatch,
           content: inputMessage.trim(),
@@ -175,7 +173,7 @@ export const AIChatAgent = ({
     return "Hi! I'm Hausto AI, your rental property assistant.";
   };
 
-  const matches = directConversations;
+  const matches = userType === 'renter' ? renterMatches : realtorMatches;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -185,7 +183,7 @@ export const AIChatAgent = ({
           Chat with Hausto AI assistant for property recommendations and real estate help
         </DialogDescription>
         <div className="p-3 md:p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
-          <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Message box</h2>
+          <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Hausto Chat</h2>
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -194,36 +192,60 @@ export const AIChatAgent = ({
               <div className="p-3 border-b bg-gray-50">
                 <h3 className="font-semibold text-gray-900">Your Conversations</h3>
                 <p className="text-sm text-gray-600">
-                  {matches.length} conversation{matches.length !== 1 ? 's' : ''}
+                  Chat with AI assistant or {matches.length} conversation{matches.length !== 1 ? 's' : ''}
                 </p>
               </div>
               
               <ScrollArea className="flex-1 p-3">
                 <div className="space-y-3">
+                  {/* AI Assistant as first profile */}
+                  <div
+                    onClick={() => setActiveTab('ai')}
+                    className="p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200"
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
+                        <Bot className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 mb-1">
+                          Hausto AI Assistant
+                        </p>
+                        <p className="text-sm text-gray-600 truncate mb-2">
+                          {userType === 'realtor' 
+                            ? 'Help with property marketing and descriptions'
+                            : 'Ask about properties and neighborhoods'
+                          }
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800">
+                            AI Assistant
+                          </Badge>
+                          <span className="text-xs text-green-500 font-medium">
+                            Always Online
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
                   {/* User conversations */}
-                  {matches.map((conversation) => {
+                  {matches.map((match) => {
                     const isRealtor = userType === 'realtor';
-                    const otherUserName = isRealtor ? conversation.renter_name : conversation.realtor_name;
-                    const otherUserId = isRealtor ? conversation.property_matches?.renter_id : conversation.property_matches?.realtor_id;
-                    const otherUserAvatar = isRealtor ? conversation.renter_avatar : conversation.realtor_avatar;
-                    const hasUnreadMessages = conversation.unread_count && conversation.unread_count > 0;
+                    const otherUserName = isRealtor ? match.renter_name : match.realtor_name;
+                    const otherUserId = isRealtor ? match.renter_id : match.realtor_id;
                     
                     return (
                       <div
-                        key={conversation.id}
-                        onClick={() => handleMatchSelect(conversation.match_id)}
-                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200 relative"
+                        key={match.id}
+                        onClick={() => handleMatchSelect(match.id)}
+                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200"
                       >
-                        {hasUnreadMessages && (
-                          <div className="absolute top-2 right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">
-                            {conversation.unread_count}
-                          </div>
-                        )}
                         <div className="flex items-start space-x-3">
                           <Avatar className="w-12 h-12 flex-shrink-0">
-                            <AvatarImage src={otherUserAvatar} />
+                            <AvatarImage src={isRealtor ? match.renter_avatar : match.realtor_avatar} />
                             <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold">
-                              {otherUserName?.charAt(0) || (isRealtor ? 'R' : 'P')}
+                              {isRealtor ? 'R' : 'P'}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
@@ -240,25 +262,18 @@ export const AIChatAgent = ({
                             >
                               {otherUserName || (isRealtor ? 'Interested Renter' : 'Property Owner')}
                             </p>
-                            <p className="text-sm text-gray-600 truncate mb-2">{conversation.property_matches?.properties?.title}</p>
+                            <p className="text-sm text-gray-600 truncate mb-2">{match.properties?.title}</p>
                             <div className="flex items-center mb-2">
                               <MapPin className="w-3 h-3 text-gray-400 mr-1" />
-                              <span className="text-xs text-gray-500 truncate">{conversation.property_matches?.properties?.location}</span>
+                              <span className="text-xs text-gray-500 truncate">{match.properties?.location}</span>
                             </div>
                             <div className="flex items-center justify-between">
                               <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800">
-                                {formatPrice(conversation.property_matches?.properties?.price || 0)}/mo
+                                {formatPrice(match.properties?.price || 0)}/mo
                               </Badge>
-                              <div className="flex items-center gap-2">
-                                {hasUnreadMessages && (
-                                  <span className="text-xs text-red-500 font-medium">
-                                    New
-                                  </span>
-                                )}
-                                <span className="text-xs text-gray-400">
-                                  {new Date(conversation.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
+                              <span className="text-xs text-gray-400">
+                                {new Date(match.created_at).toLocaleDateString()}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -436,10 +451,10 @@ export const AIChatAgent = ({
                   </div>
                   <div>
                     {(() => {
-                      const currentConversation = directConversations.find(conv => conv.match_id === selectedMatch);
+                      const currentMatch = matches.find(m => m.id === selectedMatch);
                       const isRealtor = userType === 'realtor';
-                      const otherUserName = isRealtor ? currentConversation?.renter_name : currentConversation?.realtor_name;
-                      const otherUserId = isRealtor ? currentConversation?.property_matches?.renter_id : currentConversation?.property_matches?.realtor_id;
+                      const otherUserName = isRealtor ? currentMatch?.renter_name : currentMatch?.realtor_name;
+                      const otherUserId = isRealtor ? currentMatch?.renter_id : currentMatch?.realtor_id;
                       
                       return (
                         <>
@@ -460,39 +475,38 @@ export const AIChatAgent = ({
                     })()}
                     <button
                       onClick={() => {
-                        const currentConversation = directConversations.find(conv => conv.match_id === selectedMatch);
-                        if (currentConversation?.property_matches?.properties) {
-                          const property = currentConversation.property_matches.properties;
-                          // Transform conversation data for property modal
-                          const rawVA = property.vibe_analysis;
+                        const currentMatch = matches.find(m => m.id === selectedMatch);
+                        if (currentMatch) {
+                          // Transform match data exactly like in MatchesView for consistent vibe scoring
+                          const rawVA = currentMatch.properties?.vibe_analysis;
                           let parsedVA = rawVA;
                           if (rawVA && typeof rawVA === 'string') {
                             try { parsedVA = JSON.parse(rawVA); } catch { parsedVA = null; }
                           }
                           setDetailModalApartment({
-                            id: property.id,
-                            images: property.images || [],
-                            title: property.title,
-                            location: property.location,
-                            price: Number(property.price),
-                            size: property.size || '',
-                            vibe: property.vibe || '',
-                            description: property.description || '',
-                            highlights: property.highlights || [],
+                            id: currentMatch.properties.id,
+                            images: currentMatch.properties.images || [],
+                            title: currentMatch.properties.title,
+                            location: currentMatch.properties.location,
+                            price: Number(currentMatch.properties.price),
+                            size: currentMatch.properties.size || '',
+                            vibe: currentMatch.properties.vibe || '',
+                            description: currentMatch.properties.description || '',
+                            highlights: currentMatch.properties.highlights || [],
                             vibe_analysis: parsedVA,
                             realtor: {
-                              id: currentConversation.property_matches.realtor_id || '',
-                              name: currentConversation.realtor_name || 'Property Owner',
+                              id: currentMatch.properties.realtor_id || '',
+                              name: currentMatch.realtor_name || 'Property Owner',
                               phone: '+1-234-567-8900',
                               email: 'contact@realtor.com'
                             },
-                            matchId: selectedMatch
+                            matchId: currentMatch.id
                           });
                         }
                       }}
                       className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
                     >
-                      {directConversations.find(conv => conv.match_id === selectedMatch)?.property_matches?.properties?.title}
+                      {matches.find(m => m.id === selectedMatch)?.properties?.title}
                     </button>
                   </div>
                 </div>
@@ -511,11 +525,11 @@ export const AIChatAgent = ({
                   <div className="space-y-4">
                     {directMessages.map((message) => {
                       const isOwnMessage = message.sender_id === user?.id;
-                      const currentConversation = directConversations.find(conv => conv.match_id === selectedMatch);
+                      const currentMatch = matches.find(m => m.id === selectedMatch);
                       const isRealtor = userType === 'realtor';
                       const senderName = isOwnMessage 
                         ? 'You' 
-                        : (isRealtor ? (currentConversation?.renter_name || 'Renter') : (currentConversation?.realtor_name || 'Property Owner'));
+                        : (isRealtor ? (currentMatch?.renter_name || 'Renter') : (currentMatch?.realtor_name || 'Property Owner'));
                       
                       return (
                         <div
