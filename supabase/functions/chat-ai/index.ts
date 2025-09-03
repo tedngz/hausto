@@ -95,9 +95,18 @@ serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Verify user authentication
+    // Verify user authentication using service role key
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    // Create a client with the user's token for verification
+    const userSupabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+    
+    const { data: { user }, error: authError } = await userSupabase.auth.getUser(token);
     
     if (authError || !user) {
       console.error('Authentication failed:', authError);
