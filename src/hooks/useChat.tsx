@@ -146,13 +146,14 @@ export const useChat = () => {
 
       if (error) {
         console.error('Chat AI function error:', error);
-        throw new Error(`Chat failed: ${error.message || 'Unknown error'}`);
+        throw new Error(`Chat failed: ${error.message || 'Network error - please check your connection and try again'}`);
       }
 
       if (!data) {
-        throw new Error('No response from AI service');
+        throw new Error('No response from AI service - please try again in a moment');
       }
 
+      console.log('AI response received:', data);
       return data;
     },
     onSuccess: () => {

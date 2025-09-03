@@ -377,6 +377,8 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   } else {
                     // AI message - try to parse for property results
                     let searchResults: SearchResult | null = null;
+                    let displayContent = message.content;
+                    
                     try {
                       const parsed = JSON.parse(message.content);
                       if (parsed.results && Array.isArray(parsed.results)) {
@@ -384,6 +386,10 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                       }
                     } catch (e) {
                       // Not JSON, treat as regular text
+                      // Clean up any JSON artifacts that might be visible
+                      if (message.content.includes('{"results":') || message.content.includes('"summary":')) {
+                        displayContent = "I found some properties that might interest you! Let me show them in a better format.";
+                      }
                     }
 
                     if (searchResults) {
@@ -529,11 +535,11 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                         </div>
                       );
                     } else {
-                      // Regular AI text response
+                      // Regular text message - use cleaned content
                       return (
                         <div key={index} className="flex justify-start">
                           <div className="max-w-[80%] p-3 rounded-lg bg-secondary text-secondary-foreground">
-                            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                            <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
                           </div>
                         </div>
                       );
