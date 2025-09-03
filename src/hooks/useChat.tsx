@@ -101,6 +101,18 @@ export const useChat = () => {
         throw new Error('User not authenticated');
       }
 
+      // First ensure conversation exists
+      const { data: conversationExists } = await supabase
+        .from('chat_conversations')
+        .select('id')
+        .eq('id', conversationId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!conversationExists) {
+        throw new Error('Conversation not found or access denied');
+      }
+
       // Add user message to database
       const { error: userMessageError } = await supabase
         .from('chat_messages')
