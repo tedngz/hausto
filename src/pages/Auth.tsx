@@ -56,34 +56,89 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
 
-    const redirectUrl = `${window.location.origin}/`;
+    try {
+      // Enhanced validation
+      if (!signUpData.email || !signUpData.password || !signUpData.name) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in all required fields.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
 
-    const { error } = await supabase.auth.signUp({
-      email: signUpData.email,
-      password: signUpData.password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          name: signUpData.name,
-          phone: signUpData.phone
+      if (signUpData.password.length < 8) {
+        toast({
+          title: "Weak Password",
+          description: "Password must be at least 8 characters long and contain a mix of letters, numbers, and symbols.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Email format validation
+      const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+      if (!emailRegex.test(signUpData.email)) {
+        toast({
+          title: "Invalid Email",
+          description: "Please enter a valid email address.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Phone validation if provided
+      if (signUpData.phone && signUpData.phone.trim()) {
+        const phoneRegex = /^\+?[1-9]\d{9,14}$/;
+        if (!phoneRegex.test(signUpData.phone.replace(/\s/g, ''))) {
+          toast({
+            title: "Invalid Phone Number",
+            description: "Please enter a valid phone number.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
         }
       }
-    });
 
-    if (error) {
-      toast({
-        title: "Sign up failed",
-        description: error.message,
-        variant: "destructive"
+      const redirectUrl = `${window.location.origin}/`;
+
+      const { error } = await supabase.auth.signUp({
+        email: signUpData.email,
+        password: signUpData.password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            name: signUpData.name.trim(),
+            phone: signUpData.phone.trim()
+          }
+        }
       });
-    } else {
+
+      if (error) {
+        toast({
+          title: "Sign up failed",
+          description: error.message,
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Check your email",
+          description: "We've sent you a confirmation link to complete your registration.",
+        });
+      }
+    } catch (error) {
       toast({
-        title: "Check your email",
-        description: "We've sent you a confirmation link to complete your registration.",
+        title: "Error",
+        description: "An unexpected error occurred during sign up.",
+        variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
