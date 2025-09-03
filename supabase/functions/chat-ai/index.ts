@@ -212,7 +212,7 @@ Provide creative, engaging, and professional content that stands out in the rent
       }
 
       // Renter context - help with property search and recommendations
-      systemPrompt = `You are Hausto AI, a friendly and knowledgeable rental property assistant. You specialize in helping renters find their perfect home by understanding their lifestyle, preferences, and needs.
+      systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
 🏠 AVAILABLE PROPERTIES DATABASE (${properties.length} total properties):
 ${properties.map((p, index) => `
@@ -220,75 +220,62 @@ Property ID: ${p.id}
 Title: ${p.title}
 Location: ${p.location}
 Price: ${p.price?.toLocaleString()} VND/month
-Description: ${(p.description || 'Modern living space').substring(0, 100)}${p.description?.length > 100 ? '...' : ''}
-Vibe Score: ${p.vibe_analysis ? Math.round((p.vibe_analysis.modern + p.vibe_analysis.cozy + p.vibe_analysis.luxurious + p.vibe_analysis.spacious) / 4) : 7}/10
-Primary Image: ${p.images?.[0] || 'No image available'}
+Description: ${(p.description || 'Modern living space').substring(0, 200)}
+Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
+Images: ${Array.isArray(p.images) ? p.images.join(', ') : 'No images'}
+Realtor ID: ${p.realtor_id}
 `).join('\n')}
 
-🎯 YOUR MISSION:
-- ALWAYS suggest MAXIMUM 5 properties from the database above
-- For each property, provide ONLY:
-  * Property title (short version)
-  * Brief description (1-2 sentences max)
-  * Overall vibe score
-  * One property image
-  * Clickable link format: "🔗 [View Details](/property/PROPERTY_ID)" (replace PROPERTY_ID with actual ID)
-- Keep responses concise and focused
-- Format each property as a clean, compact card
+🎯 RESPONSE FORMAT - Return ONLY valid JSON:
+{
+  "results": [
+    {
+      "id": "property-id",
+      "title": "Property Title",
+      "location": "Property Location", 
+      "price": 12000000,
+      "size": "50m²",
+      "vibe": "Modern, Cozy",
+      "description": "Brief description highlighting key features",
+      "highlights": ["Modern", "Cozy", "Pet Friendly"],
+      "images": ["image-url-1", "image-url-2"],
+      "matchScore": 85,
+      "matchReason": "Perfect match because...",
+      "realtor_id": "realtor-uuid"
+    }
+  ],
+  "summary": "Found X properties matching your preferences...",
+  "totalMatches": 3
+}
 
-📋 RESPONSE FORMAT:
-For each recommended property, use this exact format:
----
-🏡 **[Property Title]**
-📝 [Brief 1-2 sentence description]
-🌟 Vibe Score: [X]/10
-🖼️ [First property image URL]
-🔗 [View Details](/property/[property-id])
----
+RULES:
+- ALWAYS return valid JSON format above
+- Maximum 5 properties in results array
+- Use actual property data from database
+- Match preferences when provided
+- Include realistic match scores (60-95%)
+- NO markdown, NO text, ONLY JSON`;
 
-💬 COMMUNICATION STYLE:
-- Be concise and helpful
-- Maximum 5 property recommendations
-- Keep each property description under 50 words
-- Always include the clickable link for details
-- Focus on key selling points only`;
+        // Add user preferences context for renters
+        if (userPreferences) {
+          const matchingProperties = properties.filter(p => {
+            const locationMatch = userPreferences.location?.some(loc => 
+              p.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
+            );
+            const budgetMatch = userPreferences.priceRange ? 
+              p.price <= userPreferences.priceRange[1] * 1.2 : true;
+            return locationMatch && budgetMatch;
+          });
 
-      // Add user preferences context for renters
-      if (userPreferences) {
-        const matchingProperties = properties.filter(p => {
-          const locationMatch = userPreferences.location?.some(loc => 
-            p.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
-          );
-          const budgetMatch = userPreferences.priceRange ? 
-            p.price <= userPreferences.priceRange[1] * 1.2 : true;
-          return locationMatch && budgetMatch;
-        });
+          console.log(`Found ${matchingProperties.length} properties matching user preferences`);
 
-        console.log(`Found ${matchingProperties.length} properties matching user preferences`);
-
-        if (matchingProperties.length > 0) {
-          systemPrompt += `\n\nBASED ON USER'S PREFERENCES, THESE PROPERTIES ARE MOST RELEVANT:
+          if (matchingProperties.length > 0) {
+            systemPrompt += `\n\nUSER'S TOP MATCHES (prioritize these):
 ${matchingProperties.slice(0, 5).map(p => `
-✅ ${p.title} in ${p.location} - ${p.price?.toLocaleString()} VND/month
-   Perfect because: ${p.vibe || 'Great location match'} and within budget
+ID: ${p.id} | ${p.title} | ${p.location} | ${p.price?.toLocaleString()} VND
 `).join('')}`;
+          }
         }
-
-        context += `\n🎯 USER'S SPECIFIC PREFERENCES & REQUIREMENTS:
-💫 Preferred Styles: ${userPreferences.styles?.join(', ') || 'Not specified'}
-🎨 Preferred Colors: ${userPreferences.colors?.join(', ') || 'Not specified'}
-🏃‍♀️ Activities/Lifestyle: ${userPreferences.activities?.join(', ') || 'Not specified'}
-💰 Budget Range: ${userPreferences.priceRange?.[0]?.toLocaleString() || 0} - ${userPreferences.priceRange?.[1]?.toLocaleString() || 'unlimited'} VND/month
-📐 Preferred Size: ${userPreferences.size || 'Not specified'}
-📍 Preferred Locations: ${userPreferences.location?.join(', ') || 'Not specified'}
-📅 Move-in Date: ${userPreferences.moveInDate || 'Flexible'}
-
-🔍 MATCHING STRATEGY:
-- Prioritize properties in preferred locations
-- Stay within or slightly above budget range (max 20% over)
-- Match style preferences with property vibes and descriptions
-- Consider lifestyle activities when recommending neighborhoods`;
-      }
 
       if (Array.isArray(propertyImages) && propertyImages.length > 0) {
         context += `\nProperty images provided: ${propertyImages.length} images to analyze for creating descriptions.`;
