@@ -18,7 +18,7 @@ interface Post {
   comments_count: number;
   user_id: string;
   user_name?: string;
-  post_likes?: { user_id: string }[];
+  user_liked?: boolean;
 }
 
 export const SocialFeed = () => {
@@ -34,13 +34,10 @@ export const SocialFeed = () => {
 
   const fetchPosts = async () => {
     try {
-      // Fetch posts and then separately fetch user profiles
+      // Fetch posts without likes data
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
-        .select(`
-          *,
-          post_likes(user_id)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (postsError) throw postsError;
@@ -52,13 +49,24 @@ export const SocialFeed = () => {
 
       if (profilesError) throw profilesError;
 
-      // Merge posts with profile data
-      const postsWithProfiles = postsData?.map(post => ({
-        ...post,
-        user_name: profilesData?.find(profile => profile.id === post.user_id)?.name || 'Anonymous User'
-      })) || [];
+      // For each post, get like count and user's like status using secure functions
+      const postsWithDetails = await Promise.all(
+        (postsData || []).map(async (post) => {
+          const [likeCountResult, userLikedResult] = await Promise.all([
+            supabase.rpc('get_post_like_count', { post_uuid: post.id }),
+            user ? supabase.rpc('user_liked_post', { post_uuid: post.id }) : Promise.resolve({ data: false })
+          ]);
 
-      setPosts(postsWithProfiles);
+          return {
+            ...post,
+            likes_count: likeCountResult.data || 0,
+            user_liked: userLikedResult.data || false,
+            user_name: profilesData?.find(profile => profile.id === post.user_id)?.name || 'Anonymous User'
+          };
+        })
+      );
+
+      setPosts(postsWithDetails);
     } catch (error) {
       console.error('Error fetching posts:', error);
       toast.error('Failed to load posts');
@@ -95,7 +103,7 @@ export const SocialFeed = () => {
     if (!user) return;
 
     const post = posts.find(p => p.id === postId);
-    const hasLiked = post?.post_likes?.some(like => like.user_id === user.id);
+    const hasLiked = post?.user_liked || false;
 
     try {
       if (hasLiked) {
@@ -200,7 +208,7 @@ export const SocialFeed = () => {
             </div>
           ) : (
             posts.map((post, index) => {
-              const hasLiked = post.post_likes?.some(like => like.user_id === user?.id);
+              const hasLiked = post.user_liked || false;
               
               return (
                 <div key={post.id} className={`bg-white ${index === 0 ? 'mt-4' : ''} animate-fade-in hover-scale`}>

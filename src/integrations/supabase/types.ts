@@ -432,6 +432,10 @@ export type Database = {
           name: string
         }[]
       }
+      get_post_like_count: {
+        Args: { post_uuid: string }
+        Returns: number
+      }
       get_realtor_contact_for_renter: {
         Args: { realtor_id: string }
         Returns: {
@@ -476,6 +480,10 @@ export type Database = {
           subscription_end: string
           subscription_tier: string
         }[]
+      }
+      user_liked_post: {
+        Args: { post_uuid: string }
+        Returns: boolean
       }
     }
     Enums: {
