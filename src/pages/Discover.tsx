@@ -12,7 +12,6 @@ import { AIChatAgent } from '@/components/AIChatAgent';
 import { FloatingAIButton } from '@/components/FloatingAIButton';
 import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
-import { SocialFeed } from '@/components/SocialFeed';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
@@ -29,7 +28,7 @@ const Discover = () => {
 
   // Check if user is admin
   const isAdmin = user?.email === 'ted.ngz@gmail.com';
-  const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'feed'>('ai-chat');
+  const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile'>('ai-chat');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [matches, setMatches] = useState<Apartment[]>([]);
   const [realtorMatches, setRealtorMatches] = useState<Match[]>([]);
@@ -250,8 +249,6 @@ const Discover = () => {
             setCurrentView={(view) => {
               if (view === 'profile') {
                 setCurrentView('profile');
-              } else if (view === 'feed') {
-                setCurrentView('feed');
               } else if (view === 'ai-chat') {
                 setCurrentView('ai-chat');
               } else {
@@ -328,9 +325,6 @@ const Discover = () => {
           <AIChatView showNavigation={true} userPreferences={userPreferences} />
         )}
 
-        {currentView === 'feed' && userType && (
-          <SocialFeed />
-        )}
 
         {userType === 'realtor' && isAdmin && currentView === 'dashboard' && (
           <RealtorDashboard 
@@ -340,7 +334,7 @@ const Discover = () => {
           />
         )}
 
-        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile' || currentView === 'feed') && (
+        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && (
           <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />
         )}
 

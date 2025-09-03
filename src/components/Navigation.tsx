@@ -7,8 +7,8 @@ import { UserMenu } from '@/components/UserMenu';
 import { useNavigate } from 'react-router-dom';
 
 interface NavigationProps {
-  currentView: 'swipe' | 'matches' | 'profile' | 'feed' | 'ai-chat';
-  setCurrentView: (view: 'swipe' | 'matches' | 'profile' | 'feed' | 'ai-chat') => void;
+  currentView: 'swipe' | 'matches' | 'profile' | 'ai-chat';
+  setCurrentView: (view: 'swipe' | 'matches' | 'profile' | 'ai-chat') => void;
   matchCount: number;
   userType: 'renter' | 'realtor';
   onSwitchUserType: () => void;
