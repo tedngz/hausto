@@ -23,6 +23,11 @@ interface MatchConversation {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  unread_count?: number;
+  renter_name?: string;
+  realtor_name?: string;
+  renter_avatar?: string;
+  realtor_avatar?: string;
   // Joined data from property_matches
   property_matches?: {
     id: string;
@@ -35,6 +40,11 @@ interface MatchConversation {
       location: string;
       price: number;
       images: string[];
+      size?: string;
+      vibe?: string;
+      description?: string;
+      highlights?: string[];
+      vibe_analysis?: any;
     };
   };
 }
@@ -65,7 +75,7 @@ export const useDirectMessages = () => {
             property_id,
             realtor_id,
             renter_id,
-            properties(id, title, location, price, images)
+            properties(id, title, location, price, images, size, vibe, description, highlights, vibe_analysis)
           )
         `)
         .eq('is_active', true)
@@ -77,7 +87,7 @@ export const useDirectMessages = () => {
         throw error;
       }
 
-      // Get names for all users in conversations
+      // Get names and profile pictures for all users in conversations
       if (data && data.length > 0) {
         const userIds = data.flatMap(conv => [
           conv.property_matches?.renter_id,
@@ -85,20 +95,45 @@ export const useDirectMessages = () => {
         ]).filter(Boolean) as string[];
 
         const { data: profiles, error: profilesError } = await supabase
-          .rpc('get_matched_public_profiles', { user_ids: userIds });
+          .from('profiles')
+          .select('id, name, avatar_url')
+          .in('id', userIds);
 
         if (profilesError) {
           console.error('Error fetching user profiles:', profilesError);
         }
 
-        // Map names to conversations
-        const conversationsWithNames = data.map(conv => ({
-          ...conv,
-          renter_name: profiles?.find(p => p.id === conv.property_matches?.renter_id)?.name || 'Interested Renter',
-          realtor_name: profiles?.find(p => p.id === conv.property_matches?.realtor_id)?.name || 'Property Owner'
-        }));
+        // Get unread message counts for each conversation
+        const unreadCounts = await Promise.all(
+          data.map(async (conv) => {
+            const { count } = await supabase
+              .from('direct_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('match_id', conv.match_id)
+              .eq('receiver_id', user.id)
+              .is('read_at', null);
+            
+            return { matchId: conv.match_id, unreadCount: count || 0 };
+          })
+        );
 
-        return conversationsWithNames as MatchConversation[];
+        // Map names, avatars, and unread counts to conversations
+        const conversationsWithData = data.map(conv => {
+          const renterProfile = profiles?.find(p => p.id === conv.property_matches?.renter_id);
+          const realtorProfile = profiles?.find(p => p.id === conv.property_matches?.realtor_id);
+          const unreadData = unreadCounts.find(u => u.matchId === conv.match_id);
+          
+          return {
+            ...conv,
+            renter_name: renterProfile?.name || 'Interested Renter',
+            realtor_name: realtorProfile?.name || 'Property Owner',
+            renter_avatar: renterProfile?.avatar_url,
+            realtor_avatar: realtorProfile?.avatar_url,
+            unread_count: unreadData?.unreadCount || 0
+          };
+        });
+
+        return conversationsWithData as MatchConversation[];
       }
       
       console.log('Conversations fetched successfully:', data);
