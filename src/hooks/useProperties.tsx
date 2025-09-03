@@ -253,6 +253,7 @@ export const useProperties = () => {
       size?: string;
       vibe?: string;
       highlights: string[];
+      vibeAnalysis?: any;
       newImageFiles?: File[];
       existingImages?: string[];
     }) => {
@@ -284,19 +285,26 @@ export const useProperties = () => {
       }
 
       // Update property record
+      const updateData: any = {
+        title: propertyData.title,
+        description: propertyData.description,
+        location: propertyData.location,
+        price: propertyData.price,
+        size: propertyData.size,
+        vibe: propertyData.vibe,
+        highlights: propertyData.highlights,
+        images: imageUrls,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Include vibe_analysis if provided
+      if (propertyData.vibeAnalysis) {
+        updateData.vibe_analysis = propertyData.vibeAnalysis;
+      }
+
       const { data, error } = await supabase
         .from('properties')
-        .update({
-          title: propertyData.title,
-          description: propertyData.description,
-          location: propertyData.location,
-          price: propertyData.price,
-          size: propertyData.size,
-          vibe: propertyData.vibe,
-          highlights: propertyData.highlights,
-          images: imageUrls,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', propertyData.id)
         .eq('realtor_id', user.id)
         .select()

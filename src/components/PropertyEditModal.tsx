@@ -30,6 +30,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [isHighlightEditorOpen, setIsHighlightEditorOpen] = useState(false);
   const [currentHighlights, setCurrentHighlights] = useState<string[]>([]);
+  const [currentVibeAnalysis, setCurrentVibeAnalysis] = useState<any>(null);
 
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
@@ -61,6 +62,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setSize(property.size?.replace('m²', '') || '');
       setSelectedVibes(property.highlights || []);
       setCurrentHighlights(property.vibe_analysis?.generated_content?.highlights || property.highlights || []);
+      setCurrentVibeAnalysis(property.vibe_analysis);
       setExistingImages(property.images || []);
     }
   }, [property, convertPrice]);
@@ -114,6 +116,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       size: size ? `${size}m²` : undefined,
       vibe: selectedVibes[0] || null,
       highlights: currentHighlights.length > 0 ? currentHighlights : selectedVibes,
+      vibeAnalysis: currentVibeAnalysis,
       newImageFiles,
       existingImages,
     });
@@ -355,8 +358,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           property={property}
           isOpen={isHighlightEditorOpen}
           onClose={() => setIsHighlightEditorOpen(false)}
-          onHighlightsUpdate={(highlights) => {
+          onHighlightsUpdate={(highlights, vibeAnalysis) => {
             setCurrentHighlights(highlights);
+            setCurrentVibeAnalysis(vibeAnalysis);
             setIsHighlightEditorOpen(false);
           }}
         />

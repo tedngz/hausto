@@ -17,7 +17,7 @@ interface ImageHighlight {
 interface PropertyHighlightEditorProps {
   property: Property;
   isOpen: boolean;
-  onHighlightsUpdate: (highlights: string[]) => void;
+  onHighlightsUpdate: (highlights: string[], vibeAnalysis: any) => void;
   onClose: () => void;
 }
 
@@ -142,7 +142,21 @@ export const PropertyHighlightEditor = ({
     const highlights = imageHighlights
       .filter(h => h.highlight.trim())
       .map(h => h.highlight);
-    onHighlightsUpdate(highlights);
+    
+    // Update vibe_analysis structure with new highlights
+    const updatedVibeAnalysis = {
+      ...property.vibe_analysis,
+      image_analyses: imageHighlights.map((ih, index) => {
+        const existingAnalysis = property.vibe_analysis?.image_analyses?.find(a => a.image_index === index) || {};
+        return {
+          ...existingAnalysis,
+          image_index: index,
+          image_highlight: ih.highlight.trim() || existingAnalysis.image_highlight || ''
+        };
+      })
+    };
+    
+    onHighlightsUpdate(highlights, updatedVibeAnalysis);
     onClose();
   };
 
