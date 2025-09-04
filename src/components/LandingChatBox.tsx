@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { useChat } from '@/hooks/useChat';
 
 interface PropertyMatch {
   id: string;
@@ -44,6 +45,7 @@ export const LandingChatBox = () => {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
   const { toast } = useToast();
+  const { createConversation, isCreatingConversation } = useChat();
 
   // Check for stored search query on component mount
   useEffect(() => {
@@ -102,6 +104,25 @@ export const LandingChatBox = () => {
     setSearchResults(null);
 
     try {
+      // Create a conversation first for this search
+      let conversationId: string | undefined;
+      
+      // Generate a meaningful title for the conversation
+      const conversationTitle = queryToUse.trim() 
+        ? `Property Search: ${queryToUse.slice(0, 50)}${queryToUse.length > 50 ? '...' : ''}`
+        : 'Image-based Property Search';
+      
+      await new Promise<void>((resolve) => {
+        createConversation(conversationTitle);
+        // Wait for the conversation to be created
+        const checkConversation = setInterval(() => {
+          if (!isCreatingConversation) {
+            clearInterval(checkConversation);
+            resolve();
+          }
+        }, 100);
+      });
+
       let searchBody: any = { query: queryToUse.trim() };
 
       // Convert uploaded images to base64 if present

@@ -28,7 +28,7 @@ serve(async (req) => {
       });
     }
 
-    const { query } = await req.json();
+    const { query, conversationId } = await req.json();
     
     if (!query) {
       throw new Error('Query is required');
@@ -148,7 +148,26 @@ Response format (JSON):
       analysisResult = JSON.parse(aiResponse);
     } catch (parseError) {
       console.error('Failed to parse AI response:', aiResponse);
-      throw new Error('Failed to parse AI analysis');
+      // Try to extract JSON from response if wrapped in markdown
+      const jsonMatch = aiResponse.match(/```json\n([\s\S]*?)\n```/) || aiResponse.match(/```\n([\s\S]*?)\n```/);
+      if (jsonMatch) {
+        try {
+          analysisResult = JSON.parse(jsonMatch[1]);
+        } catch (secondParseError) {
+          console.error('Failed to parse extracted JSON:', jsonMatch[1]);
+          throw new Error('Failed to parse AI analysis');
+        }
+      } else {
+        throw new Error('Failed to parse AI analysis');
+      }
+    }
+
+    // Ensure we have valid structure
+    if (!analysisResult.matches || !Array.isArray(analysisResult.matches)) {
+      analysisResult = {
+        matches: [],
+        summary: analysisResult.summary || 'No suitable matches found for your search criteria.'
+      };
     }
 
     // Get the full property details for matched properties
@@ -169,10 +188,50 @@ Response format (JSON):
       };
     }).slice(0, 3); // Ensure max 3 results
 
+    // Save conversation if conversationId provided
+    let finalConversationId = conversationId;
+    if (conversationId) {
+      try {
+        // Save user query as message
+        await supabase
+          .from('chat_messages')
+          .insert({
+            conversation_id: conversationId,
+            role: 'user',
+            content: query
+          });
+
+        // Create formatted AI response for saving
+        const formattedResponse = `I found ${results.length} properties that match your criteria:\n\n${analysisResult.summary}\n\nProperty matches:\n${results.map((result: any, index: number) => 
+          `${index + 1}. ${result.title} - ${result.matchReason}`).join('\n')}`;
+
+        // Save AI response as message
+        await supabase
+          .from('chat_messages')
+          .insert({
+            conversation_id: conversationId,
+            role: 'assistant',
+            content: formattedResponse,
+            metadata: { searchResults: results, totalMatches: results.length }
+          });
+
+        // Update conversation timestamp
+        await supabase
+          .from('chat_conversations')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', conversationId);
+
+      } catch (saveError) {
+        console.error('Error saving conversation:', saveError);
+        // Don't fail the request if conversation saving fails
+      }
+    }
+
     return new Response(JSON.stringify({
       results,
       summary: analysisResult.summary,
-      totalMatches: results.length
+      totalMatches: results.length,
+      conversationId: finalConversationId
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
