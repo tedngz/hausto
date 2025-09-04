@@ -41,9 +41,9 @@ export const PropertyDetailModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
-        <div className="p-6 space-y-6">
-          <h2 className="text-2xl font-bold text-gray-900 text-center">Property Details</h2>
+      <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto p-0">
+        <div className="p-4 space-y-4">
+          <h2 className="text-xl font-bold text-gray-900 text-center">Property Details</h2>
           
           <PropertyCard
             apartment={apartment}
@@ -58,7 +58,7 @@ export const PropertyDetailModal = ({
 
           {/* Action Buttons */}
           {(onLike || onDislike) && (
-            <div className="flex justify-center space-x-4 pt-6 mt-6 border-t">
+            <div className="flex justify-center space-x-4 pt-4 mt-4 border-t">
               {onDislike && (
                 <Button variant="destructive" size="lg" className="w-24" onClick={handleDislike}>
                   <X className="w-5 h-5 mr-2" />
