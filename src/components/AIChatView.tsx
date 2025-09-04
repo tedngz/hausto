@@ -403,31 +403,47 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                             )}
                             
                             {searchResults.results.length > 0 && (
-                              <div className="space-y-4">
+                              <div className="space-y-3">
                                 {searchResults.results.map((property) => (
                                   <Card 
                                     key={property.id} 
-                                    className="bg-white border border-border hover:shadow-lg transition-all duration-300 cursor-pointer"
+                                    className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer"
                                     onClick={() => handlePropertyClick(property)}
                                   >
-                                    <CardContent className="p-0">
-                                      <div className="grid md:grid-cols-2 gap-0">
+                                    <CardContent className="p-3 sm:p-4">
+                                      <div className="flex gap-3 sm:gap-4">
                                         {/* Property Image */}
-                                        <div className="relative h-48 md:h-full">
-                                          <img
-                                            src={property.images?.[0] || '/placeholder-property.jpg'}
-                                            alt={property.title}
-                                            className="w-full h-full object-cover"
-                                          />
+                                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                                          {property.images && property.images.length > 0 ? (
+                                            <img 
+                                              src={property.images[0]} 
+                                              alt={property.title}
+                                              className="w-full h-full object-cover"
+                                            />
+                                          ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                              <Home className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+                                            </div>
+                                          )}
                                           {/* Match Score Overlay */}
-                                          <div className="absolute top-3 left-3">
-                                            <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold">
-                                              {property.matchScore}% match
+                                          <div className="absolute top-1 left-1">
+                                            <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1 py-0">
+                                              {property.matchScore}%
                                             </Badge>
                                           </div>
-                                          {/* Vibe Score Overlay */}
-                                          {userPreferences && (
-                                            <div className="absolute top-3 right-3">
+                                        </div>
+
+                                        {/* Property Details */}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-start justify-between mb-2">
+                                            <div className="flex-1 min-w-0 pr-2">
+                                              <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
+                                              <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                                                <MapPin className="h-3 w-3 flex-shrink-0" />
+                                                <span className="line-clamp-1">{property.location}</span>
+                                              </div>
+                                            </div>
+                                            {userPreferences && (
                                               <VibeScore 
                                                 score={calculateVibeScore({
                                                   id: property.id,
@@ -444,70 +460,44 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                                 }, userPreferences)}
                                                 size="sm"
                                               />
-                                            </div>
-                                          )}
-                                        </div>
-                                        
-                                        {/* Property Details */}
-                                        <div className="p-4 flex flex-col justify-between">
-                                          <div className="space-y-3">
-                                            <div>
-                                              <h3 className="font-semibold text-lg text-foreground mb-1">{property.title}</h3>
-                                              <div className="flex items-center gap-1 text-muted-foreground mb-2">
-                                                <MapPin className="h-4 w-4" />
-                                                <span className="text-sm">{property.location}</span>
-                                              </div>
-                                            </div>
+                                            )}
+                                          </div>
 
-                                            <div className="space-y-2">
-                                              <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-4">
-                                                  <div className="flex items-center gap-1">
-                                                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                                    <span className="font-semibold text-lg text-primary">
-                                                      {formatPrice(property.price)}
-                                                    </span>
-                                                  </div>
-                                                  <div className="flex items-center gap-1">
-                                                    <Home className="h-4 w-4 text-muted-foreground" />
-                                                    <span className="text-sm text-muted-foreground">{property.size}</span>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                              
-                                              <p className="text-sm text-muted-foreground line-clamp-2">
-                                                {property.description}
-                                              </p>
+                                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
+                                            <div className="flex items-center gap-1">
+                                              <DollarSign className="h-3 w-3" />
+                                              <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
+                                            </div>
+                                            {property.size && (
+                                              <span>{property.size}</span>
+                                            )}
+                                            {property.vibe && (
+                                              <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
+                                            )}
+                                          </div>
 
-                                              {/* Highlights */}
+                                          <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                                            <strong>Why it matches:</strong> {property.matchReason}
+                                          </p>
+
+                                          {/* AI Generated Highlights */}
+                                          <div className="flex justify-between items-end">
+                                            <div className="flex-1">
                                               {property.highlights && property.highlights.length > 0 && (
-                                                <div className="flex flex-wrap gap-1 mt-2">
-                                                  {property.highlights.slice(0, 4).map((highlight, idx) => (
-                                                    <Badge key={idx} variant="secondary" className="text-xs">
+                                                <div className="flex flex-wrap gap-1">
+                                                  {property.highlights.slice(0, 2).map((highlight, index) => (
+                                                    <Badge key={index} variant="outline" className="text-xs border-primary/30 bg-primary/5">
                                                       {highlight}
                                                     </Badge>
                                                   ))}
+                                                  {property.highlights.length > 2 && (
+                                                    <Badge variant="outline" className="text-xs">
+                                                      +{property.highlights.length - 2} more
+                                                    </Badge>
+                                                  )}
                                                 </div>
                                               )}
                                             </div>
-
-                                            {/* Match Reason */}
-                                            <div className="p-2 bg-primary/5 rounded border border-primary/10">
-                                              <p className="text-xs text-foreground">
-                                                <span className="font-medium text-primary">Why it matches:</span> {property.matchReason}
-                                              </p>
-                                            </div>
-                                          </div>
-
-                                          {/* Action Button */}
-                                          <div className="flex justify-between items-center pt-3 mt-3 border-t border-border">
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              className="text-xs"
-                                            >
-                                              View Details
-                                            </Button>
                                             <Button
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -515,13 +505,13 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                               }}
                                               size="sm"
                                               variant={likedProperties.has(property.id) ? "default" : "outline"}
-                                              className={`h-8 w-8 p-0 ${
+                                              className={`h-6 w-6 p-0 ml-2 ${
                                                 likedProperties.has(property.id) 
                                                   ? 'bg-red-500 hover:bg-red-600 text-white' 
                                                   : 'hover:bg-red-50 hover:text-red-500'
                                               }`}
                                             >
-                                              <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
+                                              <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
                                             </Button>
                                           </div>
                                         </div>

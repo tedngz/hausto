@@ -36,7 +36,7 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur">
+      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur">
         <div className="flex items-center justify-between p-4 border-b">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Property Preview</h2>
@@ -50,9 +50,9 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
         <div className="p-4">
           <PropertyCard
             apartment={previewApartment}
-            showFullTitle={false}
-            showFullDescription={false}
-            showAllHighlights={false}
+            showFullTitle={true}
+            showFullDescription={true}
+            showAllHighlights={true}
             showContactButton={false}
             showViewProfileButton={false}
           />

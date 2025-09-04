@@ -41,7 +41,7 @@ export const PropertyDetailModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
         <div className="p-6 space-y-6">
           <h2 className="text-2xl font-bold text-gray-900 text-center">Property Details</h2>
           
@@ -53,7 +53,7 @@ export const PropertyDetailModal = ({
             showAllHighlights={true}
             showContactButton={false}
             showViewProfileButton={false}
-            className="max-w-md mx-auto shadow-none border-0"
+            className="shadow-none border-0"
           />
 
           {/* Action Buttons */}

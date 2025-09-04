@@ -351,11 +351,11 @@ export const LandingChatBox = () => {
                               <strong>Why it matches:</strong> {property.matchReason}
                             </p>
 
-                            {/* Property Highlights */}
+                            {/* AI Generated Highlights */}
                             {property.highlights && property.highlights.length > 0 && (
                               <div className="flex flex-wrap gap-1">
                                 {property.highlights.slice(0, 2).map((highlight, index) => (
-                                  <Badge key={index} variant="outline" className="text-xs">
+                                  <Badge key={index} variant="outline" className="text-xs border-primary/30 bg-primary/5">
                                     {highlight}
                                   </Badge>
                                 ))}
