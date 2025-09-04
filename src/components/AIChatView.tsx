@@ -327,7 +327,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
               
               <h3 className="text-2xl font-bold text-foreground mb-2">Haus Finder</h3>
               <p className="text-muted-foreground">
-                Describe your dream home or upload reference images
+                Search for apartments with AI assistance
               </p>
             </div>
 
@@ -368,7 +368,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                 {messages.map((message, index) => {
                   if (message.role === 'user') {
                     return (
-                      <div key={index} className="flex justify-end">
+                      <div key={index} className="flex justify-end animate-fade-in">
                         <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
                           <p className="text-sm">{message.content}</p>
                         </div>
@@ -388,13 +388,13 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                       // Not JSON, treat as regular text
                       // Clean up any JSON artifacts that might be visible
                       if (message.content.includes('{"results":') || message.content.includes('"summary":')) {
-                        displayContent = "I found some properties that might interest you! Let me show them in a better format.";
+                        displayContent = "I found some amazing properties that match your preferences! Let me show you the top matches.";
                       }
                     }
 
                     if (searchResults) {
                       return (
-                        <div key={index} className="flex justify-start">
+                        <div key={index} className="flex justify-start animate-fade-in">
                           <div className="max-w-[95%] space-y-4">
                             {searchResults.summary && (
                               <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
@@ -407,7 +407,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                 {searchResults.results.map((property) => (
                                   <Card 
                                     key={property.id} 
-                                    className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer"
+                                    className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale"
                                     onClick={() => handlePropertyClick(property)}
                                   >
                                     <CardContent className="p-3 sm:p-4">
@@ -443,24 +443,43 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                                 <span className="line-clamp-1">{property.location}</span>
                                               </div>
                                             </div>
-                                            {userPreferences && (
-                                              <VibeScore 
-                                                score={calculateVibeScore({
-                                                  id: property.id,
-                                                  images: property.images,
-                                                  title: property.title,
-                                                  location: property.location,
-                                                  price: property.price,
-                                                  size: property.size,
-                                                  vibe: property.vibe,
-                                                  description: property.description,
-                                                  highlights: property.highlights,
-                                                  realtor: { id: '', name: '', phone: '', email: '' },
-                                                  vibe_analysis: property.vibe_analysis
-                                                }, userPreferences)}
+                                            
+                                            <div className="flex flex-col items-end gap-1">
+                                              {/* Like Button */}
+                                              <Button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleLikeProperty(property.id, property.realtor_id);
+                                                }}
                                                 size="sm"
-                                              />
-                                            )}
+                                                variant={likedProperties.has(property.id) ? "default" : "ghost"}
+                                                className={`h-8 w-8 p-0 ${likedProperties.has(property.id) 
+                                                  ? "bg-green-500 hover:bg-green-600 text-white" 
+                                                  : "hover:bg-green-50 text-green-600"}`}
+                                              >
+                                                <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                                              </Button>
+                                              
+                                              {/* Vibe Score */}
+                                              {userPreferences && (
+                                                <VibeScore 
+                                                  score={calculateVibeScore({
+                                                    id: property.id,
+                                                    images: property.images,
+                                                    title: property.title,
+                                                    location: property.location,
+                                                    price: property.price,
+                                                    size: property.size,
+                                                    vibe: property.vibe,
+                                                    description: property.description,
+                                                    highlights: property.highlights,
+                                                    realtor: { id: '', name: '', phone: '', email: '' },
+                                                    vibe_analysis: property.vibe_analysis
+                                                  }, userPreferences)}
+                                                  size="sm"
+                                                />
+                                              )}
+                                            </div>
                                           </div>
 
                                           <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
@@ -498,27 +517,37 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                                 </div>
                                               )}
                                             </div>
-                                            <Button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleLikeProperty(property.id, property.realtor_id);
-                                              }}
-                                              size="sm"
-                                              variant={likedProperties.has(property.id) ? "default" : "outline"}
-                                              className={`h-6 w-6 p-0 ml-2 ${
-                                                likedProperties.has(property.id) 
-                                                  ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                                  : 'hover:bg-red-50 hover:text-red-500'
-                                              }`}
-                                            >
-                                              <Heart className={`h-3 w-3 ${likedProperties.has(property.id) ? 'fill-current' : ''}`} />
-                                            </Button>
                                           </div>
                                         </div>
                                       </div>
                                     </CardContent>
                                   </Card>
                                 ))}
+                                
+                                {/* Support Offer */}
+                                <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in">
+                                  <p className="text-sm text-muted-foreground mb-3">
+                                    Need help with your search or have questions about these properties? I'm here to assist you further!
+                                  </p>
+                                  <div className="flex gap-2 flex-wrap">
+                                    <Button 
+                                      onClick={handleBrowseAll}
+                                      variant="outline"
+                                      size="sm"
+                                      className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                                    >
+                                      Browse All Properties
+                                    </Button>
+                                    <Button 
+                                      onClick={() => navigate('/discover')}
+                                      variant="outline"
+                                      size="sm"
+                                      className="border-secondary text-secondary-foreground hover:bg-secondary"
+                                    >
+                                      Start Swiping
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -527,7 +556,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                     } else {
                       // Regular text message - use cleaned content
                       return (
-                        <div key={index} className="flex justify-start">
+                        <div key={index} className="flex justify-start animate-fade-in">
                           <div className="max-w-[80%] p-3 rounded-lg bg-secondary text-secondary-foreground">
                             <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
                           </div>
@@ -539,7 +568,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                 
                 {/* AI Thinking Animation */}
                 {isSendingMessage && (
-                  <div className="flex justify-start">
+                  <div className="flex justify-start animate-fade-in">
                     <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
                       <div className="flex space-x-1">
                         <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -598,14 +627,14 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
 
               {/* Image Preview */}
               {uploadedImages.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap animate-fade-in">
                   {uploadedImages.map((image, index) => (
-                     <div key={index} className="relative">
-                       <img
-                         src={URL.createObjectURL(image)}
-                         alt={`Upload ${index + 1}`}
-                         className="w-16 h-16 object-cover rounded-lg border border-border"
-                       />
+                    <div key={index} className="relative">
+                      <img
+                        src={URL.createObjectURL(image)}
+                        alt={`Upload ${index + 1}`}
+                        className="w-16 h-16 object-cover rounded-lg border border-border"
+                      />
                       <Button
                         onClick={() => removeImage(index)}
                         size="sm"
@@ -621,7 +650,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
 
               {/* Auth Prompt */}
               {showAuthPrompt && !user && (
-                <Card className="border-primary/20 bg-primary/5">
+                <Card className="border-primary/20 bg-primary/5 animate-fade-in">
                   <CardContent className="p-4">
                     <div className="text-center">
                       <p className="text-foreground mb-3">
@@ -665,6 +694,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                 setShowPropertyModal(false);
                 setSelectedProperty(null);
               }}
+              onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined}
             />
 
             {/* Subscription Modal */}
