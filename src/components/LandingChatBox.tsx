@@ -687,9 +687,9 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                       onClick={() => handlePropertyClick(property)}
                     >
                       <CardContent className="p-3 sm:p-4">
-                        <div className="flex gap-3 sm:gap-4">
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                           {/* Property Image - Bigger on mobile */}
-                          <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                          <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
                             {property.images && property.images.length > 0 ? (
                               <img 
                                 src={property.images[0]} 
@@ -702,26 +702,42 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                               </div>
                             )}
                             {/* Match Score Overlay */}
-                            <div className="absolute top-1 left-1">
-                              <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1.5 py-0.5">
-                                {property.matchScore}%
+                            <div className="absolute top-2 left-2">
+                              <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
+                                {property.matchScore}% match
                               </Badge>
+                            </div>
+                            {/* Like Button - Mobile position */}
+                            <div className="absolute top-2 right-2 sm:hidden">
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLikeProperty(property.id, property.realtor_id);
+                                }}
+                                size="sm"
+                                variant={likedProperties.has(property.id) ? "default" : "ghost"}
+                                className={`h-8 w-8 p-0 ${likedProperties.has(property.id) 
+                                  ? "bg-green-500 hover:bg-green-600 text-white" 
+                                  : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"}`}
+                              >
+                                <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                              </Button>
                             </div>
                           </div>
 
                           {/* Property Details */}
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 sm:order-2">
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex-1 min-w-0 pr-2">
-                                <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
-                                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
-                                  <MapPin className="h-3 w-3 flex-shrink-0" />
+                                <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base">{property.title}</h5>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                                  <MapPin className="h-4 w-4 flex-shrink-0" />
                                   <span className="line-clamp-1">{property.location}</span>
                                 </div>
                               </div>
                               
-                              <div className="flex flex-col items-end gap-1">
-                                {/* Like Button */}
+                              {/* Desktop buttons */}
+                              <div className="hidden sm:flex flex-col items-end gap-1">
                                 <Button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -736,7 +752,6 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                                   <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                 </Button>
                                 
-                                {/* Vibe Score */}
                                 {userPreferences && (
                                   <VibeScore 
                                     score={calculateVibeScore({
@@ -758,69 +773,56 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
+                            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
                               <div className="flex items-center gap-1">
-                                <DollarSign className="h-3 w-3" />
-                                <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
+                                <DollarSign className="h-4 w-4" />
+                                <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
                               </div>
                               {property.size && (
-                                <span>{property.size}</span>
+                                <span className="font-medium">{property.size}</span>
                               )}
                               {property.vibe && (
                                 <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
                               )}
                             </div>
 
-                            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                              <strong>Why it matches:</strong> {property.matchReason}
-                            </p>
+                            {/* Why it matches - More prominent on mobile */}
+                            <div className="bg-secondary/10 p-3 rounded-lg mb-3">
+                              <p className="text-sm text-foreground">
+                                <span className="font-semibold text-primary">Why it matches: </span>
+                                {property.matchReason}
+                              </p>
+                            </div>
 
-                            {/* AI Generated Highlights */}
-                            <div className="flex justify-between items-end">
-                              <div className="flex-1">
-                                {property.highlights && property.highlights.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {property.highlights.slice(0, 2).map((highlight, index) => (
-                                      <Badge key={index} variant="outline" className="text-xs border-primary/30 bg-primary/5">
-                                        {highlight}
-                                      </Badge>
-                                    ))}
-                                    {property.highlights.length > 2 && (
-                                      <Badge variant="outline" className="text-xs">
-                                        +{property.highlights.length - 2} more
-                                      </Badge>
-                                    )}
-                                  </div>
+                            {/* AI Generated Highlights - Better spacing */}
+                            {property.highlights && property.highlights.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {property.highlights.slice(0, 3).map((highlight, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs border-primary/30 bg-primary/5 px-2 py-1">
+                                    {highlight}
+                                  </Badge>
+                                ))}
+                                {property.highlights.length > 3 && (
+                                  <Badge variant="outline" className="text-xs px-2 py-1">
+                                    +{property.highlights.length - 3} more
+                                  </Badge>
                                 )}
                               </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </CardContent>
                     </Card>
                   ))}
                   
-                  {/* Support Offer for Non-Logged In Users */}
-                  <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Found what you're looking for? Browse more properties or create an account to connect with realtors.
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button 
-                        onClick={() => navigate('/discover')}
-                        variant="outline"
-                        size="sm"
-                        className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                      >
-                        Browse All Properties
-                      </Button>
-                      <Button 
-                        onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                      >
-                        Sign Up to Connect
-                      </Button>
-                    </div>
+                  {/* Sign in CTA for Non-Logged In Users */}
+                  <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
+                    <Button 
+                      onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2"
+                    >
+                      Sign in to chat more
+                    </Button>
                   </div>
                 </div>
               )}
