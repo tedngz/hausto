@@ -457,8 +457,8 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                             >
                               <CardContent className="p-3 sm:p-4">
                                 <div className="flex gap-3 sm:gap-4">
-                                  {/* Property Image */}
-                                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                                  {/* Property Image - Bigger on mobile */}
+                                  <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
                                     {property.images && property.images.length > 0 ? (
                                       <img 
                                         src={property.images[0]} 
@@ -467,12 +467,12 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                                       />
                                     ) : (
                                       <div className="w-full h-full flex items-center justify-center">
-                                        <Home className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+                                        <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
                                       </div>
                                     )}
                                     {/* Match Score Overlay */}
                                     <div className="absolute top-1 left-1">
-                                      <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1 py-0">
+                                      <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1.5 py-0.5">
                                         {property.matchScore}%
                                       </Badge>
                                     </div>
@@ -574,7 +574,7 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                             <p className="text-sm text-muted-foreground mb-3">
                               {user ? 
                                 "Need help with your search or have questions about these properties? I'm here to assist you further!" :
-                                "Want to continue the conversation with AI, get more personalized matches, or connect with these properties?"
+                                "Found what you're looking for? Browse more properties or create an account to connect with realtors."
                               }
                             </p>
                             <div className="flex gap-2 flex-wrap">
@@ -599,13 +599,12 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                                 </>
                               ) : (
                                 <Button 
-                                  onClick={() => {
-                                    localStorage.setItem('pendingSearchQuery', query || 'Continue conversation');
-                                    navigate('/auth', { state: { returnTo: '/discover' } });
-                                  }}
-                                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                                  onClick={() => navigate('/discover')}
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
                                 >
-                                  Sign In to Continue AI Chat
+                                  Browse All Properties
                                 </Button>
                               )}
                             </div>
@@ -689,8 +688,8 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                     >
                       <CardContent className="p-3 sm:p-4">
                         <div className="flex gap-3 sm:gap-4">
-                          {/* Property Image */}
-                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                          {/* Property Image - Bigger on mobile */}
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
                             {property.images && property.images.length > 0 ? (
                               <img 
                                 src={property.images[0]} 
@@ -699,12 +698,12 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
-                                <Home className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+                                <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
                               </div>
                             )}
                             {/* Match Score Overlay */}
                             <div className="absolute top-1 left-1">
-                              <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1 py-0">
+                              <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1.5 py-0.5">
                                 {property.matchScore}%
                               </Badge>
                             </div>
@@ -804,17 +803,22 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
                   {/* Support Offer for Non-Logged In Users */}
                   <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in">
                     <p className="text-sm text-muted-foreground mb-3">
-                      Want to continue the conversation with AI, get more personalized matches, or connect with these properties?
+                      Found what you're looking for? Browse more properties or create an account to connect with realtors.
                     </p>
                     <div className="flex gap-2 flex-wrap">
                       <Button 
-                        onClick={() => {
-                          localStorage.setItem('pendingSearchQuery', 'Continue conversation');
-                          navigate('/auth', { state: { returnTo: '/discover' } });
-                        }}
+                        onClick={() => navigate('/discover')}
+                        variant="outline"
+                        size="sm"
+                        className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                      >
+                        Browse All Properties
+                      </Button>
+                      <Button 
+                        onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
                         className="bg-primary hover:bg-primary/90 text-primary-foreground"
                       >
-                        Sign In to Continue AI Chat
+                        Sign Up to Connect
                       </Button>
                     </div>
                   </div>
@@ -826,17 +830,18 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
       )}
 
 
-      {/* Chat Input */}
-      <div className="space-y-4">
-        <div className="relative">
-          <Textarea
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder={messages.length === 0 ? "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..." : "Ask me about properties, neighborhoods, or anything else..."}
-            className="min-h-[100px] pr-20 resize-none"
-            disabled={isSendingMessage}
-          />
+      {/* Chat Input - Only show if user is logged in or hasn't searched yet */}
+      {(user || (!searchResults && !tempUserMessage)) && (
+        <div className="space-y-4">
+          <div className="relative">
+            <Textarea
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder={messages.length === 0 ? "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..." : "Ask me about properties, neighborhoods, or anything else..."}
+              className="min-h-[100px] pr-20 resize-none"
+              disabled={isSendingMessage}
+            />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input
               ref={fileInputRef}
@@ -893,36 +898,37 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
           </div>
         )}
 
-        
-        {/* Auth Prompt for users who used their free searches */}
-        {!user && (() => {
-          const today = new Date().toDateString();
-          const storedData = localStorage.getItem('freeSearchUsage');
-          let searchCount = 0;
           
-          if (storedData) {
-            try {
-              const parsed = JSON.parse(storedData);
-              if (parsed.date === today) {
-                searchCount = parsed.count;
+          {/* Auth Prompt for users who used their free searches - only show if no results yet */}
+          {!user && !searchResults && !tempUserMessage && (() => {
+            const today = new Date().toDateString();
+            const storedData = localStorage.getItem('freeSearchUsage');
+            let searchCount = 0;
+            
+            if (storedData) {
+              try {
+                const parsed = JSON.parse(storedData);
+                if (parsed.date === today) {
+                  searchCount = parsed.count;
+                }
+              } catch (e) {
+                // Reset if corrupted
               }
-            } catch (e) {
-              // Reset if corrupted
             }
-          }
-          
-          return searchCount > 0;
-        })() && (
-          <div className="text-center">
-            <Button 
-              onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              Sign In to Continue
-            </Button>
-          </div>
-        )}
-      </div>
+            
+            return searchCount > 0;
+          })() && (
+            <div className="text-center">
+              <Button 
+                onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                Sign In to Continue
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Property Detail Modal */}
       <PropertyDetailModal
