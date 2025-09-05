@@ -52,6 +52,7 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
+  const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
@@ -285,6 +286,7 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
       }
     } else {
       // Handle free search for non-logged in users
+      setTempUserMessage(queryToUse); // Show user message immediately
       setIsSearching(true);
       try {
         const response = await fetch(`https://pqrvqtukfqosoqfzjkyb.supabase.co/functions/v1/ai-property-search`, {
@@ -641,6 +643,31 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
         </div>
       )}
 
+      {/* Temporary Chat Messages for Non-Logged In Users */}
+      {tempUserMessage && !user && (
+        <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+          {/* User Message */}
+          <div className="flex justify-end animate-fade-in">
+            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+              <p className="text-sm">{tempUserMessage}</p>
+            </div>
+          </div>
+          
+          {/* AI Thinking Animation */}
+          {isSearching && (
+            <div className="flex justify-start animate-fade-in">
+              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Search Results for Non-Logged In Users */}
       {searchResults && !user && (
         <div className="space-y-4 mb-6">
@@ -798,20 +825,6 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
         </div>
       )}
 
-      {/* Loading Animation for Non-Logged In Users */}
-      {isSearching && !user && (
-        <div className="space-y-4 mb-6">
-          <div className="flex justify-start animate-fade-in">
-            <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Chat Input */}
       <div className="space-y-4">
@@ -880,35 +893,6 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
           </div>
         )}
 
-        {/* Auth Prompt for logged out users who haven't searched yet */}
-        {!user && !searchResults && (() => {
-          const today = new Date().toDateString();
-          const storedData = localStorage.getItem('freeSearchUsage');
-          let searchCount = 0;
-          
-          if (storedData) {
-            try {
-              const parsed = JSON.parse(storedData);
-              if (parsed.date === today) {
-                searchCount = parsed.count;
-              }
-            } catch (e) {
-              // Reset if corrupted
-            }
-          }
-          
-          return searchCount === 0;
-        })() && (
-          <Card className="border-primary/20 bg-primary/5 animate-fade-in">
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-foreground mb-3">
-                  Get 3 free searches per day to discover your perfect home match! Sign in for unlimited searches and full features.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
         
         {/* Auth Prompt for users who used their free searches */}
         {!user && (() => {
