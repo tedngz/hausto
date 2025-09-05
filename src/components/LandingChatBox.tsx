@@ -898,35 +898,6 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
           </div>
         )}
 
-          
-          {/* Auth Prompt for users who used their free searches - only show if no results yet */}
-          {!user && !searchResults && !tempUserMessage && (() => {
-            const today = new Date().toDateString();
-            const storedData = localStorage.getItem('freeSearchUsage');
-            let searchCount = 0;
-            
-            if (storedData) {
-              try {
-                const parsed = JSON.parse(storedData);
-                if (parsed.date === today) {
-                  searchCount = parsed.count;
-                }
-              } catch (e) {
-                // Reset if corrupted
-              }
-            }
-            
-            return searchCount > 0;
-          })() && (
-            <div className="text-center">
-              <Button 
-                onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                Sign In to Continue
-              </Button>
-            </div>
-          )}
         </div>
       )}
 
