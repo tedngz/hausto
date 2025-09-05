@@ -913,18 +913,14 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
           
           return searchCount > 0;
         })() && (
-          <Card className="border-primary/20 bg-primary/5 animate-fade-in">
-            <CardContent className="p-4">
-              <div className="text-center">
-                <Button
-                  onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  Sign In to Continue
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="text-center">
+            <Button 
+              onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              Sign In to Continue
+            </Button>
+          </div>
         )}
       </div>
 
