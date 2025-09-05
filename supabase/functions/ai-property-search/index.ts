@@ -14,21 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication first
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ 
-        error: 'Missing authorization header',
-        results: [],
-        summary: 'Authentication required',
-        totalMatches: 0
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const { query, conversationId } = await req.json();
+    const { query, conversationId, images } = await req.json();
     
     if (!query) {
       throw new Error('Query is required');
@@ -37,36 +23,45 @@ serve(async (req) => {
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
 
     if (!openAIApiKey) {
       throw new Error('OpenAI API key not configured');
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
       throw new Error('Supabase configuration missing');
     }
 
-    // Initialize Supabase client and verify user
+    // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify user authentication
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    // Check if user is authenticated
+    let user = null;
+    const authHeader = req.headers.get('authorization');
     
-    if (authError || !user) {
-      console.error('Authentication failed:', authError);
-      return new Response(JSON.stringify({ 
-        error: 'Invalid or expired token',
-        results: [],
-        summary: 'Authentication failed',
-        totalMatches: 0
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      
+      // Only try to authenticate if it's not the anon key
+      if (token !== supabaseAnonKey) {
+        try {
+          const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
+          if (!authError && authUser) {
+            user = authUser;
+            console.log('Authenticated user requesting property search:', user.id);
+          } else {
+            console.log('Anonymous user requesting property search');
+          }
+        } catch (authError) {
+          console.log('Authentication failed, proceeding as anonymous user:', authError);
+        }
+      } else {
+        console.log('Anonymous user with anon key requesting property search');
+      }
+    } else {
+      console.log('No auth header, proceeding as anonymous user');
     }
-
-    console.log('Authenticated user requesting property search:', user.id);
 
     // Fetch all properties from the database
     const { data: properties, error: propertiesError } = await supabase
@@ -188,9 +183,9 @@ Response format (JSON):
       };
     }).slice(0, 3); // Ensure max 3 results
 
-    // Save conversation if conversationId provided
+    // Save conversation if user is authenticated and conversationId provided
     let finalConversationId = conversationId;
-    if (conversationId) {
+    if (user && conversationId) {
       try {
         // Save user query as message
         await supabase
@@ -225,6 +220,8 @@ Response format (JSON):
         console.error('Error saving conversation:', saveError);
         // Don't fail the request if conversation saving fails
       }
+    } else if (!user && conversationId) {
+      console.log('Skipping conversation save for anonymous user');
     }
 
     return new Response(JSON.stringify({
