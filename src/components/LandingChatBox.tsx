@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, MapPin, Home, DollarSign, Sparkles, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart } from 'lucide-react';
+import { Loader2, Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -206,17 +206,32 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
     
-    // Allow one free search for non-users
+    // Allow 3 free searches per day for non-users
     if (!user) {
-      // Check if they already used their free search
-      const hasUsedFreeSearch = localStorage.getItem('hasUsedFreeSearch');
-      if (hasUsedFreeSearch) {
+      const today = new Date().toDateString();
+      const storedData = localStorage.getItem('freeSearchUsage');
+      let searchUsage = { date: today, count: 0 };
+      
+      if (storedData) {
+        try {
+          const parsed = JSON.parse(storedData);
+          if (parsed.date === today) {
+            searchUsage = parsed;
+          }
+        } catch (e) {
+          // Reset if corrupted
+        }
+      }
+      
+      if (searchUsage.count >= 3) {
         localStorage.setItem('pendingSearchQuery', queryToUse);
         navigate('/auth', { state: { returnTo: '/discover' } });
         return;
       }
-      // Mark that they used their free search
-      localStorage.setItem('hasUsedFreeSearch', 'true');
+      
+      // Increment usage count
+      searchUsage.count++;
+      localStorage.setItem('freeSearchUsage', JSON.stringify(searchUsage));
     } else {
       // Check search limit using usage tracking for logged in users
       if (!canPerformAction('ai-search')) {
@@ -333,16 +348,8 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
     <div className="w-full max-w-4xl mx-auto p-6 bg-card border border-border rounded-2xl shadow-xl">
       {/* Header */}
       <div className="text-center mb-6 relative">
-        <div className="flex justify-center mb-4">
-          <div className="relative">
-            <div className="absolute inset-0 bg-primary/20 rounded-full blur-lg"></div>
-            <div className="relative bg-primary/10 p-3 rounded-full">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
-          </div>
-        </div>
         
-        {/* History and New Chat buttons positioned at sparkle level */}
+        {/* History and New Chat buttons */}
         {user && (
           <div className="absolute top-0 right-0 flex gap-2">
             <Button
@@ -874,25 +881,59 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
         )}
 
         {/* Auth Prompt for logged out users who haven't searched yet */}
-        {!user && !searchResults && !localStorage.getItem('hasUsedFreeSearch') && (
+        {!user && !searchResults && (() => {
+          const today = new Date().toDateString();
+          const storedData = localStorage.getItem('freeSearchUsage');
+          let searchCount = 0;
+          
+          if (storedData) {
+            try {
+              const parsed = JSON.parse(storedData);
+              if (parsed.date === today) {
+                searchCount = parsed.count;
+              }
+            } catch (e) {
+              // Reset if corrupted
+            }
+          }
+          
+          return searchCount === 0;
+        })() && (
           <Card className="border-primary/20 bg-primary/5 animate-fade-in">
             <CardContent className="p-4">
               <div className="text-center">
                 <p className="text-foreground mb-3">
-                  Get one free search to discover your perfect home match! Sign in for unlimited searches and full features.
+                  Get 3 free searches per day to discover your perfect home match! Sign in for unlimited searches and full features.
                 </p>
               </div>
             </CardContent>
           </Card>
         )}
         
-        {/* Auth Prompt for users who used their free search */}
-        {!user && localStorage.getItem('hasUsedFreeSearch') && (
+        {/* Auth Prompt for users who used their free searches */}
+        {!user && (() => {
+          const today = new Date().toDateString();
+          const storedData = localStorage.getItem('freeSearchUsage');
+          let searchCount = 0;
+          
+          if (storedData) {
+            try {
+              const parsed = JSON.parse(storedData);
+              if (parsed.date === today) {
+                searchCount = parsed.count;
+              }
+            } catch (e) {
+              // Reset if corrupted
+            }
+          }
+          
+          return searchCount > 0;
+        })() && (
           <Card className="border-primary/20 bg-primary/5 animate-fade-in">
             <CardContent className="p-4">
               <div className="text-center">
                 <p className="text-foreground mb-3">
-                  You've used your free search! Sign in to continue chatting with AI, get unlimited searches, and access all features.
+                  You've used your free searches for today! Sign in to continue chatting with AI, get unlimited searches, and access all features.
                 </p>
                 <Button 
                   onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
