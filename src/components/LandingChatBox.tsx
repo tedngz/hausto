@@ -289,11 +289,11 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
       setTempUserMessage(queryToUse); // Show user message immediately
       setIsSearching(true);
       try {
-        const response = await fetch(`https://pqrvqtukfqosoqfzjkyb.supabase.co/functions/v1/ai-property-search`, {
+        const response = await fetch(`https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/ai-property-search`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxcnZxdHVrZnFvc29xZnpqa3liIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMzMzEyNjAsImV4cCI6MjA0ODkwNzI2MH0.KlHa8Cj7LWII97sL7cZGzlh5HxOe9r8QIjUiTjHsuww`,
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZ3J3amRteXRha3NyenRjeXpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwNDQwNDcsImV4cCI6MjA2NzYyMDA0N30.pJnXggzvzGxHrOaF_ygThG7Ws66Y4VFH102iQtPS118`,
           },
           body: JSON.stringify({
             query: queryToUse,
@@ -916,10 +916,7 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
           <Card className="border-primary/20 bg-primary/5 animate-fade-in">
             <CardContent className="p-4">
               <div className="text-center">
-                <p className="text-foreground mb-3">
-                  You've used your free searches for today! Sign in to continue chatting with AI, get unlimited searches, and access all features.
-                </p>
-                <Button 
+                <Button
                   onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
