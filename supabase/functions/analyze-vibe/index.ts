@@ -88,7 +88,15 @@ serve(async (req) => {
       
       try {
           const basePrompt = generateContent 
-            ? `Analyze this rental property image for a real estate listing. Create ONE specific, compelling highlight that captures the most notable feature visible in this image.
+            ? `Analyze this rental property image for a real estate listing. You are analyzing image ${index + 1} of ${imageUrls.length} total images.
+
+            CRITICAL RULES FOR HIGHLIGHTS:
+            1. Each highlight must describe something DIFFERENT and UNIQUE visible in THIS specific image
+            2. Do NOT repeat features mentioned in other images - focus on what makes THIS image special
+            3. Highlight features that show the property's BENEFITS and UNIQUENESS to potential renters
+            4. Focus on selling points that would attract renters (comfort, luxury, functionality, lifestyle)
+
+            ${index > 0 ? `ALREADY MENTIONED FEATURES TO AVOID: You are analyzing image ${index + 1}, so make sure your highlight is completely different from what might be in other images. Focus on the unique aspect of THIS specific image only.` : ''}
 
             Focus on what makes THIS specific image special:
             - Unique architectural features (floor-to-ceiling windows, exposed beams, vaulted ceilings)
@@ -97,21 +105,22 @@ serve(async (req) => {
             - Functional features (walk-in closets, spa-like bathrooms, gourmet kitchens)
             - Views and lighting (panoramic views, abundant natural light, designer fixtures)
             - Luxury touches (high-end appliances, premium finishes, smart features)
+            - Lifestyle benefits (spacious living, entertaining areas, work-from-home spaces)
 
             Return a JSON object with:
             1. Vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant
-            2. "image_highlight": ONE specific 2-4 word phrase describing the most compelling feature visible
-            3. "detailed_analysis": Brief description of what makes this image notable
+            2. "image_highlight": ONE specific 2-4 word phrase describing the most compelling UNIQUE feature visible in THIS image
+            3. "detailed_analysis": Brief description focusing on the RENTER BENEFITS of what makes this image notable
             
-            Examples of good highlights:
-            - "Floor-to-ceiling windows"
-            - "Marble kitchen island" 
-            - "Built-in wardrobes"
-            - "Designer pendant lighting"
-            - "Panoramic city views"
-            - "Spa-like bathroom"
-            - "Hardwood flooring"`
-            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image.`;
+            Examples of good highlights that focus on renter benefits:
+            - "Floor-to-ceiling windows" (natural light, views)
+            - "Marble kitchen island" (luxury cooking, entertaining)
+            - "Built-in wardrobes" (storage convenience)
+            - "Designer pendant lighting" (ambiance, style)
+            - "Panoramic city views" (lifestyle, prestige)
+            - "Spa-like bathroom" (relaxation, luxury)
+            - "Hardwood flooring" (elegance, easy maintenance)`
+            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image that focuses on renter benefits.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
