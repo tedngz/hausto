@@ -351,9 +351,9 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
       {/* Header */}
       <div className="text-center mb-6 relative">
         
-        {/* History and New Chat buttons */}
+        {/* History and New Chat buttons - positioned to avoid text overlap */}
         {user && (
-          <div className="absolute top-0 right-0 flex gap-2">
+          <div className="absolute -top-2 right-0 flex gap-2 z-10">
             <Button
               onClick={() => setShowHistory(!showHistory)}
               variant="ghost"
@@ -373,7 +373,7 @@ export const LandingChatBox = ({ userPreferences }: LandingChatBoxProps) => {
           </div>
         )}
         
-        <h3 className="text-2xl font-bold text-foreground mb-2">Describe Your Dream Home</h3>
+        <h3 className="text-2xl font-bold text-foreground mb-2 pr-20">Describe Your Dream Home</h3>
       </div>
 
       {/* Chat History Dropdown */}
