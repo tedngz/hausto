@@ -91,35 +91,35 @@ serve(async (req) => {
             ? `Analyze this rental property image for a real estate listing. You are analyzing image ${index + 1} of ${imageUrls.length} total images.
 
             CRITICAL RULES FOR HIGHLIGHTS:
-            1. Each highlight must describe something DIFFERENT and UNIQUE visible in THIS specific image
-            2. Do NOT repeat features mentioned in other images - focus on what makes THIS image special
-            3. Highlight features that show the property's BENEFITS and UNIQUENESS to potential renters
-            4. Focus on selling points that would attract renters (comfort, luxury, functionality, lifestyle)
+            1. Each highlight must focus on BENEFITS, ACTIVITIES, or LIFESTYLE ADVANTAGES - NOT just feature descriptions
+            2. Every highlight must be COMPLETELY DIFFERENT - no overlapping concepts or similar themes
+            3. Tell renters what they can DO or HOW they'll benefit from each space/feature
+            4. Focus on lifestyle, comfort, convenience, entertainment, work, relaxation benefits
 
-            ${index > 0 ? `ALREADY MENTIONED FEATURES TO AVOID: You are analyzing image ${index + 1}, so make sure your highlight is completely different from what might be in other images. Focus on the unique aspect of THIS specific image only.` : ''}
+            ${index > 0 ? `ALREADY COVERED BENEFITS TO AVOID: You are analyzing image ${index + 1}. Make sure this highlight covers a COMPLETELY DIFFERENT benefit/activity from previous images. Think: entertainment vs work vs relaxation vs storage vs cooking vs sleeping vs style, etc.` : ''}
 
-            Focus on what makes THIS specific image special:
-            - Unique architectural features (floor-to-ceiling windows, exposed beams, vaulted ceilings)
-            - Premium materials (marble countertops, hardwood floors, stainless steel appliances)
-            - Design elements (built-in storage, designer lighting, custom finishes)
-            - Functional features (walk-in closets, spa-like bathrooms, gourmet kitchens)
-            - Views and lighting (panoramic views, abundant natural light, designer fixtures)
-            - Luxury touches (high-end appliances, premium finishes, smart features)
-            - Lifestyle benefits (spacious living, entertaining areas, work-from-home spaces)
+            Focus on RENTER BENEFITS and ACTIVITIES they can enjoy:
+            - Entertainment benefits: "Perfect for hosting", "Movie night ready", "Party entertaining"
+            - Work/productivity: "Home office potential", "Study sanctuary", "Remote work haven"
+            - Relaxation/wellness: "Spa-like retreat", "Meditation corner", "Stress-free living"
+            - Convenience/lifestyle: "Easy maintenance", "Effortless organization", "Time-saving features"
+            - Cooking/dining: "Gourmet cooking", "Family dinners", "Culinary adventures"
+            - Style/ambiance: "Instagram-worthy", "Mood lighting", "Sophisticated living"
+            - Comfort/luxury: "Hotel-like comfort", "Premium living", "Cozy relaxation"
 
             Return a JSON object with:
             1. Vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant
-            2. "image_highlight": ONE specific 2-4 word phrase describing the most compelling UNIQUE feature visible in THIS image
-            3. "detailed_analysis": Brief description focusing on the RENTER BENEFITS of what makes this image notable
+            2. "image_highlight": ONE specific 2-4 word phrase focusing on WHAT RENTERS CAN DO or HOW THEY BENEFIT
+            3. "detailed_analysis": Brief description explaining the specific lifestyle benefit or activity this space enables
             
-            Examples of good highlights that focus on renter benefits:
-            - "Floor-to-ceiling windows" (natural light, views)
-            - "Marble kitchen island" (luxury cooking, entertaining)
-            - "Built-in wardrobes" (storage convenience)
-            - "Designer pendant lighting" (ambiance, style)
-            - "Panoramic city views" (lifestyle, prestige)
-            - "Spa-like bathroom" (relaxation, luxury)
-            - "Hardwood flooring" (elegance, easy maintenance)`
+            Examples of BENEFIT-FOCUSED highlights:
+            - "Perfect for hosting" (entertaining friends, dinner parties)
+            - "Gourmet cooking space" (culinary creativity, meal prep ease)
+            - "Effortless organization" (stress-free living, easy tidiness)
+            - "Spa-like retreat" (daily relaxation, self-care rituals)
+            - "Home office ready" (productive remote work, focus zone)
+            - "Movie night haven" (entertainment, cozy evenings)
+            - "Instagram-worthy style" (impressive aesthetics, social sharing)`
             : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image that focuses on renter benefits.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
