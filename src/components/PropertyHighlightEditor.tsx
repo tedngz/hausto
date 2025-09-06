@@ -110,6 +110,53 @@ export const PropertyHighlightEditor = ({
     }
   };
 
+  const regenerateIndividualHighlight = async (imageIndex: number) => {
+    if (!property.images || property.images.length === 0) {
+      return;
+    }
+
+    setIsRegenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: [property.images[imageIndex]],
+          property_info: {
+            title: property.title,
+            description: property.description,
+            location: property.location,
+            price: property.price,
+            size: property.size
+          },
+          generateContent: true
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.analysis?.image_analyses?.[0]?.image_highlight) {
+        const newHighlight = data.analysis.image_analyses[0].image_highlight;
+        const updated = imageHighlights.map((h, i) => 
+          i === imageIndex ? { ...h, highlight: newHighlight } : h
+        );
+        setImageHighlights(updated);
+        
+        toast({
+          title: "Highlight Regenerated",
+          description: "AI has generated a new highlight for this image.",
+        });
+      }
+    } catch (error) {
+      console.error('Error regenerating individual highlight:', error);
+      toast({
+        title: "Generation Failed",
+        description: "Could not regenerate highlight. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   const startEditing = (index: number, currentText: string) => {
     setEditingIndex(index);
     setEditingText(currentText);
@@ -245,6 +292,16 @@ export const PropertyHighlightEditor = ({
                                 </p>
                               </div>
                               <div className="flex items-center gap-1 ml-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => regenerateIndividualHighlight(index)}
+                                  disabled={isRegenerating}
+                                  title="Regenerate this highlight"
+                                >
+                                  <Wand2 className="w-3 h-3" />
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"

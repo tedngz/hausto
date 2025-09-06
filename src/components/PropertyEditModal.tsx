@@ -259,7 +259,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
-          {/* AI-Generated Highlights */}
+          {/* AI-Generated Highlights with Images */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -276,7 +276,33 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 Edit Highlights
               </Button>
             </div>
-            {currentHighlights.length > 0 ? (
+            
+            {/* Display image highlights */}
+            {property.images && property.images.length > 0 && currentVibeAnalysis?.image_analyses ? (
+              <div className="space-y-3">
+                {property.images.map((image, index) => {
+                  const analysisForImage = currentVibeAnalysis.image_analyses.find((a: any) => a.image_index === index);
+                  const highlight = analysisForImage?.image_highlight;
+                  
+                  if (!highlight) return null;
+                  
+                  return (
+                    <div key={index} className="flex items-center gap-3 p-3 bg-gradient-to-r from-orange-50 to-pink-50 rounded-lg border border-orange-100">
+                      <img
+                        src={image}
+                        alt={`Property feature ${index + 1}`}
+                        className="w-16 h-12 object-cover rounded-md flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">
+                          {highlight}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : currentHighlights.length > 0 ? (
               <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg">
                 {currentHighlights.slice(0, 6).map((highlight, index) => (
                   <Badge key={index} variant="secondary" className="text-xs">
@@ -296,31 +322,66 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             )}
           </div>
 
-          {/* Vibe Selection */}
+          {/* Property Vibes with AI-detected vibes */}
           <div>
             <Label className="text-base font-semibold">Property Vibes</Label>
             <p className="text-sm text-gray-600 mb-3">Select vibes that best describe your property</p>
-            <div className="flex flex-wrap gap-2">
-              {vibeOptions.map((vibe) => (
-                <Badge
-                  key={vibe}
-                  variant={selectedVibes.includes(vibe) ? "default" : "outline"}
-                  className={`cursor-pointer transition-colors ${
-                    selectedVibes.includes(vibe) 
-                      ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
-                      : 'hover:bg-gray-100'
-                  }`}
-                  onClick={() => {
-                    setSelectedVibes(prev => 
-                      prev.includes(vibe) 
-                        ? prev.filter(v => v !== vibe)
-                        : [...prev, vibe]
-                    );
-                  }}
-                >
-                  {vibe}
-                </Badge>
-              ))}
+            
+            {/* Show AI-detected vibes first if available */}
+            {currentVibeAnalysis && (
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-700 mb-2">AI-Detected Vibes:</p>
+                <div className="flex flex-wrap gap-2">
+                {Object.entries(currentVibeAnalysis)
+                    .filter(([key, value]) => 
+                      ['modern', 'cozy', 'luxurious', 'minimalist', 'colorful', 'spacious', 'natural_light', 'urban', 'rustic', 'elegant'].includes(key) && 
+                      typeof value === 'number' && (value as number) >= 7
+                    )
+                    .map(([vibe, score]) => (
+                      <Badge
+                        key={vibe}
+                        variant="secondary"
+                        className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300 cursor-pointer"
+                        onClick={() => {
+                          const vibeLabel = vibe.charAt(0).toUpperCase() + vibe.slice(1).replace('_', ' ');
+                          const matchingVibe = vibeOptions.find(v => v.toLowerCase().includes(vibeLabel.toLowerCase()));
+                          if (matchingVibe && !selectedVibes.includes(matchingVibe)) {
+                            setSelectedVibes(prev => [...prev, matchingVibe]);
+                          }
+                        }}
+                      >
+                        {vibe.charAt(0).toUpperCase() + vibe.slice(1).replace('_', ' ')} ({score as number}/10)
+                      </Badge>
+                    ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Manual vibe selection */}
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Manual Selection:</p>
+              <div className="flex flex-wrap gap-2">
+                {vibeOptions.map((vibe) => (
+                  <Badge
+                    key={vibe}
+                    variant={selectedVibes.includes(vibe) ? "default" : "outline"}
+                    className={`cursor-pointer transition-colors ${
+                      selectedVibes.includes(vibe) 
+                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
+                        : 'hover:bg-gray-100'
+                    }`}
+                    onClick={() => {
+                      setSelectedVibes(prev => 
+                        prev.includes(vibe) 
+                          ? prev.filter(v => v !== vibe)
+                          : [...prev, vibe]
+                      );
+                    }}
+                  >
+                    {vibe}
+                  </Badge>
+                ))}
+              </div>
             </div>
           </div>
 
