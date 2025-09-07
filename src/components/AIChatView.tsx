@@ -296,16 +296,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
           <div className="w-full p-6 bg-card border border-border rounded-2xl shadow-xl">
             {/* Header */}
             <div className="text-center mb-6 relative">
-              <div className="flex justify-center mb-4">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-primary/20 rounded-full blur-lg"></div>
-                  <div className="relative bg-primary/10 p-3 rounded-full">
-                    <Sparkles className="h-8 w-8 text-primary" />
-                  </div>
-                </div>
-              </div>
-              
-              {/* History and New Chat buttons positioned at sparkle level */}
+              {/* History and New Chat buttons */}
               <div className="absolute top-0 right-0 flex gap-2">
                 <Button
                   onClick={() => setShowHistory(!showHistory)}
@@ -324,8 +315,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
-              
-              <h3 className="text-2xl font-bold text-foreground mb-2">Haus Finder</h3>
               <p className="text-muted-foreground">
                 Search for apartments with AI assistance
               </p>
