@@ -37,13 +37,13 @@ export const useSupportChat = () => {
       if (!user?.id) return [];
       
       const { data, error } = await supabase
-        .from('support_conversations')
+        .from('support_conversations' as any)
         .select('*')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      return data as SupportConversation[];
+      return (data || []) as unknown as SupportConversation[];
     },
     enabled: !!user?.id,
   });
@@ -55,13 +55,13 @@ export const useSupportChat = () => {
       if (!currentConversationId) return [];
       
       const { data, error } = await supabase
-        .from('support_messages')
+        .from('support_messages' as any)
         .select('*')
         .eq('conversation_id', currentConversationId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return data as SupportMessage[];
+      return (data || []) as unknown as SupportMessage[];
     },
     enabled: !!currentConversationId,
   });
@@ -72,7 +72,7 @@ export const useSupportChat = () => {
       if (!user?.id) throw new Error('User not authenticated');
 
       const { data, error } = await supabase
-        .from('support_conversations')
+        .from('support_conversations' as any)
         .insert({
           user_id: user.id,
           title,
@@ -81,9 +81,9 @@ export const useSupportChat = () => {
         .single();
 
       if (error) throw error;
-      return data;
+      return data as unknown as SupportConversation;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['support-conversations'] });
       setCurrentConversationId(data.id);
     },
@@ -103,7 +103,7 @@ export const useSupportChat = () => {
 
       // Save user message
       const { error: userMessageError } = await supabase
-        .from('support_messages')
+        .from('support_messages' as any)
         .insert({
           conversation_id: conversationId,
           content: message,
@@ -142,7 +142,7 @@ export const useSupportChat = () => {
   const deleteConversationMutation = useMutation({
     mutationFn: async (conversationId: string) => {
       const { error } = await supabase
-        .from('support_conversations')
+        .from('support_conversations' as any)
         .delete()
         .eq('id', conversationId);
 
