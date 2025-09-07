@@ -65,7 +65,7 @@ export const LandingPage = () => {
           </h1>
           
           <p className="text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed text-lg">
-            {user ? "Continue your search for the perfect rental with AI-powered matching and personalized recommendations." : "Discover your dream rental with AI-powered matching. Swipe through curated properties that match your lifestyle and preferences."}
+            {user ? "Find your perfect rental with AI-powered matching." : "Discover your dream rental with AI-powered matching and personalized recommendations."}
           </p>
           
           <div className="mb-8">
