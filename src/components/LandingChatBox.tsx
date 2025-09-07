@@ -51,6 +51,7 @@ export const LandingChatBox = ({
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
+  const [typedPlaceholder, setTypedPlaceholder] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const {
@@ -81,6 +82,26 @@ export const LandingChatBox = ({
     sendMessage,
     isSendingMessage
   } = useChat();
+
+  // Typing effect for placeholder
+  const fullPlaceholder = "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light...";
+  
+  useEffect(() => {
+    if (messages.length === 0) {
+      let i = 0;
+      const typingInterval = setInterval(() => {
+        setTypedPlaceholder(fullPlaceholder.slice(0, i + 1));
+        i++;
+        if (i >= fullPlaceholder.length) {
+          clearInterval(typingInterval);
+        }
+      }, 50);
+
+      return () => clearInterval(typingInterval);
+    } else {
+      setTypedPlaceholder("Ask me about properties, neighborhoods, or anything else...");
+    }
+  }, [messages.length, fullPlaceholder]);
 
   // Compute all results from messages to avoid infinite re-renders
   const allResults = useMemo(() => {
@@ -700,7 +721,7 @@ export const LandingChatBox = ({
       {/* Chat Input - Only show if user is logged in or hasn't searched yet */}
       {(user || !searchResults && !tempUserMessage) && <div className="space-y-4">
           <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={messages.length === 0 ? "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..." : "Ask me about properties, neighborhoods, or anything else..."} disabled={isSendingMessage} className="min-h-[100px] pr-20 resize-none bg-transparent" />
+            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage} className="min-h-[100px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || uploadedImages.length >= 3} size="sm" variant="outline" className="h-8 w-8 p-0">
