@@ -9,7 +9,6 @@ import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';
 import { UserTypeSelector } from '@/components/UserTypeSelector';
 import { AIChatAgent } from '@/components/AIChatAgent';
-import { FloatingAIButton } from '@/components/FloatingAIButton';
 import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
@@ -18,7 +17,8 @@ import { PropertyUploadModal } from '@/components/PropertyUploadModal';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { UsageMeter } from '@/components/UsageMeter';
 import { SubscriptionStatus } from '@/components/SubscriptionStatus';
-import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, MessageSquare } from 'lucide-react';
 import { UserPreferences, Apartment, Match } from '@/types';
 
 const Discover = () => {
@@ -335,7 +335,12 @@ const Discover = () => {
         )}
 
         {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && (
-          <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />
+          <Button
+            onClick={() => setIsAIChatOpen(true)}
+            className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <MessageSquare className="w-6 h-6 text-white" />
+          </Button>
         )}
 
         <AIChatAgent 
