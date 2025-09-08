@@ -293,6 +293,11 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto relative">
+          {/* Title outside chat box */}
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-semibold text-foreground mb-2">Describe your dream home</h2>
+          </div>
+          
           <div className="w-full p-6 bg-card border border-border rounded-2xl shadow-xl">
             {/* Header */}
             <div className="text-center mb-6 relative">
@@ -315,9 +320,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-muted-foreground">
-                Search for apartments with AI assistance
-              </p>
             </div>
 
             {/* Chat History Dropdown */}
