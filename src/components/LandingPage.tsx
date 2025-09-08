@@ -3,7 +3,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LandingChatBox } from "@/components/LandingChatBox";
-import { FloatingAIButton } from "@/components/FloatingAIButton";
 import { useAuth } from "@/hooks/useAuth";
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -178,7 +177,5 @@ export const LandingPage = () => {
           </p>
         </div>
       </footer>
-      
-      <FloatingAIButton />
     </div>;
 };

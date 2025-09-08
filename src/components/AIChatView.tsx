@@ -315,9 +315,8 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">AI Property Search</h2>
               <p className="text-muted-foreground">
-                Find your perfect apartment with AI assistance
+                Search for apartments with AI assistance
               </p>
             </div>
 
