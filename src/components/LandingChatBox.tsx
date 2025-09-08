@@ -446,16 +446,16 @@ export const LandingChatBox = ({
                                     </div>
                                   </div>
 
-                                  {/* Property Details */}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex-1 min-w-0 pr-2">
-                                        <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base">{property.title}</h5>
-                                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
-                                          <MapPin className="h-3 w-3 flex-shrink-0" />
-                                          <span className="line-clamp-1">{property.location}</span>
-                                        </div>
-                                      </div>
+                  {/* Property Details */}
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base text-left">{property.title}</h5>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                          <MapPin className="h-3 w-3 flex-shrink-0" />
+                          <span className="line-clamp-1">{property.location}</span>
+                        </div>
+                      </div>
                                       
                                       <div className="flex flex-col items-end gap-1">
                                         {/* Like Button */}
@@ -497,9 +497,9 @@ export const LandingChatBox = ({
                                       {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
                                     </div>
 
-                                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                                      <strong>Why it matches:</strong> {property.matchReason}
-                                    </p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2 text-left">
+                      <strong>Why it matches:</strong> {property.matchReason}
+                    </p>
 
                                     {/* AI Generated Highlights */}
                                     <div className="flex justify-between items-end">
@@ -631,10 +631,10 @@ export const LandingChatBox = ({
                           </div>
 
                           {/* Property Details */}
-                          <div className="flex-1 min-w-0 sm:order-2">
+                          <div className="flex-1 min-w-0 sm:order-2 text-left">
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex-1 min-w-0 pr-2">
-                                <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base">{property.title}</h5>
+                                <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base text-left">{property.title}</h5>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                                   <MapPin className="h-4 w-4 flex-shrink-0" />
                                   <span className="line-clamp-1">{property.location}</span>
@@ -681,8 +681,8 @@ export const LandingChatBox = ({
                             </div>
 
                             {/* Why it matches - More prominent on mobile */}
-                            <div className="bg-secondary/10 p-3 rounded-lg mb-3">
-                              <p className="text-sm text-foreground">
+                            <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
+                              <p className="text-sm text-foreground text-left">
                                 <span className="font-semibold text-primary">Why it matches: </span>
                                 {property.matchReason}
                               </p>
