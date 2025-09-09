@@ -298,28 +298,31 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
             <h2 className="text-xl font-semibold text-foreground mb-2">Describe your dream home</h2>
           </div>
           
-          <div className="w-full p-6 bg-card border border-border rounded-2xl shadow-xl">
+          {/* History and New Chat buttons - positioned above chat box */}
+          {user && (
+            <div className="absolute -top-8 right-0 flex gap-2 z-10">
+              <Button
+                onClick={() => setShowHistory(!showHistory)}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 hover:bg-secondary/50"
+              >
+                <History className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={createNewChat}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 hover:bg-secondary/50"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          <div className="w-full p-6 bg-transparent rounded-md shadow-xl">
             {/* Header */}
             <div className="text-center mb-6 relative">
-              {/* History and New Chat buttons */}
-              <div className="absolute top-0 right-0 flex gap-2">
-                <Button
-                  onClick={() => setShowHistory(!showHistory)}
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-secondary/50"
-                >
-                  <History className="h-4 w-4" />
-                </Button>
-                <Button
-                  onClick={createNewChat}
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-secondary/50"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
             </div>
 
             {/* Chat History Dropdown */}
