@@ -121,12 +121,40 @@ export const LandingChatBox = ({
     return results;
   }, [messages]);
 
-  // Initialize first conversation if needed
+  // Initialize first conversation if needed - load existing conversation with messages first
   useEffect(() => {
-    if (user && conversations.length === 0 && !currentConversationId) {
+    if (user && conversations.length > 0) {
+      // If no current conversation is selected, find the most recent one with messages
+      if (!currentConversationId) {
+        // Try to find a conversation with messages by checking each one
+        const findConversationWithMessages = async () => {
+          for (const conversation of conversations) {
+            const { data: conversationMessages } = await supabase
+              .from('chat_messages')
+              .select('id')
+              .eq('conversation_id', conversation.id)
+              .limit(1);
+            
+            if (conversationMessages && conversationMessages.length > 0) {
+              setCurrentConversationId(conversation.id);
+              return;
+            }
+          }
+          // If no conversation has messages, use the most recent one or create new
+          if (conversations.length > 0) {
+            setCurrentConversationId(conversations[0].id);
+          } else {
+            createConversation('AI Property Search');
+          }
+        };
+        
+        findConversationWithMessages();
+      }
+    } else if (user && conversations.length === 0) {
+      // Only create a new conversation if the user has no conversations at all
       createConversation('AI Property Search');
     }
-  }, [user, conversations.length, currentConversationId, createConversation]);
+  }, [user, conversations, currentConversationId, createConversation, setCurrentConversationId]);
 
   // Check for stored search query on component mount
   useEffect(() => {
@@ -165,9 +193,20 @@ export const LandingChatBox = ({
     setSearchResults(null);
     setShowHistory(false);
   };
-  const switchToConversation = (conversationId: string) => {
+  const switchToConversation = async (conversationId: string) => {
     setCurrentConversationId(conversationId);
     setShowHistory(false);
+    
+    // Ensure the conversation has messages, if not, it might be an empty one
+    const { data: conversationMessages } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .limit(1);
+    
+    if (!conversationMessages || conversationMessages.length === 0) {
+      console.log(`Conversation ${conversationId} appears to be empty`);
+    }
   };
   const handleLikeProperty = async (propertyId: string, realtorId?: string) => {
     if (!user) {
