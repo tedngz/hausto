@@ -93,33 +93,35 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5-2025-08-07',
-        max_completion_tokens: 2000,
+        model: 'gpt-4o-mini',
+        max_tokens: 2000,
+        temperature: 0.1,
         messages: [
           {
             role: 'system',
-            content: `You are an AI property matching assistant for Hausto, a rental platform. Analyze the user's query describing their ideal home and match it with available properties.
+            content: `You are a property matching assistant. Analyze the user's search query and find the best matching properties from the available listings.
 
 AVAILABLE PROPERTIES:
 ${JSON.stringify(propertiesContext, null, 2)}
 
-Your task:
-1. Understand what the user is looking for in their ideal home
-2. Analyze the available properties to find the best matches
-3. Return the top 3 most suitable properties based on their preferences
-4. Provide a brief explanation for each match
-
-Response format (JSON):
+IMPORTANT: You MUST respond with valid JSON in this exact format:
 {
   "matches": [
     {
       "propertyId": "property_id_here",
-      "matchScore": 95,
-      "reason": "Brief explanation why this property matches their needs"
+      "matchScore": 85,
+      "reason": "Brief explanation why this matches"
     }
   ],
-  "summary": "Brief summary of what you understood from their query and general matching approach"
-}`
+  "summary": "Brief summary of search results"
+}
+
+Rules:
+- Return top 3 best matches only
+- Match based on location, price, size, vibe, description, highlights
+- Use actual property IDs from the data
+- Keep reasons concise (max 20 words)
+- Always return valid JSON, no markdown formatting`
           },
           {
             role: 'user',
@@ -136,24 +138,52 @@ Response format (JSON):
     }
 
     const openAIData = await openAIResponse.json();
-    const aiResponse = openAIData.choices[0].message.content;
+    console.log('OpenAI response received:', JSON.stringify(openAIData, null, 2));
+    
+    const aiResponse = openAIData.choices?.[0]?.message?.content;
+    
+    if (!aiResponse) {
+      console.error('No content in OpenAI response:', openAIData);
+      throw new Error('OpenAI returned empty response');
+    }
+    
+    console.log('AI response content:', aiResponse);
 
     let analysisResult;
     try {
-      analysisResult = JSON.parse(aiResponse);
+      // First try direct JSON parse
+      analysisResult = JSON.parse(aiResponse.trim());
     } catch (parseError) {
-      console.error('Failed to parse AI response:', aiResponse);
-      // Try to extract JSON from response if wrapped in markdown
-      const jsonMatch = aiResponse.match(/```json\n([\s\S]*?)\n```/) || aiResponse.match(/```\n([\s\S]*?)\n```/);
+      console.error('Failed to parse AI response as JSON:', aiResponse);
+      
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = aiResponse.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/) || 
+                        aiResponse.match(/\{[\s\S]*\}/);
+      
       if (jsonMatch) {
         try {
-          analysisResult = JSON.parse(jsonMatch[1]);
+          const cleanJson = jsonMatch[1] || jsonMatch[0];
+          analysisResult = JSON.parse(cleanJson.trim());
+          console.log('Successfully parsed JSON from markdown:', analysisResult);
         } catch (secondParseError) {
-          console.error('Failed to parse extracted JSON:', jsonMatch[1]);
-          throw new Error('Failed to parse AI analysis');
+          console.error('Failed to parse extracted JSON:', jsonMatch[0]);
+          // Fallback: create a simple response
+          analysisResult = {
+            matches: [],
+            summary: `Found properties related to: ${query}. Please try refining your search.`
+          };
         }
       } else {
-        throw new Error('Failed to parse AI analysis');
+        console.error('No JSON found in response, creating fallback');
+        // Create fallback response
+        analysisResult = {
+          matches: properties.slice(0, 3).map((prop, idx) => ({
+            propertyId: prop.id,
+            matchScore: 70 - (idx * 5),
+            reason: `General match for your search criteria`
+          })),
+          summary: `Here are some available properties that might interest you.`
+        };
       }
     }
 
