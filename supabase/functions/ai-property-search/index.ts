@@ -36,34 +36,54 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if user is authenticated
+    // Check if user is authenticated - now required
     let user = null;
     const authHeader = req.headers.get('authorization');
     
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      
-      // Only try to authenticate if it's not the anon key
-      if (token !== supabaseAnonKey) {
-        try {
-          const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
-          if (!authError && authUser) {
-            user = authUser;
-            console.log('Authenticated user requesting property search:', user.id);
-          } else {
-            console.log('Anonymous user requesting property search');
-          }
-        } catch (authError) {
-          console.log('Authentication failed, proceeding as anonymous user:', authError);
-        }
-      } else {
-        console.log('Anonymous user with anon key requesting property search');
-      }
-    } else {
-      console.log('No auth header, proceeding as anonymous user');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ 
+        error: 'Authentication required',
+        results: [],
+        summary: 'Please sign in to search properties.',
+        totalMatches: 0
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Fetch all properties from the database
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Authenticate user with JWT token
+    try {
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authUser) {
+        return new Response(JSON.stringify({ 
+          error: 'Invalid authentication',
+          results: [],
+          summary: 'Please sign in to search properties.',
+          totalMatches: 0
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      user = authUser;
+      console.log('Authenticated user requesting property search:', user.id);
+    } catch (authError) {
+      console.log('Authentication failed:', authError);
+      return new Response(JSON.stringify({ 
+        error: 'Authentication failed',
+        results: [],
+        summary: 'Please sign in to search properties.',
+        totalMatches: 0
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Fetch all properties from the database (user is now authenticated)
     const { data: properties, error: propertiesError } = await supabase
       .from('properties')
       .select('*');
