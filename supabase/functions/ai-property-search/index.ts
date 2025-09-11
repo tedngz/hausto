@@ -36,54 +36,36 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if user is authenticated - now required
+    // Check if user is authenticated (optional for this public endpoint)
     let user = null;
     const authHeader = req.headers.get('authorization');
     
-    if (!authHeader) {
-      return new Response(JSON.stringify({ 
-        error: 'Authentication required',
-        results: [],
-        summary: 'Please sign in to search properties.',
-        totalMatches: 0
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    
-    // Authenticate user with JWT token
-    try {
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !authUser) {
-        return new Response(JSON.stringify({ 
-          error: 'Invalid authentication',
-          results: [],
-          summary: 'Please sign in to search properties.',
-          totalMatches: 0
-        }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      
+      // Try to authenticate user with JWT token
+      try {
+        const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
         });
+        
+        const { data: { user: authUser }, error: authError } = await userSupabase.auth.getUser(token);
+        if (!authError && authUser) {
+          user = authUser;
+          console.log('Authenticated user requesting property search:', user.id);
+        }
+      } catch (authError) {
+        console.log('Authentication optional, continuing without user:', authError);
+        // Continue without authentication for public access
       }
-      user = authUser;
-      console.log('Authenticated user requesting property search:', user.id);
-    } catch (authError) {
-      console.log('Authentication failed:', authError);
-      return new Response(JSON.stringify({ 
-        error: 'Authentication failed',
-        results: [],
-        summary: 'Please sign in to search properties.',
-        totalMatches: 0
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    } else {
+      console.log('No authentication provided, processing as public request');
     }
 
-    // Fetch all properties from the database (user is now authenticated)
+    // Fetch all properties from the database
     const { data: properties, error: propertiesError } = await supabase
       .from('properties')
       .select('*');
