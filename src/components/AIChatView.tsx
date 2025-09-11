@@ -115,21 +115,19 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
               return;
             }
           }
-          // If no conversation has messages, use the most recent one or create new
+          // If no conversation has messages, use the most recent one
           if (conversations.length > 0) {
             setCurrentConversationId(conversations[0].id);
-          } else {
-            createConversation('AI Property Search');
           }
         };
         
         findConversationWithMessages();
       }
-    } else if (user && conversations.length === 0) {
-      // Only create a new conversation if the user has no conversations at all
+    } else if (user && conversations.length === 0 && !isCreatingConversation) {
+      // Only create a new conversation if the user has no conversations at all and we're not already creating one
       createConversation('AI Property Search');
     }
-  }, [user, conversations, currentConversationId, createConversation, setCurrentConversationId]);
+  }, [user, conversations, currentConversationId, createConversation, setCurrentConversationId, isCreatingConversation]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -371,27 +369,36 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
               <Card className="mb-6 border-border">
                 <CardContent className="p-4">
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {conversations.map((conversation) => (
-                      <div
-                        key={conversation.id}
-                        onClick={() => switchToConversation(conversation.id)}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                          conversation.id === currentConversationId 
-                            ? 'bg-primary/10 border border-primary/20' 
-                            : 'hover:bg-secondary/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{conversation.title || 'Untitled Chat'}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(conversation.created_at).toLocaleDateString()}
-                            </p>
+                    {conversations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No conversations yet</p>
+                    ) : (
+                      conversations.map((conversation) => (
+                        <div
+                          key={conversation.id}
+                          onClick={() => switchToConversation(conversation.id)}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                            conversation.id === currentConversationId 
+                              ? 'bg-primary/10 border border-primary/20' 
+                              : 'hover:bg-secondary/50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{conversation.title || 'Untitled Chat'}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(conversation.created_at).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  timeZone: 'UTC'
+                                })}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
