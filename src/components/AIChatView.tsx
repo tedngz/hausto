@@ -558,31 +558,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                     </CardContent>
                                   </Card>
                                 ))}
-                                
-                                {/* Support Offer */}
-                                <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in">
-                                  <p className="text-sm text-muted-foreground mb-3">
-                                    Need help with your search or have questions about these properties? I'm here to assist you further!
-                                  </p>
-                                  <div className="flex gap-2 flex-wrap">
-                                    <Button 
-                                      onClick={handleBrowseAll}
-                                      variant="outline"
-                                      size="sm"
-                                      className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                                    >
-                                      Browse All Properties
-                                    </Button>
-                                    <Button 
-                                      onClick={() => navigate('/discover')}
-                                      variant="outline"
-                                      size="sm"
-                                      className="border-secondary text-secondary-foreground hover:bg-secondary"
-                                    >
-                                      Start Swiping
-                                    </Button>
-                                  </div>
-                                </div>
                               </div>
                             )}
                           </div>
