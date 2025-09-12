@@ -72,46 +72,69 @@ serve(async (req) => {
     const accessToken = authData.access_token;
 
     // Cancel PayPal subscription
-    const cancelResponse = await fetch(
-      `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          reason: "User requested cancellation",
-        }),
-      }
-    );
+    let paypalCancelled = false;
+    try {
+      const cancelResponse = await fetch(
+        `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            reason: "User requested cancellation",
+          }),
+        }
+      );
 
-    if (!cancelResponse.ok) {
-      const errorData = await cancelResponse.json();
-      throw new Error(`PayPal cancellation failed: ${JSON.stringify(errorData)}`);
+      if (!cancelResponse.ok) {
+        const errorData = await cancelResponse.json();
+        logStep("PayPal cancellation failed", { status: cancelResponse.status, error: errorData });
+        // Don't throw here - we'll still update our database
+      } else {
+        paypalCancelled = true;
+        logStep("PayPal subscription cancelled successfully");
+      }
+    } catch (paypalError) {
+      logStep("PayPal API error", { error: paypalError.message });
+      // Continue with database update even if PayPal fails
     }
 
-    // Update subscriber record
-    await supabaseClient.from("subscribers").update({
+    // Update subscriber record in our database
+    const { error: updateError } = await supabaseClient.from("subscribers").update({
       subscribed: false,
       subscription_tier: "free",
       subscription_end: null,
+      paypal_subscription_id: null, // Clear the PayPal ID
       updated_at: new Date().toISOString(),
     }).eq("user_id", user.id);
 
-    logStep("Subscription cancelled successfully");
+    if (updateError) {
+      logStep("Database update failed", { error: updateError.message });
+      throw new Error(`Failed to update subscription status: ${updateError.message}`);
+    }
 
-    return new Response(JSON.stringify({ success: true, message: "Subscription cancelled successfully" }), {
+    logStep("Subscription cancelled successfully", { paypalCancelled });
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      message: "Subscription cancelled successfully",
+      paypalCancelled 
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR in cancel-paypal-subscription", { message: "Cancellation failed" });
+    logStep("ERROR in cancel-paypal-subscription", { message: errorMessage });
     
-    // Don't expose internal error details
-    return new Response(JSON.stringify({ error: "Unable to cancel subscription" }), {
+    // Provide more specific error message for debugging
+    return new Response(JSON.stringify({ 
+      error: "Unable to cancel subscription", 
+      details: errorMessage 
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
