@@ -21,9 +21,9 @@ serve(async (req) => {
 
     const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
     const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
-    
-    if (!clientId || !clientSecret) {
-      throw new Error("PayPal credentials not configured");
+    const payPalConfigured = Boolean(clientId && clientSecret);
+    if (!payPalConfigured) {
+      logStep("PayPal credentials not configured - proceeding with local cancellation only");
     }
 
     const supabaseClient = createClient(
@@ -55,50 +55,63 @@ serve(async (req) => {
     }
 
     // Get PayPal access token
-    const authResponse = await fetch("https://api.sandbox.paypal.com/v1/oauth2/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-      },
-      body: "grant_type=client_credentials",
-    });
-
-    const authData = await authResponse.json();
-    if (!authResponse.ok) {
-      throw new Error(`PayPal auth failed: ${authData.error_description}`);
+    let accessToken: string | null = null;
+    if (payPalConfigured) {
+      try {
+        const authResponse = await fetch("https://api.sandbox.paypal.com/v1/oauth2/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+          },
+          body: "grant_type=client_credentials",
+        });
+        const authData = await authResponse.json();
+        if (!authResponse.ok) {
+          logStep("PayPal auth failed", { error: authData.error_description || authData.error || "Unknown" });
+        } else {
+          accessToken = authData.access_token;
+          logStep("Obtained PayPal access token");
+        }
+      } catch (authErr) {
+        logStep("PayPal auth exception", { error: authErr instanceof Error ? authErr.message : String(authErr) });
+      }
+    } else {
+      logStep("Skipping PayPal auth - credentials missing");
     }
-
-    const accessToken = authData.access_token;
 
     // Cancel PayPal subscription
     let paypalCancelled = false;
-    try {
-      const cancelResponse = await fetch(
-        `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            reason: "User requested cancellation",
-          }),
+    if (accessToken) {
+      try {
+        const cancelResponse = await fetch(
+          `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              reason: "User requested cancellation",
+            }),
+          }
+        );
+    
+        if (!cancelResponse.ok) {
+          const errorData = await cancelResponse.json();
+          logStep("PayPal cancellation failed", { status: cancelResponse.status, error: errorData });
+          // Don't throw here - we'll still update our database
+        } else {
+          paypalCancelled = true;
+          logStep("PayPal subscription cancelled successfully");
         }
-      );
-
-      if (!cancelResponse.ok) {
-        const errorData = await cancelResponse.json();
-        logStep("PayPal cancellation failed", { status: cancelResponse.status, error: errorData });
-        // Don't throw here - we'll still update our database
-      } else {
-        paypalCancelled = true;
-        logStep("PayPal subscription cancelled successfully");
+      } catch (paypalError) {
+        logStep("PayPal API error", { error: paypalError instanceof Error ? paypalError.message : String(paypalError) });
+        // Continue with database update even if PayPal fails
       }
-    } catch (paypalError) {
-      logStep("PayPal API error", { error: paypalError.message });
-      // Continue with database update even if PayPal fails
+    } else {
+      logStep("Skipping PayPal cancellation - no PayPal access token available");
     }
 
     // Update subscriber record in our database
