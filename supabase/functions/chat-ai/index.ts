@@ -362,11 +362,7 @@ Current user message: ${message}`;
     }
     
     // Parse the AI's response
-    const aiResponse = completion.choices[0]?.message?.content;
-    
-    if (!aiResponse) {
-      throw new Error('No response from AI');
-    }
+    const aiResponse = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
 
     // Check if the response contains search results
     let searchData = null;
@@ -436,8 +432,9 @@ Current user message: ${message}`;
       }
     }
 
-    return new Response(JSON.stringify({ message: aiResponse }), {
+    return new Response(JSON.stringify({ response: aiResponse }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
     });
 
   } catch (error) {
