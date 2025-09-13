@@ -14,6 +14,82 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_search_results: {
+        Row: {
+          created_at: string | null
+          id: string
+          match_reason: string | null
+          match_score: number | null
+          property_id: string
+          search_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          match_reason?: string | null
+          match_score?: number | null
+          property_id: string
+          search_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          match_reason?: string | null
+          match_score?: number | null
+          property_id?: string
+          search_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_search_results_search_id_fkey"
+            columns: ["search_id"]
+            isOneToOne: false
+            referencedRelation: "ai_searches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_searches: {
+        Row: {
+          conversation_id: string
+          created_at: string | null
+          id: string
+          query: string
+          summary: string | null
+          total_matches: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string | null
+          id?: string
+          query: string
+          summary?: string | null
+          total_matches?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string | null
+          id?: string
+          query?: string
+          summary?: string | null
+          total_matches?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_ai_searches_conversation"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           created_at: string
