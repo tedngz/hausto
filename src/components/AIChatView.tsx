@@ -17,6 +17,7 @@ import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
 import { UserPreferences } from '@/types';
 import { useChat } from '@/hooks/useChat';
+import { useAISearches } from '@/hooks/useAISearches';
 
 interface PropertyMatch {
   id: string;
@@ -77,6 +78,9 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     deleteConversation,
     isDeletingConversation,
   } = useChat();
+
+  // Use AI searches hook for structured search results
+  const { aiSearches, getEnrichedResults } = useAISearches(currentConversationId || undefined);
 
   // Compute all results from messages to avoid infinite re-renders
   const allResults = useMemo(() => {
@@ -223,36 +227,18 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     setCurrentConversationId(conversationId);
     setShowHistory(false);
     
-    // Ensure the conversation has messages, if not, clean it up
+    // Clear current search results - they will be loaded by the aiSearches hook
+    setSearchResults(null);
+    
+    // Log for debugging
     const { data: conversationMessages } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('id')
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+      .limit(1);
     
-    // If the conversation is empty and it's not the one we just switched to, 
-    // it might have been created accidentally
     if (!conversationMessages || conversationMessages.length === 0) {
       console.log(`Conversation ${conversationId} appears to be empty`);
-    } else {
-      // Parse the last AI message to extract search results if available
-      const lastAiMessage = conversationMessages
-        .filter(msg => msg.role === 'assistant')
-        .pop();
-      
-      if (lastAiMessage) {
-        try {
-          const parsed = JSON.parse(lastAiMessage.content);
-          if (parsed.results && Array.isArray(parsed.results)) {
-            setSearchResults(parsed);
-          }
-        } catch (e) {
-          // Not JSON, clear search results
-          setSearchResults(null);
-        }
-      } else {
-        setSearchResults(null);
-      }
     }
   };
 
@@ -739,6 +725,177 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
             />
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// Component to display AI search results
+interface AISearchResultsDisplayProps {
+  search: any;
+  onPropertyClick: (property: PropertyMatch) => void;
+  onLikeProperty: (propertyId: string, realtorId?: string) => void;
+  likedProperties: Set<string>;
+  formatPrice: (price: number) => string;
+  getEnrichedResults: (searchId: string) => Promise<PropertyMatch[]>;
+}
+
+const AISearchResultsDisplay = ({ 
+  search, 
+  onPropertyClick, 
+  onLikeProperty, 
+  likedProperties, 
+  formatPrice,
+  getEnrichedResults 
+}: AISearchResultsDisplayProps) => {
+  const [enrichedResults, setEnrichedResults] = useState<PropertyMatch[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadResults = async () => {
+      try {
+        const results = await getEnrichedResults(search.id);
+        setEnrichedResults(results);
+      } catch (error) {
+        console.error('Error loading enriched results:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadResults();
+  }, [search.id, getEnrichedResults]);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-start animate-fade-in">
+        <div className="max-w-[95%] p-3 rounded-lg bg-secondary text-secondary-foreground">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading search results...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-start animate-fade-in">
+      <div className="max-w-[95%] space-y-4">
+        {search.summary && (
+          <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+            <p className="text-sm">{search.summary}</p>
+          </div>
+        )}
+        
+        {enrichedResults.length > 0 && (
+          <div className="space-y-3">
+            {enrichedResults.map((property) => (
+              <Card 
+                key={property.id} 
+                className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale"
+                onClick={() => onPropertyClick(property)}
+              >
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex gap-3 sm:gap-4">
+                    {/* Property Image */}
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                      {property.images && property.images.length > 0 ? (
+                        <img 
+                          src={property.images[0]} 
+                          alt={property.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          <Home className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Property Details */}
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm sm:text-base text-foreground line-clamp-1">
+                            {property.title}
+                          </h3>
+                          <div className="flex items-center gap-1 text-muted-foreground text-xs sm:text-sm">
+                            <MapPin className="h-3 w-3 flex-shrink-0" />
+                            <span className="line-clamp-1">{property.location}</span>
+                          </div>
+                        </div>
+                        
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLikeProperty(property.id, property.realtor_id);
+                          }}
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 flex-shrink-0"
+                        >
+                          <Heart 
+                            className={`h-4 w-4 ${
+                              likedProperties.has(property.id) 
+                                ? 'fill-red-500 text-red-500' 
+                                : 'text-muted-foreground'
+                            }`} 
+                          />
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs sm:text-sm">
+                        <div className="flex items-center gap-1 text-primary font-semibold">
+                          <DollarSign className="h-3 w-3" />
+                          <span>{formatPrice(property.price)}</span>
+                        </div>
+                        {property.size && (
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Home className="h-3 w-3" />
+                            <span>{property.size}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Match Score and Reason */}
+                      {property.matchScore > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {Math.round(property.matchScore)}% match
+                            </Badge>
+                          </div>
+                          {property.matchReason && (
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {property.matchReason}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Highlights */}
+                      {property.highlights && property.highlights.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {property.highlights.slice(0, 3).map((highlight, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {highlight}
+                            </Badge>
+                          ))}
+                          {property.highlights.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{property.highlights.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

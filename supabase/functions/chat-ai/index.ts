@@ -361,12 +361,26 @@ Current user message: ${message}`;
       throw new Error('Invalid response from OpenAI');
     }
     
-    const aiResponse = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
-    console.log('AI response length:', aiResponse.length);
+    // Parse the AI's response
+    const aiResponse = completion.choices[0]?.message?.content;
+    
+    if (!aiResponse) {
+      throw new Error('No response from AI');
+    }
+
+    // Check if the response contains search results
+    let searchData = null;
+    try {
+      const parsed = JSON.parse(aiResponse);
+      if (parsed.results && Array.isArray(parsed.results)) {
+        searchData = parsed;
+      }
+    } catch (e) {
+      // Not JSON, treat as regular text
+    }
 
     // Save AI response to database
-    console.log('Saving AI response to database...');
-    const { error: saveError } = await supabase
+    const { error: aiMessageError } = await supabase
       .from('chat_messages')
       .insert({
         conversation_id: conversationId,
@@ -374,19 +388,57 @@ Current user message: ${message}`;
         content: aiResponse
       });
 
-    if (saveError) {
-      console.error('Error saving AI response:', saveError);
-      throw saveError;
+    if (aiMessageError) {
+      console.error('Error saving AI message:', aiMessageError);
+      throw aiMessageError;
     }
 
-    console.log('Chat AI function completed successfully');
-    return new Response(
-      JSON.stringify({ response: aiResponse }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+    // If this is a search result, save it to the ai_searches and ai_search_results tables
+    if (searchData && user?.id) {
+      try {
+        // Create AI search record
+        const { data: searchRecord, error: searchError } = await supabase
+          .from('ai_searches')
+          .insert({
+            conversation_id: conversationId,
+            user_id: user.id,
+            query: message,
+            summary: searchData.summary || '',
+            total_matches: searchData.results.length
+          })
+          .select()
+          .single();
+
+        if (searchError) {
+          console.error('Error saving search record:', searchError);
+        } else if (searchRecord && searchData.results.length > 0) {
+          // Save individual search results
+          const searchResults = searchData.results.map((result: any) => ({
+            search_id: searchRecord.id,
+            property_id: result.id,
+            match_score: result.matchScore,
+            match_reason: result.matchReason
+          }));
+
+          const { error: resultsError } = await supabase
+            .from('ai_search_results')
+            .insert(searchResults);
+
+          if (resultsError) {
+            console.error('Error saving search results:', resultsError);
+          } else {
+            console.log(`Saved ${searchResults.length} search results for search ${searchRecord.id}`);
+          }
+        }
+      } catch (searchSaveError) {
+        console.error('Error processing search results:', searchSaveError);
+        // Don't fail the whole request if search saving fails
       }
-    );
+    }
+
+    return new Response(JSON.stringify({ message: aiResponse }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error) {
     console.error('Error in chat-ai function:', error);
