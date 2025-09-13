@@ -226,14 +226,33 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     // Ensure the conversation has messages, if not, clean it up
     const { data: conversationMessages } = await supabase
       .from('chat_messages')
-      .select('id')
+      .select('*')
       .eq('conversation_id', conversationId)
-      .limit(1);
+      .order('created_at', { ascending: true });
     
     // If the conversation is empty and it's not the one we just switched to, 
     // it might have been created accidentally
     if (!conversationMessages || conversationMessages.length === 0) {
       console.log(`Conversation ${conversationId} appears to be empty`);
+    } else {
+      // Parse the last AI message to extract search results if available
+      const lastAiMessage = conversationMessages
+        .filter(msg => msg.role === 'assistant')
+        .pop();
+      
+      if (lastAiMessage) {
+        try {
+          const parsed = JSON.parse(lastAiMessage.content);
+          if (parsed.results && Array.isArray(parsed.results)) {
+            setSearchResults(parsed);
+          }
+        } catch (e) {
+          // Not JSON, clear search results
+          setSearchResults(null);
+        }
+      } else {
+        setSearchResults(null);
+      }
     }
   };
 
@@ -390,8 +409,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                 {new Date(conversation.created_at).toLocaleDateString('en-US', {
                                   year: 'numeric',
                                   month: 'short',
-                                  day: 'numeric',
-                                  timeZone: 'UTC'
+                                  day: 'numeric'
                                 })}
                               </p>
                             </div>
