@@ -280,7 +280,16 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     try {
       // Send message to AI chat
       sendMessage(messageData);
-      
+
+      // Update conversation title to reflect user's query (first 80 chars)
+      if (currentConversationId && queryToUse.trim()) {
+        const currentConv = conversations.find(c => c.id === currentConversationId);
+        if (currentConv && (!currentConv.title || currentConv.title === 'AI Property Search' || currentConv.title === 'New AI Search')) {
+          const newTitle = queryToUse.trim().slice(0, 80);
+          await supabase.from('chat_conversations').update({ title: newTitle }).eq('id', currentConversationId);
+        }
+      }
+
       // Update AI search usage
       await updateUsage('ai-search');
       
@@ -599,6 +608,36 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* AI Search History for this conversation */}
+            {aiSearches && aiSearches.length > 0 && (
+              <div className="space-y-4 mb-6">
+                {aiSearches.map((search) => (
+                  <div key={search.id} className="animate-fade-in">
+                    <div className="mb-2">
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(search.created_at).toLocaleString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                      <p className="text-sm font-medium text-foreground line-clamp-2">{search.query}</p>
+                    </div>
+                    <AISearchResultsDisplay
+                      search={search}
+                      onPropertyClick={handlePropertyClick}
+                      onLikeProperty={handleLikeProperty}
+                      likedProperties={likedProperties}
+                      formatPrice={formatPrice}
+                      getEnrichedResults={getEnrichedResults}
+                    />
+                  </div>
+                ))}
               </div>
             )}
 
