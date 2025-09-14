@@ -113,6 +113,7 @@ export const useSupportChat = () => {
       if (userMessageError) throw userMessageError;
 
       // Call support AI function
+      console.log('About to invoke support-ai function...');
       const { data: response, error: functionError } = await supabase.functions.invoke('support-ai', {
         body: {
           message,
@@ -121,7 +122,19 @@ export const useSupportChat = () => {
         }
       });
 
-      if (functionError) throw functionError;
+      console.log('Support AI function result:', { response, functionError });
+
+      if (functionError) {
+        console.error('Support AI function error details:', {
+          message: functionError.message,
+          status: functionError.status,
+          statusText: functionError.statusText,
+          details: functionError.details,
+          hint: functionError.hint,
+          code: functionError.code
+        });
+        throw functionError;
+      }
 
       return response;
     },

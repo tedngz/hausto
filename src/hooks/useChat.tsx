@@ -134,6 +134,7 @@ export const useChat = () => {
       });
 
       // Call edge function for AI response with enhanced context
+      console.log('About to invoke chat-ai function...');
       const { data, error } = await supabase.functions.invoke('chat-ai', {
         body: { 
           message, 
@@ -144,8 +145,17 @@ export const useChat = () => {
         }
       });
 
+      console.log('Function invocation result:', { data, error });
+
       if (error) {
-        console.error('Chat AI function error:', error);
+        console.error('Chat AI function error details:', {
+          message: error.message,
+          status: error.status,
+          statusText: error.statusText,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw new Error(`Chat failed: ${error.message || 'Network error - please check your connection and try again'}`);
       }
 
