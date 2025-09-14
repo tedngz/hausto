@@ -468,92 +468,95 @@ export const LandingChatBox = ({
                           <p className="text-sm">{searchResults.summary}</p>
                         </div>}
                       
-                      {searchResults.results.length > 0 && <div className="space-y-3">
-                          {searchResults.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" onClick={() => handlePropertyClick(property)}>
-                              <CardContent className="p-3 sm:p-4">
-                                <div className="flex gap-3 sm:gap-4">
-                                  {/* Property Image - Bigger on mobile */}
-                                  <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
-                                    {property.images && property.images.length > 0 ? <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center">
-                                        <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                                      </div>}
-                                    {/* Match Score Overlay */}
-                                    <div className="absolute top-1 left-1">
-                                      <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1.5 py-0.5">
-                                        {property.matchScore}%
-                                      </Badge>
+                          {searchResults.results.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                           {searchResults.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale max-w-sm" onClick={() => handlePropertyClick(property)}>
+                              <CardContent className="p-0">
+                                {/* Property Image */}
+                                <div className="relative w-full h-48 rounded-t-lg overflow-hidden bg-muted">
+                                  {property.images && property.images.length > 0 ? (
+                                    <img 
+                                      src={property.images[0]} 
+                                      alt={property.title} 
+                                      className="w-full h-full object-cover" 
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Home className="h-12 w-12 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                  
+                                  {/* Match Score Badge */}
+                                  <div className="absolute top-3 left-3">
+                                    <Badge className="bg-primary text-primary-foreground font-semibold px-2 py-1">
+                                      {property.matchScore}% match
+                                    </Badge>
+                                  </div>
+                                  
+                                  {/* Heart Button */}
+                                  <Button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleLikeProperty(property.id, property.realtor_id);
+                                    }} 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    className="absolute top-3 right-3 h-8 w-8 p-0 bg-white/90 hover:bg-white"
+                                  >
+                                    <Heart 
+                                      className={`h-4 w-4 ${
+                                        likedProperties.has(property.id) 
+                                          ? 'fill-red-500 text-red-500' 
+                                          : 'text-muted-foreground'
+                                      }`} 
+                                    />
+                                  </Button>
+                                </div>
+
+                                {/* Property Details */}
+                                <div className="p-4 space-y-3">
+                                  <div>
+                                    <h3 className="font-semibold text-base text-foreground line-clamp-1 mb-1">
+                                      {property.title}
+                                    </h3>
+                                    <div className="flex items-center gap-1 text-muted-foreground text-sm">
+                                      <MapPin className="h-4 w-4 flex-shrink-0" />
+                                      <span className="line-clamp-1">{property.location}</span>
                                     </div>
                                   </div>
 
-                  {/* Property Details */}
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <h5 className="font-semibold text-foreground line-clamp-1 text-sm sm:text-base text-left">{property.title}</h5>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
-                          <MapPin className="h-3 w-3 flex-shrink-0" />
-                          <span className="line-clamp-1">{property.location}</span>
-                        </div>
-                      </div>
-                                      
-                                      <div className="flex flex-col items-end gap-1">
-                                        {/* Like Button */}
-                                        <Button onClick={e => {
-                                e.stopPropagation();
-                                handleLikeProperty(property.id, property.realtor_id);
-                              }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "hover:bg-green-50 text-green-600"}`}>
-                                          <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                        </Button>
-                                        
-                                        {/* Vibe Score */}
-                                        {userPreferences && <VibeScore score={calculateVibeScore({
-                                id: property.id,
-                                images: property.images,
-                                title: property.title,
-                                location: property.location,
-                                price: property.price,
-                                size: property.size,
-                                vibe: property.vibe,
-                                description: property.description,
-                                highlights: property.highlights,
-                                realtor: {
-                                  id: '',
-                                  name: '',
-                                  phone: '',
-                                  email: ''
-                                },
-                                vibe_analysis: property.vibe_analysis
-                              }, userPreferences)} size="sm" />}
-                                      </div>
+                                  <div className="flex items-center gap-4 text-sm">
+                                    <div className="flex items-center gap-1 text-primary font-semibold">
+                                      <DollarSign className="h-4 w-4" />
+                                      <span>{formatPrice(property.price)}</span>
                                     </div>
-
-                                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-2">
-                                      <div className="flex items-center gap-1">
-                                        <DollarSign className="h-3 w-3" />
-                                        <span className="font-medium text-foreground">{formatPrice(property.price)}</span>
-                                      </div>
-                                      {property.size && <span>{property.size}</span>}
-                                      {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
-                                    </div>
-
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2 text-left">
-                      <strong>Why it matches:</strong> {property.matchReason}
-                    </p>
-
-                                    {/* AI Generated Highlights */}
-                                    <div className="flex justify-between items-end">
-                                      <div className="flex-1">
-                                        {property.highlights && property.highlights.length > 0 && <div className="flex flex-wrap gap-1">
-                                            {property.highlights.slice(0, 2).map((highlight, index) => <Badge key={index} variant="outline" className="text-xs border-primary/30 bg-primary/5">
-                                                {highlight}
-                                              </Badge>)}
-                                            {property.highlights.length > 2 && <Badge variant="outline" className="text-xs">
-                                                +{property.highlights.length - 2} more
-                                              </Badge>}
-                                          </div>}
-                                      </div>
-                                    </div>
+                                    {property.size && (
+                                      <span className="text-muted-foreground">{property.size}</span>
+                                    )}
+                                    {property.vibe && (
+                                      <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
+                                    )}
                                   </div>
+
+                                  {/* Match Reason */}
+                                  {property.matchReason && (
+                                    <div className="space-y-2">
+                                      <p className="text-sm">
+                                        <span className="text-primary font-medium">Why it matches:</span>{' '}
+                                        <span className="text-muted-foreground">{property.matchReason}</span>
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Highlights */}
+                                  {property.highlights && property.highlights.length > 0 && (
+                                    <div className="space-y-2">
+                                      <div className="bg-accent/30 rounded-lg p-2">
+                                        <p className="text-xs text-muted-foreground">
+                                          {property.highlights[0]}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </CardContent>
                             </Card>)}
