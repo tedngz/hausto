@@ -405,8 +405,8 @@ export const LandingChatBox = ({
       {messages.length > 0 && user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {messages.map((message, index) => {
         if (message.role === 'user') {
-          return <div key={index} className="flex justify-start animate-fade-in">
-                  <div className="max-w-[95%] p-3 rounded-lg bg-primary text-primary-foreground">
+          return <div key={index} className="flex justify-end animate-fade-in">
+                  <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
                     <p className="text-sm">{message.content}</p>
                   </div>
                 </div>;
@@ -428,7 +428,7 @@ export const LandingChatBox = ({
           }
           if (searchResults) {
             return <div key={index} className="flex justify-start animate-fade-in">
-                    <div className="max-w-[95%] space-y-4">
+                    <div className="w-full space-y-4">
                       {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
                           <p className="text-sm">{searchResults.summary}</p>
                         </div>}
@@ -600,8 +600,8 @@ export const LandingChatBox = ({
       {/* Temporary Chat Messages for Non-Logged In Users */}
       {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {/* User Message */}
-          <div className="flex justify-start animate-fade-in">
-            <div className="max-w-[95%] p-3 rounded-lg bg-primary text-primary-foreground">
+          <div className="flex justify-end animate-fade-in">
+            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
               <p className="text-sm">{tempUserMessage}</p>
             </div>
           </div>
@@ -627,7 +627,7 @@ export const LandingChatBox = ({
       {/* Search Results for Non-Logged In Users */}
       {searchResults && !user && <div className="space-y-4 mb-6">
           <div className="flex justify-start animate-fade-in">
-            <div className="max-w-[95%] space-y-4">
+            <div className="w-full space-y-4">
               {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
                   <p className="text-sm">{searchResults.summary}</p>
                 </div>}
