@@ -495,25 +495,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                         </p>
                                       </div>
 
-                                      {/* AI Generated Highlights - Better spacing */}
-                                      {property.highlights && property.highlights.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5">
-                                          {property.highlights.slice(0, 3).map((highlight, index) => (
-                                            <Badge 
-                                              key={index} 
-                                              variant="outline" 
-                                              className="text-xs border-primary/30 bg-primary/5 px-2 py-1"
-                                            >
-                                              {highlight}
-                                            </Badge>
-                                          ))}
-                                          {property.highlights.length > 3 && (
-                                            <Badge variant="outline" className="text-xs px-2 py-1">
-                                              +{property.highlights.length - 3} more
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      )}
                                     </div>
                                   </div>
                                 </CardContent>
