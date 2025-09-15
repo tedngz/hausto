@@ -16,8 +16,6 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
 import { UserPreferences } from '@/types';
-import { useChat } from '@/hooks/useChat';
-import { useAISearches } from '@/hooks/useAISearches';
 
 interface PropertyMatch {
   id: string;
@@ -49,14 +47,13 @@ interface AIChatViewProps {
 export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatViewProps) => {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
-  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<PropertyMatch | null>(null);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<Array<{id: string, query: string, results: SearchResult, timestamp: Date}>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -65,73 +62,16 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   const { canPerformAction, updateUsage } = useUsageTracking();
   const { createMatch } = useMatches();
   
-  // Use the proper chat hook for database-backed conversations
-  const {
-    conversations,
-    messages,
-    currentConversationId,
-    setCurrentConversationId,
-    createConversation,
-    isCreatingConversation,
-    sendMessage,
-    isSendingMessage,
-    deleteConversation,
-    isDeletingConversation,
-  } = useChat();
-
-  // Use AI searches hook for structured search results
-  const { aiSearches, getEnrichedResults } = useAISearches(currentConversationId || undefined);
-
-  // Compute all results from messages to avoid infinite re-renders
+  // Compute all results from search history to avoid infinite re-renders
   const allResults = useMemo(() => {
     const results: PropertyMatch[] = [];
-    messages.forEach(message => {
-      if (message.role === 'assistant') {
-        try {
-          const parsed = JSON.parse(message.content);
-          if (parsed.results && Array.isArray(parsed.results)) {
-            results.push(...parsed.results);
-          }
-        } catch (e) {
-          // Not JSON, ignore
-        }
+    searchHistory.forEach(search => {
+      if (search.results.results) {
+        results.push(...search.results.results);
       }
     });
     return results;
-  }, [messages]);
-
-  // Initialize first conversation if needed - load existing conversation with messages first
-  useEffect(() => {
-    if (user && conversations.length > 0) {
-      // If no current conversation is selected, find the most recent one with messages
-      if (!currentConversationId) {
-        // Try to find a conversation with messages by checking each one
-        const findConversationWithMessages = async () => {
-          for (const conversation of conversations) {
-            const { data: conversationMessages } = await supabase
-              .from('chat_messages')
-              .select('id')
-              .eq('conversation_id', conversation.id)
-              .limit(1);
-            
-            if (conversationMessages && conversationMessages.length > 0) {
-              setCurrentConversationId(conversation.id);
-              return;
-            }
-          }
-          // If no conversation has messages, use the most recent one
-          if (conversations.length > 0) {
-            setCurrentConversationId(conversations[0].id);
-          }
-        };
-        
-        findConversationWithMessages();
-      }
-    } else if (user && conversations.length === 0 && !isCreatingConversation) {
-      // Only create a new conversation if the user has no conversations at all and we're not already creating one
-      createConversation('AI Property Search');
-    }
-  }, [user, conversations, currentConversationId, createConversation, setCurrentConversationId, isCreatingConversation]);
+  }, [searchHistory]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -155,10 +95,9 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   };
 
   const createNewChat = () => {
-    createConversation('New AI Search');
+    setSearchHistory([]);
     setQuery('');
     setUploadedImages([]);
-    setSearchResults(null);
     setShowHistory(false);
   };
 
@@ -223,31 +162,17 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     }
   };
 
-  const switchToConversation = async (conversationId: string) => {
-    setCurrentConversationId(conversationId);
-    setShowHistory(false);
-    
-    // Clear current search results - they will be loaded by the aiSearches hook
-    setSearchResults(null);
-    
-    // Log for debugging
-    const { data: conversationMessages } = await supabase
-      .from('chat_messages')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .limit(1);
-    
-    if (!conversationMessages || conversationMessages.length === 0) {
-      console.log(`Conversation ${conversationId} appears to be empty`);
-    }
-  };
-
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
     
     if (!user) {
       localStorage.setItem('pendingSearchQuery', queryToUse);
-      setShowAuthPrompt(true);
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to search for properties",
+        variant: "destructive"
+      });
+      navigate('/auth', { state: { returnTo: '/discover' } });
       return;
     }
 
@@ -266,36 +191,45 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
       return;
     }
 
-    // Send message using the chat hook
-    const messageData = {
-      message: queryToUse,
-      conversationId: currentConversationId!,
-      userType: 'renter' as const,
-      userPreferences,
-      propertyImages: uploadedImages.length > 0 ? await Promise.all(
-        uploadedImages.map(async (file) => await convertImageToBase64(file))
-      ) : []
-    };
-
+    setIsSearching(true);
+    
     try {
-      // Send message to AI chat
-      sendMessage(messageData);
+      const response = await fetch(`https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/ai-property-search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZ3J3amRteXRha3NyenRjeXpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwNDQwNDcsImV4cCI6MjA2NzYyMDA0N30.pJnXggzvzGxHrOaF_ygThG7Ws66Y4VFH102iQtPS118`
+        },
+        body: JSON.stringify({
+          query: queryToUse,
+          userPreferences,
+          images: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
+        })
+      });
 
-      // Update conversation title to reflect user's query (first 80 chars)
-      if (currentConversationId && queryToUse.trim()) {
-        const currentConv = conversations.find(c => c.id === currentConversationId);
-        if (currentConv && (!currentConv.title || currentConv.title === 'AI Property Search' || currentConv.title === 'New AI Search')) {
-          const newTitle = queryToUse.trim().slice(0, 80);
-          await supabase.from('chat_conversations').update({ title: newTitle }).eq('id', currentConversationId);
-        }
+      if (!response.ok) {
+        throw new Error('Search failed');
       }
+
+      const results = await response.json();
+      
+      // Add search to history
+      const searchId = Date.now().toString();
+      const newSearch = {
+        id: searchId,
+        query: queryToUse,
+        results: results,
+        timestamp: new Date()
+      };
+      
+      setSearchHistory(prev => [newSearch, ...prev]);
 
       // Update AI search usage
       await updateUsage('ai-search');
       
       toast({
-        title: "Message sent!",
-        description: "Your AI assistant is processing your request.",
+        title: "Search complete!",
+        description: "Found some great matches for you."
       });
     } catch (error) {
       console.error('Search error:', error);
@@ -305,6 +239,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
         variant: "destructive"
       });
     } finally {
+      setIsSearching(false);
       setQuery('');
       setUploadedImages([]);
     }
@@ -378,34 +313,31 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
             <div className="text-center mb-6 relative">
             </div>
 
-            {/* Chat History Dropdown */}
+            {/* Search History Dropdown */}
             {showHistory && (
               <Card className="mb-6 border-border">
                 <CardContent className="p-4">
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {conversations.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">No conversations yet</p>
+                    {searchHistory.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No searches yet</p>
                     ) : (
-                      conversations.map((conversation) => (
+                      searchHistory.map((search) => (
                         <div
-                          key={conversation.id}
-                          onClick={() => switchToConversation(conversation.id)}
-                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                            conversation.id === currentConversationId 
-                              ? 'bg-primary/10 border border-primary/20' 
-                              : 'hover:bg-secondary/50'
-                          }`}
+                          key={search.id}
+                          className="p-3 rounded-lg hover:bg-secondary/50 transition-colors"
                         >
                           <div className="flex items-center gap-2">
                             <MessageSquare className="h-4 w-4 text-muted-foreground" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{conversation.title || 'Untitled Chat'}</p>
+                              <p className="text-sm font-medium truncate">{search.query}</p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(conversation.created_at).toLocaleDateString('en-US', {
+                                {search.timestamp.toLocaleDateString('en-US', {
                                   year: 'numeric',
                                   month: 'short',
-                                  day: 'numeric'
-                                })}
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })} • {search.results.results.length} properties
                               </p>
                             </div>
                           </div>
@@ -417,212 +349,200 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
               </Card>
             )}
 
-            {/* Chat Messages */}
-            {messages.length > 0 && (
-              <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
-                {messages.map((message, index) => {
-                  if (message.role === 'user') {
-                    return (
-                      <div key={index} className="flex justify-end animate-fade-in">
-                        <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
-                          <p className="text-sm">{message.content}</p>
-                        </div>
+            {/* Search Results */}
+            {searchHistory.length > 0 && (
+              <div className="space-y-6 mb-6 max-h-96 overflow-y-auto">
+                {searchHistory.map((search) => (
+                  <div key={search.id} className="animate-fade-in">
+                    {/* User Message */}
+                    <div className="flex justify-end mb-4">
+                      <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+                        <p className="text-sm">{search.query}</p>
+                        <p className="text-xs opacity-70 mt-1">
+                          {search.timestamp.toLocaleString()}
+                        </p>
                       </div>
-                    );
-                  } else {
-                    // AI message - try to parse for property results
-                    let searchResults: SearchResult | null = null;
-                    let displayContent = message.content;
+                    </div>
                     
-                    try {
-                      const parsed = JSON.parse(message.content);
-                      if (parsed.results && Array.isArray(parsed.results)) {
-                        searchResults = parsed;
-                      }
-                    } catch (e) {
-                      // Not JSON, treat as regular text
-                      // Clean up any JSON artifacts that might be visible
-                      if (message.content.includes('{"results":') || message.content.includes('"summary":')) {
-                        displayContent = "I found some amazing properties that match your preferences! Let me show you the top matches.";
-                      }
-                    }
+                    {/* AI Response with Results */}
+                    <div className="flex justify-start">
+                      <div className="max-w-[95%] space-y-4">
+                        {search.results.summary && (
+                          <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                            <p className="text-sm">{search.results.summary}</p>
+                          </div>
+                        )}
+                        
+                        {search.results.results.length > 0 && (
+                          <div className="space-y-3">
+                            {search.results.results.map((property) => (
+                              <Card 
+                                key={property.id} 
+                                className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale"
+                                onClick={() => handlePropertyClick(property)}
+                              >
+                                <CardContent className="p-3 sm:p-4">
+                                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                    {/* Property Image - Bigger on mobile */}
+                                    <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
+                                      {property.images && property.images.length > 0 ? (
+                                        <img 
+                                          src={property.images[0]} 
+                                          alt={property.title}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
+                                        </div>
+                                      )}
+                                      {/* Match Score Overlay */}
+                                      <div className="absolute top-2 left-2">
+                                        <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
+                                          {property.matchScore}% match
+                                        </Badge>
+                                      </div>
+                                      {/* Like Button - Mobile position */}
+                                      <div className="absolute top-2 right-2 sm:hidden">
+                                        <Button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleLikeProperty(property.id, property.realtor_id);
+                                          }} 
+                                          size="sm" 
+                                          variant={likedProperties.has(property.id) ? "default" : "ghost"}
+                                          className={`h-8 w-8 p-0 ${
+                                            likedProperties.has(property.id) 
+                                              ? "bg-green-500 hover:bg-green-600 text-white" 
+                                              : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"
+                                          }`}
+                                        >
+                                          <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                                        </Button>
+                                      </div>
+                                    </div>
 
-                    if (searchResults) {
-                      return (
-                        <div key={index} className="flex justify-start animate-fade-in">
-                          <div className="max-w-[95%] space-y-4">
-                            {searchResults.summary && (
-                              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-                                <p className="text-sm">{searchResults.summary}</p>
-                              </div>
-                            )}
-                            
-                             {searchResults.results.length > 0 && (
-                              <div className="space-y-3">
-                                {searchResults.results.map((property) => (
-                                  <Card 
-                                    key={property.id} 
-                                    className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale"
-                                    onClick={() => handlePropertyClick(property)}
-                                  >
-                                    <CardContent className="p-3 sm:p-4">
-                                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                                        {/* Property Image - Bigger on mobile */}
-                                        <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
-                                          {property.images && property.images.length > 0 ? (
-                                            <img 
-                                              src={property.images[0]} 
-                                              alt={property.title}
-                                              className="w-full h-full object-cover"
-                                            />
-                                          ) : (
-                                            <div className="w-full h-full flex items-center justify-center">
-                                              <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                                            </div>
-                                          )}
-                                          {/* Match Score Overlay */}
-                                          <div className="absolute top-2 left-2">
-                                            <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
-                                              {property.matchScore}% match
-                                            </Badge>
-                                          </div>
-                                          {/* Like Button - Mobile position */}
-                                          <div className="absolute top-2 right-2 sm:hidden">
-                                            <Button 
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleLikeProperty(property.id, property.realtor_id);
-                                              }} 
-                                              size="sm" 
-                                              variant={likedProperties.has(property.id) ? "default" : "ghost"}
-                                              className={`h-8 w-8 p-0 ${
-                                                likedProperties.has(property.id) 
-                                                  ? "bg-green-500 hover:bg-green-600 text-white" 
-                                                  : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"
-                                              }`}
-                                            >
-                                              <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                            </Button>
+                                    {/* Property Details */}
+                                    <div className="flex-1 min-w-0 sm:order-2 text-left">
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div className="flex-1 min-w-0 pr-2">
+                                          <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base text-left">
+                                            {property.title}
+                                          </h5>
+                                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                                            <MapPin className="h-4 w-4 flex-shrink-0" />
+                                            <span className="line-clamp-1">{property.location}</span>
                                           </div>
                                         </div>
-
-                                        {/* Property Details */}
-                                        <div className="flex-1 min-w-0 sm:order-2 text-left">
-                                          <div className="flex items-start justify-between mb-2">
-                                            <div className="flex-1 min-w-0 pr-2">
-                                              <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base text-left">
-                                                {property.title}
-                                              </h5>
-                                              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                                                <MapPin className="h-4 w-4 flex-shrink-0" />
-                                                <span className="line-clamp-1">{property.location}</span>
-                                              </div>
-                                            </div>
-                                            
-                                            {/* Desktop buttons */}
-                                            <div className="hidden sm:flex flex-col items-end gap-1">
-                                              <Button 
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleLikeProperty(property.id, property.realtor_id);
-                                                }} 
-                                                size="sm" 
-                                                variant={likedProperties.has(property.id) ? "default" : "ghost"}
-                                                className={`h-8 w-8 p-0 ${
-                                                  likedProperties.has(property.id) 
-                                                    ? "bg-green-500 hover:bg-green-600 text-white" 
-                                                    : "hover:bg-green-50 text-green-600"
-                                                }`}
-                                              >
-                                                <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                              </Button>
-                                              
-                                              {userPreferences && (
-                                                <VibeScore 
-                                                  score={calculateVibeScore({
-                                                    id: property.id,
-                                                    images: property.images,
-                                                    title: property.title,
-                                                    location: property.location,
-                                                    price: property.price,
-                                                    size: property.size,
-                                                    vibe: property.vibe,
-                                                    description: property.description,
-                                                    highlights: property.highlights,
-                                                    realtor: { id: '', name: '', phone: '', email: '' },
-                                                    vibe_analysis: property.vibe_analysis
-                                                  }, userPreferences)} 
-                                                  size="sm" 
-                                                />
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                                            <div className="flex items-center gap-1">
-                                              <DollarSign className="h-4 w-4" />
-                                              <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
-                                            </div>
-                                            {property.size && (
-                                              <span className="font-medium">{property.size}</span>
-                                            )}
-                                            {property.vibe && (
-                                              <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
-                                            )}
-                                          </div>
-
-                                          {/* Why it matches - More prominent on mobile */}
-                                          <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
-                                            <p className="text-sm text-foreground text-left">
-                                              <span className="font-semibold text-primary">Why it matches: </span>
-                                              {property.matchReason}
-                                            </p>
-                                          </div>
-
-                                          {/* AI Generated Highlights - Better spacing */}
-                                          {property.highlights && property.highlights.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5">
-                                              {property.highlights.slice(0, 3).map((highlight, index) => (
-                                                <Badge 
-                                                  key={index} 
-                                                  variant="outline" 
-                                                  className="text-xs border-primary/30 bg-primary/5 px-2 py-1"
-                                                >
-                                                  {highlight}
-                                                </Badge>
-                                              ))}
-                                              {property.highlights.length > 3 && (
-                                                <Badge variant="outline" className="text-xs px-2 py-1">
-                                                  +{property.highlights.length - 3} more
-                                                </Badge>
-                                              )}
-                                            </div>
+                                        
+                                        {/* Desktop buttons */}
+                                        <div className="hidden sm:flex flex-col items-end gap-1">
+                                          <Button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleLikeProperty(property.id, property.realtor_id);
+                                            }} 
+                                            size="sm" 
+                                            variant={likedProperties.has(property.id) ? "default" : "ghost"}
+                                            className={`h-8 w-8 p-0 ${
+                                              likedProperties.has(property.id) 
+                                                ? "bg-green-500 hover:bg-green-600 text-white" 
+                                                : "hover:bg-green-50 text-green-600"
+                                            }`}
+                                          >
+                                            <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                                          </Button>
+                                          
+                                          {userPreferences && (
+                                            <VibeScore 
+                                              score={calculateVibeScore({
+                                                id: property.id,
+                                                images: property.images,
+                                                title: property.title,
+                                                location: property.location,
+                                                price: property.price,
+                                                size: property.size,
+                                                vibe: property.vibe,
+                                                description: property.description,
+                                                highlights: property.highlights,
+                                                realtor: { id: '', name: '', phone: '', email: '' },
+                                                vibe_analysis: property.vibe_analysis
+                                              }, userPreferences)} 
+                                              size="sm" 
+                                            />
                                           )}
                                         </div>
                                       </div>
-                                    </CardContent>
-                                  </Card>
-                                ))}
-                              </div>
-                            )}
+
+                                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
+                                        <div className="flex items-center gap-1">
+                                          <DollarSign className="h-4 w-4" />
+                                          <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
+                                        </div>
+                                        {property.size && (
+                                          <span className="font-medium">{property.size}</span>
+                                        )}
+                                        {property.vibe && (
+                                          <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
+                                        )}
+                                      </div>
+
+                                      {/* Why it matches - More prominent on mobile */}
+                                      <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
+                                        <p className="text-sm text-foreground text-left">
+                                          <span className="font-semibold text-primary">Why it matches: </span>
+                                          {property.matchReason}
+                                        </p>
+                                      </div>
+
+                                      {/* AI Generated Highlights - Better spacing */}
+                                      {property.highlights && property.highlights.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {property.highlights.slice(0, 3).map((highlight, index) => (
+                                            <Badge 
+                                              key={index} 
+                                              variant="outline" 
+                                              className="text-xs border-primary/30 bg-primary/5 px-2 py-1"
+                                            >
+                                              {highlight}
+                                            </Badge>
+                                          ))}
+                                          {property.highlights.length > 3 && (
+                                            <Badge variant="outline" className="text-xs px-2 py-1">
+                                              +{property.highlights.length - 3} more
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Support Offer */}
+                        <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in">
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Need help with your search or have questions about these properties? I'm here to assist you further!
+                          </p>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button onClick={handleBrowseAll} variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+                              Browse All Properties
+                            </Button>
+                            <Button onClick={() => navigate('/discover')} variant="outline" size="sm" className="border-secondary text-secondary-foreground hover:bg-secondary">
+                              Start Swiping
+                            </Button>
                           </div>
                         </div>
-                      );
-                    } else {
-                      // Regular text message - use cleaned content
-                      return (
-                        <div key={index} className="flex justify-start animate-fade-in">
-                          <div className="max-w-[80%] p-3 rounded-lg bg-secondary text-secondary-foreground">
-                            <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
-                          </div>
-                        </div>
-                      );
-                    }
-                  }
-                })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
                 
                 {/* AI Thinking Animation */}
-                {isSendingMessage && (
+                {isSearching && (
                   <div className="flex justify-start animate-fade-in">
                     <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
                       <div className="flex space-x-1">
@@ -636,36 +556,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
               </div>
             )}
 
-            {/* AI Search History for this conversation */}
-            {aiSearches && aiSearches.length > 0 && (
-              <div className="space-y-4 mb-6">
-                {aiSearches.map((search) => (
-                  <div key={search.id} className="animate-fade-in">
-                    <div className="mb-2">
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(search.created_at).toLocaleString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                      <p className="text-sm font-medium text-foreground line-clamp-2">{search.query}</p>
-                    </div>
-                    <AISearchResultsDisplay
-                      search={search}
-                      onPropertyClick={handlePropertyClick}
-                      onLikeProperty={handleLikeProperty}
-                      likedProperties={likedProperties}
-                      formatPrice={formatPrice}
-                      getEnrichedResults={getEnrichedResults}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* Chat Input */}
             <div className="space-y-4">
               <div className="relative">
@@ -673,9 +563,9 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder={messages.length === 0 ? "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..." : "Ask me about properties, neighborhoods, or anything else..."}
-                  className="min-h-[100px] pr-20 resize-none"
-                  disabled={isSendingMessage}
+                  placeholder={searchHistory.length === 0 ? "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..." : "Ask me about properties, neighborhoods, or anything else..."}
+                  className="min-h-[100px] pr-20 resize-none bg-transparent"
+                  disabled={isSearching}
                 />
                 <div className="absolute bottom-3 right-3 flex gap-2">
                   <input
@@ -688,7 +578,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   />
                   <Button
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={isSendingMessage || uploadedImages.length >= 3}
+                    disabled={isSearching || uploadedImages.length >= 3}
                     size="sm"
                     variant="outline"
                     className="h-8 w-8 p-0"
@@ -697,11 +587,11 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   </Button>
                   <Button
                     onClick={() => handleSearch()}
-                    disabled={isSendingMessage || (!query.trim() && uploadedImages.length === 0)}
+                    disabled={isSearching || (!query.trim() && uploadedImages.length === 0)}
                     size="sm"
                     className="h-8 w-8 p-0"
                   >
-                    {isSendingMessage ? (
+                    {isSearching ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <PlaneTakeoff className="h-4 w-4" />
@@ -731,25 +621,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                     </div>
                   ))}
                 </div>
-              )}
-
-              {/* Auth Prompt */}
-              {showAuthPrompt && !user && (
-                <Card className="border-primary/20 bg-primary/5 animate-fade-in">
-                  <CardContent className="p-4">
-                    <div className="text-center">
-                      <p className="text-foreground mb-3">
-                        Sign in to search for your perfect home match!
-                      </p>
-                      <Button 
-                        onClick={() => navigate('/auth', { state: { returnTo: '/discover' } })}
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                      >
-                        Sign In to Continue
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
               )}
             </div>
 
@@ -789,201 +660,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
             />
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
-
-// Component to display AI search results
-interface AISearchResultsDisplayProps {
-  search: any;
-  onPropertyClick: (property: PropertyMatch) => void;
-  onLikeProperty: (propertyId: string, realtorId?: string) => void;
-  likedProperties: Set<string>;
-  formatPrice: (price: number) => string;
-  getEnrichedResults: (searchId: string) => Promise<PropertyMatch[]>;
-}
-
-const AISearchResultsDisplay = ({ 
-  search, 
-  onPropertyClick, 
-  onLikeProperty, 
-  likedProperties, 
-  formatPrice,
-  getEnrichedResults 
-}: AISearchResultsDisplayProps) => {
-  const [enrichedResults, setEnrichedResults] = useState<PropertyMatch[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const loadResults = async () => {
-      try {
-        const results = await getEnrichedResults(search.id);
-        setEnrichedResults(results);
-      } catch (error) {
-        console.error('Error loading enriched results:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadResults();
-  }, [search.id, getEnrichedResults]);
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-start animate-fade-in">
-        <div className="max-w-[95%] p-3 rounded-lg bg-secondary text-secondary-foreground">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Loading search results...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex justify-start animate-fade-in">
-      <div className="max-w-[95%] space-y-4">
-        {search.summary && (
-          <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-            <p className="text-sm">{search.summary}</p>
-          </div>
-        )}
-        
-        {enrichedResults.length > 0 && (
-          <div className="space-y-3">
-            {enrichedResults.map((property) => (
-              <Card 
-                key={property.id} 
-                className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale"
-                onClick={() => onPropertyClick(property)}
-              >
-                <CardContent className="p-3 sm:p-4">
-                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                    {/* Property Image - Bigger on mobile */}
-                    <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
-                      {property.images && property.images.length > 0 ? (
-                        <img 
-                          src={property.images[0]} 
-                          alt={property.title} 
-                          className="w-full h-full object-cover" 
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                        </div>
-                      )}
-                      {/* Match Score Overlay */}
-                      <div className="absolute top-2 left-2">
-                        <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
-                          {property.matchScore}% match
-                        </Badge>
-                      </div>
-                      {/* Like Button - Mobile position */}
-                      <div className="absolute top-2 right-2 sm:hidden">
-                        <Button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onLikeProperty?.(property.id, property.realtor_id);
-                          }} 
-                          size="sm" 
-                          variant={likedProperties?.has(property.id) ? "default" : "ghost"}
-                          className={`h-8 w-8 p-0 ${
-                            likedProperties?.has(property.id) 
-                              ? "bg-green-500 hover:bg-green-600 text-white" 
-                              : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"
-                          }`}
-                        >
-                          <Heart className={`h-4 w-4 ${likedProperties?.has(property.id) ? "fill-current" : ""}`} />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Property Details */}
-                    <div className="flex-1 min-w-0 sm:order-2 text-left">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0 pr-2">
-                          <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base text-left">
-                            {property.title}
-                          </h5>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                            <MapPin className="h-4 w-4 flex-shrink-0" />
-                            <span className="line-clamp-1">{property.location}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Desktop buttons */}
-                        <div className="hidden sm:flex flex-col items-end gap-1">
-                          <Button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onLikeProperty?.(property.id, property.realtor_id);
-                            }} 
-                            size="sm" 
-                            variant={likedProperties?.has(property.id) ? "default" : "ghost"}
-                            className={`h-8 w-8 p-0 ${
-                              likedProperties?.has(property.id) 
-                                ? "bg-green-500 hover:bg-green-600 text-white" 
-                                : "hover:bg-green-50 text-green-600"
-                            }`}
-                          >
-                            <Heart className={`h-4 w-4 ${likedProperties?.has(property.id) ? "fill-current" : ""}`} />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                        <div className="flex items-center gap-1">
-                          <DollarSign className="h-4 w-4" />
-                          <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
-                        </div>
-                        {property.size && (
-                          <span className="font-medium">{property.size}</span>
-                        )}
-                        {property.vibe && (
-                          <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
-                        )}
-                      </div>
-
-                      {/* Why it matches - More prominent on mobile */}
-                      <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
-                        <p className="text-sm text-foreground text-left">
-                          <span className="font-semibold text-primary">Why it matches: </span>
-                          {property.matchReason}
-                        </p>
-                      </div>
-
-                      {/* AI Generated Highlights - Better spacing */}
-                      {property.highlights && property.highlights.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {property.highlights.slice(0, 3).map((highlight, index) => (
-                            <Badge 
-                              key={index} 
-                              variant="outline" 
-                              className="text-xs border-primary/30 bg-primary/5 px-2 py-1"
-                            >
-                              {highlight}
-                            </Badge>
-                          ))}
-                          {property.highlights.length > 3 && (
-                            <Badge 
-                              variant="outline" 
-                              className="text-xs px-2 py-1"
-                            >
-                              +{property.highlights.length - 3} more
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
