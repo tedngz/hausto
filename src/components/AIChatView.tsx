@@ -475,8 +475,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                                       </div>
 
                                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                                        <div className="flex items-center gap-1">
-                                          <DollarSign className="h-4 w-4" />
+                                        <div className="flex items-center">
                                           <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
                                         </div>
                                         {property.size && (
