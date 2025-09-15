@@ -624,7 +624,7 @@ export const LandingChatBox = ({
       {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {/* User Message */}
           <div className="flex justify-end animate-fade-in">
-            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+            <div className="max-w-[95%] p-3 rounded-lg bg-primary text-primary-foreground">
               <p className="text-sm">{tempUserMessage}</p>
             </div>
           </div>
