@@ -48,7 +48,7 @@ serve(async (req) => {
       isAnonymous = true;
     }
 
-    console.log('Chat AI function called by authenticated user');
+    console.log('Chat AI function called');
     
     const requestBody = await req.text();
     console.log('Raw request body length:', requestBody.length);
@@ -102,16 +102,9 @@ serve(async (req) => {
       );
     }
 
-    // For anonymous users, conversationId is optional
+    // For authenticated users, conversationId is optional. If missing or invalid, we'll proceed without persistence.
     if (!isAnonymous && !conversationId) {
-      console.error('Missing conversationId in request for authenticated user');
-      return new Response(
-        JSON.stringify({ error: 'Conversation ID is required for authenticated users' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        }
-      );
+      console.log('No conversationId provided for authenticated user - proceeding without persistence');
     }
 
     // Supabase client already initialized above (const supabase)
@@ -128,10 +121,14 @@ serve(async (req) => {
 
     console.log(`Found ${properties?.length || 0} properties in database`);
 
+    // Helper to validate UUIDs and decide if we can persist/history
+    const isValidUUID = (v: string | null | undefined) =>
+      typeof v === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
+    const canPersist = !isAnonymous && isValidUUID(conversationId);
     let chatHistory = [];
     
-    // For authenticated users, verify conversation and get history
-    if (!isAnonymous && conversationId) {
+    // For authenticated users with a valid conversationId, verify and get history
+    if (canPersist) {
       const { data: conversation, error: convError } = await supabase
         .from('chat_conversations')
         .select('user_id')
@@ -164,6 +161,8 @@ serve(async (req) => {
       }
       
       chatHistory = history || [];
+    } else if (!isAnonymous && conversationId) {
+      console.log('Ephemeral or invalid conversationId provided; skipping persistence and history');
     }
 
     let context = '';
@@ -336,14 +335,16 @@ Current user message: ${message}`;
         ? "I'm having trouble connecting to the AI service right now. Please try again in a moment, or feel free to ask me about property marketing strategies!"
         : "I'm having trouble connecting to the AI service right now. But I'd be happy to help you find properties! Could you tell me more about what you're looking for - location preferences, budget, or lifestyle needs?";
       
-      // Save fallback response to database
-      await supabase
-        .from('chat_messages')
-        .insert({
-          conversation_id: conversationId,
-          role: 'assistant',
-          content: fallbackResponse
-        });
+      // Save fallback response to database when persistence is allowed
+      if (canPersist) {
+        await supabase
+          .from('chat_messages')
+          .insert({
+            conversation_id: conversationId,
+            role: 'assistant',
+            content: fallbackResponse
+          });
+      }
 
       return new Response(
         JSON.stringify({ response: fallbackResponse }),
@@ -377,7 +378,7 @@ Current user message: ${message}`;
     }
 
     // Save AI response to database (only for authenticated users)
-    if (!isAnonymous && conversationId) {
+    if (canPersist) {
       const { error: aiMessageError } = await supabase
         .from('chat_messages')
         .insert({
@@ -393,7 +394,7 @@ Current user message: ${message}`;
     }
 
     // If this is a search result, save it to the ai_searches and ai_search_results tables (only for authenticated users)
-    if (searchData && user?.id && !isAnonymous) {
+    if (searchData && user?.id && canPersist) {
       try {
         // Create AI search record
         const { data: searchRecord, error: searchError } = await supabase

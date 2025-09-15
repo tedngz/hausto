@@ -198,7 +198,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
       const { data: response, error: functionError } = await supabase.functions.invoke('chat-ai', {
         body: {
           message: queryToUse,
-          conversationId: `ai-search-${Date.now()}`, // Generate a unique conversation ID
           userType: 'renter',
           userPreferences,
           propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
