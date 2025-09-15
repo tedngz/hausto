@@ -312,30 +312,44 @@ export const LandingChatBox = ({
         setUploadedImages([]);
       }
     } else {
-      // Handle search for non-logged in users - show sign up prompt
+      // Handle free search for non-logged in users
       setTempUserMessage(queryToUse); // Show user message immediately
       setIsSearching(true);
-      
-      // Simulate a brief delay to show loading
-      setTimeout(() => {
-        const mockResults = {
-          results: [],
-          summary: `I'd love to help you find "${queryToUse}"! To access our AI-powered property search and get personalized matches, please sign up or log in. Our premium search provides tailored recommendations based on your preferences.`,
-          totalMatches: 0
-        };
-        
-        setSearchResults(mockResults);
-        setHasSearched(true);
-        setIsSearching(false);
-        
-        toast({
-          title: "Sign up for full access",
-          description: "Create an account to unlock AI-powered property search!"
+      try {
+        const response = await fetch(`https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/ai-property-search`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZ3J3amRteXRha3NyenRjeXpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwNDQwNDcsImV4cCI6MjA2NzYyMDA0N30.pJnXggzvzGxHrOaF_ygThG7Ws66Y4VFH102iQtPS118`
+          },
+          body: JSON.stringify({
+            query: queryToUse,
+            userPreferences,
+            images: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
+          })
         });
-        
+        if (!response.ok) {
+          throw new Error('Search failed');
+        }
+        const results = await response.json();
+        setSearchResults(results);
+        setHasSearched(true);
+        toast({
+          title: "Search complete!",
+          description: "Found some great matches for you."
+        });
+      } catch (error) {
+        console.error('Search error:', error);
+        toast({
+          title: "Search failed",
+          description: "There was an error processing your search. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsSearching(false);
         setQuery('');
         setUploadedImages([]);
-      }, 1000);
+      }
     }
   };
   const handleKeyPress = (e: React.KeyboardEvent) => {

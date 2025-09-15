@@ -194,48 +194,24 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
     setIsSearching(true);
     
     try {
-      // Use supabase functions invoke instead of direct fetch
-      const { data: response, error: functionError } = await supabase.functions.invoke('chat-ai', {
-        body: {
-          message: queryToUse,
-          conversationId: `ai-search-${Date.now()}`, // Generate a unique conversation ID
-          userType: 'renter',
+      const response = await fetch(`https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/ai-property-search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZ3J3amRteXRha3NyenRjeXpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwNDQwNDcsImV4cCI6MjA2NzYyMDA0N30.pJnXggzvzGxHrOaF_ygThG7Ws66Y4VFH102iQtPS118`
+        },
+        body: JSON.stringify({
+          query: queryToUse,
           userPreferences,
-          propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
-        }
+          images: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
+        })
       });
 
-      if (functionError || !response) {
-        throw new Error(functionError?.message || 'Search failed');
+      if (!response.ok) {
+        throw new Error('Search failed');
       }
 
-      // Parse the AI response - it could be plain text or JSON with search results
-      let results;
-      try {
-        const parsed = JSON.parse(response.response);
-        if (parsed.results && Array.isArray(parsed.results)) {
-          // AI returned search results
-          results = {
-            results: parsed.results,
-            summary: parsed.summary,
-            totalMatches: parsed.results.length
-          };
-        } else {
-          // AI returned plain text, treat as no results
-          results = {
-            results: [],
-            summary: response.response,
-            totalMatches: 0
-          };
-        }
-      } catch (e) {
-        // AI returned plain text
-        results = {
-          results: [],
-          summary: response.response,
-          totalMatches: 0
-        };
-      }
+      const results = await response.json();
       
       // Add search to history
       const searchId = Date.now().toString();
