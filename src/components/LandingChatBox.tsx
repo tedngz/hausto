@@ -52,6 +52,7 @@ export const LandingChatBox = ({
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
   const [typedPlaceholder, setTypedPlaceholder] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const {
@@ -267,47 +268,9 @@ export const LandingChatBox = ({
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
 
-    // Allow 3 free searches per day for non-users
-    if (!user) {
-      const today = new Date().toDateString();
-      const storedData = localStorage.getItem('freeSearchUsage');
-      let searchUsage = {
-        date: today,
-        count: 0
-      };
-      if (storedData) {
-        try {
-          const parsed = JSON.parse(storedData);
-          if (parsed.date === today) {
-            searchUsage = parsed;
-          }
-        } catch (e) {
-          // Reset if corrupted
-        }
-      }
-      if (searchUsage.count >= 3) {
-        localStorage.setItem('pendingSearchQuery', queryToUse);
-        navigate('/auth', {
-          state: {
-            returnTo: '/discover'
-          }
-        });
-        return;
-      }
-
-      // Increment usage count
-      searchUsage.count++;
-      localStorage.setItem('freeSearchUsage', JSON.stringify(searchUsage));
-    } else {
-      // Check search limit using usage tracking for logged in users
-      if (!canPerformAction('ai-search')) {
-        navigate('/auth', {
-          state: {
-            returnTo: '/'
-          }
-        });
-        return;
-      }
+    // Check if user has already searched (1 search limit for all users)
+    if (hasSearched) {
+      return;
     }
     if (!queryToUse.trim() && uploadedImages.length === 0) {
       toast({
@@ -332,6 +295,7 @@ export const LandingChatBox = ({
 
         // Update AI search usage
         await updateUsage('ai-search');
+        setHasSearched(true);
         toast({
           title: "Message sent!",
           description: "Your AI assistant is processing your request."
@@ -369,6 +333,7 @@ export const LandingChatBox = ({
         }
         const results = await response.json();
         setSearchResults(results);
+        setHasSearched(true);
         toast({
           title: "Search complete!",
           description: "Found some great matches for you."
@@ -596,11 +561,23 @@ export const LandingChatBox = ({
             return <div key={index} className="flex justify-start animate-fade-in">
                     <div className="max-w-[80%] p-3 rounded-lg bg-secondary text-secondary-foreground">
                       <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
-                    </div>
-                  </div>;
+                     </div>
+                   </div>;
           }
         }
       })}
+
+          {/* Continue to AI Chat CTA for Signed In Users after search */}
+          {user && hasSearched && (
+            <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
+              <Button 
+                onClick={() => navigate('/discover')} 
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2"
+              >
+                Continue to AI Chat View
+              </Button>
+            </div>
+          )}
           
           {/* AI Thinking Animation */}
           {isSendingMessage && <div className="flex justify-start animate-fade-in">
@@ -759,8 +736,8 @@ export const LandingChatBox = ({
         </div>}
 
 
-      {/* Chat Input - Only show if user is logged in or hasn't searched yet */}
-      {(user || !searchResults && !tempUserMessage) && <div className="space-y-4">
+      {/* Chat Input - Only show if hasn't searched yet */}
+      {!hasSearched && <div className="space-y-4">
           <div className="relative">
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage} className="min-h-[100px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">
