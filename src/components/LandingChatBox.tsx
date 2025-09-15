@@ -312,30 +312,65 @@ export const LandingChatBox = ({
         setUploadedImages([]);
       }
     } else {
-      // Handle search for non-logged in users - show sign up prompt
+      // Handle search for anonymous users - call AI chat directly
       setTempUserMessage(queryToUse); // Show user message immediately
       setIsSearching(true);
       
-      // Simulate a brief delay to show loading
-      setTimeout(() => {
-        const mockResults = {
-          results: [],
-          summary: `I'd love to help you find "${queryToUse}"! To access our AI-powered property search and get personalized matches, please sign up or log in. Our premium search provides tailored recommendations based on your preferences.`,
-          totalMatches: 0
+      try {
+        const messageData = {
+          message: queryToUse,
+          userType: 'renter' as const,
+          userPreferences: null, // Anonymous users don't have saved preferences
+          propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
         };
-        
-        setSearchResults(mockResults);
-        setHasSearched(true);
-        setIsSearching(false);
-        
-        toast({
-          title: "Sign up for full access",
-          description: "Create an account to unlock AI-powered property search!"
+
+        const response = await supabase.functions.invoke('chat-ai', {
+          body: messageData
         });
+
+        if (response.error) {
+          throw response.error;
+        }
+
+        // Parse AI response to extract search results
+        let searchResults = null;
+        if (response.data?.response) {
+          try {
+            const parsed = JSON.parse(response.data.response);
+            if (parsed.results && Array.isArray(parsed.results)) {
+              searchResults = parsed;
+            }
+          } catch (e) {
+            // If not JSON, treat as text response
+            searchResults = {
+              results: [],
+              summary: response.data.response,
+              totalMatches: 0
+            };
+          }
+        }
+
+        if (searchResults) {
+          setSearchResults(searchResults);
+        }
         
+        setHasSearched(true);
+        toast({
+          title: "Search completed!",
+          description: "AI has processed your search request."
+        });
+      } catch (error) {
+        console.error('Anonymous search error:', error);
+        toast({
+          title: "Search failed",
+          description: "There was an error processing your search. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsSearching(false);
         setQuery('');
         setUploadedImages([]);
-      }, 1000);
+      }
     }
   };
   const handleKeyPress = (e: React.KeyboardEvent) => {

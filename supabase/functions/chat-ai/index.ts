@@ -12,16 +12,33 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication first
+    // Check for authentication (optional for anonymous users)
     const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 401,
+    let user = null;
+    let isAnonymous = false;
+
+    if (authHeader) {
+      // Create a client with the user's token for verification
+      const userSupabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
         }
-      );
+      });
+      
+      const token = authHeader.replace('Bearer ', '');
+      const { data: userData, error: authError } = await userSupabase.auth.getUser(token);
+      
+      if (!authError && userData.user) {
+        user = userData.user;
+        console.log('Authenticated user:', user.id);
+      } else {
+        console.log('Invalid token, treating as anonymous user');
+        isAnonymous = true;
+      }
+    } else {
+      console.log('No auth header, treating as anonymous user');
+      isAnonymous = true;
     }
 
     console.log('Chat AI function called by authenticated user');
@@ -63,7 +80,8 @@ serve(async (req) => {
       hasPreferences: !!userPreferences,
       hasPropertyImages: !!propertyImages,
       propertyImagesType: typeof propertyImages,
-      propertyImagesLength: Array.isArray(propertyImages) ? propertyImages.length : 'not-array'
+      propertyImagesLength: Array.isArray(propertyImages) ? propertyImages.length : 'not-array',
+      isAnonymous
     });
 
     if (!message) {
@@ -77,10 +95,11 @@ serve(async (req) => {
       );
     }
 
-    if (!conversationId) {
-      console.error('Missing conversationId in request');
+    // For anonymous users, conversationId is optional
+    if (!isAnonymous && !conversationId) {
+      console.error('Missing conversationId in request for authenticated user');
       return new Response(
-        JSON.stringify({ error: 'Conversation ID is required' }),
+        JSON.stringify({ error: 'Conversation ID is required for authenticated users' }),
         { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 400,
@@ -88,38 +107,12 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client and verify user
+    // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
     const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Verify user authentication using service role key
-    const token = authHeader.replace('Bearer ', '');
-    
-    // Create a client with the user's token for verification
-    const userSupabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    });
-    
-    const { data: { user }, error: authError } = await userSupabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      console.error('Authentication failed:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 401,
-        }
-      );
-    }
-
-    console.log('Authenticated user:', user.id);
 
     // Fetch properties from database
     const { data: properties, error: propertiesError } = await supabase
@@ -133,36 +126,42 @@ serve(async (req) => {
 
     console.log(`Found ${properties?.length || 0} properties in database`);
 
-    // Verify conversation belongs to user and get history
-    const { data: conversation, error: convError } = await supabase
-      .from('chat_conversations')
-      .select('user_id')
-      .eq('id', conversationId)
-      .eq('user_id', user.id)
-      .single();
+    let chatHistory = [];
     
-    if (convError || !conversation) {
-      console.error('Conversation access denied:', convError);
-      return new Response(
-        JSON.stringify({ error: 'Conversation not found or access denied' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 403,
-        }
-      );
-    }
+    // For authenticated users, verify conversation and get history
+    if (!isAnonymous && conversationId) {
+      const { data: conversation, error: convError } = await supabase
+        .from('chat_conversations')
+        .select('user_id')
+        .eq('id', conversationId)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (convError || !conversation) {
+        console.error('Conversation access denied:', convError);
+        return new Response(
+          JSON.stringify({ error: 'Conversation not found or access denied' }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 403,
+          }
+        );
+      }
 
-    // Get conversation history
-    const { data: chatHistory, error: historyError } = await supabase
-      .from('chat_messages')
-      .select('role, content')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .limit(10);
+      // Get conversation history
+      const { data: history, error: historyError } = await supabase
+        .from('chat_messages')
+        .select('role, content')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+        .limit(10);
 
-    if (historyError) {
-      console.error('Error fetching chat history:', historyError);
-      throw historyError;
+      if (historyError) {
+        console.error('Error fetching chat history:', historyError);
+        throw historyError;
+      }
+      
+      chatHistory = history || [];
     }
 
     let context = '';
@@ -375,22 +374,24 @@ Current user message: ${message}`;
       // Not JSON, treat as regular text
     }
 
-    // Save AI response to database
-    const { error: aiMessageError } = await supabase
-      .from('chat_messages')
-      .insert({
-        conversation_id: conversationId,
-        role: 'assistant',
-        content: aiResponse
-      });
+    // Save AI response to database (only for authenticated users)
+    if (!isAnonymous && conversationId) {
+      const { error: aiMessageError } = await supabase
+        .from('chat_messages')
+        .insert({
+          conversation_id: conversationId,
+          role: 'assistant',
+          content: aiResponse
+        });
 
-    if (aiMessageError) {
-      console.error('Error saving AI message:', aiMessageError);
-      throw aiMessageError;
+      if (aiMessageError) {
+        console.error('Error saving AI message:', aiMessageError);
+        throw aiMessageError;
+      }
     }
 
-    // If this is a search result, save it to the ai_searches and ai_search_results tables
-    if (searchData && user?.id) {
+    // If this is a search result, save it to the ai_searches and ai_search_results tables (only for authenticated users)
+    if (searchData && user?.id && !isAnonymous) {
       try {
         // Create AI search record
         const { data: searchRecord, error: searchError } = await supabase
