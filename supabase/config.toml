@@ -1,7 +1,7 @@
 project_id = "gbgrwjdmytaksrztcyzs"
 
 [functions.chat-ai]
-verify_jwt = true
+verify_jwt = false
 
 [functions.analyze-vibe]
 verify_jwt = true

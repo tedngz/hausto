@@ -12,14 +12,21 @@ serve(async (req) => {
   }
 
   try {
+    // Initialize Supabase env and clients early
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     // Check for authentication (optional for anonymous users)
     const authHeader = req.headers.get('authorization');
     let user = null;
     let isAnonymous = false;
 
-    if (authHeader) {
-      // Create a client with the user's token for verification
-      const userSupabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    if (authHeader && !authHeader.includes(supabaseAnonKey)) {
+      // Verify user token (ignore anon key)
+      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
         auth: {
           autoRefreshToken: false,
           persistSession: false
@@ -107,12 +114,7 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Supabase client already initialized above (const supabase)
 
     // Fetch properties from database
     const { data: properties, error: propertiesError } = await supabase
