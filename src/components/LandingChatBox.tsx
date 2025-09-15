@@ -405,8 +405,8 @@ export const LandingChatBox = ({
       {messages.length > 0 && user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {messages.map((message, index) => {
         if (message.role === 'user') {
-          return <div key={index} className="flex justify-end animate-fade-in">
-                  <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+          return <div key={index} className="flex justify-start animate-fade-in">
+                  <div className="max-w-[95%] p-3 rounded-lg bg-primary text-primary-foreground">
                     <p className="text-sm">{message.content}</p>
                   </div>
                 </div>;
@@ -600,7 +600,7 @@ export const LandingChatBox = ({
       {/* Temporary Chat Messages for Non-Logged In Users */}
       {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {/* User Message */}
-          <div className="flex justify-end animate-fade-in">
+          <div className="flex justify-start animate-fade-in">
             <div className="max-w-[95%] p-3 rounded-lg bg-primary text-primary-foreground">
               <p className="text-sm">{tempUserMessage}</p>
             </div>
