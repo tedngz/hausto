@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
+import { HighlightTags } from '@/components/HighlightTags';
 import { UserPreferences } from '@/types';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
@@ -727,6 +728,13 @@ export const LandingChatBox = ({
                               {property.size && <span className="font-medium">{property.size}</span>}
                               {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
                             </div>
+
+                            {/* Property Highlights */}
+                            {property.highlights && property.highlights.length > 0 && (
+                              <div className="mb-3">
+                                <HighlightTags highlights={property.highlights} maxWords={3} />
+                              </div>
+                            )}
 
                             {/* Why it matches - More prominent on mobile */}
                             <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
