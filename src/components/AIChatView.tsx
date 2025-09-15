@@ -54,6 +54,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [searchHistory, setSearchHistory] = useState<Array<{id: string, query: string, results: SearchResult, timestamp: Date}>>([]);
+  const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -165,23 +166,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
     
-    if (!user) {
-      localStorage.setItem('pendingSearchQuery', queryToUse);
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to search for properties",
-        variant: "destructive"
-      });
-      navigate('/auth', { state: { returnTo: '/discover' } });
-      return;
-    }
-
-    // Check search limit using usage tracking
-    if (!canPerformAction('ai-search')) {
-      setShowSubscriptionModal(true);
-      return;
-    }
-
     if (!queryToUse.trim() && uploadedImages.length === 0) {
       toast({
         title: "Please describe your ideal home or upload an image",
@@ -191,10 +175,93 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
       return;
     }
 
+    // Show user message immediately
+    setTempUserMessage(queryToUse);
+    
+    if (!user) {
+      // Handle anonymous users
+      setIsSearching(true);
+      
+      try {
+        const { data: response, error: functionError } = await supabase.functions.invoke('chat-ai', {
+          body: {
+            message: queryToUse,
+            userType: 'renter',
+            userPreferences: null,
+            propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
+          }
+        });
+
+        if (functionError || !response) {
+          throw new Error(functionError?.message || 'Search failed');
+        }
+
+        // Parse the AI response
+        let results;
+        try {
+          const parsed = JSON.parse(response.response);
+          if (parsed.results && Array.isArray(parsed.results)) {
+            results = {
+              results: parsed.results,
+              summary: parsed.summary,
+              totalMatches: parsed.results.length
+            };
+          } else {
+            results = {
+              results: [],
+              summary: response.response,
+              totalMatches: 0
+            };
+          }
+        } catch (e) {
+          results = {
+            results: [],
+            summary: response.response,
+            totalMatches: 0
+          };
+        }
+        
+        // Add search to history
+        const searchId = Date.now().toString();
+        const newSearch = {
+          id: searchId,
+          query: queryToUse,
+          results: results,
+          timestamp: new Date()
+        };
+        
+        setSearchHistory(prev => [newSearch, ...prev]);
+        
+        toast({
+          title: "Search complete!",
+          description: "Found some great matches for you."
+        });
+      } catch (error) {
+        console.error('Search error:', error);
+        toast({
+          title: "Search failed",
+          description: "There was an error processing your search. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsSearching(false);
+        setTempUserMessage(null);
+        setQuery('');
+        setUploadedImages([]);
+      }
+      return;
+    }
+
+    // Check search limit using usage tracking for authenticated users
+    if (!canPerformAction('ai-search')) {
+      setShowSubscriptionModal(true);
+      setTempUserMessage(null);
+      return;
+    }
+
     setIsSearching(true);
     
     try {
-      // Use supabase functions invoke instead of direct fetch
       const { data: response, error: functionError } = await supabase.functions.invoke('chat-ai', {
         body: {
           message: queryToUse,
@@ -208,19 +275,17 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
         throw new Error(functionError?.message || 'Search failed');
       }
 
-      // Parse the AI response - it could be plain text or JSON with search results
+      // Parse the AI response
       let results;
       try {
         const parsed = JSON.parse(response.response);
         if (parsed.results && Array.isArray(parsed.results)) {
-          // AI returned search results
           results = {
             results: parsed.results,
             summary: parsed.summary,
             totalMatches: parsed.results.length
           };
         } else {
-          // AI returned plain text, treat as no results
           results = {
             results: [],
             summary: response.response,
@@ -228,7 +293,6 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
           };
         }
       } catch (e) {
-        // AI returned plain text
         results = {
           results: [],
           summary: response.response,
@@ -263,6 +327,7 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
       });
     } finally {
       setIsSearching(false);
+      setTempUserMessage(null);
       setQuery('');
       setUploadedImages([]);
     }
@@ -370,6 +435,30 @@ export const AIChatView = ({ showNavigation = true, userPreferences }: AIChatVie
                   </div>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Temp User Message Display */}
+            {tempUserMessage && (
+              <div className="space-y-4 mb-6">
+                <div className="flex justify-end animate-fade-in">
+                  <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+                    <p className="text-sm">{tempUserMessage}</p>
+                  </div>
+                </div>
+                
+                {/* AI Thinking Animation */}
+                {isSearching && (
+                  <div className="flex justify-start animate-fade-in">
+                    <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Search Results */}
