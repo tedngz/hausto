@@ -173,8 +173,9 @@ export const PropertyCard = ({
                     const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
                     const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
                     
-                    // Get image-specific highlight
-                    const specificHighlight = analysisForImage?.image_highlight || `Feature ${index + 2}`;
+                    // Get image-specific highlight or use property highlights
+                    const specificHighlight = analysisForImage?.image_highlight || 
+                      (apartment.highlights && apartment.highlights[index] ? apartment.highlights[index] : `Feature ${index + 2}`);
                     
                     return (
                       <div key={index} className="space-y-2">
