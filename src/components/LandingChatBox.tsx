@@ -438,7 +438,7 @@ export const LandingChatBox = ({
           if (searchResults) {
             return <div key={index} className="flex justify-start animate-fade-in">
                     <div className="w-full space-y-4">
-                      {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                      {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                           <p className="text-sm text-left">{searchResults.summary}</p>
                         </div>}
                       
@@ -538,7 +538,7 @@ export const LandingChatBox = ({
           } else {
             // Regular text message - use cleaned content
             return <div key={index} className="flex justify-start animate-fade-in">
-                    <div className="max-w-[80%] p-3 rounded-lg bg-secondary text-secondary-foreground">
+                    <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                       <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
                      </div>
                    </div>;
@@ -602,7 +602,7 @@ export const LandingChatBox = ({
       {searchResults && !user && <div className="space-y-4 mb-6">
           <div className="flex justify-start animate-fade-in">
             <div className="w-full space-y-4">
-              {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+              {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                   <p className="text-sm">{searchResults.summary}</p>
                 </div>}
               
