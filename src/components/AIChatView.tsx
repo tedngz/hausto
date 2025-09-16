@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Send, MapPin, Home, DollarSign, ArrowRight, Sparkles, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useChat } from '@/hooks/useChat';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -16,6 +17,7 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
 import { UserPreferences } from '@/types';
+
 interface PropertyMatch {
   id: string;
   title: string;
@@ -31,64 +33,98 @@ interface PropertyMatch {
   realtor_id?: string;
   vibe_analysis?: any;
 }
+
 interface SearchResult {
   results: PropertyMatch[];
   summary: string;
   totalMatches: number;
 }
+
 interface AIChatViewProps {
   showNavigation?: boolean;
   userPreferences?: UserPreferences;
 }
+
 export const AIChatView = ({
   showNavigation = true,
   userPreferences
 }: AIChatViewProps) => {
   const [query, setQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<PropertyMatch | null>(null);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [searchHistory, setSearchHistory] = useState<Array<{
-    id: string;
-    query: string;
-    results: SearchResult;
-    timestamp: Date;
-  }>>([]);
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const {
-    user,
-    loading
-  } = useAuth();
+  
+  const { user, loading } = useAuth();
+  const { createMatch } = useMatches();
+  const { formatPrice } = useCurrency();
+  const { toast } = useToast();
   const navigate = useNavigate();
-  const {
-    formatPrice
-  } = useCurrency();
-  const {
-    toast
-  } = useToast();
-  const {
-    canPerformAction,
-    updateUsage
-  } = useUsageTracking();
-  const {
-    createMatch
-  } = useMatches();
+  const { canPerformAction, updateUsage } = useUsageTracking();
 
-  // Compute all results from search history to avoid infinite re-renders
+  // Use the proper chat hook for database-backed conversations
+  const {
+    conversations,
+    messages,
+    currentConversationId,
+    setCurrentConversationId,
+    createConversation,
+    isCreatingConversation,
+    sendMessage,
+    isSendingMessage
+  } = useChat();
+
+  // Compute all results from messages to avoid infinite re-renders
   const allResults = useMemo(() => {
     const results: PropertyMatch[] = [];
-    searchHistory.forEach(search => {
-      if (search.results.results) {
-        results.push(...search.results.results);
+    messages.forEach(message => {
+      if (message.role === 'assistant') {
+        try {
+          const parsed = JSON.parse(message.content);
+          if (parsed.results && Array.isArray(parsed.results)) {
+            results.push(...parsed.results);
+          }
+        } catch (e) {
+          // Not JSON, ignore
+        }
       }
     });
     return results;
-  }, [searchHistory]);
+  }, [messages]);
+
+  // Initialize first conversation if needed
+  useEffect(() => {
+    if (user && conversations.length > 0) {
+      if (!currentConversationId) {
+        const findConversationWithMessages = async () => {
+          for (const conversation of conversations) {
+            const { data: conversationMessages } = await supabase
+              .from('chat_messages')
+              .select('id')
+              .eq('conversation_id', conversation.id)
+              .limit(1);
+            if (conversationMessages && conversationMessages.length > 0) {
+              setCurrentConversationId(conversation.id);
+              return;
+            }
+          }
+          if (conversations.length > 0) {
+            setCurrentConversationId(conversations[0].id);
+          } else {
+            createConversation('New Search');
+          }
+        };
+        findConversationWithMessages();
+      }
+    } else if (user && conversations.length === 0) {
+      createConversation('New Search');
+    }
+  }, [user, conversations, currentConversationId, createConversation, setCurrentConversationId]);
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
@@ -96,9 +132,11 @@ export const AIChatView = ({
       setUploadedImages(prev => [...prev, ...newImages].slice(0, 3));
     }
   };
+
   const removeImage = (index: number) => {
     setUploadedImages(prev => prev.filter((_, i) => i !== index));
   };
+
   const convertImageToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -107,12 +145,19 @@ export const AIChatView = ({
       reader.readAsDataURL(file);
     });
   };
+
   const createNewChat = () => {
-    setSearchHistory([]);
+    createConversation('New Search');
     setQuery('');
     setUploadedImages([]);
     setShowHistory(false);
   };
+
+  const switchToConversation = async (conversationId: string) => {
+    setCurrentConversationId(conversationId);
+    setShowHistory(false);
+  };
+
   const handleLikeProperty = async (propertyId: string, realtorId?: string) => {
     if (!user) {
       toast({
@@ -122,17 +167,22 @@ export const AIChatView = ({
       });
       return;
     }
+
     try {
       setLikedProperties(prev => new Set([...prev, propertyId]));
 
       // Find the actual realtor ID from the search results
       const property = allResults.find(p => p.id === propertyId);
       const actualRealtorId = property?.realtor_id || realtorId;
+      
       if (!actualRealtorId) {
         // Fallback: try to get realtor_id from database
-        const {
-          data: propertyData
-        } = await supabase.from('properties').select('realtor_id').eq('id', propertyId).single();
+        const { data: propertyData } = await supabase
+          .from('properties')
+          .select('realtor_id')
+          .eq('id', propertyId)
+          .single();
+        
         if (propertyData?.realtor_id) {
           await createMatch(propertyId, propertyData.realtor_id);
           toast({
@@ -167,9 +217,9 @@ export const AIChatView = ({
       });
     }
   };
-  const handleSearch = async (searchQuery?: string) => {
-    const queryToUse = searchQuery || query;
-    if (!queryToUse.trim() && uploadedImages.length === 0) {
+
+  const handleSearch = async () => {
+    if (!query.trim() && uploadedImages.length === 0) {
       toast({
         title: "Please describe your ideal home or upload an image",
         description: "Tell us what you're looking for or show us a reference image",
@@ -178,141 +228,56 @@ export const AIChatView = ({
       return;
     }
 
-    // Show user message immediately
-    setTempUserMessage(queryToUse);
     if (!user) {
-      // Handle anonymous users
-      setIsSearching(true);
-      try {
-        const {
-          data: response,
-          error: functionError
-        } = await supabase.functions.invoke('chat-ai', {
-          body: {
-            message: queryToUse,
-            userType: 'renter',
-            userPreferences: null,
-            propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
-          }
-        });
-        if (functionError || !response) {
-          throw new Error(functionError?.message || 'Search failed');
-        }
-
-        // Parse the AI response
-        let results;
-        try {
-          const parsed = JSON.parse(response.response);
-          if (parsed.results && Array.isArray(parsed.results)) {
-            results = {
-              results: parsed.results,
-              summary: parsed.summary,
-              totalMatches: parsed.results.length
-            };
-          } else {
-            results = {
-              results: [],
-              summary: response.response,
-              totalMatches: 0
-            };
-          }
-        } catch (e) {
-          results = {
-            results: [],
-            summary: response.response,
-            totalMatches: 0
-          };
-        }
-
-        // Add search to history
-        const searchId = Date.now().toString();
-        const newSearch = {
-          id: searchId,
-          query: queryToUse,
-          results: results,
-          timestamp: new Date()
-        };
-        setSearchHistory(prev => [newSearch, ...prev]);
-        toast({
-          title: "Search complete!",
-          description: "Found some great matches for you."
-        });
-      } catch (error) {
-        console.error('Search error:', error);
-        toast({
-          title: "Search failed",
-          description: "There was an error processing your search. Please try again.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsSearching(false);
-        setTempUserMessage(null);
-        setQuery('');
-        setUploadedImages([]);
-      }
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to use AI search",
+        variant: "destructive"
+      });
       return;
     }
 
-    // Check search limit using usage tracking for authenticated users
     if (!canPerformAction('ai-search')) {
       setShowSubscriptionModal(true);
-      setTempUserMessage(null);
       return;
     }
-    setIsSearching(true);
-    try {
-      const {
-        data: response,
-        error: functionError
-      } = await supabase.functions.invoke('chat-ai', {
-        body: {
-          message: queryToUse,
-          userType: 'renter',
-          userPreferences,
-          propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
-        }
+
+    if (!currentConversationId) {
+      toast({
+        title: "No conversation selected",
+        description: "Please create a new conversation first",
+        variant: "destructive"
       });
-      if (functionError || !response) {
-        throw new Error(functionError?.message || 'Search failed');
-      }
+      return;
+    }
 
-      // Parse the AI response
-      let results;
-      try {
-        const parsed = JSON.parse(response.response);
-        if (parsed.results && Array.isArray(parsed.results)) {
-          results = {
-            results: parsed.results,
-            summary: parsed.summary,
-            totalMatches: parsed.results.length
-          };
-        } else {
-          results = {
-            results: [],
-            summary: response.response,
-            totalMatches: 0
-          };
-        }
-      } catch (e) {
-        results = {
-          results: [],
-          summary: response.response,
-          totalMatches: 0
-        };
-      }
+    // Show user message immediately
+    setTempUserMessage(query);
 
-      // Add search to history
-      const searchId = Date.now().toString();
-      const newSearch = {
-        id: searchId,
-        query: queryToUse,
-        results: results,
-        timestamp: new Date()
+    try {
+      // Update conversation title with the user's request content (first 50 chars)
+      const titleFromMessage = query.length > 50 ? query.substring(0, 47) + '...' : query;
+      await supabase
+        .from('chat_conversations')
+        .update({ title: titleFromMessage })
+        .eq('id', currentConversationId);
+
+      // Send message using the chat hook
+      const messageData = {
+        message: query,
+        conversationId: currentConversationId,
+        userType: 'renter' as const,
+        userPreferences,
+        propertyImages: uploadedImages.length > 0 
+          ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) 
+          : []
       };
-      setSearchHistory(prev => [newSearch, ...prev]);
+
+      sendMessage(messageData);
 
       // Update AI search usage
       await updateUsage('ai-search');
+      
       toast({
         title: "Search complete!",
         description: "Found some great matches for you."
@@ -325,27 +290,28 @@ export const AIChatView = ({
         variant: "destructive"
       });
     } finally {
-      setIsSearching(false);
-      setTempUserMessage(null);
       setQuery('');
       setUploadedImages([]);
+      // Clear temporary message after a short delay to let the real message appear
+      setTimeout(() => setTempUserMessage(null), 1000);
     }
   };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSearch();
     }
   };
-  const handleBrowseAll = () => {
-    navigate('/discover');
-  };
+
   const handlePropertyClick = (property: PropertyMatch) => {
     setSelectedProperty(property);
     setShowPropertyModal(true);
   };
+
   if (loading) {
-    return <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
+    return (
+      <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto">
             <div className="w-full p-6 bg-card border border-border rounded-2xl">
@@ -355,9 +321,30 @@ export const AIChatView = ({
             </div>
           </div>
         </div>
-      </div>;
+      </div>
+    );
   }
-  return <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
+
+  if (!user) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Card className="p-6 max-w-md mx-auto">
+          <CardContent className="text-center">
+            <h2 className="text-xl font-bold mb-4">AI Property Search</h2>
+            <p className="text-muted-foreground mb-4">
+              Sign in to access our AI-powered property search
+            </p>
+            <Button onClick={() => navigate('/auth')}>
+              Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 ${showNavigation ? 'pt-20' : 'pt-8'}`}>
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto relative">
           {/* Title outside chat box */}
@@ -366,49 +353,80 @@ export const AIChatView = ({
           </div>
           
           {/* History and New Chat buttons - positioned below header, above chat box */}
-          {user && <div className="flex justify-end mb-4">
+          {user && (
+            <div className="flex justify-end mb-4">
               <div className="flex gap-2">
-                <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
+                <Button 
+                  onClick={() => setShowHistory(!showHistory)} 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0 hover:bg-secondary/50"
+                >
                   <History className="h-4 w-4" />
                 </Button>
-                <Button onClick={createNewChat} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
+                <Button 
+                  onClick={createNewChat} 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0 hover:bg-secondary/50"
+                >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
-            </div>}
+            </div>
+          )}
 
           <div className="w-full p-6 bg-transparent rounded-md shadow-xl">
             {/* Header */}
             <div className="text-center mb-6 relative">
             </div>
 
-            {/* Search History Dropdown */}
-            {showHistory && <Card className="mb-6 border-border">
+            {/* Chat History Dropdown */}
+            {showHistory && (
+              <Card className="mb-6 border-border">
                 <CardContent className="p-4">
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {searchHistory.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">No searches yet</p> : searchHistory.map(search => <div key={search.id} className="p-3 rounded-lg hover:bg-secondary/50 transition-colors">
+                    {conversations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No conversations yet</p>
+                    ) : (
+                      conversations.map(conversation => (
+                        <div 
+                          key={conversation.id} 
+                          onClick={() => switchToConversation(conversation.id)} 
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                            conversation.id === currentConversationId 
+                              ? 'bg-primary/10 border border-primary/20' 
+                              : 'hover:bg-secondary/50'
+                          }`}
+                        >
                           <div className="flex items-center gap-2">
                             <MessageSquare className="h-4 w-4 text-muted-foreground" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{search.query}</p>
+                              <p className="text-sm font-medium truncate">
+                                {conversation.title || 'New Search'}
+                              </p>
                               <p className="text-xs text-muted-foreground">
-                                {search.timestamp.toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })} • {search.results.results.length} properties
+                                {new Date(conversation.updated_at || conversation.created_at).toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
                               </p>
                             </div>
                           </div>
-                        </div>)}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </CardContent>
-              </Card>}
+              </Card>
+            )}
 
             {/* Temp User Message Display */}
-            {tempUserMessage && <div className="space-y-4 mb-6">
+            {tempUserMessage && (
+              <div className="space-y-4 mb-6">
                 <div className="flex justify-end animate-fade-in">
                   <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
                     <p className="text-sm">{tempUserMessage}</p>
@@ -416,230 +434,322 @@ export const AIChatView = ({
                 </div>
                 
                 {/* AI Thinking Animation */}
-                {isSearching && <div className="flex justify-start animate-fade-in">
-                    <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                    animationDelay: '0ms'
-                  }}></div>
-                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                    animationDelay: '150ms'
-                  }}></div>
-                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                    animationDelay: '300ms'
-                  }}></div>
-                      </div>
+                <div className="flex justify-start animate-fade-in">
+                  <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                     </div>
-                  </div>}
-              </div>}
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* Search Results */}
-            {searchHistory.length > 0 && <div className="space-y-6 mb-6 max-h-96 overflow-y-auto">
-                {searchHistory.map(search => <div key={search.id} className="animate-fade-in">
-                    {/* User Message */}
-                    <div className="flex justify-end mb-4">
-                      <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
-                        <p className="text-sm">{search.query}</p>
-                        <p className="text-xs opacity-70 mt-1">
-                          {search.timestamp.toLocaleString()}
-                        </p>
+            {/* Chat Messages */}
+            {messages.length > 0 && (
+              <div className="space-y-6 mb-6 max-h-96 overflow-y-auto">
+                {messages.map((message, index) => {
+                  if (message.role === 'user') {
+                    return (
+                      <div key={index} className="flex justify-end mb-4 animate-fade-in">
+                        <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+                          <p className="text-sm">{message.content}</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            {new Date(message.created_at).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    );
+                  } else {
+                    // AI message - try to parse for property results
+                    let searchResults: SearchResult | null = null;
+                    let displayContent = message.content;
+                    try {
+                      const parsed = JSON.parse(message.content);
+                      if (parsed.results && Array.isArray(parsed.results)) {
+                        searchResults = parsed;
+                      }
+                    } catch (e) {
+                      // Not JSON, treat as regular text
+                      if (message.content.includes('{"results":') || message.content.includes('"summary":')) {
+                        displayContent = "I found some amazing properties that match your preferences! Let me show you the top matches.";
+                      }
+                    }
                     
-                    {/* AI Response with Results */}
-                    <div className="flex justify-start">
-                      <div className="max-w-[95%] space-y-4">
-                        {search.results.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-                            <p className="text-sm">{search.results.summary}</p>
-                          </div>}
-                        
-                        {search.results.results.length > 0 && <div className="space-y-3">
-                            {search.results.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" onClick={() => handlePropertyClick(property)}>
-                                <CardContent className="p-3 sm:p-4">
-                                  {/* Vibe Rating */}
-                                  {userPreferences && (
-                                    <div className="mb-3">
-                                      <VibeScore 
-                                        score={calculateVibeScore({
-                                          id: property.id,
-                                          images: property.images,
-                                          title: property.title,
-                                          location: property.location,
-                                          price: property.price,
-                                          size: property.size,
-                                          vibe: property.vibe,
-                                          description: property.description,
-                                          highlights: property.highlights,
-                                          realtor: { id: '', name: '', phone: '', email: '' },
-                                          vibe_analysis: property.vibe_analysis
-                                        }, userPreferences)} 
-                                        size="sm" 
-                                      />
-                                    </div>
-                                  )}
-                                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                                    {/* Property Image - Bigger on mobile */}
-                                    <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
-                                      {property.images && property.images.length > 0 ? <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center">
-                                          <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                                        </div>}
-                                      {/* Match Score Overlay */}
-                                      <div className="absolute top-2 left-2">
-                                        <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
-                                          {property.matchScore}% match
-                                        </Badge>
-                                      </div>
-                                      {/* Like Button - Mobile position */}
-                                      <div className="absolute top-2 right-2 sm:hidden">
-                                        <Button onClick={e => {
-                                e.stopPropagation();
-                                handleLikeProperty(property.id, property.realtor_id);
-                              }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"}`}>
-                                          <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                        </Button>
-                                      </div>
-                                    </div>
+                    if (searchResults) {
+                      return (
+                        <div key={index} className="animate-fade-in">
+                          {/* AI Response with Results */}
+                          <div className="flex justify-start">
+                            <div className="max-w-[95%] space-y-4">
+                              {searchResults.summary && (
+                                <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                                  <p className="text-sm">{searchResults.summary}</p>
+                                </div>
+                              )}
+                              
+                              {searchResults.results.length > 0 && (
+                                <div className="space-y-3">
+                                  {searchResults.results.map(property => (
+                                    <Card 
+                                      key={property.id} 
+                                      className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" 
+                                      onClick={() => handlePropertyClick(property)}
+                                    >
+                                      <CardContent className="p-3 sm:p-4">
+                                        {/* Vibe Rating */}
+                                        {userPreferences && (
+                                          <div className="mb-3">
+                                            <VibeScore 
+                                              score={calculateVibeScore({
+                                                id: property.id,
+                                                images: property.images,
+                                                title: property.title,
+                                                location: property.location,
+                                                price: property.price,
+                                                size: property.size,
+                                                vibe: property.vibe,
+                                                description: property.description,
+                                                highlights: property.highlights,
+                                                realtor: { id: '', name: '', phone: '', email: '' },
+                                                vibe_analysis: property.vibe_analysis
+                                              }, userPreferences)} 
+                                              size="sm" 
+                                            />
+                                          </div>
+                                        )}
+                                        
+                                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                          {/* Property Image */}
+                                          <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
+                                            {property.images && property.images.length > 0 ? (
+                                              <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" />
+                                            ) : (
+                                              <div className="w-full h-full flex items-center justify-center">
+                                                <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
+                                              </div>
+                                            )}
+                                            
+                                            {/* Match Score Overlay */}
+                                            <div className="absolute top-2 left-2">
+                                              <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
+                                                {property.matchScore}% match
+                                              </Badge>
+                                            </div>
+                                            
+                                            {/* Like Button - Mobile position */}
+                                            <div className="absolute top-2 right-2 sm:hidden">
+                                              <Button 
+                                                onClick={e => {
+                                                  e.stopPropagation();
+                                                  handleLikeProperty(property.id, property.realtor_id);
+                                                }} 
+                                                size="sm" 
+                                                variant={likedProperties.has(property.id) ? "default" : "ghost"} 
+                                                className={`h-8 w-8 p-0 ${
+                                                  likedProperties.has(property.id) 
+                                                    ? "bg-green-500 hover:bg-green-600 text-white" 
+                                                    : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"
+                                                }`}
+                                              >
+                                                <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                                              </Button>
+                                            </div>
+                                          </div>
 
-                                    {/* Property Details */}
-                                    <div className="flex-1 min-w-0 sm:order-2 text-left">
-                                      <div className="flex items-start justify-between mb-2">
-                                        <div className="flex-1 min-w-0 pr-2">
-                                          <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base text-left">
-                                            {property.title}
-                                          </h5>
-                                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                                            <MapPin className="h-4 w-4 flex-shrink-0" />
-                                            <span className="line-clamp-1">{property.location}</span>
+                                          {/* Property Details */}
+                                          <div className="flex-1 min-w-0 sm:order-2 text-left">
+                                            <div className="flex items-start justify-between mb-2">
+                                              <div className="flex-1 min-w-0 pr-2">
+                                                <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base text-left">
+                                                  {property.title}
+                                                </h5>
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                                                  <MapPin className="h-4 w-4 flex-shrink-0" />
+                                                  <span className="line-clamp-1">{property.location}</span>
+                                                </div>
+                                              </div>
+                                              
+                                              {/* Desktop buttons */}
+                                              <div className="hidden sm:flex flex-col items-end gap-1">
+                                                <Button 
+                                                  onClick={e => {
+                                                    e.stopPropagation();
+                                                    handleLikeProperty(property.id, property.realtor_id);
+                                                  }} 
+                                                  size="sm" 
+                                                  variant={likedProperties.has(property.id) ? "default" : "ghost"} 
+                                                  className={`h-8 w-8 p-0 ${
+                                                    likedProperties.has(property.id) 
+                                                      ? "bg-green-500 hover:bg-green-600 text-white" 
+                                                      : "hover:bg-green-50 text-green-600"
+                                                  }`}
+                                                >
+                                                  <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                                                </Button>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
+                                              <div className="flex items-center">
+                                                <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
+                                              </div>
+                                              {property.size && <span className="font-medium">{property.size}</span>}
+                                              {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
+                                            </div>
+
+                                            {/* Why it matches */}
+                                            <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
+                                              <p className="text-sm text-foreground text-left">
+                                                <span className="font-semibold text-primary">Why it matches: </span>
+                                                {property.matchReason}
+                                              </p>
+                                            </div>
                                           </div>
                                         </div>
-                                        
-                                        {/* Desktop buttons */}
-                                        <div className="hidden sm:flex flex-col items-end gap-1">
-                                          <Button onClick={e => {
-                                  e.stopPropagation();
-                                  handleLikeProperty(property.id, property.realtor_id);
-                                }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "hover:bg-green-50 text-green-600"}`}>
-                                            <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                          </Button>
-                                          
-                                          {userPreferences && <VibeScore score={calculateVibeScore({
-                                  id: property.id,
-                                  images: property.images,
-                                  title: property.title,
-                                  location: property.location,
-                                  price: property.price,
-                                  size: property.size,
-                                  vibe: property.vibe,
-                                  description: property.description,
-                                  highlights: property.highlights,
-                                  realtor: {
-                                    id: '',
-                                    name: '',
-                                    phone: '',
-                                    email: ''
-                                  },
-                                  vibe_analysis: property.vibe_analysis
-                                }, userPreferences)} size="sm" />}
-                                        </div>
-                                      </div>
+                                      </CardContent>
+                                    </Card>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // Regular text message
+                      return (
+                        <div key={index} className="flex justify-start animate-fade-in">
+                          <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
+                            <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+                })}
 
-                                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                                        <div className="flex items-center">
-                                          <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
-                                        </div>
-                                        {property.size && <span className="font-medium">{property.size}</span>}
-                                        {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
-                                      </div>
-
-                                      {/* Why it matches - More prominent on mobile */}
-                                      <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
-                                        <p className="text-sm text-foreground text-left">
-                                          <span className="font-semibold text-primary">Why it matches: </span>
-                                          {property.matchReason}
-                                        </p>
-                                      </div>
-
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>)}
-                          </div>}
-                        
-                      </div>
-                    </div>
-                  </div>)}
-                
                 {/* AI Thinking Animation */}
-                {isSearching && <div className="flex justify-start animate-fade-in">
+                {isSendingMessage && (
+                  <div className="flex justify-start animate-fade-in">
                     <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
                       <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                    animationDelay: '0ms'
-                  }}></div>
-                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                    animationDelay: '150ms'
-                  }}></div>
-                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                    animationDelay: '300ms'
-                  }}></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
                     </div>
-                  </div>}
-              </div>}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Chat Input */}
             <div className="space-y-4">
               <div className="relative">
-                <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={searchHistory.length === 0 ? "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light..." : "Ask me about properties, neighborhoods, or anything else..."} className="min-h-[100px] pr-20 resize-none bg-transparent" disabled={isSearching} />
+                <Textarea
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Tell me about your ideal home - style, location, features, vibe..."
+                  disabled={isSendingMessage}
+                  className="min-h-[100px] pr-20 resize-none bg-transparent"
+                />
                 <div className="absolute bottom-3 right-3 flex gap-2">
-                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-                  <Button onClick={() => fileInputRef.current?.click()} disabled={isSearching || uploadedImages.length >= 3} size="sm" variant="outline" className="h-8 w-8 p-0">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <Button 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSendingMessage || uploadedImages.length >= 3}
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                  >
                     <Upload className="h-4 w-4" />
                   </Button>
-                  <Button onClick={() => handleSearch()} disabled={isSearching || !query.trim() && uploadedImages.length === 0} size="sm" className="h-8 w-8 p-0">
-                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlaneTakeoff className="h-4 w-4" />}
+                  <Button 
+                    onClick={handleSearch}
+                    disabled={isSendingMessage || (!query.trim() && uploadedImages.length === 0)}
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                  >
+                    {isSendingMessage ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <PlaneTakeoff className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
 
               {/* Image Preview */}
-              {uploadedImages.length > 0 && <div className="flex gap-2 flex-wrap animate-fade-in">
-                  {uploadedImages.map((image, index) => <div key={index} className="relative">
-                      <img src={URL.createObjectURL(image)} alt={`Upload ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-border" />
-                      <Button onClick={() => removeImage(index)} size="sm" variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full">
+              {uploadedImages.length > 0 && (
+                <div className="flex gap-2 flex-wrap animate-fade-in">
+                  {uploadedImages.map((image, index) => (
+                    <div key={index} className="relative">
+                      <img 
+                        src={URL.createObjectURL(image)} 
+                        alt={`Upload ${index + 1}`} 
+                        className="w-16 h-16 object-cover rounded-lg border border-border" 
+                      />
+                      <Button 
+                        onClick={() => removeImage(index)}
+                        size="sm"
+                        variant="destructive"
+                        className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full"
+                      >
                         <X className="h-3 w-3" />
                       </Button>
-                    </div>)}
-                </div>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Property Detail Modal */}
-            <PropertyDetailModal apartment={selectedProperty ? {
-            id: selectedProperty.id,
-            title: selectedProperty.title,
-            location: selectedProperty.location,
-            price: selectedProperty.price,
-            size: selectedProperty.size,
-            vibe: selectedProperty.vibe,
-            description: selectedProperty.description,
-            highlights: selectedProperty.highlights,
-            images: selectedProperty.images,
-            realtor: {
-              id: "contact",
-              name: "Contact for details",
-              phone: "",
-              email: ""
-            },
-            vibe_analysis: selectedProperty.vibe_analysis
-          } : null} userPreferences={userPreferences} isOpen={showPropertyModal} onClose={() => {
-            setShowPropertyModal(false);
-            setSelectedProperty(null);
-          }} onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined} />
+            <PropertyDetailModal 
+              apartment={selectedProperty ? {
+                id: selectedProperty.id,
+                title: selectedProperty.title,
+                location: selectedProperty.location,
+                price: selectedProperty.price,
+                size: selectedProperty.size,
+                vibe: selectedProperty.vibe,
+                description: selectedProperty.description,
+                highlights: selectedProperty.highlights,
+                images: selectedProperty.images,
+                realtor: {
+                  id: "contact",
+                  name: "Contact for details",
+                  phone: "",
+                  email: ""
+                },
+                vibe_analysis: selectedProperty.vibe_analysis
+              } : null}
+              userPreferences={userPreferences}
+              isOpen={showPropertyModal}
+              onClose={() => {
+                setShowPropertyModal(false);
+                setSelectedProperty(null);
+              }}
+              onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined}
+            />
 
             {/* Subscription Modal */}
-            <SubscriptionModal isOpen={showSubscriptionModal} onClose={() => setShowSubscriptionModal(false)} />
+            <SubscriptionModal 
+              isOpen={showSubscriptionModal} 
+              onClose={() => setShowSubscriptionModal(false)} 
+            />
           </div>
         </div>
       </div>
-    </div>;
+    </div>
+  );
 };
