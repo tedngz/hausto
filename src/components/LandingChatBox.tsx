@@ -429,7 +429,7 @@ export const LandingChatBox = ({
         if (message.role === 'user') {
           return <div key={index} className="flex justify-end animate-fade-in">
                   <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
-                    <p className="text-sm">{message.content}</p>
+                    <p className="text-sm text-left">{message.content}</p>
                   </div>
                 </div>;
         } else {
