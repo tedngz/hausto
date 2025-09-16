@@ -454,6 +454,27 @@ export const AIChatView = ({
                         {search.results.results.length > 0 && <div className="space-y-3">
                             {search.results.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" onClick={() => handlePropertyClick(property)}>
                                 <CardContent className="p-3 sm:p-4">
+                                  {/* Vibe Rating */}
+                                  {userPreferences && (
+                                    <div className="mb-3">
+                                      <VibeScore 
+                                        score={calculateVibeScore({
+                                          id: property.id,
+                                          images: property.images,
+                                          title: property.title,
+                                          location: property.location,
+                                          price: property.price,
+                                          size: property.size,
+                                          vibe: property.vibe,
+                                          description: property.description,
+                                          highlights: property.highlights,
+                                          realtor: { id: '', name: '', phone: '', email: '' },
+                                          vibe_analysis: property.vibe_analysis
+                                        }, userPreferences)} 
+                                        size="sm" 
+                                      />
+                                    </div>
+                                  )}
                                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                     {/* Property Image - Bigger on mobile */}
                                     <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
