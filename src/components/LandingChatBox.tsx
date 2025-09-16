@@ -52,6 +52,7 @@ export const LandingChatBox = ({
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
+  const [tempUserMessageForLoggedIn, setTempUserMessageForLoggedIn] = useState<string | null>(null);
   const [typedPlaceholder, setTypedPlaceholder] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -273,6 +274,9 @@ export const LandingChatBox = ({
       return;
     }
     if (user) {
+      // Show user message immediately for logged-in users
+      setTempUserMessageForLoggedIn(queryToUse);
+      
       // Send message using the chat hook for logged in users
       const messageData = {
         message: queryToUse,
@@ -302,6 +306,8 @@ export const LandingChatBox = ({
       } finally {
         setQuery('');
         setUploadedImages([]);
+        // Clear temporary message after a short delay to let the real message appear
+        setTimeout(() => setTempUserMessageForLoggedIn(null), 1000);
       }
     } else {
       // Handle search for anonymous users - call AI chat directly
@@ -411,7 +417,14 @@ export const LandingChatBox = ({
         </Card>}
 
       {/* Chat Messages */}
-      {messages.length > 0 && user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+      {(messages.length > 0 || tempUserMessageForLoggedIn) && user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+          {/* Temporary user message for instant feedback */}
+          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
+              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+                <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
+              </div>
+            </div>}
+          
           {messages.map((message, index) => {
         if (message.role === 'user') {
           return <div key={index} className="flex justify-end animate-fade-in">
