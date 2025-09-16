@@ -513,7 +513,7 @@ export const LandingChatBox = ({
 
                                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
                                         <div className="flex items-center">
-                                          <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
+                                          <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
                                         </div>
                                         {property.size && <span className="font-medium">{property.size}</span>}
                                         {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
