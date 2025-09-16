@@ -87,7 +87,6 @@ export const LandingChatBox = ({
 
   // Typing effect for placeholder
   const fullPlaceholder = "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light...";
-  
   useEffect(() => {
     if (messages.length === 0) {
       let i = 0;
@@ -98,7 +97,6 @@ export const LandingChatBox = ({
           clearInterval(typingInterval);
         }
       }, 50);
-
       return () => clearInterval(typingInterval);
     } else {
       setTypedPlaceholder("Ask me about properties, neighborhoods, or anything else...");
@@ -131,12 +129,9 @@ export const LandingChatBox = ({
         // Try to find a conversation with messages by checking each one
         const findConversationWithMessages = async () => {
           for (const conversation of conversations) {
-            const { data: conversationMessages } = await supabase
-              .from('chat_messages')
-              .select('id')
-              .eq('conversation_id', conversation.id)
-              .limit(1);
-            
+            const {
+              data: conversationMessages
+            } = await supabase.from('chat_messages').select('id').eq('conversation_id', conversation.id).limit(1);
             if (conversationMessages && conversationMessages.length > 0) {
               setCurrentConversationId(conversation.id);
               return;
@@ -149,7 +144,6 @@ export const LandingChatBox = ({
             createConversation('AI Property Search');
           }
         };
-        
         findConversationWithMessages();
       }
     } else if (user && conversations.length === 0) {
@@ -198,14 +192,11 @@ export const LandingChatBox = ({
   const switchToConversation = async (conversationId: string) => {
     setCurrentConversationId(conversationId);
     setShowHistory(false);
-    
+
     // Ensure the conversation has messages, if not, it might be an empty one
-    const { data: conversationMessages } = await supabase
-      .from('chat_messages')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .limit(1);
-    
+    const {
+      data: conversationMessages
+    } = await supabase.from('chat_messages').select('id').eq('conversation_id', conversationId).limit(1);
     if (!conversationMessages || conversationMessages.length === 0) {
       console.log(`Conversation ${conversationId} appears to be empty`);
     }
@@ -316,19 +307,17 @@ export const LandingChatBox = ({
       // Handle search for anonymous users - call AI chat directly
       setTempUserMessage(queryToUse); // Show user message immediately
       setIsSearching(true);
-      
       try {
         const messageData = {
           message: queryToUse,
           userType: 'renter' as const,
-          userPreferences: null, // Anonymous users don't have saved preferences
+          userPreferences: null,
+          // Anonymous users don't have saved preferences
           propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
         };
-
         const response = await supabase.functions.invoke('chat-ai', {
           body: messageData
         });
-
         if (response.error) {
           throw response.error;
         }
@@ -350,11 +339,9 @@ export const LandingChatBox = ({
             };
           }
         }
-
         if (searchResults) {
           setSearchResults(searchResults);
         }
-        
         setHasSearched(true);
         toast({
           title: "Search completed!",
@@ -452,7 +439,7 @@ export const LandingChatBox = ({
             return <div key={index} className="flex justify-start animate-fade-in">
                     <div className="w-full space-y-4">
                       {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-                          <p className="text-sm">{searchResults.summary}</p>
+                          <p className="text-sm text-left">{searchResults.summary}</p>
                         </div>}
                       
                            {searchResults.results.length > 0 && <div className="space-y-3">
@@ -461,17 +448,9 @@ export const LandingChatBox = ({
                                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                     {/* Property Image - Bigger on mobile */}
                                     <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
-                                      {property.images && property.images.length > 0 ? (
-                                        <img 
-                                          src={property.images[0]} 
-                                          alt={property.title} 
-                                          className="w-full h-full object-cover" 
-                                        />
-                                      ) : (
-                                        <div className="w-full h-full flex items-center justify-center">
+                                      {property.images && property.images.length > 0 ? <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center">
                                           <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                                        </div>
-                                      )}
+                                        </div>}
                                       {/* Match Score Overlay */}
                                       <div className="absolute top-2 left-2">
                                         <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
@@ -480,19 +459,10 @@ export const LandingChatBox = ({
                                       </div>
                                       {/* Like Button - Mobile position */}
                                       <div className="absolute top-2 right-2 sm:hidden">
-                                        <Button 
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleLikeProperty(property.id, property.realtor_id);
-                                          }} 
-                                          size="sm" 
-                                          variant={likedProperties.has(property.id) ? "default" : "ghost"}
-                                          className={`h-8 w-8 p-0 ${
-                                            likedProperties.has(property.id) 
-                                              ? "bg-green-500 hover:bg-green-600 text-white" 
-                                              : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"
-                                          }`}
-                                        >
+                                        <Button onClick={e => {
+                              e.stopPropagation();
+                              handleLikeProperty(property.id, property.realtor_id);
+                            }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"}`}>
                                           <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                         </Button>
                                       </div>
@@ -513,40 +483,31 @@ export const LandingChatBox = ({
                                         
                                         {/* Desktop buttons */}
                                         <div className="hidden sm:flex flex-col items-end gap-1">
-                                          <Button 
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleLikeProperty(property.id, property.realtor_id);
-                                            }} 
-                                            size="sm" 
-                                            variant={likedProperties.has(property.id) ? "default" : "ghost"}
-                                            className={`h-8 w-8 p-0 ${
-                                              likedProperties.has(property.id) 
-                                                ? "bg-green-500 hover:bg-green-600 text-white" 
-                                                : "hover:bg-green-50 text-green-600"
-                                            }`}
-                                          >
+                                          <Button onClick={e => {
+                                e.stopPropagation();
+                                handleLikeProperty(property.id, property.realtor_id);
+                              }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "hover:bg-green-50 text-green-600"}`}>
                                             <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                           </Button>
                                           
-                                          {userPreferences && (
-                                            <VibeScore 
-                                              score={calculateVibeScore({
-                                                id: property.id,
-                                                images: property.images,
-                                                title: property.title,
-                                                location: property.location,
-                                                price: property.price,
-                                                size: property.size,
-                                                vibe: property.vibe,
-                                                description: property.description,
-                                                highlights: property.highlights,
-                                                realtor: { id: '', name: '', phone: '', email: '' },
-                                                vibe_analysis: property.vibe_analysis
-                                              }, userPreferences)} 
-                                              size="sm" 
-                                            />
-                                          )}
+                                          {userPreferences && <VibeScore score={calculateVibeScore({
+                                id: property.id,
+                                images: property.images,
+                                title: property.title,
+                                location: property.location,
+                                price: property.price,
+                                size: property.size,
+                                vibe: property.vibe,
+                                description: property.description,
+                                highlights: property.highlights,
+                                realtor: {
+                                  id: '',
+                                  name: '',
+                                  phone: '',
+                                  email: ''
+                                },
+                                vibe_analysis: property.vibe_analysis
+                              }, userPreferences)} size="sm" />}
                                         </div>
                                       </div>
 
@@ -554,12 +515,8 @@ export const LandingChatBox = ({
                                         <div className="flex items-center">
                                           <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
                                         </div>
-                                        {property.size && (
-                                          <span className="font-medium">{property.size}</span>
-                                        )}
-                                        {property.vibe && (
-                                          <Badge variant="outline" className="text-xs">{property.vibe}</Badge>
-                                        )}
+                                        {property.size && <span className="font-medium">{property.size}</span>}
+                                        {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
                                       </div>
 
                                       {/* Why it matches - More prominent on mobile */}
@@ -590,16 +547,11 @@ export const LandingChatBox = ({
       })}
 
           {/* Continue to AI Chat CTA for Signed In Users after search */}
-          {user && hasSearched && (
-            <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
-              <Button 
-                onClick={() => navigate('/discover')} 
-                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2"
-              >
+          {user && hasSearched && <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
+              <Button onClick={() => navigate('/discover')} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
                 Continue to AI Chat View
               </Button>
-            </div>
-          )}
+            </div>}
           
           {/* AI Thinking Animation */}
           {isSendingMessage && <div className="flex justify-start animate-fade-in">
@@ -730,11 +682,9 @@ export const LandingChatBox = ({
                             </div>
 
                             {/* Property Highlights */}
-                            {property.highlights && property.highlights.length > 0 && (
-                              <div className="mb-3">
+                            {property.highlights && property.highlights.length > 0 && <div className="mb-3">
                                 <HighlightTags highlights={property.highlights} maxWords={3} />
-                              </div>
-                            )}
+                              </div>}
 
                             {/* Why it matches - More prominent on mobile */}
                             <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
