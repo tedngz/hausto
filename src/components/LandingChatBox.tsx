@@ -276,28 +276,27 @@ export const LandingChatBox = ({
     if (user) {
       // Show user message immediately for logged-in users
       setTempUserMessageForLoggedIn(queryToUse);
-      
+
       // Send message using the chat hook for logged in users
-          const messageData = {
-            message: queryToUse,
-            conversationId: currentConversationId!,
-            userType: 'renter' as const,
-            userPreferences,
-            propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
-          };
-          try {
-            // Update conversation title with the user's request content (first 50 chars)
-            const titleFromMessage = queryToUse.length > 50 ? queryToUse.substring(0, 47) + '...' : queryToUse;
-            await supabase
-              .from('chat_conversations')
-              .update({ title: titleFromMessage })
-              .eq('id', currentConversationId!);
+      const messageData = {
+        message: queryToUse,
+        conversationId: currentConversationId!,
+        userType: 'renter' as const,
+        userPreferences,
+        propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
+      };
+      try {
+        // Update conversation title with the user's request content (first 50 chars)
+        const titleFromMessage = queryToUse.length > 50 ? queryToUse.substring(0, 47) + '...' : queryToUse;
+        await supabase.from('chat_conversations').update({
+          title: titleFromMessage
+        }).eq('id', currentConversationId!);
 
-            // Send message to AI chat
-            sendMessage(messageData);
+        // Send message to AI chat
+        sendMessage(messageData);
 
-            // Update AI search usage
-            await updateUsage('ai-search');
+        // Update AI search usage
+        await updateUsage('ai-search');
         setHasSearched(true);
         toast({
           title: "Message sent!",
@@ -415,12 +414,12 @@ export const LandingChatBox = ({
                       <p className="text-sm font-medium truncate">{conversation.title || 'New Search'}</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(conversation.updated_at || conversation.created_at).toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })}
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                  })}
                       </p>
                     </div>
                   </div>
@@ -602,7 +601,7 @@ export const LandingChatBox = ({
           {/* User Message */}
           <div className="flex justify-end animate-fade-in">
             <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
-              <p className="text-sm">{tempUserMessage}</p>
+              <p className="text-sm text-left">{tempUserMessage}</p>
             </div>
           </div>
           
@@ -629,7 +628,7 @@ export const LandingChatBox = ({
           <div className="flex justify-start animate-fade-in">
             <div className="w-full space-y-4">
               {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
-                  <p className="text-sm">{searchResults.summary}</p>
+                  <p className="text-sm text-left">{searchResults.summary}</p>
                 </div>}
               
               {searchResults.results.length > 0 && <div className="space-y-3">
@@ -701,7 +700,7 @@ export const LandingChatBox = ({
 
                             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
                               <div className="flex items-center">
-                                <span className="font-semibold text-foreground text-lg">{formatPrice(property.price)}</span>
+                                <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
                               </div>
                               {property.size && <span className="font-medium">{property.size}</span>}
                               {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
