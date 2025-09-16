@@ -35,7 +35,7 @@ export const PropertyDetailModal = ({
   };
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md max-h-[95vh] overflow-y-auto p-0 m-4">
-        <div className="p-4 px-[17px] mx-[10px]">
+        <div className="p-4 px-[17px] mx-0">
           <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} showViewProfileButton={false} className="shadow-none border-0 bg-transparent" />
 
           {/* Action Buttons */}
