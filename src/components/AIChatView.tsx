@@ -365,14 +365,16 @@ export const AIChatView = ({
             <h2 className="text-xl font-semibold text-foreground mb-2">Describe your dream home</h2>
           </div>
           
-          {/* History and New Chat buttons - positioned above chat box */}
-          {user && <div className="absolute -top-8 right-0 flex gap-2 z-10">
-              <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
-                <History className="h-4 w-4" />
-              </Button>
-              <Button onClick={createNewChat} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
-                <Plus className="h-4 w-4" />
-              </Button>
+          {/* History and New Chat buttons - positioned below header, above chat box */}
+          {user && <div className="flex justify-end mb-4">
+              <div className="flex gap-2">
+                <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button onClick={createNewChat} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>}
 
           <div className="w-full p-6 bg-transparent rounded-md shadow-xl">
