@@ -72,9 +72,8 @@ export const AIChatView = ({
     messages,
     currentConversationId,
     setCurrentConversationId,
-    createConversation,
-    isCreatingConversation,
     sendMessage,
+    sendMessageWithoutConversation,
     isSendingMessage
   } = useChat();
 
@@ -96,34 +95,26 @@ export const AIChatView = ({
     return results;
   }, [messages]);
 
-  // Initialize first conversation if needed
+  // Initialize conversation selection based on existing conversations with messages
   useEffect(() => {
-    if (user && conversations.length > 0) {
-      if (!currentConversationId) {
-        const findConversationWithMessages = async () => {
-          for (const conversation of conversations) {
-            const { data: conversationMessages } = await supabase
-              .from('chat_messages')
-              .select('id')
-              .eq('conversation_id', conversation.id)
-              .limit(1);
-            if (conversationMessages && conversationMessages.length > 0) {
-              setCurrentConversationId(conversation.id);
-              return;
-            }
+    if (user && conversations.length > 0 && !currentConversationId) {
+      const findConversationWithMessages = async () => {
+        for (const conversation of conversations) {
+          const { data: conversationMessages } = await supabase
+            .from('chat_messages')
+            .select('id')
+            .eq('conversation_id', conversation.id)
+            .limit(1);
+          if (conversationMessages && conversationMessages.length > 0) {
+            setCurrentConversationId(conversation.id);
+            return;
           }
-          if (conversations.length > 0) {
-            setCurrentConversationId(conversations[0].id);
-          } else {
-            createConversation('New Search');
-          }
-        };
-        findConversationWithMessages();
-      }
-    } else if (user && conversations.length === 0) {
-      createConversation('New Search');
+        }
+        // If no conversation has messages, don't select any
+      };
+      findConversationWithMessages();
     }
-  }, [user, conversations, currentConversationId, createConversation, setCurrentConversationId]);
+  }, [user, conversations, currentConversationId, setCurrentConversationId]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -147,7 +138,11 @@ export const AIChatView = ({
   };
 
   const createNewChat = () => {
-    createConversation('New Search');
+    setCurrentConversationId(null);
+    setQuery('');
+    setUploadedImages([]);
+    setShowHistory(false);
+  };
     setQuery('');
     setUploadedImages([]);
     setShowHistory(false);
@@ -242,38 +237,33 @@ export const AIChatView = ({
       return;
     }
 
-    if (!currentConversationId) {
-      toast({
-        title: "No conversation selected",
-        description: "Please create a new conversation first",
-        variant: "destructive"
-      });
-      return;
-    }
-
     // Show user message immediately
     setTempUserMessage(query);
 
+    const messageData = {
+      message: query,
+      userType: 'renter' as const,
+      userPreferences,
+      propertyImages: uploadedImages.length > 0 
+        ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) 
+        : []
+    };
+
     try {
-      // Update conversation title with the user's request content (first 50 chars)
-      const titleFromMessage = query.length > 50 ? query.substring(0, 47) + '...' : query;
-      await supabase
-        .from('chat_conversations')
-        .update({ title: titleFromMessage })
-        .eq('id', currentConversationId);
-
-      // Send message using the chat hook
-      const messageData = {
-        message: query,
-        conversationId: currentConversationId,
-        userType: 'renter' as const,
-        userPreferences,
-        propertyImages: uploadedImages.length > 0 
-          ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) 
-          : []
-      };
-
-      sendMessage(messageData);
+      // Send message - this will create a conversation if needed
+      if (currentConversationId) {
+        await sendMessage({
+          ...messageData,
+          conversationId: currentConversationId
+        });
+      } else {
+        await sendMessageWithoutConversation(
+          messageData.message,
+          messageData.userType,
+          messageData.userPreferences,
+          messageData.propertyImages
+        );
+      }
 
       // Update AI search usage
       await updateUsage('ai-search');
@@ -753,3 +743,5 @@ export const AIChatView = ({
     </div>
   );
 };
+
+export default AIChatView;

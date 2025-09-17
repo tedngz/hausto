@@ -101,23 +101,43 @@ export const useChat = () => {
         throw new Error('User not authenticated');
       }
 
-      // First ensure conversation exists
-      const { data: conversationExists } = await supabase
-        .from('chat_conversations')
-        .select('id')
-        .eq('id', conversationId)
-        .eq('user_id', user.id)
-        .single();
+      let actualConversationId = conversationId;
 
-      if (!conversationExists) {
-        throw new Error('Conversation not found or access denied');
+      // If no conversation ID provided or conversation doesn't exist, create one
+      if (!conversationId) {
+        const titleFromMessage = message.length > 50 ? message.substring(0, 47) + '...' : message;
+        const { data: newConversation, error: createError } = await supabase
+          .from('chat_conversations')
+          .insert({
+            user_id: user.id,
+            title: titleFromMessage
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        actualConversationId = newConversation.id;
+        setCurrentConversationId(actualConversationId);
+        queryClient.invalidateQueries({ queryKey: ['chat-conversations'] });
+      } else {
+        // Verify conversation exists and belongs to user
+        const { data: conversationExists } = await supabase
+          .from('chat_conversations')
+          .select('id')
+          .eq('id', conversationId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (!conversationExists) {
+          throw new Error('Conversation not found or access denied');
+        }
       }
 
       // Add user message to database
       const { error: userMessageError } = await supabase
         .from('chat_messages')
         .insert({
-          conversation_id: conversationId,
+          conversation_id: actualConversationId,
           role: 'user',
           content: message
         });
@@ -138,7 +158,7 @@ export const useChat = () => {
       const { data, error } = await supabase.functions.invoke('chat-ai', {
         body: { 
           message, 
-          conversationId,
+          conversationId: actualConversationId,
           userType,
           userPreferences,
           propertyImages: Array.isArray(propertyImages) ? propertyImages : []
@@ -220,6 +240,17 @@ export const useChat = () => {
     },
   });
 
+  // Add function to send message without existing conversation
+  const sendMessageWithoutConversation = (message: string, userType?: 'renter' | 'realtor', userPreferences?: any, propertyImages?: string[]) => {
+    sendMessageMutation.mutate({
+      message,
+      conversationId: '', // Empty string will trigger conversation creation
+      userType,
+      userPreferences,
+      propertyImages
+    });
+  };
+
   return {
     conversations,
     messages,
@@ -228,6 +259,7 @@ export const useChat = () => {
     createConversation: createConversationMutation.mutate,
     isCreatingConversation: createConversationMutation.isPending,
     sendMessage: sendMessageMutation.mutate,
+    sendMessageWithoutConversation,
     isSendingMessage: sendMessageMutation.isPending,
     deleteConversation: deleteConversationMutation.mutate,
     isDeletingConversation: deleteConversationMutation.isPending,

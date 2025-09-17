@@ -80,9 +80,8 @@ export const LandingChatBox = ({
     messages,
     currentConversationId,
     setCurrentConversationId,
-    createConversation,
-    isCreatingConversation,
     sendMessage,
+    sendMessageWithoutConversation,
     isSendingMessage
   } = useChat();
 
@@ -122,36 +121,26 @@ export const LandingChatBox = ({
     return results;
   }, [messages]);
 
-  // Initialize first conversation if needed - load existing conversation with messages first
+  // Initialize conversation selection - only select existing conversations with messages
   useEffect(() => {
-    if (user && conversations.length > 0) {
-      // If no current conversation is selected, find the most recent one with messages
-      if (!currentConversationId) {
-        // Try to find a conversation with messages by checking each one
-        const findConversationWithMessages = async () => {
-          for (const conversation of conversations) {
-            const {
-              data: conversationMessages
-            } = await supabase.from('chat_messages').select('id').eq('conversation_id', conversation.id).limit(1);
-            if (conversationMessages && conversationMessages.length > 0) {
-              setCurrentConversationId(conversation.id);
-              return;
-            }
+    if (user && conversations.length > 0 && !currentConversationId) {
+      const findConversationWithMessages = async () => {
+        for (const conversation of conversations) {
+          const { data: conversationMessages } = await supabase
+            .from('chat_messages')
+            .select('id')
+            .eq('conversation_id', conversation.id)
+            .limit(1);
+          if (conversationMessages && conversationMessages.length > 0) {
+            setCurrentConversationId(conversation.id);
+            return;
           }
-          // If no conversation has messages, use the most recent one or create new
-          if (conversations.length > 0) {
-            setCurrentConversationId(conversations[0].id);
-          } else {
-            createConversation('AI Property Search');
-          }
-        };
-        findConversationWithMessages();
-      }
-    } else if (user && conversations.length === 0) {
-      // Only create a new conversation if the user has no conversations at all
-      createConversation('AI Property Search');
+        }
+        // If no conversation has messages, don't select any
+      };
+      findConversationWithMessages();
     }
-  }, [user, conversations, currentConversationId, createConversation, setCurrentConversationId]);
+  }, [user, conversations, currentConversationId, setCurrentConversationId]);
 
   // Check for stored search query on component mount
   useEffect(() => {
@@ -184,7 +173,7 @@ export const LandingChatBox = ({
     });
   };
   const createNewChat = () => {
-    createConversation('New Search');
+    setCurrentConversationId(null);
     setQuery('');
     setUploadedImages([]);
     setSearchResults(null);
@@ -277,23 +266,28 @@ export const LandingChatBox = ({
       // Show user message immediately for logged-in users
       setTempUserMessageForLoggedIn(queryToUse);
 
-      // Send message using the chat hook for logged in users
       const messageData = {
         message: queryToUse,
-        conversationId: currentConversationId!,
         userType: 'renter' as const,
         userPreferences,
         propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
       };
-      try {
-        // Update conversation title with the user's request content (first 50 chars)
-        const titleFromMessage = queryToUse.length > 50 ? queryToUse.substring(0, 47) + '...' : queryToUse;
-        await supabase.from('chat_conversations').update({
-          title: titleFromMessage
-        }).eq('id', currentConversationId!);
 
-        // Send message to AI chat
-        sendMessage(messageData);
+      try {
+        // Send message - this will create a conversation if needed
+        if (currentConversationId) {
+          await sendMessage({
+            ...messageData,
+            conversationId: currentConversationId
+          });
+        } else {
+          await sendMessageWithoutConversation(
+            messageData.message,
+            messageData.userType,
+            messageData.userPreferences,
+            messageData.propertyImages
+          );
+        }
 
         // Update AI search usage
         await updateUsage('ai-search');
