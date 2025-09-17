@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { OnboardingQuiz } from '@/components/OnboardingQuiz';
 import { SwipeInterface } from '@/components/SwipeInterface';
 import { MatchesView } from '@/components/MatchesView';
-import { AIChatView } from '@/components/AIChatView';
+import AIChatView from '@/components/AIChatView';
 import { Navigation } from '@/components/Navigation';
 import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';

@@ -45,7 +45,7 @@ interface AIChatViewProps {
   userPreferences?: UserPreferences;
 }
 
-export const AIChatView = ({
+const AIChatView = ({
   showNavigation = true,
   userPreferences
 }: AIChatViewProps) => {
@@ -703,40 +703,40 @@ export const AIChatView = ({
               )}
             </div>
 
-            {/* Property Detail Modal */}
-            <PropertyDetailModal 
-              apartment={selectedProperty ? {
-                id: selectedProperty.id,
-                title: selectedProperty.title,
-                location: selectedProperty.location,
-                price: selectedProperty.price,
-                size: selectedProperty.size,
-                vibe: selectedProperty.vibe,
-                description: selectedProperty.description,
-                highlights: selectedProperty.highlights,
-                images: selectedProperty.images,
-                realtor: {
-                  id: "contact",
-                  name: "Contact for details",
-                  phone: "",
-                  email: ""
-                },
-                vibe_analysis: selectedProperty.vibe_analysis
-              } : null}
-              userPreferences={userPreferences}
-              isOpen={showPropertyModal}
-              onClose={() => {
-                setShowPropertyModal(false);
-                setSelectedProperty(null);
-              }}
-              onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined}
-            />
+          {/* Property Detail Modal */}
+          <PropertyDetailModal 
+            apartment={selectedProperty ? {
+              id: selectedProperty.id,
+              title: selectedProperty.title,
+              location: selectedProperty.location,
+              price: selectedProperty.price,
+              size: selectedProperty.size,
+              vibe: selectedProperty.vibe,
+              description: selectedProperty.description,
+              highlights: selectedProperty.highlights,
+              images: selectedProperty.images,
+              realtor: {
+                id: "contact",
+                name: "Contact for details",
+                phone: "",
+                email: ""
+              },
+              vibe_analysis: selectedProperty.vibe_analysis
+            } : null}
+            userPreferences={userPreferences}
+            isOpen={showPropertyModal}
+            onClose={() => {
+              setShowPropertyModal(false);
+              setSelectedProperty(null);
+            }}
+            onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined}
+          />
 
-            {/* Subscription Modal */}
-            <SubscriptionModal 
-              isOpen={showSubscriptionModal} 
-              onClose={() => setShowSubscriptionModal(false)} 
-            />
+          {/* Subscription Modal */}
+          <SubscriptionModal 
+            isOpen={showSubscriptionModal} 
+            onClose={() => setShowSubscriptionModal(false)} 
+          />
           </div>
         </div>
       </div>
