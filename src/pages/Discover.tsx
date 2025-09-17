@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { OnboardingQuiz } from '@/components/OnboardingQuiz';
 import { SwipeInterface } from '@/components/SwipeInterface';
 import { MatchesView } from '@/components/MatchesView';
-import AIChatView from '@/components/AIChatView';
+import { LandingChatBox } from '@/components/LandingChatBox';
 import { Navigation } from '@/components/Navigation';
 import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';
@@ -322,7 +322,7 @@ const Discover = () => {
         )}
 
         {currentView === 'ai-chat' && userType && (
-          <AIChatView showNavigation={true} userPreferences={userPreferences} />
+          <LandingChatBox />
         )}
 
 
