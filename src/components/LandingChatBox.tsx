@@ -312,8 +312,8 @@ export const LandingChatBox = ({
       } finally {
         setQuery('');
         setUploadedImages([]);
-        // Clear temporary message after a short delay to let the real message appear
-        setTimeout(() => setTempUserMessageForLoggedIn(null), 1000);
+        // Clear temporary message after a longer delay to ensure smooth transition
+        setTimeout(() => setTempUserMessageForLoggedIn(null), 2000);
       }
     } else {
       // Handle search for anonymous users - call AI chat directly
@@ -428,8 +428,8 @@ export const LandingChatBox = ({
           </CardContent>
         </Card>}
 
-      {/* Chat Messages */}
-      {(messages.length > 0 || tempUserMessageForLoggedIn) && user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+      {/* Chat Messages for Signed In Users */}
+      {user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {/* Temporary user message for instant feedback */}
           {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
               <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
@@ -571,14 +571,7 @@ export const LandingChatBox = ({
         }
       })}
 
-          {/* Continue to AI Chat CTA for Signed In Users after search */}
-          {user && hasSearched && <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
-              <Button onClick={() => navigate('/discover')} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
-                Continue to AI Chat View
-              </Button>
-            </div>}
-          
-          {/* AI Thinking Animation */}
+          {/* AI Thinking Animation for Signed In Users */}
           {isSendingMessage && <div className="flex justify-start animate-fade-in">
               <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
                 <div className="flex space-x-1">
@@ -593,6 +586,13 @@ export const LandingChatBox = ({
             }}></div>
                 </div>
               </div>
+            </div>}
+
+          {/* Continue to AI Chat CTA for Signed In Users after search */}
+          {hasSearched && <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
+              <Button onClick={() => navigate('/discover')} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
+                Continue to AI Chat View
+              </Button>
             </div>}
         </div>}
 
@@ -740,7 +740,7 @@ export const LandingChatBox = ({
         </div>}
 
 
-      {/* Chat Input - Only show if hasn't searched yet */}
+      {/* Chat Input - Show for everyone until they search */}
       {!hasSearched && <div className="space-y-4">
           <div className="relative">
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage} className="min-h-[100px] pr-20 resize-none bg-transparent" />
