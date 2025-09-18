@@ -407,7 +407,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           />
 
         {/* Action buttons */}
-        <div className="flex justify-center space-x-4">
+        <div className="flex justify-center space-x-4 mb-8">
           <Button
             size="lg"
             variant="outline"
@@ -418,7 +418,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           </Button>
           <Button
             size="lg"
-            className="w-16 h-16 rounded-full bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-white"
+            className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white"
             onClick={handleLike}
           >
             <Heart className="w-8 h-8" />

@@ -478,10 +478,10 @@ export const LandingChatBox = ({
                                       </div>
                                       {/* Like Button - Mobile position */}
                                       <div className="absolute top-2 right-2 sm:hidden">
-                                        <Button onClick={e => {
+                                         <Button onClick={e => {
                               e.stopPropagation();
                               handleLikeProperty(property.id, property.realtor_id);
-                            }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"}`}>
+                            }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-white/90 hover:bg-white text-orange-600 backdrop-blur"}`}>
                                           <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                         </Button>
                                       </div>
@@ -502,10 +502,10 @@ export const LandingChatBox = ({
                                         
                                         {/* Desktop buttons */}
                                         <div className="hidden sm:flex flex-col items-end gap-1">
-                                          <Button onClick={e => {
+                                           <Button onClick={e => {
                                 e.stopPropagation();
                                 handleLikeProperty(property.id, property.realtor_id);
-                              }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "hover:bg-green-50 text-green-600"}`}>
+                              }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
                                             <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                           </Button>
                                           
@@ -645,7 +645,7 @@ export const LandingChatBox = ({
                               <Button onClick={e => {
                         e.stopPropagation();
                         handleLikeProperty(property.id, property.realtor_id);
-                      }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "bg-white/90 hover:bg-white text-green-600 backdrop-blur"}`}>
+                      }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-white/90 hover:bg-white text-orange-600 backdrop-blur"}`}>
                                 <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                               </Button>
                             </div>
@@ -667,7 +667,7 @@ export const LandingChatBox = ({
                                 <Button onClick={e => {
                           e.stopPropagation();
                           handleLikeProperty(property.id, property.realtor_id);
-                        }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-green-500 hover:bg-green-600 text-white" : "hover:bg-green-50 text-green-600"}`}>
+                        }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
                                   <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                 </Button>
                                 
