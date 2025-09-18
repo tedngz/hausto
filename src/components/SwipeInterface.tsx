@@ -287,7 +287,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   // Show loading state
   if (isLoading) {
     return (
-      <div className="pt-20 px-4">
+      <div className="pt-20 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
         <div className="max-w-md mx-auto text-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">Finding properties for you...</p>
@@ -301,7 +301,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     const { title, message, suggestion } = getNoMatchMessage();
     
     return (
-      <div className="pt-20 px-4">
+      <div className="pt-20 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
         <Card className="max-w-md mx-auto p-8 text-center">
           <h3 className="text-xl font-semibold mb-4">{title}</h3>
           <p className="text-muted-foreground mb-4">{message}</p>
@@ -348,7 +348,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   // Show setup message only if no preferences AND no apartments to show
   if (!userPreferences && apartments.length === 0) {
     return (
-      <div className="pt-20 px-4">
+      <div className="pt-20 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
         <Card className="max-w-md mx-auto p-8 text-center">
           <h3 className="text-xl font-semibold mb-4">Setup Required</h3>
           <p className="text-muted-foreground mb-4">Your preferences need to be set up to find matching properties.</p>
@@ -394,8 +394,8 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   };
 
   return (
-    <div className="pt-20 px-4 min-h-screen">
-      <div className="max-w-md mx-auto">
+    <div className="pt-20 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
+      <div className="max-w-md mx-auto pb-8">
           <PropertyCard
             apartment={modifiedApartment}
             userPreferences={userPreferences}
