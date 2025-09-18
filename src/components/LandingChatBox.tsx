@@ -414,7 +414,7 @@ export const LandingChatBox = ({
                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate text-left">{conversation.title || 'New Search'}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground text-left">
                         {new Date(conversation.updated_at || conversation.created_at).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
