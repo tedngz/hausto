@@ -128,11 +128,9 @@ export const LandingChatBox = ({
     if (user && conversations.length > 0 && !currentConversationId && !wantsNewChat && !hasSearched) {
       const findConversationWithMessages = async () => {
         for (const conversation of conversations) {
-          const { data: conversationMessages } = await supabase
-            .from('chat_messages')
-            .select('id')
-            .eq('conversation_id', conversation.id)
-            .limit(1);
+          const {
+            data: conversationMessages
+          } = await supabase.from('chat_messages').select('id').eq('conversation_id', conversation.id).limit(1);
           if (conversationMessages && conversationMessages.length > 0) {
             setCurrentConversationId(conversation.id);
             setHasSearched(true); // Mark as searched since we're loading existing conversation
@@ -281,14 +279,12 @@ export const LandingChatBox = ({
     if (user) {
       // Show user message immediately for logged-in users
       setTempUserMessageForLoggedIn(queryToUse);
-
       const messageData = {
         message: queryToUse,
         userType: 'renter' as const,
         userPreferences,
         propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
       };
-
       try {
         // Send message - this will create a conversation if needed
         if (currentConversationId) {
@@ -297,12 +293,7 @@ export const LandingChatBox = ({
             conversationId: currentConversationId
           });
         } else {
-          await sendMessageWithoutConversation(
-            messageData.message,
-            messageData.userType,
-            messageData.userPreferences,
-            messageData.propertyImages
-          );
+          await sendMessageWithoutConversation(messageData.message, messageData.userType, messageData.userPreferences, messageData.propertyImages);
         }
 
         // Update AI search usage
@@ -422,7 +413,7 @@ export const LandingChatBox = ({
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{conversation.title || 'New Search'}</p>
+                      <p className="text-sm font-medium truncate text-left">{conversation.title || 'New Search'}</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(conversation.updated_at || conversation.created_at).toLocaleString('en-US', {
                     month: 'short',
