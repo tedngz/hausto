@@ -394,7 +394,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   };
 
   return (
-    <div className="pt-20 px-4 min-h-screen">
+    <div className="pt-20 px-4">
       <div className="max-w-md mx-auto">
           <PropertyCard
             apartment={modifiedApartment}
