@@ -135,6 +135,7 @@ export const LandingChatBox = ({
             .limit(1);
           if (conversationMessages && conversationMessages.length > 0) {
             setCurrentConversationId(conversation.id);
+            setHasSearched(true); // Mark as searched since we're loading existing conversation
             return;
           }
         }
@@ -175,6 +176,7 @@ export const LandingChatBox = ({
     });
   };
   const createNewChat = () => {
+    // Clear all chat-related state completely
     startFreshChat();
     setQuery('');
     setUploadedImages([]);
@@ -182,13 +184,20 @@ export const LandingChatBox = ({
     setShowHistory(false);
     setWantsNewChat(true);
     setHasSearched(false);
+    setTempUserMessage(null);
     setTempUserMessageForLoggedIn(null);
+    // Clear any stored pending queries
+    localStorage.removeItem('pendingSearchQuery');
   };
   const switchToConversation = async (conversationId: string) => {
     setCurrentConversationId(conversationId);
     setShowHistory(false);
     setWantsNewChat(false);
     setHasSearched(true); // Existing conversation means user has searched before
+    // Clear any temporary states when switching to existing conversation
+    setTempUserMessage(null);
+    setTempUserMessageForLoggedIn(null);
+    setSearchResults(null); // Clear anonymous search results
 
     // Ensure the conversation has messages, if not, it might be an empty one
     const {

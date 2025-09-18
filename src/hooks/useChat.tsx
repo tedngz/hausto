@@ -254,7 +254,9 @@ export const useChat = () => {
   // Add function to start a completely fresh chat
   const startFreshChat = () => {
     setCurrentConversationId(null);
-    queryClient.invalidateQueries({ queryKey: ['chat-messages'] });
+    // Clear all message queries to ensure fresh start
+    queryClient.removeQueries({ queryKey: ['chat-messages'] });
+    queryClient.resetQueries({ queryKey: ['chat-messages'] });
   };
 
   return {

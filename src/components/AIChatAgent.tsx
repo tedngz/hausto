@@ -118,6 +118,9 @@ export const AIChatAgent = ({
   const handleStartNewChat = () => {
     setSelectedMatch(null);
     setIsStartingNewChat(true);
+    // Clear any pending messages or state
+    setInputMessage('');
+    setPendingMessage('');
   };
 
   const getPlaceholder = () => {
