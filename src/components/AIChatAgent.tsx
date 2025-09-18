@@ -39,6 +39,7 @@ export const AIChatAgent = ({
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [selectedRenterId, setSelectedRenterId] = useState<string | null>(null);
+  const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { formatPrice } = useCurrency();
@@ -111,6 +112,12 @@ export const AIChatAgent = ({
 
   const handleMatchSelect = (matchId: string) => {
     setSelectedMatch(matchId);
+    setIsStartingNewChat(false);
+  };
+
+  const handleStartNewChat = () => {
+    setSelectedMatch(null);
+    setIsStartingNewChat(true);
   };
 
   const getPlaceholder = () => {
@@ -132,13 +139,23 @@ export const AIChatAgent = ({
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          {!selectedMatch ? (
+          {!selectedMatch && !isStartingNewChat ? (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-3 border-b bg-gray-50">
-                <h3 className="font-semibold text-gray-900">Your Conversations</h3>
-                <p className="text-sm text-gray-600">
-                  {matches.length} conversation{matches.length !== 1 ? 's' : ''}
-                </p>
+              <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Your Conversations</h3>
+                  <p className="text-sm text-gray-600">
+                    {matches.length} conversation{matches.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <Button 
+                  onClick={handleStartNewChat}
+                  variant="outline" 
+                  size="sm"
+                  className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                >
+                  New Chat
+                </Button>
               </div>
               
               <ScrollArea className="flex-1 p-3">

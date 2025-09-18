@@ -251,6 +251,12 @@ export const useChat = () => {
     });
   };
 
+  // Add function to start a completely fresh chat
+  const startFreshChat = () => {
+    setCurrentConversationId(null);
+    queryClient.invalidateQueries({ queryKey: ['chat-messages'] });
+  };
+
   return {
     conversations,
     messages,
@@ -260,6 +266,7 @@ export const useChat = () => {
     isCreatingConversation: createConversationMutation.isPending,
     sendMessage: sendMessageMutation.mutate,
     sendMessageWithoutConversation,
+    startFreshChat,
     isSendingMessage: sendMessageMutation.isPending,
     deleteConversation: deleteConversationMutation.mutate,
     isDeletingConversation: deleteConversationMutation.isPending,

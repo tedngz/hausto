@@ -55,6 +55,7 @@ export const LandingChatBox = ({
   const [tempUserMessageForLoggedIn, setTempUserMessageForLoggedIn] = useState<string | null>(null);
   const [typedPlaceholder, setTypedPlaceholder] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [wantsNewChat, setWantsNewChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const {
@@ -82,6 +83,7 @@ export const LandingChatBox = ({
     setCurrentConversationId,
     sendMessage,
     sendMessageWithoutConversation,
+    startFreshChat,
     isSendingMessage
   } = useChat();
 
@@ -121,9 +123,9 @@ export const LandingChatBox = ({
     return results;
   }, [messages]);
 
-  // Initialize conversation selection - only select existing conversations with messages
+  // Initialize conversation selection - only select existing conversations with messages if user doesn't want a new chat
   useEffect(() => {
-    if (user && conversations.length > 0 && !currentConversationId) {
+    if (user && conversations.length > 0 && !currentConversationId && !wantsNewChat) {
       const findConversationWithMessages = async () => {
         for (const conversation of conversations) {
           const { data: conversationMessages } = await supabase
@@ -140,7 +142,7 @@ export const LandingChatBox = ({
       };
       findConversationWithMessages();
     }
-  }, [user, conversations, currentConversationId, setCurrentConversationId]);
+  }, [user, conversations, currentConversationId, setCurrentConversationId, wantsNewChat]);
 
   // Check for stored search query on component mount
   useEffect(() => {
@@ -173,15 +175,20 @@ export const LandingChatBox = ({
     });
   };
   const createNewChat = () => {
-    setCurrentConversationId(null);
+    startFreshChat();
     setQuery('');
     setUploadedImages([]);
     setSearchResults(null);
     setShowHistory(false);
+    setWantsNewChat(true);
+    setHasSearched(false);
+    setTempUserMessageForLoggedIn(null);
   };
   const switchToConversation = async (conversationId: string) => {
     setCurrentConversationId(conversationId);
     setShowHistory(false);
+    setWantsNewChat(false);
+    setHasSearched(true); // Existing conversation means user has searched before
 
     // Ensure the conversation has messages, if not, it might be an empty one
     const {
@@ -292,6 +299,7 @@ export const LandingChatBox = ({
         // Update AI search usage
         await updateUsage('ai-search');
         setHasSearched(true);
+        setWantsNewChat(false); // Reset new chat flag after successful search
         toast({
           title: "Message sent!",
           description: "Your AI assistant is processing your request."
