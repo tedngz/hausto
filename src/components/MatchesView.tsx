@@ -78,7 +78,7 @@ export const MatchesView = ({ userPreferences, userProfile }: MatchesViewProps) 
   if (apartments.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="w-24 h-24 bg-gradient-to-r from-orange-400 to-red-400 rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="w-24 h-24 bg-gradient-to-r from-orange-400 to-red-400 rounded-full flex items-center justify-center mx-auto mb-6 mt-20">
           <span className="text-white text-3xl">💕</span>
         </div>
         <h3 className="text-xl font-semibold text-gray-900 mb-2">No matches yet</h3>
