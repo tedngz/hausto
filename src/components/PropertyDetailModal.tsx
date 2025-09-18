@@ -43,7 +43,7 @@ export const PropertyDetailModal = ({
               {onDislike && <Button size="lg" variant="outline" className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400" onClick={handleDislike}>
                   <X className="w-8 h-8" />
                 </Button>}
-              {onLike && <Button size="lg" className="w-16 h-16 rounded-full bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-white" onClick={handleLike}>
+              {onLike && <Button size="lg" onClick={handleLike} className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white">
                   <Heart className="w-8 h-8" />
                 </Button>}
             </div>}
