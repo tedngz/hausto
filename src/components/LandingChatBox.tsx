@@ -125,7 +125,7 @@ export const LandingChatBox = ({
 
   // Initialize conversation selection - only select existing conversations with messages if user doesn't want a new chat
   useEffect(() => {
-    if (user && conversations.length > 0 && !currentConversationId && !wantsNewChat) {
+    if (user && conversations.length > 0 && !currentConversationId && !wantsNewChat && !hasSearched) {
       const findConversationWithMessages = async () => {
         for (const conversation of conversations) {
           const { data: conversationMessages } = await supabase
@@ -266,8 +266,8 @@ export const LandingChatBox = ({
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
 
-    // Check if user has already searched (1 search limit for all users)
-    if (hasSearched) {
+    // For anonymous users, limit to a single search
+    if (!user && hasSearched) {
       return;
     }
     if (!queryToUse.trim() && uploadedImages.length === 0) {
@@ -599,12 +599,6 @@ export const LandingChatBox = ({
               </div>
             </div>}
 
-          {/* Continue to AI Chat CTA for Signed In Users after search */}
-          {hasSearched && <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
-              <Button onClick={() => navigate('/discover')} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
-                Continue to AI Chat View
-              </Button>
-            </div>}
         </div>}
 
       {/* Temporary Chat Messages for Non-Logged In Users */}
@@ -752,7 +746,7 @@ export const LandingChatBox = ({
 
 
       {/* Chat Input - Show for everyone until they search */}
-      {!hasSearched && <div className="space-y-4">
+      {(user || !hasSearched) && <div className="space-y-4">
           <div className="relative">
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage} className="min-h-[100px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">
