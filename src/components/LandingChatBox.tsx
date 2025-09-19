@@ -123,25 +123,13 @@ export const LandingChatBox = ({
     return results;
   }, [messages]);
 
-  // Initialize conversation selection - only select existing conversations with messages if user doesn't want a new chat
+  // Always start with empty session by default - user can manually select chat history if needed
   useEffect(() => {
-    if (user && conversations.length > 0 && !currentConversationId && !wantsNewChat && !hasSearched) {
-      const findConversationWithMessages = async () => {
-        for (const conversation of conversations) {
-          const {
-            data: conversationMessages
-          } = await supabase.from('chat_messages').select('id').eq('conversation_id', conversation.id).limit(1);
-          if (conversationMessages && conversationMessages.length > 0) {
-            setCurrentConversationId(conversation.id);
-            setHasSearched(true); // Mark as searched since we're loading existing conversation
-            return;
-          }
-        }
-        // If no conversation has messages, don't select any
-      };
-      findConversationWithMessages();
+    if (user && !currentConversationId) {
+      // Start fresh - no automatic loading of previous conversations
+      startFreshChat();
     }
-  }, [user, conversations, currentConversationId, setCurrentConversationId, wantsNewChat]);
+  }, [user, startFreshChat]);
 
   // Check for stored search query on component mount
   useEffect(() => {
