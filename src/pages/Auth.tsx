@@ -181,14 +181,20 @@ const Auth = () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth`
+        redirectTo: `${window.location.origin}/`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
       }
     });
 
     if (error) {
       toast({
-        title: "Google sign in failed",
-        description: error.message,
+        title: "Authentication failed",
+        description: error.message === 'Email link is invalid or has expired' 
+          ? "If you have an existing account with this email, try signing in with your password first, then link your Google account from your profile settings."
+          : error.message,
         variant: "destructive"
       });
       setLoading(false);
