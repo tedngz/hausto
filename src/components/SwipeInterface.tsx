@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, X, RotateCcw, MessageCircle } from 'lucide-react';
+import { Heart, X, RotateCcw, MessageCircle, UserCheck } from 'lucide-react';
 import { UserPreferences, Apartment } from '@/types';
 import { UserProfile } from '@/components/LoginModal';
 import { useProperties, Property } from '@/hooks/useProperties';
@@ -18,6 +18,7 @@ import { Card } from '@/components/ui/card';
 import { VibeScore } from '@/components/VibeScore';
 import { toast } from 'sonner';
 import { sampleProperties } from '@/data/sampleProperties';
+import { useAuth } from '@/hooks/useAuth';
 
 interface SwipeInterfaceProps {
   userPreferences: UserPreferences | null;
@@ -27,6 +28,7 @@ interface SwipeInterfaceProps {
 }
 
 export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestartOnboarding }: SwipeInterfaceProps) => {
+  const { user } = useAuth();
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [currentApartmentIndex, setCurrentApartmentIndex] = useState(0);
   const [likedApartmentIds, setLikedApartmentIds] = useState<string[]>([]);
@@ -39,6 +41,9 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   const { renterMatches, isLoadingMatches } = useMatches();
   const { canPerformAction, updateUsage } = useUsageTracking();
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+
+  // Check if user has ever taken the quiz before
+  const hasEverTakenQuiz = user ? !!localStorage.getItem(`userPreferences_${user.id}`) : false;
 
   // Transform Property to Apartment
   const transformPropertyToApartment = (property: Property): Apartment => {
@@ -376,6 +381,88 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
             </Button>
           </div>
         </Card>
+      </div>
+    );
+  }
+
+  // Show quiz button for users who have apartments but never took the quiz
+  if (apartments.length > 0 && !hasEverTakenQuiz) {
+    const currentApartment = apartments[currentApartmentIndex];
+    const vibeScore = userPreferences ? calculateVibeScore(currentApartment, userPreferences) : { overall: 5, breakdown: {} };
+    const currentImageIndex = imageIndices[currentApartment.id] || 0;
+
+    // Create a modified apartment with current image index
+    const modifiedApartment = {
+      ...currentApartment,
+      _currentImageIndex: currentImageIndex
+    };
+
+    return (
+      <div className="pt-20 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
+        <div className="max-w-md mx-auto pb-8">
+          <PropertyCard
+            apartment={modifiedApartment}
+            userPreferences={userPreferences}
+            showContactButton={false}
+            showFullTitle={true}
+            showFullDescription={false}
+            showAllHighlights={false}
+            className="mb-6 max-w-md"
+          />
+
+          {/* Quiz recommendation card */}
+          <Card className="mb-6 p-6 text-center bg-gradient-to-r from-orange-50 to-yellow-50 border-orange-200">
+            <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <UserCheck className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2 text-orange-800">Get Better Matches!</h3>
+            <p className="text-sm text-orange-700 mb-4">
+              Take our quick quiz to get personalized recommendations based on your style and preferences.
+            </p>
+            <Button
+              onClick={onRestartOnboarding}
+              className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white mb-3"
+            >
+              <UserCheck className="w-4 h-4 mr-2" />
+              Take Personalization Quiz
+            </Button>
+            <p className="text-xs text-orange-600">You can still browse properties below</p>
+          </Card>
+
+          {/* Action buttons */}
+          <div className="flex justify-center space-x-4 mb-8">
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400"
+              onClick={handleDislike}
+            >
+              <X className="w-8 h-8" />
+            </Button>
+            <Button
+              size="lg"
+              className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white"
+              onClick={handleLike}
+            >
+              <Heart className="w-8 h-8" />
+            </Button>
+          </div>
+
+          {/* Full-size image modal */}
+          <PropertyImageModal
+            apartment={currentApartment}
+            isOpen={isImageModalOpen}
+            onClose={() => setIsImageModalOpen(false)}
+            initialImageIndex={currentImageIndex}
+          />
+          
+          {/* Subscription Modal */}
+          <SubscriptionModal
+            isOpen={showSubscriptionModal}
+            onClose={() => setShowSubscriptionModal(false)}
+            reason={subscriptionReason}
+          />
+        </div>
       </div>
     );
   }
