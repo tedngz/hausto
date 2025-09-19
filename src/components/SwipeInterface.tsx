@@ -82,12 +82,26 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     // Transform real properties only - no sample properties
     const transformedRealProperties = (realProperties || []).map(transformPropertyToApartment);
     
+    // Filter out already matched properties
+    const matchedPropertyIds = new Set(renterMatches?.map(match => match.property_id) || []);
+    const unMatchedProperties = transformedRealProperties.filter(property => !matchedPropertyIds.has(property.id));
+    
     console.log('Real properties available:', transformedRealProperties.length);
+    console.log('Already matched properties:', matchedPropertyIds.size);
+    console.log('Unmatched properties available:', unMatchedProperties.length);
 
     // If no real properties available at all, show error
     if (transformedRealProperties.length === 0) {
       console.log('No real properties available');
       setNoMatchReason('no-properties');
+      setApartments([]);
+      return;
+    }
+
+    // If all properties are already matched, show appropriate message
+    if (unMatchedProperties.length === 0 && transformedRealProperties.length > 0) {
+      console.log('All properties already matched');
+      setNoMatchReason('no-more-available');
       setApartments([]);
       return;
     }
@@ -98,19 +112,19 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       setNoMatchReason('invalid-preferences');
       // Don't clear apartments here, let user still see properties
       if (apartments.length === 0) {
-        setApartments(transformedRealProperties);
+        setApartments(unMatchedProperties);
         setCurrentApartmentIndex(0);
       }
       return;
     }
 
     // Try filtering by user preferences with very lenient criteria
-    let filteredApartments = transformedRealProperties;
+    let filteredApartments = unMatchedProperties;
     
     try {
       // Only filter if we have valid price range
       if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
-        filteredApartments = transformedRealProperties.filter(apartment => {
+        filteredApartments = unMatchedProperties.filter(apartment => {
           console.log('Filtering apartment:', apartment.title, apartment.location, apartment.price);
           
           // Ultra-lenient location matching - if no location specified, show all
@@ -142,8 +156,8 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       }
     } catch (error) {
       console.error('Error filtering apartments:', error);
-      // If filtering fails, show all real properties
-      filteredApartments = transformedRealProperties;
+      // If filtering fails, show all unmatched properties
+      filteredApartments = unMatchedProperties;
     }
 
     console.log('Filtered apartments:', filteredApartments.length);
@@ -157,9 +171,9 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return;
     }
 
-    // If no properties pass filters, show all real properties anyway
-    console.log('No properties pass filters, showing all real properties');
-    setApartments(transformedRealProperties);
+    // If no properties pass filters, show all unmatched properties anyway
+    console.log('No properties pass filters, showing all unmatched properties');
+    setApartments(unMatchedProperties);
     setCurrentApartmentIndex(0);
     setNoMatchReason('');
 
