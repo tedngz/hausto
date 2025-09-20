@@ -13,7 +13,6 @@ import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { PropertyImageModal } from '@/components/PropertyImageModal';
 import { PropertyCard } from '@/components/PropertyCard';
-import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Card } from '@/components/ui/card';
 import { VibeScore } from '@/components/VibeScore';
 import { toast } from 'sonner';
@@ -35,8 +34,6 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   const [declinedPropertyIds, setDeclinedPropertyIds] = useState<string[]>([]);
   const [imageIndices, setImageIndices] = useState<Record<string, number>>({});
   const [noMatchReason, setNoMatchReason] = useState<string>('');
-  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [subscriptionReason, setSubscriptionReason] = useState<'views' | 'matches' | 'quiz'>('views');
   const { formatPrice } = useCurrency();
   const { properties: realProperties, isLoading } = useProperties();
   const { renterMatches, isLoadingMatches } = useMatches();
@@ -213,13 +210,6 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     const trackView = async () => {
       if (!apartments[currentApartmentIndex] || !user?.id) return;
       
-      // Check if user can view more properties
-      if (!canPerformAction('view')) {
-        setSubscriptionReason('views');
-        setShowSubscriptionModal(true);
-        return;
-      }
-      
       try {
         await updateUsage('view');
         console.log('Tracked view for property:', apartments[currentApartmentIndex].title);
@@ -239,8 +229,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     
     // Check if user can create more matches
     if (!canPerformAction('match')) {
-      setSubscriptionReason('matches');
-      setShowSubscriptionModal(true);
+      toast.error('You\'ve reached your weekly match limit. You can still view this property but cannot create more matches.');
       return;
     }
     
@@ -322,6 +311,12 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   };
 
   const moveToNext = () => {
+    // Check if user can view more properties before moving
+    if (!canPerformAction('view')) {
+      toast.error('You\'ve reached your daily view limit. You can still interact with this property but cannot view more today.');
+      return;
+    }
+    
     if (currentApartmentIndex < apartments.length - 1) {
       setCurrentApartmentIndex(prev => prev + 1);
     } else {
@@ -549,13 +544,6 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
             onClose={() => setIsImageModalOpen(false)}
             initialImageIndex={currentImageIndex}
           />
-          
-          {/* Subscription Modal */}
-          <SubscriptionModal
-            isOpen={showSubscriptionModal}
-            onClose={() => setShowSubscriptionModal(false)}
-            reason={subscriptionReason}
-          />
         </div>
       </div>
     );
@@ -612,13 +600,6 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
           isOpen={isImageModalOpen}
           onClose={() => setIsImageModalOpen(false)}
           initialImageIndex={currentImageIndex}
-        />
-        
-        {/* Subscription Modal */}
-        <SubscriptionModal
-          isOpen={showSubscriptionModal}
-          onClose={() => setShowSubscriptionModal(false)}
-          reason={subscriptionReason}
         />
       </div>
     </div>

@@ -105,7 +105,7 @@ export const useChat = () => {
 
       // Check AI request limits before proceeding
       if (!canPerformAction('ai-search')) {
-        throw new Error('Daily AI request limit reached. Upgrade to premium for unlimited access.');
+        throw new Error('Daily AI request limit reached. Try again tomorrow or explore current properties.');
       }
 
       let actualConversationId = conversationId;

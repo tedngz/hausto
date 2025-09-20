@@ -256,7 +256,7 @@ export const LandingChatBox = ({
     if (user && !canPerformAction('ai-search')) {
       toast({
         title: "Daily AI Request Limit Reached",
-        description: "You've reached your limit of 10 AI requests per day. Upgrade to premium for unlimited access.",
+        description: "You've reached your limit of 10 AI requests per day. Try again tomorrow or like and interact with current properties.",
         variant: "destructive",
       });
       return;
