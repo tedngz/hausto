@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Heart, RotateCcw, Crown } from 'lucide-react';
+import { Eye, Heart, RotateCcw, Crown, MessageSquare } from 'lucide-react';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 
 export const UsageMeter = () => {
@@ -50,6 +50,13 @@ export const UsageMeter = () => {
       current: weeklyQuizRetakes,
       limit: limits.weeklyQuizRetakes,
       color: 'text-purple-500',
+    },
+    {
+      icon: MessageSquare,
+      label: 'Daily AI Requests',
+      current: todayUsage.aiSearches,
+      limit: limits.dailyAiRequests,
+      color: 'text-green-500',
     },
   ];
 

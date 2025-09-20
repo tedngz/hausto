@@ -32,6 +32,7 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [currentApartmentIndex, setCurrentApartmentIndex] = useState(0);
   const [likedApartmentIds, setLikedApartmentIds] = useState<string[]>([]);
+  const [declinedPropertyIds, setDeclinedPropertyIds] = useState<string[]>([]);
   const [imageIndices, setImageIndices] = useState<Record<string, number>>({});
   const [noMatchReason, setNoMatchReason] = useState<string>('');
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -44,6 +45,30 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
 
   // Check if user has ever taken the quiz before
   const hasEverTakenQuiz = user ? !!localStorage.getItem(`userPreferences_${user.id}`) : false;
+
+  // Fetch declined properties on mount
+  useEffect(() => {
+    const fetchDeclinedProperties = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('declined_properties')
+          .select('property_id')
+          .eq('user_id', user.id);
+        
+        if (error) {
+          console.error('Error fetching declined properties:', error);
+        } else {
+          setDeclinedPropertyIds(data?.map(item => item.property_id) || []);
+        }
+      } catch (error) {
+        console.error('Error fetching declined properties:', error);
+      }
+    };
+    
+    fetchDeclinedProperties();
+  }, [user?.id]);
 
   // Transform Property to Apartment
   const transformPropertyToApartment = (property: Property): Apartment => {
@@ -82,13 +107,17 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     // Transform real properties only - no sample properties
     const transformedRealProperties = (realProperties || []).map(transformPropertyToApartment);
     
-    // Filter out already matched properties
+    // Filter out already matched and declined properties
     const matchedPropertyIds = new Set(renterMatches?.map(match => match.property_id) || []);
-    const unMatchedProperties = transformedRealProperties.filter(property => !matchedPropertyIds.has(property.id));
+    const declinedPropertyIdSet = new Set(declinedPropertyIds);
+    const availableProperties = transformedRealProperties.filter(property => 
+      !matchedPropertyIds.has(property.id) && !declinedPropertyIdSet.has(property.id)
+    );
     
     console.log('Real properties available:', transformedRealProperties.length);
     console.log('Already matched properties:', matchedPropertyIds.size);
-    console.log('Unmatched properties available:', unMatchedProperties.length);
+    console.log('Declined properties:', declinedPropertyIds.length);
+    console.log('Available properties:', availableProperties.length);
 
     // If no real properties available at all, show error
     if (transformedRealProperties.length === 0) {
@@ -98,9 +127,9 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return;
     }
 
-    // If all properties are already matched, show appropriate message
-    if (unMatchedProperties.length === 0 && transformedRealProperties.length > 0) {
-      console.log('All properties already matched');
+    // If all properties are already matched or declined, show appropriate message  
+    if (availableProperties.length === 0 && transformedRealProperties.length > 0) {
+      console.log('All properties already matched or declined');
       setNoMatchReason('no-more-available');
       setApartments([]);
       return;
@@ -112,19 +141,19 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       setNoMatchReason('invalid-preferences');
       // Don't clear apartments here, let user still see properties
       if (apartments.length === 0) {
-        setApartments(unMatchedProperties);
+        setApartments(availableProperties);
         setCurrentApartmentIndex(0);
       }
       return;
     }
 
     // Try filtering by user preferences with very lenient criteria
-    let filteredApartments = unMatchedProperties;
+    let filteredApartments = availableProperties;
     
     try {
       // Only filter if we have valid price range
       if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
-        filteredApartments = unMatchedProperties.filter(apartment => {
+        filteredApartments = availableProperties.filter(apartment => {
           console.log('Filtering apartment:', apartment.title, apartment.location, apartment.price);
           
           // Ultra-lenient location matching - if no location specified, show all
@@ -156,8 +185,8 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       }
     } catch (error) {
       console.error('Error filtering apartments:', error);
-      // If filtering fails, show all unmatched properties
-      filteredApartments = unMatchedProperties;
+      // If filtering fails, show all available properties
+      filteredApartments = availableProperties;
     }
 
     console.log('Filtered apartments:', filteredApartments.length);
@@ -171,13 +200,39 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
       return;
     }
 
-    // If no properties pass filters, show all unmatched properties anyway
-    console.log('No properties pass filters, showing all unmatched properties');
-    setApartments(unMatchedProperties);
+    // If no properties pass filters, show all available properties anyway
+    console.log('No properties pass filters, showing all available properties');
+    setApartments(availableProperties);
     setCurrentApartmentIndex(0);
     setNoMatchReason('');
 
-  }, [userPreferences, realProperties, renterMatches, likedApartmentIds, isLoading]);
+  }, [userPreferences, realProperties, renterMatches, likedApartmentIds, declinedPropertyIds, isLoading]);
+
+  // Track property views when apartment changes
+  useEffect(() => {
+    const trackView = async () => {
+      if (!apartments[currentApartmentIndex] || !user?.id) return;
+      
+      // Check if user can view more properties
+      if (!canPerformAction('view')) {
+        setSubscriptionReason('views');
+        setShowSubscriptionModal(true);
+        return;
+      }
+      
+      try {
+        await updateUsage('view');
+        console.log('Tracked view for property:', apartments[currentApartmentIndex].title);
+      } catch (error) {
+        console.error('Error tracking property view:', error);
+      }
+    };
+    
+    // Only track if we have a valid apartment to show
+    if (apartments.length > 0 && currentApartmentIndex >= 0) {
+      trackView();
+    }
+  }, [currentApartmentIndex, apartments, user?.id, canPerformAction, updateUsage]);
 
   const handleLike = async () => {
     if (apartments.length === 0) return;
@@ -236,8 +291,33 @@ export const SwipeInterface = ({ userPreferences, onMatch, userProfile, onRestar
     }
   };
 
-  const handleDislike = () => {
-    console.log('Disliking apartment:', apartments[currentApartmentIndex]?.title);
+  const handleDislike = async () => {
+    if (apartments.length === 0) return;
+    
+    const currentApartment = apartments[currentApartmentIndex];
+    console.log('Disliking apartment:', currentApartment?.title);
+    
+    try {
+      // Store declined property in database
+      if (user?.id && currentApartment) {
+        const { error } = await supabase
+          .from('declined_properties')
+          .insert({
+            user_id: user.id,
+            property_id: currentApartment.id
+          });
+        
+        if (error && !error.message.includes('duplicate key')) {
+          console.error('Error storing declined property:', error);
+        } else {
+          // Update local state
+          setDeclinedPropertyIds(prev => [...prev, currentApartment.id]);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling dislike:', error);
+    }
+    
     moveToNext();
   };
 

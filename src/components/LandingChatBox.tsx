@@ -252,6 +252,16 @@ export const LandingChatBox = ({
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
 
+    // Check AI request limits for logged-in users
+    if (user && !canPerformAction('ai-search')) {
+      toast({
+        title: "Daily AI Request Limit Reached",
+        description: "You've reached your limit of 10 AI requests per day. Upgrade to premium for unlimited access.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // For anonymous users, limit to a single search
     if (!user && hasSearched) {
       return;

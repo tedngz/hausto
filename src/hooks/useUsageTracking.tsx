@@ -20,7 +20,7 @@ const FREE_TIER_LIMITS = {
   dailyViews: 10,
   weeklyMatches: 20,
   weeklyQuizRetakes: 2,
-  dailyAiSearches: 3,
+  dailyAiRequests: 10,
 };
 
 export const useUsageTracking = () => {
@@ -72,7 +72,7 @@ export const useUsageTracking = () => {
           propertiesViewed: todayData.properties_viewed,
           propertiesMatched: todayData.properties_matched,
           quizRetakes: todayData.quiz_retakes,
-          aiSearches: 0, // Will be tracked in separate table/logic
+          aiSearches: todayData.ai_requests || 0,
         });
       }
 
@@ -173,6 +173,7 @@ export const useUsageTracking = () => {
           properties_viewed: newViews,
           properties_matched: newMatches,
           quiz_retakes: newQuizRetakes,
+          ai_requests: newAiSearches,
         }, { 
           onConflict: 'user_id,usage_date',
           ignoreDuplicates: false 
@@ -242,8 +243,8 @@ export const useUsageTracking = () => {
         console.log(`Can quiz: ${canQuiz} (${weeklyQuizRetakes}/${FREE_TIER_LIMITS.weeklyQuizRetakes})`);
         return canQuiz;
       case 'ai-search':
-        const canAiSearch = todayUsage.aiSearches < FREE_TIER_LIMITS.dailyAiSearches;
-        console.log(`Can AI search: ${canAiSearch} (${todayUsage.aiSearches}/${FREE_TIER_LIMITS.dailyAiSearches})`);
+        const canAiSearch = todayUsage.aiSearches < FREE_TIER_LIMITS.dailyAiRequests;
+        console.log(`Can AI search: ${canAiSearch} (${todayUsage.aiSearches}/${FREE_TIER_LIMITS.dailyAiRequests})`);
         return canAiSearch;
       default:
         return false;
@@ -263,7 +264,7 @@ export const useUsageTracking = () => {
       case 'quiz':
         return Math.max(0, FREE_TIER_LIMITS.weeklyQuizRetakes - weeklyQuizRetakes);
       case 'ai-search':
-        return Math.max(0, FREE_TIER_LIMITS.dailyAiSearches - todayUsage.aiSearches);
+        return Math.max(0, FREE_TIER_LIMITS.dailyAiRequests - todayUsage.aiSearches);
       default:
         return 0;
     }

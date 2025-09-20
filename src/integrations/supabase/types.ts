@@ -151,6 +151,7 @@ export type Database = {
       }
       daily_usage: {
         Row: {
+          ai_requests: number | null
           created_at: string
           id: string
           properties_matched: number
@@ -161,6 +162,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_requests?: number | null
           created_at?: string
           id?: string
           properties_matched?: number
@@ -171,6 +173,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_requests?: number | null
           created_at?: string
           id?: string
           properties_matched?: number
@@ -178,6 +181,27 @@ export type Database = {
           quiz_retakes?: number
           updated_at?: string
           usage_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      declined_properties: {
+        Row: {
+          created_at: string
+          id: string
+          property_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          property_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          property_id?: string
           user_id?: string
         }
         Relationships: []

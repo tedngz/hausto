@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useUsageTracking } from '@/hooks/useUsageTracking';
 
 interface ChatMessage {
   id: string;
@@ -32,6 +33,7 @@ export const useChat = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const { canPerformAction, updateUsage } = useUsageTracking();
 
   // Fetch conversations
   const { data: conversations = [] } = useQuery({
@@ -99,6 +101,11 @@ export const useChat = () => {
       
       if (!user?.id) {
         throw new Error('User not authenticated');
+      }
+
+      // Check AI request limits before proceeding
+      if (!canPerformAction('ai-search')) {
+        throw new Error('Daily AI request limit reached. Upgrade to premium for unlimited access.');
       }
 
       let actualConversationId = conversationId;
@@ -184,6 +191,10 @@ export const useChat = () => {
       }
 
       console.log('AI response received:', data);
+      
+      // Track successful AI request
+      await updateUsage('ai-search');
+      
       return data;
     },
     onSuccess: () => {
