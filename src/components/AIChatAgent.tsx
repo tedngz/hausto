@@ -129,7 +129,6 @@ export const AIChatAgent = ({
         </DialogDescription>
         <div className="p-3 md:p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
           <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Hausto Chat</h2>
-          <p className="text-sm text-gray-600 mt-1">Describe Your Dream Home</p>
         </div>
 
         
