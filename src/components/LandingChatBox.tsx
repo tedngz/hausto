@@ -388,7 +388,7 @@ export const LandingChatBox = ({
   };
   return <div className="w-full max-w-4xl mx-auto mt-16">
       {/* Heading */}
-      <h2 className="text-2xl md:text-3xl font-bold text-center mb-8 bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent py-[10px]">
+      <h2 className="md:text-3xl font-bold text-center mb-8 bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text py-[10px] text-inherit text-xl">
         Describe Your Dream Home
       </h2>
       
