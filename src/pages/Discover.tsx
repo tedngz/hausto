@@ -228,7 +228,7 @@ const Discover = () => {
   }
   return <CurrencyProvider>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-5">
-        {currentView === 'ai-chat' && userType && <div className="text-center py-8">
+        {currentView === 'ai-chat' && userType && <div className="text-center py-0">
             <h1 className="text-2xl font-bold mt-8 mb-2 text-center text-inherit">Describe Your Dream Home</h1>
           </div>}
         
