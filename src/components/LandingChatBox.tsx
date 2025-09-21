@@ -386,7 +386,7 @@ export const LandingChatBox = ({
     setSelectedProperty(property);
     setShowPropertyModal(true);
   };
-  return <div className="w-full max-w-4xl mx-auto p-6 shadow-xl bg-transparent rounded-md mt-20">
+  return <div className="w-full max-w-4xl mx-auto p-8 md:p-6 shadow-xl bg-transparent rounded-md mt-12">
       {/* Header */}
       <div className="text-center mb-6 relative">
         
