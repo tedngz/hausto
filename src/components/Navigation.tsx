@@ -1,7 +1,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageSquare, User, Users, Sparkles } from 'lucide-react';
+import { Heart, MessageSquare, User, Users, Sparkles, Search } from 'lucide-react';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { UserMenu } from '@/components/UserMenu';
 import { useNavigate } from 'react-router-dom';
@@ -66,7 +66,7 @@ export const Navigation = ({
                 onClick={() => setCurrentView('swipe')}
                 className={`text-xs px-2 py-1.5 h-8 ${currentView === 'swipe' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Heart className="w-3.5 h-3.5 mr-1" />
+                <Search className="w-3.5 h-3.5 mr-1" />
                 <span className="hidden xs:inline text-xs">Discover</span>
               </Button>
               
@@ -76,7 +76,7 @@ export const Navigation = ({
                 onClick={() => setCurrentView('matches')}
                 className={`relative text-xs px-2 py-1.5 h-8 ${currentView === 'matches' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                <Heart className="w-3.5 h-3.5 mr-1" />
                 <span className="hidden xs:inline text-xs">Matches</span>
                 {matchCount > 0 && (
                   <Badge className="ml-1 bg-primary text-primary-foreground text-xs h-4 min-w-4 flex items-center justify-center rounded-full">
