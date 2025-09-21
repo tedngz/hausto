@@ -227,7 +227,7 @@ const Discover = () => {
     return null;
   }
   return <CurrencyProvider>
-      <div className="h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 mx-0">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 mt-0 pt-0">
         {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation currentView={currentView} setCurrentView={view => {
         if (view === 'profile') {
           setCurrentView('profile');
