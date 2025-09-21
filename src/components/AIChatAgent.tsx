@@ -122,7 +122,7 @@ export const AIChatAgent = ({
   };
   const matches = userType === 'renter' ? renterMatches : realtorMatches;
   return <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl h-[90vh] max-h-[90vh] p-0 flex flex-col bg-white overflow-hidden sm:rounded-lg">
+      <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col bg-white overflow-hidden sm:rounded-lg">
         <DialogTitle className="sr-only">Hausto Chat Assistant</DialogTitle>
         <DialogDescription className="sr-only">
           Chat with Hausto AI assistant for property recommendations and real estate help
