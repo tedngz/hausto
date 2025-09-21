@@ -77,7 +77,7 @@ export const MatchesView = ({
         <p className="text-gray-600 mb-6">Start swiping to find your perfect place!</p>
       </div>;
   }
-  return <div className="container mx-auto px-4 py-8 pt-20">
+  return <div className="container mx-auto px-4">
       <div className="mb-8">
         <h2 className="text-2xl font-bold mb-2 text-center text-inherit">Your Matches</h2>
         
