@@ -386,7 +386,13 @@ export const LandingChatBox = ({
     setSelectedProperty(property);
     setShowPropertyModal(true);
   };
-  return <div className="w-full max-w-4xl mx-auto p-8 md:p-6 shadow-xl bg-transparent rounded-md mt-12">
+  return <div className="w-full max-w-4xl mx-auto mt-16">
+      {/* Heading */}
+      <h2 className="text-2xl md:text-3xl font-bold text-center mb-8 bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
+        Describe Your Dream Home
+      </h2>
+      
+      <div className="p-8 md:p-6 shadow-xl bg-transparent rounded-md">
       {/* Header */}
       <div className="text-center mb-6 relative">
         
@@ -783,5 +789,6 @@ export const LandingChatBox = ({
       setShowPropertyModal(false);
       setSelectedProperty(null);
     }} onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined} />
+      </div>
     </div>;
 };
