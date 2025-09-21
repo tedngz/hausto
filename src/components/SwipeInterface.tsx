@@ -452,7 +452,7 @@ export const SwipeInterface = ({
           <Card className="mb-6 p-6 text-center bg-gradient-to-r from-orange-50 to-yellow-50 border-orange-200">
             
             
-            <p className="text-sm text-orange-700 mb-4">Take a quick vibe quiz to get personalized recommendations based on your style and preferences.</p>
+            <p className="text-sm text-orange-700 mb-4">Take a quick vibe quiz to get better matches</p>
             <Button onClick={onRestartOnboarding} className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white mb-3">
               <UserCheck className="w-4 h-4 mr-2" />
               Take Personalization Quiz
