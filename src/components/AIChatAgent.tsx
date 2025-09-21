@@ -154,8 +154,8 @@ export const AIChatAgent = ({
                 const isRealtor = userType === 'realtor';
                 const otherUserName = isRealtor ? match.renter_name : match.realtor_name;
                 const otherUserId = isRealtor ? match.renter_id : match.realtor_id;
-                return <div key={match.id} onClick={() => handleMatchSelect(match.id)} className="p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200">
-                        <div className="flex items-start space-x-3">
+                return <div key={match.id} onClick={() => handleMatchSelect(match.id)} className="p-3 sm:p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200">
+                        <div className="flex items-start space-x-2 sm:space-x-3">
                           <Avatar className="w-12 h-12 flex-shrink-0">
                             <AvatarImage src={isRealtor ? match.renter_avatar : match.realtor_avatar} />
                             <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold">
