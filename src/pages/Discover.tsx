@@ -228,6 +228,12 @@ const Discover = () => {
   }
   return <CurrencyProvider>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-5">
+        {currentView === 'ai-chat' && userType && (
+          <div className="text-center py-8">
+            <h1 className="text-4xl font-bold text-gray-800">Describe Your Dream Home</h1>
+          </div>
+        )}
+        
         {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation currentView={currentView} setCurrentView={view => {
         if (view === 'profile') {
           setCurrentView('profile');
