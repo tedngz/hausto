@@ -141,6 +141,10 @@ export const AIChatAgent = ({
           <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Hausto Chat</h2>
         </div>
 
+        <div className="px-4 py-6 text-center bg-gradient-to-r from-orange-50/30 to-pink-50/30 border-b flex-shrink-0">
+          <h3 className="text-xl md:text-2xl font-semibold text-gray-800">Describe Your Dream Home</h3>
+        </div>
+
         <div className="flex-1 flex flex-col overflow-hidden">
           {!selectedMatch && !isStartingNewChat ? (
             <div className="flex-1 flex flex-col overflow-hidden">
