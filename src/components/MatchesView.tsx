@@ -79,7 +79,7 @@ export const MatchesView = ({
   }
   return <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-2 text-center text-inherit">Your Matches</h2>
+        <h2 className="text-2xl font-bold mt-3 mb-2 text-center text-inherit">Your Matches</h2>
         
       </div>
 
