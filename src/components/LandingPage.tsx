@@ -80,9 +80,7 @@ export const LandingPage = () => {
           <h2 className="text-4xl font-bold text-foreground mb-4">
             {user ? "Your AI-Powered Search Experience" : "Why Choose Hausto?"}
           </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            {user ? "Use our advanced AI to find properties that perfectly match your preferences and lifestyle." : "Experience the future of rental searching with our innovative platform"}
-          </p>
+          
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
