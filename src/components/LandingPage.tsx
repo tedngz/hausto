@@ -102,9 +102,7 @@ export const LandingPage = () => {
                 <Search className="h-8 w-8 text-primary" />
               </div>
               <h3 className="text-2xl font-semibold text-foreground mb-4">Smart Search</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Swipe through curated properties with detailed insights and vibe scores to find your perfect match.
-              </p>
+              <p className="text-muted-foreground leading-relaxed">Ask AI and swipe through curated properties with detailed insights and vibe scores to find your perfect match.</p>
             </CardContent>
           </Card>
 
