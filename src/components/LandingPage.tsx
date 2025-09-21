@@ -78,7 +78,7 @@ export const LandingPage = () => {
       <section className="container mx-auto px-4 py-20">
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold text-foreground mb-4">
-            {user ? "Your AI-Powered Search Experience" : "Why Choose Hausto?"}
+            Elevate your home hunting experience
           </h2>
           
         </div>
