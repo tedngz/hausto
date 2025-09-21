@@ -57,18 +57,18 @@ export const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-20">
-        <div className="text-center max-w-4xl mx-auto">
-          <h1 className="text-5xl font-bold text-foreground mb-6 leading-tight md:text-5xl">
+      <section className="container mx-auto px-4 py-8 md:py-12 min-h-[calc(100vh-8rem)] flex items-center">
+        <div className="text-center max-w-4xl mx-auto w-full">
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4 md:mb-6 leading-tight">
             <span className="text-primary">Vibe Check</span>
             <span className="block">Your Next Home</span>
           </h1>
           
-          <p className="text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed text-lg">
+          <p className="text-muted-foreground mb-6 md:mb-8 max-w-2xl mx-auto leading-relaxed text-base md:text-lg">
             {user ? "Find your perfect rental with AI-powered matching." : "Discover your dream rental with AI-powered matching and personalized recommendations."}
           </p>
           
-          <div className="mb-8">
+          <div className="mb-4">
             <LandingChatBox />
           </div>
         </div>
