@@ -91,7 +91,7 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
                 <Heart className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">AI-Powered Matching</h3>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Vibe Matching</h3>
               <p className="text-muted-foreground leading-relaxed">
                 Our smart algorithm learns your preferences and finds properties that truly match your lifestyle and needs.
               </p>
