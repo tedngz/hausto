@@ -211,9 +211,17 @@ export const SwipeInterface = ({
       const currentApartment = apartments[currentApartmentIndex];
       if (!currentApartment || !user?.id) return;
       
+      // Check if user can view more properties
+      if (!canPerformAction('view')) {
+        console.log('View limit reached, not tracking view for:', currentApartment.title);
+        return;
+      }
+      
       try {
-        await updatePropertyView(currentApartment.id);
-        console.log('Tracked unique view for property:', currentApartment.title);
+        const success = await updatePropertyView(currentApartment.id);
+        if (success) {
+          console.log('Tracked unique view for property:', currentApartment.title);
+        }
       } catch (error) {
         console.error('Error tracking property view:', error);
       }
@@ -223,7 +231,7 @@ export const SwipeInterface = ({
     if (apartments.length > 0 && currentApartmentIndex >= 0) {
       trackView();
     }
-  }, [currentApartmentIndex, apartments, user?.id, updatePropertyView]);
+  }, [currentApartmentIndex, apartments, user?.id, updatePropertyView, canPerformAction]);
   const handleLike = async () => {
     if (apartments.length === 0) return;
 
@@ -282,11 +290,6 @@ export const SwipeInterface = ({
     moveToNext();
   };
   const moveToNext = () => {
-    // Check if user can view more properties before moving
-    if (!canPerformAction('view')) {
-      toast.error('You\'ve reached your daily view limit. You can still interact with this property but cannot view more today.');
-      return;
-    }
     if (currentApartmentIndex < apartments.length - 1) {
       setCurrentApartmentIndex(prev => prev + 1);
     } else {
