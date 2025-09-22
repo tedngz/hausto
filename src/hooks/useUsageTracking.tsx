@@ -50,9 +50,12 @@ export const useUsageTracking = () => {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // Calculate exactly 7 days ago (including today = 7 days total)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      const weekAgo = sevenDaysAgo.toISOString().split('T')[0];
 
-      console.log('Fetching usage for date:', today);
+      console.log('Fetching usage for date range:', { today, weekAgo });
 
       // Reset viewed properties for new day
       setViewedPropertiesToday(new Set());
@@ -78,14 +81,24 @@ export const useUsageTracking = () => {
           quizRetakes: todayData.quiz_retakes,
           aiSearches: todayData.ai_requests || 0,
         });
+      } else {
+        // Reset to zero if no data for today
+        setTodayUsage({
+          propertiesViewed: 0,
+          propertiesMatched: 0,
+          quizRetakes: 0,
+          aiSearches: 0,
+        });
       }
 
-      // Get weekly matches and quiz retakes
+      // Get weekly matches and quiz retakes (last 7 days including today)
       const { data: weeklyData, error: weeklyError } = await supabase
         .from('daily_usage')
-        .select('properties_matched, quiz_retakes')
+        .select('usage_date, properties_matched, quiz_retakes')
         .eq('user_id', user.id)
-        .gte('usage_date', weekAgo);
+        .gte('usage_date', weekAgo)
+        .lte('usage_date', today)
+        .order('usage_date', { ascending: true });
 
       if (weeklyError) {
         console.error('Error fetching weekly usage:', weeklyError);
@@ -96,6 +109,7 @@ export const useUsageTracking = () => {
       if (weeklyData) {
         const weeklyMatchesSum = weeklyData.reduce((sum, day) => sum + day.properties_matched, 0);
         const weeklyQuizRetakesSum = weeklyData.reduce((sum, day) => sum + day.quiz_retakes, 0);
+        console.log('Weekly totals calculated:', { weeklyMatchesSum, weeklyQuizRetakesSum });
         setWeeklyMatches(weeklyMatchesSum);
         setWeeklyQuizRetakes(weeklyQuizRetakesSum);
       }
@@ -150,11 +164,43 @@ export const useUsageTracking = () => {
       return true;
     }
 
-    const success = await updateUsage('view');
-    if (success) {
+    // Track the view directly
+    const today = new Date().toISOString().split('T')[0];
+    const newViews = todayUsage.propertiesViewed + 1;
+    
+    try {
+      const { error } = await supabase
+        .from('daily_usage')
+        .upsert({
+          user_id: user.id,
+          usage_date: today,
+          properties_viewed: newViews,
+          properties_matched: todayUsage.propertiesMatched,
+          quiz_retakes: todayUsage.quizRetakes,
+          ai_requests: todayUsage.aiSearches,
+        }, { 
+          onConflict: 'user_id,usage_date',
+          ignoreDuplicates: false 
+        });
+
+      if (error) {
+        console.error('Supabase error updating property view:', error);
+        return false;
+      }
+
+      // Update local state
+      setTodayUsage(prev => ({
+        ...prev,
+        propertiesViewed: newViews
+      }));
+      
       setViewedPropertiesToday(prev => new Set(prev).add(propertyId));
+      console.log('Successfully tracked unique property view for:', propertyId);
+      return true;
+    } catch (error) {
+      console.error('Error updating property view:', error);
+      return false;
     }
-    return success;
   };
 
   const updateUsage = async (type: 'view' | 'match' | 'quiz' | 'ai-search') => {
@@ -219,7 +265,7 @@ export const useUsageTracking = () => {
         aiSearches: newAiSearches,
       });
 
-      // Update weekly counters immediately
+      // Update weekly counters immediately only after successful database update
       if (type === 'match') {
         console.log('Incrementing weekly matches from', weeklyMatches, 'to', weeklyMatches + 1);
         setWeeklyMatches(prev => prev + 1);
@@ -243,7 +289,8 @@ export const useUsageTracking = () => {
       tier: subscriptionStatus.subscription_tier,
       todayViews: todayUsage.propertiesViewed,
       weeklyMatches,
-      weeklyQuizRetakes
+      weeklyQuizRetakes,
+      todayAiSearches: todayUsage.aiSearches
     });
 
     // Premium users have unlimited access

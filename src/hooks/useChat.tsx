@@ -192,9 +192,6 @@ export const useChat = () => {
 
       console.log('AI response received:', data);
       
-      // Track successful AI request
-      await updateUsage('ai-search');
-      
       return data;
     },
     onSuccess: () => {
