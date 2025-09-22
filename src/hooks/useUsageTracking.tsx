@@ -33,6 +33,7 @@ export const useUsageTracking = () => {
   });
   const [weeklyMatches, setWeeklyMatches] = useState(0);
   const [weeklyQuizRetakes, setWeeklyQuizRetakes] = useState(0);
+  const [viewedPropertiesToday, setViewedPropertiesToday] = useState<Set<string>>(new Set());
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>({
     subscribed: false,
     subscription_tier: 'free',
@@ -52,6 +53,9 @@ export const useUsageTracking = () => {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       console.log('Fetching usage for date:', today);
+
+      // Reset viewed properties for new day
+      setViewedPropertiesToday(new Set());
 
       // Get today's usage
       const { data: todayData, error: todayError } = await supabase
@@ -132,6 +136,26 @@ export const useUsageTracking = () => {
   useEffect(() => {
     fetchUsage();
   }, [user?.id]);
+
+  // Add new function to track unique property views
+  const updatePropertyView = async (propertyId: string) => {
+    if (!user?.id || !propertyId) {
+      console.error('No user ID or property ID available for view tracking');
+      return false;
+    }
+
+    // Check if this property was already viewed today
+    if (viewedPropertiesToday.has(propertyId)) {
+      console.log('Property already viewed today, not counting again:', propertyId);
+      return true;
+    }
+
+    const success = await updateUsage('view');
+    if (success) {
+      setViewedPropertiesToday(prev => new Set(prev).add(propertyId));
+    }
+    return success;
+  };
 
   const updateUsage = async (type: 'view' | 'match' | 'quiz' | 'ai-search') => {
     if (!user?.id) {
@@ -277,6 +301,7 @@ export const useUsageTracking = () => {
     subscriptionStatus,
     loading,
     updateUsage,
+    updatePropertyView,
     canPerformAction,
     getRemainingActions,
     refetchUsage: fetchUsage,

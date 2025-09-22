@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useUsageTracking } from '@/hooks/useUsageTracking';
 
 export interface PropertyMatch {
   id: string;
@@ -33,6 +34,7 @@ export const useMatches = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { updateUsage } = useUsageTracking();
 
   // Fetch matches for realtors
   const { data: realtorMatches = [], isLoading: isLoadingMatches } = useQuery({
@@ -194,6 +196,9 @@ export const useMatches = () => {
         });
       
       if (error) throw error;
+      
+      // Update usage tracking for matches (includes AI chat matches)
+      await updateUsage('match');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['renter-matches'] });

@@ -48,11 +48,12 @@ export const SwipeInterface = ({
   } = useProperties();
   const {
     renterMatches,
-    isLoadingMatches
+    isLoadingMatches,
+    createMatch
   } = useMatches();
   const {
     canPerformAction,
-    updateUsage
+    updatePropertyView
   } = useUsageTracking();
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
@@ -204,13 +205,15 @@ export const SwipeInterface = ({
     setNoMatchReason('');
   }, [userPreferences, realProperties, renterMatches, likedApartmentIds, declinedPropertyIds, isLoading]);
 
-  // Track property views when apartment changes
+  // Track property views when apartment changes (unique views only)
   useEffect(() => {
     const trackView = async () => {
-      if (!apartments[currentApartmentIndex] || !user?.id) return;
+      const currentApartment = apartments[currentApartmentIndex];
+      if (!currentApartment || !user?.id) return;
+      
       try {
-        await updateUsage('view');
-        console.log('Tracked view for property:', apartments[currentApartmentIndex].title);
+        await updatePropertyView(currentApartment.id);
+        console.log('Tracked unique view for property:', currentApartment.title);
       } catch (error) {
         console.error('Error tracking property view:', error);
       }
@@ -220,7 +223,7 @@ export const SwipeInterface = ({
     if (apartments.length > 0 && currentApartmentIndex >= 0) {
       trackView();
     }
-  }, [currentApartmentIndex, apartments, user?.id, canPerformAction, updateUsage]);
+  }, [currentApartmentIndex, apartments, user?.id, updatePropertyView]);
   const handleLike = async () => {
     if (apartments.length === 0) return;
 
@@ -232,38 +235,19 @@ export const SwipeInterface = ({
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Liking apartment:', currentApartment.title);
     try {
-      // Update usage tracking
-      await updateUsage('match');
-
       // Add to liked apartments
       setLikedApartmentIds(prev => [...prev, currentApartment.id]);
 
       // Call parent onMatch function
       onMatch(currentApartment);
 
-      // Try to create a match in the database if it's a real property
+      // Create match using useMatches hook (this will handle usage tracking)
       const realProperty = realProperties?.find(p => p.id === currentApartment.id);
       if (realProperty) {
-        const {
-          data: user
-        } = await supabase.auth.getUser();
-        if (user.user) {
-          const {
-            error
-          } = await supabase.from('property_matches').insert({
-            renter_id: user.user.id,
-            property_id: currentApartment.id,
-            realtor_id: realProperty.realtor_id
-          });
-          if (error) {
-            console.error('Error creating match:', error);
-          } else {
-            console.log('Match created successfully');
-            toast.success('Match created! Check your matches to connect with the realtor.');
-          }
-        }
+        await createMatch(currentApartment.id, realProperty.realtor_id);
+        console.log('Match created successfully');
       } else {
-        // For real properties only, show a message about connecting with realtors
+        // For sample properties, just show success message
         toast.success('Match created! Check your matches to connect with the realtor.');
       }
       moveToNext();
