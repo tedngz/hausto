@@ -164,9 +164,7 @@ export const LandingPage = () => {
             <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="h-6 w-6" />
             <span className="text-lg font-semibold text-foreground">Hausto</span>
           </div>
-          <p className="text-center text-muted-foreground mt-2">
-            © 2024 Hausto. All rights reserved.
-          </p>
+          <p className="text-center text-muted-foreground mt-2">© 2025 Hausto. All rights reserved.</p>
         </div>
       </footer>
     </div>;
