@@ -3,11 +3,11 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet } from 'lucide-react';
 import { PropertyCard } from '@/components/PropertyCard';
 import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
-
+import { BulkUploadModal } from '@/components/BulkUploadModal';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { AIChatAgent } from '@/components/AIChatAgent';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
@@ -24,6 +24,7 @@ interface RealtorDashboardProps {
 
 export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUploadModal }: RealtorDashboardProps) => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
@@ -113,13 +114,23 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                 <h2 className="text-xl font-semibold text-slate-900">My Properties</h2>
                 <p className="text-slate-600 text-sm">Manage your listed properties</p>
               </div>
-              <Button 
-                onClick={() => setIsUploadModalOpen(true)}
-                className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Add Property
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Add Property
+                </Button>
+                <Button 
+                  onClick={() => setIsBulkUploadModalOpen(true)}
+                  variant="outline"
+                  className="border-green-200 text-green-700 hover:bg-green-50"
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Bulk Upload
+                </Button>
+              </div>
             </div>
           </div>
           
@@ -292,6 +303,16 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
       <PropertyUploadModal 
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
+      />
+
+      <BulkUploadModal 
+        isOpen={isBulkUploadModalOpen}
+        onClose={() => setIsBulkUploadModalOpen(false)}
+        onSuccess={() => {
+          setIsBulkUploadModalOpen(false);
+          // Refresh properties list
+          window.location.reload();
+        }}
       />
 
       <PropertyEditModal 
