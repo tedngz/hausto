@@ -88,12 +88,12 @@ export const LandingChatBox = ({
     isSendingMessage
   } = useChat();
 
-  // Clear temporary message when messages are updated (AI response received)
+  // Clear temporary message when user's message appears in database
   useEffect(() => {
     if (messages.length > 0 && tempUserMessageForLoggedIn) {
-      // Check if the last message is from assistant (AI response)
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === 'assistant') {
+      // Check if any message in the array is from user (meaning user message was saved to DB)
+      const hasUserMessage = messages.some(message => message.role === 'user');
+      if (hasUserMessage) {
         setTempUserMessageForLoggedIn(null);
         setTempUserImages([]);
       }
