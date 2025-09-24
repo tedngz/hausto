@@ -459,6 +459,19 @@ export const LandingChatBox = ({
 
       {/* Chat Messages for Signed In Users */}
       {user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+          {/* Temporary user message for instant feedback */}
+          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
+              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
+                <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
+                {tempUserImages.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {tempUserImages.map((image, index) => (
+                      <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>}
           
           {messages.map((message, index) => {
           if (message.role === 'user') {
@@ -601,20 +614,6 @@ export const LandingChatBox = ({
           }
         })}
 
-          {/* Temporary user message for instant feedback */}
-          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
-              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
-                <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
-                {tempUserImages.length > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {tempUserImages.map((image, index) => (
-                      <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>}
-
           {/* AI Thinking Animation for Signed In Users */}
           {isSendingMessage && <div className="flex justify-start animate-fade-in">
               <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
@@ -632,6 +631,40 @@ export const LandingChatBox = ({
               </div>
             </div>}
 
+        </div>}
+
+      {/* Temporary Chat Messages for Non-Logged In Users */}
+      {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+          {/* User Message */}
+          <div className="flex justify-end animate-fade-in">
+            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
+              <p className="text-sm text-left">{tempUserMessage}</p>
+              {tempUserImages.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {tempUserImages.map((image, index) => (
+                    <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* AI Thinking Animation */}
+          {isSearching && <div className="flex justify-start animate-fade-in">
+              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
+                animationDelay: '0ms'
+              }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
+                animationDelay: '150ms'
+              }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
+                animationDelay: '300ms'
+              }}></div>
+                </div>
+              </div>
+            </div>}
         </div>}
 
       {/* Search Results for Non-Logged In Users */}
@@ -750,67 +783,8 @@ export const LandingChatBox = ({
           </div>
         </div>}
 
-      {/* Temporary Chat Messages for Non-Logged In Users */}
-      {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
-          {/* User Message */}
-          <div className="flex justify-end animate-fade-in">
-            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
-              <p className="text-sm text-left">{tempUserMessage}</p>
-              {tempUserImages.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {tempUserImages.map((image, index) => (
-                    <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* AI Thinking Animation */}
-          {isSearching && <div className="flex justify-start animate-fade-in">
-              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                animationDelay: '0ms'
-              }}></div>
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                animationDelay: '150ms'
-              }}></div>
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
-                animationDelay: '300ms'
-              }}></div>
-                </div>
-              </div>
-            </div>}
-        </div>}
-
 
       {/* Chat Input - Show for everyone until they search */}
-      {(user || !hasSearched) && <div className="space-y-4">
-          <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] pr-20 resize-none bg-transparent" />
-          <div className="absolute bottom-3 right-3 flex gap-2">
-            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" className="h-8 w-8 p-0">
-              <Upload className="h-4 w-4" />
-            </Button>
-            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || (!query.trim() && uploadedImages.length === 0)} size="sm" className="h-8 w-8 p-0">
-              {(isSendingMessage || isSearching) ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlaneTakeoff className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-
-        {/* Image Preview */}
-        {uploadedImages.length > 0 && <div className="flex gap-2 flex-wrap animate-fade-in">
-            {uploadedImages.map((image, index) => <div key={index} className="relative">
-                <img src={URL.createObjectURL(image)} alt={`Upload ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-border" />
-                <Button onClick={() => removeImage(index)} size="sm" variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full">
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>)}
-          </div>}
-
-        </div>}
       {(user || !hasSearched) && <div className="space-y-4">
           <div className="relative">
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] pr-20 resize-none bg-transparent" />
