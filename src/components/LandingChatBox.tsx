@@ -269,6 +269,11 @@ export const LandingChatBox = ({
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
 
+    // Prevent new messages while AI is processing for both user types
+    if (isSendingMessage || isSearching) {
+      return;
+    }
+
     // Check AI request limits for logged-in users
     if (user && !canPerformAction('ai-search')) {
       toast({
