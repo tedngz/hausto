@@ -91,9 +91,11 @@ export const LandingChatBox = ({
   // Clear temporary message when user's message appears in database
   useEffect(() => {
     if (messages.length > 0 && tempUserMessageForLoggedIn) {
-      // Check if any message in the array is from user (meaning user message was saved to DB)
-      const hasUserMessage = messages.some(message => message.role === 'user');
-      if (hasUserMessage) {
+      // Check if the most recent user message matches our temporary message
+      const userMessages = messages.filter(message => message.role === 'user');
+      const latestUserMessage = userMessages[userMessages.length - 1];
+      
+      if (latestUserMessage && latestUserMessage.content === tempUserMessageForLoggedIn) {
         setTempUserMessageForLoggedIn(null);
         setTempUserImages([]);
       }
