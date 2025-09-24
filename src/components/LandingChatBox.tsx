@@ -53,6 +53,7 @@ export const LandingChatBox = ({
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
   const [tempUserMessageForLoggedIn, setTempUserMessageForLoggedIn] = useState<string | null>(null);
+  const [tempUserImages, setTempUserImages] = useState<string[]>([]);
   const [typedPlaceholder, setTypedPlaceholder] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [wantsNewChat, setWantsNewChat] = useState(false);
@@ -88,7 +89,7 @@ export const LandingChatBox = ({
   } = useChat();
 
   // Typing effect for placeholder
-  const fullPlaceholder = "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light...";
+  const fullPlaceholder = "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light... (or upload reference images)";
   useEffect(() => {
     if (messages.length === 0) {
       let i = 0;
@@ -172,6 +173,7 @@ export const LandingChatBox = ({
     setHasSearched(false);
     setTempUserMessage(null);
     setTempUserMessageForLoggedIn(null);
+    setTempUserImages([]);
     // Clear any stored pending queries
     localStorage.removeItem('pendingSearchQuery');
   };
@@ -183,6 +185,7 @@ export const LandingChatBox = ({
     // Clear any temporary states when switching to existing conversation
     setTempUserMessage(null);
     setTempUserMessageForLoggedIn(null);
+    setTempUserImages([]);
     setSearchResults(null); // Clear anonymous search results
 
     // Ensure the conversation has messages, if not, it might be an empty one
@@ -277,6 +280,7 @@ export const LandingChatBox = ({
     if (user) {
       // Show user message immediately for logged-in users
       setTempUserMessageForLoggedIn(queryToUse);
+      setTempUserImages(uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []);
       const messageData = {
         message: queryToUse,
         userType: 'renter' as const,
@@ -313,11 +317,15 @@ export const LandingChatBox = ({
         setQuery('');
         setUploadedImages([]);
         // Clear temporary message after a longer delay to ensure smooth transition
-        setTimeout(() => setTempUserMessageForLoggedIn(null), 2000);
+        setTimeout(() => {
+          setTempUserMessageForLoggedIn(null);
+          setTempUserImages([]);
+        }, 2000);
       }
     } else {
       // Handle search for anonymous users - call AI chat directly
       setTempUserMessage(queryToUse); // Show user message immediately
+      setTempUserImages(uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []);
       setIsSearching(true);
       try {
         const messageData = {
@@ -370,6 +378,7 @@ export const LandingChatBox = ({
         setIsSearching(false);
         setQuery('');
         setUploadedImages([]);
+        setTempUserImages([]);
       }
     }
   };
@@ -433,16 +442,30 @@ export const LandingChatBox = ({
       {user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {/* Temporary user message for instant feedback */}
           {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
-              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
                 <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
+                {tempUserImages.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {tempUserImages.map((image, index) => (
+                      <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>}
           
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-fade-in">
-                  <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+                  <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
                     <p className="text-sm text-left">{message.content}</p>
+                    {message.metadata?.images && message.metadata.images.length > 0 && (
+                      <div className="flex gap-2 flex-wrap">
+                        {message.metadata.images.map((image, imgIndex) => (
+                          <img key={imgIndex} src={image} alt={`Reference ${imgIndex + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>;
           } else {
@@ -595,8 +618,15 @@ export const LandingChatBox = ({
       {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {/* User Message */}
           <div className="flex justify-end animate-fade-in">
-            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground">
+            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
               <p className="text-sm text-left">{tempUserMessage}</p>
+              {tempUserImages.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {tempUserImages.map((image, index) => (
+                    <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           

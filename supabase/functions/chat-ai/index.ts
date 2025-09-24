@@ -278,7 +278,17 @@ ID: ${p.id} | ${p.title} | ${p.location} | ${p.price?.toLocaleString()} VND
         }
 
       if (Array.isArray(propertyImages) && propertyImages.length > 0) {
-        context += `\nProperty images provided: ${propertyImages.length} images to analyze for creating descriptions.`;
+        systemPrompt += `\n\n📸 UPLOADED REFERENCE IMAGES:
+The user has uploaded ${propertyImages.length} reference image(s). When they ask to "find similar apartments" or mention the uploaded images:
+1. Analyze the visual style, color scheme, layout, and design elements from their description
+2. Look for properties that match those aesthetic preferences
+3. Focus on properties with similar vibes (Modern, Cozy, Minimalist, etc.)
+4. Consider architectural features, interior design, lighting, and overall ambiance
+5. Prioritize properties that would appeal to someone who likes the reference style
+
+The images have been processed and included in this search request.`;
+        
+        context += `\n\nUser uploaded ${propertyImages.length} reference image(s) for style matching and similarity search.`;
       }
     }
 
@@ -314,7 +324,19 @@ Current user message: ${message}`;
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages: [
+        messages: propertyImages && propertyImages.length > 0 ? [
+          { role: 'system', content: fullContext },
+          { 
+            role: 'user', 
+            content: [
+              { type: 'text', text: message },
+              ...propertyImages.map(image => ({
+                type: 'image_url',
+                image_url: { url: image }
+              }))
+            ]
+          }
+        ] : [
           { role: 'system', content: fullContext },
           { role: 'user', content: message }
         ],

@@ -11,6 +11,10 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  metadata?: {
+    images?: string[];
+    [key: string]: any;
+  };
 }
 
 interface ChatConversation {
@@ -146,7 +150,8 @@ export const useChat = () => {
         .insert({
           conversation_id: actualConversationId,
           role: 'user',
-          content: message
+          content: message,
+          metadata: propertyImages && propertyImages.length > 0 ? { images: propertyImages } : null
         });
 
       if (userMessageError) {
