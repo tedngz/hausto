@@ -88,6 +88,18 @@ export const LandingChatBox = ({
     isSendingMessage
   } = useChat();
 
+  // Clear temporary message when messages are updated (AI response received)
+  useEffect(() => {
+    if (messages.length > 0 && tempUserMessageForLoggedIn) {
+      // Check if the last message is from assistant (AI response)
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'assistant') {
+        setTempUserMessageForLoggedIn(null);
+        setTempUserImages([]);
+      }
+    }
+  }, [messages, tempUserMessageForLoggedIn]);
+
   // Typing effect for placeholder
   const fullPlaceholder = "I'm looking for a modern apartment with city views, close to cafes and markets. I love minimalist design and need good natural light... (or upload reference images)";
   useEffect(() => {
@@ -313,14 +325,12 @@ export const LandingChatBox = ({
           description: "There was an error processing your search. Please try again.",
           variant: "destructive"
         });
+        // Clear temporary message on error
+        setTempUserMessageForLoggedIn(null);
+        setTempUserImages([]);
       } finally {
         setQuery('');
         setUploadedImages([]);
-        // Clear temporary message after a longer delay to ensure smooth transition
-        setTimeout(() => {
-          setTempUserMessageForLoggedIn(null);
-          setTempUserImages([]);
-        }, 2000);
       }
     } else {
       // Handle search for anonymous users - call AI chat directly
@@ -378,6 +388,8 @@ export const LandingChatBox = ({
         setIsSearching(false);
         setQuery('');
         setUploadedImages([]);
+        // Clear temporary message after anonymous search completes
+        setTempUserMessage(null);
         setTempUserImages([]);
       }
     }
@@ -768,14 +780,14 @@ export const LandingChatBox = ({
       {/* Chat Input - Show for everyone until they search */}
       {(user || !hasSearched) && <div className="space-y-4">
           <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage} className="min-h-[140px] pr-20 resize-none bg-transparent" />
+            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || uploadedImages.length >= 3} size="sm" variant="outline" className="h-8 w-8 p-0">
+            <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" className="h-8 w-8 p-0">
               <Upload className="h-4 w-4" />
             </Button>
-            <Button onClick={() => handleSearch()} disabled={isSendingMessage || !query.trim() && uploadedImages.length === 0} size="sm" className="h-8 w-8 p-0">
-              {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlaneTakeoff className="h-4 w-4" />}
+            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || (!query.trim() && uploadedImages.length === 0)} size="sm" className="h-8 w-8 p-0">
+              {(isSendingMessage || isSearching) ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlaneTakeoff className="h-4 w-4" />}
             </Button>
           </div>
         </div>
