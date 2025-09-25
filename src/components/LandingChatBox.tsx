@@ -395,9 +395,7 @@ export const LandingChatBox = ({
         setIsSearching(false);
         setQuery('');
         setUploadedImages([]);
-        // Clear temporary message after anonymous search completes
-        setTempUserMessage(null);
-        setTempUserImages([]);
+        // Keep tempUserMessage and images so the user's message remains visible after results
       }
     }
   };
