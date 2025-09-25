@@ -9,10 +9,17 @@ interface VibeScoreProps {
   score: VibeScoreType;
   showBreakdown?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  isAnonymous?: boolean;
 }
 
-export const VibeScore = ({ score, showBreakdown = false, size = 'md' }: VibeScoreProps) => {
-  const getVibeLevel = (scoreValue: number) => {
+export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymous = false }: VibeScoreProps) => {
+  const getVibeLevel = (scoreValue: number, isAnonymousUser: boolean) => {
+    // For anonymous users, always show "Good vibe" 
+    if (isAnonymousUser) {
+      return { level: 'Good vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
+    }
+    
+    // For logged-in users, use preference-based scoring
     const label = getVibeRatingLabel(scoreValue);
     const colorClass = getVibeRatingColor(scoreValue);
     
@@ -99,7 +106,7 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md' }: VibeSco
     }
   };
 
-  const vibeLevel = getVibeLevel(roundedScore.overall);
+  const vibeLevel = getVibeLevel(roundedScore.overall, isAnonymous);
 
   return (
     <div className="space-y-2">

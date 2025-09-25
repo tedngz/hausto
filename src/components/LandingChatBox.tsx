@@ -542,24 +542,28 @@ export const LandingChatBox = ({
                                             <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                           </Button>
                                           
-                                          {userPreferences && <VibeScore score={calculateVibeScore({
-                                  id: property.id,
-                                  images: property.images,
-                                  title: property.title,
-                                  location: property.location,
-                                  price: property.price,
-                                  size: property.size,
-                                  vibe: property.vibe,
-                                  description: property.description,
-                                  highlights: property.highlights,
-                                  realtor: {
-                                    id: '',
-                                    name: '',
-                                    phone: '',
-                                    email: ''
-                                  },
-                                  vibe_analysis: property.vibe_analysis
-                                }, userPreferences)} size="sm" />}
+                                           <VibeScore 
+                                             score={userPreferences ? calculateVibeScore({
+                                               id: property.id,
+                                               images: property.images,
+                                               title: property.title,
+                                               location: property.location,
+                                               price: property.price,
+                                               size: property.size,
+                                               vibe: property.vibe,
+                                               description: property.description,
+                                               highlights: property.highlights,
+                                               realtor: {
+                                                 id: '',
+                                                 name: '',
+                                                 phone: '',
+                                                 email: ''
+                                               },
+                                               vibe_analysis: property.vibe_analysis
+                                             }, userPreferences) : { overall: 55, breakdown: { style: 55, color: 55, activities: 55, price: 55 } }} 
+                                             size="sm" 
+                                             isAnonymous={!user}
+                                           />
                                         </div>
                                       </div>
 
@@ -719,24 +723,28 @@ export const LandingChatBox = ({
                                   <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                 </Button>
                                 
-                                {userPreferences && <VibeScore score={calculateVibeScore({
-                            id: property.id,
-                            images: property.images,
-                            title: property.title,
-                            location: property.location,
-                            price: property.price,
-                            size: property.size,
-                            vibe: property.vibe,
-                            description: property.description,
-                            highlights: property.highlights,
-                            realtor: {
-                              id: '',
-                              name: '',
-                              phone: '',
-                              email: ''
-                            },
-                            vibe_analysis: property.vibe_analysis
-                          }, userPreferences)} size="sm" />}
+                                 <VibeScore 
+                                   score={userPreferences ? calculateVibeScore({
+                                     id: property.id,
+                                     images: property.images,
+                                     title: property.title,
+                                     location: property.location,
+                                     price: property.price,
+                                     size: property.size,
+                                     vibe: property.vibe,
+                                     description: property.description,
+                                     highlights: property.highlights,
+                                     realtor: {
+                                       id: '',
+                                       name: '',
+                                       phone: '',
+                                       email: ''
+                                     },
+                                     vibe_analysis: property.vibe_analysis
+                                   }, userPreferences) : { overall: 55, breakdown: { style: 55, color: 55, activities: 55, price: 55 } }} 
+                                   size="sm" 
+                                   isAnonymous={!user}
+                                 />
                               </div>
                             </div>
 
