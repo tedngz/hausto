@@ -459,20 +459,6 @@ export const LandingChatBox = ({
 
       {/* Chat Messages for Signed In Users */}
       {user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
-          {/* Temporary user message for instant feedback */}
-          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
-              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
-                <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
-                {tempUserImages.length > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {tempUserImages.map((image, index) => (
-                      <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>}
-          
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-fade-in">
@@ -613,6 +599,20 @@ export const LandingChatBox = ({
             }
           }
         })}
+
+          {/* Temporary user message for instant feedback - shows after all existing messages */}
+          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
+              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
+                <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
+                {tempUserImages.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {tempUserImages.map((image, index) => (
+                      <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>}
 
           {/* AI Thinking Animation for Signed In Users */}
           {isSendingMessage && <div className="flex justify-start animate-fade-in">
