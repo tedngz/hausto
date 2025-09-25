@@ -533,47 +533,45 @@ export const LandingChatBox = ({
                                           </div>
                                         </div>
                                         
-                                        {/* Desktop buttons */}
-                                        <div className="hidden sm:flex flex-col items-end gap-1">
-                                           <Button onClick={e => {
-                                  e.stopPropagation();
-                                  handleLikeProperty(property.id, property.realtor_id);
-                                }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
-                                            <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                          </Button>
-                                          
-                                           <VibeScore 
-                                             score={userPreferences ? calculateVibeScore({
-                                               id: property.id,
-                                               images: property.images,
-                                               title: property.title,
-                                               location: property.location,
-                                               price: property.price,
-                                               size: property.size,
-                                               vibe: property.vibe,
-                                               description: property.description,
-                                               highlights: property.highlights,
-                                               realtor: {
-                                                 id: '',
-                                                 name: '',
-                                                 phone: '',
-                                                 email: ''
-                                               },
-                                               vibe_analysis: property.vibe_analysis
-                                             }, userPreferences) : { overall: 55, breakdown: { style: 55, color: 55, activities: 55, price: 55 } }} 
-                                             size="sm" 
-                                             isAnonymous={!user}
-                                           />
-                                        </div>
+                                         {/* Desktop buttons */}
+                                         <div className="hidden sm:flex flex-col items-end gap-1">
+                                            <Button onClick={e => {
+                                   e.stopPropagation();
+                                   handleLikeProperty(property.id, property.realtor_id);
+                                 }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
+                                             <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                                           </Button>
+                                         </div>
                                       </div>
 
-                                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                                        <div className="flex items-center">
-                                          <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
-                                        </div>
-                                        {property.size && <span className="font-medium">{property.size}</span>}
-                                        {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
-                                      </div>
+                                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
+                                         <div className="flex items-center">
+                                           <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
+                                         </div>
+                                         {property.size && <span className="font-medium">{property.size}</span>}
+                                         <VibeScore 
+                                           score={userPreferences ? calculateVibeScore({
+                                             id: property.id,
+                                             images: property.images,
+                                             title: property.title,
+                                             location: property.location,
+                                             price: property.price,
+                                             size: property.size,
+                                             vibe: property.vibe,
+                                             description: property.description,
+                                             highlights: property.highlights,
+                                             realtor: {
+                                               id: '',
+                                               name: '',
+                                               phone: '',
+                                               email: ''
+                                             },
+                                             vibe_analysis: property.vibe_analysis
+                                           }, userPreferences) : { overall: 55, breakdown: { style: 55, color: 55, activities: 55, price: 55 } }} 
+                                           size="sm" 
+                                           isAnonymous={!user}
+                                         />
+                                       </div>
 
                                       {/* Why it matches - More prominent on mobile */}
                                       <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
@@ -714,47 +712,45 @@ export const LandingChatBox = ({
                                 </div>
                               </div>
                               
-                              {/* Desktop buttons */}
-                              <div className="hidden sm:flex flex-col items-end gap-1">
-                                <Button onClick={e => {
-                            e.stopPropagation();
-                            handleLikeProperty(property.id, property.realtor_id);
-                          }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
-                                  <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                </Button>
-                                
-                                 <VibeScore 
-                                   score={userPreferences ? calculateVibeScore({
-                                     id: property.id,
-                                     images: property.images,
-                                     title: property.title,
-                                     location: property.location,
-                                     price: property.price,
-                                     size: property.size,
-                                     vibe: property.vibe,
-                                     description: property.description,
-                                     highlights: property.highlights,
-                                     realtor: {
-                                       id: '',
-                                       name: '',
-                                       phone: '',
-                                       email: ''
-                                     },
-                                     vibe_analysis: property.vibe_analysis
-                                   }, userPreferences) : { overall: 55, breakdown: { style: 55, color: 55, activities: 55, price: 55 } }} 
-                                   size="sm" 
-                                   isAnonymous={!user}
-                                 />
-                              </div>
+                               {/* Desktop buttons */}
+                               <div className="hidden sm:flex flex-col items-end gap-1">
+                                 <Button onClick={e => {
+                             e.stopPropagation();
+                             handleLikeProperty(property.id, property.realtor_id);
+                           }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
+                                   <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
+                                 </Button>
+                               </div>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                              <div className="flex items-center">
-                                <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
-                              </div>
-                              {property.size && <span className="font-medium">{property.size}</span>}
-                              {property.vibe && <Badge variant="outline" className="text-xs">{property.vibe}</Badge>}
-                            </div>
+                             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
+                               <div className="flex items-center">
+                                 <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
+                               </div>
+                               {property.size && <span className="font-medium">{property.size}</span>}
+                               <VibeScore 
+                                 score={userPreferences ? calculateVibeScore({
+                                   id: property.id,
+                                   images: property.images,
+                                   title: property.title,
+                                   location: property.location,
+                                   price: property.price,
+                                   size: property.size,
+                                   vibe: property.vibe,
+                                   description: property.description,
+                                   highlights: property.highlights,
+                                   realtor: {
+                                     id: '',
+                                     name: '',
+                                     phone: '',
+                                     email: ''
+                                   },
+                                   vibe_analysis: property.vibe_analysis
+                                 }, userPreferences) : { overall: 55, breakdown: { style: 55, color: 55, activities: 55, price: 55 } }} 
+                                 size="sm" 
+                                 isAnonymous={!user}
+                               />
+                             </div>
 
                             {/* Property Highlights */}
                             {property.highlights && property.highlights.length > 0 && <div className="mb-3">
