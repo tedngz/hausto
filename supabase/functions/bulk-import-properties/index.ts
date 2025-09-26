@@ -203,10 +203,11 @@ serve(async (req) => {
 
       } catch (error) {
         console.error(`Error processing property ${i + 1}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         results.push({
           index: i,
           status: 'failed',
-          error: error.message
+          error: errorMessage
         });
         failed++;
       }
@@ -228,9 +229,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Bulk import error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: errorMessage,
         success: false 
       }),
       {

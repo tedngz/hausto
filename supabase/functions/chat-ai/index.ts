@@ -125,7 +125,7 @@ serve(async (req) => {
     const isValidUUID = (v: string | null | undefined) =>
       typeof v === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
     const canPersist = !isAnonymous && isValidUUID(conversationId);
-    let chatHistory = [];
+    let chatHistory: Array<{role: string, content: string}> = [];
     
     // For authenticated users with a valid conversationId, verify and get history
     if (canPersist) {
@@ -133,7 +133,7 @@ serve(async (req) => {
         .from('chat_conversations')
         .select('user_id')
         .eq('id', conversationId)
-        .eq('user_id', user.id)
+        .eq('user_id', user?.id)
         .single();
       
       if (convError || !conversation) {
@@ -187,7 +187,7 @@ Provide creative, engaging, and professional content that stands out in the rent
       }
     } else {
       // Helper function for lifestyle tips
-      function getLifestyleTips(location, vibe, highlights) {
+      function getLifestyleTips(location: any, vibe: any, highlights: any) {
         const tips = [];
         
         if (location?.includes('District 1')) {
@@ -259,7 +259,7 @@ RULES:
         // Add user preferences context for renters
         if (userPreferences) {
           const matchingProperties = properties.filter(p => {
-            const locationMatch = userPreferences.location?.some(loc => 
+            const locationMatch = userPreferences.location?.some((loc: any) => 
               p.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
             );
             const budgetMatch = userPreferences.priceRange ? 
@@ -330,7 +330,7 @@ Current user message: ${message}`;
             role: 'user', 
             content: [
               { type: 'text', text: message },
-              ...propertyImages.map(image => ({
+              ...propertyImages.map((image: any) => ({
                 type: 'image_url',
                 image_url: { url: image }
               }))
@@ -465,8 +465,9 @@ Current user message: ${message}`;
 
   } catch (error) {
     console.error('Error in chat-ai function:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,

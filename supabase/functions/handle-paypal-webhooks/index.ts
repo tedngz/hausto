@@ -34,7 +34,8 @@ const verifyWebhookSignature = async (body: string, headers: Headers): Promise<b
     
     return true;
   } catch (error) {
-    logStep("Webhook signature verification failed", { error: error.message });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    logStep("Webhook signature verification failed", { error: errorMessage });
     return false;
   }
 };
