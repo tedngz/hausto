@@ -155,21 +155,46 @@ serve(async (req) => {
 
           if (aiError) {
             console.warn('AI analysis failed:', aiError);
-          } else if (aiResult) {
-            aiContent = aiResult;
+          } else if (aiResult?.analysis) {
+            aiContent = aiResult.analysis;
             
-            // Use AI-generated content if not provided
-            if (!generatedTitle && aiResult.generatedTitle) {
-              generatedTitle = aiResult.generatedTitle;
+            // Extract title and description from generated_content
+            if (!generatedTitle && aiResult.analysis.generated_content?.title) {
+              generatedTitle = aiResult.analysis.generated_content.title;
             }
-            if (!generatedDescription && aiResult.generatedDescription) {
-              generatedDescription = aiResult.generatedDescription;
+            if (!generatedDescription && aiResult.analysis.generated_content?.description) {
+              generatedDescription = aiResult.analysis.generated_content.description;
             }
-            if (!generatedVibe && aiResult.overallVibe) {
-              generatedVibe = aiResult.overallVibe;
+            
+            // Extract highlights from individual image analyses
+            if (generatedHighlights.length === 0 && aiResult.analysis.image_analyses?.length > 0) {
+              const imageHighlights = aiResult.analysis.image_analyses
+                .map((img: any) => img.image_highlight)
+                .filter((highlight: string) => highlight && highlight.trim() !== '');
+              
+              if (imageHighlights.length > 0) {
+                generatedHighlights = imageHighlights;
+              } else if (aiResult.analysis.generated_content?.highlights) {
+                generatedHighlights = aiResult.analysis.generated_content.highlights;
+              }
             }
-            if (generatedHighlights.length === 0 && aiResult.highlights) {
-              generatedHighlights = aiResult.highlights;
+            
+            // Determine overall vibe from the analysis
+            if (!generatedVibe) {
+              // Find the highest scoring vibe characteristic
+              const vibeScores = aiResult.analysis;
+              const vibeTypes = ['modern', 'cozy', 'luxurious', 'minimalist', 'elegant', 'spacious', 'rustic'];
+              let highestVibe = 'modern';
+              let highestScore = 0;
+              
+              vibeTypes.forEach(vibe => {
+                if (vibeScores[vibe] && vibeScores[vibe] > highestScore) {
+                  highestScore = vibeScores[vibe];
+                  highestVibe = vibe;
+                }
+              });
+              
+              generatedVibe = highestVibe;
             }
           }
         } catch (error) {
