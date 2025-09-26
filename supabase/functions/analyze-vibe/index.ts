@@ -88,36 +88,57 @@ serve(async (req) => {
       
       try {
           const basePrompt = generateContent 
-            ? `You are analyzing rental property images to create compelling listing content that converts browsers into renters. You are analyzing image ${index + 1} of ${imageUrls.length} total images.
+            ? `You are a luxury rental marketing specialist analyzing property images to create HIGH-CONVERTING listing content. This is image ${index + 1} of ${imageUrls.length} total images.
 
-            YOUR MISSION: Find what makes THIS space uniquely valuable to renters' daily lives.
+            CORE MISSION: Discover the UNIQUE LIFESTYLE TRANSFORMATION this specific space offers renters.
 
-            CRITICAL RULES FOR HIGHLIGHTS:
-            1. Focus on TRANSFORMATION: How will this space change the renter's life?
-            2. Emphasize UNIQUE SELLING POINTS: What can't they get elsewhere?
-            3. Address RENTER PAIN POINTS: storage, entertaining, work-from-home, relaxation
-            4. Each highlight must be COMPLETELY DIFFERENT from others - no overlapping benefits
-            5. Think LIFESTYLE UPGRADE, not just features
+            ANALYSIS FRAMEWORK:
+            1. ESSENCE: What's the ONE thing that makes this space irreplaceable?
+            2. EMOTIONAL TRIGGER: What feeling does this space instantly evoke?
+            3. LIFESTYLE UPGRADE: How does this space solve a specific daily life problem?
+            4. COMPETITIVE ADVANTAGE: What can't they get in 90% of other properties?
+            5. RENTER VALUE: What will they gain that they didn't have before?
 
-            ${index > 0 ? `ALREADY COVERED BENEFITS TO AVOID: You are analyzing image ${index + 1}. This highlight must address a COMPLETELY DIFFERENT lifestyle need from previous images. Think: productivity vs entertainment vs relaxation vs culinary vs social vs wellness vs organization.` : ''}
+            ${index > 0 ? `DIFFERENTIATION RULE: This is image ${index + 1}. Your highlight must offer a COMPLETELY DIFFERENT lifestyle benefit from previous images. Previous benefits covered - avoid overlap! Think: 
+            - WORK: Productivity, focus, professional success
+            - SOCIAL: Entertaining, hosting, impression-making  
+            - WELLNESS: Relaxation, health, mental clarity
+            - CULINARY: Cooking, dining, food experiences
+            - COMFORT: Rest, privacy, personal sanctuary
+            - STYLE: Aesthetics, sophistication, status
+            - CONVENIENCE: Organization, efficiency, time-saving` : ''}
 
-            PREMIUM BENEFIT CATEGORIES to choose from:
-            🏢 PRODUCTIVITY: "Executive home office", "Creative workspace", "Focus sanctuary"
-            🎉 ENTERTAINMENT: "Party hosting hub", "Movie night paradise", "Social gathering space"
-            🧘 WELLNESS: "Spa-like retreat", "Zen meditation corner", "Stress-free sanctuary"
-            👥 SOCIAL: "Dinner party ready", "Conversation starter", "Instagram-worthy backdrop"
-            🍳 CULINARY: "Gourmet cooking lab", "Entertaining kitchen", "Chef's playground"
-            💤 COMFORT: "Hotel-suite luxury", "Resort-style living", "Cozy escape"
-            📦 ORGANIZATION: "Effortless tidiness", "Storage paradise", "Clutter-free living"
-            ✨ STYLE: "Designer showcase", "Sophisticated ambiance", "Elevated aesthetics"
+            PREMIUM LIFESTYLE TRANSFORMATION CATEGORIES:
+            💼 CAREER SUCCESS: "Executive command center", "Zoom-ready backdrop", "Productivity sanctuary"
+            🎭 SOCIAL MASTERY: "Entertainment showcase", "Dinner party stage", "Impression maker"
+            🧘 WELLNESS UPGRADE: "Stress-relief retreat", "Morning meditation space", "Zen sanctuary"
+            👑 LUXURY LIVING: "Hotel-suite experience", "Premium lifestyle", "Elevated daily life"
+            🍳 CULINARY EXCELLENCE: "Chef's creative lab", "Gourmet experience", "Culinary playground"
+            ✨ AESTHETIC IMPACT: "Instagram paradise", "Design statement", "Visual masterpiece"
+            🏠 LIFESTYLE CONVENIENCE: "Effortless living", "Time-saving design", "Life simplifier"
 
-            Return JSON with:
-            1. Vibe characteristics (1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant
-            2. "image_highlight": One compelling 2-4 word phrase focusing on the UNIQUE LIFESTYLE BENEFIT this space provides
-            3. "detailed_analysis": Brief explanation of the specific life improvement this space enables for renters
+            Return JSON with EXACT format:
+            {
+              "modern": [1-10],
+              "cozy": [1-10],
+              "luxurious": [1-10],
+              "minimalist": [1-10],
+              "colorful": [1-10],
+              "spacious": [1-10],
+              "natural_light": [1-10],
+              "urban": [1-10],
+              "rustic": [1-10],
+              "elegant": [1-10],
+              "image_highlight": "2-4 word lifestyle benefit phrase",
+              "detailed_analysis": "30-50 word explanation of the specific life transformation this space enables",
+              "raw_analysis": "Brief description of what you see",
+              "image_index": ${index}
+            }
             
-            Focus on TRANSFORMATION over FEATURES:
+            CRITICAL: Focus on TRANSFORMATION over FEATURES:
             ❌ "Large windows" → ✅ "Natural energy boost"
+            ❌ "Nice kitchen" → ✅ "Culinary creativity hub"
+            ❌ "Spacious bedroom" → ✅ "Resort-style retreat"
             ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
             ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
             ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
@@ -324,69 +345,84 @@ Property Details:
           messages: [
             {
               role: 'system',
-              content: `You are a premium real estate copywriter specializing in creating irresistible rental listings that convert browsers into renters. You craft compelling narratives that capture a property's soul and connect emotionally with potential tenants.
+              content: `You are an elite luxury real estate copywriter who creates VIRAL rental listings that make properties rent within 24 hours. Your listings are so compelling that renters apply sight unseen.
 
-CONTENT PHILOSOPHY:
-- Every property has a unique story - find it and tell it compellingly
-- Focus on TRANSFORMATION: How will living here change the renter's life?
-- Create EMOTIONAL CONNECTION: Make them visualize their best life in this space
-- Emphasize UNIQUE VALUE: What can't they get anywhere else?
+MASTER COPYWRITING PHILOSOPHY:
+- Every property is a LIFESTYLE TRANSFORMATION, not just a place to sleep
+- Create URGENT DESIRE: Make them fear missing out on their dream life
+- Build EMOTIONAL ADDICTION: They can't stop thinking about living there
+- Establish UNIQUENESS: This is the ONE property that changes everything
+- Promise ASPIRATION: The person they'll become living here
 
-TITLE STRATEGY (50-80 characters):
-- Lead with the most compelling unique feature or lifestyle benefit
-- Use emotional triggers: "Sanctuary," "Haven," "Oasis," "Escape," "Dream"
-- Include specific architectural or design elements that stand out
-- Avoid generic terms like "Nice apartment" or "Great location"
+TITLE MASTERY (45-65 characters for maximum impact):
+- Start with their BIGGEST PAIN POINT SOLUTION or DREAM FULFILLMENT
+- Use POWER WORDS: "Sanctuary," "Haven," "Oasis," "Paradise," "Retreat," "Escape," "Dream"
+- Include SPECIFIC DIFFERENTIATORS visible in the images
+- Create URGENCY without being pushy
+- Examples: "Sun-Soaked Chef's Paradise" not "Bright Apartment with Kitchen"
 
-DESCRIPTION STRATEGY (150-250 words):
-- Open with the property's defining characteristic or wow factor
-- Paint a vivid picture of daily life in this space
-- Mention specific visual details that create atmosphere
-- Address renter pain points: commute, storage, entertaining, work-from-home
-- End with an aspirational statement about the lifestyle it enables
-- Use sensory language: light, textures, sounds, ambiance`
+DESCRIPTION MASTERY (180-280 words):
+- HOOK (20-30 words): The most jaw-dropping transformation promise
+- STORY (80-120 words): Paint their EXACT daily life using specific visual details from images
+- BENEFITS (40-60 words): Address their deepest lifestyle desires and pain points
+- PROOF (20-30 words): Prestigious location/building details that add social status
+- VISION (20-40 words): Their upgraded identity and life living here
+
+SENSORY LANGUAGE RULES:
+- Morning: "golden sunrise," "coffee ritual," "peaceful awakening"
+- Evening: "unwind in luxury," "candlelit dinners," "skyline views"
+- Social: "dinner parties that impress," "Instagram-worthy moments"
+- Work: "productivity flows," "Zoom backgrounds that wow," "focus sanctuary"`
             },
             {
               role: 'user',
-              content: `Create an irresistible rental listing that makes renters say "I MUST live here!" based on this visual analysis:
+              content: `Create a VIRAL rental listing that creates instant obsession and FOMO. Analysis of this unique property:
 
-${propertyContext}
+LOCATION CONTEXT: ${propertyContext}
 
-Property's Unique Visual Story:
-${analyses.map((a, i) => `.Image ${i + 1}: ${a.image_highlight || 'Notable feature'} - ${a.detailed_analysis || 'Detailed analysis not available'}`).join('\n')}
+VISUAL LIFESTYLE TRANSFORMATION MAP:
+${analyses.map((a, i) => `• Space ${i + 1}: ${a.image_highlight || 'Premium feature'} → ${a.detailed_analysis || 'Lifestyle enhancement'}`).join('\n')}
 
-Visual DNA Analysis:
+DETAILED VISUAL STORYTELLING:
 ${detailedAnalyses}
 
-Property Personality Profile (1-10 scale):
-• Modern: ${aggregated.modern}/10 ${aggregated.modern >= 7 ? '(Contemporary living)' : aggregated.modern >= 5 ? '(Balanced style)' : '(Classic charm)'}
-• Cozy: ${aggregated.cozy}/10 ${aggregated.cozy >= 7 ? '(Intimate & warm)' : aggregated.cozy >= 5 ? '(Comfortable)' : '(Spacious & airy)'}
-• Luxurious: ${aggregated.luxurious}/10 ${aggregated.luxurious >= 7 ? '(Premium finishes)' : aggregated.luxurious >= 5 ? '(Quality details)' : '(Practical living)'}
-• Spacious: ${aggregated.spacious}/10 ${aggregated.spacious >= 7 ? '(Generous proportions)' : aggregated.spacious >= 5 ? '(Well-proportioned)' : '(Efficient layout)'}
-• Natural Light: ${aggregated.natural_light}/10 ${aggregated.natural_light >= 7 ? '(Light-flooded)' : aggregated.natural_light >= 5 ? '(Well-lit)' : '(Intimate lighting)'}
-• Elegant: ${aggregated.elegant}/10 ${aggregated.elegant >= 7 ? '(Sophisticated)' : aggregated.elegant >= 5 ? '(Refined)' : '(Relaxed style)'}
+PROPERTY PERSONALITY DNA (Lifestyle Amplifiers):
+${aggregated.modern >= 7 ? '🔥 ULTRA-MODERN: Cutting-edge contemporary living that puts you ahead of trends' : aggregated.modern >= 4 ? '✨ CONTEMPORARY: Perfect blend of modern style and timeless appeal' : '🏛️ CLASSIC: Timeless elegance that never goes out of style'}
+${aggregated.luxurious >= 7 ? '💎 LUXURY TIER: Premium finishes that deliver 5-star hotel living daily' : aggregated.luxurious >= 4 ? '👑 ELEVATED: Quality details that make everyday feel special' : '🌟 REFINED: Thoughtful touches that enhance daily comfort'}
+${aggregated.spacious >= 7 ? '🏰 SPACIOUS GRANDEUR: Generous proportions that eliminate cramped living forever' : aggregated.spacious >= 4 ? '📐 PERFECT PROPORTIONS: Intelligently designed space optimization' : '🎯 EFFICIENT BRILLIANCE: Every square foot maximized for purpose'}
+${aggregated.natural_light >= 7 ? '☀️ LIGHT SANCTUARY: Sun-flooded spaces that boost mood and energy naturally' : aggregated.natural_light >= 4 ? '🌤️ BRIGHT LIVING: Well-lit spaces that feel alive throughout the day' : '🕯️ INTIMATE AMBIANCE: Cozy, cocoon-like atmosphere'}
+${aggregated.cozy >= 7 ? '🤗 WARMTH HAVEN: Instant comfort that melts stress away' : aggregated.cozy >= 4 ? '🏠 HOMEY COMFORT: Welcoming atmosphere that feels like a hug' : '🌊 AIRY OPENNESS: Spacious flow that breathes freedom'}
+${aggregated.elegant >= 7 ? '👑 SOPHISTICATED PRESTIGE: Impressive style that elevates your social status' : aggregated.elegant >= 4 ? '✨ REFINED TASTE: Polished aesthetic that reflects your success' : '😌 RELAXED CHARM: Laid-back style that prioritizes comfort'}
 
-MISSION: Create a listing that emotionally connects and converts viewers into renters.
+URGENT MISSION: Create listing copy that makes them desperately want to live this lifestyle.
 
-TITLE REQUIREMENTS (50-80 characters):
-• Lead with the most compelling differentiator visible in images
-• Use power words that trigger emotion and desire
-• Make it impossible to scroll past without clicking
-• Examples: "Sun-Drenched Sanctuary with Chef's Dream Kitchen" or "Industrial Loft Haven with Sky-High Ceilings"
+TITLE FORMULA (45-65 characters):
+[BIGGEST LIFESTYLE BENEFIT] + [UNIQUE VISUAL FEATURE] + [EMOTIONAL TRIGGER]
+Examples from images:
+- If chef's kitchen: "Culinary Paradise with Granite Command Center"
+- If natural light: "Sun-Drenched Sanctuary with Sky-High Views"  
+- If spacious: "Expansive Haven with Entertaining Excellence"
+Must make them think: "This is exactly what I've been searching for!"
 
-DESCRIPTION REQUIREMENTS (150-250 words):
-• Hook: Start with the most jaw-dropping feature or transformation promise
-• Story: Paint a vivid picture of their daily life in this space using specific visual details
-• Benefits: Address lifestyle improvements they'll gain (better sleep, easier entertaining, improved productivity)
-• Social proof: Mention prestigious neighborhood or building features if relevant
-• Close: End with an aspirational vision of their upgraded life
+DESCRIPTION FORMULA (200-300 words):
+1. HOOK (25-35 words): Start with their most desperate desire fulfilled
+2. DAILY LIFE STORY (100-150 words): Paint their exact morning/evening routine using specific visual details from the images
+3. LIFESTYLE UPGRADE (50-75 words): Connect features to life improvements (productivity, relationships, wellbeing, status)
+4. SOCIAL PROOF (25-35 words): Location prestige or building amenities that add status
+5. ASPIRATION CLOSE (25-35 words): The elevated version of themselves they'll become
 
-Focus on TRANSFORMATION not just FEATURES. Instead of "large windows," say "wake up to golden sunrise streaming through floor-to-ceiling windows." Instead of "updated kitchen," say "unleash your inner chef in this culinary command center."
+EMOTIONAL TRIGGERS TO WEAVE IN:
+- Morning transformation: golden light rituals, peaceful awakening
+- Social elevation: dinner parties that impress, Instagram-worthy moments
+- Daily escape: stress melts away, personal sanctuary
+- Success symbol: Zoom backgrounds that wow, sophisticated living
 
-Return JSON format:
+CRITICAL: Use specific visual details from the analysis to create vivid mental movies of their life here.
+
+Return EXACT JSON format:
 {
-  "title": "irresistible title that hooks them immediately",
-  "description": "compelling narrative that makes them visualize their best life here, mentioning specific visual elements that create the lifestyle transformation"
+  "title": "compelling title that creates instant desire (45-65 chars)",
+  "description": "narrative that makes them visualize their dream life with specific visual details (200-300 words)"
 }`
             }
           ],

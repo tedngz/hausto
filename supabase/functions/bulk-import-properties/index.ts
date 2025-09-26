@@ -142,6 +142,9 @@ serve(async (req) => {
                 price: property.price,
                 size: property.size
               }
+            },
+            headers: {
+              Authorization: `Bearer ${token}`
             }
           });
 
