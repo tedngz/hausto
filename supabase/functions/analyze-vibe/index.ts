@@ -88,39 +88,40 @@ serve(async (req) => {
       
       try {
           const basePrompt = generateContent 
-            ? `Analyze this rental property image for a real estate listing. You are analyzing image ${index + 1} of ${imageUrls.length} total images.
+            ? `You are analyzing rental property images to create compelling listing content that converts browsers into renters. You are analyzing image ${index + 1} of ${imageUrls.length} total images.
+
+            YOUR MISSION: Find what makes THIS space uniquely valuable to renters' daily lives.
 
             CRITICAL RULES FOR HIGHLIGHTS:
-            1. Each highlight must focus on BENEFITS, ACTIVITIES, or LIFESTYLE ADVANTAGES - NOT just feature descriptions
-            2. Every highlight must be COMPLETELY DIFFERENT - no overlapping concepts or similar themes
-            3. Tell renters what they can DO or HOW they'll benefit from each space/feature
-            4. Focus on lifestyle, comfort, convenience, entertainment, work, relaxation benefits
+            1. Focus on TRANSFORMATION: How will this space change the renter's life?
+            2. Emphasize UNIQUE SELLING POINTS: What can't they get elsewhere?
+            3. Address RENTER PAIN POINTS: storage, entertaining, work-from-home, relaxation
+            4. Each highlight must be COMPLETELY DIFFERENT from others - no overlapping benefits
+            5. Think LIFESTYLE UPGRADE, not just features
 
-            ${index > 0 ? `ALREADY COVERED BENEFITS TO AVOID: You are analyzing image ${index + 1}. Make sure this highlight covers a COMPLETELY DIFFERENT benefit/activity from previous images. Think: entertainment vs work vs relaxation vs storage vs cooking vs sleeping vs style, etc.` : ''}
+            ${index > 0 ? `ALREADY COVERED BENEFITS TO AVOID: You are analyzing image ${index + 1}. This highlight must address a COMPLETELY DIFFERENT lifestyle need from previous images. Think: productivity vs entertainment vs relaxation vs culinary vs social vs wellness vs organization.` : ''}
 
-            Focus on RENTER BENEFITS and ACTIVITIES they can enjoy:
-            - Entertainment benefits: "Perfect for hosting", "Movie night ready", "Party entertaining"
-            - Work/productivity: "Home office potential", "Study sanctuary", "Remote work haven"
-            - Relaxation/wellness: "Spa-like retreat", "Meditation corner", "Stress-free living"
-            - Convenience/lifestyle: "Easy maintenance", "Effortless organization", "Time-saving features"
-            - Cooking/dining: "Gourmet cooking", "Family dinners", "Culinary adventures"
-            - Style/ambiance: "Instagram-worthy", "Mood lighting", "Sophisticated living"
-            - Comfort/luxury: "Hotel-like comfort", "Premium living", "Cozy relaxation"
+            PREMIUM BENEFIT CATEGORIES to choose from:
+            🏢 PRODUCTIVITY: "Executive home office", "Creative workspace", "Focus sanctuary"
+            🎉 ENTERTAINMENT: "Party hosting hub", "Movie night paradise", "Social gathering space"
+            🧘 WELLNESS: "Spa-like retreat", "Zen meditation corner", "Stress-free sanctuary"
+            👥 SOCIAL: "Dinner party ready", "Conversation starter", "Instagram-worthy backdrop"
+            🍳 CULINARY: "Gourmet cooking lab", "Entertaining kitchen", "Chef's playground"
+            💤 COMFORT: "Hotel-suite luxury", "Resort-style living", "Cozy escape"
+            📦 ORGANIZATION: "Effortless tidiness", "Storage paradise", "Clutter-free living"
+            ✨ STYLE: "Designer showcase", "Sophisticated ambiance", "Elevated aesthetics"
 
-            Return a JSON object with:
-            1. Vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant
-            2. "image_highlight": ONE specific 2-4 word phrase focusing on WHAT RENTERS CAN DO or HOW THEY BENEFIT
-            3. "detailed_analysis": Brief description explaining the specific lifestyle benefit or activity this space enables
+            Return JSON with:
+            1. Vibe characteristics (1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant
+            2. "image_highlight": One compelling 2-4 word phrase focusing on the UNIQUE LIFESTYLE BENEFIT this space provides
+            3. "detailed_analysis": Brief explanation of the specific life improvement this space enables for renters
             
-            Examples of BENEFIT-FOCUSED highlights:
-            - "Perfect for hosting" (entertaining friends, dinner parties)
-            - "Gourmet cooking space" (culinary creativity, meal prep ease)
-            - "Effortless organization" (stress-free living, easy tidiness)
-            - "Spa-like retreat" (daily relaxation, self-care rituals)
-            - "Home office ready" (productive remote work, focus zone)
-            - "Movie night haven" (entertainment, cozy evenings)
-            - "Instagram-worthy style" (impressive aesthetics, social sharing)`
-            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image that focuses on renter benefits.`;
+            Focus on TRANSFORMATION over FEATURES:
+            ❌ "Large windows" → ✅ "Natural energy boost"
+            ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
+            ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
+            ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
+            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image that focuses on unique renter benefits.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
@@ -283,7 +284,7 @@ serve(async (req) => {
     }
 
     // Aggregate the analyses and generate content if requested
-    const aggregated = {
+    const aggregated: any = {
       modern: Math.round(analyses.reduce((sum, a) => sum + (a.modern || 5), 0) / analyses.length),
       cozy: Math.round(analyses.reduce((sum, a) => sum + (a.cozy || 5), 0) / analyses.length),
       luxurious: Math.round(analyses.reduce((sum, a) => sum + (a.luxurious || 5), 0) / analyses.length),
@@ -323,47 +324,69 @@ Property Details:
           messages: [
             {
               role: 'system',
-              content: `You are an expert real estate marketing specialist creating compelling rental listings. Based on detailed visual analysis of property images, you create unique, engaging content that highlights specific architectural features, design elements, and lifestyle benefits visible in the photos.
+              content: `You are a premium real estate copywriter specializing in creating irresistible rental listings that convert browsers into renters. You craft compelling narratives that capture a property's soul and connect emotionally with potential tenants.
 
-IMPORTANT RULES:
-- Create titles that are catchy and unique, not generic
-- Descriptions should mention specific visual features you can see in the images
-- Highlight unique selling points and lifestyle benefits
-- Make each listing feel distinct and memorable
-- Use engaging, descriptive language that appeals to potential renters
-- Focus on what makes THIS specific property special`
+CONTENT PHILOSOPHY:
+- Every property has a unique story - find it and tell it compellingly
+- Focus on TRANSFORMATION: How will living here change the renter's life?
+- Create EMOTIONAL CONNECTION: Make them visualize their best life in this space
+- Emphasize UNIQUE VALUE: What can't they get anywhere else?
+
+TITLE STRATEGY (50-80 characters):
+- Lead with the most compelling unique feature or lifestyle benefit
+- Use emotional triggers: "Sanctuary," "Haven," "Oasis," "Escape," "Dream"
+- Include specific architectural or design elements that stand out
+- Avoid generic terms like "Nice apartment" or "Great location"
+
+DESCRIPTION STRATEGY (150-250 words):
+- Open with the property's defining characteristic or wow factor
+- Paint a vivid picture of daily life in this space
+- Mention specific visual details that create atmosphere
+- Address renter pain points: commute, storage, entertaining, work-from-home
+- End with an aspirational statement about the lifestyle it enables
+- Use sensory language: light, textures, sounds, ambiance`
             },
             {
               role: 'user',
-              content: `Create a compelling rental listing based on this visual analysis:
+              content: `Create an irresistible rental listing that makes renters say "I MUST live here!" based on this visual analysis:
 
 ${propertyContext}
 
-Image-Specific Highlights:
-${analyses.map((a, i) => `Image ${i + 1}: ${a.image_highlight || 'Notable feature'}`).join('\n')}
+Property's Unique Visual Story:
+${analyses.map((a, i) => `.Image ${i + 1}: ${a.image_highlight || 'Notable feature'} - ${a.detailed_analysis || 'Detailed analysis not available'}`).join('\n')}
 
-Detailed Analysis:
+Visual DNA Analysis:
 ${detailedAnalyses}
 
-Visual Characteristics (1-10 scale):
-- Modern: ${aggregated.modern}/10
-- Cozy: ${aggregated.cozy}/10  
-- Luxurious: ${aggregated.luxurious}/10
-- Minimalist: ${aggregated.minimalist}/10
-- Spacious: ${aggregated.spacious}/10
-- Natural Light: ${aggregated.natural_light}/10
-- Urban: ${aggregated.urban}/10
-- Elegant: ${aggregated.elegant}/10
+Property Personality Profile (1-10 scale):
+• Modern: ${aggregated.modern}/10 ${aggregated.modern >= 7 ? '(Contemporary living)' : aggregated.modern >= 5 ? '(Balanced style)' : '(Classic charm)'}
+• Cozy: ${aggregated.cozy}/10 ${aggregated.cozy >= 7 ? '(Intimate & warm)' : aggregated.cozy >= 5 ? '(Comfortable)' : '(Spacious & airy)'}
+• Luxurious: ${aggregated.luxurious}/10 ${aggregated.luxurious >= 7 ? '(Premium finishes)' : aggregated.luxurious >= 5 ? '(Quality details)' : '(Practical living)'}
+• Spacious: ${aggregated.spacious}/10 ${aggregated.spacious >= 7 ? '(Generous proportions)' : aggregated.spacious >= 5 ? '(Well-proportioned)' : '(Efficient layout)'}
+• Natural Light: ${aggregated.natural_light}/10 ${aggregated.natural_light >= 7 ? '(Light-flooded)' : aggregated.natural_light >= 5 ? '(Well-lit)' : '(Intimate lighting)'}
+• Elegant: ${aggregated.elegant}/10 ${aggregated.elegant >= 7 ? '(Sophisticated)' : aggregated.elegant >= 5 ? '(Refined)' : '(Relaxed style)'}
 
-Based on the image-specific highlights and visual analysis, create:
+MISSION: Create a listing that emotionally connects and converts viewers into renters.
 
-1. A unique, catchy title (50-80 characters) that captures the property's distinctive features
-2. An engaging description (150-250 words) that mentions the specific visual elements from each image
+TITLE REQUIREMENTS (50-80 characters):
+• Lead with the most compelling differentiator visible in images
+• Use power words that trigger emotion and desire
+• Make it impossible to scroll past without clicking
+• Examples: "Sun-Drenched Sanctuary with Chef's Dream Kitchen" or "Industrial Loft Haven with Sky-High Ceilings"
+
+DESCRIPTION REQUIREMENTS (150-250 words):
+• Hook: Start with the most jaw-dropping feature or transformation promise
+• Story: Paint a vivid picture of their daily life in this space using specific visual details
+• Benefits: Address lifestyle improvements they'll gain (better sleep, easier entertaining, improved productivity)
+• Social proof: Mention prestigious neighborhood or building features if relevant
+• Close: End with an aspirational vision of their upgraded life
+
+Focus on TRANSFORMATION not just FEATURES. Instead of "large windows," say "wake up to golden sunrise streaming through floor-to-ceiling windows." Instead of "updated kitchen," say "unleash your inner chef in this culinary command center."
 
 Return JSON format:
 {
-  "title": "your unique title",
-  "description": "your detailed description mentioning specific visual features"
+  "title": "irresistible title that hooks them immediately",
+  "description": "compelling narrative that makes them visualize their best life here, mentioning specific visual elements that create the lifestyle transformation"
 }`
             }
           ],
@@ -440,8 +463,9 @@ Return JSON format:
 
   } catch (error) {
     console.error('Error in analyze-vibe function:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
