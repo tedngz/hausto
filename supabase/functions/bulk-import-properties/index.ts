@@ -58,10 +58,15 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { properties } = await req.json();
+    const { properties, startIndex = 0 } = await req.json();
     
     if (!Array.isArray(properties) || properties.length === 0) {
       throw new Error('Properties array is required and must not be empty');
+    }
+
+    // Limit batch size to prevent timeouts
+    if (properties.length > 5) {
+      throw new Error('Batch size too large. Maximum 5 properties per batch.');
     }
 
     console.log(`Processing ${properties.length} properties for bulk import`);
@@ -80,7 +85,7 @@ serve(async (req) => {
           throw new Error('Required fields missing: location, price, realtor_id, and images');
         }
 
-        console.log(`Processing property ${i + 1}: ${property.location}`);
+        console.log(`Processing property ${startIndex + i + 1}: ${property.location}`);
 
         // Step 1: Upload images to Supabase Storage
         const uploadedImages: string[] = [];
@@ -202,10 +207,10 @@ serve(async (req) => {
         });
         
         successful++;
-        console.log(`Successfully processed property ${i + 1}: ${insertData.id}`);
+        console.log(`Successfully processed property ${startIndex + i + 1}: ${insertData.id}`);
 
       } catch (error) {
-        console.error(`Error processing property ${i + 1}:`, error);
+        console.error(`Error processing property ${startIndex + i + 1}:`, error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         results.push({
           index: i,
