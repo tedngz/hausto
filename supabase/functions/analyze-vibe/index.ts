@@ -108,40 +108,51 @@ serve(async (req) => {
             - STYLE: Aesthetics, sophistication, status
             - CONVENIENCE: Organization, efficiency, time-saving` : ''}
 
-            PREMIUM LIFESTYLE TRANSFORMATION CATEGORIES:
-            💼 CAREER SUCCESS: "Executive command center", "Zoom-ready backdrop", "Productivity sanctuary"
-            🎭 SOCIAL MASTERY: "Entertainment showcase", "Dinner party stage", "Impression maker"
-            🧘 WELLNESS UPGRADE: "Stress-relief retreat", "Morning meditation space", "Zen sanctuary"
-            👑 LUXURY LIVING: "Hotel-suite experience", "Premium lifestyle", "Elevated daily life"
-            🍳 CULINARY EXCELLENCE: "Chef's creative lab", "Gourmet experience", "Culinary playground"
-            ✨ AESTHETIC IMPACT: "Instagram paradise", "Design statement", "Visual masterpiece"
-            🏠 LIFESTYLE CONVENIENCE: "Effortless living", "Time-saving design", "Life simplifier"
+             PREMIUM LIFESTYLE TRANSFORMATION CATEGORIES:
+             💼 CAREER SUCCESS: "Executive command center", "Zoom-ready backdrop", "Productivity sanctuary"
+             🎭 SOCIAL MASTERY: "Entertainment showcase", "Dinner party stage", "Impression maker"
+             🧘 WELLNESS UPGRADE: "Stress-relief retreat", "Morning meditation space", "Zen sanctuary"
+             👑 LUXURY LIVING: "Hotel-suite experience", "Premium lifestyle", "Elevated daily life"
+             🍳 CULINARY EXCELLENCE: "Chef's creative lab", "Gourmet experience", "Culinary playground"
+             ✨ AESTHETIC IMPACT: "Instagram paradise", "Design statement", "Visual masterpiece"
+             🏠 LIFESTYLE CONVENIENCE: "Effortless living", "Time-saving design", "Life simplifier"
 
-            Return JSON with EXACT format:
-            {
-              "modern": [1-10],
-              "cozy": [1-10],
-              "luxurious": [1-10],
-              "minimalist": [1-10],
-              "colorful": [1-10],
-              "spacious": [1-10],
-              "natural_light": [1-10],
-              "urban": [1-10],
-              "rustic": [1-10],
-              "elegant": [1-10],
-              "image_highlight": "2-4 word lifestyle benefit phrase",
-              "detailed_analysis": "30-50 word explanation of the specific life transformation this space enables",
-              "raw_analysis": "Brief description of what you see",
-              "image_index": ${index}
-            }
-            
-            CRITICAL: Focus on TRANSFORMATION over FEATURES:
-            ❌ "Large windows" → ✅ "Natural energy boost"
-            ❌ "Nice kitchen" → ✅ "Culinary creativity hub"
-            ❌ "Spacious bedroom" → ✅ "Resort-style retreat"
-            ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
-            ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
-            ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
+             ANALYSIS REQUIREMENTS:
+             1. DETAILED_ANALYSIS: Write a comprehensive 60-100 word description analyzing EVERYTHING you see in the image:
+                - Physical elements (furniture, fixtures, colors, layout, lighting, materials)
+                - Design style and aesthetic appeal
+                - Functionality and practical uses
+                - Atmosphere and mood created
+                - Unique features that stand out
+                - How the space flows and feels
+             
+             2. IMAGE_HIGHLIGHT: Extract ONE key lifestyle benefit from your detailed analysis into a 2-4 word phrase that captures the essence
+             
+             Return JSON with EXACT format:
+             {
+               "modern": [1-10],
+               "cozy": [1-10],
+               "luxurious": [1-10],
+               "minimalist": [1-10],
+               "colorful": [1-10],
+               "spacious": [1-10],
+               "natural_light": [1-10],
+               "urban": [1-10],
+               "rustic": [1-10],
+               "elegant": [1-10],
+               "image_highlight": "2-4 word lifestyle benefit phrase abstracted from your detailed analysis",
+               "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
+               "raw_analysis": "Brief one-sentence summary of what you see",
+               "image_index": ${index}
+             }
+             
+             CRITICAL: Focus on TRANSFORMATION over FEATURES:
+             ❌ "Large windows" → ✅ "Natural energy boost"
+             ❌ "Nice kitchen" → ✅ "Culinary creativity hub"
+             ❌ "Spacious bedroom" → ✅ "Resort-style retreat"
+             ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
+             ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
+             ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
             : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image that focuses on unique renter benefits.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
@@ -361,12 +372,10 @@ TITLE MASTERY (45-65 characters for maximum impact):
 - Create URGENCY without being pushy
 - Examples: "Sun-Soaked Chef's Paradise" not "Bright Apartment with Kitchen"
 
-DESCRIPTION MASTERY (180-280 words):
-- HOOK (20-30 words): The most jaw-dropping transformation promise
-- STORY (80-120 words): Paint their EXACT daily life using specific visual details from images
-- BENEFITS (40-60 words): Address their deepest lifestyle desires and pain points
-- PROOF (20-30 words): Prestigious location/building details that add social status
-- VISION (20-40 words): Their upgraded identity and life living here
+DESCRIPTION MASTERY (80-120 words, 3-5 sentences):
+- HOOK (20-25 words): The most jaw-dropping transformation promise
+- LIFESTYLE STORY (40-60 words): Paint their daily life using specific visual details from images
+- VALUE PROPOSITION (20-35 words): Key benefits that solve their problems or fulfill desires
 
 SENSORY LANGUAGE RULES:
 - Morning: "golden sunrise," "coffee ritual," "peaceful awakening"
@@ -404,12 +413,10 @@ Examples from images:
 - If spacious: "Expansive Haven with Entertaining Excellence"
 Must make them think: "This is exactly what I've been searching for!"
 
-DESCRIPTION FORMULA (200-300 words):
-1. HOOK (25-35 words): Start with their most desperate desire fulfilled
-2. DAILY LIFE STORY (100-150 words): Paint their exact morning/evening routine using specific visual details from the images
-3. LIFESTYLE UPGRADE (50-75 words): Connect features to life improvements (productivity, relationships, wellbeing, status)
-4. SOCIAL PROOF (25-35 words): Location prestige or building amenities that add status
-5. ASPIRATION CLOSE (25-35 words): The elevated version of themselves they'll become
+DESCRIPTION FORMULA (80-120 words, 3-5 sentences max):
+1. HOOK (20-25 words): Start with their biggest desire fulfilled
+2. LIFESTYLE STORY (40-60 words): Paint their daily experience using specific visual details from images
+3. VALUE CLOSE (20-35 words): Key transformation they'll experience living here
 
 EMOTIONAL TRIGGERS TO WEAVE IN:
 - Morning transformation: golden light rituals, peaceful awakening
@@ -422,7 +429,7 @@ CRITICAL: Use specific visual details from the analysis to create vivid mental m
 Return EXACT JSON format:
 {
   "title": "compelling title that creates instant desire (45-65 chars)",
-  "description": "narrative that makes them visualize their dream life with specific visual details (200-300 words)"
+  "description": "concise narrative that makes them visualize their dream life with specific visual details (80-120 words, 3-5 sentences max)"
 }`
             }
           ],
