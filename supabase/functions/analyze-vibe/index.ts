@@ -126,7 +126,7 @@ serve(async (req) => {
                 - Unique features that stand out
                 - How the space flows and feels
              
-             2. IMAGE_HIGHLIGHT: Create a 1-3 word concise phrase that captures the single most important feature or benefit from your detailed analysis
+             2. IMAGE_HIGHLIGHT: Create a descriptive sentence or phrase (at least 7 words) that captures the key lifestyle benefit or feature from your detailed analysis
              
              Return JSON with EXACT format:
              {
@@ -140,7 +140,7 @@ serve(async (req) => {
                "urban": [1-10],
                "rustic": [1-10],
                "elegant": [1-10],
-               "image_highlight": "1-3 word concise phrase from your detailed analysis focusing on the most important aspect",
+               "image_highlight": "descriptive sentence or phrase (at least 7 words) capturing key lifestyle benefit from detailed analysis",
                "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
                "raw_analysis": "Brief one-sentence summary of what you see",
                "image_index": ${index}
