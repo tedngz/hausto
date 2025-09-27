@@ -15,6 +15,7 @@ import { useProperties, Property } from '@/hooks/useProperties';
 import { useMatches, PropertyMatch } from '@/hooks/useMatches';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface RealtorDashboardProps {
   onSwitchUserType: () => void;
@@ -35,6 +36,7 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
   const { realtorMatches, isLoadingMatches } = useMatches();
   const { formatPrice } = useCurrency();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const unreadMatches = realtorMatches.filter(match => new Date(match.created_at).getTime() > Date.now() - 86400000);
 
@@ -108,33 +110,34 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
 
         {/* My Properties */}
         <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
-          <div className="p-6 border-b border-slate-200">
-            <div className="flex items-center justify-between">
+          <div className="p-4 md:p-6 border-b border-slate-200">
+            <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">My Properties</h2>
+                <h2 className="text-lg md:text-xl font-semibold text-slate-900">My Properties</h2>
                 <p className="text-slate-600 text-sm">Manage your listed properties</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Button 
                   onClick={() => setIsUploadModalOpen(true)}
                   className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                  size={isMobile ? "sm" : "default"}
                 >
                   <Upload className="w-4 h-4 mr-2" />
-                  Add Property
+                  {isMobile ? "Add" : "Add Property"}
                 </Button>
                 <Button 
                   onClick={() => setIsBulkUploadModalOpen(true)}
                   variant="outline"
                   className="border-green-200 text-green-700 hover:bg-green-50"
+                  size={isMobile ? "sm" : "default"}
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  Bulk Upload
+                  {isMobile ? "Bulk" : "Bulk Upload"}
                 </Button>
               </div>
             </div>
           </div>
-          
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             {isLoading ? (
               <div className="text-center py-8">
                 <p className="text-slate-600">Loading properties...</p>
@@ -142,11 +145,11 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
             ) : realtorProperties.length === 0 ? (
               <div className="text-center py-8">
                 <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-900 mb-2">No properties yet</h3>
-                <p className="text-slate-600">Upload your first property to start getting matches!</p>
+                <h3 className="text-base md:text-lg font-medium text-slate-900 mb-2">No properties yet</h3>
+                <p className="text-slate-600 text-sm">Upload your first property to start getting matches!</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {realtorProperties.map((property) => (
                   <Card key={property.id} className="overflow-hidden border border-slate-200 hover:shadow-lg transition-shadow">
                     {property.images && property.images.length > 0 && (
@@ -154,57 +157,55 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                         <img 
                           src={property.images[0]}
                           alt={property.title}
-                          className="w-full h-48 object-cover"
+                          className="w-full h-32 md:h-48 object-cover"
                         />
                         <div className="absolute top-2 right-2">
-                          <Badge className="bg-white/90 text-slate-800 font-semibold">
+                          <Badge className="bg-white/90 text-slate-800 font-semibold text-xs">
                             {formatPrice(property.price)}/mo
                           </Badge>
                         </div>
                       </div>
                     )}
-                    <div className="p-4">
-                      <h3 className="font-semibold text-slate-900 mb-2 line-clamp-2">{property.title}</h3>
-                      <div className="flex items-center text-sm text-slate-600 mb-2">
+                    <div className="p-3 md:p-4">
+                      <h3 className="font-semibold text-slate-900 mb-2 line-clamp-2 text-sm md:text-base">{property.title}</h3>
+                      <div className="flex items-center text-xs md:text-sm text-slate-600 mb-2">
                         <MapPin className="w-3 h-3 mr-1" />
-                        {property.location}
+                        <span className="line-clamp-1">{property.location}</span>
                       </div>
                       {property.vibe && (
-                        <Badge variant="secondary" className="bg-orange-100 text-orange-800 mb-3">
+                        <Badge variant="secondary" className="bg-orange-100 text-orange-800 mb-3 text-xs">
                           {property.vibe}
                         </Badge>
                       )}
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-2 sm:space-y-0">
-                        <div className="flex flex-wrap gap-1">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handlePreview(property)}
-                            className="text-xs px-2 py-1"
-                          >
-                            <Eye className="w-3 h-3 mr-1" />
-                            <span className="hidden sm:inline">Preview</span>
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleEdit(property)}
-                            className="text-xs px-2 py-1"
-                          >
-                            <Edit className="w-3 h-3 mr-1" />
-                            <span className="hidden sm:inline">Edit</span>
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleDelete(property)}
-                            disabled={isDeleting}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs px-2 py-1"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            <span className="hidden sm:inline">Delete</span>
-                          </Button>
-                        </div>
+                      <div className="flex flex-wrap gap-1">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handlePreview(property)}
+                          className="text-xs px-2 py-1 flex-1 min-w-0"
+                        >
+                          <Eye className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{isMobile ? "View" : "Preview"}</span>
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleEdit(property)}
+                          className="text-xs px-2 py-1 flex-1 min-w-0"
+                        >
+                          <Edit className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">Edit</span>
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleDelete(property)}
+                          disabled={isDeleting}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs px-2 py-1 flex-1 min-w-0"
+                        >
+                          <Trash2 className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{isMobile ? "Del" : "Delete"}</span>
+                        </Button>
                       </div>
                     </div>
                   </Card>
@@ -216,12 +217,12 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
 
         {/* Interested Renters */}
         <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
-          <div className="p-6 border-b border-slate-200">
-            <h2 className="text-xl font-semibold text-slate-900">Interested Renters</h2>
+          <div className="p-4 md:p-6 border-b border-slate-200">
+            <h2 className="text-lg md:text-xl font-semibold text-slate-900">Interested Renters</h2>
             <p className="text-slate-600 text-sm">Connect with potential tenants</p>
           </div>
           
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             {isLoadingMatches ? (
               <div className="text-center py-8">
                 <p className="text-slate-600">Loading matches...</p>
@@ -229,30 +230,30 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
             ) : realtorMatches.length === 0 ? (
               <div className="text-center py-8">
                 <User className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-900 mb-2">No interested renters yet</h3>
-                <p className="text-slate-600">Your properties will start getting interest once renters discover them!</p>
+                <h3 className="text-base md:text-lg font-medium text-slate-900 mb-2">No interested renters yet</h3>
+                <p className="text-slate-600 text-sm">Your properties will start getting interest once renters discover them!</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 md:space-y-4">
                 {realtorMatches.map((match) => (
-                  <div key={match.id} className="flex flex-col lg:flex-row lg:items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors space-y-3 lg:space-y-0">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center text-white font-semibold text-sm lg:text-base">
+                  <div key={match.id} className="flex flex-col space-y-3 p-3 md:p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors md:flex-row md:items-center md:justify-between md:space-y-0">
+                    <div className="flex items-start space-x-3 md:space-x-4">
+                      <div className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center text-white font-semibold text-xs md:text-sm lg:text-base flex-shrink-0">
                         R
                       </div>
-                       <div className="flex-1">
+                       <div className="flex-1 min-w-0">
                          <button 
-                           className="font-medium text-slate-900 text-sm lg:text-base hover:text-primary transition-colors text-left"
+                           className="font-medium text-slate-900 text-sm md:text-base hover:text-primary transition-colors text-left truncate w-full"
                            onClick={() => handleViewProfile(match)}
                          >
                            {match.renter_name || 'Anonymous Renter'}
                          </button>
-                         <p className="text-xs lg:text-sm text-slate-600">{match.properties?.title}</p>
-                        <div className="flex items-center text-xs lg:text-sm text-slate-600 mt-1">
-                          <MapPin className="w-3 h-3 mr-1" />
-                          {match.properties?.location}
+                         <p className="text-xs md:text-sm text-slate-600 truncate">{match.properties?.title}</p>
+                        <div className="flex items-center text-xs md:text-sm text-slate-600 mt-1">
+                          <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{match.properties?.location}</span>
                         </div>
-                        <div className="flex items-center space-x-2 mt-2">
+                        <div className="flex flex-wrap items-center gap-1 md:gap-2 mt-2">
                           <Badge variant="secondary" className="bg-slate-100 text-slate-700 text-xs">
                             {formatPrice(match.properties?.price || 0)}/mo
                           </Badge>
@@ -263,28 +264,30 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                       </div>
                     </div>
                     
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-                      <div className="text-left sm:text-right">
+                    <div className="flex flex-col space-y-2 md:flex-row md:items-center md:space-y-0 md:space-x-3">
+                      <div className="text-left md:text-right order-2 md:order-1">
                         <p className="text-xs text-slate-500">
                           {new Date(match.created_at).toLocaleDateString()}
                         </p>
-                        <p className="text-xs text-slate-500">
-                          {new Date(match.created_at).toLocaleTimeString()}
-                        </p>
+                        {!isMobile && (
+                          <p className="text-xs text-slate-500">
+                            {new Date(match.created_at).toLocaleTimeString()}
+                          </p>
+                        )}
                       </div>
-                      <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
+                      <div className="flex space-x-2 order-1 md:order-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-blue-200 text-blue-600 hover:bg-blue-50 text-xs px-2 py-1"
+                          className="border-blue-200 text-blue-600 hover:bg-blue-50 text-xs px-2 py-1 flex-1 md:flex-none"
                           onClick={() => handleViewProfile(match)}
                         >
                           <User className="w-3 h-3 mr-1" />
-                          View Profile
+                          {isMobile ? "View" : "View Profile"}
                         </Button>
                         <Button
                           size="sm"
-                          className="bg-gradient-to-r from-primary to-secondary hover:shadow-lg text-white text-xs px-2 py-1"
+                          className="bg-gradient-to-r from-primary to-secondary hover:shadow-lg text-white text-xs px-2 py-1 flex-1 md:flex-none"
                           onClick={() => handleChat(match)}
                         >
                           <MessageSquare className="w-3 h-3 mr-1" />
