@@ -25,6 +25,7 @@ interface ExcelProperty {
   vibe?: string;
   highlights?: string;
   image_urls?: string;
+  property_source_link?: string;
 }
 
 const sampleData = [
@@ -36,7 +37,8 @@ const sampleData = [
     description: "Spacious apartment in the heart of the city",
     vibe: "Urban Professional",
     highlights: "24/7 Security, Gym, Rooftop Terrace",
-    image_urls: "https://example.com/image1.jpg,https://example.com/image2.jpg"
+    image_urls: "https://example.com/image1.jpg,https://example.com/image2.jpg",
+    property_source_link: "https://example-realestate.com/listing/123"
   },
   {
     location: "456 Maple Avenue, Suburbs", 
@@ -46,7 +48,8 @@ const sampleData = [
     description: "Perfect for families, quiet neighborhood",
     vibe: "Family Friendly",
     highlights: "Garden, Parking, Near Schools",
-    image_urls: "https://example.com/image3.jpg"
+    image_urls: "https://example.com/image3.jpg",
+    property_source_link: "https://example-realestate.com/listing/456"
   }
 ];
 
@@ -111,7 +114,8 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
         description: item.description, 
         vibe: item.vibe,
         highlights: item.highlights ? item.highlights.split(',').map(h => h.trim()) : undefined,
-        images: item.image_urls ? item.image_urls.split(',').map(url => url.trim()) : []
+        images: item.image_urls ? item.image_urls.split(',').map(url => url.trim()) : [],
+        property_source_link: item.property_source_link
       }));
 
       const result = await bulkImportProperties(crawledProperties);
@@ -279,6 +283,7 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
               <li>• <strong>vibe</strong>: Property vibe/style (optional - AI will generate if empty)</li>
               <li>• <strong>highlights</strong>: Comma-separated features (optional - AI will generate if empty)</li>
               <li>• <strong>image_urls</strong>: Comma-separated image URLs (optional)</li>
+              <li>• <strong>property_source_link</strong>: External listing URL (optional)</li>
             </ul>
           </Card>
         </div>

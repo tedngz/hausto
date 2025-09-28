@@ -17,6 +17,7 @@ interface CrawledProperty {
   description?: string;
   vibe?: string;
   highlights?: string[];
+  property_source_link?: string;
 }
 
 interface ProcessResult {
@@ -212,7 +213,8 @@ serve(async (req) => {
           highlights: generatedHighlights,
           images: uploadedImages,
           vibe_analysis: aiContent || {},
-          realtor_id: property.realtor_id
+          realtor_id: property.realtor_id,
+          property_source_link: property.property_source_link || null
         };
 
         const { data: insertData, error: insertError } = await supabase
