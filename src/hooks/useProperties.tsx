@@ -16,7 +16,6 @@ export interface Property {
   highlights: string[] | null;
   images: string[] | null;
   vibe_analysis: any | null;
-  property_source_link: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -157,7 +156,6 @@ export const useProperties = () => {
       highlights: string[];
       imageFiles: File[];
       vibeAnalysis?: any;
-      propertySourceLink?: string;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -219,7 +217,6 @@ export const useProperties = () => {
           highlights: finalHighlights,
           images: imageUrls,
           vibe_analysis: vibeAnalysis,
-          property_source_link: propertyData.propertySourceLink,
         })
         .select()
         .single();

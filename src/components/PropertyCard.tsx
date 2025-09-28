@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, ExternalLink } from 'lucide-react';
+import { MapPin, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/types';
 import { VibeScore } from '@/components/VibeScore';
 import { VibeScoreBar } from '@/components/VibeScoreBar';
@@ -205,20 +205,6 @@ export const PropertyCard = ({
           </div>
         )}
 
-        {/* Property Source Link */}
-        {apartment.property_source_link && (
-          <div className="mb-3">
-            <a
-              href={apartment.property_source_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              View Original Listing
-            </a>
-          </div>
-        )}
-
         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
         <div className="flex items-center space-x-2">
             {apartment.realtor.avatar ? (
@@ -233,30 +219,16 @@ export const PropertyCard = ({
               </div>
             )}
             <div>
-              <div className="flex items-center gap-1">
-                {onViewProfile ? (
-                  <button 
-                    className="text-sm font-medium text-gray-900 hover:text-primary transition-colors"
-                    onClick={onViewProfile}
-                  >
-                    {apartment.realtor.name || 'Realtor'}
-                  </button>
-                ) : (
-                  <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
-                )}
-                {apartment.property_source_link && (
-                  <a
-                    href={apartment.property_source_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open external listing source"
-                    aria-label="Open external listing source"
-                    className="inline-flex"
-                  >
-                    <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                  </a>
-                )}
-              </div>
+              {onViewProfile ? (
+                <button 
+                  className="text-sm font-medium text-gray-900 hover:text-primary transition-colors"
+                  onClick={onViewProfile}
+                >
+                  {apartment.realtor.name || 'Realtor'}
+                </button>
+              ) : (
+                <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
+              )}
               <p className="text-xs text-gray-500">Licensed Realtor</p>
             </div>
           </div>

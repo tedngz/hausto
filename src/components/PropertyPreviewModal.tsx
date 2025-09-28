@@ -31,8 +31,7 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
       phone: '+1-234-567-8900',
       email: 'contact@realtor.com'
     },
-    vibe_analysis: property.vibe_analysis,
-    property_source_link: property.property_source_link
+    vibe_analysis: property.vibe_analysis
   };
 
   return (

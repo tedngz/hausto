@@ -398,7 +398,6 @@ export type Database = {
           images: string[] | null
           location: string
           price: number
-          property_source_link: string | null
           realtor_id: string
           size: string | null
           title: string
@@ -414,7 +413,6 @@ export type Database = {
           images?: string[] | null
           location: string
           price: number
-          property_source_link?: string | null
           realtor_id: string
           size?: string | null
           title: string
@@ -430,7 +428,6 @@ export type Database = {
           images?: string[] | null
           location?: string
           price?: number
-          property_source_link?: string | null
           realtor_id?: string
           size?: string | null
           title?: string

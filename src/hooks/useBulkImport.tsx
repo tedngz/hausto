@@ -13,7 +13,6 @@ interface CrawledProperty {
   description?: string;
   vibe?: string;
   highlights?: string[];
-  property_source_link?: string;
 }
 
 interface BulkImportResult {
