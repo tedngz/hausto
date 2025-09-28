@@ -167,10 +167,15 @@ serve(async (req) => {
             if (imageResponse.ok) {
               const imageBlob = await imageResponse.blob();
               
-              // Ensure we have a supported image format
-              let mimeType = imageBlob.type;
-              if (!mimeType || !['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(mimeType)) {
-                mimeType = 'image/jpeg'; // Default to JPEG for OpenAI compatibility
+              // Ensure we have a supported image format and normalize
+              let mimeType = imageBlob.type?.toLowerCase();
+              // Normalize common non-standard types to supported ones
+              if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+              if (mimeType === 'application/octet-stream' || !mimeType) mimeType = 'image/jpeg';
+              const allowed = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+              if (!allowed.has(mimeType)) {
+                // Force to jpeg for OpenAI compatibility
+                mimeType = 'image/jpeg';
               }
               
               // Convert to base64 with proper chunking for large images
@@ -244,9 +249,9 @@ serve(async (req) => {
             rustic: 5,
             elegant: 5,
             description: 'Unable to analyze image',
-            detailed_analysis: generateContent ? 'Analysis failed due to API error' : 'Analysis failed',
+            detailed_analysis: generateContent ? `Analysis failed due to API error: ${errorText}` : 'Analysis failed',
             image_index: index,
-            raw_analysis: 'API Error'
+            raw_analysis: errorText || 'API Error'
           });
           continue;
         }

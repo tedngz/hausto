@@ -245,9 +245,16 @@ export const PropertyCard = ({
                   <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
                 )}
                 {apartment.property_source_link && (
-                  <span title="External listing source">
+                  <a
+                    href={apartment.property_source_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open external listing source"
+                    aria-label="Open external listing source"
+                    className="inline-flex"
+                  >
                     <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                  </span>
+                  </a>
                 )}
               </div>
               <p className="text-xs text-gray-500">Licensed Realtor</p>
