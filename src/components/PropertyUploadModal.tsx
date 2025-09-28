@@ -633,16 +633,11 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                 </div>
                 <p className="text-sm text-gray-600 mb-3">AI has generated highlights for each image</p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {imageHighlights.slice(0, 6).map((highlight, index) => (
+                  {imageHighlights.map((highlight, index) => (
                     <Badge key={index} variant="outline" className="text-xs">
                       {highlight.text}
                     </Badge>
                   ))}
-                  {imageHighlights.length > 6 && (
-                    <Badge variant="outline" className="text-xs text-gray-500">
-                      +{imageHighlights.length - 6} more
-                    </Badge>
-                  )}
                 </div>
               </div>
 
