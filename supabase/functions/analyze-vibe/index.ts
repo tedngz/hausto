@@ -166,11 +166,27 @@ serve(async (req) => {
             const imageResponse = await fetch(imageUrl);
             if (imageResponse.ok) {
               const imageBlob = await imageResponse.blob();
+              
+              // Ensure we have a supported image format
+              let mimeType = imageBlob.type;
+              if (!mimeType || !['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(mimeType)) {
+                mimeType = 'image/jpeg'; // Default to JPEG for OpenAI compatibility
+              }
+              
+              // Convert to base64 with proper chunking for large images
               const buffer = await imageBlob.arrayBuffer();
-              const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-              const mimeType = imageBlob.type || 'image/jpeg';
+              const bytes = new Uint8Array(buffer);
+              let binary = '';
+              const chunkSize = 8192;
+              
+              for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, Array.from(chunk));
+              }
+              
+              const base64 = btoa(binary);
               processedImageUrl = `data:${mimeType};base64,${base64}`;
-              console.log(`Converted image ${index + 1} to base64 format`);
+              console.log(`Converted image ${index + 1} to base64 format (${mimeType}, ${Math.round(base64.length/1024)}KB)`);
             }
           } catch (conversionError) {
             console.error(`Failed to convert image ${index + 1} to base64:`, conversionError);
