@@ -5,13 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, Sparkles, MapPin, Loader2, Eye } from 'lucide-react';
+import { X, Upload, Sparkles, MapPin, Loader2, Eye, Wand2 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
+import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
 
 interface PropertyUploadModalProps {
   isOpen: boolean;
@@ -22,16 +23,21 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [location, setLocation] = useState('');
+  const [sourceLink, setSourceLink] = useState('');
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegeneratingTitle, setIsRegeneratingTitle] = useState(false);
+  const [isRegeneratingDescription, setIsRegeneratingDescription] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showHighlightEditor, setShowHighlightEditor] = useState(false);
   const [imageHighlights, setImageHighlights] = useState<{text: string, imageIndexes: number[]}[]>([]);
   const [vibeAnalysis, setVibeAnalysis] = useState<any>(null);
+  const [locationSuggestionsVisible, setLocationSuggestionsVisible] = useState(false);
 
   const { createProperty, isCreating } = useProperties();
   const { toast } = useToast();
@@ -49,14 +55,24 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   ];
 
   const locationSuggestions = [
-    'District 1, Ho Chi Minh City',
-    'District 2, Ho Chi Minh City', 
-    'District 3, Ho Chi Minh City',
-    'District 7, Ho Chi Minh City',
-    'Ba Dinh, Hanoi',
-    'Hoan Kiem, Hanoi',
-    'Cau Giay, Hanoi',
-    'Dong Da, Hanoi'
+    '45 Nguyen Hue Street, District 1, Ho Chi Minh City',
+    '123 Le Lai Street, District 1, Ho Chi Minh City',
+    '78 Dong Khoi Street, District 1, Ho Chi Minh City',
+    '234 Saigon Pearl, District 2, Ho Chi Minh City',
+    '567 Masteri Thao Dien, District 2, Ho Chi Minh City',
+    '89 The Vista, District 2, Ho Chi Minh City',
+    '12 Vo Van Tang Street, District 3, Ho Chi Minh City',
+    '345 Nam Ky Khoi Nghia Street, District 3, Ho Chi Minh City',
+    '678 Phu My Hung, District 7, Ho Chi Minh City',
+    '901 Midtown Sakura Park, District 7, Ho Chi Minh City',
+    '23 Tran Phu Street, Ba Dinh, Hanoi',
+    '456 Kim Ma Street, Ba Dinh, Hanoi',
+    '789 Hang Bai Street, Hoan Kiem, Hanoi',
+    '147 Trang Tien Street, Hoan Kiem, Hanoi',
+    '258 Duy Tan Street, Cau Giay, Hanoi',
+    '369 Nguyen Hoang Ton Street, Cau Giay, Hanoi',
+    '741 Lang Ha Street, Dong Da, Hanoi',
+    '852 Xa Dan Street, Dong Da, Hanoi'
   ];
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -294,11 +310,13 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
       imageFiles,
       vibeAnalysis,
+      propertySourceLink: sourceLink,
     });
 
     // Reset form
     setTitle('');
     setLocation('');
+    setSourceLink('');
     setPrice('');
     setSize('');
     setDescription('');
@@ -308,12 +326,87 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     setImageHighlights([]);
     setVibeAnalysis(null);
     setHasGenerated(false);
+    setShowHighlightEditor(false);
     onClose();
+  };
+
+  const regenerateTitle = async () => {
+    if (!vibeAnalysis || imageFiles.length === 0) return;
+    
+    setIsRegeneratingTitle(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: imagePreviews,
+          generateContent: true,
+          propertyInfo: { location, price: parseInt(price), size, currency },
+          regenerateType: 'title'
+        }
+      });
+
+      if (error) throw error;
+      if (data?.analysis?.generated_content?.title) {
+        setTitle(data.analysis.generated_content.title);
+        toast({
+          title: "Title Regenerated",
+          description: "AI has generated a new title for your property."
+        });
+      }
+    } catch (error) {
+      console.error('Error regenerating title:', error);
+      toast({
+        title: "Regeneration Failed",
+        description: "Could not regenerate title. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRegeneratingTitle(false);
+    }
+  };
+
+  const regenerateDescription = async () => {
+    if (!vibeAnalysis || imageFiles.length === 0) return;
+    
+    setIsRegeneratingDescription(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: imagePreviews,
+          generateContent: true,
+          propertyInfo: { location, price: parseInt(price), size, currency },
+          regenerateType: 'description'
+        }
+      });
+
+      if (error) throw error;
+      if (data?.analysis?.generated_content?.description) {
+        setDescription(data.analysis.generated_content.description);
+        toast({
+          title: "Description Regenerated", 
+          description: "AI has generated a new description for your property."
+        });
+      }
+    } catch (error) {
+      console.error('Error regenerating description:', error);
+      toast({
+        title: "Regeneration Failed",
+        description: "Could not regenerate description. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRegeneratingDescription(false);
+    }
   };
 
   const removeImage = (index: number) => {
     setImageFiles(prev => prev.filter((_, i) => i !== index));
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleHighlightsUpdate = (highlights: string[], updatedVibeAnalysis: any) => {
+    setImageHighlights(highlights.map((h, i) => ({ text: h, imageIndexes: [i] })));
+    setVibeAnalysis(updatedVibeAnalysis);
+    setShowHighlightEditor(false);
   };
 
   if (!isOpen) return null;
@@ -377,16 +470,37 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                 <Input 
                   id="location"
                   value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Select or type location"
+                  onChange={(e) => {
+                    setLocation(e.target.value);
+                    setLocationSuggestionsVisible(e.target.value.length > 0);
+                  }}
+                  onFocus={() => setLocationSuggestionsVisible(true)}
+                  onBlur={() => setTimeout(() => setLocationSuggestionsVisible(false), 200)}
+                  placeholder="Start typing address..."
                   className="pl-10"
-                  list="location-suggestions"
                 />
-                <datalist id="location-suggestions">
-                  {locationSuggestions.map((suggestion, index) => (
-                    <option key={index} value={suggestion} />
-                  ))}
-                </datalist>
+                {locationSuggestionsVisible && location && (
+                  <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
+                    {locationSuggestions
+                      .filter(suggestion => 
+                        suggestion.toLowerCase().includes(location.toLowerCase())
+                      )
+                      .slice(0, 8)
+                      .map((suggestion, index) => (
+                        <div
+                          key={index}
+                          className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-sm"
+                          onClick={() => {
+                            setLocation(suggestion);
+                            setLocationSuggestionsVisible(false);
+                          }}
+                        >
+                          {suggestion}
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
               </div>
             </div>
             <div>
@@ -399,6 +513,17 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                 placeholder="e.g., 75"
               />
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="sourceLink">Property Source Link (Optional)</Label>
+            <Input 
+              id="sourceLink"
+              type="url"
+              value={sourceLink}
+              onChange={(e) => setSourceLink(e.target.value)}
+              placeholder="https://example.com/property-listing (optional)"
+            />
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
@@ -441,7 +566,23 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
           {hasGenerated && (
             <>
               <div>
-                <Label htmlFor="title" className="text-base font-semibold">Generated Title *</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label htmlFor="title" className="text-base font-semibold">Generated Title *</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={regenerateTitle}
+                    disabled={isRegeneratingTitle}
+                    className="text-purple-600 hover:text-purple-700"
+                  >
+                    {isRegeneratingTitle ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <Wand2 className="w-3 h-3 mr-1" />
+                    )}
+                    Regenerate
+                  </Button>
+                </div>
                 <Input 
                   id="title"
                   value={title}
@@ -479,102 +620,53 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               </div>
 
               <div>
-                <Label className="text-base font-semibold">AI Generated Highlights</Label>
-                <p className="text-sm text-gray-600 mb-3">Edit these highlights to match your images accurately</p>
-                <div className="space-y-4">
-                  {imageHighlights.map((highlight, index) => (
-                    <div key={index} className="border rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-center space-x-2 mb-3">
-                        <Input
-                          value={highlight.text}
-                          onChange={(e) => {
-                            const newHighlights = [...imageHighlights];
-                            newHighlights[index] = { ...newHighlights[index], text: e.target.value };
-                            setImageHighlights(newHighlights);
-                          }}
-                          placeholder={`Highlight ${index + 1}`}
-                          className="flex-1"
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setImageHighlights(prev => prev.filter((_, i) => i !== index));
-                          }}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      
-                      <div className="mb-2">
-                        <Label className="text-sm font-medium text-gray-700">Associated Images:</Label>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-2">
-                        {imagePreviews.map((img, imgIndex) => (
-                          <div
-                            key={imgIndex}
-                            className={`relative cursor-pointer border-2 rounded transition-all ${
-                              highlight.imageIndexes.includes(imgIndex)
-                                ? 'border-blue-500 ring-2 ring-blue-200'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                            onClick={() => {
-                              const newHighlights = [...imageHighlights];
-                              const isSelected = highlight.imageIndexes.includes(imgIndex);
-                              if (isSelected) {
-                                newHighlights[index] = {
-                                  ...newHighlights[index],
-                                  imageIndexes: newHighlights[index].imageIndexes.filter(i => i !== imgIndex)
-                                };
-                              } else {
-                                newHighlights[index] = {
-                                  ...newHighlights[index],
-                                  imageIndexes: [...newHighlights[index].imageIndexes, imgIndex]
-                                };
-                              }
-                              setImageHighlights(newHighlights);
-                            }}
-                          >
-                            <img 
-                              src={img} 
-                              alt={`Property ${imgIndex + 1}`} 
-                              className="w-full h-16 object-cover rounded" 
-                            />
-                            {highlight.imageIndexes.includes(imgIndex) && (
-                              <div className="absolute top-1 right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                                <span className="text-white text-xs">✓</span>
-                              </div>
-                            )}
-                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center py-1 rounded-b">
-                              {imgIndex + 1}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="text-base font-semibold">Image Highlights</Label>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setImageHighlights(prev => [...prev, { text: 'New highlight', imageIndexes: [0] }])}
-                    className="text-blue-500 hover:text-blue-700"
+                    onClick={() => setShowHighlightEditor(true)}
+                    className="text-blue-600 hover:text-blue-700"
                   >
-                    + Add Highlight
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    Edit Highlights
                   </Button>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">AI has generated highlights for each image</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {imageHighlights.map((highlight, index) => (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {highlight.text}
+                    </Badge>
+                  ))}
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="description" className="text-base font-semibold">Generated Description *</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label htmlFor="description" className="text-base font-semibold">Generated Description *</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={regenerateDescription}
+                    disabled={isRegeneratingDescription}
+                    className="text-purple-600 hover:text-purple-700"
+                  >
+                    {isRegeneratingDescription ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <Wand2 className="w-3 h-3 mr-1" />
+                    )}
+                    Regenerate
+                  </Button>
+                </div>
                 <Textarea
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="AI will generate this"
                   rows={8}
-                  className="resize-none mt-2"
+                  className="resize-none"
                 />
               </div>
             </>
@@ -628,9 +720,33 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             images: imagePreviews,
             realtor_id: 'preview',
             vibe_analysis: vibeAnalysis,
+            property_source_link: sourceLink,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }}
+        />
+
+        {/* Property Highlight Editor Modal */}
+        <PropertyHighlightEditor
+          isOpen={showHighlightEditor}
+          onClose={() => setShowHighlightEditor(false)}
+          property={{
+            id: 'preview',
+            title,
+            description,
+            location,
+            price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
+            size: `${size}m²`,
+            vibe: selectedVibes[0] || '',
+            highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+            images: imagePreviews,
+            realtor_id: 'preview',
+            vibe_analysis: vibeAnalysis,
+            property_source_link: sourceLink,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }}
+          onHighlightsUpdate={handleHighlightsUpdate}
         />
       </Card>
     </div>

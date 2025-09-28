@@ -27,6 +27,7 @@ export type Apartment = {
   };
   matchId?: string;
   vibe_analysis?: any;
+  property_source_link?: string;
 };
 
 export type Match = {
