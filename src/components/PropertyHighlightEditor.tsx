@@ -129,8 +129,8 @@ export const PropertyHighlightEditor = ({
         }
       });
       if (error) throw error;
-      if (data?.vibe_analysis?.image_analyses?.[0]?.image_highlight) {
-        const newHighlight = data.vibe_analysis.image_analyses[0].image_highlight;
+      if (data?.analysis?.image_analyses?.[0]?.image_highlight) {
+        const newHighlight = data.analysis.image_analyses[0].image_highlight;
         const updated = imageHighlights.map((h, i) => i === imageIndex ? {
           ...h,
           highlight: newHighlight
