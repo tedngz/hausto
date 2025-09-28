@@ -205,6 +205,20 @@ export const PropertyCard = ({
           </div>
         )}
 
+        {/* Property Source Link */}
+        {apartment.property_source_link && (
+          <div className="mb-3">
+            <a
+              href={apartment.property_source_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              View Original Listing
+            </a>
+          </div>
+        )}
+
         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
         <div className="flex items-center space-x-2">
             {apartment.realtor.avatar ? (

@@ -310,6 +310,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
       imageFiles,
       vibeAnalysis,
+      propertySourceLink: sourceLink,
     });
 
     // Reset form
@@ -719,6 +720,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             images: imagePreviews,
             realtor_id: 'preview',
             vibe_analysis: vibeAnalysis,
+            property_source_link: sourceLink,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }}
@@ -740,6 +742,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             images: imagePreviews,
             realtor_id: 'preview',
             vibe_analysis: vibeAnalysis,
+            property_source_link: sourceLink,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }}

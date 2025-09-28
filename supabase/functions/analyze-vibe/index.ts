@@ -157,6 +157,27 @@ serve(async (req) => {
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
+        // Convert image to base64 if it's a Supabase storage URL to ensure compatibility
+        let processedImageUrl = imageUrl;
+        
+        // Check if it's a Supabase storage URL and convert to base64
+        if (imageUrl.includes('supabase') || imageUrl.includes('gbgrwjdmytaksrztcyzs')) {
+          try {
+            const imageResponse = await fetch(imageUrl);
+            if (imageResponse.ok) {
+              const imageBlob = await imageResponse.blob();
+              const buffer = await imageBlob.arrayBuffer();
+              const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+              const mimeType = imageBlob.type || 'image/jpeg';
+              processedImageUrl = `data:${mimeType};base64,${base64}`;
+              console.log(`Converted image ${index + 1} to base64 format`);
+            }
+          } catch (conversionError) {
+            console.error(`Failed to convert image ${index + 1} to base64:`, conversionError);
+            // Continue with original URL as fallback
+          }
+        }
+
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -175,7 +196,10 @@ serve(async (req) => {
                   },
                   {
                     type: 'image_url',
-                    image_url: { url: imageUrl }
+                    image_url: { 
+                      url: processedImageUrl,
+                      detail: "auto"
+                    }
                   }
                 ]
               }
