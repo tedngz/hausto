@@ -333,73 +333,60 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
-          {/* AI-Generated Highlights with Images */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <Label className="text-base font-semibold">Property Highlights</Label>
-                <p className="text-sm text-gray-600">AI-generated and custom highlights</p>
+          {/* Image Highlights */}
+          {property.images && property.images.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <Label className="text-base font-semibold">Image Highlights</Label>
+                  <p className="text-sm text-gray-600">AI-generated highlights for each image</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsHighlightEditorOpen(true)}
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                >
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Edit Image Highlights
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsHighlightEditorOpen(true)}
-                className="text-blue-600 border-blue-200 hover:bg-blue-50"
-              >
-                <Wand2 className="w-4 h-4 mr-2" />
-                Edit Highlights
-              </Button>
-            </div>
-            
-            {/* Display image highlights */}
-            {property.images && property.images.length > 0 && currentVibeAnalysis?.image_analyses ? (
-              <div className="space-y-3">
-                {property.images.map((image, index) => {
-                  const analysisForImage = currentVibeAnalysis.image_analyses.find((a: any) => a.image_index === index);
-                  const highlight = analysisForImage?.image_highlight;
-                  
-                  if (!highlight) return null;
-                  
-                  return (
-                    <div key={index} className="flex items-center gap-3 p-3 bg-gradient-to-r from-orange-50 to-pink-50 rounded-lg border border-orange-100">
-                      <img
-                        src={image}
-                        alt={`Property feature ${index + 1}`}
-                        className="w-16 h-12 object-cover rounded-md flex-shrink-0"
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          {highlight}
-                        </p>
+              
+              {/* Display image highlights */}
+              {currentVibeAnalysis?.image_analyses && currentVibeAnalysis.image_analyses.length > 0 ? (
+                <div className="space-y-3">
+                  {property.images.map((image, index) => {
+                    const analysisForImage = currentVibeAnalysis.image_analyses.find((a: any) => a.image_index === index);
+                    const highlight = analysisForImage?.image_highlight;
+                    
+                    return (
+                      <div key={index} className="flex items-center gap-3 p-3 bg-gradient-to-r from-orange-50 to-pink-50 rounded-lg border border-orange-100">
+                        <img
+                          src={image}
+                          alt={`Property feature ${index + 1}`}
+                          className="w-16 h-12 object-cover rounded-md flex-shrink-0"
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">
+                            {highlight || "No highlight generated for this image"}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : currentHighlights.length > 0 ? (
-              <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg">
-                {currentHighlights.slice(0, 6).map((highlight, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs">
-                    {highlight.length > 25 ? highlight.substring(0, 25) + '...' : highlight}
-                  </Badge>
-                ))}
-                {currentHighlights.length > 6 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{currentHighlights.length - 6} more
-                  </Badge>
-                )}
-              </div>
-            ) : (
-              <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center">
-                <p className="text-gray-500">No highlights yet. Click "Edit Highlights" to add or generate them.</p>
-              </div>
-            )}
-          </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center">
+                  <p className="text-gray-500">No image highlights yet. Click "Edit Image Highlights" to generate them.</p>
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Property Vibes with AI-detected vibes */}
+          {/* Property Vibes */}
           <div>
-            <Label className="text-base font-semibold">Property Vibes</Label>
-            <p className="text-sm text-gray-600 mb-3">Select vibes that best describe your property</p>
+            <Label className="text-base font-semibold">Property Vibes & Tags</Label>
+            <p className="text-sm text-gray-600 mb-3">Select vibes and tags that best describe your property</p>
             
             {/* Show AI-detected vibes first if available */}
             {currentVibeAnalysis && (
