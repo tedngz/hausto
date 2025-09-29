@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
+import { processImageFiles } from '@/utils/imageConverter';
 
 interface PropertyUploadModalProps {
   isOpen: boolean;
@@ -93,27 +94,38 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         });
       }
       
-      setImageFiles(prev => [...prev, ...filesToAdd]);
-      
-      // Process previews sequentially to avoid memory issues
-      for (const file of filesToAdd) {
-        try {
-          const reader = new FileReader();
-          const result = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-          
-          setImagePreviews(prev => [...prev, result]);
-        } catch (error) {
-          console.error('Error reading file:', error);
-          toast({
-            title: "File Error",
-            description: "Failed to process one or more images.",
-            variant: "destructive"
-          });
+      try {
+        // Convert AVIF files to PNG for OpenAI compatibility
+        const processedFiles = await processImageFiles(filesToAdd);
+        setImageFiles(prev => [...prev, ...processedFiles]);
+        
+        // Process previews sequentially to avoid memory issues
+        for (const file of processedFiles) {
+          try {
+            const reader = new FileReader();
+            const result = await new Promise<string>((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+            
+            setImagePreviews(prev => [...prev, result]);
+          } catch (error) {
+            console.error('Error reading file:', error);
+            toast({
+              title: "File Error",
+              description: "Failed to process one or more images.",
+              variant: "destructive"
+            });
+          }
         }
+      } catch (error) {
+        console.error('Error processing image files:', error);
+        toast({
+          title: "Image Processing Error",
+          description: "Failed to process AVIF images. Please try again.",
+          variant: "destructive"
+        });
       }
     }
   };

@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
+import { processImageFiles } from '@/utils/imageConverter';
 
 interface PropertyEditModalProps {
   isOpen: boolean;
@@ -69,21 +70,33 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     }
   }, [property, convertPrice]);
 
-  const handleNewImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNewImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
       const newFiles = Array.from(files);
-      setNewImageFiles(prev => [...prev, ...newFiles]);
       
-      newFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (e.target?.result) {
-            setNewImagePreviews(prev => [...prev, e.target!.result as string]);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+      try {
+        // Convert AVIF files to PNG for OpenAI compatibility
+        const processedFiles = await processImageFiles(newFiles);
+        setNewImageFiles(prev => [...prev, ...processedFiles]);
+        
+        processedFiles.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            if (e.target?.result) {
+              setNewImagePreviews(prev => [...prev, e.target!.result as string]);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      } catch (error) {
+        console.error('Error processing image files:', error);
+        toast({
+          title: "Image Processing Error",
+          description: "Failed to process AVIF images. Please try again.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
