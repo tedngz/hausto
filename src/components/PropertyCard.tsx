@@ -184,9 +184,9 @@ export const PropertyCard = ({
           <div className="flex items-center gap-2">
             {apartment.property_source_link && (() => {
             const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
-            return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center gap-1 px-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors py-[9px]">
-                  <img src={sourceInfo.logo} alt={sourceInfo.name} className="w-4 h-4 object-contain" />
-                  <span className="text-xs text-gray-600">{sourceInfo.name}</span>
+            return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center bg-gray-50 rounded-md hover:bg-gray-100 transition-colors py-0 px-[15px]">
+                  <img src={sourceInfo.logo} alt={sourceInfo.name} className="w-9 h-9 object-contain" />
+                  
                 </a>;
           })()}
             {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
