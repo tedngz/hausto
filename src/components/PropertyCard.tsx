@@ -177,20 +177,18 @@ export const PropertyCard = ({
                     {apartment.realtor.name || 'Realtor'}
                   </button> : <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>}
               </div>
-              <p className="text-xs text-gray-500">Licensed Realtor</p>
+              
             </div>
           </div>
           
           <div className="flex items-center gap-2">
             {apartment.property_source_link && (() => {
-              const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
-              return (
-                <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
+            const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
+            return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
                   <img src={sourceInfo.logo} alt={sourceInfo.name} className="w-4 h-4 object-contain" />
                   <span className="text-xs text-gray-600">{sourceInfo.name}</span>
-                </a>
-              );
-            })()}
+                </a>;
+          })()}
             {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
                 Contact
               </Button>}
