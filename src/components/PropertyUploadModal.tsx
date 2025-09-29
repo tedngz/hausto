@@ -621,7 +621,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
 
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <Label className="text-base font-semibold">Image Highlights</Label>
+                  <Label className="text-base font-semibold">Review Images & Highlights</Label>
                   <Button
                     variant="outline"
                     size="sm"
@@ -632,13 +632,43 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                     Edit Highlights
                   </Button>
                 </div>
-                <p className="text-sm text-gray-600 mb-3">AI has generated highlights for each image</p>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {imageHighlights.map((highlight, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {highlight.text}
-                    </Badge>
-                  ))}
+                <p className="text-sm text-gray-600 mb-3">Review your images and AI-generated highlights before publishing</p>
+                
+                {/* Image Review Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {imagePreviews.map((preview, index) => {
+                    const imageHighlight = imageHighlights.find(h => h.imageIndexes.includes(index));
+                    return (
+                      <div key={index} className="relative border rounded-lg overflow-hidden">
+                        <img 
+                          src={preview} 
+                          alt={`Property ${index + 1}`}
+                          className="w-full h-48 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                        <div className="absolute bottom-2 left-2 right-2">
+                          <p className="text-white text-sm font-medium mb-1">Image {index + 1}</p>
+                          {imageHighlight && (
+                            <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
+                              {imageHighlight.text}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* All Highlights Summary */}
+                <div className="border rounded-lg p-3 bg-gray-50">
+                  <p className="text-sm font-medium text-gray-700 mb-2">All Generated Highlights:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {imageHighlights.map((highlight, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {highlight.text}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               </div>
 
