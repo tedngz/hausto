@@ -11,6 +11,7 @@ import { PropertyImageModal } from '@/components/PropertyImageModal';
 import { calculateVibeScore } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 interface PropertyCardProps {
   apartment: Apartment;
   userPreferences?: UserPreferences;
@@ -164,10 +165,6 @@ export const PropertyCard = ({
               </div>}
           </div>}
 
-        {/* Property Source Link */}
-        {apartment.property_source_link && <div className="mb-3">
-            
-          </div>}
 
         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
         <div className="flex items-center space-x-2">
@@ -179,15 +176,21 @@ export const PropertyCard = ({
                 {onViewProfile ? <button className="text-sm font-medium text-gray-900 hover:text-primary transition-colors" onClick={onViewProfile}>
                     {apartment.realtor.name || 'Realtor'}
                   </button> : <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>}
-                {apartment.property_source_link && <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title="Open external listing source" aria-label="Open external listing source" className="inline-flex">
-                    <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                  </a>}
               </div>
               <p className="text-xs text-gray-500">Licensed Realtor</p>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
+            {apartment.property_source_link && (() => {
+              const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
+              return (
+                <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
+                  <img src={sourceInfo.logo} alt={sourceInfo.name} className="w-4 h-4 object-contain" />
+                  <span className="text-xs text-gray-600">{sourceInfo.name}</span>
+                </a>
+              );
+            })()}
             {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
                 Contact
               </Button>}
