@@ -192,9 +192,7 @@ export const PropertyCard = ({
             {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
                 Contact
               </Button>}
-            {showViewProfileButton && onViewProfile && <Button size="sm" variant="outline" onClick={onViewProfile}>
-                View Profile
-              </Button>}
+            {showViewProfileButton && onViewProfile}
           </div>
         </div>
       </div>
