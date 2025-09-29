@@ -116,13 +116,17 @@ export const ImageHighlightEditor = ({
           </div>
         ) : (
           <div className="space-y-1">
-            <p className="text-xs text-gray-700 min-h-[2rem] p-1 bg-gray-50 rounded border">
-              {highlight?.text || (
+            <div className="text-xs min-h-[2rem] p-1 bg-gray-50 rounded border">
+              {highlight?.text ? (
+                <Badge variant="secondary" className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border-blue-200">
+                  {highlight.text}
+                </Badge>
+              ) : (
                 <span className="text-gray-400 italic">
                   Click "Generate Content" to create AI-powered highlights for this image
                 </span>
               )}
-            </p>
+            </div>
             <div className="flex gap-1">
               <Button
                 size="sm"
