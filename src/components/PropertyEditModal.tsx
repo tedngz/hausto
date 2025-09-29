@@ -5,12 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, MapPin, Wand2 } from 'lucide-react';
+import { X, Upload, MapPin, Wand2, RefreshCw } from 'lucide-react';
 import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PropertyEditModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [isHighlightEditorOpen, setIsHighlightEditorOpen] = useState(false);
   const [currentHighlights, setCurrentHighlights] = useState<string[]>([]);
   const [currentVibeAnalysis, setCurrentVibeAnalysis] = useState<any>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
@@ -92,6 +94,66 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const removeNewImage = (index: number) => {
     setNewImageFiles(prev => prev.filter((_, i) => i !== index));
     setNewImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const regenerateContent = async () => {
+    if (!property?.images || property.images.length === 0) {
+      toast({
+        title: "No Images",
+        description: "Please add images to regenerate content.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsRegenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: property.images,
+          generateContent: true,
+          propertyInfo: {
+            location: location,
+            size: size ? `${size}m²` : undefined,
+            price: price
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        // Update title and description if generated
+        if (data.generated_content?.title) {
+          setTitle(data.generated_content.title);
+        }
+        if (data.generated_content?.description) {
+          setDescription(data.generated_content.description);
+        }
+
+        // Update highlights if generated
+        if (data.generated_content?.highlights) {
+          setCurrentHighlights(data.generated_content.highlights);
+        }
+
+        // Update vibe analysis
+        setCurrentVibeAnalysis(data);
+
+        toast({
+          title: "Content Regenerated",
+          description: "Property title, description, and highlights have been updated with AI-generated content.",
+        });
+      }
+    } catch (error) {
+      console.error('Error regenerating content:', error);
+      toast({
+        title: "Error",
+        description: "Failed to regenerate content. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   const handleSubmit = () => {
@@ -203,7 +265,19 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
 
           {/* Basic Info */}
           <div>
-            <Label htmlFor="title">Property Title *</Label>
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="title">Property Title *</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerateContent}
+                disabled={isRegenerating || !property?.images?.length}
+                className="text-purple-600 border-purple-200 hover:bg-purple-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRegenerating ? 'animate-spin' : ''}`} />
+                {isRegenerating ? 'Regenerating...' : 'Regenerate Content'}
+              </Button>
+            </div>
             <Input 
               id="title"
               value={title}
@@ -387,7 +461,10 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
 
           {/* Description */}
           <div>
-            <Label htmlFor="description" className="text-base font-semibold">Property Description</Label>
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="description" className="text-base font-semibold">Property Description</Label>
+              <p className="text-sm text-gray-500">Use the "Regenerate Content" button above to update</p>
+            </div>
             <Textarea
               id="description"
               value={description}
