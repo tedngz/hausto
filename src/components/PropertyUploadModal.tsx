@@ -734,7 +734,13 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
             images: imagePreviews,
             realtor_id: 'preview',
-            vibe_analysis: vibeAnalysis,
+            vibe_analysis: {
+              ...vibeAnalysis,
+              generated_content: {
+                ...vibeAnalysis?.generated_content,
+                highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes
+              }
+            },
             property_source_link: sourceLink,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -756,7 +762,13 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
             images: imagePreviews,
             realtor_id: 'preview',
-            vibe_analysis: vibeAnalysis,
+            vibe_analysis: {
+              ...vibeAnalysis,
+              generated_content: {
+                ...vibeAnalysis?.generated_content,
+                highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes
+              }
+            },
             property_source_link: sourceLink,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
