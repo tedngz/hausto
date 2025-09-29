@@ -86,10 +86,10 @@ export const MatchesView = ({
       <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
         {apartments.map(apartment => {
         return <div key={apartment.id} className="relative mb-6 break-inside-avoid">
-                <PropertyCard apartment={apartment} userPreferences={userPreferences} onViewProfile={() => setSelectedRealtorId(apartment.realtor.id)} onContact={() => {
+                <PropertyCard apartment={apartment} userPreferences={userPreferences} onContact={() => {
             setSelectedMatchId(apartment.matchId!);
             setIsChatOpen(true);
-          }} showContactButton={true} showViewProfileButton={true} showFullTitle={true} showFullDescription={false} showAllHighlights={true} className="sm:h-auto" />
+          }} showContactButton={true} showViewProfileButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={true} className="sm:h-auto" />
               {apartment.matchId && <div className="absolute top-4 right-4">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
