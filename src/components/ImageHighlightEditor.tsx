@@ -117,7 +117,11 @@ export const ImageHighlightEditor = ({
         ) : (
           <div className="space-y-1">
             <p className="text-xs text-gray-700 min-h-[2rem] p-1 bg-gray-50 rounded border">
-              {highlight?.text || 'No highlight'}
+              {highlight?.text || (
+                <span className="text-gray-400 italic">
+                  Click "Generate Content" to create AI-powered highlights for this image
+                </span>
+              )}
             </p>
             <div className="flex gap-1">
               <Button
