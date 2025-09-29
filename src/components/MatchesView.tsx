@@ -50,6 +50,7 @@ export const MatchesView = ({
       description: match.properties.description || '',
       highlights: match.properties.highlights || [],
       vibe_analysis: parsedVA,
+      property_source_link: match.properties.property_source_link,
       realtor: {
         id: match.properties.realtor_id || '',
         name: match.realtor_name || 'Property Owner',

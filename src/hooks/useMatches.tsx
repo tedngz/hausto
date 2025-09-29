@@ -57,7 +57,8 @@ export const useMatches = () => {
             highlights,
             size,
             realtor_id,
-            vibe_analysis
+            vibe_analysis,
+            property_source_link
           )
         `)
         .eq('realtor_id', user.id)
@@ -118,7 +119,8 @@ export const useMatches = () => {
             highlights,
             size,
             realtor_id,
-            vibe_analysis
+            vibe_analysis,
+            property_source_link
           )
         `)
         .eq('renter_id', user.id)

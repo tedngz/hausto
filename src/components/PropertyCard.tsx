@@ -181,7 +181,7 @@ export const PropertyCard = ({
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {apartment.property_source_link && (() => {
             const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
             return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center gap-1 px-2 py-1 bg-muted hover:bg-muted/80 rounded-md transition-colors border border-border">
