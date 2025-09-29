@@ -622,53 +622,159 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-base font-semibold">Review Images & Highlights</Label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowHighlightEditor(true)}
-                    className="text-blue-600 hover:text-blue-700"
-                  >
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    Edit Highlights
-                  </Button>
                 </div>
-                <p className="text-sm text-gray-600 mb-3">Review your images and AI-generated highlights before publishing</p>
+                <p className="text-sm text-gray-600 mb-3">Review and edit your images and AI-generated highlights</p>
                 
                 {/* Image Review Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
                   {imagePreviews.map((preview, index) => {
                     const imageHighlight = imageHighlights.find(h => h.imageIndexes.includes(index));
+                    const [isEditing, setIsEditing] = useState(false);
+                    const [editText, setEditText] = useState(imageHighlight?.text || '');
+                    const [isRegenerating, setIsRegenerating] = useState(false);
+                    
+                    const handleEdit = () => {
+                      setIsEditing(true);
+                      setEditText(imageHighlight?.text || '');
+                    };
+                    
+                    const handleSave = () => {
+                      const updatedHighlights = [...imageHighlights];
+                      const highlightIndex = updatedHighlights.findIndex(h => h.imageIndexes.includes(index));
+                      
+                      if (highlightIndex >= 0) {
+                        updatedHighlights[highlightIndex] = { text: editText, imageIndexes: [index] };
+                      } else {
+                        updatedHighlights.push({ text: editText, imageIndexes: [index] });
+                      }
+                      
+                      setImageHighlights(updatedHighlights);
+                      setIsEditing(false);
+                    };
+                    
+                    const handleCancel = () => {
+                      setIsEditing(false);
+                      setEditText(imageHighlight?.text || '');
+                    };
+                    
+                    const handleRegenerate = async () => {
+                      setIsRegenerating(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+                          body: {
+                            imageUrls: [preview],
+                            generateContent: false,
+                            imageIndex: index
+                          }
+                        });
+                        
+                        if (error) throw error;
+                        
+                        if (data?.analysis?.highlights && data.analysis.highlights.length > 0) {
+                          const newHighlight = data.analysis.highlights[0];
+                          const updatedHighlights = [...imageHighlights];
+                          const highlightIndex = updatedHighlights.findIndex(h => h.imageIndexes.includes(index));
+                          
+                          if (highlightIndex >= 0) {
+                            updatedHighlights[highlightIndex] = { text: newHighlight, imageIndexes: [index] };
+                          } else {
+                            updatedHighlights.push({ text: newHighlight, imageIndexes: [index] });
+                          }
+                          
+                          setImageHighlights(updatedHighlights);
+                          toast({
+                            title: "Highlight Regenerated",
+                            description: "AI has generated a new highlight for this image."
+                          });
+                        }
+                      } catch (error) {
+                        console.error('Error regenerating highlight:', error);
+                        toast({
+                          title: "Regeneration Failed",
+                          description: "Could not regenerate highlight. Please try again.",
+                          variant: "destructive"
+                        });
+                      } finally {
+                        setIsRegenerating(false);
+                      }
+                    };
+                    
                     return (
-                      <div key={index} className="relative border rounded-lg overflow-hidden">
-                        <img 
-                          src={preview} 
-                          alt={`Property ${index + 1}`}
-                          className="w-full h-48 object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                        <div className="absolute bottom-2 left-2 right-2">
-                          <p className="text-white text-sm font-medium mb-1">Image {index + 1}</p>
-                          {imageHighlight && (
-                            <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
-                              {imageHighlight.text}
+                      <div key={index} className="space-y-2">
+                        <div className="relative border rounded-lg overflow-hidden">
+                          <img 
+                            src={preview} 
+                            alt={`Property ${index + 1}`}
+                            className="w-full h-24 object-cover"
+                          />
+                          <div className="absolute top-1 left-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {index + 1}
                             </Badge>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          {isEditing ? (
+                            <div className="space-y-1">
+                              <Input
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                className="text-xs h-8"
+                                placeholder="Enter highlight..."
+                              />
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  onClick={handleSave}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleCancel}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <p className="text-xs text-gray-700 min-h-[2rem] p-1 bg-gray-50 rounded border">
+                                {imageHighlight?.text || 'No highlight'}
+                              </p>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleEdit}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleRegenerate}
+                                  disabled={isRegenerating}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  {isRegenerating ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Wand2 className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
                     );
                   })}
-                </div>
-                
-                {/* All Highlights Summary */}
-                <div className="border rounded-lg p-3 bg-gray-50">
-                  <p className="text-sm font-medium text-gray-700 mb-2">All Generated Highlights:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {imageHighlights.map((highlight, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {highlight.text}
-                      </Badge>
-                    ))}
-                  </div>
                 </div>
               </div>
 
