@@ -215,16 +215,20 @@ Provide creative, engaging, and professional content that stands out in the rent
       systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
 🏠 AVAILABLE PROPERTIES DATABASE (${properties.length} total properties):
-${properties.map((p, index) => `
+${properties.map((p, index) => {
+  const amenities = p.vibe_analysis?.amenities || [];
+  return `
 Property ID: ${p.id}
 Title: ${p.title}
 Location: ${p.location}
 Price: ${p.price?.toLocaleString()} VND/month
 Description: ${(p.description || 'Modern living space').substring(0, 200)}
 Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
+Amenities: ${amenities.length > 0 ? amenities.join(', ') : 'Not specified'}
 Images: ${Array.isArray(p.images) ? p.images.join(', ') : 'No images'}
 Realtor ID: ${p.realtor_id}
-`).join('\n')}
+`;
+}).join('\n')}
 
 🎯 RESPONSE FORMAT - Return ONLY valid JSON:
 {

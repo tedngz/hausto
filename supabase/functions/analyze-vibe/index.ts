@@ -92,6 +92,31 @@ serve(async (req) => {
 
             CORE MISSION: Discover the UNIQUE LIFESTYLE TRANSFORMATION this specific space offers renters.
 
+            AMENITY DETECTION: Identify all visible amenities from this list:
+            - TV, Smart TV, Large Screen TV
+            - WiFi Router, Internet Equipment
+            - Air Conditioning, AC Unit, Climate Control
+            - Washing Machine, Dryer, Laundry
+            - Dishwasher, Kitchen Appliances
+            - Microwave, Oven, Stove, Refrigerator
+            - Gym Equipment, Fitness Area
+            - Pool, Swimming Pool
+            - Balcony, Terrace, Outdoor Space
+            - Parking, Garage, Car Space
+            - Security System, Cameras, Safe
+            - Workspace, Desk, Office Setup
+            - Pet Amenities, Pet Bed, Pet Bowls
+            - Garden, Plants, Green Space
+            - Fireplace, Heating
+            - Bathtub, Jacuzzi, Spa
+            - Walk-in Closet, Storage
+            - Kitchen Island, Breakfast Bar
+            - Hardwood Floors, Marble, Premium Finishes
+            - Smart Home Devices, Automation
+            - Elevator Access
+            - High Ceilings
+            - Natural Light, Large Windows
+
             ANALYSIS FRAMEWORK:
             1. ESSENCE: What's the ONE thing that makes this space irreplaceable?
             2. EMOTIONAL TRIGGER: What feeling does this space instantly evoke?
@@ -140,6 +165,7 @@ serve(async (req) => {
                "urban": [1-10],
                "rustic": [1-10],
                "elegant": [1-10],
+               "amenities": ["list of amenities you can clearly identify in the image"],
                "image_highlight": "descriptive sentence or phrase (at least 7 words) capturing key lifestyle benefit from detailed analysis",
                "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
                "raw_analysis": "Brief one-sentence summary of what you see",
@@ -361,6 +387,14 @@ serve(async (req) => {
     }
 
     // Aggregate the analyses and generate content if requested
+    // Collect all unique amenities from all images
+    const allAmenities = new Set<string>();
+    analyses.forEach(a => {
+      if (Array.isArray(a.amenities)) {
+        a.amenities.forEach((amenity: string) => allAmenities.add(amenity));
+      }
+    });
+
     const aggregated: any = {
       modern: Math.round(analyses.reduce((sum, a) => sum + (a.modern || 5), 0) / analyses.length),
       cozy: Math.round(analyses.reduce((sum, a) => sum + (a.cozy || 5), 0) / analyses.length),
@@ -372,6 +406,7 @@ serve(async (req) => {
       urban: Math.round(analyses.reduce((sum, a) => sum + (a.urban || 5), 0) / analyses.length),
       rustic: Math.round(analyses.reduce((sum, a) => sum + (a.rustic || 5), 0) / analyses.length),
       elegant: Math.round(analyses.reduce((sum, a) => sum + (a.elegant || 5), 0) / analyses.length),
+      amenities: Array.from(allAmenities),
       image_analyses: analyses
     };
 

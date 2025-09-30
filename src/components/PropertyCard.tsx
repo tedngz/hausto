@@ -12,6 +12,7 @@ import { calculateVibeScore } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
+import { PropertyAmenities } from '@/components/PropertyAmenities';
 interface PropertyCardProps {
   apartment: Apartment;
   userPreferences?: UserPreferences;
@@ -124,6 +125,13 @@ export const PropertyCard = ({
           </div>
         </div>
 
+        {/* Amenities Section */}
+        {apartment.vibe_analysis?.amenities && apartment.vibe_analysis.amenities.length > 0 && (
+          <div className="mb-3 pb-3 border-b border-border">
+            <PropertyAmenities amenities={apartment.vibe_analysis.amenities} compact />
+          </div>
+        )}
+
         {apartment.description && <div className="mb-4">
             <div className={`text-gray-700 text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
               {apartment.description}
@@ -192,7 +200,11 @@ export const PropertyCard = ({
             {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
                 Contact
               </Button>}
-            {showViewProfileButton && onViewProfile}
+            {showViewProfileButton && onViewProfile && (
+              <Button size="sm" variant="outline" onClick={onViewProfile}>
+                View Profile
+              </Button>
+            )}
           </div>
         </div>
       </div>
