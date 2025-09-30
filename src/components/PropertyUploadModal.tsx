@@ -15,6 +15,7 @@ import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
 import { processImageFiles } from '@/utils/imageConverter';
+import { PropertyAmenities } from '@/components/PropertyAmenities';
 
 interface PropertyUploadModalProps {
   isOpen: boolean;
@@ -40,6 +41,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [imageHighlights, setImageHighlights] = useState<{text: string, imageIndexes: number[]}[]>([]);
   const [vibeAnalysis, setVibeAnalysis] = useState<any>(null);
   const [locationSuggestionsVisible, setLocationSuggestionsVisible] = useState(false);
+  const [amenities, setAmenities] = useState<string[]>([]);
+  const [newAmenity, setNewAmenity] = useState('');
 
   const { createProperty, isCreating } = useProperties();
   const { toast } = useToast();
@@ -194,6 +197,11 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         // Store detailed vibe analysis for preview
         setVibeAnalysis(analysis);
         
+        // Extract and set amenities from AI analysis
+        if (analysis.amenities && Array.isArray(analysis.amenities)) {
+          setAmenities(analysis.amenities);
+        }
+        
         // Auto-select vibes based on comprehensive AI analysis with improved accuracy
         const aiVibes = [];
         
@@ -322,7 +330,10 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       vibe: selectedVibes[0] || null,
       highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
       imageFiles,
-      vibeAnalysis,
+      vibeAnalysis: {
+        ...vibeAnalysis,
+        amenities
+      },
       propertySourceLink: sourceLink,
     });
 
@@ -338,6 +349,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     setImagePreviews([]);
     setImageHighlights([]);
     setVibeAnalysis(null);
+    setAmenities([]);
+    setNewAmenity('');
     setHasGenerated(false);
     setShowHighlightEditor(false);
     onClose();
@@ -670,6 +683,59 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               </div>
 
               <div>
+                <Label className="text-base font-semibold">Detected Amenities</Label>
+                <p className="text-sm text-gray-600 mb-3">AI has detected these amenities - you can add or remove them</p>
+                
+                {amenities.length > 0 ? (
+                  <div className="mb-3">
+                    <PropertyAmenities amenities={amenities} compact={false} />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground mb-3">No amenities detected yet</p>
+                )}
+                
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {amenities.map((amenity, index) => (
+                    <Badge
+                      key={index}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                      onClick={() => setAmenities(prev => prev.filter((_, i) => i !== index))}
+                    >
+                      {amenity}
+                      <X className="w-3 h-3 ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+                
+                <div className="flex gap-2">
+                  <Input
+                    value={newAmenity}
+                    onChange={(e) => setNewAmenity(e.target.value)}
+                    placeholder="Add custom amenity..."
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && newAmenity.trim()) {
+                        setAmenities(prev => [...prev, newAmenity.trim()]);
+                        setNewAmenity('');
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (newAmenity.trim()) {
+                        setAmenities(prev => [...prev, newAmenity.trim()]);
+                        setNewAmenity('');
+                      }
+                    }}
+                    disabled={!newAmenity.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label htmlFor="description" className="text-base font-semibold">Generated Description *</Label>
                   <Button
@@ -748,6 +814,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             realtor_id: 'preview',
             vibe_analysis: {
               ...vibeAnalysis,
+              amenities,
               generated_content: {
                 ...vibeAnalysis?.generated_content,
                 highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes
@@ -776,6 +843,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             realtor_id: 'preview',
             vibe_analysis: {
               ...vibeAnalysis,
+              amenities,
               generated_content: {
                 ...vibeAnalysis?.generated_content,
                 highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes
