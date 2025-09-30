@@ -116,6 +116,19 @@ serve(async (req) => {
             - Elevator Access
             - High Ceilings
             - Natural Light, Large Windows
+            - Bed, Queen Bed, King Bed, Double Bed
+            - Cabinets, Storage Cabinets
+            - Shelves, Bookshelf
+            - Chair, Dining Chair, Office Chair
+            - Table, Dining Table, Coffee Table
+            - Couch, Sofa, Sectional
+            - Fan, Ceiling Fan
+            - Air Purifier
+            - Vacuum Cleaner
+            - Speaker, Sound System, Radio
+            - Plants, Indoor Plants
+            - Painting, Artwork, Wall Art
+            - Chandelier, Lighting Fixtures, Pendant Light
 
             ANALYSIS FRAMEWORK:
             1. ESSENCE: What's the ONE thing that makes this space irreplaceable?

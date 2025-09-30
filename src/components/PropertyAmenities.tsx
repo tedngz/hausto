@@ -1,4 +1,4 @@
-import { Tv, Wifi, Wind, Waves, Car, Dumbbell, Shield, Flower2, Flame, Bath, Sparkles, Briefcase, Home, ChefHat, Utensils, Sofa, PawPrint, WashingMachine, Sun } from 'lucide-react';
+import { Tv, Wifi, Wind, Waves, Car, Dumbbell, Shield, Flower2, Flame, Bath, Sparkles, Briefcase, Home, ChefHat, Utensils, Sofa, PawPrint, WashingMachine, Sun, Bed, Archive, BookOpen, Armchair, Table, Fan, Radio, Volume2, Flower, Image, Lamp } from 'lucide-react';
 
 interface PropertyAmenitiesProps {
   amenities: string[];
@@ -46,7 +46,6 @@ const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'Terrace': { icon: Home, label: 'Terrace' },
   'Outdoor Space': { icon: Home, label: 'Outdoor' },
   'Garden': { icon: Flower2, label: 'Garden' },
-  'Plants': { icon: Flower2, label: 'Plants' },
   'Green Space': { icon: Flower2, label: 'Green Space' },
   
   // Parking & Transport
@@ -83,6 +82,43 @@ const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'Automation': { icon: Sparkles, label: 'Automation' },
   'Natural Light': { icon: Sun, label: 'Natural Light' },
   'Large Windows': { icon: Sun, label: 'Large Windows' },
+  
+  // Furniture
+  'Bed': { icon: Bed, label: 'Bed' },
+  'Queen Bed': { icon: Bed, label: 'Queen Bed' },
+  'King Bed': { icon: Bed, label: 'King Bed' },
+  'Double Bed': { icon: Bed, label: 'Double Bed' },
+  'Cabinets': { icon: Archive, label: 'Cabinets' },
+  'Storage Cabinets': { icon: Archive, label: 'Storage' },
+  'Shelves': { icon: BookOpen, label: 'Shelves' },
+  'Bookshelf': { icon: BookOpen, label: 'Bookshelf' },
+  'Chair': { icon: Armchair, label: 'Chair' },
+  'Dining Chair': { icon: Armchair, label: 'Dining Chair' },
+  'Office Chair': { icon: Armchair, label: 'Office Chair' },
+  'Table': { icon: Table, label: 'Table' },
+  'Dining Table': { icon: Table, label: 'Dining Table' },
+  'Coffee Table': { icon: Table, label: 'Coffee Table' },
+  'Couch': { icon: Sofa, label: 'Couch' },
+  'Sectional': { icon: Sofa, label: 'Sectional' },
+  
+  // Electronics
+  'Fan': { icon: Fan, label: 'Fan' },
+  'Ceiling Fan': { icon: Fan, label: 'Ceiling Fan' },
+  'Air Purifier': { icon: Wind, label: 'Air Purifier' },
+  'Vacuum Cleaner': { icon: Wind, label: 'Vacuum' },
+  'Speaker': { icon: Volume2, label: 'Speaker' },
+  'Sound System': { icon: Volume2, label: 'Sound System' },
+  'Radio': { icon: Radio, label: 'Radio' },
+  
+  // Decoration
+  'Plants': { icon: Flower, label: 'Plants' },
+  'Indoor Plants': { icon: Flower, label: 'Indoor Plants' },
+  'Painting': { icon: Image, label: 'Painting' },
+  'Artwork': { icon: Image, label: 'Artwork' },
+  'Wall Art': { icon: Image, label: 'Wall Art' },
+  'Chandelier': { icon: Lamp, label: 'Chandelier' },
+  'Lighting': { icon: Lamp, label: 'Lighting' },
+  'Pendant Light': { icon: Lamp, label: 'Pendant Light' },
 };
 
 // Normalize amenity names to match icon keys
