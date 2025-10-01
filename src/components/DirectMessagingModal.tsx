@@ -38,8 +38,8 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
   const {
     conversations,
     messages,
-    currentMatchId,
-    setCurrentMatchId,
+    currentConversationId,
+    setCurrentConversationId,
     sendMessage,
     isSendingMessage,
     deleteConversation,
@@ -51,36 +51,36 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
   const [messageText, setMessageText] = useState('');
 
   useEffect(() => {
-    console.log('DirectMessagingModal useEffect - initialMatchId:', initialMatchId, 'isOpen:', isOpen, 'conversations.length:', conversations.length, 'currentMatchId:', currentMatchId);
+    console.log('DirectMessagingModal useEffect - initialMatchId:', initialMatchId, 'isOpen:', isOpen, 'conversations.length:', conversations.length, 'currentConversationId:', currentConversationId);
     
     if (initialMatchId && isOpen) {
-      console.log('Setting currentMatchId to initialMatchId:', initialMatchId);
-      setCurrentMatchId(initialMatchId);
-    } else if (isOpen && conversations.length > 0 && !currentMatchId) {
-      // Auto-select first conversation if no match is selected
-      console.log('Auto-selecting first conversation:', conversations[0].match_id);
-      setCurrentMatchId(conversations[0].match_id);
+      console.log('Setting currentConversationId to initialMatchId:', initialMatchId);
+      setCurrentConversationId(initialMatchId);
+    } else if (isOpen && conversations.length > 0 && !currentConversationId) {
+      // Auto-select first conversation if no conversation is selected
+      console.log('Auto-selecting first conversation:', conversations[0].id);
+      setCurrentConversationId(conversations[0].id);
     }
-  }, [initialMatchId, isOpen, conversations, currentMatchId, setCurrentMatchId]);
+  }, [initialMatchId, isOpen, conversations, currentConversationId, setCurrentConversationId]);
 
   useEffect(() => {
-    if (currentMatchId && messages.length > 0) {
-      markAsRead(currentMatchId);
+    if (currentConversationId && messages.length > 0) {
+      markAsRead(currentConversationId);
     }
-  }, [currentMatchId, messages.length, markAsRead]);
+  }, [currentConversationId, messages.length, markAsRead]);
 
-  const currentConversation = conversations.find(conv => conv.match_id === currentMatchId);
-  const currentMatch = currentConversation?.property_matches;
+  const currentConversation = conversations.find(conv => conv.id === currentConversationId);
+  const isUserRealtor = user?.id === currentConversation?.realtor_id;
 
   const handleSendMessage = () => {
-    if (!messageText.trim() || !currentMatchId || !currentMatch) return;
+    if (!messageText.trim() || !currentConversationId || !currentConversation) return;
 
-    const receiverId = user?.id === currentMatch.realtor_id 
-      ? currentMatch.renter_id 
-      : currentMatch.realtor_id;
+    const receiverId = user?.id === currentConversation.realtor_id 
+      ? currentConversation.renter_id 
+      : currentConversation.realtor_id;
 
     sendMessage({
-      matchId: currentMatchId,
+      conversationId: currentConversationId,
       content: messageText.trim(),
       receiverId
     });
@@ -89,8 +89,8 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
   };
 
   const handleDeleteConversation = () => {
-    if (currentMatchId) {
-      deleteConversation(currentMatchId);
+    if (currentConversationId) {
+      deleteConversation(currentConversationId);
     }
   };
 
@@ -134,15 +134,15 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
               ) : (
                 <div className="p-2">
                   {conversations.map((conversation) => {
-                    const match = conversation.property_matches;
-                    const property = match?.properties;
-                    const isSelected = currentMatchId === conversation.match_id;
-                    const isRealtor = user?.id === match?.realtor_id;
+                    const properties = conversation.properties || [];
+                    const property = properties[0]; // Show first property in conversation
+                    const isSelected = currentConversationId === conversation.id;
+                    const isRealtor = user?.id === conversation.realtor_id;
                     
                     return (
                       <div
                         key={conversation.id}
-                        onClick={() => setCurrentMatchId(conversation.match_id)}
+                        onClick={() => setCurrentConversationId(conversation.id)}
                         className={`p-3 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg mb-2 ${
                           isSelected ? 'bg-purple-50 border border-purple-200' : 'border border-transparent'
                         }`}
@@ -158,30 +158,30 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (isRealtor) {
-                                    setSelectedRenterId(match?.renter_id || '');
+                                    setSelectedRenterId(conversation.renter_id);
                                   } else {
-                                    setSelectedRealtorId(match?.realtor_id || '');
+                                    setSelectedRealtorId(conversation.realtor_id);
                                   }
                                 }}
                                 className="font-medium text-sm text-gray-900 truncate hover:text-blue-600 hover:underline text-left block"
                               >
-                                {isRealtor ? (conversation as any).renter_name || 'Interested Renter' : (conversation as any).realtor_name || 'Property Owner'}
+                                {isRealtor ? conversation.renter_name || 'Interested Renter' : conversation.realtor_name || 'Property Owner'}
                               </button>
                                <button 
                                  onClick={() => {
                                    if (property) {
                                      const apartment = {
-                                       id: property.id,
+                                       id: property.property_id,
                                        images: property.images || [],
                                        title: property.title,
                                        location: property.location,
                                        price: Number(property.price),
-                                       size: (property as any).size || '',
-                                       vibe: (property as any).vibe || '',
-                                       description: (property as any).description || '',
-                                       highlights: (property as any).highlights || [],
+                                       size: '',
+                                       vibe: '',
+                                       description: '',
+                                       highlights: [],
                                        realtor: {
-                                         id: (property as any).realtor_id || '',
+                                         id: conversation.realtor_id,
                                          name: 'Licensed Realtor',
                                          phone: '+1-234-567-8900',
                                          email: 'contact@realtor.com'
@@ -211,61 +211,60 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
 
           {/* Chat Area */}
           <div className="flex-1 flex flex-col">
-            {currentConversation && currentMatch ? (
+            {currentConversation ? (
               <>
                 {/* Chat Header */}
                 <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <Avatar className="w-8 h-8">
                       <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm">
-                        {user?.id === currentMatch.realtor_id ? 'R' : 'O'}
+                        {isUserRealtor ? 'R' : 'O'}
                       </AvatarFallback>
                      </Avatar>
                       <div>
                         <button 
                           onClick={() => {
-                            const isUserRealtor = user?.id === currentMatch.realtor_id;
                             if (isUserRealtor) {
-                              setSelectedRenterId(currentMatch.renter_id);
+                              setSelectedRenterId(currentConversation.renter_id);
                             } else {
-                              setSelectedRealtorId(currentMatch.realtor_id);
+                              setSelectedRealtorId(currentConversation.realtor_id);
                             }
                           }}
                           className="font-medium text-gray-900 text-sm hover:text-blue-600 hover:underline text-left block"
                         >
-                          {user?.id === currentMatch.realtor_id ? 
-                            (currentConversation as any).renter_name || 'Interested Renter' : 
-                            (currentConversation as any).realtor_name || 'Property Owner'
+                          {isUserRealtor ? 
+                            currentConversation.renter_name || 'Interested Renter' : 
+                            currentConversation.realtor_name || 'Property Owner'
                           }
                         </button>
-                            <button 
-                              onClick={() => {
-                                if (currentMatch.properties) {
+                            {currentConversation.properties && currentConversation.properties.length > 0 && (
+                              <button 
+                                onClick={() => {
+                                  const property = currentConversation.properties![0];
                                   const apartment = {
-                                    id: currentMatch.properties.id,
-                                    images: currentMatch.properties.images || [],
-                                    title: currentMatch.properties.title,
-                                    location: currentMatch.properties.location,
-                                    price: Number(currentMatch.properties.price),
-                                    size: (currentMatch.properties as any).size || '',
-                                    vibe: (currentMatch.properties as any).vibe || '',
-                                    description: (currentMatch.properties as any).description || '',
-                                    highlights: (currentMatch.properties as any).highlights || [],
-                                    vibe_analysis: (currentMatch.properties as any).vibe_analysis,
+                                    id: property.property_id,
+                                    images: property.images || [],
+                                    title: property.title,
+                                    location: property.location,
+                                    price: Number(property.price),
+                                    size: '',
+                                    vibe: '',
+                                    description: '',
+                                    highlights: [],
                                     realtor: {
-                                      id: (currentMatch.properties as any).realtor_id || '',
+                                      id: currentConversation.realtor_id,
                                       name: 'Licensed Realtor',
                                       phone: '+1-234-567-8900',
                                       email: 'contact@realtor.com'
                                     }
                                   };
                                   setDetailModalApartment(apartment);
-                                }
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-800 hover:underline text-left line-clamp-1"
-                            >
-                              {currentMatch.properties?.title}
-                            </button>
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-800 hover:underline text-left line-clamp-1"
+                              >
+                                {currentConversation.properties[0].title}
+                              </button>
+                            )}
                      </div>
                   </div>
                   <AlertDialog>
@@ -317,7 +316,7 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                             {!isOwnMessage && (
                               <Avatar className="w-8 h-8 mb-1">
                                 <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs">
-                                  {user?.id === currentMatch?.realtor_id ? 'R' : 'O'}
+                                  {isUserRealtor ? 'R' : 'O'}
                                 </AvatarFallback>
                               </Avatar>
                             )}

@@ -49,7 +49,7 @@ export const AIChatAgent = ({
     sendMessage: sendDirectMessage,
     isSendingMessage: isSendingDirectMessage,
     messages: directMessages,
-    setCurrentMatchId,
+    setCurrentConversationId,
     loadingMessages: loadingDirectMessages,
     markAsRead
   } = useDirectMessages();
@@ -68,8 +68,8 @@ export const AIChatAgent = ({
 
   // Sync selected match with direct messages hook
   useEffect(() => {
-    setCurrentMatchId(selectedMatch ?? null);
-  }, [selectedMatch, setCurrentMatchId]);
+    setCurrentConversationId(selectedMatch ?? null);
+  }, [selectedMatch, setCurrentConversationId]);
 
   // Mark messages as read when viewing a conversation and new messages arrive
   useEffect(() => {
@@ -92,7 +92,7 @@ export const AIChatAgent = ({
       if (match) {
         const receiverId = user?.id === match.realtor_id ? match.renter_id : match.realtor_id;
         sendDirectMessage({
-          matchId: selectedMatch,
+          conversationId: selectedMatch,
           content: inputMessage.trim(),
           receiverId
         });

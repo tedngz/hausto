@@ -42,56 +42,66 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
     try {
       console.log('Starting conversation between user:', user.id, 'and realtor:', apartment.realtor.id, 'for property:', apartment.id);
       
-      // Check if match already exists
-      const { data: existingMatch, error: checkError } = await supabase
-        .from('property_matches')
+      // Check if conversation already exists
+      const { data: existingConv, error: checkError } = await supabase
+        .from('match_conversations')
         .select('id')
-        .eq('property_id', apartment.id)
         .eq('realtor_id', apartment.realtor.id)
         .eq('renter_id', user.id)
-        .maybeSingle(); // Use maybeSingle to avoid errors when no match exists
+        .maybeSingle();
 
       if (checkError) {
-        console.error('Error checking existing match:', checkError);
+        console.error('Error checking existing conversation:', checkError);
         throw checkError;
       }
 
-      let matchId = existingMatch?.id;
+      let conversationId = existingConv?.id;
       
-      // Create new match if none exists
-      if (!matchId) {
-        console.log('Creating new property match...');
-        const { data: newMatch, error: matchError } = await supabase
-          .from('property_matches')
+      // Create new conversation if none exists
+      if (!conversationId) {
+        console.log('Creating new conversation...');
+        const { data: newConv, error: convError } = await supabase
+          .from('match_conversations')
           .insert({
-            property_id: apartment.id,
             realtor_id: apartment.realtor.id,
-            renter_id: user.id
+            renter_id: user.id,
+            is_active: true
           })
           .select()
           .single();
 
-        if (matchError) {
-          console.error('Error creating property match:', matchError);
-          throw matchError;
+        if (convError) {
+          console.error('Error creating conversation:', convError);
+          throw convError;
         }
         
-        matchId = newMatch.id;
-        console.log('Created new match with ID:', matchId);
+        conversationId = newConv.id;
+        console.log('Created new conversation with ID:', conversationId);
       } else {
-        console.log('Using existing match ID:', matchId);
+        console.log('Using existing conversation ID:', conversationId);
       }
 
-      if (!matchId) {
-        throw new Error('Failed to create or find property match');
+      if (!conversationId) {
+        throw new Error('Failed to create or find conversation');
       }
+
+      // Create property match record for tracking
+      await supabase
+        .from('property_matches')
+        .insert({
+          property_id: apartment.id,
+          realtor_id: apartment.realtor.id,
+          renter_id: user.id
+        })
+        .select()
+        .maybeSingle(); // Don't fail if already exists
 
       // Send the initial message
       console.log('Sending initial message...');
       const { data: messageData, error: messageError } = await supabase
         .from('direct_messages')
         .insert({
-          match_id: matchId,
+          conversation_id: conversationId,
           sender_id: user.id,
           receiver_id: apartment.realtor.id,
           content: formData.message
@@ -106,23 +116,22 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
       
       console.log('Message sent successfully:', messageData);
 
-      // Create or update the match conversation to ensure it appears in chat
-      console.log('Creating/updating match conversation...');
-      const { error: conversationError } = await supabase
+      // Update conversation with latest message
+      console.log('Updating conversation...');
+      const { error: updateError } = await supabase
         .from('match_conversations')
-        .upsert({
-          match_id: matchId,
+        .update({
           last_message_at: new Date().toISOString(),
-          last_message_preview: formData.message.substring(0, 100),
-          is_active: true
-        }, { onConflict: 'match_id' });
+          last_message_preview: formData.message.substring(0, 100)
+        })
+        .eq('id', conversationId);
 
-      if (conversationError) {
-        console.error('Error creating/updating conversation:', conversationError);
-        throw conversationError;
+      if (updateError) {
+        console.error('Error updating conversation:', updateError);
+        throw updateError;
       }
       
-      console.log('Conversation created/updated successfully');
+      console.log('Conversation updated successfully');
 
       toast({
         title: "Message sent!",
