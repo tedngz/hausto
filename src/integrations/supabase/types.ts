@@ -209,10 +209,10 @@ export type Database = {
       direct_messages: {
         Row: {
           content: string
+          conversation_id: string
           created_at: string
           deleted_by: string[] | null
           id: string
-          match_id: string
           metadata: Json | null
           read_at: string | null
           receiver_id: string
@@ -220,10 +220,10 @@ export type Database = {
         }
         Insert: {
           content: string
+          conversation_id: string
           created_at?: string
           deleted_by?: string[] | null
           id?: string
-          match_id: string
           metadata?: Json | null
           read_at?: string | null
           receiver_id: string
@@ -231,10 +231,10 @@ export type Database = {
         }
         Update: {
           content?: string
+          conversation_id?: string
           created_at?: string
           deleted_by?: string[] | null
           id?: string
-          match_id?: string
           metadata?: Json | null
           read_at?: string | null
           receiver_id?: string
@@ -242,10 +242,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "direct_messages_match_id_fkey"
-            columns: ["match_id"]
+            foreignKeyName: "direct_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
             isOneToOne: false
-            referencedRelation: "property_matches"
+            referencedRelation: "conversation_properties"
+            referencedColumns: ["conversation_id"]
+          },
+          {
+            foreignKeyName: "direct_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "match_conversations"
             referencedColumns: ["id"]
           },
         ]
@@ -257,7 +264,8 @@ export type Database = {
           is_active: boolean | null
           last_message_at: string | null
           last_message_preview: string | null
-          match_id: string
+          realtor_id: string
+          renter_id: string
           updated_at: string
         }
         Insert: {
@@ -266,7 +274,8 @@ export type Database = {
           is_active?: boolean | null
           last_message_at?: string | null
           last_message_preview?: string | null
-          match_id: string
+          realtor_id: string
+          renter_id: string
           updated_at?: string
         }
         Update: {
@@ -275,18 +284,11 @@ export type Database = {
           is_active?: boolean | null
           last_message_at?: string | null
           last_message_preview?: string | null
-          match_id?: string
+          realtor_id?: string
+          renter_id?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "match_conversations_match_id_fkey"
-            columns: ["match_id"]
-            isOneToOne: true
-            referencedRelation: "property_matches"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       post_likes: {
         Row: {
@@ -624,7 +626,29 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      conversation_properties: {
+        Row: {
+          conversation_id: string | null
+          images: string[] | null
+          location: string | null
+          match_id: string | null
+          matched_at: string | null
+          price: number | null
+          property_id: string | null
+          realtor_id: string | null
+          renter_id: string | null
+          title: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_matches_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       activate_user_subscription: {

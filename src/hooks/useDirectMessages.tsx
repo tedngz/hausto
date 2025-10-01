@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface DirectMessage {
   id: string;
-  match_id: string;
+  conversation_id: string;
   sender_id: string;
   receiver_id: string;
   content: string;
@@ -17,33 +17,29 @@ interface DirectMessage {
 
 interface MatchConversation {
   id: string;
-  match_id: string;
+  renter_id: string;
+  realtor_id: string;
   last_message_at: string;
   last_message_preview: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  // Joined data from property_matches
-  property_matches?: {
-    id: string;
+  renter_name?: string;
+  realtor_name?: string;
+  properties?: Array<{
     property_id: string;
-    realtor_id: string;
-    renter_id: string;
-    properties?: {
-      id: string;
-      title: string;
-      location: string;
-      price: number;
-      images: string[];
-    };
-  };
+    title: string;
+    location: string;
+    price: number;
+    images: string[];
+  }>;
 }
 
 export const useDirectMessages = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [currentMatchId, setCurrentMatchId] = useState<string | null>(null);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
 
   // Fetch conversations for current user
   const { data: conversations = [], isLoading: loadingConversations } = useQuery({
@@ -58,18 +54,9 @@ export const useDirectMessages = () => {
       
       const { data, error } = await supabase
         .from('match_conversations')
-        .select(`
-          *,
-          property_matches!inner(
-            id,
-            property_id,
-            realtor_id,
-            renter_id,
-            properties(id, title, location, price, images)
-          )
-        `)
+        .select('*')
         .eq('is_active', true)
-        .or(`realtor_id.eq.${user.id},renter_id.eq.${user.id}`, { foreignTable: 'property_matches' })
+        .or(`realtor_id.eq.${user.id},renter_id.eq.${user.id}`)
         .order('last_message_at', { ascending: false });
 
       if (error) {
@@ -77,12 +64,9 @@ export const useDirectMessages = () => {
         throw error;
       }
 
-      // Get names for all users in conversations
+      // Get names and properties for conversations
       if (data && data.length > 0) {
-        const userIds = data.flatMap(conv => [
-          conv.property_matches?.renter_id,
-          conv.property_matches?.realtor_id
-        ]).filter(Boolean) as string[];
+        const userIds = data.flatMap(conv => [conv.renter_id, conv.realtor_id]).filter(Boolean) as string[];
 
         const { data: profiles, error: profilesError } = await supabase
           .rpc('get_matched_public_profiles', { user_ids: userIds });
@@ -91,14 +75,28 @@ export const useDirectMessages = () => {
           console.error('Error fetching user profiles:', profilesError);
         }
 
-        // Map names to conversations
-        const conversationsWithNames = data.map(conv => ({
-          ...conv,
-          renter_name: profiles?.find(p => p.id === conv.property_matches?.renter_id)?.name || 'Interested Renter',
-          realtor_name: profiles?.find(p => p.id === conv.property_matches?.realtor_id)?.name || 'Property Owner'
-        }));
+        // Fetch all matched properties for each conversation
+        const conversationsWithData = await Promise.all(
+          data.map(async (conv) => {
+            const { data: properties, error: propsError } = await supabase
+              .from('conversation_properties')
+              .select('*')
+              .eq('conversation_id', conv.id);
 
-        return conversationsWithNames as MatchConversation[];
+            if (propsError) {
+              console.error('Error fetching conversation properties:', propsError);
+            }
+
+            return {
+              ...conv,
+              renter_name: profiles?.find(p => p.id === conv.renter_id)?.name || 'Interested Renter',
+              realtor_name: profiles?.find(p => p.id === conv.realtor_id)?.name || 'Property Owner',
+              properties: properties || []
+            };
+          })
+        );
+
+        return conversationsWithData as MatchConversation[];
       }
       
       console.log('Conversations fetched successfully:', data);
@@ -132,22 +130,22 @@ export const useDirectMessages = () => {
     };
   }, [user?.id, queryClient]);
 
-  // Fetch messages for current match
+  // Fetch messages for current conversation
   const { data: messages = [], isLoading: loadingMessages, refetch: refetchMessages } = useQuery({
-    queryKey: ['direct-messages', currentMatchId],
+    queryKey: ['direct-messages', currentConversationId],
     queryFn: async () => {
-      if (!currentMatchId) {
-        console.log('No currentMatchId for messages query');
+      if (!currentConversationId) {
+        console.log('No currentConversationId for messages query');
         return [];
       }
       
-      console.log('Fetching messages for match:', currentMatchId, 'user:', user?.id);
+      console.log('Fetching messages for conversation:', currentConversationId, 'user:', user?.id);
       
       try {
         const { data, error } = await supabase
           .from('direct_messages')
           .select('*')
-          .eq('match_id', currentMatchId)
+          .eq('conversation_id', currentConversationId)
           .order('created_at', { ascending: true });
 
         if (error) {
@@ -155,34 +153,34 @@ export const useDirectMessages = () => {
           throw error;
         }
         
-        console.log('Messages fetched successfully for match', currentMatchId, ':', data);
+        console.log('Messages fetched successfully for conversation', currentConversationId, ':', data);
         return data as DirectMessage[];
       } catch (error) {
         console.error('Failed to fetch messages:', error);
         throw error;
       }
     },
-    enabled: !!currentMatchId,
+    enabled: !!currentConversationId,
     refetchInterval: 3000, // Refetch every 3 seconds as fallback
   });
 
   // Set up real-time subscription for messages
   useEffect(() => {
-    if (!currentMatchId || !user?.id) return;
+    if (!currentConversationId || !user?.id) return;
 
     const channel = supabase
-      .channel(`direct-messages-${currentMatchId}`)
+      .channel(`direct-messages-${currentConversationId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'direct_messages',
-          filter: `match_id=eq.${currentMatchId}`
+          filter: `conversation_id=eq.${currentConversationId}`
         },
         (payload) => {
           console.log('New message received:', payload);
-          queryClient.invalidateQueries({ queryKey: ['direct-messages', currentMatchId] });
+          queryClient.invalidateQueries({ queryKey: ['direct-messages', currentConversationId] });
         }
       )
       .subscribe();
@@ -190,12 +188,12 @@ export const useDirectMessages = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentMatchId, user?.id, queryClient]);
+  }, [currentConversationId, user?.id, queryClient]);
 
   // Send message
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ matchId, content, receiverId }: { 
-      matchId: string; 
+    mutationFn: async ({ conversationId, content, receiverId }: { 
+      conversationId: string; 
       content: string; 
       receiverId: string;
     }) => {
@@ -204,12 +202,12 @@ export const useDirectMessages = () => {
         throw new Error('User not authenticated');
       }
 
-      console.log('Sending message:', { matchId, senderId: user.id, receiverId, content });
+      console.log('Sending message:', { conversationId, senderId: user.id, receiverId, content });
 
       const { data, error } = await supabase
         .from('direct_messages')
         .insert({
-          match_id: matchId,
+          conversation_id: conversationId,
           sender_id: user.id,
           receiver_id: receiverId,
           content
@@ -228,18 +226,17 @@ export const useDirectMessages = () => {
     onSuccess: async (data, variables) => {
       console.log('Message sent successfully, invalidating queries...');
       
-      // Update match conversation with latest message
+      // Update conversation with latest message
       await supabase
         .from('match_conversations')
-        .upsert({
-          match_id: variables.matchId,
+        .update({
           last_message_at: new Date().toISOString(),
           last_message_preview: variables.content.substring(0, 100),
-          is_active: true
-        }, { onConflict: 'match_id' });
+        })
+        .eq('id', variables.conversationId);
 
       // Force immediate refetch of messages and conversations
-      await queryClient.invalidateQueries({ queryKey: ['direct-messages', currentMatchId] });
+      await queryClient.invalidateQueries({ queryKey: ['direct-messages', currentConversationId] });
       await queryClient.invalidateQueries({ queryKey: ['match-conversations'] });
       
       // Also manually refetch messages for immediate update
@@ -257,14 +254,14 @@ export const useDirectMessages = () => {
 
   // Delete conversation (delete everything for both users)
   const deleteConversationMutation = useMutation({
-    mutationFn: async (matchId: string) => {
+    mutationFn: async (conversationId: string) => {
       if (!user?.id) throw new Error('User not authenticated');
 
-      // Delete all messages in the match
+      // Delete all messages in the conversation
       const { error: messagesError } = await supabase
         .from('direct_messages')
         .delete()
-        .eq('match_id', matchId);
+        .eq('conversation_id', conversationId);
 
       if (messagesError) throw messagesError;
 
@@ -272,16 +269,16 @@ export const useDirectMessages = () => {
       const { error: convError } = await supabase
         .from('match_conversations')
         .delete()
-        .eq('match_id', matchId);
+        .eq('id', conversationId);
 
       if (convError) throw convError;
 
-      return matchId;
+      return conversationId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['match-conversations'] });
       queryClient.invalidateQueries({ queryKey: ['direct-messages'] });
-      setCurrentMatchId(null);
+      setCurrentConversationId(null);
       toast({
         title: "Conversation Deleted",
         description: "The conversation has been removed.",
@@ -299,33 +296,63 @@ export const useDirectMessages = () => {
 
   // Mark messages as read
   const markAsReadMutation = useMutation({
-    mutationFn: async (matchId: string) => {
+    mutationFn: async (conversationId: string) => {
       if (!user?.id) return;
 
       const { error } = await supabase
         .from('direct_messages')
         .update({ read_at: new Date().toISOString() })
-        .eq('match_id', matchId)
+        .eq('conversation_id', conversationId)
         .eq('receiver_id', user.id)
         .is('read_at', null);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['direct-messages', currentMatchId] });
+      queryClient.invalidateQueries({ queryKey: ['direct-messages', currentConversationId] });
     },
   });
+
+  // Helper to get or create conversation for a renter-realtor pair
+  const getOrCreateConversation = async (renterId: string, realtorId: string) => {
+    // Try to find existing conversation
+    const { data: existing, error: fetchError } = await supabase
+      .from('match_conversations')
+      .select('*')
+      .eq('renter_id', renterId)
+      .eq('realtor_id', realtorId)
+      .single();
+
+    if (existing) {
+      return existing.id;
+    }
+
+    // Create new conversation
+    const { data: newConv, error: createError } = await supabase
+      .from('match_conversations')
+      .insert({
+        renter_id: renterId,
+        realtor_id: realtorId,
+        is_active: true
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+    return newConv.id;
+  };
 
   return {
     conversations,
     messages,
-    currentMatchId,
-    setCurrentMatchId,
+    currentConversationId,
+    setCurrentConversationId,
     sendMessage: sendMessageMutation.mutate,
     isSendingMessage: sendMessageMutation.isPending,
     deleteConversation: deleteConversationMutation.mutate,
     isDeletingConversation: deleteConversationMutation.isPending,
     markAsRead: markAsReadMutation.mutate,
+    getOrCreateConversation,
     loadingConversations,
     loadingMessages,
   };
