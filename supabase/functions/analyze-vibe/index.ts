@@ -87,10 +87,20 @@ serve(async (req) => {
       const imageUrl = imageUrls[index];
       
       try {
+          // Build context of previous highlights to ensure uniqueness
+          const previousHighlights = analyses
+            .filter(a => a.image_highlight)
+            .map(a => a.image_highlight)
+            .join('\n- ');
+          
+          const highlightContext = previousHighlights && index > 0
+            ? `\n\n📌 PREVIOUS HIGHLIGHTS ALREADY GENERATED:\n- ${previousHighlights}\n\n🚨 CRITICAL: Your highlight must focus on COMPLETELY DIFFERENT aspects not covered above. If previous highlights covered the bedroom, focus on the kitchen or bathroom. If they covered relaxation, focus on productivity or entertaining. AVOID ANY OVERLAP OR REPETITION.`
+            : '';
+
           const basePrompt = generateContent 
             ? `You are a luxury rental marketing specialist analyzing property images to create HIGH-CONVERTING listing content. This is image ${index + 1} of ${imageUrls.length} total images.
 
-            CORE MISSION: Discover the UNIQUE LIFESTYLE TRANSFORMATION this specific space offers renters.
+            CORE MISSION: Discover the UNIQUE LIFESTYLE TRANSFORMATION this specific space offers renters.${highlightContext}
 
             AMENITY DETECTION: Identify all visible amenities from this list:
             - TV, Smart TV, Large Screen TV
@@ -137,7 +147,7 @@ serve(async (req) => {
             4. COMPETITIVE ADVANTAGE: What can't they get in 90% of other properties?
             5. RENTER VALUE: What will they gain that they didn't have before?
 
-            ${index > 0 ? `DIFFERENTIATION RULE: This is image ${index + 1}. Your highlight must offer a COMPLETELY DIFFERENT lifestyle benefit from previous images. Previous benefits covered - avoid overlap! Think: 
+            ${index > 0 ? `DIFFERENTIATION STRATEGY: Vary your highlights across these lifestyle benefit categories to ensure each image showcases a different value: 
             - WORK: Productivity, focus, professional success
             - SOCIAL: Entertaining, hosting, impression-making  
             - WELLNESS: Relaxation, health, mental clarity
