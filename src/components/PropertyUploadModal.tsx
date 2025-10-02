@@ -318,6 +318,29 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       return;
     }
 
+    // Validate property data
+    try {
+      const { propertySchema } = require('@/lib/validation');
+      propertySchema.parse({
+        title,
+        description: description || '',
+        location,
+        price: parseFloat(price),
+        size: `${size}m²`,
+        vibe: selectedVibes[0] || '',
+        highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+        images: [], // Will be populated after upload
+        property_source_link: sourceLink || '',
+      });
+    } catch (error: any) {
+      toast({
+        title: "Validation Error",
+        description: error.errors?.[0]?.message || "Please check your input and try again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     // Convert price to VND if in USD
     const priceInVND = currency === 'USD' ? parseInt(price) * 24500 : parseInt(price);
 

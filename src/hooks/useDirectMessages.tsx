@@ -223,7 +223,15 @@ export const useDirectMessages = () => {
         throw new Error('User not authenticated');
       }
 
-      console.log('Sending message:', { conversationId, senderId: user.id, receiverId, content });
+      // Validate message content
+      const { messageSchema } = await import('@/lib/validation');
+      const validatedData = messageSchema.parse({
+        content,
+        conversation_id: conversationId,
+        receiver_id: receiverId,
+      });
+
+      console.log('Sending message:', { conversationId, senderId: user.id, receiverId, content: validatedData.content });
 
       const { data, error } = await supabase
         .from('direct_messages')
@@ -231,7 +239,7 @@ export const useDirectMessages = () => {
           conversation_id: conversationId,
           sender_id: user.id,
           receiver_id: receiverId,
-          content
+          content: validatedData.content
         })
         .select()
         .single();

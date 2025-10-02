@@ -41,6 +41,7 @@ interface UserProfile {
   bio?: string;
   location?: string;
   avatar_url?: string;
+  allow_contact_sharing?: boolean;
 }
 
 export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
@@ -155,16 +156,28 @@ export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
     mutationFn: async (updates: Partial<UserProfile>) => {
       if (!user?.id) throw new Error('User not authenticated');
 
+      // Validate input using zod schema
+      const { profileSchema } = await import('@/lib/validation');
+      const validatedData = profileSchema.parse({
+        name: updates.name || '',
+        email: updates.email || user?.email || '',
+        phone: updates.phone || '',
+        bio: updates.bio || '',
+        location: updates.location || '',
+        avatar_url: updates.avatar_url || '',
+        allow_contact_sharing: updates.allow_contact_sharing,
+      });
+
       const { data, error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
-          email: updates.email || user?.email || '',
-          name: updates.name || '',
-          phone: updates.phone || null,
-          bio: updates.bio || null,
-          location: updates.location || null,
-          avatar_url: updates.avatar_url || null,
+          email: validatedData.email,
+          name: validatedData.name,
+          phone: validatedData.phone || null,
+          bio: validatedData.bio || null,
+          location: validatedData.location || null,
+          avatar_url: validatedData.avatar_url || null,
         })
         .select()
         .single();

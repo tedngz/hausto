@@ -16,26 +16,79 @@ const logStep = (step: string, details?: any) => {
   console.log(`[HANDLE-PAYPAL-WEBHOOKS] ${step}${safeDetails ? ` - ${JSON.stringify(safeDetails)}` : ''}`);
 };
 
-// Verify PayPal webhook signature (basic implementation)
+// Verify PayPal webhook signature using PayPal's verification API
 const verifyWebhookSignature = async (body: string, headers: Headers): Promise<boolean> => {
   try {
-    // In production, implement proper PayPal webhook signature verification
-    // For now, we'll do basic validation
     const paypalWebhookId = headers.get('PAYPAL-TRANSMISSION-ID');
     const paypalCertId = headers.get('PAYPAL-CERT-ID');
     const paypalAuthAlgo = headers.get('PAYPAL-AUTH-ALGO');
     const paypalTransmissionSig = headers.get('PAYPAL-TRANSMISSION-SIG');
+    const paypalTransmissionTime = headers.get('PAYPAL-TRANSMISSION-TIME');
     
-    // Basic validation - in production you'd verify the actual signature
-    if (!paypalWebhookId || !paypalCertId || !paypalAuthAlgo || !paypalTransmissionSig) {
+    // Validate all required headers are present
+    if (!paypalWebhookId || !paypalCertId || !paypalAuthAlgo || !paypalTransmissionSig || !paypalTransmissionTime) {
       logStep("Missing required PayPal headers");
       return false;
     }
-    
-    return true;
+
+    // Get PayPal webhook ID from environment
+    const webhookId = Deno.env.get('PAYPAL_WEBHOOK_ID');
+    if (!webhookId) {
+      logStep("PAYPAL_WEBHOOK_ID not configured");
+      return false;
+    }
+
+    // Call PayPal's webhook verification API
+    const paypalClientId = Deno.env.get('PAYPAL_CLIENT_ID');
+    const paypalClientSecret = Deno.env.get('PAYPAL_CLIENT_SECRET');
+    const isProduction = Deno.env.get('PAYPAL_MODE') === 'production';
+    const baseUrl = isProduction ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+
+    // Get access token
+    const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${btoa(`${paypalClientId}:${paypalClientSecret}`)}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials',
+    });
+
+    if (!tokenResponse.ok) {
+      logStep("Failed to get PayPal access token");
+      return false;
+    }
+
+    const { access_token } = await tokenResponse.json();
+
+    // Verify webhook signature
+    const verifyResponse = await fetch(`${baseUrl}/v1/notifications/verify-webhook-signature`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${access_token}`,
+      },
+      body: JSON.stringify({
+        transmission_id: paypalWebhookId,
+        transmission_time: paypalTransmissionTime,
+        cert_url: paypalCertId,
+        auth_algo: paypalAuthAlgo,
+        transmission_sig: paypalTransmissionSig,
+        webhook_id: webhookId,
+        webhook_event: JSON.parse(body),
+      }),
+    });
+
+    if (!verifyResponse.ok) {
+      logStep("PayPal signature verification failed");
+      return false;
+    }
+
+    const verifyResult = await verifyResponse.json();
+    return verifyResult.verification_status === 'SUCCESS';
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    logStep("Webhook signature verification failed", { error: errorMessage });
+    logStep("Webhook signature verification error", { error: errorMessage });
     return false;
   }
 };

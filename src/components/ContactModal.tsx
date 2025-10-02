@@ -103,13 +103,22 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
 
       // Send the initial message
       console.log('Sending initial message...');
+      
+      // Validate message content
+      const { messageSchema } = await import('@/lib/validation');
+      const validatedMessage = messageSchema.parse({
+        content: formData.message,
+        conversation_id: conversationId,
+        receiver_id: apartment.realtor.id,
+      });
+
       const { data: messageData, error: messageError } = await supabase
         .from('direct_messages')
         .insert({
           conversation_id: conversationId,
           sender_id: user.id,
           receiver_id: apartment.realtor.id,
-          content: formData.message
+          content: validatedMessage.content
         })
         .select()
         .single();
