@@ -42,7 +42,7 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
     try {
       console.log('Starting conversation between user:', user.id, 'and realtor:', apartment.realtor.id, 'for property:', apartment.id);
       
-      // Check if conversation already exists
+      // Get or create conversation (now with unique constraint, this handles duplicates)
       const { data: existingConv, error: checkError } = await supabase
         .from('match_conversations')
         .select('id')
