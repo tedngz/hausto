@@ -245,13 +245,6 @@ export type Database = {
             foreignKeyName: "direct_messages_conversation_id_fkey"
             columns: ["conversation_id"]
             isOneToOne: false
-            referencedRelation: "conversation_properties"
-            referencedColumns: ["conversation_id"]
-          },
-          {
-            foreignKeyName: "direct_messages_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
             referencedRelation: "match_conversations"
             referencedColumns: ["id"]
           },
@@ -626,34 +619,27 @@ export type Database = {
       }
     }
     Views: {
-      conversation_properties: {
-        Row: {
-          conversation_id: string | null
-          images: string[] | null
-          location: string | null
-          match_id: string | null
-          matched_at: string | null
-          price: number | null
-          property_id: string | null
-          realtor_id: string | null
-          renter_id: string | null
-          title: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "property_matches_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       activate_user_subscription: {
         Args: { user_email: string }
         Returns: undefined
+      }
+      get_conversation_properties: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          conversation_id: string
+          images: string[]
+          location: string
+          match_id: string
+          matched_at: string
+          price: number
+          property_id: string
+          realtor_id: string
+          renter_id: string
+          title: string
+        }[]
       }
       get_matched_public_profiles: {
         Args: { user_ids: string[] }
