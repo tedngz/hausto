@@ -45,29 +45,34 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
       // Get or create conversation (now with unique constraint, this handles duplicates)
       const { data: existingConv, error: checkError } = await supabase
         .from('match_conversations')
-        .select('id')
+        .select('id, created_at')
         .eq('realtor_id', apartment.realtor.id)
         .eq('renter_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle();
 
       if (checkError) {
         console.error('Error checking existing conversation:', checkError);
-        throw checkError;
+        // Do not throw here; proceed to upsert below as a safe fallback
       }
 
       let conversationId = existingConv?.id;
       
-      // Create new conversation if none exists
+      // Create or fetch conversation if none exists (safe for unique constraint)
       if (!conversationId) {
-        console.log('Creating new conversation...');
-        const { data: newConv, error: convError } = await supabase
+        console.log('Creating or fetching conversation via upsert...');
+        const { data: upsertConv, error: convError } = await supabase
           .from('match_conversations')
-          .insert({
-            realtor_id: apartment.realtor.id,
-            renter_id: user.id,
-            is_active: true
-          })
-          .select()
+          .upsert(
+            {
+              realtor_id: apartment.realtor.id,
+              renter_id: user.id,
+              is_active: true,
+            },
+            { onConflict: 'renter_id,realtor_id' }
+          )
+          .select('id')
           .single();
 
         if (convError) {
@@ -75,8 +80,8 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
           throw convError;
         }
         
-        conversationId = newConv.id;
-        console.log('Created new conversation with ID:', conversationId);
+        conversationId = upsertConv.id;
+        console.log('Upserted conversation with ID:', conversationId);
       } else {
         console.log('Using existing conversation ID:', conversationId);
       }

@@ -96,11 +96,32 @@ export const useDirectMessages = () => {
           })
         );
 
-        return conversationsWithData as MatchConversation[];
+        const deduped = Object.values(
+          (conversationsWithData as MatchConversation[]).reduce((acc, conv) => {
+            const key = `${conv.renter_id}::${conv.realtor_id}`;
+            const existing = acc[key];
+            if (!existing || new Date(conv.last_message_at).getTime() > new Date(existing.last_message_at).getTime()) {
+              acc[key] = conv;
+            }
+            return acc;
+          }, {} as Record<string, MatchConversation>)
+        ).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+
+        return deduped;
       }
       
       console.log('Conversations fetched successfully:', data);
-      return data as MatchConversation[];
+      const deduped = Object.values(
+        (data as MatchConversation[]).reduce((acc, conv) => {
+          const key = `${conv.renter_id}::${conv.realtor_id}`;
+          const existing = acc[key];
+          if (!existing || new Date(conv.last_message_at).getTime() > new Date(existing.last_message_at).getTime()) {
+            acc[key] = conv;
+          }
+          return acc;
+        }, {} as Record<string, MatchConversation>)
+      ).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+      return deduped;
     },
     enabled: !!user?.id,
   });
@@ -315,31 +336,36 @@ export const useDirectMessages = () => {
 
   // Helper to get or create conversation for a renter-realtor pair
   const getOrCreateConversation = async (renterId: string, realtorId: string) => {
-    // Try to find existing conversation
-    const { data: existing, error: fetchError } = await supabase
+    // Try to find the earliest existing conversation for this pair (handles legacy duplicates)
+    const { data: existing } = await supabase
       .from('match_conversations')
-      .select('*')
+      .select('id, created_at, last_message_at')
       .eq('renter_id', renterId)
       .eq('realtor_id', realtorId)
-      .single();
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-    if (existing) {
+    if (existing?.id) {
       return existing.id;
     }
 
-    // Create new conversation
-    const { data: newConv, error: createError } = await supabase
+    // Create or fetch via upsert to avoid race conditions and enforce uniqueness
+    const { data: upserted, error: upsertError } = await supabase
       .from('match_conversations')
-      .insert({
-        renter_id: renterId,
-        realtor_id: realtorId,
-        is_active: true
-      })
-      .select()
+      .upsert(
+        {
+          renter_id: renterId,
+          realtor_id: realtorId,
+          is_active: true,
+        },
+        { onConflict: 'renter_id,realtor_id' }
+      )
+      .select('id')
       .single();
 
-    if (createError) throw createError;
-    return newConv.id;
+    if (upsertError) throw upsertError;
+    return upserted.id;
   };
 
   return {
