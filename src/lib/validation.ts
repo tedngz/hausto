@@ -73,8 +73,8 @@ export const messageSchema = z.object({
     .trim()
     .min(1, 'Message cannot be empty')
     .max(5000, 'Message must be less than 5000 characters'),
-  conversation_id: z.string().uuid('Invalid conversation ID').optional(),
-  receiver_id: z.string().uuid('Invalid receiver ID').optional(),
+  conversation_id: z.string().uuid('Invalid conversation ID'),
+  receiver_id: z.string().uuid('Invalid receiver ID'),
 });
 
 export type MessageFormData = z.infer<typeof messageSchema>;

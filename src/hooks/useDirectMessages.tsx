@@ -75,26 +75,27 @@ export const useDirectMessages = () => {
           console.error('Error fetching user profiles:', profilesError);
         }
 
-        // Fetch all matched properties for each conversation
-        const conversationsWithData = await Promise.all(
-          data.map(async (conv) => {
-            const { data: properties, error: propsError } = await supabase
-              .from('conversation_properties')
-              .select('*')
-              .eq('conversation_id', conv.id);
+        // Fetch all conversation properties at once
+        const { data: allProperties, error: propsError } = await supabase
+          .rpc('get_conversation_properties');
 
-            if (propsError) {
-              console.error('Error fetching conversation properties:', propsError);
-            }
+        if (propsError) {
+          console.error('Error fetching conversation properties:', propsError);
+        }
 
-            return {
-              ...conv,
-              renter_name: profiles?.find(p => p.id === conv.renter_id)?.name || 'Interested Renter',
-              realtor_name: profiles?.find(p => p.id === conv.realtor_id)?.name || 'Property Owner',
-              properties: properties || []
-            };
-          })
-        );
+        // Map properties to conversations
+        const conversationsWithData = data.map((conv) => {
+          const properties = (allProperties || []).filter(
+            (prop) => prop.conversation_id === conv.id
+          );
+
+          return {
+            ...conv,
+            renter_name: profiles?.find(p => p.id === conv.renter_id)?.name || 'Interested Renter',
+            realtor_name: profiles?.find(p => p.id === conv.realtor_id)?.name || 'Property Owner',
+            properties: properties || []
+          };
+        });
 
         const deduped = Object.values(
           (conversationsWithData as MatchConversation[]).reduce((acc, conv) => {
