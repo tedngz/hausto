@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
+import { supabase } from '@/integrations/supabase/client';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +47,7 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
     markAsRead,
     loadingConversations,
     loadingMessages,
+    getOrCreateConversation,
   } = useDirectMessages();
 
   const [messageText, setMessageText] = useState('');
@@ -53,15 +55,36 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
   useEffect(() => {
     console.log('DirectMessagingModal useEffect - initialMatchId:', initialMatchId, 'isOpen:', isOpen, 'conversations.length:', conversations.length, 'currentConversationId:', currentConversationId);
     
-    if (initialMatchId && isOpen) {
-      console.log('Setting currentConversationId to initialMatchId:', initialMatchId);
-      setCurrentConversationId(initialMatchId);
-    } else if (isOpen && conversations.length > 0 && !currentConversationId) {
-      // Auto-select first conversation if no conversation is selected
-      console.log('Auto-selecting first conversation:', conversations[0].id);
-      setCurrentConversationId(conversations[0].id);
-    }
-  }, [initialMatchId, isOpen, conversations, currentConversationId, setCurrentConversationId]);
+    const resolveConversation = async () => {
+      if (!isOpen) return;
+
+      if (initialMatchId) {
+        // If a conversation already exists with this ID, use it
+        const existingConv = conversations.find(c => c.id === initialMatchId);
+        if (existingConv) {
+          setCurrentConversationId(existingConv.id);
+          return;
+        }
+        // Otherwise, treat initialMatchId as a property_match id and resolve renter/realtor pair
+        const { data: match } = await supabase
+          .from('property_matches')
+          .select('renter_id,realtor_id')
+          .eq('id', initialMatchId)
+          .maybeSingle();
+        if (match?.renter_id && match?.realtor_id) {
+          const convId = await getOrCreateConversation(match.renter_id, match.realtor_id);
+          setCurrentConversationId(convId);
+          return;
+        }
+      }
+      // Fallback: auto-select first conversation
+      if (conversations.length > 0 && !currentConversationId) {
+        setCurrentConversationId(conversations[0].id);
+      }
+    };
+
+    resolveConversation();
+  }, [initialMatchId, isOpen, conversations, currentConversationId, setCurrentConversationId, getOrCreateConversation]);
 
   useEffect(() => {
     if (currentConversationId && messages.length > 0) {
