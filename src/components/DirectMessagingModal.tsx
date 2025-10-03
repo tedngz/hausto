@@ -307,6 +307,55 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                     <div className="space-y-4">
                       {messages.map((message) => {
                         const isOwnMessage = message.sender_id === user?.id;
+                        const isSystemMessage = message.metadata?.type === 'system';
+                        
+                        if (isSystemMessage) {
+                          return (
+                            <div key={message.id} className="flex justify-center my-4">
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 max-w-md text-center">
+                                <p className="text-sm text-blue-800">{message.content}</p>
+                                {message.metadata?.property_id && (
+                                  <button
+                                    onClick={() => {
+                                      const property = currentConversation?.properties?.find(
+                                        p => p.property_id === message.metadata?.property_id
+                                      );
+                                      if (property) {
+                                        const apartment = {
+                                          id: property.property_id,
+                                          images: property.images || [],
+                                          title: property.title,
+                                          location: property.location,
+                                          price: Number(property.price),
+                                          size: '',
+                                          vibe: '',
+                                          description: '',
+                                          highlights: [],
+                                          realtor: {
+                                            id: currentConversation.realtor_id,
+                                            name: 'Licensed Realtor',
+                                            phone: '+1-234-567-8900',
+                                            email: 'contact@realtor.com'
+                                          }
+                                        };
+                                        setDetailModalApartment(apartment);
+                                      }
+                                    }}
+                                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-1 inline-block"
+                                  >
+                                    View property →
+                                  </button>
+                                )}
+                                <p className="text-xs text-blue-600 mt-1">
+                                  {new Date(message.created_at).toLocaleTimeString([], { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
                         
                         return (
                           <div

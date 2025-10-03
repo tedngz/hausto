@@ -13,6 +13,12 @@ interface DirectMessage {
   created_at: string;
   read_at: string | null;
   deleted_by: string[];
+  metadata?: {
+    type?: 'system';
+    property_id?: string;
+    property_title?: string;
+    property_location?: string;
+  };
 }
 
 interface MatchConversation {
