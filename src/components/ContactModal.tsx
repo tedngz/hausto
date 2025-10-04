@@ -42,42 +42,26 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
     try {
       console.log('Starting conversation between user:', user.id, 'and realtor:', apartment.realtor.id, 'for property:', apartment.id);
       
-      // Get or create conversation using upsert
-      const { data: existingConv } = await supabase
+      // Get or create ONE conversation per renter-realtor pair (reused for all property matches)
+      const { data: conversation, error: convError } = await supabase
         .from('match_conversations')
+        .upsert(
+          {
+            realtor_id: apartment.realtor.id,
+            renter_id: user.id,
+            is_active: true,
+          },
+          { onConflict: 'renter_id,realtor_id' }
+        )
         .select('id')
-        .eq('realtor_id', apartment.realtor.id)
-        .eq('renter_id', user.id)
-        .maybeSingle();
+        .single();
 
-      let conversationId = existingConv?.id;
+      if (convError || !conversation?.id) {
+        console.error('Error creating/retrieving conversation:', convError);
+        throw convError || new Error('Failed to create or find conversation');
+      }
       
-      // Create conversation if it doesn't exist
-      if (!conversationId) {
-        const { data: newConv, error: convError } = await supabase
-          .from('match_conversations')
-          .upsert(
-            {
-              realtor_id: apartment.realtor.id,
-              renter_id: user.id,
-              is_active: true,
-            },
-            { onConflict: 'renter_id,realtor_id' }
-          )
-          .select('id')
-          .single();
-
-        if (convError) {
-          console.error('Error creating conversation:', convError);
-          throw convError;
-        }
-        
-        conversationId = newConv.id;
-      }
-
-      if (!conversationId) {
-        throw new Error('Failed to create or find conversation');
-      }
+      const conversationId = conversation.id;
 
       // Check if this property match already exists
       const { data: existingMatch } = await supabase
