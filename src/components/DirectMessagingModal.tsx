@@ -313,6 +313,63 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                   </AlertDialog>
                 </div>
 
+                {/* Matched Properties */}
+                {currentConversation.properties && currentConversation.properties.length > 0 && (
+                  <div className="border-b bg-gradient-to-r from-purple-50/50 to-pink-50/50 p-3">
+                    <p className="text-xs font-medium text-gray-600 mb-2">
+                      Matched Properties ({currentConversation.properties.length})
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {currentConversation.properties.map((property) => (
+                        <button
+                          key={property.property_id}
+                          onClick={() => {
+                            const apartment = {
+                              id: property.property_id,
+                              images: property.images || [],
+                              title: property.title,
+                              location: property.location,
+                              price: Number(property.price),
+                              size: '',
+                              vibe: '',
+                              description: '',
+                              highlights: [],
+                              realtor: {
+                                id: currentConversation.realtor_id,
+                                name: 'Licensed Realtor',
+                                phone: '+1-234-567-8900',
+                                email: 'contact@realtor.com'
+                              }
+                            };
+                            setDetailModalApartment(apartment);
+                          }}
+                          className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-2 hover:border-purple-300 hover:shadow-sm transition-all group"
+                        >
+                          {property.images?.[0] && (
+                            <img 
+                              src={property.images[0]} 
+                              alt={property.title}
+                              className="w-12 h-12 object-cover rounded"
+                            />
+                          )}
+                          <div className="text-left min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 group-hover:text-purple-600 line-clamp-1">
+                              {property.title}
+                            </p>
+                            <p className="text-xs text-gray-500 line-clamp-1 flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {property.location}
+                            </p>
+                          </div>
+                          <Badge variant="secondary" className="shrink-0">
+                            ${property.price.toLocaleString()}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Messages */}
                 <ScrollArea className="flex-1 p-4">
                   {loadingMessages ? (
