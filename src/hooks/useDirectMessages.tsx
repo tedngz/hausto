@@ -81,7 +81,7 @@ export const useDirectMessages = () => {
           console.error('Error fetching user profiles:', profilesError);
         }
 
-        // Fetch all conversation properties at once
+        // Fetch all conversation properties once (may return multiple rows per conversation/pair)
         const { data: allProperties, error: propsError } = await supabase
           .rpc('get_conversation_properties');
 
@@ -89,45 +89,62 @@ export const useDirectMessages = () => {
           console.error('Error fetching conversation properties:', propsError);
         }
 
-        // Map properties to conversations
-        const conversationsWithData = data.map((conv) => {
-          const properties = (allProperties || []).filter(
-            (prop) => prop.conversation_id === conv.id
-          );
+        // Build quick maps for names and properties grouped by renter/realtor pair
+        const nameById = new Map<string, string>();
+        profiles?.forEach(p => nameById.set(p.id, p.name));
 
-          return {
-            ...conv,
-            renter_name: profiles?.find(p => p.id === conv.renter_id)?.name || 'Interested Renter',
-            realtor_name: profiles?.find(p => p.id === conv.realtor_id)?.name || 'Property Owner',
-            properties: properties || []
-          };
+        const propertiesByPair = new Map<string, Array<{ property_id: string; title: string; location: string; price: number; images: string[] }>>();
+        (allProperties || []).forEach((row: any) => {
+          const key = `${row.renter_id}::${row.realtor_id}`;
+          const list = propertiesByPair.get(key) || [];
+          // Ensure unique properties per pair
+          if (!list.some(p => p.property_id === row.property_id)) {
+            list.push({
+              property_id: row.property_id,
+              title: row.title,
+              location: row.location,
+              price: Number(row.price ?? 0),
+              images: row.images || [],
+            });
+          }
+          propertiesByPair.set(key, list);
         });
 
-        const deduped = Object.values(
-          (conversationsWithData as MatchConversation[]).reduce((acc, conv) => {
-            const key = `${conv.renter_id}::${conv.realtor_id}`;
-            const existing = acc[key];
-            if (!existing || new Date(conv.last_message_at).getTime() > new Date(existing.last_message_at).getTime()) {
-              acc[key] = conv;
-            }
-            return acc;
-          }, {} as Record<string, MatchConversation>)
-        ).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+        // Deduplicate conversations strictly by renter/realtor pair and merge property lists per pair
+        const pairMap = new Map<string, MatchConversation>();
+        (data as any[]).forEach((conv) => {
+          const key = `${conv.renter_id}::${conv.realtor_id}`;
+          const enriched: MatchConversation = {
+            ...conv,
+            renter_name: nameById.get(conv.renter_id) || 'Interested Renter',
+            realtor_name: nameById.get(conv.realtor_id) || 'Property Owner',
+            properties: propertiesByPair.get(key) || [],
+          };
+          const existing = pairMap.get(key);
+          if (!existing || new Date(conv.last_message_at).getTime() > new Date(existing.last_message_at).getTime()) {
+            pairMap.set(key, enriched);
+          }
+        });
 
+        const deduped = Array.from(pairMap.values()).sort(
+          (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+        );
+
+        console.log('Conversations (deduped by pair):', deduped.map(c => ({ id: c.id, renter: c.renter_id, realtor: c.realtor_id, props: c.properties?.length })));
         return deduped;
       }
       
-      console.log('Conversations fetched successfully:', data);
-      const deduped = Object.values(
-        (data as MatchConversation[]).reduce((acc, conv) => {
-          const key = `${conv.renter_id}::${conv.realtor_id}`;
-          const existing = acc[key];
-          if (!existing || new Date(conv.last_message_at).getTime() > new Date(existing.last_message_at).getTime()) {
-            acc[key] = conv;
-          }
-          return acc;
-        }, {} as Record<string, MatchConversation>)
-      ).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+      console.log('Conversations fetched successfully (raw):', data);
+      // Fallback: ensure uniqueness by renter/realtor pair even without extra data
+      const pairMap = new Map<string, MatchConversation>();
+      (data as any[]).forEach((conv) => {
+        const key = `${conv.renter_id}::${conv.realtor_id}`;
+        const existing = pairMap.get(key);
+        if (!existing || new Date(conv.last_message_at).getTime() > new Date(existing.last_message_at).getTime()) {
+          pairMap.set(key, conv as MatchConversation);
+        }
+      });
+      const deduped = Array.from(pairMap.values()).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
       return deduped;
     },
     enabled: !!user?.id,
