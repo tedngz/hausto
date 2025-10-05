@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { X, Send, MessageCircle, MapPin, ArrowLeft } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -235,39 +236,67 @@ export const AIChatAgent = ({
                           </h4>
                         </>
                       );
-                    })()}
-                    <button onClick={() => {
-                  const currentConv = conversations.find(c => c.id === selectedMatch);
-                  const firstProp = currentConv?.properties?.[0];
-                  if (currentConv && firstProp) {
-                    setDetailModalApartment({
-                      id: firstProp.property_id,
-                      images: firstProp.images || [],
-                      title: firstProp.title,
-                      location: firstProp.location,
-                      price: Number(firstProp.price || 0),
-                      size: '',
-                      vibe: '',
-                      description: '',
-                      highlights: [],
-                      vibe_analysis: null,
-                      realtor: {
-                        id: currentConv.realtor_id,
-                        name: currentConv.realtor_name || 'Property Owner',
-                        phone: '+1-234-567-8900',
-                        email: 'contact@realtor.com'
-                      },
-                      matchId: currentConv.id
-                    });
-                  }
-                }} className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left">
-                      {(() => {
-                        const currentConv = conversations.find(c => c.id === selectedMatch);
-                        const firstProp = currentConv?.properties?.[0];
-                        const extraCount = Math.max((currentConv?.properties?.length || 0) - 1, 0);
-                        return firstProp ? `${firstProp.title}${extraCount > 0 ? ` (+${extraCount} more)` : ''}` : 'View property';
-                      })()}
-                    </button>
+                     })()}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left">
+                          {(() => {
+                            const currentConv = conversations.find(c => c.id === selectedMatch);
+                            const firstProp = currentConv?.properties?.[0];
+                            const extraCount = Math.max((currentConv?.properties?.length || 0) - 1, 0);
+                            return firstProp ? `${firstProp.title}${extraCount > 0 ? ` (+${extraCount} more)` : ''}` : 'View property';
+                          })()}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-3" align="start">
+                        <h4 className="font-semibold mb-3 text-sm">Matched Properties</h4>
+                        <ScrollArea className="max-h-64">
+                          <div className="space-y-2">
+                            {(() => {
+                              const currentConv = conversations.find(c => c.id === selectedMatch);
+                              return currentConv?.properties?.map((prop, index) => (
+                                <button
+                                  key={prop.property_id}
+                                  onClick={() => {
+                                    setDetailModalApartment({
+                                      id: prop.property_id,
+                                      images: prop.images || [],
+                                      title: prop.title,
+                                      location: prop.location,
+                                      price: Number(prop.price || 0),
+                                      size: '',
+                                      vibe: '',
+                                      description: '',
+                                      highlights: [],
+                                      vibe_analysis: null,
+                                      realtor: {
+                                        id: currentConv.realtor_id,
+                                        name: currentConv.realtor_name || 'Property Owner',
+                                        phone: '+1-234-567-8900',
+                                        email: 'contact@realtor.com'
+                                      },
+                                      matchId: currentConv.id
+                                    });
+                                  }}
+                                  className="w-full text-left p-2 rounded hover:bg-muted transition-colors border border-border"
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <span className="font-semibold text-primary mt-0.5">{index + 1}.</span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-sm truncate">{prop.title}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{prop.location}</p>
+                                      <Badge variant="secondary" className="text-xs mt-1">
+                                        {formatPrice(Number(prop.price || 0))}/mo
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </button>
+                              ));
+                            })()}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
               </div>
