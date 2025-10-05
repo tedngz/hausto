@@ -15,6 +15,8 @@ import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { Apartment } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 interface AIChatAgentProps {
   isOpen: boolean;
   onClose: () => void;
@@ -46,6 +48,7 @@ export const AIChatAgent = ({
   const {
     user
   } = useAuth();
+  const { toast } = useToast();
   const {
     conversations,
     sendMessage: sendDirectMessage,
@@ -257,26 +260,46 @@ export const AIChatAgent = ({
                               return currentConv?.properties?.map((prop, index) => (
                                 <button
                                   key={prop.property_id}
-                                  onClick={() => {
-                                    setDetailModalApartment({
-                                      id: prop.property_id,
-                                      images: prop.images || [],
-                                      title: prop.title,
-                                      location: prop.location,
-                                      price: Number(prop.price || 0),
-                                      size: '',
-                                      vibe: '',
-                                      description: '',
-                                      highlights: [],
-                                      vibe_analysis: null,
-                                      realtor: {
-                                        id: currentConv.realtor_id,
-                                        name: currentConv.realtor_name || 'Property Owner',
-                                        phone: '+1-234-567-8900',
-                                        email: 'contact@realtor.com'
-                                      },
-                                      matchId: currentConv.id
-                                    });
+                                  onClick={async () => {
+                                    try {
+                                      const { data: fullProperty, error } = await supabase
+                                        .from('properties')
+                                        .select('*')
+                                        .eq('id', prop.property_id)
+                                        .single();
+
+                                      if (error) throw error;
+
+                                      if (fullProperty) {
+                                        setDetailModalApartment({
+                                          id: fullProperty.id,
+                                          images: fullProperty.images || [],
+                                          title: fullProperty.title,
+                                          location: fullProperty.location,
+                                          price: Number(fullProperty.price || 0),
+                                          size: fullProperty.size || '',
+                                          vibe: fullProperty.vibe || '',
+                                          description: fullProperty.description || '',
+                                          highlights: fullProperty.highlights || [],
+                                          vibe_analysis: fullProperty.vibe_analysis,
+                                          property_source_link: fullProperty.property_source_link,
+                                          realtor: {
+                                            id: currentConv.realtor_id,
+                                            name: currentConv.realtor_name || 'Property Owner',
+                                            phone: '+1-234-567-8900',
+                                            email: 'contact@realtor.com'
+                                          },
+                                          matchId: currentConv.id
+                                        });
+                                      }
+                                    } catch (error) {
+                                      console.error('Error fetching property details:', error);
+                                      toast({
+                                        title: 'Error',
+                                        description: 'Failed to load property details',
+                                        variant: 'destructive'
+                                      });
+                                    }
                                   }}
                                   className="w-full text-left p-2 rounded hover:bg-muted transition-colors border border-border"
                                 >
