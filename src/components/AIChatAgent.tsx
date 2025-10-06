@@ -251,10 +251,10 @@ export const AIChatAgent = ({
                           })()}
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-80 p-3" align="start">
-                        <h4 className="font-semibold mb-3 text-sm">Matched Properties</h4>
-                        <ScrollArea className="max-h-64">
-                          <div className="space-y-2">
+                      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-96 p-3 max-h-[70vh] flex flex-col" align="start">
+                        <h4 className="font-semibold mb-3 text-sm flex-shrink-0">Matched Properties</h4>
+                        <ScrollArea className="flex-1">
+                          <div className="space-y-2 pr-3">
                             {(() => {
                               const currentConv = conversations.find(c => c.id === selectedMatch);
                               return currentConv?.properties?.map((prop, index) => (
@@ -301,14 +301,14 @@ export const AIChatAgent = ({
                                       });
                                     }
                                   }}
-                                  className="w-full text-left p-2 rounded hover:bg-muted transition-colors border border-border"
+                                  className="w-full text-left p-3 rounded-lg hover:bg-muted transition-colors border border-border"
                                 >
                                   <div className="flex items-start gap-2">
-                                    <span className="font-semibold text-primary mt-0.5">{index + 1}.</span>
+                                    <span className="font-semibold text-primary mt-0.5 flex-shrink-0">{index + 1}.</span>
                                     <div className="flex-1 min-w-0">
-                                      <p className="font-medium text-sm truncate">{prop.title}</p>
-                                      <p className="text-xs text-muted-foreground truncate">{prop.location}</p>
-                                      <Badge variant="secondary" className="text-xs mt-1">
+                                      <p className="font-medium text-sm break-words">{prop.title}</p>
+                                      <p className="text-xs text-muted-foreground break-words mt-1">{prop.location}</p>
+                                      <Badge variant="secondary" className="text-xs mt-2">
                                         {formatPrice(Number(prop.price || 0))}/mo
                                       </Badge>
                                     </div>
