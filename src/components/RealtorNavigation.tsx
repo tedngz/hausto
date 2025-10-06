@@ -60,16 +60,6 @@ export const RealtorNavigation = ({
                 <Building className="w-3.5 h-3.5 mr-1" />
                 <span className="hidden xs:inline text-xs">Dashboard</span>
               </Button>
-              
-              <Button
-                variant={currentView === 'profile' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setCurrentView('profile')}
-                className={`text-xs px-2 py-1.5 h-8 ${currentView === 'profile' ? 'bg-primary text-primary-foreground' : ''}`}
-              >
-                <User className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">Profile</span>
-              </Button>
             </div>
           </div>
 
@@ -81,6 +71,11 @@ export const RealtorNavigation = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 bg-white border shadow-lg z-50">
+                <DropdownMenuItem onClick={() => setCurrentView('profile')}>
+                  <User className="w-4 h-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 {onAddProperty && (
                   <>
                     <DropdownMenuItem onClick={onAddProperty}>
