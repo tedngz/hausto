@@ -160,18 +160,18 @@ export const AIChatAgent = ({
                       <div
                         key={conv.id}
                         onClick={() => handleMatchSelect(conv.id)}
-                        className="p-3 sm:p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200"
+                        className="p-2.5 sm:p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200"
                       >
                         <div className="flex items-start space-x-2 sm:space-x-3">
-                          <Avatar className="w-12 h-12 flex-shrink-0">
+                          <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                             <AvatarImage src="" />
-                            <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold">
+                            <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold text-sm">
                               {isRealtor ? 'R' : 'P'}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
                             <p
-                              className="font-medium text-gray-900 mb-1 hover:text-orange-600 cursor-pointer"
+                              className="font-medium text-sm sm:text-base text-gray-900 mb-1 hover:text-orange-600 cursor-pointer truncate"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (isRealtor) {
@@ -183,20 +183,20 @@ export const AIChatAgent = ({
                             >
                               {otherUserName || (isRealtor ? 'Interested Renter' : 'Property Owner')}
                             </p>
-                            <p className="text-sm text-gray-600 truncate mb-2">
+                            <p className="text-xs sm:text-sm text-gray-600 truncate mb-1.5 sm:mb-2">
                               {firstProp?.title}{extraCount > 0 ? ` (+${extraCount} more)` : ''}
                             </p>
-                            <div className="flex items-center mb-2">
-                              <MapPin className="w-3 h-3 text-gray-400 mr-1" />
+                            <div className="flex items-center mb-1.5 sm:mb-2">
+                              <MapPin className="w-3 h-3 text-gray-400 mr-1 flex-shrink-0" />
                               <span className="text-xs text-gray-500 truncate">
                                 {firstProp?.location}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800 whitespace-nowrap">
                                 {formatPrice(Number(firstProp?.price || 0))}/mo
                               </Badge>
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-gray-400 whitespace-nowrap">
                                 {new Date(conv.created_at).toLocaleDateString()}
                               </span>
                             </div>
