@@ -156,8 +156,11 @@ export const PropertyCard = ({
               const actualImageIndex = index + 1;
               const analysisForImage = imageAnalyses.find(a => a.image_index === actualImageIndex);
 
-              // Get highlight from vibe_analysis only
-              const imageHighlight = analysisForImage?.image_highlight || `Photo ${actualImageIndex + 1}`;
+              // Get highlight from vibe_analysis only - no placeholders
+              const imageHighlight = analysisForImage?.image_highlight;
+              
+              if (!imageHighlight) return null;
+              
               return <div key={index} className="space-y-2">
                         <div className="flex items-center gap-1 text-xs text-primary">
                           <Sparkles className="w-2.5 h-2.5" />
