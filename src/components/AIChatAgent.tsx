@@ -251,10 +251,10 @@ export const AIChatAgent = ({
                           })()}
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-96 p-3 max-h-[50vh] sm:max-h-[70vh] flex flex-col overflow-hidden" align="start">
-                        <h4 className="font-semibold mb-3 text-sm flex-shrink-0">Matched Properties</h4>
-                        <ScrollArea className="flex-1 max-h-[calc(50vh-4rem)] sm:max-h-[calc(70vh-4rem)]">
-                          <div className="space-y-2 pr-3">
+                      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-96 p-0 max-h-[60vh] sm:max-h-[70vh] flex flex-col overflow-hidden" align="start">
+                        <h4 className="font-semibold p-3 pb-2 text-sm flex-shrink-0 border-b">Matched Properties</h4>
+                        <ScrollArea className="h-full overflow-y-auto">
+                          <div className="space-y-2 p-3">
                             {(() => {
                               const currentConv = conversations.find(c => c.id === selectedMatch);
                               return currentConv?.properties?.map((prop, index) => (
