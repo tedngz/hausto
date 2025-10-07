@@ -152,10 +152,12 @@ export const PropertyCard = ({
                 <div className="space-y-4">
                   {apartment.images.slice(1).map((image, index) => {
               const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
-              const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
+              // index is 0-based for sliced array, but actual image is at index+1
+              const actualImageIndex = index + 1;
+              const analysisForImage = imageAnalyses.find(a => a.image_index === actualImageIndex);
 
-              // Get full highlight for this image
-              const imageHighlight = analysisForImage?.image_highlight || apartment.highlights?.[index + 1] || apartment.highlights?.[index] || `Beautiful ${apartment.title.toLowerCase()} feature`;
+              // Get highlight from vibe_analysis only
+              const imageHighlight = analysisForImage?.image_highlight || `Photo ${actualImageIndex + 1}`;
               return <div key={index} className="space-y-2">
                         <div className="flex items-center gap-1 text-xs text-primary">
                           <Sparkles className="w-2.5 h-2.5" />
