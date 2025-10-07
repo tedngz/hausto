@@ -110,7 +110,7 @@ export const PropertyCard = ({
           </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm mb-3 gap-2">
+        <div className="flex flex-col text-sm mb-3 gap-2">
           <div className="flex items-center text-gray-600">
             <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
             <span className="line-clamp-1">{apartment.location}</span>
