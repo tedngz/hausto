@@ -89,12 +89,30 @@ export const PropertyCard = ({
   };
   return <Card className={`bg-white/70 backdrop-blur-md overflow-hidden ${className}`}>
       {/* Representative Property Image */}
-      <div className="relative h-48">
-        <img src={apartment.images[0] || '/placeholder-property.jpg'} alt={apartment.title} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => setIsImageModalOpen(true)} />
-        {/* Vibe Ranking Overlay */}
-        {vibeScore && <div className="absolute top-3 left-3 z-10">
-            <VibeScore score={vibeScore} size="sm" />
-          </div>}
+      <div className="space-y-2">
+        {(() => {
+          const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
+          const analysisForImage = imageAnalyses.find(a => a.image_index === 0);
+          const imageHighlight = analysisForImage?.image_highlight;
+          
+          return (
+            <>
+              {imageHighlight && (
+                <div className="flex items-center gap-1 text-xs text-primary px-4 pt-4">
+                  <Sparkles className="w-2.5 h-2.5 flex-shrink-0" />
+                  <span className="font-medium">{imageHighlight}</span>
+                </div>
+              )}
+              <div className="relative h-48">
+                <img src={apartment.images[0] || '/placeholder-property.jpg'} alt={apartment.title} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => setIsImageModalOpen(true)} />
+                {/* Vibe Ranking Overlay */}
+                {vibeScore && <div className="absolute top-3 left-3 z-10">
+                    <VibeScore score={vibeScore} size="sm" />
+                  </div>}
+              </div>
+            </>
+          );
+        })()}
       </div>
       
       <div className="p-4 sm:p-6">
@@ -154,13 +172,15 @@ export const PropertyCard = ({
               const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
               const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
 
-              // Get full highlight for this image
-              const imageHighlight = analysisForImage?.image_highlight || apartment.highlights?.[index + 1] || apartment.highlights?.[index] || `Beautiful ${apartment.title.toLowerCase()} feature`;
+              // Get image highlight from database
+              const imageHighlight = analysisForImage?.image_highlight;
               return <div key={index} className="space-y-2">
-                        <div className="flex items-center gap-1 text-xs text-primary">
-                          <Sparkles className="w-2.5 h-2.5" />
-                          <span className="font-medium">{imageHighlight}</span>
-                        </div>
+                        {imageHighlight && (
+                          <div className="flex items-center gap-1 text-xs text-primary">
+                            <Sparkles className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="font-medium">{imageHighlight}</span>
+                          </div>
+                        )}
                         <div className="relative h-48">
                           <img src={image} alt={`${apartment.title} - Image ${index + 2}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
                     setCurrentImageIndex(index + 1);
