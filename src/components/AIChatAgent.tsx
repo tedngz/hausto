@@ -341,13 +341,13 @@ export const AIChatAgent = ({
                       const senderName = isOwnMessage ? 'You' : (isRealtor ? (currentConv?.renter_name || 'Renter') : (currentConv?.realtor_name || 'Property Owner'));
                       return (
                         <div key={message.id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                          <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[75%] sm:max-w-[80%]`}>
                             <p className="text-xs text-gray-500 mb-1 px-1">
                               {senderName}
                             </p>
-                            <div className={`max-w-[85%] md:max-w-xs lg:max-w-md px-4 py-2 rounded-lg break-words ${isOwnMessage ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' : 'bg-gray-100 text-gray-900'}`}>
-                              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                              <p className={`text-xs mt-1 ${isOwnMessage ? 'text-white/70' : 'text-gray-500'}`}>
+                            <div className={`w-full px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg break-words ${isOwnMessage ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                              <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                              <p className={`text-[10px] sm:text-xs mt-1 ${isOwnMessage ? 'text-white/70' : 'text-gray-500'}`}>
                                 {new Date(message.created_at).toLocaleTimeString([], {
                                   hour: '2-digit',
                                   minute: '2-digit'
