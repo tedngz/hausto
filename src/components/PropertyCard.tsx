@@ -136,7 +136,7 @@ export const PropertyCard = ({
             <div className={`text-gray-700 text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
               {apartment.description}
             </div>
-            {apartment.description && apartment.description.length > 150 && <Button variant="ghost" size="sm" className="p-0 h-auto text-orange-600 hover:text-orange-700 mt-1" onClick={() => setExpandedDescription(!expandedDescription)}>
+            {!showFullDescription && apartment.description && apartment.description.length > 150 && <Button variant="ghost" size="sm" className="p-0 h-auto text-orange-600 hover:text-orange-700 mt-1" onClick={() => setExpandedDescription(!expandedDescription)}>
                 {expandedDescription ? <>
                     <ChevronUp className="w-3 h-3 mr-1" />
                     Read less
@@ -154,12 +154,12 @@ export const PropertyCard = ({
               const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
               const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
 
-              // Get full highlight for this image
-              const imageHighlight = analysisForImage?.image_highlight || apartment.highlights?.[index + 1] || apartment.highlights?.[index] || `Beautiful ${apartment.title.toLowerCase()} feature`;
+              // Get full detailed analysis for this image
+              const imageHighlight = analysisForImage?.detailed_analysis || analysisForImage?.image_highlight || apartment.highlights?.[index + 1] || apartment.highlights?.[index] || `Beautiful ${apartment.title.toLowerCase()} feature`;
               return <div key={index} className="space-y-2">
-                        <div className="flex items-center gap-1 text-xs text-primary">
-                          <Sparkles className="w-2.5 h-2.5" />
-                          <span className="font-medium">{imageHighlight}</span>
+                        <div className="flex items-start gap-2 text-sm text-gray-700 bg-primary/5 p-3 rounded-lg">
+                          <Sparkles className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                          <p className="leading-relaxed">{imageHighlight}</p>
                         </div>
                         <div className="relative h-48">
                           <img src={image} alt={`${apartment.title} - Image ${index + 2}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
