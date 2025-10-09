@@ -145,32 +145,32 @@ export const PropertyCard = ({
                     Read more
                   </>}
               </Button>}
-            
-            {/* Additional Images with Highlights */}
-            {apartment.images.length > 1 && <div className="mt-4 space-y-3">
-                <p className="text-xs font-medium text-muted-foreground">More Photos</p>
-                <div className="space-y-4">
-                  {apartment.images.slice(1).map((image, index) => {
-              const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
-              const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
+          </div>}
 
-              // Get full highlight for this image
-              const imageHighlight = analysisForImage?.image_highlight || apartment.highlights?.[index + 1] || apartment.highlights?.[index] || `Beautiful ${apartment.title.toLowerCase()} feature`;
-              return <div key={index} className="space-y-2">
-                        <div className="flex items-center gap-1 text-xs text-primary">
-                          <Sparkles className="w-2.5 h-2.5" />
-                          <span className="font-medium">{imageHighlight}</span>
-                        </div>
-                        <div className="relative h-48">
-                          <img src={image} alt={`${apartment.title} - Image ${index + 2}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
-                    setCurrentImageIndex(index + 1);
-                    setIsImageModalOpen(true);
-                  }} />
-                        </div>
-                      </div>;
-            })}
-                </div>
-              </div>}
+        {/* Additional Images with Highlights */}
+        {apartment.images.length > 1 && <div className="mb-4 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">More Photos</p>
+            <div className="space-y-4">
+              {apartment.images.slice(1).map((image, index) => {
+          const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
+          const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
+
+          // Get full highlight for this image
+          const imageHighlight = analysisForImage?.image_highlight || apartment.highlights?.[index + 1] || apartment.highlights?.[index] || `Beautiful ${apartment.title.toLowerCase()} feature`;
+          return <div key={index} className="space-y-2">
+                    <div className="flex items-center gap-1 text-xs text-primary">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      <span className="font-medium">{imageHighlight}</span>
+                    </div>
+                    <div className="relative h-48">
+                      <img src={image} alt={`${apartment.title} - Image ${index + 2}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
+                setCurrentImageIndex(index + 1);
+                setIsImageModalOpen(true);
+              }} />
+                    </div>
+                  </div>;
+        })}
+            </div>
           </div>}
 
 
