@@ -88,13 +88,56 @@ export const PropertyCard = ({
     setCurrentImageIndex(prev => (prev - 1 + apartment.images.length) % apartment.images.length);
   };
   return <Card className={`bg-white/70 backdrop-blur-md overflow-hidden ${className}`}>
-      {/* Representative Property Image */}
       <div className="relative h-48">
-        <img src={apartment.images[0] || '/placeholder-property.jpg'} alt={apartment.title} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => setIsImageModalOpen(true)} />
+        <img
+          src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'}
+          alt={`${apartment.title} - Image ${currentImageIndex + 1}`}
+          className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
+          onClick={() => setIsImageModalOpen(true)}
+        />
+
         {/* Vibe Ranking Overlay */}
-        {vibeScore && <div className="absolute top-3 left-3 z-10">
+        {vibeScore && (
+          <div className="absolute top-3 left-3 z-10">
             <VibeScore score={vibeScore} size="sm" />
-          </div>}
+          </div>
+        )}
+
+        {/* Image navigation */}
+        {apartment.images.length > 1 && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="absolute top-1/2 -translate-y-1/2 left-2 bg-background/70 backdrop-blur-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                prevImage();
+              }}
+              aria-label="Previous image"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="absolute top-1/2 -translate-y-1/2 right-2 bg-background/70 backdrop-blur-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                nextImage();
+              }}
+              aria-label="Next image"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+
+            <div className="absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded-md bg-background/80 text-foreground">
+              {currentImageIndex + 1}/{apartment.images.length}
+            </div>
+          </>
+        )}
       </div>
       
       <div className="p-4 sm:p-6">
