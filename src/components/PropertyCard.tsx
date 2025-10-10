@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, ExternalLink } from 'lucide-react';
+import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/types';
 import { VibeScore } from '@/components/VibeScore';
 import { VibeScoreBar } from '@/components/VibeScoreBar';
@@ -81,12 +81,6 @@ export const PropertyCard = ({
     color: 'border-accent/30 bg-accent/10',
     activity: 'border-secondary/30 bg-secondary/10'
   };
-  const nextImage = () => {
-    setCurrentImageIndex(prev => (prev + 1) % apartment.images.length);
-  };
-  const prevImage = () => {
-    setCurrentImageIndex(prev => (prev - 1 + apartment.images.length) % apartment.images.length);
-  };
   return <Card className={`bg-white/70 backdrop-blur-md overflow-hidden ${className}`}>
       <div className="relative h-48">
         <img
@@ -101,42 +95,6 @@ export const PropertyCard = ({
           <div className="absolute top-3 left-3 z-10">
             <VibeScore score={vibeScore} size="sm" />
           </div>
-        )}
-
-        {/* Image navigation */}
-        {apartment.images.length > 1 && (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="absolute top-1/2 -translate-y-1/2 left-2 bg-background/70 backdrop-blur-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                prevImage();
-              }}
-              aria-label="Previous image"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="absolute top-1/2 -translate-y-1/2 right-2 bg-background/70 backdrop-blur-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                nextImage();
-              }}
-              aria-label="Next image"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-
-            <div className="absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded-md bg-background/80 text-foreground">
-              {currentImageIndex + 1}/{apartment.images.length}
-            </div>
-          </>
         )}
       </div>
       
