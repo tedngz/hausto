@@ -41,6 +41,7 @@ export const AIChatAgent = ({
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [selectedRenterId, setSelectedRenterId] = useState<string | null>(null);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
+  const [showPropertyList, setShowPropertyList] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
     formatPrice
@@ -135,7 +136,95 @@ export const AIChatAgent = ({
         
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          {!selectedMatch && !isStartingNewChat ? <div className="flex-1 flex flex-col overflow-hidden">
+          {showPropertyList ? (
+            /* Property List View */
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
+                <div className="flex items-center space-x-3">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowPropertyList(false)} 
+                    className="hover:bg-white/50 p-1" 
+                    aria-label="Back to conversation"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <h3 className="font-semibold text-gray-900">Matched Properties</h3>
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-3">
+                  {(() => {
+                    const currentConv = conversations.find(c => c.id === selectedMatch);
+                    return currentConv?.properties?.map((prop, index) => (
+                      <button
+                        key={prop.property_id}
+                        onClick={async () => {
+                          try {
+                            const { data: fullProperty, error } = await supabase
+                              .from('properties')
+                              .select('*')
+                              .eq('id', prop.property_id)
+                              .single();
+
+                            if (error) throw error;
+
+                            if (fullProperty) {
+                              setDetailModalApartment({
+                                id: fullProperty.id,
+                                images: fullProperty.images || [],
+                                title: fullProperty.title,
+                                location: fullProperty.location,
+                                price: Number(fullProperty.price || 0),
+                                size: fullProperty.size || '',
+                                vibe: fullProperty.vibe || '',
+                                description: fullProperty.description || '',
+                                highlights: fullProperty.highlights || [],
+                                vibe_analysis: fullProperty.vibe_analysis,
+                                property_source_link: fullProperty.property_source_link,
+                                realtor: {
+                                  id: currentConv.realtor_id,
+                                  name: currentConv.realtor_name || 'Property Owner',
+                                  phone: '+1-234-567-8900',
+                                  email: 'contact@realtor.com'
+                                },
+                                matchId: currentConv.id
+                              });
+                              setShowPropertyList(false);
+                            }
+                          } catch (error) {
+                            console.error('Error fetching property details:', error);
+                            toast({
+                              title: 'Error',
+                              description: 'Failed to load property details',
+                              variant: 'destructive'
+                            });
+                          }
+                        }}
+                        className="w-full text-left p-4 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200 hover:border-orange-200"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="font-semibold text-orange-600 mt-1 flex-shrink-0 text-lg">{index + 1}.</span>
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <p className="font-medium text-base break-words">{prop.title}</p>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                              <p className="text-sm text-gray-600 break-words">{prop.location}</p>
+                            </div>
+                            <Badge variant="secondary" className="text-sm bg-orange-100 text-orange-800">
+                              {formatPrice(Number(prop.price || 0))}/mo
+                            </Badge>
+                          </div>
+                        </div>
+                      </button>
+                    ));
+                  })()}
+                </div>
+              </ScrollArea>
+            </div>
+          ) : !selectedMatch && !isStartingNewChat ? <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
                 <div>
                   
@@ -240,86 +329,17 @@ export const AIChatAgent = ({
                         </>
                       );
                      })()}
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left">
-                          {(() => {
-                            const currentConv = conversations.find(c => c.id === selectedMatch);
-                            const firstProp = currentConv?.properties?.[0];
-                            const extraCount = Math.max((currentConv?.properties?.length || 0) - 1, 0);
-                            return firstProp ? `${firstProp.title}${extraCount > 0 ? ` (+${extraCount} more)` : ''}` : 'View property';
-                          })()}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[90vw] max-w-[calc(100vw-1rem)] sm:w-96 p-0 max-h-[50vh] sm:max-h-[70vh] flex flex-col" align="center" side="top" sideOffset={10}>
-                        <h4 className="font-semibold p-3 pb-2 text-sm flex-shrink-0 border-b bg-background">Matched Properties</h4>
-                        <ScrollArea className="flex-1 overflow-auto" style={{ maxHeight: 'calc(50vh - 3rem)' }}>
-                          <div className="space-y-2 p-3">
-                            {(() => {
-                              const currentConv = conversations.find(c => c.id === selectedMatch);
-                              return currentConv?.properties?.map((prop, index) => (
-                                <button
-                                  key={prop.property_id}
-                                  onClick={async () => {
-                                    try {
-                                      const { data: fullProperty, error } = await supabase
-                                        .from('properties')
-                                        .select('*')
-                                        .eq('id', prop.property_id)
-                                        .single();
-
-                                      if (error) throw error;
-
-                                      if (fullProperty) {
-                                        setDetailModalApartment({
-                                          id: fullProperty.id,
-                                          images: fullProperty.images || [],
-                                          title: fullProperty.title,
-                                          location: fullProperty.location,
-                                          price: Number(fullProperty.price || 0),
-                                          size: fullProperty.size || '',
-                                          vibe: fullProperty.vibe || '',
-                                          description: fullProperty.description || '',
-                                          highlights: fullProperty.highlights || [],
-                                          vibe_analysis: fullProperty.vibe_analysis,
-                                          property_source_link: fullProperty.property_source_link,
-                                          realtor: {
-                                            id: currentConv.realtor_id,
-                                            name: currentConv.realtor_name || 'Property Owner',
-                                            phone: '+1-234-567-8900',
-                                            email: 'contact@realtor.com'
-                                          },
-                                          matchId: currentConv.id
-                                        });
-                                      }
-                                    } catch (error) {
-                                      console.error('Error fetching property details:', error);
-                                      toast({
-                                        title: 'Error',
-                                        description: 'Failed to load property details',
-                                        variant: 'destructive'
-                                      });
-                                    }
-                                  }}
-                                  className="w-full text-left p-3 rounded-lg hover:bg-muted transition-colors border border-border"
-                                >
-                                  <div className="flex items-start gap-2">
-                                    <span className="font-semibold text-primary mt-0.5 flex-shrink-0">{index + 1}.</span>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="font-medium text-sm break-words">{prop.title}</p>
-                                      <p className="text-xs text-muted-foreground break-words mt-1">{prop.location}</p>
-                                      <Badge variant="secondary" className="text-xs mt-2">
-                                        {formatPrice(Number(prop.price || 0))}/mo
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                </button>
-                              ));
-                            })()}
-                          </div>
-                        </ScrollArea>
-                      </PopoverContent>
-                    </Popover>
+                    <button 
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
+                      onClick={() => setShowPropertyList(true)}
+                    >
+                      {(() => {
+                        const currentConv = conversations.find(c => c.id === selectedMatch);
+                        const firstProp = currentConv?.properties?.[0];
+                        const extraCount = Math.max((currentConv?.properties?.length || 0) - 1, 0);
+                        return firstProp ? `${firstProp.title}${extraCount > 0 ? ` (+${extraCount} more)` : ''}` : 'View properties';
+                      })()}
+                    </button>
                   </div>
                 </div>
               </div>
