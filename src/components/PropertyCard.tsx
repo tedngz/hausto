@@ -40,7 +40,7 @@ export const PropertyCard = ({
   // Use provided image index from SwipeInterface or maintain own state
   const externalImageIndex = (apartment as any)._currentImageIndex;
   const [currentImageIndex, setCurrentImageIndex] = useState(externalImageIndex || 0);
-  const [expandedDescription, setExpandedDescription] = useState(showFullDescription);
+  const [expandedDescription, setExpandedDescription] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const {
     formatPrice
