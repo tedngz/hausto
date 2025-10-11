@@ -10,19 +10,26 @@ interface VibeScoreProps {
   showBreakdown?: boolean;
   size?: 'sm' | 'md' | 'lg';
   isAnonymous?: boolean;
+  isAISearch?: boolean;
 }
 
-export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymous = false }: VibeScoreProps) => {
-  const getVibeLevel = (scoreValue: number, isAnonymousUser: boolean) => {
-    // For anonymous users, always show "Good vibe" 
+export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymous = false, isAISearch = false }: VibeScoreProps) => {
+  const getVibeLevel = (scoreValue: number, isAnonymousUser: boolean, fromAISearch: boolean) => {
+    // For anonymous users in AI search, show at least "Good vibe" or higher based on score
+    if (isAnonymousUser && fromAISearch) {
+      // Boost score to ensure it's at least "Good vibe" (55+)
+      const boostedScore = Math.max(scoreValue, 55);
+      if (boostedScore >= 85) return { level: 'Perfect vibe', color: 'bg-emerald-500 text-white border-emerald-400', emoji: '🔥' };
+      if (boostedScore >= 70) return { level: 'Strong vibe', color: 'bg-blue-500 text-white border-blue-400', emoji: '✨' };
+      return { level: 'Good vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
+    }
+    
+    // For anonymous users not in AI search, always show "Good vibe"
     if (isAnonymousUser) {
       return { level: 'Good vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
     }
     
     // For logged-in users, use preference-based scoring
-    const label = getVibeRatingLabel(scoreValue);
-    const colorClass = getVibeRatingColor(scoreValue);
-    
     if (scoreValue >= 85) return { level: 'Perfect vibe', color: 'bg-emerald-500 text-white border-emerald-400', emoji: '🔥' };
     if (scoreValue >= 70) return { level: 'Strong vibe', color: 'bg-blue-500 text-white border-blue-400', emoji: '✨' };
     if (scoreValue >= 55) return { level: 'Good vibe', color: 'bg-orange-500 text-white border-orange-400', emoji: '⭐' };
@@ -106,7 +113,7 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
     }
   };
 
-  const vibeLevel = getVibeLevel(roundedScore.overall, isAnonymous);
+  const vibeLevel = getVibeLevel(roundedScore.overall, isAnonymous, isAISearch);
 
   return (
     <div className="space-y-2">
