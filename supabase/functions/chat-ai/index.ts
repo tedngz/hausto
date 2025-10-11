@@ -80,12 +80,12 @@ serve(async (req) => {
           console.log('Anonymous user has already used their free chat today');
           return new Response(
             JSON.stringify({ 
-              error: 'You have already used your free chat for today. Please sign in to continue chatting.',
+              response: 'Thanks for trying Hausto AI! To continue chatting and get personalized property recommendations, please sign in or create a free account.',
               requiresAuth: true
             }),
             { 
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 429,
+              status: 200,
             }
           );
         }

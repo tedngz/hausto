@@ -357,19 +357,21 @@ export const LandingChatBox = ({
         });
         
         if (response.error) {
-          // Check if it's a rate limit error
-          if (response.error.message?.includes('already used your free chat')) {
-            toast({
-              title: "Free chat limit reached",
-              description: "You've used your free chat for today. Please sign in to continue chatting with our AI assistant.",
-              variant: "destructive",
-            });
+          throw response.error;
+        }
+
+        // Check if auth is required (returned from edge function)
+        if (response.data?.requiresAuth) {
+          toast({
+            title: "Sign in to continue",
+            description: response.data.response || "Please sign in to continue chatting.",
+          });
+          setTimeout(() => {
             navigate('/auth', {
               state: { returnTo: '/' }
             });
-            return;
-          }
-          throw response.error;
+          }, 2000);
+          return;
         }
 
         // Parse AI response to extract search results
