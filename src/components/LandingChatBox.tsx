@@ -355,7 +355,20 @@ export const LandingChatBox = ({
         const response = await supabase.functions.invoke('chat-ai', {
           body: messageData
         });
+        
         if (response.error) {
+          // Check if it's a rate limit error
+          if (response.error.message?.includes('already used your free chat')) {
+            toast({
+              title: "Free chat limit reached",
+              description: "You've used your free chat for today. Please sign in to continue chatting with our AI assistant.",
+              variant: "destructive",
+            });
+            navigate('/auth', {
+              state: { returnTo: '/' }
+            });
+            return;
+          }
           throw response.error;
         }
 

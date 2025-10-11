@@ -49,6 +49,51 @@ serve(async (req) => {
     }
 
     console.log('Chat AI function called');
+
+    // Rate limiting for anonymous users
+    if (isAnonymous) {
+      // Get the client IP address
+      const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0].trim() 
+        || req.headers.get('x-real-ip') 
+        || 'unknown';
+
+      console.log('Anonymous user IP:', clientIP);
+
+      if (clientIP !== 'unknown') {
+        // Check if this IP has used their free chat today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const { data: existingAttempt, error: attemptError } = await supabase
+          .from('anonymous_chat_attempts')
+          .select('*')
+          .eq('ip_address', clientIP)
+          .gte('last_attempt_at', today.toISOString())
+          .single();
+
+        if (attemptError && attemptError.code !== 'PGRST116') {
+          // PGRST116 is "no rows returned", which is fine
+          console.error('Error checking rate limit:', attemptError);
+        }
+
+        if (existingAttempt) {
+          console.log('Anonymous user has already used their free chat today');
+          return new Response(
+            JSON.stringify({ 
+              error: 'You have already used your free chat for today. Please sign in to continue chatting.',
+              requiresAuth: true
+            }),
+            { 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 429,
+            }
+          );
+        }
+
+        // Record this attempt (will be updated at the end if successful)
+        console.log('Recording anonymous chat attempt');
+      }
+    }
     
     const requestBody = await req.text();
     console.log('Raw request body length:', requestBody.length);
@@ -459,6 +504,32 @@ Current user message: ${message}`;
       } catch (searchSaveError) {
         console.error('Error processing search results:', searchSaveError);
         // Don't fail the whole request if search saving fails
+      }
+    }
+
+    // Record successful anonymous chat attempt
+    if (isAnonymous) {
+      const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0].trim() 
+        || req.headers.get('x-real-ip') 
+        || 'unknown';
+
+      if (clientIP !== 'unknown') {
+        const { error: recordError } = await supabase
+          .from('anonymous_chat_attempts')
+          .insert({
+            ip_address: clientIP,
+            attempt_count: 1,
+            last_attempt_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (recordError) {
+          console.error('Error recording chat attempt:', recordError);
+          // Don't fail the request if we can't record the attempt
+        } else {
+          console.log('Successfully recorded anonymous chat attempt for IP:', clientIP);
+        }
       }
     }
 

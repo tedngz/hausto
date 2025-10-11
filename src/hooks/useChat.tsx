@@ -177,6 +177,17 @@ export const useChat = () => {
         }
       });
 
+      if (error) {
+        console.error('Error from chat-ai function:', error);
+        
+        // Check if it's a rate limit error (though this shouldn't happen for authenticated users)
+        if (error.message?.includes('already used your free chat')) {
+          throw new Error('Rate limit reached. Please try again tomorrow or upgrade your account.');
+        }
+        
+        throw error;
+      }
+
       console.log('Function invocation result:', { data, error });
 
       if (error) {

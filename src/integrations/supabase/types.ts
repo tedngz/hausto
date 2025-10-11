@@ -90,6 +90,30 @@ export type Database = {
           },
         ]
       }
+      anonymous_chat_attempts: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          id: string
+          ip_address: unknown
+          last_attempt_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          ip_address: unknown
+          last_attempt_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          ip_address?: unknown
+          last_attempt_at?: string
+        }
+        Relationships: []
+      }
       chat_conversations: {
         Row: {
           created_at: string
