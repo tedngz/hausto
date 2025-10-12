@@ -53,17 +53,8 @@ export const PropertyCard = ({
     }
   }, [externalImageIndex]);
 
-  // Always calculate vibe score - use default preferences if none provided
-  const defaultPreferences: UserPreferences = {
-    styles: ['modern', 'minimalist'],
-    colors: ['neutral', 'warm'],
-    activities: ['relaxing', 'working'],
-    priceRange: [1000, 5000] as [number, number],
-    size: '1-2 bedrooms',
-    location: ['any'],
-    moveInDate: new Date().toISOString()
-  };
-  const vibeScore = calculateVibeScore(apartment, userPreferences || defaultPreferences);
+  // Calculate vibe score only if user preferences are provided
+  const vibeScore = userPreferences ? calculateVibeScore(apartment, userPreferences) : null;
 
   // Highlight categorization and styling
   const getHighlightCategory = (highlight: string): 'style' | 'color' | 'activity' => {
@@ -147,6 +138,17 @@ export const PropertyCard = ({
                   </>}
               </Button>}
           </div>}
+
+        {/* Vibe Score Section - Shown in detail view */}
+        {showFullDescription && vibeScore && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-lg border border-primary/10">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-semibold text-gray-900">Match Score</h3>
+            </div>
+            <VibeScore score={vibeScore} showBreakdown={true} size="md" />
+          </div>
+        )}
 
         {/* Additional Images with Highlights */}
         {apartment.images.length > 1 && <div className="mb-4 space-y-3">
