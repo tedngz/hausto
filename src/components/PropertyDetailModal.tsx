@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Heart, X } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/types';
 import { PropertyCard } from '@/components/PropertyCard';
+import { VibeScore } from '@/components/VibeScore';
+import { calculateVibeScore } from '@/utils/vibeScoring';
 interface PropertyDetailModalProps {
   apartment: Apartment | null;
   userPreferences?: UserPreferences;
@@ -35,10 +37,27 @@ export const PropertyDetailModal = ({
     }
     onClose();
   };
+  const vibeScore = userPreferences && !isAnonymous
+    ? calculateVibeScore(apartment, userPreferences)
+    : {
+        overall: 75,
+        breakdown: {
+          style: 75,
+          color: 75,
+          activities: 75,
+          price: 75
+        }
+      }; // Default "Good vibe" for anonymous users
+
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md w-[95vw] max-h-[90vh] sm:max-h-[95vh] overflow-y-auto p-0 gap-0">
-        <div className="p-3 sm:p-4">
-          <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} showViewProfileButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} />
+        <div className="p-3 sm:p-4 relative">
+          {/* Vibe Score Overlay */}
+          <div className="absolute top-6 left-6 z-10">
+            <VibeScore score={vibeScore} size="sm" isAnonymous={isAnonymous} />
+          </div>
+          
+          <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} showViewProfileButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} hideVibeScore={true} />
 
           {/* Action Buttons */}
           {(onLike || onDislike) && <div className="flex justify-center space-x-4 pt-4 mt-4 border-t">
