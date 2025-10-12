@@ -827,7 +827,7 @@ export const LandingChatBox = ({
       } : null} userPreferences={userPreferences} isOpen={showPropertyModal} onClose={() => {
         setShowPropertyModal(false);
         setSelectedProperty(null);
-      }} onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined} />
+      }} onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined} isAnonymous={!user} />
       </div>
     </div>;
 };

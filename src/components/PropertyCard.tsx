@@ -25,6 +25,7 @@ interface PropertyCardProps {
   showFullDescription?: boolean;
   showAllHighlights?: boolean;
   hideVibeScore?: boolean;
+  isAnonymous?: boolean;
 }
 export const PropertyCard = ({
   apartment,
@@ -37,7 +38,8 @@ export const PropertyCard = ({
   showFullTitle = false,
   showFullDescription = false,
   showAllHighlights = false,
-  hideVibeScore = false
+  hideVibeScore = false,
+  isAnonymous = false
 }: PropertyCardProps) => {
   // Use provided image index from SwipeInterface or maintain own state
   const externalImageIndex = (apartment as any)._currentImageIndex;
@@ -95,7 +97,7 @@ export const PropertyCard = ({
         {/* Vibe Ranking Overlay */}
         {vibeScore && !hideVibeScore && (
           <div className="absolute top-3 left-3 z-10">
-            <VibeScore score={vibeScore} size="sm" />
+            <VibeScore score={vibeScore} size="sm" isAnonymous={isAnonymous} />
           </div>
         )}
       </div>

@@ -11,6 +11,7 @@ interface PropertyDetailModalProps {
   onClose: () => void;
   onLike?: (apartment: Apartment) => void;
   onDislike?: (apartment: Apartment) => void;
+  isAnonymous?: boolean;
 }
 export const PropertyDetailModal = ({
   apartment,
@@ -18,7 +19,8 @@ export const PropertyDetailModal = ({
   isOpen,
   onClose,
   onLike,
-  onDislike
+  onDislike,
+  isAnonymous = false
 }: PropertyDetailModalProps) => {
   if (!apartment) return null;
   const handleLike = () => {
@@ -36,7 +38,7 @@ export const PropertyDetailModal = ({
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md w-[95vw] max-h-[90vh] sm:max-h-[95vh] overflow-y-auto p-0 gap-0">
         <div className="p-3 sm:p-4">
-          <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} showViewProfileButton={false} className="shadow-none border-0 bg-transparent" />
+          <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} showViewProfileButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} />
 
           {/* Action Buttons */}
           {(onLike || onDislike) && <div className="flex justify-center space-x-4 pt-4 mt-4 border-t">
