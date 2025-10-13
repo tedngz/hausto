@@ -423,8 +423,35 @@ export const LandingChatBox = ({
   const handleBrowseAll = () => {
     navigate('/discover');
   };
-  const handlePropertyClick = (property: PropertyMatch) => {
-    setSelectedProperty(property);
+  const handlePropertyClick = async (property: PropertyMatch) => {
+    try {
+      // Try to fetch full property details from database by ID
+      const { data: fullProperty } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('id', property.id)
+        .single();
+
+      if (fullProperty) {
+        const enriched = {
+          ...property,
+          images: fullProperty.images?.length ? fullProperty.images : property.images,
+          description: fullProperty.description || property.description,
+          highlights: fullProperty.highlights?.length ? fullProperty.highlights : property.highlights,
+          size: fullProperty.size || property.size,
+          price: Number(fullProperty.price ?? property.price),
+          vibe: fullProperty.vibe || property.vibe,
+          vibe_analysis: fullProperty.vibe_analysis ?? property.vibe_analysis,
+          realtor_id: fullProperty.realtor_id || property.realtor_id,
+        } as PropertyMatch;
+        setSelectedProperty(enriched);
+      } else {
+        setSelectedProperty(property);
+      }
+    } catch (e) {
+      // Fallback to original result on error
+      setSelectedProperty(property);
+    }
     setShowPropertyModal(true);
   };
   return <div className="w-full max-w-4xl mx-auto mt-4 px-1">
@@ -818,7 +845,7 @@ export const LandingChatBox = ({
         highlights: selectedProperty.highlights,
         images: selectedProperty.images,
         realtor: {
-          id: "contact",
+          id: selectedProperty.realtor_id || "contact",
           name: "Contact for details",
           phone: "",
           email: ""
