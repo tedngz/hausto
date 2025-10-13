@@ -9,7 +9,7 @@ import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
 import { BulkUploadModal } from '@/components/BulkUploadModal';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
-import { AIChatAgent } from '@/components/AIChatAgent';
+import { HaustoChat } from '@/components/HaustoChat';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { useMatches, PropertyMatch } from '@/hooks/useMatches';
@@ -336,7 +336,7 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
         property={selectedProperty}
       />
 
-      <AIChatAgent
+      <HaustoChat
         isOpen={isChatModalOpen}
         onClose={() => {
           setIsChatModalOpen(false);

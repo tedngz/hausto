@@ -12,7 +12,7 @@ import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
 import { HighlightTags } from '@/components/HighlightTags';
 import { UserPreferences } from '@/types';
-import { useChat } from '@/hooks/useChat';
+import { useHomeAI } from '@/hooks/useHomeAI';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
@@ -37,12 +37,12 @@ interface SearchResult {
   summary: string;
   totalMatches: number;
 }
-interface LandingChatBoxProps {
+interface HomeAIProps {
   userPreferences?: UserPreferences;
 }
-export const LandingChatBox = ({
+export const HomeAI = ({
   userPreferences
-}: LandingChatBoxProps) => {
+}: HomeAIProps) => {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -86,7 +86,7 @@ export const LandingChatBox = ({
     sendMessageWithoutConversation,
     startFreshChat,
     isSendingMessage
-  } = useChat();
+  } = useHomeAI();
 
   // Clear temporary message when user's message appears in database
   useEffect(() => {

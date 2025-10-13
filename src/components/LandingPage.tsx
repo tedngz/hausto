@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { LandingChatBox } from "@/components/LandingChatBox";
+import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -69,7 +69,7 @@ export const LandingPage = () => {
           </p>
           
           <div className="mb-4">
-            <LandingChatBox />
+            <HomeAI />
           </div>
         </div>
       </section>

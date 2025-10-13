@@ -17,7 +17,7 @@ import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { Apartment } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-interface AIChatAgentProps {
+interface HaustoChatProps {
   isOpen: boolean;
   onClose: () => void;
   userPreferences?: any;
@@ -25,14 +25,14 @@ interface AIChatAgentProps {
   propertyImages?: string[];
   initialMatchId?: string | null;
 }
-export const AIChatAgent = ({
+export const HaustoChat = ({
   isOpen,
   onClose,
   userPreferences,
   userType,
   propertyImages = [],
   initialMatchId = null
-}: AIChatAgentProps) => {
+}: HaustoChatProps) => {
   const [inputMessage, setInputMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'messages'>('messages');
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null);

@@ -32,7 +32,7 @@ interface SendMessageData {
   propertyImages?: string[];
 }
 
-export const useChat = () => {
+export const useHomeAI = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();

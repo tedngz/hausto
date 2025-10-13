@@ -8,7 +8,7 @@ import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
-import { AIChatAgent } from '@/components/AIChatAgent';
+import { HaustoChat } from '@/components/HaustoChat';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 interface MatchesViewProps {
   userPreferences?: UserPreferences;
@@ -124,7 +124,7 @@ export const MatchesView = ({
 
       {detailModalApartment && <PropertyDetailModal apartment={detailModalApartment} isOpen={!!detailModalApartment} onClose={() => setDetailModalApartment(null)} userPreferences={userPreferences} />}
 
-      <AIChatAgent isOpen={isChatOpen} onClose={() => {
+      <HaustoChat isOpen={isChatOpen} onClose={() => {
       setIsChatOpen(false);
       setSelectedMatchId(null);
     }} userPreferences={userPreferences} userType="renter" initialMatchId={selectedMatchId} />

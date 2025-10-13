@@ -3,12 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { OnboardingQuiz } from '@/components/OnboardingQuiz';
 import { SwipeInterface } from '@/components/SwipeInterface';
 import { MatchesView } from '@/components/MatchesView';
-import { LandingChatBox } from '@/components/LandingChatBox';
+import { HomeAI } from '@/components/HomeAI';
 import { Navigation } from '@/components/Navigation';
 import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';
 import { UserTypeSelector } from '@/components/UserTypeSelector';
-import { AIChatAgent } from '@/components/AIChatAgent';
+import { HaustoChat } from '@/components/HaustoChat';
 import { FloatingAIButton } from '@/components/FloatingAIButton';
 import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
@@ -270,14 +270,14 @@ const Discover = () => {
               </div>
             </div>)}
 
-        {currentView === 'ai-chat' && userType && <LandingChatBox />}
+        {currentView === 'ai-chat' && userType && <HomeAI />}
 
 
         {userType === 'realtor' && isAdmin && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
 
         {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
 
-        <AIChatAgent isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} userPreferences={userPreferences} userType={userType || 'renter'} />
+        <HaustoChat isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} userPreferences={userPreferences} userType={userType || 'renter'} />
 
         <PropertyUploadModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} />
 
