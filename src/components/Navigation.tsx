@@ -57,7 +57,7 @@ export const Navigation = ({
                 className={`text-xs px-2 py-1.5 h-8 ${currentView === 'ai-chat' ? 'bg-primary text-primary-foreground' : ''}`}
               >
                 <Sparkles className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">AI Chat</span>
+                <span className="hidden xs:inline text-xs">Discovery AI</span>
               </Button>
               
               <Button

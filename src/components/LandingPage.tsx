@@ -107,8 +107,8 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
                 <MessageSquare className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">Unified Listings</h3>
-              <p className="text-muted-foreground leading-relaxed">Access curated property listings from multiple sources, all in one convenient place.</p>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Home AI</h3>
+              <p className="text-muted-foreground leading-relaxed">Chat with our AI to find your perfect home match</p>
             </CardContent>
           </Card>
         </div>

@@ -125,7 +125,7 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
         {/* Header */}
         <div className="p-4 border-b bg-gradient-to-r from-purple-50 to-pink-50 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Hausto Chat</h2>
             <p className="text-sm text-gray-600">
               {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
             </p>
