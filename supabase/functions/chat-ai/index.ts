@@ -272,7 +272,7 @@ Property ID (for matching): ${p.id}
       "vibe": "Modern, Cozy",
       "description": "Brief description highlighting key features",
       "highlights": ["Modern", "Cozy", "Pet Friendly"],
-      "images": ["image-url-1", "image-url-2"],
+      "images": ["actual-image-url-1", "actual-image-url-2"],
       "matchScore": 85,
       "matchReason": "Perfect match because...",
       "realtor_id": "realtor-uuid"
@@ -282,10 +282,11 @@ Property ID (for matching): ${p.id}
   "totalMatches": 3
 }
 
-RULES:
+CRITICAL RULES:
 - ALWAYS return valid JSON format above
 - Maximum ${maxResults} properties in results array ${isAnonymous ? '(limited for guest users)' : ''}
-- Use actual property data from database
+- Use actual property data from database INCLUDING THE REAL IMAGE URLs
+- MUST include the actual "images" array URLs from each property's data
 - Match preferences when provided
 - Include realistic match scores (60-95%)
 - NO markdown, NO text, ONLY JSON`;
