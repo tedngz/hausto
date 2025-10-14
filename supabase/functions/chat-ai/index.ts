@@ -154,17 +154,31 @@ serve(async (req) => {
 
     // Supabase client already initialized above (const supabase)
 
-    // Fetch properties from database
-    const { data: properties, error: propertiesError } = await supabase
-      .from('properties')
-      .select('*');
+    // Fetch properties from database (only for authenticated users with full details)
+    let properties = [];
+    if (!isAnonymous) {
+      const { data: propertiesData, error: propertiesError } = await supabase
+        .from('properties')
+        .select('*');
 
-    if (propertiesError) {
-      console.error('Error fetching properties:', propertiesError);
-      throw propertiesError;
+      if (propertiesError) {
+        console.error('Error fetching properties:', propertiesError);
+        throw propertiesError;
+      }
+      
+      properties = propertiesData || [];
+      console.log(`Found ${properties.length} properties in database for authenticated user`);
+    } else {
+      // For anonymous users, fetch only basic statistics
+      const { count, error: countError } = await supabase
+        .from('properties')
+        .select('*', { count: 'exact', head: true });
+        
+      if (countError) {
+        console.error('Error fetching property count:', countError);
+      }
+      console.log(`Anonymous user - showing ${count || 0} total properties available`);
     }
-
-    console.log(`Found ${properties?.length || 0} properties in database`);
 
     // Helper to validate UUIDs and decide if we can persist/history
     const isValidUUID = (v: string | null | undefined) =>
@@ -231,47 +245,59 @@ Provide creative, engaging, and professional content that stands out in the rent
         context += `\nProperty images provided: ${propertyImages.length} images to analyze for creating descriptions.`;
       }
     } else {
-      // Helper function for lifestyle tips
-      function getLifestyleTips(location: any, vibe: any, highlights: any) {
-        const tips = [];
-        
-        if (location?.includes('District 1')) {
-          tips.push('Urban professionals who love being in the heart of the action');
-        } else if (location?.includes('District 2')) {
-          tips.push('Those who appreciate modern development with international community');
-        } else if (location?.includes('Ba Dinh')) {
-          tips.push('Culture enthusiasts near government district and historic sites');
-        }
-        
-        if (vibe?.includes('Modern')) {
-          tips.push('Tech-savvy individuals who appreciate contemporary design');
-        } else if (vibe?.includes('Cozy')) {
-          tips.push('Those seeking a warm, homely atmosphere');
-        }
-        
-        if (highlights?.includes('Family Friendly')) {
-          tips.push('Families with children or those planning to start one');
-        }
-        
-        return tips.length ? tips.join(' • ') : 'Various lifestyles and preferences';
-      }
-
       // Renter context - help with property search and recommendations
-      systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
+      if (isAnonymous) {
+        // For anonymous users - provide helpful information without exposing specific property data
+        systemPrompt = `You are Hausto AI, a friendly rental property assistant for Hausto.
+
+We have a curated database of rental properties in Vietnam, including locations like District 1, District 2, District 3, District 7, Ba Dinh, and many more areas across Hanoi and Ho Chi Minh City.
+
+Our properties range from budget-friendly studios to luxury apartments, with prices typically ranging from 5,000,000 VND to 50,000,000 VND per month.
+
+Available property types include:
+- Modern apartments with contemporary design
+- Cozy studio apartments perfect for singles
+- Family-friendly homes with multiple bedrooms
+- Pet-friendly properties
+- Furnished and unfurnished options
+- Properties with amenities like gym, pool, parking, balcony
+
+IMPORTANT: To search our full property database and get personalized matches, users need to sign in or create a free account. You can help them understand what types of properties we have, explain our matching system, and encourage them to sign up for personalized recommendations.
+
+When users ask about specific properties, prices, or want to search:
+1. Explain that we have many great options available
+2. Mention the general types and locations we cover
+3. Encourage them to sign in for personalized property matches
+4. Keep responses helpful and friendly, focusing on the value of creating an account
+
+DO NOT:
+- Make up specific property addresses or details
+- Provide specific property IDs or pricing
+- Claim to search the database for anonymous users
+
+DO:
+- Be warm and helpful
+- Explain the benefits of signing up (personalized matches, AI-powered search, direct messaging with realtors)
+- Provide general information about property types and locations
+- Answer questions about how Hausto works`;
+
+      } else {
+        // For authenticated users - provide full property database access
+        systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
 🏠 AVAILABLE PROPERTIES DATABASE (${properties.length} total properties):
 ${properties.map((p, index) => {
   const amenities = p.vibe_analysis?.amenities || [];
   return `
-Property ID: ${p.id}
+Property ${index + 1}:
 Title: ${p.title}
 Location: ${p.location}
 Price: ${p.price?.toLocaleString()} VND/month
 Description: ${(p.description || 'Modern living space').substring(0, 200)}
 Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
 Amenities: ${amenities.length > 0 ? amenities.join(', ') : 'Not specified'}
-Images: ${Array.isArray(p.images) ? p.images.join(', ') : 'No images'}
-Realtor ID: ${p.realtor_id}
+Images: ${Array.isArray(p.images) ? p.images.length : 0} images available
+Property ID (for matching): ${p.id}
 `;
 }).join('\n')}
 
@@ -305,7 +331,7 @@ RULES:
 - Include realistic match scores (60-95%)
 - NO markdown, NO text, ONLY JSON`;
 
-        // Add user preferences context for renters
+        // Add user preferences context for authenticated renters
         if (userPreferences) {
           const matchingProperties = properties.filter(p => {
             const locationMatch = userPreferences.location?.some((loc: any) => 
@@ -325,6 +351,7 @@ ID: ${p.id} | ${p.title} | ${p.location} | ${p.price?.toLocaleString()} VND
 `).join('')}`;
           }
         }
+      }
 
       if (Array.isArray(propertyImages) && propertyImages.length > 0) {
         systemPrompt += `\n\n📸 UPLOADED REFERENCE IMAGES:
