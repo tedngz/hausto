@@ -247,6 +247,7 @@ Provide creative, engaging, and professional content that stands out in the rent
 🏠 AVAILABLE PROPERTIES DATABASE (${properties.length} total properties):
 ${properties.map((p, index) => {
   const amenities = p.vibe_analysis?.amenities || [];
+  const imageUrls = Array.isArray(p.images) ? p.images : [];
   return `
 Property ${index + 1}:
 Title: ${p.title}
@@ -255,8 +256,9 @@ Price: ${p.price?.toLocaleString()} VND/month
 Description: ${(p.description || 'Modern living space').substring(0, 200)}
 Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
 Amenities: ${amenities.length > 0 ? amenities.join(', ') : 'Not specified'}
-Images: ${Array.isArray(p.images) ? p.images.length : 0} images available
 Property ID (for matching): ${p.id}
+Realtor ID: ${p.realtor_id}
+**ACTUAL IMAGE URLS (MUST COPY EXACTLY)**: ${JSON.stringify(imageUrls)}
 `;
 }).join('\n')}
 
@@ -264,29 +266,35 @@ Property ID (for matching): ${p.id}
 {
   "results": [
     {
-      "id": "property-id",
-      "title": "Property Title",
-      "location": "Property Location", 
+      "id": "copy-exact-property-id-from-above",
+      "title": "Copy exact title",
+      "location": "Copy exact location", 
       "price": 12000000,
       "size": "50m²",
       "vibe": "Modern, Cozy",
-      "description": "Brief description highlighting key features",
+      "description": "Brief description",
       "highlights": ["Modern", "Cozy", "Pet Friendly"],
-      "images": ["actual-image-url-1", "actual-image-url-2"],
+      "images": ["COPY-EXACT-IMAGE-URLS-FROM-PROPERTY-DATA"],
       "matchScore": 85,
       "matchReason": "Perfect match because...",
-      "realtor_id": "realtor-uuid"
+      "realtor_id": "copy-exact-realtor-id-from-above"
     }
   ],
   "summary": "Found X properties matching your preferences...",
   "totalMatches": 3
 }
 
-CRITICAL RULES:
+⚠️ CRITICAL IMAGE RULES:
+- For "images" field: COPY the EXACT image URL array from "**ACTUAL IMAGE URLS**" in property data
+- Do NOT create fake image URLs or placeholder URLs
+- Do NOT use generic descriptions like "image-url-1"
+- MUST copy the complete array exactly as shown in property data
+- Example: If property shows "**ACTUAL IMAGE URLS**: ["https://...", "https://..."]", copy that EXACT array
+
+OTHER RULES:
 - ALWAYS return valid JSON format above
 - Maximum ${maxResults} properties in results array ${isAnonymous ? '(limited for guest users)' : ''}
-- Use actual property data from database INCLUDING THE REAL IMAGE URLs
-- MUST include the actual "images" array URLs from each property's data
+- Copy exact property ID and realtor ID from property data
 - Match preferences when provided
 - Include realistic match scores (60-95%)
 - NO markdown, NO text, ONLY JSON`;
