@@ -50,17 +50,24 @@ serve(async (req) => {
 
     console.log('Chat AI function called');
 
-    // Rate limiting for anonymous users
+    // Rate limiting for anonymous users - 2 free searches per day
     if (isAnonymous) {
-      // Get the client IP address
-      const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0].trim() 
-        || req.headers.get('x-real-ip') 
-        || 'unknown';
+      // Get the client IP address with multiple fallbacks
+      const xForwardedFor = req.headers.get('x-forwarded-for');
+      const xRealIp = req.headers.get('x-real-ip');
+      const cfConnectingIp = req.headers.get('cf-connecting-ip'); // Cloudflare
+      
+      const clientIP = (xForwardedFor?.split(',')[0].trim() || xRealIp || cfConnectingIp || 'unknown');
 
-      console.log('Anonymous user IP:', clientIP);
+      console.log('Anonymous user IP detection:', { 
+        xForwardedFor, 
+        xRealIp, 
+        cfConnectingIp, 
+        finalIP: clientIP 
+      });
 
       if (clientIP !== 'unknown') {
-        // Check if this IP has used their free chat today
+        // Check if this IP has exceeded their daily limit
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -76,11 +83,11 @@ serve(async (req) => {
           console.error('Error checking rate limit:', attemptError);
         }
 
-        if (existingAttempt) {
-          console.log('Anonymous user has already used their free chat today');
+        if (existingAttempt && existingAttempt.attempt_count >= 2) {
+          console.log(`Anonymous user has used ${existingAttempt.attempt_count}/2 free searches today`);
           return new Response(
             JSON.stringify({ 
-              response: 'Thanks for trying Hausto AI! To continue chatting and get personalized property recommendations, please sign in or create a free account.',
+              response: 'You\'ve used your 2 free searches today! To get unlimited AI-powered property searches and personalized recommendations, please sign in or create a free account.',
               requiresAuth: true
             }),
             { 
@@ -90,8 +97,7 @@ serve(async (req) => {
           );
         }
 
-        // Record this attempt (will be updated at the end if successful)
-        console.log('Recording anonymous chat attempt');
+        console.log(`Anonymous user search count: ${existingAttempt?.attempt_count || 0}/2`);
       }
     }
     
@@ -154,31 +160,21 @@ serve(async (req) => {
 
     // Supabase client already initialized above (const supabase)
 
-    // Fetch properties from database (only for authenticated users with full details)
-    let properties = [];
-    if (!isAnonymous) {
-      const { data: propertiesData, error: propertiesError } = await supabase
-        .from('properties')
-        .select('*');
+    // Fetch properties from database (for all users)
+    const { data: propertiesData, error: propertiesError } = await supabase
+      .from('properties')
+      .select('*');
 
-      if (propertiesError) {
-        console.error('Error fetching properties:', propertiesError);
-        throw propertiesError;
-      }
-      
-      properties = propertiesData || [];
-      console.log(`Found ${properties.length} properties in database for authenticated user`);
-    } else {
-      // For anonymous users, fetch only basic statistics
-      const { count, error: countError } = await supabase
-        .from('properties')
-        .select('*', { count: 'exact', head: true });
-        
-      if (countError) {
-        console.error('Error fetching property count:', countError);
-      }
-      console.log(`Anonymous user - showing ${count || 0} total properties available`);
+    if (propertiesError) {
+      console.error('Error fetching properties:', propertiesError);
+      throw propertiesError;
     }
+    
+    const properties = propertiesData || [];
+    console.log(`Found ${properties.length} properties in database${isAnonymous ? ' for anonymous user' : ''}`);
+    
+    // For anonymous users, we'll limit results in the system prompt
+    const maxResults = isAnonymous ? 3 : 5;
 
     // Helper to validate UUIDs and decide if we can persist/history
     const isValidUUID = (v: string | null | undefined) =>
@@ -246,44 +242,7 @@ Provide creative, engaging, and professional content that stands out in the rent
       }
     } else {
       // Renter context - help with property search and recommendations
-      if (isAnonymous) {
-        // For anonymous users - provide helpful information without exposing specific property data
-        systemPrompt = `You are Hausto AI, a friendly rental property assistant for Hausto.
-
-We have a curated database of rental properties in Vietnam, including locations like District 1, District 2, District 3, District 7, Ba Dinh, and many more areas across Hanoi and Ho Chi Minh City.
-
-Our properties range from budget-friendly studios to luxury apartments, with prices typically ranging from 5,000,000 VND to 50,000,000 VND per month.
-
-Available property types include:
-- Modern apartments with contemporary design
-- Cozy studio apartments perfect for singles
-- Family-friendly homes with multiple bedrooms
-- Pet-friendly properties
-- Furnished and unfurnished options
-- Properties with amenities like gym, pool, parking, balcony
-
-IMPORTANT: To search our full property database and get personalized matches, users need to sign in or create a free account. You can help them understand what types of properties we have, explain our matching system, and encourage them to sign up for personalized recommendations.
-
-When users ask about specific properties, prices, or want to search:
-1. Explain that we have many great options available
-2. Mention the general types and locations we cover
-3. Encourage them to sign in for personalized property matches
-4. Keep responses helpful and friendly, focusing on the value of creating an account
-
-DO NOT:
-- Make up specific property addresses or details
-- Provide specific property IDs or pricing
-- Claim to search the database for anonymous users
-
-DO:
-- Be warm and helpful
-- Explain the benefits of signing up (personalized matches, AI-powered search, direct messaging with realtors)
-- Provide general information about property types and locations
-- Answer questions about how Hausto works`;
-
-      } else {
-        // For authenticated users - provide full property database access
-        systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
+      systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
 🏠 AVAILABLE PROPERTIES DATABASE (${properties.length} total properties):
 ${properties.map((p, index) => {
@@ -325,12 +284,13 @@ Property ID (for matching): ${p.id}
 
 RULES:
 - ALWAYS return valid JSON format above
-- Maximum 5 properties in results array
+- Maximum ${maxResults} properties in results array ${isAnonymous ? '(limited for guest users)' : ''}
 - Use actual property data from database
 - Match preferences when provided
 - Include realistic match scores (60-95%)
 - NO markdown, NO text, ONLY JSON`;
 
+      if (!isAnonymous) {
         // Add user preferences context for authenticated renters
         if (userPreferences) {
           const matchingProperties = properties.filter(p => {
@@ -534,28 +494,55 @@ Current user message: ${message}`;
       }
     }
 
-    // Record successful anonymous chat attempt
+    // Record successful anonymous search attempt
     if (isAnonymous) {
-      const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0].trim() 
-        || req.headers.get('x-real-ip') 
-        || 'unknown';
+      const xForwardedFor = req.headers.get('x-forwarded-for');
+      const xRealIp = req.headers.get('x-real-ip');
+      const cfConnectingIp = req.headers.get('cf-connecting-ip');
+      const clientIP = (xForwardedFor?.split(',')[0].trim() || xRealIp || cfConnectingIp || 'unknown');
 
       if (clientIP !== 'unknown') {
-        const { error: recordError } = await supabase
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Check existing attempts for today
+        const { data: existingAttempt } = await supabase
           .from('anonymous_chat_attempts')
-          .insert({
-            ip_address: clientIP,
-            attempt_count: 1,
-            last_attempt_at: new Date().toISOString()
-          })
-          .select()
+          .select('*')
+          .eq('ip_address', clientIP)
+          .gte('last_attempt_at', today.toISOString())
           .single();
 
-        if (recordError) {
-          console.error('Error recording chat attempt:', recordError);
-          // Don't fail the request if we can't record the attempt
+        if (existingAttempt) {
+          // Update existing attempt count
+          const { error: updateError } = await supabase
+            .from('anonymous_chat_attempts')
+            .update({
+              attempt_count: existingAttempt.attempt_count + 1,
+              last_attempt_at: new Date().toISOString()
+            })
+            .eq('id', existingAttempt.id);
+
+          if (updateError) {
+            console.error('Error updating chat attempt:', updateError);
+          } else {
+            console.log(`Updated anonymous search count to ${existingAttempt.attempt_count + 1}/2 for IP:`, clientIP);
+          }
         } else {
-          console.log('Successfully recorded anonymous chat attempt for IP:', clientIP);
+          // Create new attempt record
+          const { error: insertError } = await supabase
+            .from('anonymous_chat_attempts')
+            .insert({
+              ip_address: clientIP,
+              attempt_count: 1,
+              last_attempt_at: new Date().toISOString()
+            });
+
+          if (insertError) {
+            console.error('Error recording chat attempt:', insertError);
+          } else {
+            console.log('Successfully recorded first anonymous search (1/2) for IP:', clientIP);
+          }
         }
       }
     }
