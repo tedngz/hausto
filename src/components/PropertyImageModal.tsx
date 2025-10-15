@@ -36,12 +36,12 @@ export const PropertyImageModal = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="w-[95vw] sm:max-w-6xl h-[85vh] sm:h-[90vh] p-2 sm:p-4 overflow-hidden bg-background/95 backdrop-blur-sm border shadow-xl">
-        <div className="relative w-full h-full bg-transparent flex flex-col gap-2 sm:gap-3">
+        <div className="relative w-full h-full bg-transparent flex flex-col gap-1 sm:gap-3">
 
           {/* AI Highlights - Outside image */}
           {selectedHighlight && (
-            <div className="flex justify-center px-2">
-              <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 sm:gap-1.5 text-center text-[11px] sm:text-xs px-3 py-1.5 leading-snug max-w-full">
+            <div className="flex justify-center px-2 pt-6 sm:pt-0">
+              <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 sm:gap-1.5 text-center text-[10px] sm:text-xs px-2.5 py-1 sm:py-1.5 leading-snug max-w-[calc(100%-3rem)] sm:max-w-full">
                 <Sparkles className="w-3 h-3 flex-shrink-0" />
                 <span className="break-words line-clamp-2">{selectedHighlight}</span>
               </Badge>
