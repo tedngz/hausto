@@ -36,20 +36,10 @@ export const PropertyImageModal = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="w-[95vw] sm:max-w-6xl h-[85vh] sm:h-[90vh] p-2 sm:p-4 overflow-hidden bg-background/95 backdrop-blur-sm border shadow-xl">
-        <div className="relative w-full h-full bg-transparent flex flex-col gap-1 sm:gap-3">
-
-          {/* AI Highlights - Outside image */}
-          {selectedHighlight && (
-            <div className="flex justify-center px-2 pt-6 sm:pt-0">
-              <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 sm:gap-1.5 text-center text-[10px] sm:text-xs px-2.5 py-1 sm:py-1.5 leading-snug max-w-[calc(100%-3rem)] sm:max-w-full">
-                <Sparkles className="w-3 h-3 flex-shrink-0" />
-                <span className="break-words line-clamp-2">{selectedHighlight}</span>
-              </Badge>
-            </div>
-          )}
+        <div className="relative w-full h-full bg-transparent">
 
           {/* Main image */}
-          <div className="relative w-full flex-1 flex items-center justify-center overflow-hidden rounded-lg">
+          <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-lg">
             <img
               src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'}
               alt={apartment.title}
@@ -59,6 +49,16 @@ export const PropertyImageModal = ({
                 maxWidth: 'calc(95vw - 2rem)'
               }}
             />
+
+            {/* AI Highlights overlay */}
+            {selectedHighlight && (
+              <div className="absolute top-4 sm:top-6 md:top-8 left-1/2 -translate-x-1/2 z-10 max-w-[calc(100%-1rem)] sm:max-w-md md:max-w-lg px-2">
+                <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 sm:gap-1.5 text-center text-[10px] sm:text-xs px-2.5 py-1 sm:py-1.5 leading-snug">
+                  <Sparkles className="w-3 h-3 flex-shrink-0" />
+                  <span className="break-words line-clamp-2">{selectedHighlight}</span>
+                </Badge>
+              </div>
+            )}
 
             {/* Navigation buttons */}
             {apartment.images.length > 1 && (
