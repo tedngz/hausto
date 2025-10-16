@@ -36,6 +36,13 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
     };
   }
   
+  if (url.includes('batdongsan.com.vn')) {
+    return {
+      name: 'Batdongsan.com.vn',
+      logo: '/logos/batdongsan-logo.png'
+    };
+  }
+  
   // Default fallback
   return {
     name: 'External Source',
