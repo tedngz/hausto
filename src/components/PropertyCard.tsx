@@ -197,8 +197,8 @@ export const PropertyCard = ({
           <div className="flex items-center gap-2">
             {apartment.property_source_link && (() => {
             const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
-            return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center justify-center bg-gray-50 rounded-md hover:bg-gray-100 transition-colors w-12 h-12 p-1">
-                  <img src={sourceInfo.logo} alt={sourceInfo.name} className="w-full h-full object-contain" />
+            return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center bg-gray-50 rounded-md hover:bg-gray-100 transition-colors py-0 px-[17px]">
+                  <img src={sourceInfo.logo} alt={sourceInfo.name} className="w-9 h-9 object-contain" />
                   
                 </a>;
           })()}
