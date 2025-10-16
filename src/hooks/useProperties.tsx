@@ -17,6 +17,7 @@ export interface Property {
   images: string[] | null;
   vibe_analysis: any | null;
   property_source_link: string | null;
+  amenities: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -259,6 +260,7 @@ export const useProperties = () => {
       vibeAnalysis?: any;
       newImageFiles?: File[];
       existingImages?: string[];
+      amenities?: string[];
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -297,6 +299,7 @@ export const useProperties = () => {
         vibe: propertyData.vibe,
         highlights: propertyData.highlights,
         images: imageUrls,
+        amenities: propertyData.amenities || [],
         updated_at: new Date().toISOString(),
       };
 

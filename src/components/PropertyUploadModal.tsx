@@ -835,6 +835,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
             images: imagePreviews,
             realtor_id: 'preview',
+            amenities: amenities,
             vibe_analysis: {
               ...vibeAnalysis,
               amenities,
@@ -864,6 +865,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
             images: imagePreviews,
             realtor_id: 'preview',
+            amenities: amenities,
             vibe_analysis: {
               ...vibeAnalysis,
               amenities,

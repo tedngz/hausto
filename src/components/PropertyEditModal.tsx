@@ -34,6 +34,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [currentHighlights, setCurrentHighlights] = useState<string[]>([]);
   const [currentVibeAnalysis, setCurrentVibeAnalysis] = useState<any>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [amenities, setAmenities] = useState<string[]>([]);
+  const [newAmenity, setNewAmenity] = useState('');
 
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
@@ -67,6 +69,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setCurrentHighlights(property.vibe_analysis?.generated_content?.highlights || property.highlights || []);
       setCurrentVibeAnalysis(property.vibe_analysis);
       setExistingImages(property.images || []);
+      setAmenities((property as any).amenities || []);
     }
   }, [property, convertPrice]);
 
@@ -194,6 +197,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       vibeAnalysis: currentVibeAnalysis,
       newImageFiles,
       existingImages,
+      amenities,
     });
 
     // Reset form
@@ -473,6 +477,56 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               rows={6}
               className="resize-none"
             />
+          </div>
+
+          {/* Amenities */}
+          <div>
+            <Label className="text-base font-semibold">Amenities</Label>
+            <p className="text-sm text-gray-600 mb-3">Add property amenities and features</p>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  value={newAmenity}
+                  onChange={(e) => setNewAmenity(e.target.value)}
+                  placeholder="e.g., WiFi, Air Conditioning, Parking"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
+                        setAmenities([...amenities, newAmenity.trim()]);
+                        setNewAmenity('');
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
+                      setAmenities([...amenities, newAmenity.trim()]);
+                      setNewAmenity('');
+                    }
+                  }}
+                  variant="outline"
+                >
+                  Add
+                </Button>
+              </div>
+              {amenities.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {amenities.map((amenity, index) => (
+                    <Badge
+                      key={index}
+                      variant="secondary"
+                      className="cursor-pointer"
+                      onClick={() => setAmenities(amenities.filter((_, i) => i !== index))}
+                    >
+                      {amenity} <X className="w-3 h-3 ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Submit Button */}

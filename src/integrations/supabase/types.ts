@@ -410,6 +410,7 @@ export type Database = {
       }
       properties: {
         Row: {
+          amenities: string[] | null
           created_at: string
           description: string | null
           highlights: string[] | null
@@ -426,6 +427,7 @@ export type Database = {
           vibe_analysis: Json | null
         }
         Insert: {
+          amenities?: string[] | null
           created_at?: string
           description?: string | null
           highlights?: string[] | null
@@ -442,6 +444,7 @@ export type Database = {
           vibe_analysis?: Json | null
         }
         Update: {
+          amenities?: string[] | null
           created_at?: string
           description?: string | null
           highlights?: string[] | null
