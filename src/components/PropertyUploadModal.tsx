@@ -706,27 +706,19 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               </div>
 
               <div>
-                <Label className="text-base font-semibold">Detected Amenities</Label>
-                <p className="text-sm text-gray-600 mb-3">AI has detected these amenities - you can add or remove them</p>
+                <Label className="text-base font-semibold">Amenities</Label>
+                <p className="text-sm text-gray-600 mb-3">Click to select/deselect amenities</p>
                 
-                {amenities.length > 0 ? (
-                  <div className="mb-3">
-                    <PropertyAmenities amenities={amenities} compact={false} />
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground mb-3">No amenities detected yet</p>
-                )}
-                
-                <div className="flex flex-wrap gap-2 mb-3">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {/* Show all amenities as clickable badges */}
                   {amenities.map((amenity, index) => (
                     <Badge
                       key={index}
-                      variant="secondary"
-                      className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                      variant="default"
+                      className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
                       onClick={() => setAmenities(prev => prev.filter((_, i) => i !== index))}
                     >
                       {amenity}
-                      <X className="w-3 h-3 ml-1" />
                     </Badge>
                   ))}
                 </div>
@@ -738,6 +730,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                     placeholder="Add custom amenity..."
                     onKeyPress={(e) => {
                       if (e.key === 'Enter' && newAmenity.trim()) {
+                        e.preventDefault();
                         setAmenities(prev => [...prev, newAmenity.trim()]);
                         setNewAmenity('');
                       }

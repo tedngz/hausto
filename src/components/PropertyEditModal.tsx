@@ -489,86 +489,74 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           {/* Amenities */}
           <div>
             <Label className="text-base font-semibold">Amenities</Label>
-            <p className="text-sm text-gray-600 mb-3">Select amenities or add custom ones</p>
-            <div className="space-y-4">
-              {/* Predefined Amenities */}
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Quick Select:</p>
-                <div className="flex flex-wrap gap-2">
-                  {predefinedAmenities.map((amenity) => (
-                    <Badge
-                      key={amenity}
-                      variant={amenities.includes(amenity) ? "default" : "outline"}
-                      className={`cursor-pointer transition-colors ${
-                        amenities.includes(amenity)
-                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
-                          : 'hover:bg-gray-100'
-                      }`}
-                      onClick={() => {
-                        if (amenities.includes(amenity)) {
-                          setAmenities(amenities.filter(a => a !== amenity));
-                        } else {
-                          setAmenities([...amenities, amenity]);
-                        }
-                      }}
-                    >
-                      {amenity}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              {/* Custom Amenity Input */}
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Add Custom:</p>
-                <div className="flex gap-2">
-                  <Input
-                    value={newAmenity}
-                    onChange={(e) => setNewAmenity(e.target.value)}
-                    placeholder="e.g., Garden, Rooftop Access"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
-                          setAmenities([...amenities, newAmenity.trim()]);
-                          setNewAmenity('');
-                        }
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
+            <p className="text-sm text-gray-600 mb-3">Click to select/deselect amenities</p>
+            
+            <div className="flex flex-wrap gap-2 mb-4">
+              {predefinedAmenities.map((amenity) => {
+                const isSelected = amenities.includes(amenity);
+                return (
+                  <Badge
+                    key={amenity}
+                    variant={isSelected ? "default" : "outline"}
+                    className={`cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'hover:bg-muted'
+                    }`}
                     onClick={() => {
-                      if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
-                        setAmenities([...amenities, newAmenity.trim()]);
-                        setNewAmenity('');
+                      if (isSelected) {
+                        setAmenities(amenities.filter(a => a !== amenity));
+                      } else {
+                        setAmenities([...amenities, amenity]);
                       }
                     }}
-                    variant="outline"
                   >
-                    Add
-                  </Button>
-                </div>
-              </div>
-
-              {/* Selected Amenities */}
-              {amenities.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-gray-700 mb-2">Selected ({amenities.length}):</p>
-                  <div className="flex flex-wrap gap-2">
-                    {amenities.map((amenity, index) => (
-                      <Badge
-                        key={index}
-                        variant="secondary"
-                        className="cursor-pointer bg-blue-100 text-blue-800 hover:bg-blue-200"
-                        onClick={() => setAmenities(amenities.filter((_, i) => i !== index))}
-                      >
-                        {amenity} <X className="w-3 h-3 ml-1" />
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    {amenity}
+                  </Badge>
+                );
+              })}
+              
+              {/* Show custom amenities that aren't in predefined list */}
+              {amenities.filter(a => !predefinedAmenities.includes(a)).map((amenity, index) => (
+                <Badge
+                  key={`custom-${index}`}
+                  variant="default"
+                  className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => setAmenities(amenities.filter(a => a !== amenity))}
+                >
+                  {amenity}
+                </Badge>
+              ))}
+            </div>
+            
+            <div className="flex gap-2 mt-3">
+              <Input
+                value={newAmenity}
+                onChange={(e) => setNewAmenity(e.target.value)}
+                placeholder="Add custom amenity..."
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
+                      setAmenities([...amenities, newAmenity.trim()]);
+                      setNewAmenity('');
+                    }
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={() => {
+                  if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
+                    setAmenities([...amenities, newAmenity.trim()]);
+                    setNewAmenity('');
+                  }
+                }}
+                variant="outline"
+                disabled={!newAmenity.trim()}
+              >
+                Add
+              </Button>
             </div>
           </div>
 
