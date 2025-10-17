@@ -41,7 +41,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [imageHighlights, setImageHighlights] = useState<{text: string, imageIndexes: number[]}[]>([]);
   const [vibeAnalysis, setVibeAnalysis] = useState<any>(null);
   const [locationSuggestionsVisible, setLocationSuggestionsVisible] = useState(false);
-  const [amenities, setAmenities] = useState<string[]>([]);
+  const [detectedAmenities, setDetectedAmenities] = useState<string[]>([]);
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [newAmenity, setNewAmenity] = useState('');
 
   const { createProperty, isCreating } = useProperties();
@@ -199,7 +200,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         
         // Extract and set amenities from AI analysis
         if (analysis.amenities && Array.isArray(analysis.amenities)) {
-          setAmenities(analysis.amenities);
+          setDetectedAmenities(analysis.amenities);
+          setSelectedAmenities(analysis.amenities); // All detected amenities are selected by default
         }
         
         // Auto-select vibes based on comprehensive AI analysis with improved accuracy
@@ -355,7 +357,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       imageFiles,
       vibeAnalysis: {
         ...vibeAnalysis,
-        amenities
+        amenities: selectedAmenities
       },
       propertySourceLink: sourceLink,
     });
@@ -372,7 +374,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     setImagePreviews([]);
     setImageHighlights([]);
     setVibeAnalysis(null);
-    setAmenities([]);
+    setDetectedAmenities([]);
+    setSelectedAmenities([]);
     setNewAmenity('');
     setHasGenerated(false);
     setShowHighlightEditor(false);
@@ -710,17 +713,30 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                 <p className="text-sm text-gray-600 mb-3">Click to select/deselect amenities</p>
                 
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {/* Show all amenities as clickable badges */}
-                  {amenities.map((amenity, index) => (
-                    <Badge
-                      key={index}
-                      variant="default"
-                      className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
-                      onClick={() => setAmenities(prev => prev.filter((_, i) => i !== index))}
-                    >
-                      {amenity}
-                    </Badge>
-                  ))}
+                  {/* Show all detected amenities */}
+                  {detectedAmenities.map((amenity, index) => {
+                    const isSelected = selectedAmenities.includes(amenity);
+                    return (
+                      <Badge
+                        key={index}
+                        variant={isSelected ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedAmenities(prev => prev.filter(a => a !== amenity));
+                          } else {
+                            setSelectedAmenities(prev => [...prev, amenity]);
+                          }
+                        }}
+                      >
+                        {amenity}
+                      </Badge>
+                    );
+                  })}
                 </div>
                 
                 <div className="flex gap-2">
@@ -731,7 +747,11 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                     onKeyPress={(e) => {
                       if (e.key === 'Enter' && newAmenity.trim()) {
                         e.preventDefault();
-                        setAmenities(prev => [...prev, newAmenity.trim()]);
+                        const trimmed = newAmenity.trim();
+                        if (!detectedAmenities.includes(trimmed)) {
+                          setDetectedAmenities(prev => [...prev, trimmed]);
+                          setSelectedAmenities(prev => [...prev, trimmed]);
+                        }
                         setNewAmenity('');
                       }
                     }}
@@ -740,7 +760,11 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                     variant="outline"
                     onClick={() => {
                       if (newAmenity.trim()) {
-                        setAmenities(prev => [...prev, newAmenity.trim()]);
+                        const trimmed = newAmenity.trim();
+                        if (!detectedAmenities.includes(trimmed)) {
+                          setDetectedAmenities(prev => [...prev, trimmed]);
+                          setSelectedAmenities(prev => [...prev, trimmed]);
+                        }
                         setNewAmenity('');
                       }
                     }}
@@ -828,10 +852,10 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
             images: imagePreviews,
             realtor_id: 'preview',
-            amenities: amenities,
+            amenities: selectedAmenities,
             vibe_analysis: {
               ...vibeAnalysis,
-              amenities,
+              amenities: selectedAmenities,
               generated_content: {
                 ...vibeAnalysis?.generated_content,
                 highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes
@@ -858,10 +882,10 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
             images: imagePreviews,
             realtor_id: 'preview',
-            amenities: amenities,
+            amenities: selectedAmenities,
             vibe_analysis: {
               ...vibeAnalysis,
-              amenities,
+              amenities: selectedAmenities,
               generated_content: {
                 ...vibeAnalysis?.generated_content,
                 highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes

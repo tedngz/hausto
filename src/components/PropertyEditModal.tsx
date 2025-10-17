@@ -34,7 +34,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [currentHighlights, setCurrentHighlights] = useState<string[]>([]);
   const [currentVibeAnalysis, setCurrentVibeAnalysis] = useState<any>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [amenities, setAmenities] = useState<string[]>([]);
+  const [detectedAmenities, setDetectedAmenities] = useState<string[]>([]);
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [newAmenity, setNewAmenity] = useState('');
 
   const { updateProperty, isUpdating } = useProperties();
@@ -76,7 +77,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setCurrentHighlights(property.vibe_analysis?.generated_content?.highlights || property.highlights || []);
       setCurrentVibeAnalysis(property.vibe_analysis);
       setExistingImages(property.images || []);
-      setAmenities((property as any).amenities || []);
+      const propertyAmenities = (property as any).amenities || [];
+      setDetectedAmenities(propertyAmenities);
+      setSelectedAmenities(propertyAmenities);
     }
   }, [property, convertPrice]);
 
@@ -204,7 +207,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       vibeAnalysis: currentVibeAnalysis,
       newImageFiles,
       existingImages,
-      amenities,
+      amenities: selectedAmenities,
     });
 
     // Reset form
@@ -492,22 +495,22 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             <p className="text-sm text-gray-600 mb-3">Click to select/deselect amenities</p>
             
             <div className="flex flex-wrap gap-2 mb-4">
-              {predefinedAmenities.map((amenity) => {
-                const isSelected = amenities.includes(amenity);
+              {detectedAmenities.map((amenity, index) => {
+                const isSelected = selectedAmenities.includes(amenity);
                 return (
                   <Badge
-                    key={amenity}
+                    key={index}
                     variant={isSelected ? "default" : "outline"}
                     className={`cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        : 'hover:bg-muted'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                     onClick={() => {
                       if (isSelected) {
-                        setAmenities(amenities.filter(a => a !== amenity));
+                        setSelectedAmenities(selectedAmenities.filter(a => a !== amenity));
                       } else {
-                        setAmenities([...amenities, amenity]);
+                        setSelectedAmenities([...selectedAmenities, amenity]);
                       }
                     }}
                   >
@@ -515,18 +518,6 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                   </Badge>
                 );
               })}
-              
-              {/* Show custom amenities that aren't in predefined list */}
-              {amenities.filter(a => !predefinedAmenities.includes(a)).map((amenity, index) => (
-                <Badge
-                  key={`custom-${index}`}
-                  variant="default"
-                  className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={() => setAmenities(amenities.filter(a => a !== amenity))}
-                >
-                  {amenity}
-                </Badge>
-              ))}
             </div>
             
             <div className="flex gap-2 mt-3">
@@ -537,8 +528,10 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
-                      setAmenities([...amenities, newAmenity.trim()]);
+                    const trimmed = newAmenity.trim();
+                    if (trimmed && !detectedAmenities.includes(trimmed)) {
+                      setDetectedAmenities([...detectedAmenities, trimmed]);
+                      setSelectedAmenities([...selectedAmenities, trimmed]);
                       setNewAmenity('');
                     }
                   }
@@ -547,8 +540,10 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               <Button
                 type="button"
                 onClick={() => {
-                  if (newAmenity.trim() && !amenities.includes(newAmenity.trim())) {
-                    setAmenities([...amenities, newAmenity.trim()]);
+                  const trimmed = newAmenity.trim();
+                  if (trimmed && !detectedAmenities.includes(trimmed)) {
+                    setDetectedAmenities([...detectedAmenities, trimmed]);
+                    setSelectedAmenities([...selectedAmenities, trimmed]);
                     setNewAmenity('');
                   }
                 }}
