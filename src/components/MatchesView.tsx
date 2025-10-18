@@ -21,7 +21,9 @@ export const MatchesView = ({
   userPreferences,
   userProfile
 }: MatchesViewProps) => {
-  const { user } = useAuth();
+  const {
+    user
+  } = useAuth();
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null);
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
@@ -29,7 +31,6 @@ export const MatchesView = ({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [aiProperties, setAiProperties] = useState<Apartment[]>([]);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
-  
   const {
     renterMatches,
     isLoadingMatches,
@@ -41,28 +42,24 @@ export const MatchesView = ({
   useEffect(() => {
     const fetchAISearchResults = async () => {
       if (!user?.id) return;
-      
       setIsLoadingAI(true);
       try {
         // Get all AI searches for the user
-        const { data: searches, error: searchError } = await supabase
-          .from('ai_searches')
-          .select('id')
-          .eq('user_id', user.id);
-
+        const {
+          data: searches,
+          error: searchError
+        } = await supabase.from('ai_searches').select('id').eq('user_id', user.id);
         if (searchError || !searches?.length) {
           setIsLoadingAI(false);
           return;
         }
-
         const searchIds = searches.map(s => s.id);
 
         // Get all search results
-        const { data: results, error: resultsError } = await supabase
-          .from('ai_search_results')
-          .select('property_id, match_score, match_reason')
-          .in('search_id', searchIds);
-
+        const {
+          data: results,
+          error: resultsError
+        } = await supabase.from('ai_search_results').select('property_id, match_score, match_reason').in('search_id', searchIds);
         if (resultsError || !results?.length) {
           setIsLoadingAI(false);
           return;
@@ -72,11 +69,10 @@ export const MatchesView = ({
         const uniquePropertyIds = [...new Set(results.map(r => r.property_id))];
 
         // Fetch property details
-        const { data: properties, error: propError } = await supabase
-          .from('properties')
-          .select('*')
-          .in('id', uniquePropertyIds);
-
+        const {
+          data: properties,
+          error: propError
+        } = await supabase.from('properties').select('*').in('id', uniquePropertyIds);
         if (propError || !properties) {
           setIsLoadingAI(false);
           return;
@@ -84,14 +80,16 @@ export const MatchesView = ({
 
         // Get realtor names
         const realtorIds = [...new Set(properties.map(p => p.realtor_id))];
-        const { data: realtorProfiles } = await supabase
-          .rpc('get_matched_public_profiles', { user_ids: realtorIds });
+        const {
+          data: realtorProfiles
+        } = await supabase.rpc('get_matched_public_profiles', {
+          user_ids: realtorIds
+        });
 
         // Transform to Apartment format
         const aiApartments: Apartment[] = properties.map(prop => {
           const result = results.find(r => r.property_id === prop.id);
           const realtorProfile = realtorProfiles?.find((r: any) => r.id === prop.realtor_id);
-          
           let parsedVA = prop.vibe_analysis;
           if (parsedVA && typeof parsedVA === 'string') {
             try {
@@ -100,7 +98,6 @@ export const MatchesView = ({
               parsedVA = null;
             }
           }
-
           return {
             id: prop.id,
             images: prop.images || [],
@@ -121,7 +118,6 @@ export const MatchesView = ({
             }
           };
         });
-
         setAiProperties(aiApartments);
       } catch (error) {
         console.error('Error fetching AI search results:', error);
@@ -129,7 +125,6 @@ export const MatchesView = ({
         setIsLoadingAI(false);
       }
     };
-
     fetchAISearchResults();
   }, [user?.id]);
   const transformMatchToApartment = (match: any): Apartment => {
@@ -171,15 +166,12 @@ export const MatchesView = ({
         <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full"></div>
       </div>;
   }
-  
   const regularApartments = renterMatches?.map(transformMatchToApartment) || [];
-  
+
   // Filter out AI properties that are already in regular matches
   const regularPropertyIds = new Set(regularApartments.map(a => a.id));
   const uniqueAiProperties = aiProperties.filter(p => !regularPropertyIds.has(p.id));
-  
   const allApartments = [...regularApartments, ...uniqueAiProperties];
-  
   if (allApartments.length === 0) {
     return <div className="text-center py-12">
         <div className="w-24 h-24 bg-gradient-to-r from-orange-400 to-red-400 rounded-full flex items-center justify-center mx-auto mb-6 mt-20">
@@ -199,14 +191,9 @@ export const MatchesView = ({
 
       <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
         {allApartments.map(apartment => {
-          const isAIMatch = !regularPropertyIds.has(apartment.id);
+        const isAIMatch = !regularPropertyIds.has(apartment.id);
         return <div key={apartment.id} className="relative mb-6 break-inside-avoid">
-                {isAIMatch && (
-                  <Badge className="absolute top-4 left-4 z-10 bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0">
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    AI Match
-                  </Badge>
-                )}
+                {isAIMatch}
                 <PropertyCard apartment={apartment} userPreferences={userPreferences} onContact={() => {
             setSelectedMatchId(apartment.matchId!);
             setIsChatOpen(true);
