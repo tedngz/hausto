@@ -189,24 +189,43 @@ export const useMatches = () => {
   // Create match mutation
   const createMatchMutation = useMutation({
     mutationFn: async ({ propertyId, realtorId }: { propertyId: string; realtorId: string }) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
       const { error } = await supabase
         .from('property_matches')
         .insert({
-          renter_id: user?.id,
+          renter_id: user.id,
           property_id: propertyId,
           realtor_id: realtorId,
         });
-      
       if (error) throw error;
+
+      // Ensure a conversation exists for this renter/realtor pair so it shows up in Hausto Chat
+      const { error: convError } = await supabase
+        .from('match_conversations')
+        .upsert(
+          {
+            renter_id: user.id,
+            realtor_id: realtorId,
+            is_active: true,
+            last_message_at: new Date().toISOString(),
+          },
+          { onConflict: 'renter_id,realtor_id' }
+        );
+      if (convError) {
+        // Non-fatal: log but don't block match creation UX
+        console.error('Failed to upsert match_conversations:', convError);
+      }
       
       // Update usage tracking for matches (includes AI chat matches)
       await updateUsage('match');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['renter-matches'] });
+      queryClient.invalidateQueries({ queryKey: ['match-conversations'] });
       toast({
         title: "Property liked!",
-        description: "Property has been added to your matches.",
+        description: "Property has been added to your matches and chat.",
       });
     },
     onError: (error) => {
