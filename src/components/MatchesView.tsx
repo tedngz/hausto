@@ -9,6 +9,8 @@ import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
 import { HaustoChat } from '@/components/HaustoChat';
+import { useDirectMessages } from '@/hooks/useDirectMessages';
+import { useAuth } from '@/hooks/useAuth';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 interface MatchesViewProps {
   userPreferences?: UserPreferences;
@@ -22,13 +24,19 @@ export const MatchesView = ({
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const {
     renterMatches,
     isLoadingMatches,
     removeMatch,
     isRemovingMatch
   } = useMatches();
+  const {
+    conversations,
+    getOrCreateConversation,
+    setCurrentConversationId
+  } = useDirectMessages();
+  const { user } = useAuth();
   const transformMatchToApartment = (match: any): Apartment => {
     const rawVA = match.properties?.vibe_analysis;
     let parsedVA = rawVA;
@@ -63,6 +71,26 @@ export const MatchesView = ({
   const handleRemoveMatch = async (matchId: string) => {
     await removeMatch(matchId);
   };
+
+  const handleContactRealtor = async (apartment: Apartment) => {
+    if (!user?.id) {
+      setSelectedApartment(apartment);
+      return;
+    }
+
+    // Get or create conversation with this realtor
+    const conversationId = await getOrCreateConversation(user.id, apartment.realtor.id);
+    
+    if (conversationId) {
+      // Set the current conversation and open chat
+      setCurrentConversationId(conversationId);
+      setSelectedConversationId(conversationId);
+      setIsChatOpen(true);
+    } else {
+      // Fallback to contact modal if conversation creation fails
+      setSelectedApartment(apartment);
+    }
+  };
   if (isLoadingMatches) {
     return <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full"></div>
@@ -89,10 +117,7 @@ export const MatchesView = ({
       <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
         {allApartments.map(apartment => {
         return <div key={apartment.id} className="relative mb-6 break-inside-avoid">
-                <PropertyCard apartment={apartment} userPreferences={userPreferences} onContact={() => {
-            setSelectedMatchId(apartment.matchId!);
-            setIsChatOpen(true);
-          }} showContactButton={true} showViewProfileButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={true} className="sm:h-auto" />
+                <PropertyCard apartment={apartment} userPreferences={userPreferences} onContact={() => handleContactRealtor(apartment)} showContactButton={true} showViewProfileButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={true} className="sm:h-auto" />
               {apartment.matchId && <div className="absolute top-4 right-4">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -128,7 +153,7 @@ export const MatchesView = ({
 
       <HaustoChat isOpen={isChatOpen} onClose={() => {
       setIsChatOpen(false);
-      setSelectedMatchId(null);
-    }} userPreferences={userPreferences} userType="renter" initialMatchId={selectedMatchId} />
+      setSelectedConversationId(null);
+    }} userPreferences={userPreferences} userType="renter" initialMatchId={selectedConversationId} />
     </div>;
 };
