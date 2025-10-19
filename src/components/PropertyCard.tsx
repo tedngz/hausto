@@ -200,7 +200,7 @@ export const PropertyCard = ({
             const logoSize = sourceInfo.name === 'Batdongsan.com.vn' ? 'w-14 h-14' : 
                             sourceInfo.name === 'Airbnb' ? 'w-11 h-11' : 'w-10 h-10';
             return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center justify-center h-9 rounded-md hover:opacity-80 transition-opacity">
-                  <img src={sourceInfo.logo} alt={sourceInfo.name} className={`${logoSize} object-contain border-2 border-orange-500 rounded-md`} />
+                  <img src={sourceInfo.logo} alt={sourceInfo.name} className={`${logoSize} object-contain`} />
                   
                 </a>;
           })()}
