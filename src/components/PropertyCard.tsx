@@ -185,18 +185,26 @@ export const PropertyCard = ({
               <img 
                 src={apartment.realtor.avatar} 
                 alt={apartment.realtor.name || 'Realtor'} 
-                className="w-8 h-8 rounded-full object-cover" 
+                className={`w-8 h-8 rounded-full object-cover ${onViewProfile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                onClick={onViewProfile}
               />
             ) : (
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
+              <div 
+                className={`w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center ${onViewProfile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                onClick={onViewProfile}
+              >
                 <User className="w-4 h-4 text-white" />
               </div>
             )}
             <div>
               <div className="flex items-center gap-1">
-                {onViewProfile ? <button className="text-sm font-medium text-gray-900 hover:text-primary transition-colors" onClick={onViewProfile}>
+                {onViewProfile ? (
+                  <button className="text-sm font-medium text-gray-900 hover:text-primary transition-colors" onClick={onViewProfile}>
                     {apartment.realtor.name || 'Realtor'}
-                  </button> : <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>}
+                  </button>
+                ) : (
+                  <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
+                )}
               </div>
               
             </div>
