@@ -181,30 +181,14 @@ export const PropertyCard = ({
 
         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
         <div className="flex items-center space-x-2">
-            {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? (
-              <img 
-                src={apartment.realtor.avatar} 
-                alt={apartment.realtor.name || 'Realtor'} 
-                className={`w-8 h-8 rounded-full object-cover ${onViewProfile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-                onClick={onViewProfile}
-              />
-            ) : (
-              <div 
-                className={`w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center ${onViewProfile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-                onClick={onViewProfile}
-              >
+            {apartment.realtor.avatar ? <img src={apartment.realtor.avatar} alt={apartment.realtor.name || 'Realtor'} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
                 <User className="w-4 h-4 text-white" />
-              </div>
-            )}
+              </div>}
             <div>
               <div className="flex items-center gap-1">
-                {onViewProfile ? (
-                  <button className="text-sm font-medium text-gray-900 hover:text-primary transition-colors" onClick={onViewProfile}>
+                {onViewProfile ? <button className="text-sm font-medium text-gray-900 hover:text-primary transition-colors" onClick={onViewProfile}>
                     {apartment.realtor.name || 'Realtor'}
-                  </button>
-                ) : (
-                  <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
-                )}
+                  </button> : <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>}
               </div>
               
             </div>
