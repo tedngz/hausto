@@ -37,8 +37,13 @@ export const MatchesView = ({
     setCurrentConversationId
   } = useDirectMessages();
   const { user } = useAuth();
-  const transformMatchToApartment = (match: any): Apartment => {
-    const rawVA = match.properties?.vibe_analysis;
+  const transformMatchToApartment = (match: any): Apartment | null => {
+    // Filter out matches with null/undefined properties
+    if (!match.properties) {
+      return null;
+    }
+    
+    const rawVA = match.properties.vibe_analysis;
     let parsedVA = rawVA;
     if (rawVA && typeof rawVA === 'string') {
       try {
@@ -96,7 +101,7 @@ export const MatchesView = ({
         <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full"></div>
       </div>;
   }
-  const allApartments = renterMatches?.map(transformMatchToApartment) || [];
+  const allApartments = renterMatches?.map(transformMatchToApartment).filter((apt): apt is Apartment => apt !== null) || [];
   if (allApartments.length === 0) {
     return <div className="text-center py-12">
         <div className="w-24 h-24 bg-gradient-to-r from-orange-400 to-red-400 rounded-full flex items-center justify-center mx-auto mb-6 mt-20">
