@@ -498,13 +498,6 @@ export type Database = {
             foreignKeyName: "property_matches_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
-            referencedRelation: "active_properties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "property_matches_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
             referencedRelation: "properties"
             referencedColumns: ["id"]
           },
@@ -659,66 +652,7 @@ export type Database = {
       }
     }
     Views: {
-      active_properties: {
-        Row: {
-          amenities: string[] | null
-          created_at: string | null
-          description: string | null
-          highlights: string[] | null
-          id: string | null
-          images: string[] | null
-          is_active: boolean | null
-          last_activated_at: string | null
-          location: string | null
-          price: number | null
-          property_source_link: string | null
-          realtor_id: string | null
-          size: string | null
-          title: string | null
-          updated_at: string | null
-          vibe: string | null
-          vibe_analysis: Json | null
-        }
-        Insert: {
-          amenities?: string[] | null
-          created_at?: string | null
-          description?: string | null
-          highlights?: string[] | null
-          id?: string | null
-          images?: string[] | null
-          is_active?: boolean | null
-          last_activated_at?: string | null
-          location?: string | null
-          price?: number | null
-          property_source_link?: string | null
-          realtor_id?: string | null
-          size?: string | null
-          title?: string | null
-          updated_at?: string | null
-          vibe?: string | null
-          vibe_analysis?: Json | null
-        }
-        Update: {
-          amenities?: string[] | null
-          created_at?: string | null
-          description?: string | null
-          highlights?: string[] | null
-          id?: string | null
-          images?: string[] | null
-          is_active?: boolean | null
-          last_activated_at?: string | null
-          location?: string | null
-          price?: number | null
-          property_source_link?: string | null
-          realtor_id?: string | null
-          size?: string | null
-          title?: string | null
-          updated_at?: string | null
-          vibe?: string | null
-          vibe_analysis?: Json | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       activate_user_subscription: {

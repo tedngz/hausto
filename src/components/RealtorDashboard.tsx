@@ -16,6 +16,8 @@ import { useMatches, PropertyMatch } from '@/hooks/useMatches';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface RealtorDashboardProps {
   onSwitchUserType: () => void;
@@ -32,7 +34,7 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<PropertyMatch | null>(null);
-  const { realtorProperties, isLoading, deleteProperty, isDeleting } = useProperties();
+  const { realtorProperties, isLoading, deleteProperty, isDeleting, toggleProperty, isToggling } = useProperties();
   const { realtorMatches, isLoadingMatches } = useMatches();
   const { formatPrice } = useCurrency();
   const { toast } = useToast();
@@ -64,6 +66,19 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
   const handleChat = (match: PropertyMatch) => {
     setSelectedMatch(match);
     setIsChatModalOpen(true);
+  };
+
+  const handleToggleActive = (property: Property) => {
+    toggleProperty({ id: property.id, isActive: !property.is_active });
+  };
+
+  const getDaysRemaining = (lastActivated?: string) => {
+    if (!lastActivated) return 0;
+    const activatedDate = new Date(lastActivated);
+    const now = new Date();
+    const diffTime = 10 * 24 * 60 * 60 * 1000 - (now.getTime() - activatedDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
   };
 
   return (
@@ -167,15 +182,35 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                       </div>
                     )}
                     <div className="p-3 md:p-4">
-                      <h3 className="font-semibold text-slate-900 mb-2 line-clamp-2 text-sm md:text-base">{property.title}</h3>
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-semibold text-slate-900 line-clamp-2 text-sm md:text-base flex-1">{property.title}</h3>
+                      </div>
                       <div className="flex items-center text-xs md:text-sm text-slate-600 mb-2">
                         <MapPin className="w-3 h-3 mr-1" />
                         <span className="line-clamp-1">{property.location}</span>
                       </div>
-                      {property.vibe && (
-                        <Badge variant="secondary" className="bg-orange-100 text-orange-800 mb-3 text-xs">
-                          {property.vibe}
-                        </Badge>
+                      <div className="flex items-center justify-between mb-3">
+                        {property.vibe && (
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs">
+                            {property.vibe}
+                          </Badge>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`active-${property.id}`} className="text-xs text-slate-600 cursor-pointer">
+                            {property.is_active ? 'Active' : 'Inactive'}
+                          </Label>
+                          <Switch
+                            id={`active-${property.id}`}
+                            checked={property.is_active}
+                            onCheckedChange={() => handleToggleActive(property)}
+                            disabled={isToggling}
+                          />
+                        </div>
+                      </div>
+                      {property.is_active && (
+                        <div className="text-xs text-slate-500 mb-2">
+                          {getDaysRemaining(property.last_activated_at)} days remaining
+                        </div>
                       )}
                       <div className="flex flex-wrap gap-1">
                         <Button 

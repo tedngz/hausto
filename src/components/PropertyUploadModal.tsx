@@ -864,6 +864,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             property_source_link: sourceLink,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            is_active: true,
+            last_activated_at: new Date().toISOString(),
           }}
         />
 
@@ -894,6 +896,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             property_source_link: sourceLink,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            is_active: true,
+            last_activated_at: new Date().toISOString(),
           }}
           onHighlightsUpdate={handleHighlightsUpdate}
         />

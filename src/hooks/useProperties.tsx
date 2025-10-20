@@ -20,6 +20,15 @@ export interface Property {
   amenities: string[] | null;
   created_at: string;
   updated_at: string;
+  is_active: boolean;
+  last_activated_at: string;
+  realtor?: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    avatar: string;
+  };
 }
 
 export const useProperties = () => {
@@ -368,6 +377,46 @@ export const useProperties = () => {
     },
   });
 
+  // Toggle property active status
+  const togglePropertyMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      const updateData: any = { 
+        is_active: isActive,
+      };
+
+      // Only update last_activated_at when turning ON
+      if (isActive) {
+        updateData.last_activated_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('properties')
+        .update(updateData)
+        .eq('id', id)
+        .eq('realtor_id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
+      toast({
+        title: "Success",
+        description: "Property status updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      console.error('Error toggling property:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update property status. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   return {
     properties,
     realtorProperties,
@@ -378,5 +427,7 @@ export const useProperties = () => {
     isUpdating: updatePropertyMutation.isPending,
     deleteProperty: deletePropertyMutation.mutate,
     isDeleting: deletePropertyMutation.isPending,
+    toggleProperty: togglePropertyMutation.mutate,
+    isToggling: togglePropertyMutation.isPending,
   };
 };
