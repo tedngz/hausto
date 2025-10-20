@@ -172,6 +172,11 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                       >
                         <div className="flex items-center space-x-3">
                           <Avatar className="w-10 h-10">
+                            {isRealtor && conversation.renter_avatar ? (
+                              <AvatarImage src={conversation.renter_avatar} alt={conversation.renter_name} />
+                            ) : !isRealtor && conversation.realtor_avatar ? (
+                              <AvatarImage src={conversation.realtor_avatar} alt={conversation.realtor_name} />
+                            ) : null}
                             <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm">
                               {isRealtor ? 'R' : 'O'}
                             </AvatarFallback>
@@ -240,6 +245,11 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                 <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <Avatar className="w-8 h-8">
+                      {isUserRealtor && currentConversation.renter_avatar ? (
+                        <AvatarImage src={currentConversation.renter_avatar} alt={currentConversation.renter_name} />
+                      ) : !isUserRealtor && currentConversation.realtor_avatar ? (
+                        <AvatarImage src={currentConversation.realtor_avatar} alt={currentConversation.realtor_name} />
+                      ) : null}
                       <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm">
                         {isUserRealtor ? 'R' : 'O'}
                       </AvatarFallback>

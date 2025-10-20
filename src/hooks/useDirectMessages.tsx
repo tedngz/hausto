@@ -32,6 +32,8 @@ interface MatchConversation {
   updated_at: string;
   renter_name?: string;
   realtor_name?: string;
+  renter_avatar?: string;
+  realtor_avatar?: string;
   properties?: Array<{
     property_id: string;
     title: string;
@@ -89,9 +91,13 @@ export const useDirectMessages = () => {
           console.error('Error fetching conversation properties:', propsError);
         }
 
-        // Build quick maps for names and properties grouped by renter/realtor pair
+        // Build quick maps for names, avatars and properties grouped by renter/realtor pair
         const nameById = new Map<string, string>();
-        profiles?.forEach(p => nameById.set(p.id, p.name));
+        const avatarById = new Map<string, string>();
+        profiles?.forEach(p => {
+          nameById.set(p.id, p.name);
+          if (p.avatar_url) avatarById.set(p.id, p.avatar_url);
+        });
 
         const propertiesByPair = new Map<string, Array<{ property_id: string; title: string; location: string; price: number; images: string[] }>>();
         (allProperties || []).forEach((row: any) => {
@@ -118,6 +124,8 @@ export const useDirectMessages = () => {
             ...conv,
             renter_name: nameById.get(conv.renter_id) || 'Interested Renter',
             realtor_name: nameById.get(conv.realtor_id) || 'Property Owner',
+            renter_avatar: avatarById.get(conv.renter_id),
+            realtor_avatar: avatarById.get(conv.realtor_id),
             properties: propertiesByPair.get(key) || [],
           };
           const existing = pairMap.get(key);
