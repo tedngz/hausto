@@ -160,10 +160,16 @@ serve(async (req) => {
 
     // Supabase client already initialized above (const supabase)
 
-    // Fetch properties from database (for all users)
+    // Fetch active properties from database (for all users)
+    // Only include properties that are active and within the 10-day active window
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    
     const { data: propertiesData, error: propertiesError } = await supabase
       .from('properties')
-      .select('*');
+      .select('*')
+      .eq('is_active', true)
+      .gte('last_activated_at', tenDaysAgo.toISOString());
 
     if (propertiesError) {
       console.error('Error fetching properties:', propertiesError);
