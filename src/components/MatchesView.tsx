@@ -68,7 +68,8 @@ export const MatchesView = ({
         id: match.properties.realtor_id || '',
         name: match.realtor_name || 'Property Owner',
         phone: '+1-234-567-8900',
-        email: 'contact@realtor.com'
+        email: 'contact@realtor.com',
+        avatar: match.realtor_avatar || ''
       },
       matchId: match.id
     };
