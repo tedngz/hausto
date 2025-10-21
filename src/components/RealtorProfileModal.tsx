@@ -135,23 +135,6 @@ export const RealtorProfileModal = ({ realtorId, isOpen, onClose }: RealtorProfi
               </CardHeader>
             </Card>
 
-            {/* Profile Information - Limited for privacy */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Profile Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-                    <User className="w-8 h-8 text-blue-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{profile?.name || 'Anonymous User'}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    For privacy protection, contact details are only shared during direct communication.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Activity Stats */}
             <Card>
