@@ -142,7 +142,7 @@ export const LandingPage = () => {
             <h2 className="text-4xl font-bold text-foreground mb-6">
               Ready to Find Your Dream Home?
             </h2>
-            <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">
               Join thousands of renters who have found their perfect match. Start your journey today.
             </p>
             <div className="flex justify-center">
