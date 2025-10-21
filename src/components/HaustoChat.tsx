@@ -253,7 +253,7 @@ export const HaustoChat = ({
                       >
                         <div className="flex items-start gap-2 sm:gap-3">
                           <Avatar className="w-9 h-9 sm:w-12 sm:h-12 flex-shrink-0">
-                            <AvatarImage src="" />
+                            <AvatarImage src={isRealtor ? conv.renter_avatar : conv.realtor_avatar} />
                             <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold text-xs sm:text-sm">
                               {isRealtor ? 'R' : 'P'}
                             </AvatarFallback>
@@ -303,9 +303,15 @@ export const HaustoChat = ({
                   <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1" aria-label="Back to conversations">
                     <ArrowLeft className="w-4 h-4" />
                   </Button>
-                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                    {userType === 'realtor' ? 'R' : 'P'}
-                  </div>
+                  <Avatar className="w-10 h-10 flex-shrink-0">
+                    <AvatarImage src={(() => {
+                      const currentConv = conversations.find(c => c.id === selectedMatch);
+                      return userType === 'realtor' ? currentConv?.renter_avatar : currentConv?.realtor_avatar;
+                    })()} />
+                    <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold">
+                      {userType === 'realtor' ? 'R' : 'P'}
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
                     {(() => {
                       const currentConv = conversations.find(c => c.id === selectedMatch);
