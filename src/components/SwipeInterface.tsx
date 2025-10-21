@@ -81,8 +81,9 @@ export const SwipeInterface = ({
     fetchDeclinedProperties();
   }, [user?.id]);
 
-  // Transform Property to Apartment
-  const transformPropertyToApartment = (property: Property): Apartment => {
+  // Transform Property to Apartment with realtor info
+  const transformPropertyToApartment = (property: Property, realtorProfiles: Map<string, any>): Apartment => {
+    const realtorProfile = realtorProfiles.get(property.realtor_id);
     return {
       id: property.id,
       images: property.images || [],
@@ -95,26 +96,47 @@ export const SwipeInterface = ({
       highlights: property.highlights || [],
       realtor: {
         id: property.realtor_id,
-        name: 'Property Manager',
-        phone: '',
-        email: ''
+        name: realtorProfile?.name || 'Property Manager',
+        phone: realtorProfile?.phone || '',
+        email: realtorProfile?.email || '',
+        avatar: realtorProfile?.avatar_url || ''
       },
       vibe_analysis: property.vibe_analysis
     };
   };
   useEffect(() => {
-    console.log('SwipeInterface useEffect triggered:', {
-      userPreferences,
-      realPropertiesCount: realProperties?.length || 0,
-      isLoading
-    });
-    if (isLoading) {
-      console.log('Still loading properties...');
-      return;
-    }
+    const loadPropertiesWithRealtors = async () => {
+      console.log('SwipeInterface useEffect triggered:', {
+        userPreferences,
+        realPropertiesCount: realProperties?.length || 0,
+        isLoading
+      });
+      if (isLoading) {
+        console.log('Still loading properties...');
+        return;
+      }
 
-    // Transform real properties only - no sample properties
-    const transformedRealProperties = (realProperties || []).map(transformPropertyToApartment);
+      // Fetch realtor profiles for all properties
+      const realtorIds = [...new Set((realProperties || []).map(p => p.realtor_id))];
+      const realtorProfiles = new Map<string, any>();
+      
+      if (realtorIds.length > 0) {
+        try {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, name, email, phone, avatar_url')
+            .in('id', realtorIds);
+          
+          profiles?.forEach(profile => {
+            realtorProfiles.set(profile.id, profile);
+          });
+        } catch (error) {
+          console.error('Error fetching realtor profiles:', error);
+        }
+      }
+
+      // Transform real properties with realtor info
+      const transformedRealProperties = (realProperties || []).map(p => transformPropertyToApartment(p, realtorProfiles));
 
     // Filter out already matched and declined properties
     const matchedPropertyIds = new Set(renterMatches?.map(match => match.property_id) || []);
@@ -194,15 +216,18 @@ export const SwipeInterface = ({
       setApartments(filteredApartments);
       setCurrentApartmentIndex(0);
       setNoMatchReason('');
-      console.log('Using filtered properties:', filteredApartments.length);
-      return;
-    }
+    console.log('Using filtered properties:', filteredApartments.length);
+        return;
+      }
 
-    // If no properties pass filters, show all available properties anyway
-    console.log('No properties pass filters, showing all available properties');
-    setApartments(availableProperties);
-    setCurrentApartmentIndex(0);
-    setNoMatchReason('');
+      // If no properties pass filters, show all available properties anyway
+      console.log('No properties pass filters, showing all available properties');
+      setApartments(availableProperties);
+      setCurrentApartmentIndex(0);
+      setNoMatchReason('');
+    };
+
+    loadPropertiesWithRealtors();
   }, [userPreferences, realProperties, renterMatches, likedApartmentIds, declinedPropertyIds, isLoading]);
 
   // Track property views when apartment changes (unique views only)
