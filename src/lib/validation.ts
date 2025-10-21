@@ -11,10 +11,10 @@ export const profileSchema = z.object({
     .email('Invalid email address')
     .max(255, 'Email must be less than 255 characters'),
   phone: z.string()
-    .trim()
-    .regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone number format (use E.164 format: +1234567890)')
     .optional()
-    .or(z.literal('')),
+    .refine((val) => !val || val === '' || /^\+?[1-9]\d{1,14}$/.test(val), {
+      message: 'Invalid phone number format (use E.164 format: +1234567890)'
+    }),
   bio: z.string()
     .trim()
     .max(500, 'Bio must be less than 500 characters')
