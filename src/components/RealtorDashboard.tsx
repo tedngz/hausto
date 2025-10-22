@@ -189,23 +189,23 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                         <MapPin className="w-3 h-3 mr-1" />
                         <span className="line-clamp-1">{property.location}</span>
                       </div>
-                      <div className="flex items-center justify-between mb-3">
-                        {property.vibe && (
+                      {property.vibe && (
+                        <div className="mb-2">
                           <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs">
                             {property.vibe}
                           </Badge>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`active-${property.id}`} className="text-xs text-slate-600 cursor-pointer">
-                            {property.is_active ? 'Active' : 'Inactive'}
-                          </Label>
-                          <Switch
-                            id={`active-${property.id}`}
-                            checked={property.is_active}
-                            onCheckedChange={() => handleToggleActive(property)}
-                            disabled={isToggling}
-                          />
                         </div>
+                      )}
+                      <div className="flex items-center gap-2 mb-3">
+                        <Label htmlFor={`active-${property.id}`} className="text-xs text-slate-600 cursor-pointer">
+                          {property.is_active ? 'Active' : 'Inactive'}
+                        </Label>
+                        <Switch
+                          id={`active-${property.id}`}
+                          checked={property.is_active}
+                          onCheckedChange={() => handleToggleActive(property)}
+                          disabled={isToggling}
+                        />
                       </div>
                       {property.is_active && (
                         <div className="text-xs text-slate-500 mb-2">
