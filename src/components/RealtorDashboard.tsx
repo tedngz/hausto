@@ -196,22 +196,24 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                           </Badge>
                         </div>
                       )}
-                      <div className="flex items-center gap-2 mb-3">
-                        <Label htmlFor={`active-${property.id}`} className="text-xs text-slate-600 cursor-pointer">
-                          {property.is_active ? 'Active' : 'Inactive'}
-                        </Label>
-                        <Switch
-                          id={`active-${property.id}`}
-                          checked={property.is_active}
-                          onCheckedChange={() => handleToggleActive(property)}
-                          disabled={isToggling}
-                        />
-                      </div>
-                      {property.is_active && (
-                        <div className="text-xs text-slate-500 mb-2">
-                          {getDaysRemaining(property.last_activated_at)} days remaining
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`active-${property.id}`} className="text-xs text-slate-600 cursor-pointer">
+                            {property.is_active ? 'Active' : 'Inactive'}
+                          </Label>
+                          <Switch
+                            id={`active-${property.id}`}
+                            checked={property.is_active}
+                            onCheckedChange={() => handleToggleActive(property)}
+                            disabled={isToggling}
+                          />
                         </div>
-                      )}
+                        {property.is_active && (
+                          <div className="text-xs text-slate-500">
+                            {getDaysRemaining(property.last_activated_at)} days remaining
+                          </div>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-1">
                         <Button 
                           size="sm" 
