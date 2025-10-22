@@ -129,6 +129,20 @@ export const HaustoChat = ({
       const currentConv = conversations.find(c => c.id === selectedMatch);
       if (!currentConv) return;
 
+      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+
+      // First, insert greeting message from Hausto AI
+      await supabase.from('direct_messages').insert({
+        conversation_id: selectedMatch,
+        sender_id: 'hausto-ai',
+        receiver_id: receiverId,
+        content: "Hi there! 👋 I'm Hausto AI, your real estate assistant. I've been following your conversation and I'm here to help facilitate this deal. How can I assist you both today?",
+        metadata: { type: 'ai-greeting' }
+      });
+
+      // Wait a moment for the greeting to appear
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       // Get recent messages for context
       const recentMessages = directMessages.slice(-5).map(m => ({
         role: m.sender_id === user?.id ? 'user' : 'other',
@@ -146,8 +160,7 @@ export const HaustoChat = ({
 
       if (error) throw error;
 
-      // Send AI message as system message
-      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+      // Send AI suggestion message
       await supabase.from('direct_messages').insert({
         conversation_id: selectedMatch,
         sender_id: 'hausto-ai',
@@ -434,15 +447,15 @@ export const HaustoChat = ({
                       
                       if (isAIMessage) {
                         return (
-                          <div key={message.id} className="flex justify-center">
+                          <div key={message.id} className="flex justify-center my-4">
                             <div className="max-w-[85%] bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 shadow-sm">
                               <div className="flex items-center gap-2 mb-2">
-                                <div className="w-6 h-6 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-                                  <MessageCircle className="w-3 h-3 text-white" />
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                                  <MessageCircle className="w-4 h-4 text-white" />
                                 </div>
                                 <span className="text-xs font-semibold text-purple-700">Hausto AI Assistant</span>
                               </div>
-                              <p className="text-sm text-gray-700 leading-relaxed">{message.content}</p>
+                              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{message.content}</p>
                               <span className="text-xs text-gray-400 mt-2 block">
                                 {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
@@ -452,8 +465,16 @@ export const HaustoChat = ({
                       }
                       
                       return (
-                        <div key={message.id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[75%] sm:max-w-[80%]`}>
+                        <div key={message.id} className={`flex gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                          {!isOwnMessage && (
+                            <Avatar className="w-8 h-8 flex-shrink-0 mt-1">
+                              <AvatarImage src={isRealtor ? currentConv?.renter_avatar : currentConv?.realtor_avatar} />
+                              <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs">
+                                {senderName.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                          <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
                             <p className="text-xs text-gray-500 mb-1 px-1">
                               {senderName}
                             </p>
@@ -467,12 +488,20 @@ export const HaustoChat = ({
                               </p>
                             </div>
                           </div>
+                          {isOwnMessage && (
+                            <Avatar className="w-8 h-8 flex-shrink-0 mt-1">
+                              <AvatarImage src={isRealtor ? currentConv?.realtor_avatar : currentConv?.renter_avatar} />
+                              <AvatarFallback className="bg-gradient-to-r from-orange-500 to-pink-500 text-white text-xs">
+                                {senderName.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
                         </div>
                       );
                     })}
                   </div>}
-                <div ref={messagesEndRef} />
-              </div>
+                 <div ref={messagesEndRef} />
+               </div>
 
               <div className="p-4 border-t border-gray-200 flex-shrink-0">
                 <div className="flex space-x-2">
@@ -491,5 +520,5 @@ export const HaustoChat = ({
 
         {selectedRenterId && <RenterProfileModal userId={selectedRenterId} isOpen={!!selectedRenterId} onClose={() => setSelectedRenterId(null)} />}
       </DialogContent>
-    </Dialog>;
+    </Dialog>
 };
