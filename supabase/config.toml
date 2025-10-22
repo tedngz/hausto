@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.handle-paypal-webhooks]
 verify_jwt = false
+
+[functions.hausto-ai-assist]
+verify_jwt = false

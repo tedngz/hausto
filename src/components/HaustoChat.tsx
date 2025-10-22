@@ -42,6 +42,7 @@ export const HaustoChat = ({
   const [selectedRenterId, setSelectedRenterId] = useState<string | null>(null);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [showPropertyList, setShowPropertyList] = useState(false);
+  const [isRequestingAI, setIsRequestingAI] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
     formatPrice
@@ -117,6 +118,58 @@ export const HaustoChat = ({
     // Clear any pending messages or state
     setInputMessage('');
     setPendingMessage('');
+  };
+
+  const handleRequestAI = async () => {
+    if (!selectedMatch || isRequestingAI) return;
+    
+    setIsRequestingAI(true);
+    
+    try {
+      const currentConv = conversations.find(c => c.id === selectedMatch);
+      if (!currentConv) return;
+
+      // Get recent messages for context
+      const recentMessages = directMessages.slice(-5).map(m => ({
+        role: m.sender_id === user?.id ? 'user' : 'other',
+        content: m.content
+      }));
+
+      const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
+        body: {
+          conversationId: selectedMatch,
+          userType,
+          messages: recentMessages,
+          properties: currentConv.properties
+        }
+      });
+
+      if (error) throw error;
+
+      // Send AI message as system message
+      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+      await supabase.from('direct_messages').insert({
+        conversation_id: selectedMatch,
+        sender_id: 'hausto-ai',
+        receiver_id: receiverId,
+        content: data.suggestion,
+        metadata: { type: 'ai-suggestion' }
+      });
+
+      toast({
+        title: "Hausto AI",
+        description: "AI assistant has joined the conversation",
+      });
+    } catch (error) {
+      console.error('Error requesting AI:', error);
+      toast({
+        title: "Error",
+        description: "Failed to get AI assistance",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRequestingAI(false);
+    }
   };
   const getPlaceholder = () => {
     return 'Type your message...';
@@ -299,11 +352,12 @@ export const HaustoChat = ({
             </div> : (/* User Messages Interface */
         <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
-                <div className="flex items-center space-x-3">
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1" aria-label="Back to conversations">
-                    <ArrowLeft className="w-4 h-4" />
-                  </Button>
-                  <Avatar className="w-10 h-10 flex-shrink-0">
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center space-x-3">
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1" aria-label="Back to conversations">
+                      <ArrowLeft className="w-4 h-4" />
+                    </Button>
+                    <Avatar className="w-10 h-10 flex-shrink-0">
                     <AvatarImage src={(() => {
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       return userType === 'realtor' ? currentConv?.renter_avatar : currentConv?.realtor_avatar;
@@ -347,6 +401,17 @@ export const HaustoChat = ({
                       })()}
                     </button>
                   </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRequestAI}
+                    disabled={isRequestingAI}
+                    className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:border-purple-300 text-purple-700 text-xs"
+                  >
+                    <MessageCircle className="w-3 h-3 mr-1" />
+                    {isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}
+                  </Button>
                 </div>
               </div>
 
@@ -362,9 +427,30 @@ export const HaustoChat = ({
                   </div> : <div className="space-y-4">
                     {directMessages.map(message => {
                       const isOwnMessage = message.sender_id === user?.id;
+                      const isAIMessage = message.sender_id === 'hausto-ai';
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       const isRealtor = userType === 'realtor';
-                      const senderName = isOwnMessage ? 'You' : (isRealtor ? (currentConv?.renter_name || 'Renter') : (currentConv?.realtor_name || 'Property Owner'));
+                      const senderName = isAIMessage ? 'Hausto AI' : (isOwnMessage ? 'You' : (isRealtor ? (currentConv?.renter_name || 'Renter') : (currentConv?.realtor_name || 'Property Owner')));
+                      
+                      if (isAIMessage) {
+                        return (
+                          <div key={message.id} className="flex justify-center">
+                            <div className="max-w-[85%] bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 shadow-sm">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+                                  <MessageCircle className="w-3 h-3 text-white" />
+                                </div>
+                                <span className="text-xs font-semibold text-purple-700">Hausto AI Assistant</span>
+                              </div>
+                              <p className="text-sm text-gray-700 leading-relaxed">{message.content}</p>
+                              <span className="text-xs text-gray-400 mt-2 block">
+                                {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
                       return (
                         <div key={message.id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                           <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[75%] sm:max-w-[80%]`}>
