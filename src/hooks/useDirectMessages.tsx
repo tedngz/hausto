@@ -14,10 +14,11 @@ interface DirectMessage {
   read_at: string | null;
   deleted_by: string[];
   metadata?: {
-    type?: 'system' | 'ai-greeting' | 'ai-suggestion';
+    type?: 'system' | 'ai-greeting' | 'ai-suggestion' | 'ai-exit' | 'user-action';
     property_id?: string;
     property_title?: string;
     property_location?: string;
+    suggestedActions?: string[];
   };
 }
 

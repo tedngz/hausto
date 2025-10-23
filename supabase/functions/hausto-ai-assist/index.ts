@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { userType, messages, properties } = await req.json();
+    const { userType, messages, properties, action } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -29,7 +29,30 @@ serve(async (req) => {
       `${m.role === 'user' ? 'Current user' : 'Other party'}: ${m.content}`
     ).join('\n') || 'No messages yet';
 
-    const systemPrompt = `You are Hausto AI, a friendly and helpful real estate assistant designed to facilitate conversations between renters and property owners. Your goal is to help both parties close the deal by:
+    let systemPrompt = '';
+    let suggestedActions = [];
+
+    if (action) {
+      // Handle specific actions
+      switch (action) {
+        case 'schedule_viewing':
+          systemPrompt = `You are Hausto AI. The user wants to schedule a property viewing. Ask about their availability and preferred time slots in a friendly, conversational way. Keep it to 2-3 sentences.`;
+          break;
+        case 'discuss_price':
+          systemPrompt = `You are Hausto AI. The user wants to discuss pricing. Help facilitate the price negotiation by asking about their budget flexibility or concerns. Keep it to 2-3 sentences.`;
+          break;
+        case 'ask_amenities':
+          systemPrompt = `You are Hausto AI. The user wants to know more about amenities. Ask specific questions about which amenities are most important to them. Keep it to 2-3 sentences.`;
+          break;
+        case 'request_documents':
+          systemPrompt = `You are Hausto AI. The user wants to request documents. Ask what specific documents they need and help coordinate the exchange. Keep it to 2-3 sentences.`;
+          break;
+        default:
+          systemPrompt = `You are Hausto AI responding to: "${action}". Provide a helpful response in 2-3 sentences.`;
+      }
+    } else {
+      // Initial suggestion with actions
+      systemPrompt = `You are Hausto AI, a friendly and helpful real estate assistant designed to facilitate conversations between renters and property owners. Your goal is to help both parties close the deal by:
 
 1. Suggesting relevant questions one party should ask the other
 2. Highlighting important property details that haven't been discussed
@@ -45,6 +68,10 @@ Recent conversation:
 ${conversationContext}
 
 Provide a brief, helpful suggestion (2-3 sentences max) that will move the conversation forward and help close the deal. Be specific, actionable, and encouraging. Don't be too formal - be friendly and conversational.`;
+      
+      // Suggest relevant actions based on conversation
+      suggestedActions = ['schedule_viewing', 'discuss_price', 'ask_amenities', 'request_documents'];
+    }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -73,7 +100,7 @@ Provide a brief, helpful suggestion (2-3 sentences max) that will move the conve
     const suggestion = data.choices[0].message.content;
 
     return new Response(
-      JSON.stringify({ suggestion }),
+      JSON.stringify({ suggestion, suggestedActions }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200 

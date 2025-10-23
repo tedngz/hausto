@@ -43,7 +43,10 @@ export const HaustoChat = ({
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [showPropertyList, setShowPropertyList] = useState(false);
   const [isRequestingAI, setIsRequestingAI] = useState(false);
+  const [isAIActive, setIsAIActive] = useState(false);
+  const [aiLastActiveTime, setAiLastActiveTime] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const aiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const {
     formatPrice
   } = useCurrency();
@@ -121,6 +124,52 @@ export const HaustoChat = ({
     setPendingMessage('');
   };
 
+  // AI auto-exit after 5 minutes
+  useEffect(() => {
+    if (isAIActive && aiLastActiveTime) {
+      // Clear existing timeout
+      if (aiTimeoutRef.current) {
+        clearTimeout(aiTimeoutRef.current);
+      }
+
+      // Set new timeout for 5 minutes
+      aiTimeoutRef.current = setTimeout(async () => {
+        if (!selectedMatch || !user?.id) return;
+        
+        const currentConv = conversations.find(c => c.id === selectedMatch);
+        if (!currentConv) return;
+        
+        const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+        
+        // Send exit message
+        await supabase.from('direct_messages').insert({
+          conversation_id: selectedMatch,
+          sender_id: user?.id,
+          receiver_id: receiverId,
+          content: "I'll step away for now to let you both continue your conversation. Feel free to call me back anytime if you need more assistance! 👋",
+          metadata: { type: 'ai-exit' }
+        });
+        
+        await refetchMessages();
+        setIsAIActive(false);
+        setAiLastActiveTime(null);
+      }, 5 * 60 * 1000); // 5 minutes
+    }
+
+    return () => {
+      if (aiTimeoutRef.current) {
+        clearTimeout(aiTimeoutRef.current);
+      }
+    };
+  }, [isAIActive, aiLastActiveTime, selectedMatch, user?.id, conversations, refetchMessages]);
+
+  // Reset AI timer on new messages
+  useEffect(() => {
+    if (isAIActive && directMessages.length > 0) {
+      setAiLastActiveTime(Date.now());
+    }
+  }, [directMessages.length, isAIActive]);
+
   const handleRequestAI = async () => {
     if (!selectedMatch || isRequestingAI) return;
     if (!user?.id) {
@@ -135,6 +184,10 @@ export const HaustoChat = ({
       if (!currentConv) return;
 
       const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+
+      // Activate AI
+      setIsAIActive(true);
+      setAiLastActiveTime(Date.now());
 
       // First, insert greeting message from Hausto AI
       await supabase.from('direct_messages').insert({
@@ -168,13 +221,16 @@ export const HaustoChat = ({
 
       if (error) throw error;
 
-      // Send AI suggestion message
+      // Send AI suggestion message with actions
       await supabase.from('direct_messages').insert({
         conversation_id: selectedMatch,
         sender_id: user?.id || '',
         receiver_id: receiverId,
         content: data.suggestion,
-        metadata: { type: 'ai-suggestion' }
+        metadata: { 
+          type: 'ai-suggestion',
+          suggestedActions: data.suggestedActions || []
+        }
       });
 
       // Refetch to show suggestion
@@ -189,6 +245,78 @@ export const HaustoChat = ({
       toast({
         title: "Error",
         description: "Failed to get AI assistance",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRequestingAI(false);
+    }
+  };
+
+  const handleAIAction = async (action: string) => {
+    if (!selectedMatch || isRequestingAI || !user?.id) return;
+    
+    setIsRequestingAI(true);
+    setAiLastActiveTime(Date.now()); // Reset timer
+    
+    try {
+      const currentConv = conversations.find(c => c.id === selectedMatch);
+      if (!currentConv) return;
+
+      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+
+      // Get action label
+      const actionLabels: Record<string, string> = {
+        schedule_viewing: 'Schedule Viewing',
+        discuss_price: 'Discuss Price',
+        ask_amenities: 'Ask About Amenities',
+        request_documents: 'Request Documents'
+      };
+
+      // Insert user's action selection as a message
+      await supabase.from('direct_messages').insert({
+        conversation_id: selectedMatch,
+        sender_id: user?.id,
+        receiver_id: receiverId,
+        content: `[Selected: ${actionLabels[action] || action}]`,
+        metadata: { type: 'user-action' }
+      });
+
+      await refetchMessages();
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Get recent messages for context
+      const recentMessages = directMessages.slice(-5).map(m => ({
+        role: m.sender_id === user?.id ? 'user' : 'other',
+        content: m.content
+      }));
+
+      const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
+        body: {
+          conversationId: selectedMatch,
+          userType,
+          messages: recentMessages,
+          properties: currentConv.properties,
+          action
+        }
+      });
+
+      if (error) throw error;
+
+      // Send AI follow-up
+      await supabase.from('direct_messages').insert({
+        conversation_id: selectedMatch,
+        sender_id: user?.id,
+        receiver_id: receiverId,
+        content: data.suggestion,
+        metadata: { type: 'ai-suggestion' }
+      });
+
+      await refetchMessages();
+    } catch (error) {
+      console.error('Error handling AI action:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process action",
         variant: "destructive"
       });
     } finally {
@@ -426,16 +554,22 @@ export const HaustoChat = ({
                     </button>
                   </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRequestAI}
-                    disabled={isRequestingAI}
-                    className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:border-purple-300 text-purple-700 text-xs"
-                  >
-                    <MessageCircle className="w-3 h-3 mr-1" />
-                    {isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}
-                  </Button>
+                  {!isAIActive ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRequestAI}
+                      disabled={isRequestingAI}
+                      className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:border-purple-300 text-purple-700 text-xs"
+                    >
+                      <MessageCircle className="w-3 h-3 mr-1" />
+                      {isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}
+                    </Button>
+                  ) : (
+                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0">
+                      AI Active
+                    </Badge>
+                  )}
                 </div>
               </div>
 
@@ -451,26 +585,58 @@ export const HaustoChat = ({
                   </div> : <div className="space-y-4">
                     {directMessages.map(message => {
                       const isOwnMessage = message.sender_id === user?.id;
-                      const isAIMessage = message.metadata?.type === 'ai-greeting' || message.metadata?.type === 'ai-suggestion';
+                      const isAIMessage = message.metadata?.type === 'ai-greeting' || message.metadata?.type === 'ai-suggestion' || message.metadata?.type === 'ai-exit';
+                      const isUserAction = message.metadata?.type === 'user-action';
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       const isRealtor = userType === 'realtor';
                       const senderName = isAIMessage ? 'Hausto AI' : (isOwnMessage ? 'You' : (isRealtor ? (currentConv?.renter_name || 'Renter') : (currentConv?.realtor_name || 'Property Owner')));
                       
+                      // Hide user action messages
+                      if (isUserAction) return null;
+                      
                       if (isAIMessage) {
                         return (
-                          <div key={message.id} className="flex justify-center my-4">
-                            <div className="max-w-[85%] bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 shadow-sm">
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
-                                  <MessageCircle className="w-4 h-4 text-white" />
+                          <div key={message.id}>
+                            <div className="flex justify-center my-4">
+                              <div className="max-w-[85%] bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 shadow-sm">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                                    <MessageCircle className="w-4 h-4 text-white" />
+                                  </div>
+                                  <span className="text-xs font-semibold text-purple-700">Hausto AI Assistant</span>
                                 </div>
-                                <span className="text-xs font-semibold text-purple-700">Hausto AI Assistant</span>
+                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                                <span className="text-xs text-gray-400 mt-2 block">
+                                  {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
                               </div>
-                              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                              <span className="text-xs text-gray-400 mt-2 block">
-                                {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
                             </div>
+                            
+                            {/* Show suggested actions */}
+                            {message.metadata?.suggestedActions && message.metadata.suggestedActions.length > 0 && (
+                              <div className="flex justify-center gap-2 mt-2 flex-wrap">
+                                {message.metadata.suggestedActions.map((action: string) => {
+                                  const actionLabels: Record<string, string> = {
+                                    schedule_viewing: '📅 Schedule Viewing',
+                                    discuss_price: '💰 Discuss Price',
+                                    ask_amenities: '🏠 Ask About Amenities',
+                                    request_documents: '📄 Request Documents'
+                                  };
+                                  return (
+                                    <Button
+                                      key={action}
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleAIAction(action)}
+                                      disabled={isRequestingAI}
+                                      className="text-xs bg-white hover:bg-purple-50 border-purple-300 text-purple-700"
+                                    >
+                                      {actionLabels[action] || action}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       }
