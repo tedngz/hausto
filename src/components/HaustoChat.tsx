@@ -58,7 +58,8 @@ export const HaustoChat = ({
     messages: directMessages,
     setCurrentConversationId,
     loadingMessages: loadingDirectMessages,
-    markAsRead
+    markAsRead,
+    refetchMessages
   } = useDirectMessages();
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
@@ -140,8 +141,11 @@ export const HaustoChat = ({
         metadata: { type: 'ai-greeting' }
       });
 
-      // Wait a moment for the greeting to appear
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Refetch to show greeting immediately
+      await refetchMessages();
+      
+      // Wait a moment for better UX
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       // Get recent messages for context
       const recentMessages = directMessages.slice(-5).map(m => ({
@@ -168,6 +172,9 @@ export const HaustoChat = ({
         content: data.suggestion,
         metadata: { type: 'ai-suggestion' }
       });
+
+      // Refetch to show suggestion
+      await refetchMessages();
 
       toast({
         title: "Hausto AI",

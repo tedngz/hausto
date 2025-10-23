@@ -421,5 +421,6 @@ export const useDirectMessages = () => {
     getOrCreateConversation,
     loadingConversations,
     loadingMessages,
+    refetchMessages,
   };
 };
