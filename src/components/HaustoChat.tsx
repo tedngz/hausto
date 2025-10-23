@@ -123,6 +123,10 @@ export const HaustoChat = ({
 
   const handleRequestAI = async () => {
     if (!selectedMatch || isRequestingAI) return;
+    if (!user?.id) {
+      toast({ title: 'Sign in required', description: 'Please sign in to use Hausto AI.' });
+      return;
+    }
     
     setIsRequestingAI(true);
     
@@ -135,7 +139,7 @@ export const HaustoChat = ({
       // First, insert greeting message from Hausto AI
       await supabase.from('direct_messages').insert({
         conversation_id: selectedMatch,
-        sender_id: 'hausto-ai',
+        sender_id: user?.id || '',
         receiver_id: receiverId,
         content: "Hi there! 👋 I'm Hausto AI, your real estate assistant. I've been following your conversation and I'm here to help facilitate this deal. How can I assist you both today?",
         metadata: { type: 'ai-greeting' }
@@ -167,7 +171,7 @@ export const HaustoChat = ({
       // Send AI suggestion message
       await supabase.from('direct_messages').insert({
         conversation_id: selectedMatch,
-        sender_id: 'hausto-ai',
+        sender_id: user?.id || '',
         receiver_id: receiverId,
         content: data.suggestion,
         metadata: { type: 'ai-suggestion' }
@@ -447,7 +451,7 @@ export const HaustoChat = ({
                   </div> : <div className="space-y-4">
                     {directMessages.map(message => {
                       const isOwnMessage = message.sender_id === user?.id;
-                      const isAIMessage = message.sender_id === 'hausto-ai';
+                      const isAIMessage = message.metadata?.type === 'ai-greeting' || message.metadata?.type === 'ai-suggestion';
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       const isRealtor = userType === 'realtor';
                       const senderName = isAIMessage ? 'Hausto AI' : (isOwnMessage ? 'You' : (isRealtor ? (currentConv?.renter_name || 'Renter') : (currentConv?.realtor_name || 'Property Owner')));
