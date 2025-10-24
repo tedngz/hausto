@@ -163,12 +163,19 @@ export const HaustoChat = ({
     };
   }, [isAIActive, aiLastActiveTime, selectedMatch, user?.id, conversations, refetchMessages]);
 
-  // Reset AI timer on new messages
+  // Reset AI timer only when AI sends a message
   useEffect(() => {
     if (isAIActive && directMessages.length > 0) {
-      setAiLastActiveTime(Date.now());
+      const lastMessage = directMessages[directMessages.length - 1];
+      const isAIMessage = lastMessage?.metadata && 
+        (lastMessage.metadata.type === 'ai-greeting' || 
+         lastMessage.metadata.type === 'ai-suggestion');
+      
+      if (isAIMessage) {
+        setAiLastActiveTime(Date.now());
+      }
     }
-  }, [directMessages.length, isAIActive]);
+  }, [directMessages.length, isAIActive, directMessages]);
 
   const handleRequestAI = async () => {
     if (!selectedMatch || isRequestingAI) return;
