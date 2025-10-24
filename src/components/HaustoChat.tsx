@@ -574,7 +574,7 @@ export const HaustoChat = ({
                       <span className="sm:hidden">{isRequestingAI ? 'AI...' : 'AI'}</span>
                     </Button>
                   ) : (
-                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[8px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1">
+                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[8px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center justify-center">
                       AI Active
                     </Badge>
                   )}
