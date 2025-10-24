@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Loader2, Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -31,6 +32,8 @@ interface PropertyMatch {
   matchReason: string;
   realtor_id?: string;
   vibe_analysis?: any;
+  realtor_name?: string;
+  realtor_avatar?: string;
 }
 interface SearchResult {
   results: PropertyMatch[];
@@ -57,6 +60,7 @@ export const HomeAI = ({
   const [typedPlaceholder, setTypedPlaceholder] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [wantsNewChat, setWantsNewChat] = useState(false);
+  const [realtorProfiles, setRealtorProfiles] = useState<Record<string, { name: string; avatar: string }>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const {
@@ -137,6 +141,34 @@ export const HomeAI = ({
     });
     return results;
   }, [messages]);
+
+  // Fetch realtor profiles for all results
+  useEffect(() => {
+    const fetchRealtorProfiles = async () => {
+      const realtorIds = [...new Set(allResults.map(r => r.realtor_id).filter(Boolean))];
+      if (realtorIds.length === 0) return;
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, avatar_url')
+        .in('id', realtorIds);
+
+      if (profiles) {
+        const profileMap: Record<string, { name: string; avatar: string }> = {};
+        profiles.forEach(profile => {
+          profileMap[profile.id] = {
+            name: profile.name || 'Property Owner',
+            avatar: profile.avatar_url || ''
+          };
+        });
+        setRealtorProfiles(profileMap);
+      }
+    };
+
+    if (allResults.length > 0) {
+      fetchRealtorProfiles();
+    }
+  }, [allResults]);
 
   // Always start with empty session by default - user can manually select chat history if needed
   useEffect(() => {
@@ -593,13 +625,28 @@ export const HomeAI = ({
                                           {property.size && <span className="font-medium">{property.size}</span>}
                                         </div>
 
-                                      {/* Why it matches - More prominent on mobile */}
+                                       {/* Why it matches - More prominent on mobile */}
                                       <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
                                         <p className="text-sm text-foreground text-left">
                                           <span className="font-semibold text-primary">Why it matches: </span>
                                           {property.matchReason}
                                         </p>
                                       </div>
+
+                                      {/* Realtor Info */}
+                                      {property.realtor_id && realtorProfiles[property.realtor_id] && (
+                                        <div className="flex items-center gap-2 pt-2 border-t border-border">
+                                          <Avatar className="w-6 h-6">
+                                            <AvatarImage src={realtorProfiles[property.realtor_id].avatar} />
+                                            <AvatarFallback className="bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xs">
+                                              <User className="w-3 h-3" />
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <span className="text-xs text-muted-foreground">
+                                            Listed by <span className="font-medium text-foreground">{realtorProfiles[property.realtor_id].name}</span>
+                                          </span>
+                                        </div>
+                                      )}
 
                                     </div>
                                   </div>
@@ -762,6 +809,21 @@ export const HomeAI = ({
                                 {property.matchReason}
                               </p>
                             </div>
+
+                            {/* Realtor Info */}
+                            {property.realtor_id && realtorProfiles[property.realtor_id] && (
+                              <div className="flex items-center gap-2 pt-2 border-t border-border">
+                                <Avatar className="w-6 h-6">
+                                  <AvatarImage src={realtorProfiles[property.realtor_id].avatar} />
+                                  <AvatarFallback className="bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xs">
+                                    <User className="w-3 h-3" />
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs text-muted-foreground">
+                                  Listed by <span className="font-medium text-foreground">{realtorProfiles[property.realtor_id].name}</span>
+                                </span>
+                              </div>
+                            )}
 
                           </div>
                         </div>
