@@ -503,13 +503,13 @@ export const HaustoChat = ({
               </ScrollArea>
             </div> : (/* User Messages Interface */
         <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center space-x-3">
+              <div className="p-2 sm:p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
+                <div className="flex items-center justify-between w-full gap-2">
+                  <div className="flex items-center space-x-2 sm:space-x-3">
                     <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1" aria-label="Back to conversations">
-                      <ArrowLeft className="w-4 h-4" />
+                      <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
                     </Button>
-                    <Avatar className="w-10 h-10 flex-shrink-0">
+                    <Avatar className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0">
                     <AvatarImage src={(() => {
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       return userType === 'realtor' ? currentConv?.renter_avatar : currentConv?.realtor_avatar;
@@ -527,7 +527,7 @@ export const HaustoChat = ({
                       return (
                         <>
                           <h4
-                            className="font-semibold text-gray-900 hover:text-orange-600 cursor-pointer"
+                            className="text-sm sm:text-base font-semibold text-gray-900 hover:text-orange-600 cursor-pointer"
                             onClick={() => {
                               if (isRealtor) {
                                 setSelectedRenterId(otherUserId || null);
@@ -542,7 +542,7 @@ export const HaustoChat = ({
                       );
                      })()}
                     <button 
-                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
+                      className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
                       onClick={() => setShowPropertyList(true)}
                     >
                       {(() => {
@@ -560,13 +560,14 @@ export const HaustoChat = ({
                       size="sm"
                       onClick={handleRequestAI}
                       disabled={isRequestingAI}
-                      className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:border-purple-300 text-purple-700 text-xs"
+                      className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:border-purple-300 text-purple-700 text-[10px] sm:text-xs"
                     >
-                      <MessageCircle className="w-3 h-3 mr-1" />
-                      {isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}
+                      <MessageCircle className="w-3 h-3 sm:mr-1" />
+                      <span className="hidden sm:inline">{isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}</span>
+                      <span className="sm:hidden">{isRequestingAI ? 'AI...' : 'AI'}</span>
                     </Button>
                   ) : (
-                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0">
+                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[10px] sm:text-xs px-2 py-1">
                       AI Active
                     </Badge>
                   )}
