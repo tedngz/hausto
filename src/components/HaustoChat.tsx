@@ -47,6 +47,9 @@ export const HaustoChat = ({
   const [aiLastActiveTime, setAiLastActiveTime] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const aiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Track per-conversation proactive timers and last scheduled message IDs
+  const proactiveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const lastScheduledMsgRef = useRef<Record<string, string>>({});
   const {
     formatPrice
   } = useCurrency();
@@ -179,104 +182,123 @@ export const HaustoChat = ({
 
   // Proactive AI: Auto-respond after 1 minute if realtor hasn't replied to renter
   useEffect(() => {
-    if (!selectedMatch || !directMessages.length || userType !== 'realtor') return;
-    
+    if (!selectedMatch || !directMessages.length || userType !== 'realtor' || !user?.id) return;
+
     const currentConv = conversations.find(c => c.id === selectedMatch);
-    if (!currentConv || !user?.id) return;
+    if (!currentConv) return;
 
     const lastMessage = directMessages[directMessages.length - 1];
-    
-    // Only trigger if last message is from renter and realtor hasn't responded
+    const convKey = selectedMatch;
+
+    // If realtor replied, cancel any scheduled timer for this conversation
+    if (lastMessage.sender_id === currentConv.realtor_id) {
+      const existing = proactiveTimersRef.current[convKey];
+      if (existing) {
+        clearTimeout(existing);
+        delete proactiveTimersRef.current[convKey];
+      }
+      lastScheduledMsgRef.current[convKey] = '';
+      return;
+    }
+
+    // Only schedule when last message is from renter
     const isFromRenter = lastMessage.sender_id === currentConv.renter_id;
     if (!isFromRenter) return;
 
-    // Set a 1-minute timeout
-    const proactiveTimeoutId = setTimeout(async () => {
+    // Avoid rescheduling for the same renter message across refetches
+    if (lastScheduledMsgRef.current[convKey] === lastMessage.id) return;
+
+    // Clear any prior timer and schedule a new one for this specific message
+    const existingTimer = proactiveTimersRef.current[convKey];
+    if (existingTimer) clearTimeout(existingTimer);
+    lastScheduledMsgRef.current[convKey] = lastMessage.id;
+
+    proactiveTimersRef.current[convKey] = setTimeout(async () => {
       console.log('Proactive AI: 1 minute passed, checking if response needed...');
-      
       try {
-        // Double-check that realtor still hasn't responded
-        const { data: latestMessages } = await supabase
+        // Double-check the latest message is still not from the realtor
+        const { data: latest } = await supabase
           .from('direct_messages')
           .select('*')
-          .eq('conversation_id', selectedMatch)
+          .eq('conversation_id', convKey)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
-        
-        // If realtor has responded in the meantime, don't trigger AI
-        if (latestMessages?.sender_id === currentConv.realtor_id) {
+
+        if (latest?.sender_id === currentConv.realtor_id) {
           console.log('Proactive AI: Realtor has responded, canceling AI response');
           return;
         }
 
         console.log('Proactive AI: Generating response on behalf of realtor...');
 
-        // Build context from recent messages
         const recentMessages = directMessages.slice(-5).map(m => ({
           role: m.sender_id === currentConv.renter_id ? 'user' : 'assistant',
-          content: m.content
+          content: m.content,
         }));
 
         const propertiesContext = currentConv.properties?.map(p => ({
           title: p.title,
           location: p.location,
-          price: p.price
+          price: p.price,
         })) || [];
 
-        // Get AI suggestion
         const { data: aiData, error: aiError } = await supabase.functions.invoke('hausto-ai-assist', {
           body: {
             userType: 'realtor',
             messages: recentMessages,
             properties: propertiesContext,
-            action: null // Let AI decide the best response
-          }
+            action: null,
+          },
         });
 
         if (aiError) throw aiError;
 
-        // Activate AI mode
         setIsAIActive(true);
         setAiLastActiveTime(Date.now());
 
-        // Send AI greeting first
         await supabase.from('direct_messages').insert({
-          conversation_id: selectedMatch,
+          conversation_id: convKey,
           sender_id: user.id,
           receiver_id: currentConv.renter_id,
           content: "Hi! I'm Hausto AI stepping in to help while the property owner is unavailable. How can I assist you?",
-          metadata: { type: 'ai-greeting' }
+          metadata: { type: 'ai-greeting' },
         });
 
         await refetchMessages();
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Send AI response
         await supabase.from('direct_messages').insert({
-          conversation_id: selectedMatch,
+          conversation_id: convKey,
           sender_id: user.id,
           receiver_id: currentConv.renter_id,
-          content: aiData.suggestion,
-          metadata: { 
+          content: aiData?.suggestion || "I'm here to help move things forward.",
+          metadata: {
             type: 'ai-suggestion',
-            suggestedActions: aiData.suggestedActions || []
-          }
+            suggestedActions: aiData?.suggestedActions || [],
+          },
         });
 
         await refetchMessages();
 
         toast({
-          title: "Hausto AI Active",
-          description: "AI has responded on your behalf since you were unavailable.",
+          title: 'Hausto AI Active',
+          description: 'AI has responded on your behalf since you were unavailable.',
         });
       } catch (error) {
         console.error('Proactive AI error:', error);
+      } finally {
+        delete proactiveTimersRef.current[convKey];
       }
-    }, 60000); // 1 minute = 60000ms
+    }, 60000);
+  }, [selectedMatch, userType, user?.id, conversations, directMessages]);
 
-    return () => clearTimeout(proactiveTimeoutId);
-  }, [directMessages, selectedMatch, conversations, userType, user?.id, sendDirectMessage, refetchMessages, toast]);
+  // Cleanup any pending timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(proactiveTimersRef.current).forEach((t) => clearTimeout(t));
+    };
+  }, []);
 
   const handleRequestAI = async () => {
     if (!selectedMatch || isRequestingAI) return;
