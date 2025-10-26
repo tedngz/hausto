@@ -50,6 +50,7 @@ export const HaustoChat = ({
   // Track per-conversation proactive timers and last scheduled message IDs
   const proactiveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const lastScheduledMsgRef = useRef<Record<string, string>>({});
+  const aiRespondedToRef = useRef<Set<string>>(new Set());
   const {
     formatPrice
   } = useCurrency();
@@ -186,10 +187,9 @@ export const HaustoChat = ({
     
     if (isAIMessage) return;
 
-    // Check if we already responded to this message
-    const alreadyRespondedKey = `ai-responded-${lastMessage.id}`;
-    if (sessionStorage.getItem(alreadyRespondedKey)) return;
-    sessionStorage.setItem(alreadyRespondedKey, 'true');
+    // Check if we already responded to this message (in-memory only)
+    if (aiRespondedToRef.current.has(lastMessage.id)) return;
+    aiRespondedToRef.current.add(lastMessage.id);
 
     const respondToRenter = async () => {
       try {
@@ -239,9 +239,8 @@ export const HaustoChat = ({
       }
     };
 
-    // Respond with a short delay for better UX
-    const timeoutId = setTimeout(respondToRenter, 1000);
-    return () => clearTimeout(timeoutId);
+    // Respond immediately
+    respondToRenter();
   }, [isAIActive, selectedMatch, directMessages, user?.id, conversations, refetchMessages]);
 
   // Reset AI timer only when AI sends a message
@@ -355,6 +354,9 @@ export const HaustoChat = ({
       if (!currentConv) return;
 
       const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+
+      // Clear the responded tracking when AI is manually activated
+      aiRespondedToRef.current.clear();
 
       // Activate AI
       setIsAIActive(true);
