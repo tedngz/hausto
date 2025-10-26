@@ -127,7 +127,7 @@ export const HaustoChat = ({
     setPendingMessage('');
   };
 
-  // AI auto-exit after 5 minutes
+  // AI auto-exit after 5 minutes of no new renter messages
   useEffect(() => {
     if (isAIActive && aiLastActiveTime) {
       // Clear existing timeout
@@ -165,6 +165,84 @@ export const HaustoChat = ({
       }
     };
   }, [isAIActive, aiLastActiveTime, selectedMatch, user?.id, conversations, refetchMessages]);
+
+  // Proactive AI response to new renter messages when AI is active
+  useEffect(() => {
+    if (!isAIActive || !selectedMatch || !directMessages.length || !user?.id) return;
+
+    const currentConv = conversations.find(c => c.id === selectedMatch);
+    if (!currentConv) return;
+
+    const lastMessage = directMessages[directMessages.length - 1];
+    
+    // Only respond to new renter messages
+    if (lastMessage.sender_id !== currentConv.renter_id) return;
+    
+    // Don't respond to AI's own messages
+    const isAIMessage = lastMessage?.metadata && 
+      (lastMessage.metadata.type === 'ai-greeting' || 
+       lastMessage.metadata.type === 'ai-suggestion' ||
+       lastMessage.metadata.type === 'ai-exit');
+    
+    if (isAIMessage) return;
+
+    // Check if we already responded to this message
+    const alreadyRespondedKey = `ai-responded-${lastMessage.id}`;
+    if (sessionStorage.getItem(alreadyRespondedKey)) return;
+    sessionStorage.setItem(alreadyRespondedKey, 'true');
+
+    const respondToRenter = async () => {
+      try {
+        const receiverId = currentConv.renter_id;
+
+        // Get recent messages for context
+        const recentMessages = directMessages.slice(-5).map(m => ({
+          role: m.sender_id === currentConv.renter_id ? 'user' : 'assistant',
+          content: m.content,
+        }));
+
+        const propertiesContext = currentConv.properties?.map(p => ({
+          title: p.title,
+          location: p.location,
+          price: p.price,
+        })) || [];
+
+        const { data: aiData, error: aiError } = await supabase.functions.invoke('hausto-ai-assist', {
+          body: {
+            userType: 'realtor',
+            messages: recentMessages,
+            properties: propertiesContext,
+            action: null,
+          },
+        });
+
+        if (aiError) throw aiError;
+
+        // Send AI response
+        await supabase.from('direct_messages').insert({
+          conversation_id: selectedMatch,
+          sender_id: user.id,
+          receiver_id: receiverId,
+          content: aiData?.suggestion || "I'm here to help move things forward.",
+          metadata: {
+            type: 'ai-suggestion',
+            suggestedActions: aiData?.suggestedActions || [],
+          },
+        });
+
+        await refetchMessages();
+        
+        // Reset the 5-minute exit timer
+        setAiLastActiveTime(Date.now());
+      } catch (error) {
+        console.error('Proactive AI response error:', error);
+      }
+    };
+
+    // Respond with a short delay for better UX
+    const timeoutId = setTimeout(respondToRenter, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [isAIActive, selectedMatch, directMessages, user?.id, conversations, refetchMessages]);
 
   // Reset AI timer only when AI sends a message
   useEffect(() => {
