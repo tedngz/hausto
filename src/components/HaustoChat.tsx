@@ -182,7 +182,7 @@ export const HaustoChat = ({
 
   // Proactive AI: Auto-respond after 1 minute if realtor hasn't replied to renter
   useEffect(() => {
-    if (!selectedMatch || !directMessages.length || userType !== 'realtor' || !user?.id) return;
+    if (!selectedMatch || !directMessages.length || !user?.id) return;
 
     const currentConv = conversations.find(c => c.id === selectedMatch);
     if (!currentConv) return;
@@ -214,12 +214,12 @@ export const HaustoChat = ({
     lastScheduledMsgRef.current[convKey] = lastMessage.id;
 
     proactiveTimersRef.current[convKey] = setTimeout(async () => {
-      console.log('Proactive AI: 1 minute passed, checking if response needed...');
+      console.log('Proactive AI: 1 minute passed, requesting server-side reply...');
       try {
         // Double-check the latest message is still not from the realtor
         const { data: latest } = await supabase
           .from('direct_messages')
-          .select('*')
+          .select('id,sender_id,created_at')
           .eq('conversation_id', convKey)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -230,60 +230,23 @@ export const HaustoChat = ({
           return;
         }
 
-        console.log('Proactive AI: Generating response on behalf of realtor...');
-
-        const recentMessages = directMessages.slice(-5).map(m => ({
-          role: m.sender_id === currentConv.renter_id ? 'user' : 'assistant',
-          content: m.content,
-        }));
-
-        const propertiesContext = currentConv.properties?.map(p => ({
-          title: p.title,
-          location: p.location,
-          price: p.price,
-        })) || [];
-
-        const { data: aiData, error: aiError } = await supabase.functions.invoke('hausto-ai-assist', {
-          body: {
-            userType: 'realtor',
-            messages: recentMessages,
-            properties: propertiesContext,
-            action: null,
-          },
+        // Ask server to step in and reply as realtor (uses service role)
+        const { data, error } = await supabase.functions.invoke('proactive-ai-reply', {
+          body: { conversationId: convKey },
         });
 
-        if (aiError) throw aiError;
+        if (error) {
+          console.error('proactive-ai-reply error:', error);
+          return;
+        }
 
         setIsAIActive(true);
         setAiLastActiveTime(Date.now());
-
-        await supabase.from('direct_messages').insert({
-          conversation_id: convKey,
-          sender_id: user.id,
-          receiver_id: currentConv.renter_id,
-          content: "Hi! I'm Hausto AI stepping in to help while the property owner is unavailable. How can I assist you?",
-          metadata: { type: 'ai-greeting' },
-        });
-
-        await refetchMessages();
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        await supabase.from('direct_messages').insert({
-          conversation_id: convKey,
-          sender_id: user.id,
-          receiver_id: currentConv.renter_id,
-          content: aiData?.suggestion || "I'm here to help move things forward.",
-          metadata: {
-            type: 'ai-suggestion',
-            suggestedActions: aiData?.suggestedActions || [],
-          },
-        });
-
         await refetchMessages();
 
         toast({
           title: 'Hausto AI Active',
-          description: 'AI has responded on your behalf since you were unavailable.',
+          description: 'AI has responded on behalf of the realtor.',
         });
       } catch (error) {
         console.error('Proactive AI error:', error);
@@ -291,7 +254,7 @@ export const HaustoChat = ({
         delete proactiveTimersRef.current[convKey];
       }
     }, 60000);
-  }, [selectedMatch, userType, user?.id, conversations, directMessages]);
+  }, [selectedMatch, user?.id, conversations, directMessages]);
 
   // Cleanup any pending timers on unmount
   useEffect(() => {

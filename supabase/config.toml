@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.hausto-ai-assist]
 verify_jwt = false
+
+[functions.proactive-ai-reply]
+verify_jwt = false
