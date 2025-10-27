@@ -73,7 +73,8 @@ export const HomeAI = ({
   } = useMatches();
   const {
     canPerformAction,
-    updateUsage
+    updateUsage,
+    refetchUsage
   } = useUsageTracking();
 
   // Use the proper chat hook for database-backed conversations
@@ -317,8 +318,9 @@ export const HomeAI = ({
           await sendMessageWithoutConversation(messageData.message, messageData.userType, messageData.userPreferences, messageData.propertyImages);
         }
 
-        // Update AI search usage
-        await updateUsage('ai-search');
+        // Note: AI search usage is now tracked server-side in chat-ai edge function
+        // Refetch usage to get updated counts
+        refetchUsage();
         setHasSearched(true);
         setWantsNewChat(false); // Reset new chat flag after successful search
         toast({

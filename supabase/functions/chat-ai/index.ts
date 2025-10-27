@@ -509,6 +509,47 @@ Current user message: ${message}`;
       }
     }
 
+    // Track AI search usage for authenticated users
+    if (user?.id && !isAnonymous) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Get current usage for today
+        const { data: currentUsage } = await supabase
+          .from('daily_usage')
+          .select('ai_requests, properties_viewed, properties_matched, quiz_retakes')
+          .eq('user_id', user.id)
+          .eq('usage_date', today)
+          .maybeSingle();
+
+        const newAiRequests = (currentUsage?.ai_requests || 0) + 1;
+
+        // Upsert usage record
+        const { error: usageError } = await supabase
+          .from('daily_usage')
+          .upsert({
+            user_id: user.id,
+            usage_date: today,
+            ai_requests: newAiRequests,
+            properties_viewed: currentUsage?.properties_viewed || 0,
+            properties_matched: currentUsage?.properties_matched || 0,
+            quiz_retakes: currentUsage?.quiz_retakes || 0,
+          }, {
+            onConflict: 'user_id,usage_date',
+            ignoreDuplicates: false
+          });
+
+        if (usageError) {
+          console.error('Error tracking AI search usage:', usageError);
+        } else {
+          console.log(`Successfully tracked AI search usage for user ${user.id}, total today: ${newAiRequests}`);
+        }
+      } catch (usageTrackError) {
+        console.error('Error in usage tracking:', usageTrackError);
+        // Don't fail the whole request if usage tracking fails
+      }
+    }
+
     // Record successful anonymous search attempt
     if (isAnonymous) {
       const xForwardedFor = req.headers.get('x-forwarded-for');
