@@ -278,8 +278,8 @@ export const HomeAI = ({
     // Check AI request limits for logged-in users
     if (user && !canPerformAction('ai-search')) {
       toast({
-        title: "Daily AI Request Limit Reached",
-        description: "You've reached your limit of 10 AI requests per day. Try again tomorrow or like and interact with current properties.",
+        title: "Daily AI Search Limit Reached",
+        description: "Free tier users can make 10 AI searches per day. Upgrade to premium for unlimited searches or try again tomorrow.",
         variant: "destructive"
       });
       return;
@@ -320,7 +320,7 @@ export const HomeAI = ({
 
         // Note: AI search usage is now tracked server-side in chat-ai edge function
         // Refetch usage to get updated counts
-        refetchUsage();
+        await refetchUsage();
         setHasSearched(true);
         setWantsNewChat(false); // Reset new chat flag after successful search
         toast({
