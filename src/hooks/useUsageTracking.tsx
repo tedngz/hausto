@@ -33,7 +33,12 @@ export const useUsageTracking = () => {
   });
   const [weeklyMatches, setWeeklyMatches] = useState(0);
   const [weeklyQuizRetakes, setWeeklyQuizRetakes] = useState(0);
-  const [viewedPropertiesToday, setViewedPropertiesToday] = useState<Set<string>>(new Set());
+  const [viewedPropertiesToday, setViewedPropertiesToday] = useState<Set<string>>(() => {
+    // Load viewed properties from localStorage on initialization
+    const today = new Date().toISOString().split('T')[0];
+    const stored = localStorage.getItem(`viewedProperties_${today}`);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>({
     subscribed: false,
     subscription_tier: 'free',
@@ -57,8 +62,17 @@ export const useUsageTracking = () => {
 
       console.log('Fetching usage for date range:', { today, weekAgo });
 
-      // Reset viewed properties for new day
-      setViewedPropertiesToday(new Set());
+      // Load viewed properties from localStorage for today, or reset if it's a new day
+      const stored = localStorage.getItem(`viewedProperties_${today}`);
+      const viewedSet = stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set<string>();
+      setViewedPropertiesToday(viewedSet);
+
+      // Clean up old viewed properties from localStorage (keep only today's)
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('viewedProperties_') && key !== `viewedProperties_${today}`) {
+          localStorage.removeItem(key);
+        }
+      });
 
       // Get today's usage
       const { data: todayData, error: todayError } = await supabase
@@ -194,7 +208,10 @@ export const useUsageTracking = () => {
         propertiesViewed: newViews
       }));
       
-      setViewedPropertiesToday(prev => new Set(prev).add(propertyId));
+      // Update the Set and persist to localStorage
+      const newSet = new Set(viewedPropertiesToday).add(propertyId);
+      setViewedPropertiesToday(newSet);
+      localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
       console.log('Successfully tracked unique property view for:', propertyId);
       return true;
     } catch (error) {
