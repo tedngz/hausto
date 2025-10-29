@@ -260,9 +260,25 @@ export const SwipeInterface = ({
   const handleLike = async () => {
     if (apartments.length === 0) return;
 
+    // Check if user has reached daily view limit before moving to next property
+    if (currentApartmentIndex < apartments.length - 1 && !canPerformAction('view')) {
+      toast.error('You\'ve reached your daily view limit. Upgrade to premium for unlimited views!', {
+        action: {
+          label: 'Upgrade',
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+        }
+      });
+      return;
+    }
+
     // Check if user can create more matches
     if (!canPerformAction('match')) {
-      toast.error('You\'ve reached your weekly match limit. You can still view this property but cannot create more matches.');
+      toast.error('You\'ve reached your weekly match limit. Upgrade to premium for unlimited matches!', {
+        action: {
+          label: 'Upgrade',
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+        }
+      });
       return;
     }
     const currentApartment = apartments[currentApartmentIndex];
@@ -291,6 +307,18 @@ export const SwipeInterface = ({
   };
   const handleDislike = async () => {
     if (apartments.length === 0) return;
+    
+    // Check if user has reached daily view limit before moving to next property
+    if (currentApartmentIndex < apartments.length - 1 && !canPerformAction('view')) {
+      toast.error('You\'ve reached your daily view limit. Upgrade to premium for unlimited views!', {
+        action: {
+          label: 'Upgrade',
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+        }
+      });
+      return;
+    }
+    
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Disliking apartment:', currentApartment?.title);
     try {
