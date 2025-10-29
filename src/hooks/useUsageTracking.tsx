@@ -165,6 +165,30 @@ export const useUsageTracking = () => {
     fetchUsage();
   }, [user?.id]);
 
+  // Listen for cross-component usage updates
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent;
+      const detail = custom.detail || {};
+      if (detail.todayUsage) {
+        setTodayUsage(detail.todayUsage);
+      }
+      if (typeof detail.weeklyMatches === 'number') {
+        setWeeklyMatches(detail.weeklyMatches);
+      }
+      if (typeof detail.weeklyQuizRetakes === 'number') {
+        setWeeklyQuizRetakes(detail.weeklyQuizRetakes);
+      }
+      // As a fallback, re-fetch to stay consistent with DB
+      if (!detail.todayUsage) {
+        fetchUsage();
+      }
+    };
+    window.addEventListener('usage:updated', handler as EventListener);
+    return () => window.removeEventListener('usage:updated', handler as EventListener);
+  }, []);
+
+
   // Add new function to track unique property views
   const updatePropertyView = async (propertyId: string) => {
     if (!user?.id || !propertyId) {
@@ -203,18 +227,25 @@ export const useUsageTracking = () => {
       }
 
       // Update local state
-      setTodayUsage(prev => ({
-        ...prev,
-        propertiesViewed: newViews
-      }));
+      const updatedTodayUsage = {
+        propertiesViewed: newViews,
+        propertiesMatched: todayUsage.propertiesMatched,
+        quizRetakes: todayUsage.quizRetakes,
+        aiSearches: todayUsage.aiSearches,
+      };
+      setTodayUsage(updatedTodayUsage);
       
       // Update the Set and persist to localStorage
       const newSet = new Set(viewedPropertiesToday).add(propertyId);
       setViewedPropertiesToday(newSet);
       localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
 
-      // Broadcast usage update so other components refresh their counters
-      window.dispatchEvent(new CustomEvent('usage:updated'));
+      // Broadcast usage update so other components refresh their counters immediately
+      window.dispatchEvent(new CustomEvent('usage:updated', { detail: {
+        todayUsage: updatedTodayUsage,
+        weeklyMatches,
+        weeklyQuizRetakes,
+      }}));
 
       console.log('Successfully tracked unique property view for:', propertyId);
       return true;
