@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
+import { toast as sonnerToast } from 'sonner';
 
 export interface PropertyMatch {
   id: string;
@@ -34,7 +35,7 @@ export const useMatches = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { updateUsage } = useUsageTracking();
+  const { updateUsage, canPerformAction } = useUsageTracking();
 
   // Fetch matches for realtors
   const { data: realtorMatches = [], isLoading: isLoadingMatches } = useQuery({
@@ -191,6 +192,11 @@ export const useMatches = () => {
     mutationFn: async ({ propertyId, realtorId }: { propertyId: string; realtorId: string }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
+      // Check if user can create more matches BEFORE proceeding
+      if (!canPerformAction('match')) {
+        throw new Error('MATCH_LIMIT_REACHED');
+      }
+
       // Check if match already exists
       const { data: existingMatch } = await supabase
         .from('property_matches')
@@ -245,6 +251,13 @@ export const useMatches = () => {
         toast({
           title: "Already in your matches!",
           description: "This property is already saved in your Matches tab.",
+        });
+      } else if (error?.message === 'MATCH_LIMIT_REACHED') {
+        sonnerToast.error("Weekly match limit reached. Upgrade to premium for unlimited matches!", {
+          action: {
+            label: 'Upgrade',
+            onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+          }
         });
       } else {
         toast({

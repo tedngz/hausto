@@ -239,6 +239,8 @@ export const SwipeInterface = ({
       // Check if user can view more properties
       if (!canPerformAction('view')) {
         console.log('View limit reached, not tracking view for:', currentApartment.title);
+        // Set no match reason to show limit reached message
+        setNoMatchReason('view-limit-reached');
         return;
       }
       
@@ -357,6 +359,12 @@ export const SwipeInterface = ({
   };
   const getNoMatchMessage = () => {
     switch (noMatchReason) {
+      case 'view-limit-reached':
+        return {
+          title: "Daily view limit reached",
+          message: "You've reached your daily limit for viewing new properties.",
+          suggestion: "Upgrade to premium for unlimited property views or check back tomorrow."
+        };
       case 'invalid-preferences':
         return {
           title: "Setup Required",
