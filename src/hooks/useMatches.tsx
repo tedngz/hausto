@@ -191,6 +191,18 @@ export const useMatches = () => {
     mutationFn: async ({ propertyId, realtorId }: { propertyId: string; realtorId: string }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
+      // Check if match already exists
+      const { data: existingMatch } = await supabase
+        .from('property_matches')
+        .select('id')
+        .eq('renter_id', user.id)
+        .eq('property_id', propertyId)
+        .maybeSingle();
+
+      if (existingMatch) {
+        throw new Error('ALREADY_MATCHED');
+      }
+
       const { error } = await supabase
         .from('property_matches')
         .insert({
@@ -228,12 +240,19 @@ export const useMatches = () => {
         description: "Property has been added to your matches and chat.",
       });
     },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to like property. Please try again.",
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      if (error?.message === 'ALREADY_MATCHED') {
+        toast({
+          title: "Already in your matches!",
+          description: "This property is already saved in your Matches tab.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to like property. Please try again.",
+          variant: "destructive",
+        });
+      }
     },
   });
 
