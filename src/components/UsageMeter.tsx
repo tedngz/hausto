@@ -1,9 +1,10 @@
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Eye, Heart, RotateCcw, Crown, MessageSquare } from 'lucide-react';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
-
+ 
 export const UsageMeter = () => {
   const {
     todayUsage,
@@ -12,7 +13,16 @@ export const UsageMeter = () => {
     subscriptionStatus,
     loading,
     limits,
+    refetchUsage,
   } = useUsageTracking();
+
+  useEffect(() => {
+    const handler = () => {
+      refetchUsage();
+    };
+    window.addEventListener('usage:updated', handler);
+    return () => window.removeEventListener('usage:updated', handler);
+  }, [refetchUsage]);
 
   if (loading) {
     return (

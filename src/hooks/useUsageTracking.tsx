@@ -212,6 +212,10 @@ export const useUsageTracking = () => {
       const newSet = new Set(viewedPropertiesToday).add(propertyId);
       setViewedPropertiesToday(newSet);
       localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
+
+      // Broadcast usage update so other components refresh their counters
+      window.dispatchEvent(new CustomEvent('usage:updated'));
+
       console.log('Successfully tracked unique property view for:', propertyId);
       return true;
     } catch (error) {
@@ -281,6 +285,9 @@ export const useUsageTracking = () => {
         quizRetakes: newQuizRetakes,
         aiSearches: newAiSearches,
       });
+
+      // Notify listeners (e.g., UsageMeter) to refresh
+      window.dispatchEvent(new CustomEvent('usage:updated'));
 
       // Update weekly counters immediately only after successful database update
       if (type === 'match') {
