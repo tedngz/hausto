@@ -12,6 +12,8 @@ import { HaustoChat } from '@/components/HaustoChat';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useAuth } from '@/hooks/useAuth';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 interface MatchesViewProps {
   userPreferences?: UserPreferences;
   userProfile?: UserProfile;
@@ -81,6 +83,20 @@ export const MatchesView = ({
   const handleContactRealtor = async (apartment: Apartment) => {
     if (!user?.id) {
       setSelectedApartment(apartment);
+      return;
+    }
+
+    // Check if property is still available
+    const { data: property, error } = await supabase
+      .from('properties')
+      .select('id, is_active')
+      .eq('id', apartment.id)
+      .maybeSingle();
+
+    if (error || !property || !property.is_active) {
+      toast.info("Property No Longer Available", {
+        description: "This property is no longer listed. It may have been rented or removed by the owner."
+      });
       return;
     }
 
