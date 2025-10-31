@@ -27,6 +27,7 @@ interface PropertyCardProps {
   showAllHighlights?: boolean;
   hideVibeScore?: boolean;
   isAnonymous?: boolean;
+  hasDeleteButton?: boolean;
 }
 export const PropertyCard = ({
   apartment,
@@ -40,7 +41,8 @@ export const PropertyCard = ({
   showFullDescription = false,
   showAllHighlights = false,
   hideVibeScore = false,
-  isAnonymous = false
+  isAnonymous = false,
+  hasDeleteButton = false
 }: PropertyCardProps) => {
   // Use provided image index from SwipeInterface or maintain own state
   const externalImageIndex = (apartment as any)._currentImageIndex;
@@ -121,7 +123,7 @@ export const PropertyCard = ({
         )}
 
         {/* Share Button Overlay */}
-        <div className="absolute top-3 right-12 z-10">
+        <div className={`absolute top-3 z-10 ${hasDeleteButton ? 'right-12' : 'right-3'}`}>
           <Button
             size="sm"
             variant="secondary"
