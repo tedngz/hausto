@@ -121,7 +121,7 @@ export const PropertyCard = ({
         )}
 
         {/* Share Button Overlay */}
-        <div className="absolute top-3 right-3 z-10">
+        <div className="absolute top-3 right-12 z-10">
           <Button
             size="sm"
             variant="secondary"
