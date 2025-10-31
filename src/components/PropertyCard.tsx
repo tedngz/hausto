@@ -125,7 +125,7 @@ export const PropertyCard = ({
           <Button
             size="sm"
             variant="secondary"
-            className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md"
+            className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md w-8 h-8 p-0"
             onClick={handleShare}
           >
             <Share2 className="w-4 h-4" />
