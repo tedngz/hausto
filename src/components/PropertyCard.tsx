@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink } from 'lucide-react';
+import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink, Share2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 import { Apartment, UserPreferences } from '@/types';
 import { VibeScore } from '@/components/VibeScore';
 import { VibeScoreBar } from '@/components/VibeScoreBar';
@@ -69,6 +70,24 @@ export const PropertyCard = ({
   };
   const vibeScore = calculateVibeScore(apartment, userPreferences || defaultPreferences);
 
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/property/${apartment.id}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "Link Copied!",
+        description: "Property link has been copied to your clipboard.",
+      });
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+      toast({
+        title: "Failed to copy",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Highlight categorization and styling
   const getHighlightCategory = (highlight: string): 'style' | 'color' | 'activity' => {
     const h = highlight.toLowerCase();
@@ -100,6 +119,18 @@ export const PropertyCard = ({
             <VibeScore score={vibeScore} size="sm" isAnonymous={isAnonymous} />
           </div>
         )}
+
+        {/* Share Button Overlay */}
+        <div className="absolute top-3 right-3 z-10">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md"
+            onClick={handleShare}
+          >
+            <Share2 className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
       
       <div className="p-4 sm:p-6">
