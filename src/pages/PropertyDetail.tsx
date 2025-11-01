@@ -40,14 +40,12 @@ const PropertyDetail = () => {
           return;
         }
 
-        // Fetch realtor profile
-        const { data: realtor, error: realtorError } = await supabase
+        // Fetch realtor profile (may not be available for non-authenticated users)
+        const { data: realtor } = await supabase
           .from('profiles')
           .select('id, name, phone, email, avatar_url, bio')
           .eq('id', property.realtor_id)
-          .single();
-
-        if (realtorError) throw realtorError;
+          .maybeSingle();
 
         // Transform to Apartment type
         const transformedApartment: Apartment = {
@@ -62,12 +60,18 @@ const PropertyDetail = () => {
           highlights: property.highlights || [],
           vibe_analysis: property.vibe_analysis,
           property_source_link: property.property_source_link,
-          realtor: {
+          realtor: realtor ? {
             id: realtor.id,
             name: realtor.name || 'Property Owner',
             phone: realtor.phone || '',
             email: realtor.email || '',
             avatar: realtor.avatar_url,
+          } : {
+            id: property.realtor_id,
+            name: 'Property Owner',
+            phone: '',
+            email: '',
+            avatar: undefined,
           },
         };
 
