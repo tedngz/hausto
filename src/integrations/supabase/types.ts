@@ -508,7 +508,7 @@ export type Database = {
           action: string
           created_at: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           new_values: Json | null
           old_values: Json | null
           record_id: string | null
@@ -520,7 +520,7 @@ export type Database = {
           action: string
           created_at?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           new_values?: Json | null
           old_values?: Json | null
           record_id?: string | null
@@ -532,7 +532,7 @@ export type Database = {
           action?: string
           created_at?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           new_values?: Json | null
           old_values?: Json | null
           record_id?: string | null
@@ -660,7 +660,7 @@ export type Database = {
         Returns: undefined
       }
       get_conversation_properties: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           conversation_id: string
           images: string[]
@@ -689,10 +689,7 @@ export type Database = {
           name: string
         }[]
       }
-      get_post_like_count: {
-        Args: { post_uuid: string }
-        Returns: number
-      }
+      get_post_like_count: { Args: { post_uuid: string }; Returns: number }
       get_realtor_contact_for_renter: {
         Args: { realtor_id: string }
         Returns: {
@@ -731,7 +728,7 @@ export type Database = {
         }[]
       }
       get_user_subscription_status: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           subscribed: boolean
           subscription_end: string
@@ -749,18 +746,9 @@ export type Database = {
         Args: { activated_at: string }
         Returns: boolean
       }
-      user_liked_post: {
-        Args: { post_uuid: string }
-        Returns: boolean
-      }
-      validate_email: {
-        Args: { email_input: string }
-        Returns: boolean
-      }
-      validate_phone: {
-        Args: { phone_input: string }
-        Returns: boolean
-      }
+      user_liked_post: { Args: { post_uuid: string }; Returns: boolean }
+      validate_email: { Args: { email_input: string }; Returns: boolean }
+      validate_phone: { Args: { phone_input: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

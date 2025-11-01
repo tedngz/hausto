@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { PropertyCard } from '@/components/PropertyCard';
 import { ContactModal } from '@/components/ContactModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, LogIn } from 'lucide-react';
 import { Apartment } from '@/types';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
+import { Card, CardContent } from '@/components/ui/card';
 
 const PropertyDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [apartment, setApartment] = useState<Apartment | null>(null);
   const [loading, setLoading] = useState(true);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -119,12 +122,31 @@ const PropertyDetail = () => {
             apartment={apartment}
             onContact={() => setShowContactModal(true)}
             onViewProfile={() => setShowRealtorProfile(true)}
-            showContactButton={true}
-            showViewProfileButton={true}
+            showContactButton={!!user}
+            showViewProfileButton={!!user}
             showFullTitle={true}
             showFullDescription={true}
             showAllHighlights={true}
           />
+
+          {!user && (
+            <Card className="mt-4">
+              <CardContent className="pt-6">
+                <div className="text-center space-y-4">
+                  <p className="text-muted-foreground">
+                    Sign in to connect with the property owner and schedule a viewing.
+                  </p>
+                  <Button 
+                    onClick={() => navigate('/auth')}
+                    className="w-full"
+                  >
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign In to Contact
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {showContactModal && (
