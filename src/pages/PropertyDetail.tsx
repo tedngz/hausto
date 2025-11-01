@@ -131,6 +131,7 @@ const PropertyDetail = () => {
             showFullTitle={true}
             showFullDescription={true}
             showAllHighlights={true}
+            showRealtorInfo={!!user}
           />
 
           {!user && (
