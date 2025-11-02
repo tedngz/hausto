@@ -168,6 +168,8 @@ export const useProperties = () => {
       imageFiles: File[];
       vibeAnalysis?: any;
       propertySourceLink?: string;
+      propertySourceProviderName?: string;
+      propertySourceProviderPhone?: string;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -230,6 +232,8 @@ export const useProperties = () => {
           images: imageUrls,
           vibe_analysis: vibeAnalysis,
           property_source_link: propertyData.propertySourceLink,
+          property_source_provider_name: propertyData.propertySourceProviderName,
+          property_source_provider_phone: propertyData.propertySourceProviderPhone,
         })
         .select()
         .single();

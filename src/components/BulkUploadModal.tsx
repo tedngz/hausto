@@ -24,8 +24,11 @@ interface ExcelProperty {
   description?: string;
   vibe?: string;
   highlights?: string;
+  amenities?: string;
   image_urls?: string;
   property_source_link?: string;
+  property_source_provider_name?: string;
+  property_source_provider_phone?: string;
 }
 
 const sampleData = [
@@ -37,8 +40,11 @@ const sampleData = [
     description: "Spacious apartment in the heart of the city",
     vibe: "Urban Professional",
     highlights: "24/7 Security, Gym, Rooftop Terrace",
+    amenities: "Parking, Pool, WiFi",
     image_urls: "https://example.com/image1.jpg,https://example.com/image2.jpg",
-    property_source_link: "https://example-realestate.com/listing/123"
+    property_source_link: "https://example-realestate.com/listing/123",
+    property_source_provider_name: "ABC Real Estate",
+    property_source_provider_phone: "+84123456789"
   },
   {
     location: "456 Maple Avenue, Suburbs", 
@@ -48,8 +54,11 @@ const sampleData = [
     description: "Perfect for families, quiet neighborhood",
     vibe: "Family Friendly",
     highlights: "Garden, Parking, Near Schools",
+    amenities: "Furnished, Air Conditioning, Security",
     image_urls: "https://example.com/image3.jpg",
-    property_source_link: "https://example-realestate.com/listing/456"
+    property_source_link: "https://example-realestate.com/listing/456",
+    property_source_provider_name: "XYZ Properties",
+    property_source_provider_phone: "+84987654321"
   }
 ];
 
@@ -114,8 +123,11 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
         description: item.description, 
         vibe: item.vibe,
         highlights: item.highlights ? item.highlights.split(',').map(h => h.trim()) : undefined,
+        amenities: item.amenities ? item.amenities.split(',').map(a => a.trim()) : undefined,
         images: item.image_urls ? item.image_urls.split(',').map(url => url.trim()) : [],
-        property_source_link: item.property_source_link
+        property_source_link: item.property_source_link,
+        property_source_provider_name: item.property_source_provider_name,
+        property_source_provider_phone: item.property_source_provider_phone
       }));
 
       const result = await bulkImportProperties(crawledProperties);
@@ -282,8 +294,11 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
               <li>• <strong>description</strong>: Property description (optional - AI will generate if empty)</li>
               <li>• <strong>vibe</strong>: Property vibe/style (optional - AI will generate if empty)</li>
               <li>• <strong>highlights</strong>: Comma-separated features (optional - AI will generate if empty)</li>
+              <li>• <strong>amenities</strong>: Comma-separated amenities (optional - AI will generate if empty)</li>
               <li>• <strong>image_urls</strong>: Comma-separated image URLs (optional)</li>
               <li>• <strong>property_source_link</strong>: External listing URL (optional)</li>
+              <li>• <strong>property_source_provider_name</strong>: Name of source provider (optional)</li>
+              <li>• <strong>property_source_provider_phone</strong>: Phone of source provider (optional)</li>
             </ul>
           </Card>
         </div>

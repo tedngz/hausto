@@ -211,10 +211,13 @@ serve(async (req) => {
           size: property.size || null,
           vibe: generatedVibe || 'modern',
           highlights: generatedHighlights,
+          amenities: property.amenities || aiResult?.amenities || [],
           images: uploadedImages,
           vibe_analysis: aiContent || {},
           realtor_id: property.realtor_id,
-          property_source_link: property.property_source_link || null
+          property_source_link: property.property_source_link || null,
+          property_source_provider_name: property.property_source_provider_name || null,
+          property_source_provider_phone: property.property_source_provider_phone || null
         };
 
         const { data: insertData, error: insertError } = await supabase

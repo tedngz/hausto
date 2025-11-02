@@ -421,6 +421,8 @@ export type Database = {
           location: string
           price: number
           property_source_link: string | null
+          property_source_provider_name: string | null
+          property_source_provider_phone: string | null
           realtor_id: string
           size: string | null
           title: string
@@ -440,6 +442,8 @@ export type Database = {
           location: string
           price: number
           property_source_link?: string | null
+          property_source_provider_name?: string | null
+          property_source_provider_phone?: string | null
           realtor_id: string
           size?: string | null
           title: string
@@ -459,6 +463,8 @@ export type Database = {
           location?: string
           price?: number
           property_source_link?: string | null
+          property_source_provider_name?: string | null
+          property_source_provider_phone?: string | null
           realtor_id?: string
           size?: string | null
           title?: string

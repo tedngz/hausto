@@ -27,6 +27,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [location, setLocation] = useState('');
   const [sourceLink, setSourceLink] = useState('');
+  const [sourceProviderName, setSourceProviderName] = useState('');
+  const [sourceProviderPhone, setSourceProviderPhone] = useState('');
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('');
   const [title, setTitle] = useState('');
@@ -360,12 +362,16 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         amenities: selectedAmenities
       },
       propertySourceLink: sourceLink,
+      propertySourceProviderName: sourceProviderName,
+      propertySourceProviderPhone: sourceProviderPhone,
     });
 
     // Reset form
     setTitle('');
     setLocation('');
     setSourceLink('');
+    setSourceProviderName('');
+    setSourceProviderPhone('');
     setPrice('');
     setSize('');
     setDescription('');
@@ -576,6 +582,27 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               onChange={(e) => setSourceLink(e.target.value)}
               placeholder="https://example.com/property-listing (optional)"
             />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="sourceProviderName">Source Provider Name (Optional)</Label>
+              <Input 
+                id="sourceProviderName"
+                value={sourceProviderName}
+                onChange={(e) => setSourceProviderName(e.target.value)}
+                placeholder="e.g., ABC Real Estate"
+              />
+            </div>
+            <div>
+              <Label htmlFor="sourceProviderPhone">Source Provider Phone (Optional)</Label>
+              <Input 
+                id="sourceProviderPhone"
+                value={sourceProviderPhone}
+                onChange={(e) => setSourceProviderPhone(e.target.value)}
+                placeholder="e.g., +84123456789"
+              />
+            </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
