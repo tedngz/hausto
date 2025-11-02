@@ -19,6 +19,7 @@ interface BulkUploadModalProps {
 interface ExcelProperty {
   location: string;
   price: number;
+  currency?: string;
   size?: string;
   title?: string;
   description?: string;
@@ -35,6 +36,7 @@ const sampleData = [
   {
     location: "123 Oak Street, Downtown",
     price: 2500,
+    currency: "USD",
     size: "120 sqm",
     title: "Modern Downtown Apartment",
     description: "Spacious apartment in the heart of the city",
@@ -48,7 +50,8 @@ const sampleData = [
   },
   {
     location: "456 Maple Avenue, Suburbs", 
-    price: 1800,
+    price: 44100000,
+    currency: "VND",
     size: "95 sqm",
     title: "Cozy Suburban Home",
     description: "Perfect for families, quiet neighborhood",
@@ -113,22 +116,34 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
     if (!user || parsedData.length === 0) return;
 
     try {
+      const VND_TO_USD_RATE = 24500;
+      
       // Convert Excel format to CrawledProperty format
-      const crawledProperties = parsedData.map(item => ({
-        location: item.location,
-        price: Number(item.price),
-        size: item.size || '',
-        realtor_id: user.id,
-        title: item.title,
-        description: item.description, 
-        vibe: item.vibe,
-        highlights: item.highlights ? item.highlights.split(',').map(h => h.trim()) : undefined,
-        amenities: item.amenities ? item.amenities.split(',').map(a => a.trim()) : undefined,
-        images: item.image_urls ? item.image_urls.split(',').map(url => url.trim()) : [],
-        property_source_link: item.property_source_link,
-        property_source_provider_name: item.property_source_provider_name,
-        property_source_provider_phone: item.property_source_provider_phone
-      }));
+      const crawledProperties = parsedData.map(item => {
+        // Convert price to VND if it's in USD
+        let priceInVND = Number(item.price);
+        const currency = item.currency?.toUpperCase() || 'VND';
+        
+        if (currency === 'USD') {
+          priceInVND = Math.round(priceInVND * VND_TO_USD_RATE);
+        }
+        
+        return {
+          location: item.location,
+          price: priceInVND,
+          size: item.size || '',
+          realtor_id: user.id,
+          title: item.title,
+          description: item.description, 
+          vibe: item.vibe,
+          highlights: item.highlights ? item.highlights.split(',').map(h => h.trim()) : undefined,
+          amenities: item.amenities ? item.amenities.split(',').map(a => a.trim()) : undefined,
+          images: item.image_urls ? item.image_urls.split(',').map(url => url.trim()) : [],
+          property_source_link: item.property_source_link,
+          property_source_provider_name: item.property_source_provider_name,
+          property_source_provider_phone: item.property_source_provider_phone
+        };
+      });
 
       const result = await bulkImportProperties(crawledProperties);
       setLastResult(result);
@@ -289,6 +304,7 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
             <ul className="text-sm text-slate-600 space-y-1">
               <li>• <strong>location</strong>: Property address (required)</li>
               <li>• <strong>price</strong>: Monthly rent amount (required)</li>
+              <li>• <strong>currency</strong>: Price currency - "VND" or "USD" (optional, defaults to VND)</li>
               <li>• <strong>size</strong>: Property size (optional)</li>
               <li>• <strong>title</strong>: Property title (optional - AI will generate if empty)</li>
               <li>• <strong>description</strong>: Property description (optional - AI will generate if empty)</li>
