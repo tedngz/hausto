@@ -55,7 +55,7 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
             showFullDescription={true}
             showAllHighlights={true}
             showContactButton={false}
-            showViewProfileButton={false}
+            className="max-w-md mx-auto"
           />
         </div>
       </Card>

@@ -125,13 +125,12 @@ const PropertyDetail = () => {
           <PropertyCard
             apartment={apartment}
             onContact={() => setShowContactModal(true)}
-            onViewProfile={() => setShowRealtorProfile(true)}
             showContactButton={!!user}
-            showViewProfileButton={!!user}
             showFullTitle={true}
             showFullDescription={true}
             showAllHighlights={true}
             showRealtorInfo={!!user}
+            className="max-w-md mx-auto"
           />
 
           {!user && (

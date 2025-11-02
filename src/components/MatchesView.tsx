@@ -139,7 +139,7 @@ export const MatchesView = ({
       <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
         {allApartments.map(apartment => {
         return <div key={apartment.id} className="relative mb-6 break-inside-avoid">
-                <PropertyCard apartment={apartment} userPreferences={userPreferences} onContact={() => handleContactRealtor(apartment)} showContactButton={true} showViewProfileButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={true} className="sm:h-auto" hasDeleteButton={true} />
+                <PropertyCard apartment={apartment} userPreferences={userPreferences} onContact={() => handleContactRealtor(apartment)} showContactButton={true} showFullTitle={true} showFullDescription={false} showAllHighlights={true} className="sm:h-auto" hasDeleteButton={true} />
               {apartment.matchId && <div className="absolute top-3 right-3">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

@@ -18,9 +18,7 @@ interface PropertyCardProps {
   apartment: Apartment;
   userPreferences?: UserPreferences;
   onContact?: () => void;
-  onViewProfile?: () => void;
   showContactButton?: boolean;
-  showViewProfileButton?: boolean;
   className?: string;
   showFullTitle?: boolean;
   showFullDescription?: boolean;
@@ -34,9 +32,7 @@ export const PropertyCard = ({
   apartment,
   userPreferences,
   onContact,
-  onViewProfile,
   showContactButton = true,
-  showViewProfileButton = false,
   className = "",
   showFullTitle = false,
   showFullDescription = false,
@@ -215,32 +211,24 @@ export const PropertyCard = ({
 
 
         {showRealtorInfo && (
-          <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+        <div className="flex items-center justify-between pt-3 border-t border-gray-200">
             <div className="flex items-center space-x-2">
               {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? (
                 <img 
                   src={apartment.realtor.avatar} 
                   alt={apartment.realtor.name || 'Realtor'} 
-                  className={`w-8 h-8 rounded-full object-cover ${onViewProfile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-                  onClick={onViewProfile}
+                  className="w-8 h-8 rounded-full object-cover"
                 />
               ) : (
                 <div 
-                  className={`w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center ${onViewProfile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-                  onClick={onViewProfile}
+                  className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center"
                 >
                   <User className="w-4 h-4 text-white" />
                 </div>
               )}
               <div>
                 <div className="flex items-center gap-1">
-                  {onViewProfile ? (
-                    <button className="text-sm font-medium text-gray-900 hover:text-primary transition-colors" onClick={onViewProfile}>
-                      {apartment.realtor.name || 'Realtor'}
-                    </button>
-                  ) : (
-                    <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
-                  )}
+                  <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
                 </div>
                 
               </div>
@@ -259,11 +247,6 @@ export const PropertyCard = ({
               {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
                   Contact
                 </Button>}
-              {showViewProfileButton && onViewProfile && (
-                <Button size="sm" variant="outline" onClick={onViewProfile}>
-                  View Profile
-                </Button>
-              )}
             </div>
           </div>
         )}

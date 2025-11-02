@@ -57,7 +57,7 @@ export const PropertyDetailModal = ({
             <VibeScore score={vibeScore} size="sm" isAnonymous={isAnonymous} />
           </div>
           
-          <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} showViewProfileButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} hideVibeScore={true} />
+          <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} hideVibeScore={true} />
 
           {/* Action Buttons */}
           {(onLike || onDislike) && <div className="flex justify-center space-x-4 pt-4 mt-4 border-t">
