@@ -255,7 +255,7 @@ export const useUsageTracking = () => {
     }
   };
 
-  const updateUsage = async (type: 'view' | 'match' | 'quiz' | 'ai-search') => {
+  const updateUsage = async (type: 'view' | 'match' | 'quiz' | 'ai-search' | 'match-with-view') => {
     if (!user?.id) {
       console.error('No user ID available for usage tracking');
       return false;
@@ -276,6 +276,10 @@ export const useUsageTracking = () => {
           break;
         case 'match':
           newMatches += 1;
+          break;
+        case 'match-with-view':
+          newMatches += 1;
+          newViews += 1;
           break;
         case 'quiz':
           newQuizRetakes += 1;
@@ -321,7 +325,7 @@ export const useUsageTracking = () => {
       window.dispatchEvent(new CustomEvent('usage:updated'));
 
       // Update weekly counters immediately only after successful database update
-      if (type === 'match') {
+      if (type === 'match' || type === 'match-with-view') {
         console.log('Incrementing weekly matches from', weeklyMatches, 'to', weeklyMatches + 1);
         setWeeklyMatches(prev => prev + 1);
       }

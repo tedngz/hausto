@@ -236,9 +236,8 @@ export const useMatches = () => {
       }
       
       // Update usage tracking for matches (includes AI chat matches)
-      await updateUsage('match');
-      // Also count the match as a property view
-      await updateUsage('view');
+      // Count match as both a match AND a view in a single update to avoid race conditions
+      await updateUsage('match-with-view');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['renter-matches'] });
