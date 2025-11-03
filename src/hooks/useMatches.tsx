@@ -257,7 +257,7 @@ export const useMatches = () => {
         sonnerToast.error("Weekly match limit reached. Upgrade to premium for unlimited matches!", {
           action: {
             label: 'Upgrade',
-            onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+            onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
           }
         });
       } else {

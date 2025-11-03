@@ -267,7 +267,7 @@ export const SwipeInterface = ({
       toast.error('You\'ve reached your daily view limit. Upgrade to premium for unlimited views!', {
         action: {
           label: 'Upgrade',
-          onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
         }
       });
       return;
@@ -278,7 +278,7 @@ export const SwipeInterface = ({
       toast.error('You\'ve reached your weekly match limit. Upgrade to premium for unlimited matches!', {
         action: {
           label: 'Upgrade',
-          onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
         }
       });
       return;
@@ -315,7 +315,7 @@ export const SwipeInterface = ({
       toast.error('You\'ve reached your daily view limit. Upgrade to premium for unlimited views!', {
         action: {
           label: 'Upgrade',
-          onClick: () => window.dispatchEvent(new CustomEvent('openSubscription'))
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
         }
       });
       return;
