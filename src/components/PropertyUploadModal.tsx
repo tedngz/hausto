@@ -16,7 +16,7 @@ import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
 import { processImageFiles } from '@/utils/imageConverter';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
-
+import { propertySchema } from '@/lib/validation';
 interface PropertyUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -342,10 +342,19 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       return;
     }
 
+    // Optional provider phone validation (E.164)
+    const phoneTrimmed = sourceProviderPhone?.trim();
+    if (phoneTrimmed && !/^\+?[1-9]\d{1,14}$/.test(phoneTrimmed)) {
+      toast({
+        title: "Invalid Provider Phone",
+        description: "Use E.164 format, e.g. +1234567890.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      const { propertySchema } = require('@/lib/validation');
-      
-      // Prepare data for validation
+      // Prepare data for validation using Zod
       const validationData = {
         title,
         description: description && description.trim() ? description : undefined,
@@ -357,12 +366,12 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         images: [],
         property_source_link: sourceLink && sourceLink.trim() ? sourceLink : undefined,
       };
-      
+
       propertySchema.parse(validationData);
     } catch (error: any) {
       const errorMessage = error.errors?.[0]?.message || "Please check your input and try again.";
       const fieldName = error.errors?.[0]?.path?.[0] || '';
-      
+
       toast({
         title: "Validation Error",
         description: fieldName ? `${fieldName}: ${errorMessage}` : errorMessage,
