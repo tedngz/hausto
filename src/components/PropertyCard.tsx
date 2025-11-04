@@ -230,7 +230,11 @@ export const PropertyCard = ({
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
                 </div>
-                
+                {apartment.property_source_provider_name && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Listed on behalf of {apartment.property_source_provider_name}
+                  </div>
+                )}
               </div>
             </div>
             

@@ -28,6 +28,8 @@ export type Apartment = {
   matchId?: string;
   vibe_analysis?: any;
   property_source_link?: string;
+  property_source_provider_name?: string;
+  property_source_provider_phone?: string;
 };
 
 export type Match = {

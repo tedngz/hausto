@@ -241,6 +241,11 @@ Feature Tags: High Ceilings, Natural Light, Open Plan, Walk-in Closet, En-suite 
 
 When analyzing property images, ONLY use tags from the standard list above. Match the visual style and features you see to these predefined categories. Do not create new tags.
 
+IMPORTANT: When users ask about property source providers or property owner contacts:
+- If a property has property_source_provider_name and property_source_provider_phone, you can provide this contact information when requested
+- Explain that these are partner properties listed on behalf of the named provider
+- The contact details are shared through the Hausto messaging system after initial contact
+
 Provide creative, engaging, and professional content that stands out in the rental market.`;
 
       if (Array.isArray(propertyImages) && propertyImages.length > 0) {
@@ -254,6 +259,8 @@ Provide creative, engaging, and professional content that stands out in the rent
 ${properties.map((p, index) => {
   const amenities = p.vibe_analysis?.amenities || [];
   const imageUrls = Array.isArray(p.images) ? p.images : [];
+  const providerName = p.property_source_provider_name;
+  const providerPhone = p.property_source_provider_phone;
   return `
 Property ${index + 1}:
 Title: ${p.title}
@@ -265,6 +272,8 @@ Amenities: ${amenities.length > 0 ? amenities.join(', ') : 'Not specified'}
 Property ID (for matching): ${p.id}
 Realtor ID: ${p.realtor_id}
 **ACTUAL IMAGE URLS (MUST COPY EXACTLY)**: ${JSON.stringify(imageUrls)}
+${providerName ? `Property Source Provider: ${providerName}` : ''}
+${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
 `;
 }).join('\n')}
 
@@ -303,7 +312,13 @@ OTHER RULES:
 - Copy exact property ID and realtor ID from property data
 - Match preferences when provided
 - Include realistic match scores (60-95%)
-- NO markdown, NO text, ONLY JSON`;
+- NO markdown, NO text, ONLY JSON
+
+🔍 PROPERTY OWNER INFORMATION:
+- When users ask about property owners or contacts, check if the property has "Property Source Provider" information
+- If available, tell them the property is managed by that provider
+- Explain that contact details will be shared through the Hausto messaging system after they express interest
+- If they explicitly request contact info and it's available, you can mention that the provider's contact will be shared when they send a message`;
 
       if (!isAnonymous) {
         // Add user preferences context for authenticated renters

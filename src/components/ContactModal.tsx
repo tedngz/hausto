@@ -129,6 +129,28 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
               property_location: apartment.location
             }
           });
+
+        // If property has a source provider, send their contact details
+        if (apartment.property_source_provider_name) {
+          const contactMessage = `📞 Property Owner Contact:\nName: ${apartment.property_source_provider_name}${
+            apartment.property_source_provider_phone 
+              ? `\nPhone: ${apartment.property_source_provider_phone}` 
+              : ''
+          }\n\nFeel free to reach out directly or continue chatting here!`;
+
+          await supabase
+            .from('direct_messages')
+            .insert({
+              conversation_id: conversationId,
+              sender_id: user.id,
+              receiver_id: apartment.realtor.id,
+              content: contactMessage,
+              metadata: { 
+                type: 'system',
+                provider_contact: true
+              }
+            });
+        }
       }
 
       // Update conversation with latest message
@@ -162,7 +184,11 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
-            <span>Contact Realtor</span>
+            <span>
+              {apartment.property_source_provider_name 
+                ? `Contact Property Owner - ${apartment.property_source_provider_name}`
+                : 'Contact Realtor'}
+            </span>
           </DialogTitle>
         </DialogHeader>
         
@@ -182,7 +208,15 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
           
           <div className="bg-gray-50 p-3 rounded-lg">
             <p className="text-sm font-medium">{apartment.realtor.name}</p>
-            <p className="text-xs text-gray-600">Licensed Realtor</p>
+            <p className="text-xs text-gray-600">
+              {apartment.property_source_provider_name ? 'Property Manager' : 'Licensed Realtor'}
+            </p>
+            {apartment.property_source_provider_name && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                <p className="font-medium mb-1">About this listing</p>
+                <p>This property is managed by {apartment.property_source_provider_name}. Your message will be sent through Hausto, and we'll connect you directly with the property owner.</p>
+              </div>
+            )}
             <p className="text-xs text-gray-500 mt-1">Contact details will be shared after your message is sent</p>
           </div>
         </div>

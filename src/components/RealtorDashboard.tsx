@@ -129,7 +129,11 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
             <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
               <div>
                 <h2 className="text-lg md:text-xl font-semibold text-slate-900">My Properties</h2>
-                <p className="text-slate-600 text-sm">Manage your listed properties</p>
+                <p className="text-slate-600 text-sm">
+                  Manage your listed properties • 
+                  {realtorProperties.filter(p => !p.property_source_provider_name).length} Direct • 
+                  {realtorProperties.filter(p => p.property_source_provider_name).length} Partner
+                </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button 
@@ -181,14 +185,24 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                         </div>
                       </div>
                     )}
-                    <div className="p-3 md:p-4">
+                     <div className="p-3 md:p-4">
                       <div className="flex items-start justify-between mb-2">
                         <h3 className="font-semibold text-slate-900 line-clamp-2 text-sm md:text-base flex-1">{property.title}</h3>
+                        {property.property_source_provider_name && (
+                          <Badge variant="outline" className="ml-2 text-xs flex-shrink-0">
+                            Partner
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center text-xs md:text-sm text-slate-600 mb-2">
                         <MapPin className="w-3 h-3 mr-1" />
                         <span className="line-clamp-1">{property.location}</span>
                       </div>
+                      {property.property_source_provider_name && (
+                        <div className="text-xs text-muted-foreground mb-2">
+                          Provider: {property.property_source_provider_name}
+                        </div>
+                      )}
                       {property.vibe && (
                         <div className="mb-2">
                           <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs">
