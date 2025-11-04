@@ -323,23 +323,49 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     }
 
     // Validate property data
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast({
+        title: "Invalid Price",
+        description: "Please enter a valid price greater than 0.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!size || isNaN(parseFloat(size))) {
+      toast({
+        title: "Invalid Size",
+        description: "Please enter a valid size in m².",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       const { propertySchema } = require('@/lib/validation');
-      propertySchema.parse({
+      
+      // Prepare data for validation
+      const validationData = {
         title,
-        description: description || '',
+        description: description && description.trim() ? description : undefined,
         location,
-        price: parseFloat(price),
-        size: `${size}m²`,
+        price: priceNum,
+        size: `${size.trim()}m²`,
         vibe: selectedVibes[0] || '',
         highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
-        images: [], // Will be populated after upload
-        property_source_link: sourceLink || '',
-      });
+        images: [],
+        property_source_link: sourceLink && sourceLink.trim() ? sourceLink : undefined,
+      };
+      
+      propertySchema.parse(validationData);
     } catch (error: any) {
+      const errorMessage = error.errors?.[0]?.message || "Please check your input and try again.";
+      const fieldName = error.errors?.[0]?.path?.[0] || '';
+      
       toast({
         title: "Validation Error",
-        description: error.errors?.[0]?.message || "Please check your input and try again.",
+        description: fieldName ? `${fieldName}: ${errorMessage}` : errorMessage,
         variant: "destructive"
       });
       return;
