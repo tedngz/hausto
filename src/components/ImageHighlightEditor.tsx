@@ -54,7 +54,9 @@ export const ImageHighlightEditor = ({
         body: {
           imageUrls: [preview],
           generateContent: false,
-          imageIndex: index
+          imageIndex: index,
+          regenerate: true,
+          previousHighlight: highlight?.text
         }
       });
       if (error) throw error;
@@ -67,7 +69,7 @@ export const ImageHighlightEditor = ({
           });
           toast({
             title: "Highlight Regenerated",
-            description: "AI has generated a new highlight for this image."
+            description: "AI has generated a fresh highlight for this image."
           });
         }
       }
