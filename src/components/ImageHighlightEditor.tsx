@@ -105,7 +105,7 @@ export const ImageHighlightEditor = ({
             </div>
           </div> : <div className="space-y-1">
             <div className="text-xs min-h-[2rem] p-1 bg-gray-50 rounded border">
-              {highlight?.text && <Badge variant="secondary" className="text-xs px-2 py-1 text-blue-700 ">
+              {highlight?.text && <Badge variant="secondary" className="text-xs text-orange px-0 py-0">
                   {highlight.text}
                 </Badge>}
             </div>
