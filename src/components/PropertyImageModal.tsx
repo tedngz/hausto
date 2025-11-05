@@ -52,10 +52,10 @@ export const PropertyImageModal = ({
 
             {/* AI Highlights overlay */}
             {selectedHighlight && (
-              <div className="absolute top-4 sm:top-6 md:top-8 left-1/2 -translate-x-1/2 z-10 max-w-[calc(100%-1rem)] sm:max-w-md md:max-w-lg px-2">
-                <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-center gap-1 sm:gap-1.5 text-center text-[10px] sm:text-xs px-2.5 py-1 sm:py-1.5 leading-snug">
-                  <Sparkles className="w-3 h-3 flex-shrink-0" />
-                  <span className="break-words line-clamp-2">{selectedHighlight}</span>
+              <div className="absolute top-4 sm:top-6 md:top-8 left-1/2 -translate-x-1/2 z-10 w-[95%] sm:max-w-md md:max-w-lg">
+                <Badge className="bg-orange-500/90 text-white border-orange-400 shadow-lg flex items-start gap-1 sm:gap-1.5 text-left text-[10px] sm:text-xs px-3 py-2 leading-snug w-full">
+                  <Sparkles className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                  <span className="break-words line-clamp-2 flex-1">{selectedHighlight}</span>
                 </Badge>
               </div>
             )}
