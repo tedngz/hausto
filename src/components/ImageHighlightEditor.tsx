@@ -47,45 +47,31 @@ export const ImageHighlightEditor = ({
   const handleRegenerate = async () => {
     setIsRegenerating(true);
     try {
-      const attempt = async () => {
-        const { data, error } = await supabase.functions.invoke('analyze-vibe', {
-          body: {
-            imageUrls: [preview],
-            generateContent: false,
-            imageIndex: index,
-            regenerate: true,
-            previousHighlight: highlight?.text
-          }
-        });
-        if (error) throw error;
-        const first = data?.analysis?.image_analyses?.[0] ?? {};
-        const candidate = first.image_highlight || first.highlight || '';
-        return String(candidate).trim();
-      };
-
-      // Try up to 2 times to encourage variation
-      const prev = (highlight?.text ?? '').trim();
-      let next = await attempt();
-      if (!next || next.toLowerCase() === prev.toLowerCase()) {
-        next = await attempt();
-      }
-
-      if (next) {
-        onHighlightUpdate(index, {
-          text: next,
-          imageIndexes: [index]
-        });
-        toast({
-          title: "Highlight Regenerated",
-          description: next.toLowerCase() === prev.toLowerCase()
-            ? "Generated a similar result. Try again for more variety."
-            : "AI has generated a fresh highlight for this image."
-        });
-      } else {
-        toast({
-          title: "No Highlight Returned",
-          description: "AI didn't detect a clear highlight. Try again or edit manually.",
-        });
+      const {
+        data,
+        error
+      } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: [preview],
+          generateContent: false,
+          imageIndex: index,
+          regenerate: true,
+          previousHighlight: highlight?.text
+        }
+      });
+      if (error) throw error;
+      if (data?.analysis?.image_analyses && data.analysis.image_analyses.length > 0) {
+        const newHighlight = data.analysis.image_analyses[0].image_highlight;
+        if (newHighlight) {
+          onHighlightUpdate(index, {
+            text: newHighlight,
+            imageIndexes: [index]
+          });
+          toast({
+            title: "Highlight Regenerated",
+            description: "AI has generated a fresh highlight for this image."
+          });
+        }
       }
     } catch (error) {
       console.error('Error regenerating highlight:', error);

@@ -206,7 +206,7 @@ serve(async (req) => {
              ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
              ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
              ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
-            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant.\n\nReturn JSON with EXACT format:\n{\n  \"modern\": [1-10],\n  \"cozy\": [1-10],\n  \"luxurious\": [1-10],\n  \"minimalist\": [1-10],\n  \"colorful\": [1-10],\n  \"spacious\": [1-10],\n  \"natural_light\": [1-10],\n  \"urban\": [1-10],\n  \"rustic\": [1-10],\n  \"elegant\": [1-10],\n  \"image_highlight\": \"descriptive sentence (>=7 words) focusing on a unique renter benefit\",\n  \"detailed_analysis\": \"60-100 word comprehensive description\",\n  \"raw_analysis\": \"Brief one-sentence summary\",\n  \"image_index\": ${index}\n}`;
+            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image that focuses on unique renter benefits.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
