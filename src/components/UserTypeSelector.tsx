@@ -1,28 +1,22 @@
-
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Heart, Building, Sparkles } from 'lucide-react';
-
 interface UserTypeSelectorProps {
   onSelect: (type: 'renter' | 'realtor') => void;
 }
-
-export const UserTypeSelector = ({ onSelect }: UserTypeSelectorProps) => {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
+export const UserTypeSelector = ({
+  onSelect
+}: UserTypeSelectorProps) => {
+  return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
       <div className="max-w-6xl w-full">
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-6">
-            <img 
-              src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
-              alt="Hausto Logo" 
-              className="w-16 h-16 mr-4"
-            />
+            <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="w-16 h-16 mr-4" />
             <h1 className="text-5xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent flex items-center">
               Hausto
             </h1>
           </div>
-          <p className="text-xl text-slate-600 mb-2">Find your perfect home match</p>
+          
           <p className="text-slate-500">Choose how you'd like to get started</p>
         </div>
 
@@ -51,10 +45,7 @@ export const UserTypeSelector = ({ onSelect }: UserTypeSelectorProps) => {
                   <span>Direct realtor contact</span>
                 </div>
               </div>
-              <Button 
-                onClick={() => onSelect('renter')}
-                className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-              >
+              <Button onClick={() => onSelect('renter')} className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
                 Start Swiping
               </Button>
             </div>
@@ -84,10 +75,7 @@ export const UserTypeSelector = ({ onSelect }: UserTypeSelectorProps) => {
                   <span>Analytics dashboard</span>
                 </div>
               </div>
-              <Button 
-                onClick={() => onSelect('realtor')}
-                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-3 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-              >
+              <Button onClick={() => onSelect('realtor')} className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-3 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
                 Manage Properties
               </Button>
             </div>
@@ -95,11 +83,8 @@ export const UserTypeSelector = ({ onSelect }: UserTypeSelectorProps) => {
         </div>
 
         <div className="text-center mt-12">
-          <p className="text-slate-500 text-sm">
-            Join thousands of users who've found their perfect match
-          </p>
+          
         </div>
       </div>
-    </div>
-  );
+    </div>;
 };
