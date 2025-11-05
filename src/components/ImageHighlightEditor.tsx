@@ -123,7 +123,7 @@ export const ImageHighlightEditor = ({
                 </Badge>
               ) : (
                 <span className="text-gray-400 italic">
-                  Click "Generate Content" to create AI-powered highlights for this image
+                  Show AI generated highlight here
                 </span>
               )}
             </div>
