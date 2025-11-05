@@ -66,6 +66,8 @@ export const MatchesView = ({
       highlights: match.properties.highlights || [],
       vibe_analysis: parsedVA,
       property_source_link: match.properties.property_source_link,
+      property_source_provider_name: match.properties.property_source_provider_name,
+      property_source_provider_phone: match.properties.property_source_provider_phone,
       realtor: {
         id: match.properties.realtor_id || '',
         name: match.realtor_name || 'Property Owner',
