@@ -5,57 +5,66 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Wand2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-
 interface ImageHighlightEditorProps {
   preview: string;
   index: number;
-  highlight?: { text: string; imageIndexes: number[] };
-  onHighlightUpdate: (index: number, newHighlight: { text: string; imageIndexes: number[] }) => void;
+  highlight?: {
+    text: string;
+    imageIndexes: number[];
+  };
+  onHighlightUpdate: (index: number, newHighlight: {
+    text: string;
+    imageIndexes: number[];
+  }) => void;
 }
-
-export const ImageHighlightEditor = ({ 
-  preview, 
-  index, 
-  highlight, 
-  onHighlightUpdate 
+export const ImageHighlightEditor = ({
+  preview,
+  index,
+  highlight,
+  onHighlightUpdate
 }: ImageHighlightEditorProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(highlight?.text || '');
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const { toast } = useToast();
-
+  const {
+    toast
+  } = useToast();
   const handleEdit = () => {
     setIsEditing(true);
     setEditText(highlight?.text || '');
   };
-
   const handleSave = () => {
-    onHighlightUpdate(index, { text: editText, imageIndexes: [index] });
+    onHighlightUpdate(index, {
+      text: editText,
+      imageIndexes: [index]
+    });
     setIsEditing(false);
   };
-
   const handleCancel = () => {
     setIsEditing(false);
     setEditText(highlight?.text || '');
   };
-
   const handleRegenerate = async () => {
     setIsRegenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+      const {
+        data,
+        error
+      } = await supabase.functions.invoke('analyze-vibe', {
         body: {
           imageUrls: [preview],
           generateContent: false,
           imageIndex: index
         }
       });
-      
       if (error) throw error;
-      
       if (data?.analysis?.image_analyses && data.analysis.image_analyses.length > 0) {
         const newHighlight = data.analysis.image_analyses[0].image_highlight;
         if (newHighlight) {
-          onHighlightUpdate(index, { text: newHighlight, imageIndexes: [index] });
+          onHighlightUpdate(index, {
+            text: newHighlight,
+            imageIndexes: [index]
+          });
           toast({
             title: "Highlight Regenerated",
             description: "AI has generated a new highlight for this image."
@@ -73,15 +82,9 @@ export const ImageHighlightEditor = ({
       setIsRegenerating(false);
     }
   };
-
-  return (
-    <div className="space-y-2">
+  return <div className="space-y-2">
       <div className="relative border rounded-lg overflow-hidden">
-        <img 
-          src={preview} 
-          alt={`Property ${index + 1}`}
-          className="w-full h-24 object-cover"
-        />
+        <img src={preview} alt={`Property ${index + 1}`} className="w-full h-24 object-cover" />
         <div className="absolute top-1 left-1">
           <Badge variant="secondary" className="text-xs">
             {index + 1}
@@ -90,67 +93,31 @@ export const ImageHighlightEditor = ({
       </div>
       
       <div className="space-y-1">
-        {isEditing ? (
-          <div className="space-y-1">
-            <Input
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              className="text-xs h-8"
-              placeholder="Enter highlight..."
-            />
+        {isEditing ? <div className="space-y-1">
+            <Input value={editText} onChange={e => setEditText(e.target.value)} className="text-xs h-8" placeholder="Enter highlight..." />
             <div className="flex gap-1">
-              <Button
-                size="sm"
-                onClick={handleSave}
-                className="h-6 px-2 text-xs"
-              >
+              <Button size="sm" onClick={handleSave} className="h-6 px-2 text-xs">
                 Save
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCancel}
-                className="h-6 px-2 text-xs"
-              >
+              <Button size="sm" variant="outline" onClick={handleCancel} className="h-6 px-2 text-xs">
                 Cancel
               </Button>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-1">
+          </div> : <div className="space-y-1">
             <div className="text-xs min-h-[2rem] p-1 bg-gray-50 rounded border">
-              {highlight?.text && (
-                <Badge variant="secondary" className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border-blue-200">
+              {highlight?.text && <Badge variant="secondary" className="text-xs px-2 py-1 text-blue-700 ">
                   {highlight.text}
-                </Badge>
-              )}
+                </Badge>}
             </div>
             <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleEdit}
-                className="h-6 px-2 text-xs"
-              >
+              <Button size="sm" variant="outline" onClick={handleEdit} className="h-6 px-2 text-xs">
                 Edit
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRegenerate}
-                disabled={isRegenerating}
-                className="h-6 px-2 text-xs"
-              >
-                {isRegenerating ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Wand2 className="w-3 h-3" />
-                )}
+              <Button size="sm" variant="outline" onClick={handleRegenerate} disabled={isRegenerating} className="h-6 px-2 text-xs">
+                {isRegenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
               </Button>
             </div>
-          </div>
-        )}
+          </div>}
       </div>
-    </div>
-  );
+    </div>;
 };
