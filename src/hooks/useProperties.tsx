@@ -17,6 +17,8 @@ export interface Property {
   images: string[] | null;
   vibe_analysis: any | null;
   property_source_link: string | null;
+  property_source_provider_name: string | null;
+  property_source_provider_phone: string | null;
   amenities: string[] | null;
   created_at: string;
   updated_at: string;

@@ -27,6 +27,7 @@ interface PropertyCardProps {
   isAnonymous?: boolean;
   hasDeleteButton?: boolean;
   showRealtorInfo?: boolean;
+  isOwnProperty?: boolean;
 }
 export const PropertyCard = ({
   apartment,
@@ -40,7 +41,8 @@ export const PropertyCard = ({
   hideVibeScore = false,
   isAnonymous = false,
   hasDeleteButton = false,
-  showRealtorInfo = true
+  showRealtorInfo = true,
+  isOwnProperty = false
 }: PropertyCardProps) => {
   // Use provided image index from SwipeInterface or maintain own state
   const externalImageIndex = (apartment as any)._currentImageIndex;
@@ -232,7 +234,16 @@ export const PropertyCard = ({
                 </div>
                 {apartment.property_source_provider_name && (
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Listed on behalf of {apartment.property_source_provider_name}
+                    {isOwnProperty ? (
+                      <>
+                        Provider: {apartment.property_source_provider_name}
+                        {apartment.property_source_provider_phone && (
+                          <span className="ml-1">• {apartment.property_source_provider_phone}</span>
+                        )}
+                      </>
+                    ) : (
+                      `Listed on behalf of ${apartment.property_source_provider_name}`
+                    )}
                   </div>
                 )}
               </div>

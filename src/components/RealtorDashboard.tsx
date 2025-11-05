@@ -201,6 +201,9 @@ export const RealtorDashboard = ({ onSwitchUserType, onViewProfile, onOpenUpload
                       {property.property_source_provider_name && (
                         <div className="text-xs text-muted-foreground mb-2">
                           Provider: {property.property_source_provider_name}
+                          {property.property_source_provider_phone && (
+                            <span className="ml-1">• {property.property_source_provider_phone}</span>
+                          )}
                         </div>
                       )}
                       {property.vibe && (

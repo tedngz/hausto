@@ -924,6 +924,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               }
             },
             property_source_link: sourceLink,
+            property_source_provider_name: sourceProviderName,
+            property_source_provider_phone: sourceProviderPhone,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             is_active: true,
@@ -956,6 +958,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               }
             },
             property_source_link: sourceLink,
+            property_source_provider_name: sourceProviderName,
+            property_source_provider_phone: sourceProviderPhone,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             is_active: true,
