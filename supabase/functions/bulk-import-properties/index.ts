@@ -133,13 +133,14 @@ serve(async (req) => {
 
         // Step 2: Generate AI content using analyze-vibe function
         let aiContent = null;
+        let aiResult: any = null;
         let generatedTitle = property.title;
         let generatedDescription = property.description;
         let generatedVibe = property.vibe;
         let generatedHighlights = property.highlights || [];
 
         try {
-          const { data: aiResult, error: aiError } = await supabase.functions.invoke('analyze-vibe', {
+          const { data: aiData, error: aiError } = await supabase.functions.invoke('analyze-vibe', {
             body: {
               imageUrls: uploadedImages,
               generateContent: true,
@@ -156,34 +157,35 @@ serve(async (req) => {
 
           if (aiError) {
             console.warn('AI analysis failed:', aiError);
-          } else if (aiResult?.analysis) {
-            aiContent = aiResult.analysis;
+          } else if (aiData?.analysis) {
+            aiResult = aiData;
+            aiContent = aiData.analysis;
             
             // Extract title and description from generated_content
-            if (!generatedTitle && aiResult.analysis.generated_content?.title) {
-              generatedTitle = aiResult.analysis.generated_content.title;
+            if (!generatedTitle && aiData.analysis.generated_content?.title) {
+              generatedTitle = aiData.analysis.generated_content.title;
             }
-            if (!generatedDescription && aiResult.analysis.generated_content?.description) {
-              generatedDescription = aiResult.analysis.generated_content.description;
+            if (!generatedDescription && aiData.analysis.generated_content?.description) {
+              generatedDescription = aiData.analysis.generated_content.description;
             }
             
             // Extract highlights from individual image analyses
-            if (generatedHighlights.length === 0 && aiResult.analysis.image_analyses?.length > 0) {
-              const imageHighlights = aiResult.analysis.image_analyses
+            if (generatedHighlights.length === 0 && aiData.analysis.image_analyses?.length > 0) {
+              const imageHighlights = aiData.analysis.image_analyses
                 .map((img: any) => img.image_highlight)
                 .filter((highlight: string) => highlight && highlight.trim() !== '');
               
               if (imageHighlights.length > 0) {
                 generatedHighlights = imageHighlights;
-              } else if (aiResult.analysis.generated_content?.highlights) {
-                generatedHighlights = aiResult.analysis.generated_content.highlights;
+              } else if (aiData.analysis.generated_content?.highlights) {
+                generatedHighlights = aiData.analysis.generated_content.highlights;
               }
             }
             
             // Determine overall vibe from the analysis
             if (!generatedVibe) {
               // Find the highest scoring vibe characteristic
-              const vibeScores = aiResult.analysis;
+              const vibeScores = aiData.analysis;
               const vibeTypes = ['modern', 'cozy', 'luxurious', 'minimalist', 'elegant', 'spacious', 'rustic'];
               let highestVibe = 'modern';
               let highestScore = 0;
