@@ -52,13 +52,15 @@ export const ImageHighlightEditor = ({
       
       if (error) throw error;
       
-      if (data?.analysis?.highlights && data.analysis.highlights.length > 0) {
-        const newHighlight = data.analysis.highlights[0];
-        onHighlightUpdate(index, { text: newHighlight, imageIndexes: [index] });
-        toast({
-          title: "Highlight Regenerated",
-          description: "AI has generated a new highlight for this image."
-        });
+      if (data?.analysis?.image_analyses && data.analysis.image_analyses.length > 0) {
+        const newHighlight = data.analysis.image_analyses[0].image_highlight;
+        if (newHighlight) {
+          onHighlightUpdate(index, { text: newHighlight, imageIndexes: [index] });
+          toast({
+            title: "Highlight Regenerated",
+            description: "AI has generated a new highlight for this image."
+          });
+        }
       }
     } catch (error) {
       console.error('Error regenerating highlight:', error);
@@ -117,14 +119,10 @@ export const ImageHighlightEditor = ({
         ) : (
           <div className="space-y-1">
             <div className="text-xs min-h-[2rem] p-1 bg-gray-50 rounded border">
-              {highlight?.text ? (
+              {highlight?.text && (
                 <Badge variant="secondary" className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border-blue-200">
                   {highlight.text}
                 </Badge>
-              ) : (
-                <span className="text-gray-400 italic">
-                  Show AI generated highlight here
-                </span>
               )}
             </div>
             <div className="flex gap-1">

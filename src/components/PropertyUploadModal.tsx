@@ -188,12 +188,19 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         setTitle(generated.title || `Beautiful ${size}m² Property in ${location.split(',')[0]}`);
         setDescription(generated.description || 'A wonderful space perfect for your next home.');
         
-        // Store image highlights if available - convert to new format with image associations
-        if (generated.highlights && Array.isArray(generated.highlights)) {
-          const highlightsWithImages = generated.highlights.map((highlight: string, index: number) => ({
-            text: highlight,
-            imageIndexes: [Math.min(index, imageFiles.length - 1)] // Associate with corresponding image, fallback to last image
-          }));
+        // Extract per-image highlights from image_analyses
+        if (analysis.image_analyses && Array.isArray(analysis.image_analyses)) {
+          const highlightsWithImages = analysis.image_analyses
+            .map((imgAnalysis: any, index: number) => {
+              if (imgAnalysis.image_highlight) {
+                return {
+                  text: imgAnalysis.image_highlight,
+                  imageIndexes: [index]
+                };
+              }
+              return null;
+            })
+            .filter((h: any) => h !== null);
           setImageHighlights(highlightsWithImages);
         }
         
