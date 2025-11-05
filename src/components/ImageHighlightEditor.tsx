@@ -104,10 +104,8 @@ export const ImageHighlightEditor = ({
               </Button>
             </div>
           </div> : <div className="space-y-1">
-            <div className="text-xs min-h-[2rem] p-1 bg-gray-50 rounded border">
-              {highlight?.text && <Badge variant="secondary" className="text-xs text-orange px-0 py-0">
-                  {highlight.text}
-                </Badge>}
+            <div className="text-xs min-h-[2rem] text-orange-500">
+              {highlight?.text}
             </div>
             <div className="flex gap-1">
               <Button size="sm" variant="outline" onClick={handleEdit} className="h-6 px-2 text-xs">
