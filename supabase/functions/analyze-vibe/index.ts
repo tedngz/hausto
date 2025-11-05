@@ -47,7 +47,7 @@ serve(async (req) => {
       );
     }
 
-    const { imageUrls, generateContent = false, propertyInfo, regenerate = false, previousHighlight } = await req.json();
+    const { imageUrls, generateContent = false, propertyInfo } = await req.json();
     console.log('Authenticated user requesting vibe analysis:', user.id);
 
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
@@ -93,18 +93,14 @@ serve(async (req) => {
             .map(a => a.image_highlight)
             .join('\n- ');
           
-          const regenerateContext = regenerate && previousHighlight
-            ? `\n\n🔄 REGENERATION MODE ACTIVATED:\nPREVIOUS HIGHLIGHT: "${previousHighlight}"\n\n🚨 CRITICAL INSTRUCTION: You MUST create a COMPLETELY DIFFERENT highlight that:\n1. Focuses on a DIFFERENT feature or angle from the previous one\n2. Uses DIFFERENT words and phrasing (no overlap)\n3. Targets a DIFFERENT lifestyle benefit category\n4. Provides a FRESH perspective on this space\n\nFor example:\n- If previous was about "productivity", now focus on "relaxation" or "entertaining"\n- If previous mentioned "natural light", now highlight "storage" or "design aesthetic"\n- If previous emphasized "workspace", now emphasize "comfort" or "style"\n\nThink creatively and find a NEW angle that makes this space desirable!`
-            : '';
-
-          const highlightContext = !regenerate && previousHighlights && index > 0
+          const highlightContext = previousHighlights && index > 0
             ? `\n\n📌 PREVIOUS HIGHLIGHTS ALREADY GENERATED:\n- ${previousHighlights}\n\n🚨 CRITICAL: Your highlight must focus on COMPLETELY DIFFERENT aspects not covered above. If previous highlights covered the bedroom, focus on the kitchen or bathroom. If they covered relaxation, focus on productivity or entertaining. AVOID ANY OVERLAP OR REPETITION.`
             : '';
 
           const basePrompt = generateContent 
             ? `You are a luxury rental marketing specialist analyzing property images to create HIGH-CONVERTING listing content. This is image ${index + 1} of ${imageUrls.length} total images.
 
-            CORE MISSION: Discover the UNIQUE LIFESTYLE TRANSFORMATION this specific space offers renters.${regenerateContext}${highlightContext}
+            CORE MISSION: Discover the UNIQUE LIFESTYLE TRANSFORMATION this specific space offers renters.${highlightContext}
 
             AMENITY DETECTION: Identify all visible amenities from this list:
             - TV, Smart TV, Large Screen TV
@@ -206,7 +202,7 @@ serve(async (req) => {
              ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
              ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
              ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
-            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant.\n\nReturn JSON with EXACT format:\n{\n  \"modern\": [1-10],\n  \"cozy\": [1-10],\n  \"luxurious\": [1-10],\n  \"minimalist\": [1-10],\n  \"colorful\": [1-10],\n  \"spacious\": [1-10],\n  \"natural_light\": [1-10],\n  \"urban\": [1-10],\n  \"rustic\": [1-10],\n  \"elegant\": [1-10],\n  \"image_highlight\": \"descriptive sentence (>=7 words) focusing on a unique renter benefit\",\n  \"detailed_analysis\": \"60-100 word comprehensive description\",\n  \"raw_analysis\": \"Brief one-sentence summary\",\n  \"image_index\": ${index}\n}`;
+            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant, plus one specific highlight for this image that focuses on unique renter benefits.`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
@@ -279,7 +275,6 @@ serve(async (req) => {
               }
             ],
             max_tokens: generateContent ? 500 : 300,
-            temperature: regenerate ? 1.0 : 0.7,
           }),
         });
 
