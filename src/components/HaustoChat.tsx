@@ -444,7 +444,8 @@ export const HaustoChat = ({
         schedule_viewing: 'Schedule Viewing',
         discuss_price: 'Discuss Price',
         ask_amenities: 'Ask About Amenities',
-        request_documents: 'Request Documents'
+        request_documents: 'Request Documents',
+        get_provider_contact: 'Get Manager Contact'
       };
 
       // Insert user's action selection as a message
@@ -805,7 +806,7 @@ export const HaustoChat = ({
                                     discuss_price: '💰 Discuss Price',
                                     ask_amenities: '🏠 Ask About Amenities',
                                     request_documents: '📄 Request Documents',
-                                    get_provider_contact: '📞 Get Provider Contact'
+                                    get_provider_contact: '📞 Get Manager Contact'
                                   };
                                   return (
                                     <Button
