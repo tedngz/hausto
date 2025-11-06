@@ -661,10 +661,10 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 return (
                   <Badge
                     key={vibe}
-                    variant={isSelected ? "default" : "outline"}
+                    variant={(isAiDetected || isSelected) ? "default" : "outline"}
                     className={`cursor-pointer transition-colors ${
-                      isSelected && isAiDetected
-                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
+                      isAiDetected
+                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
                         : isSelected
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-gray-100'
