@@ -6,25 +6,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Check, X, Crown } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { toast } from 'sonner';
+
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   reason?: 'views' | 'matches' | 'quiz';
 }
-export const SubscriptionModal = ({
-  isOpen,
-  onClose,
-  reason
-}: SubscriptionModalProps) => {
-  const {
-    checkSubscription
-  } = useSubscription();
+
+export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModalProps) => {
+  const { checkSubscription } = useSubscription();
   const [paypalLoaded, setPaypalLoaded] = useState(false);
+
   const reasonMessages = {
     views: "You've reached your daily limit of 10 property views.",
     matches: "You've reached your weekly limit of 20 matches.",
-    quiz: "You've used both weekly quiz retakes."
+    quiz: "You've used both weekly quiz retakes.",
   };
+
   useEffect(() => {
     if (isOpen && !paypalLoaded) {
       const script = document.createElement('script');
@@ -34,6 +32,7 @@ export const SubscriptionModal = ({
         initializePayPalButton();
       };
       document.body.appendChild(script);
+      
       return () => {
         const existingScript = document.querySelector('script[src*="paypal.com/sdk"]');
         if (existingScript) {
@@ -42,6 +41,7 @@ export const SubscriptionModal = ({
       };
     }
   }, [isOpen, paypalLoaded]);
+
   const initializePayPalButton = () => {
     if ((window as any).paypal) {
       (window as any).paypal.Buttons({
@@ -51,26 +51,42 @@ export const SubscriptionModal = ({
           layout: 'vertical',
           label: 'paypal'
         },
-        createSubscription: function (data: any, actions: any) {
+        createSubscription: function(data: any, actions: any) {
           return actions.subscription.create({
             plan_id: 'P-3RL93059D68804616NCU6CSI'
           });
         },
-        onApprove: function (data: any, actions: any) {
+        onApprove: function(data: any, actions: any) {
           toast.success('Subscription activated! You now have premium access.');
           checkSubscription(); // Refresh subscription status
           onClose(); // Close the modal
         },
-        onError: function (err: any) {
+        onError: function(err: any) {
           toast.error('Payment failed. Please try again.');
           console.error('PayPal error:', err);
         }
       }).render('#paypal-button-container-P-3RL93059D68804616NCU6CSI');
     }
   };
-  const freeFeatures = ['10 property views per day', '20 matches per week', '2 quiz retakes per week', 'Basic search filters'];
-  const premiumFeatures = ['Unlimited property views', 'Unlimited matches', 'Unlimited quiz retakes', 'Advanced search filters', 'Priority customer support', 'Early access to new features'];
-  return <Dialog open={isOpen} onOpenChange={onClose}>
+
+  const freeFeatures = [
+    '10 property views per day',
+    '20 matches per week',
+    '2 quiz retakes per week',
+    'Basic search filters',
+  ];
+
+  const premiumFeatures = [
+    'Unlimited property views',
+    'Unlimited matches',
+    'Unlimited quiz retakes',
+    'Advanced search filters',
+    'Priority customer support',
+    'Early access to new features',
+  ];
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
@@ -96,10 +112,12 @@ export const SubscriptionModal = ({
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="space-y-2 sm:space-y-3">
-                {freeFeatures.map((feature, index) => <li key={index} className="flex items-center gap-2">
+                {freeFeatures.map((feature, index) => (
+                  <li key={index} className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-muted-foreground shrink-0" />
-                    
-                  </li>)}
+                    <span className="text-xs sm:text-sm">{feature}</span>
+                  </li>
+                ))}
               </ul>
             </CardContent>
           </Card>
@@ -119,10 +137,12 @@ export const SubscriptionModal = ({
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-                {premiumFeatures.map((feature, index) => <li key={index} className="flex items-center gap-2">
+                {premiumFeatures.map((feature, index) => (
+                  <li key={index} className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-primary shrink-0" />
                     <span className="text-xs sm:text-sm font-medium">{feature}</span>
-                  </li>)}
+                  </li>
+                ))}
               </ul>
               <div className="w-full mt-6">
                 <div id="paypal-button-container-P-3RL93059D68804616NCU6CSI"></div>
@@ -135,5 +155,6 @@ export const SubscriptionModal = ({
           <p>✓ Cancel anytime • ✓ Secure PayPal payment • ✓ Instant activation</p>
         </div>
       </DialogContent>
-    </Dialog>;
+    </Dialog>
+  );
 };
