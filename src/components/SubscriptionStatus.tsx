@@ -63,7 +63,7 @@ export const SubscriptionStatus = ({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 text-lg">
               {isPremium ? <>
                   <Crown className="h-5 w-5 text-primary" />
                   Premium Plan
