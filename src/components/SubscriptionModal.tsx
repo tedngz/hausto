@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, X, Crown } from 'lucide-react';
-import { useSubscription } from '@/hooks/useSubscription';
+import { Check, Crown } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 interface SubscriptionModalProps {
@@ -14,8 +15,8 @@ interface SubscriptionModalProps {
 }
 
 export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModalProps) => {
-  const { checkSubscription } = useSubscription();
-  const [paypalLoaded, setPaypalLoaded] = useState(false);
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   const reasonMessages = {
     views: "You've reached your daily limit of 10 property views.",
@@ -23,49 +24,40 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
     quiz: "You've used both weekly quiz retakes.",
   };
 
-  useEffect(() => {
-    if (isOpen && !paypalLoaded) {
-      const script = document.createElement('script');
-      script.src = 'https://www.paypal.com/sdk/js?client-id=Af9M7zFD7HxgpMjHpmRHK7AhVEF0NSTan-3UXW5CRJA8OsT1A2p2D6hWFv6r049S4Bc6IrmQDsw9q3t_&vault=true&intent=subscription';
-      script.onload = () => {
-        setPaypalLoaded(true);
-        initializePayPalButton();
-      };
-      document.body.appendChild(script);
-      
-      return () => {
-        const existingScript = document.querySelector('script[src*="paypal.com/sdk"]');
-        if (existingScript) {
-          document.body.removeChild(existingScript);
-        }
-      };
+  const handleGoPremium = async () => {
+    if (!user) {
+      toast.error('Please log in to upgrade to premium');
+      return;
     }
-  }, [isOpen, paypalLoaded]);
 
-  const initializePayPalButton = () => {
-    if ((window as any).paypal) {
-      (window as any).paypal.Buttons({
-        style: {
-          shape: 'pill',
-          color: 'white',
-          layout: 'vertical',
-          label: 'paypal'
+    setLoading(true);
+    try {
+      // Get user profile for name
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name, email')
+        .eq('id', user.id)
+        .single();
+
+      const { error } = await supabase.functions.invoke('notify-premium-interest', {
+        body: {
+          userEmail: profile?.email || user.email,
+          userName: profile?.name || 'Valued Customer',
         },
-        createSubscription: function(data: any, actions: any) {
-          return actions.subscription.create({
-            plan_id: 'P-3RL93059D68804616NCU6CSI'
-          });
-        },
-        onApprove: function(data: any, actions: any) {
-          toast.success('Subscription activated! You now have premium access.');
-          checkSubscription(); // Refresh subscription status
-          onClose(); // Close the modal
-        },
-        onError: function(err: any) {
-          toast.error('Payment failed. Please try again.');
-          console.error('PayPal error:', err);
-        }
-      }).render('#paypal-button-container-P-3RL93059D68804616NCU6CSI');
+      });
+
+      if (error) throw error;
+
+      toast.success(
+        'Request received! You will receive a payment request email from Payoneer soon.',
+        { duration: 5000 }
+      );
+      onClose();
+    } catch (error: any) {
+      console.error('Error requesting premium:', error);
+      toast.error('Failed to process request. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -141,15 +133,20 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
                   </li>
                 ))}
               </ul>
-              <div className="w-full mt-6">
-                <div id="paypal-button-container-P-3RL93059D68804616NCU6CSI"></div>
-              </div>
+              <Button 
+                onClick={handleGoPremium}
+                disabled={loading}
+                className="w-full"
+                size="lg"
+              >
+                {loading ? 'Processing...' : 'Go Premium'}
+              </Button>
             </CardContent>
           </Card>
         </div>
 
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
-          <p>✓ Cancel anytime • ✓ Secure PayPal payment • ✓ Instant activation</p>
+          <p>✓ Cancel anytime • ✓ Secure Payoneer payment • ✓ Fast activation</p>
         </div>
       </DialogContent>
     </Dialog>

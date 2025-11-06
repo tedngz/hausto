@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.proactive-ai-reply]
 verify_jwt = false
+
+[functions.notify-premium-interest]
+verify_jwt = true
