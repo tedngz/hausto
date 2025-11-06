@@ -41,10 +41,12 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
 
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+
     const {
       data: { user },
       error: authError,
-    } = await supabaseClient.auth.getUser();
+    } = await supabaseClient.auth.getUser(token);
 
     if (authError) {
       console.error("Auth error:", authError);
