@@ -72,8 +72,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
   const freeFeatures = [
     '10 property views per day',
     '20 matches per week',
-    '2 quiz retakes per week',
-    'Basic search filters',
+    '10 AI searches per day',
   ];
 
   const premiumFeatures = [
