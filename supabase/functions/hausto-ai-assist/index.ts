@@ -23,6 +23,11 @@ serve(async (req) => {
     const propertyContext = properties?.map((p: any, i: number) => 
       `Property ${i + 1}: ${p.title} at ${p.location} - $${p.price}/mo`
     ).join('\n') || 'No properties in conversation';
+    
+    // Get provider contact info from first property
+    const firstProperty = properties?.[0];
+    const providerName = firstProperty?.property_source_provider_name;
+    const providerPhone = firstProperty?.property_source_provider_phone;
 
     // Build conversation context
     const conversationContext = messages?.map((m: any) => 
@@ -63,6 +68,30 @@ Keep your response professional and consultative, 2-3 sentences.`;
 - Offer to help coordinate the exchange
 Keep your response professional and organized, 2-3 sentences.`;
           break;
+        case 'get_provider_contact':
+          if (providerName && providerPhone) {
+            return new Response(
+              JSON.stringify({ 
+                suggestion: `I can help you connect with the property manager! The property is managed by ${providerName}. You can reach them directly at ${providerPhone}. Feel free to contact them for any questions about the property, scheduling a viewing, or discussing lease terms.`,
+                suggestedActions: []
+              }),
+              { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200 
+              }
+            );
+          } else {
+            return new Response(
+              JSON.stringify({ 
+                suggestion: `I apologize, but the property manager's contact information is not available at the moment. I recommend asking the property owner in this conversation for the manager's details.`,
+                suggestedActions: []
+              }),
+              { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200 
+              }
+            );
+          }
         default:
           systemPrompt = `You are Hausto AI, a professional real estate assistant responding to: "${action}". As an experienced realtor, provide knowledgeable guidance in 2-3 sentences.`;
       }
@@ -87,8 +116,13 @@ ${conversationContext}
 
 As a professional realtor would, provide expert guidance (2-3 sentences max) that moves the conversation forward strategically. Be knowledgeable, trustworthy, and proactive. Show expertise while remaining approachable.`;
       
-      // Suggest relevant actions based on conversation
+      // Suggest relevant actions based on conversation and user type
       suggestedActions = ['schedule_viewing', 'discuss_price', 'ask_amenities', 'request_documents'];
+      
+      // Only show provider contact for renters if provider info exists
+      if (userType === 'renter' && providerName && providerPhone) {
+        suggestedActions.push('get_provider_contact');
+      }
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {

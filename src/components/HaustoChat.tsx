@@ -205,6 +205,8 @@ export const HaustoChat = ({
           title: p.title,
           location: p.location,
           price: p.price,
+          property_source_provider_name: p.property_source_provider_name,
+          property_source_provider_phone: p.property_source_provider_phone,
         })) || [];
 
         const { data: aiData, error: aiError } = await supabase.functions.invoke('hausto-ai-assist', {
