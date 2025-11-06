@@ -117,12 +117,9 @@ ${conversationContext}
 As a professional realtor would, provide expert guidance (2-3 sentences max) that moves the conversation forward strategically. Be knowledgeable, trustworthy, and proactive. Show expertise while remaining approachable.`;
       
       // Suggest relevant actions based on conversation and user type
-      suggestedActions = ['schedule_viewing', 'discuss_price', 'ask_amenities', 'request_documents'];
+      suggestedActions = ['schedule_viewing', 'discuss_price', 'ask_amenities', 'request_documents', 'get_provider_contact'];
       
-      // Only show provider contact for renters if provider info exists
-      if (userType === 'renter' && providerName && providerPhone) {
-        suggestedActions.push('get_provider_contact');
-      }
+      // Always include provider contact action; the function will handle missing info gracefully
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
