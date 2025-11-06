@@ -21,7 +21,7 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     console.log("Request received, checking authorization...");
-    
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       console.error("No authorization header found");
@@ -31,17 +31,13 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
-    );
+    const supabaseClient = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    });
 
-    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+    const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
 
     const {
       data: { user },
@@ -72,7 +68,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email to the renter
     const renterEmailResponse = await resend.emails.send({
-      from: "Hausto <onboarding@resend.dev>",
+      from: "Hausto <admin@hausto.com>",
       to: [userEmail],
       subject: "Premium Subscription Request Received",
       html: `
@@ -89,7 +85,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email to the admin
     const adminEmailResponse = await resend.emails.send({
-      from: "Hausto <onboarding@resend.dev>",
+      from: "Hausto <admin@hausto.com>",
       to: ["ted.ngz@gmail.com"],
       subject: "New Premium Subscription Interest",
       html: `
@@ -107,9 +103,9 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Admin email sent:", adminEmailResponse);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
-        message: "Notifications sent successfully" 
+        message: "Notifications sent successfully",
       }),
       {
         status: 200,
@@ -117,17 +113,14 @@ const handler = async (req: Request): Promise<Response> => {
           "Content-Type": "application/json",
           ...corsHeaders,
         },
-      }
+      },
     );
   } catch (error: any) {
     console.error("Error in notify-premium-interest function:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   }
 };
 
