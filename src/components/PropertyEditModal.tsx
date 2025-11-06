@@ -620,7 +620,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           {/* Step 3: AI Generated Content */}
           <div>
             <Label className="text-base font-semibold">Selected Vibes</Label>
-            <p className="text-sm text-gray-600 mb-3">Select vibes and tags that best describe your property</p>
+            <p className="text-sm text-gray-600 mb-3">AI has selected these vibes - you can modify them</p>
             <div className="flex flex-wrap gap-2">
               {vibeOptions.map((vibe) => (
                 <Badge
