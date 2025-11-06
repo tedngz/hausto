@@ -385,12 +385,23 @@ export const HaustoChat = ({
         content: m.content
       }));
 
+      // Ensure properties include provider info
+      const propertiesWithProvider = currentConv.properties?.map(p => ({
+        title: p.title,
+        location: p.location,
+        price: p.price,
+        property_source_provider_name: p.property_source_provider_name,
+        property_source_provider_phone: p.property_source_provider_phone,
+      })) || [];
+
+      console.log('Sending properties to AI:', propertiesWithProvider);
+
       const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
         body: {
           conversationId: selectedMatch,
           userType,
           messages: recentMessages,
-          properties: currentConv.properties
+          properties: propertiesWithProvider
         }
       });
 
@@ -466,12 +477,23 @@ export const HaustoChat = ({
         content: m.content
       }));
 
+      // Ensure properties include provider info
+      const propertiesWithProvider = currentConv.properties?.map(p => ({
+        title: p.title,
+        location: p.location,
+        price: p.price,
+        property_source_provider_name: p.property_source_provider_name,
+        property_source_provider_phone: p.property_source_provider_phone,
+      })) || [];
+
+      console.log('Sending properties to AI (action):', propertiesWithProvider);
+
       const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
         body: {
           conversationId: selectedMatch,
           userType,
           messages: recentMessages,
-          properties: currentConv.properties,
+          properties: propertiesWithProvider,
           action
         }
       });

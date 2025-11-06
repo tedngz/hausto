@@ -28,6 +28,14 @@ serve(async (req) => {
     const firstProperty = properties?.[0];
     const providerName = firstProperty?.property_source_provider_name;
     const providerPhone = firstProperty?.property_source_provider_phone;
+    
+    // Debug logging to verify provider data
+    console.log('Provider info received:', { 
+      providerName, 
+      providerPhone, 
+      hasProperties: properties?.length > 0,
+      firstPropertyKeys: firstProperty ? Object.keys(firstProperty) : []
+    });
 
     // Build conversation context
     const conversationContext = messages?.map((m: any) => 
