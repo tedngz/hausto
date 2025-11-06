@@ -9,7 +9,6 @@ export const UsageMeter = () => {
   const {
     todayUsage,
     weeklyMatches,
-    weeklyQuizRetakes,
     subscriptionStatus,
     loading,
     limits,
@@ -53,13 +52,6 @@ export const UsageMeter = () => {
       current: weeklyMatches,
       limit: limits.weeklyMatches,
       color: 'text-red-500',
-    },
-    {
-      icon: RotateCcw,
-      label: 'Weekly Quiz Retakes',
-      current: weeklyQuizRetakes,
-      limit: limits.weeklyQuizRetakes,
-      color: 'text-purple-500',
     },
     {
       icon: MessageSquare,

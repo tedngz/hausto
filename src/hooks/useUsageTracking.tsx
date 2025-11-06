@@ -19,7 +19,6 @@ interface SubscriptionStatus {
 const FREE_TIER_LIMITS = {
   dailyViews: 10,
   weeklyMatches: 20,
-  weeklyQuizRetakes: 2,
   dailyAiRequests: 10,
 };
 
@@ -32,7 +31,6 @@ export const useUsageTracking = () => {
     aiSearches: 0,
   });
   const [weeklyMatches, setWeeklyMatches] = useState(0);
-  const [weeklyQuizRetakes, setWeeklyQuizRetakes] = useState(0);
   const [viewedPropertiesToday, setViewedPropertiesToday] = useState<Set<string>>(() => {
     // Load viewed properties from localStorage on initialization
     const today = new Date().toISOString().split('T')[0];
@@ -105,10 +103,10 @@ export const useUsageTracking = () => {
         });
       }
 
-      // Get weekly matches and quiz retakes (last 7 days including today)
+      // Get weekly matches (last 7 days including today)
       const { data: weeklyData, error: weeklyError } = await supabase
         .from('daily_usage')
-        .select('usage_date, properties_matched, quiz_retakes')
+        .select('usage_date, properties_matched')
         .eq('user_id', user.id)
         .gte('usage_date', weekAgo)
         .lte('usage_date', today)
@@ -122,10 +120,8 @@ export const useUsageTracking = () => {
 
       if (weeklyData) {
         const weeklyMatchesSum = weeklyData.reduce((sum, day) => sum + day.properties_matched, 0);
-        const weeklyQuizRetakesSum = weeklyData.reduce((sum, day) => sum + day.quiz_retakes, 0);
-        console.log('Weekly totals calculated:', { weeklyMatchesSum, weeklyQuizRetakesSum });
+        console.log('Weekly totals calculated:', { weeklyMatchesSum });
         setWeeklyMatches(weeklyMatchesSum);
-        setWeeklyQuizRetakes(weeklyQuizRetakesSum);
       }
 
       // Get subscription status
@@ -175,9 +171,6 @@ export const useUsageTracking = () => {
       }
       if (typeof detail.weeklyMatches === 'number') {
         setWeeklyMatches(detail.weeklyMatches);
-      }
-      if (typeof detail.weeklyQuizRetakes === 'number') {
-        setWeeklyQuizRetakes(detail.weeklyQuizRetakes);
       }
       // As a fallback, re-fetch to stay consistent with DB
       if (!detail.todayUsage) {
@@ -244,7 +237,6 @@ export const useUsageTracking = () => {
       window.dispatchEvent(new CustomEvent('usage:updated', { detail: {
         todayUsage: updatedTodayUsage,
         weeklyMatches,
-        weeklyQuizRetakes,
       }}));
 
       console.log('Successfully tracked unique property view for:', propertyId);
@@ -329,10 +321,6 @@ export const useUsageTracking = () => {
         console.log('Incrementing weekly matches from', weeklyMatches, 'to', weeklyMatches + 1);
         setWeeklyMatches(prev => prev + 1);
       }
-      if (type === 'quiz') {
-        console.log('Incrementing weekly quiz retakes from', weeklyQuizRetakes, 'to', weeklyQuizRetakes + 1);
-        setWeeklyQuizRetakes(prev => prev + 1);
-      }
 
       return true;
     } catch (error) {
@@ -348,13 +336,17 @@ export const useUsageTracking = () => {
       tier: subscriptionStatus.subscription_tier,
       todayViews: todayUsage.propertiesViewed,
       weeklyMatches,
-      weeklyQuizRetakes,
       todayAiSearches: todayUsage.aiSearches
     });
 
     // Premium users have unlimited access
     if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
       console.log('Premium user - unlimited access');
+      return true;
+    }
+
+    // Quiz is now unlimited for all users
+    if (type === 'quiz') {
       return true;
     }
 
@@ -368,10 +360,6 @@ export const useUsageTracking = () => {
         const canMatch = weeklyMatches < FREE_TIER_LIMITS.weeklyMatches;
         console.log(`Can match: ${canMatch} (${weeklyMatches}/${FREE_TIER_LIMITS.weeklyMatches})`);
         return canMatch;
-      case 'quiz':
-        const canQuiz = weeklyQuizRetakes < FREE_TIER_LIMITS.weeklyQuizRetakes;
-        console.log(`Can quiz: ${canQuiz} (${weeklyQuizRetakes}/${FREE_TIER_LIMITS.weeklyQuizRetakes})`);
-        return canQuiz;
       case 'ai-search':
         const canAiSearch = todayUsage.aiSearches < FREE_TIER_LIMITS.dailyAiRequests;
         console.log(`Can AI search: ${canAiSearch} (${todayUsage.aiSearches}/${FREE_TIER_LIMITS.dailyAiRequests})`);
@@ -386,13 +374,16 @@ export const useUsageTracking = () => {
       return Infinity;
     }
 
+    // Quiz is now unlimited for all users
+    if (type === 'quiz') {
+      return Infinity;
+    }
+
     switch (type) {
       case 'view':
         return Math.max(0, FREE_TIER_LIMITS.dailyViews - todayUsage.propertiesViewed);
       case 'match':
         return Math.max(0, FREE_TIER_LIMITS.weeklyMatches - weeklyMatches);
-      case 'quiz':
-        return Math.max(0, FREE_TIER_LIMITS.weeklyQuizRetakes - weeklyQuizRetakes);
       case 'ai-search':
         return Math.max(0, FREE_TIER_LIMITS.dailyAiRequests - todayUsage.aiSearches);
       default:
@@ -403,7 +394,6 @@ export const useUsageTracking = () => {
   return {
     todayUsage,
     weeklyMatches,
-    weeklyQuizRetakes,
     subscriptionStatus,
     loading,
     updateUsage,

@@ -40,41 +40,6 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentStep]);
 
-  // Check if user has reached quiz limit AFTER all hooks are called
-  const hasReachedQuizLimit = !canPerformAction('quiz');
-  const isPremium = subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium';
-  
-  // If user has reached limit and is not premium, show limit message instead of quiz
-  if (hasReachedQuizLimit && !isPremium) {
-    return (
-      <Card className="max-w-2xl mx-auto p-8 text-center">
-        <div className="space-y-4">
-          <div className="text-6xl">🚫</div>
-          <h2 className="text-2xl font-bold">Quiz Limit Reached</h2>
-          <p className="text-muted-foreground">
-            You've used all your weekly quiz retakes. 
-            Upgrade to Premium for unlimited quiz access!
-          </p>
-          <div className="flex gap-4 justify-center mt-6">
-            <Button 
-              variant="outline" 
-              onClick={onSkip}
-            >
-              Skip for Now
-            </Button>
-            <Button
-              onClick={() => {
-                // Trigger subscription modal
-                window.dispatchEvent(new CustomEvent('openSubscriptionModal', { detail: { reason: 'quiz' } }));
-              }}
-            >
-              Upgrade to Premium
-            </Button>
-          </div>
-        </div>
-      </Card>
-    );
-  }
 
   const handleNext = () => {
     setIsAnimating(true);
@@ -131,11 +96,6 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   };
 
   const handleSubmit = async () => {
-    if (!canPerformAction('quiz')) {
-      toast.error(`You've reached your weekly quiz retake limit (${getRemainingActions('quiz')} remaining). Upgrade to Premium for unlimited access!`);
-      return;
-    }
-
     const finalPreferences: UserPreferences = {
       styles: preferences.styles as string[],
       colors: preferences.colors as string[],
