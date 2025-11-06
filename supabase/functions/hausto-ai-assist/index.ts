@@ -72,7 +72,7 @@ Keep your response professional and organized, 2-3 sentences.`;
           if (providerName && providerPhone) {
             return new Response(
               JSON.stringify({ 
-                suggestion: `I can help you connect with the property manager! The property is managed by ${providerName}. You can reach them directly at ${providerPhone}. Feel free to contact them for any questions about the property, scheduling a viewing, or discussing lease terms.`,
+                suggestion: `Here's the listing provider's contact information:\n\n📋 Provider: ${providerName}\n📞 Phone: ${providerPhone}\n\nThis is the original source where the property was listed. You can contact them directly for more details about the property, schedule viewings, or discuss terms.`,
                 suggestedActions: []
               }),
               { 
@@ -83,7 +83,7 @@ Keep your response professional and organized, 2-3 sentences.`;
           } else {
             return new Response(
               JSON.stringify({ 
-                suggestion: `I apologize, but the property manager's contact information is not available at the moment. I recommend asking the property owner in this conversation for the manager's details.`,
+                suggestion: `I apologize, but the listing provider's contact information is not available for this property. The contact details may not have been included when the property was imported. Please ask the property owner in this conversation for alternative contact options.`,
                 suggestedActions: []
               }),
               { 
