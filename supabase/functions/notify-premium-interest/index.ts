@@ -68,7 +68,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email to the renter
     const renterEmailResponse = await resend.emails.send({
-      from: "Hausto <admin@hausto.com>",
+      from: "Hausto <hello@hausto.com>",
       to: [userEmail],
       subject: "Premium Subscription Request Received",
       html: `
@@ -85,7 +85,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email to the admin
     const adminEmailResponse = await resend.emails.send({
-      from: "Hausto <admin@hausto.com>",
+      from: "Hausto <hello@hausto.com>",
       to: ["ted.ngz@gmail.com"],
       subject: "New Premium Subscription Interest",
       html: `
