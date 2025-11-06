@@ -94,10 +94,7 @@ export const SubscriptionStatus = ({
                   <li>• Unlimited AI search</li>
                 </ul>
               </div>
-              <Button variant="outline" onClick={handleCancel} disabled={cancelling} className="w-full">
-                <CreditCard className="h-4 w-4 mr-2" />
-                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button>
+              
             </div> : <div className="space-y-3">
               <div className="text-sm text-muted-foreground">
                 Upgrade to unlock unlimited access to all features
