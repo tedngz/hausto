@@ -91,7 +91,7 @@ export const SubscriptionStatus = ({
                 <ul className="text-sm text-muted-foreground mt-2 space-y-1">
                   <li>• Unlimited property views</li>
                   <li>• Unlimited matches</li>
-                  <li>• Unlimited quiz retakes</li>
+                  <li>• Unlimited AI search</li>
                 </ul>
               </div>
               <Button variant="outline" onClick={handleCancel} disabled={cancelling} className="w-full">
