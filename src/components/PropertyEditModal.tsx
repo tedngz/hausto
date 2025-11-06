@@ -5,14 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, MapPin, Wand2, RefreshCw } from 'lucide-react';
+import { X, Upload, MapPin, Wand2, RefreshCw, Eye, Sparkles, Loader2 } from 'lucide-react';
 import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
+import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
+import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
+import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { processImageFiles } from '@/utils/imageConverter';
+import { propertySchema } from '@/lib/validation';
 
 interface PropertyEditModalProps {
   isOpen: boolean;
@@ -25,45 +29,61 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [location, setLocation] = useState('');
+  const [sourceLink, setSourceLink] = useState('');
+  const [sourceProviderName, setSourceProviderName] = useState('');
+  const [sourceProviderPhone, setSourceProviderPhone] = useState('');
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [isHighlightEditorOpen, setIsHighlightEditorOpen] = useState(false);
+  const [showHighlightEditor, setShowHighlightEditor] = useState(false);
   const [currentHighlights, setCurrentHighlights] = useState<string[]>([]);
+  const [imageHighlights, setImageHighlights] = useState<{text: string, imageIndexes: number[]}[]>([]);
   const [currentVibeAnalysis, setCurrentVibeAnalysis] = useState<any>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isRegeneratingTitle, setIsRegeneratingTitle] = useState(false);
+  const [isRegeneratingDescription, setIsRegeneratingDescription] = useState(false);
   const [detectedAmenities, setDetectedAmenities] = useState<string[]>([]);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [newAmenity, setNewAmenity] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
   const { currency, convertPrice } = useCurrency();
 
   const vibeOptions = [
-    'Modern Minimalist', 'Cozy Traditional', 'Urban Chic', 'Bohemian Eclectic',
-    'Industrial Loft', 'Scandinavian Clean', 'Vintage Charm', 'Luxury Executive',
-    'Artistic Creative', 'Family Friendly', 'Young Professional', 'Pet Friendly'
-  ];
-
-  const predefinedAmenities = [
-    'AC', 'Workspace', 'Natural Light', 'Balcony', 'Desk', 'Chair',
-    'Large Windows', 'Appliances', 'WiFi', 'Parking', 'Gym', 'Pool',
-    'Elevator', 'Security', 'Pet Friendly', 'Furnished', 'Kitchen',
-    'Washing Machine', 'Dryer', 'Dishwasher', 'Microwave', 'Refrigerator'
+    'Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
+    'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage',
+    'Pet Friendly', 'Gym Access', 'Pool', 'Parking', 'Balcony', 'Garden', 
+    'Elevator', 'Security', 'WiFi', 'Furnished', 'Air Conditioning', 'Washing Machine',
+    'City Center', 'Quiet Neighborhood', 'Near Metro', 'Shopping Nearby', 
+    'School District', 'Business District', 'Riverside', 'Mountain View', 'Beach Access',
+    'High Ceilings', 'Natural Light', 'Open Plan', 'Walk-in Closet', 
+    'En-suite Bathroom', 'Kitchen Island', 'Hardwood Floors', 'Marble Counters', 'Smart Home'
   ];
 
   const locationSuggestions = [
-    'District 1, Ho Chi Minh City',
-    'District 2, Ho Chi Minh City', 
-    'District 3, Ho Chi Minh City',
-    'District 7, Ho Chi Minh City',
-    'Ba Dinh, Hanoi',
-    'Hoan Kiem, Hanoi',
-    'Cau Giay, Hanoi',
-    'Dong Da, Hanoi'
+    '45 Nguyen Hue Street, District 1, Ho Chi Minh City',
+    '123 Le Lai Street, District 1, Ho Chi Minh City',
+    '78 Dong Khoi Street, District 1, Ho Chi Minh City',
+    '234 Saigon Pearl, District 2, Ho Chi Minh City',
+    '567 Masteri Thao Dien, District 2, Ho Chi Minh City',
+    '89 The Vista, District 2, Ho Chi Minh City',
+    '12 Vo Van Tang Street, District 3, Ho Chi Minh City',
+    '345 Nam Ky Khoi Nghia Street, District 3, Ho Chi Minh City',
+    '678 Phu My Hung, District 7, Ho Chi Minh City',
+    '901 Midtown Sakura Park, District 7, Ho Chi Minh City',
+    '23 Tran Phu Street, Ba Dinh, Hanoi',
+    '456 Kim Ma Street, Ba Dinh, Hanoi',
+    '789 Hang Bai Street, Hoan Kiem, Hanoi',
+    '147 Trang Tien Street, Hoan Kiem, Hanoi',
+    '258 Duy Tan Street, Cau Giay, Hanoi',
+    '369 Nguyen Hoang Ton Street, Cau Giay, Hanoi',
+    '741 Lang Ha Street, Dong Da, Hanoi',
+    '852 Xa Dan Street, Dong Da, Hanoi'
   ];
 
   useEffect(() => {
@@ -71,10 +91,30 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setTitle(property.title);
       setDescription(property.description || '');
       setLocation(property.location);
+      setSourceLink((property as any).property_source_link || '');
+      setSourceProviderName((property as any).property_source_provider_name || '');
+      setSourceProviderPhone((property as any).property_source_provider_phone || '');
       setPrice(convertPrice(property.price).toString());
       setSize(property.size?.replace('m²', '') || '');
       setSelectedVibes(property.highlights || []);
       setCurrentHighlights(property.vibe_analysis?.generated_content?.highlights || property.highlights || []);
+      
+      // Extract image highlights
+      if (property.vibe_analysis?.image_analyses && Array.isArray(property.vibe_analysis.image_analyses)) {
+        const highlightsWithImages = property.vibe_analysis.image_analyses
+          .map((imgAnalysis: any, index: number) => {
+            if (imgAnalysis.image_highlight) {
+              return {
+                text: imgAnalysis.image_highlight,
+                imageIndexes: [index]
+              };
+            }
+            return null;
+          })
+          .filter((h: any) => h !== null);
+        setImageHighlights(highlightsWithImages);
+      }
+      
       setCurrentVibeAnalysis(property.vibe_analysis);
       setExistingImages(property.images || []);
       const propertyAmenities = (property as any).amenities || [];
@@ -123,7 +163,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   };
 
   const regenerateContent = async () => {
-    if (!property?.images || property.images.length === 0) {
+    const allImages = [...existingImages, ...newImagePreviews];
+    
+    if (allImages.length === 0) {
       toast({
         title: "No Images",
         description: "Please add images to regenerate content.",
@@ -136,44 +178,71 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     try {
       const { data, error } = await supabase.functions.invoke('analyze-vibe', {
         body: {
-          imageUrls: property.images,
+          imageUrls: allImages,
           generateContent: true,
           propertyInfo: {
-            location: location,
-            size: size ? `${size}m²` : undefined,
-            price: price
+            location,
+            price: parseInt(price),
+            size,
+            currency
           }
         }
       });
 
       if (error) throw error;
 
-      if (data) {
-        // Update title and description if generated
-        if (data.generated_content?.title) {
-          setTitle(data.generated_content.title);
-        }
-        if (data.generated_content?.description) {
-          setDescription(data.generated_content.description);
-        }
+      const analysis = data?.analysis;
 
-        // Update highlights if generated
-        if (data.generated_content?.highlights) {
-          setCurrentHighlights(data.generated_content.highlights);
+      if (analysis?.generated_content) {
+        const generated = analysis.generated_content;
+        setTitle(generated.title || `Beautiful ${size}m² Property in ${location.split(',')[0]}`);
+        setDescription(generated.description || 'A wonderful space perfect for your next home.');
+        
+        // Extract per-image highlights
+        if (analysis.image_analyses && Array.isArray(analysis.image_analyses)) {
+          const highlightsWithImages = analysis.image_analyses
+            .map((imgAnalysis: any, index: number) => {
+              if (imgAnalysis.image_highlight) {
+                return {
+                  text: imgAnalysis.image_highlight,
+                  imageIndexes: [index]
+                };
+              }
+              return null;
+            })
+            .filter((h: any) => h !== null);
+          setImageHighlights(highlightsWithImages);
         }
-
-        // Update vibe analysis
-        setCurrentVibeAnalysis(data);
+        
+        setCurrentVibeAnalysis(analysis);
+        
+        // Extract and set amenities
+        if (analysis.amenities && Array.isArray(analysis.amenities)) {
+          setDetectedAmenities(analysis.amenities);
+          setSelectedAmenities(analysis.amenities);
+        }
+        
+        // Auto-select vibes based on AI analysis
+        const aiVibes = [];
+        if (analysis.modern >= 5) aiVibes.push('Modern');
+        if (analysis.cozy >= 5) aiVibes.push('Cozy');
+        if (analysis.luxurious >= 6) aiVibes.push('Luxury');
+        if (analysis.urban >= 5) aiVibes.push('Urban');
+        if (analysis.minimalist >= 5) aiVibes.push('Minimalist');
+        if (analysis.elegant >= 5) aiVibes.push('Contemporary');
+        
+        const uniqueVibes = [...new Set(aiVibes)];
+        setSelectedVibes(uniqueVibes.slice(0, 5));
 
         toast({
-          title: "Content Regenerated",
-          description: "Property title, description, and highlights have been updated with AI-generated content.",
+          title: "Content Regenerated!",
+          description: "AI has analyzed your property and updated all content.",
         });
       }
     } catch (error) {
       console.error('Error regenerating content:', error);
       toast({
-        title: "Error",
+        title: "Generation Failed",
         description: "Failed to regenerate content. Please try again.",
         variant: "destructive"
       });
@@ -182,11 +251,143 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     }
   };
 
+  const regenerateTitle = async () => {
+    const allImages = [...existingImages, ...newImagePreviews];
+    if (allImages.length === 0) {
+      toast({
+        title: "No Images",
+        description: "Please add images first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsRegeneratingTitle(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: allImages,
+          generateContent: true,
+          propertyInfo: { location, price: parseInt(price), size, currency }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.analysis?.generated_content?.title) {
+        setTitle(data.analysis.generated_content.title);
+        toast({ title: "Title Updated!", description: "New title generated successfully." });
+      }
+    } catch (error) {
+      console.error('Error regenerating title:', error);
+      toast({
+        title: "Failed",
+        description: "Could not regenerate title.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRegeneratingTitle(false);
+    }
+  };
+
+  const regenerateDescription = async () => {
+    const allImages = [...existingImages, ...newImagePreviews];
+    if (allImages.length === 0) {
+      toast({
+        title: "No Images",
+        description: "Please add images first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsRegeneratingDescription(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: allImages,
+          generateContent: true,
+          propertyInfo: { location, price: parseInt(price), size, currency }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.analysis?.generated_content?.description) {
+        setDescription(data.analysis.generated_content.description);
+        toast({ title: "Description Updated!", description: "New description generated successfully." });
+      }
+    } catch (error) {
+      console.error('Error regenerating description:', error);
+      toast({
+        title: "Failed",
+        description: "Could not regenerate description.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRegeneratingDescription(false);
+    }
+  };
+
+  const handleHighlightsUpdate = (newHighlights: {text: string, imageIndexes: number[]}[], newVibeAnalysis: any) => {
+    setImageHighlights(newHighlights);
+    setCurrentVibeAnalysis(newVibeAnalysis);
+  };
+
   const handleSubmit = () => {
     if (!property || !title || !location || !price) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate property data
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast({
+        title: "Invalid Price",
+        description: "Please enter a valid price greater than 0.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Optional provider phone validation
+    const phoneTrimmed = sourceProviderPhone?.trim();
+    if (phoneTrimmed && !/^\+?[1-9]\d{1,14}$/.test(phoneTrimmed)) {
+      toast({
+        title: "Invalid Provider Phone",
+        description: "Use E.164 format, e.g. +1234567890.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Zod validation
+    try {
+      const validationData = {
+        title,
+        description: description && description.trim() ? description : undefined,
+        location,
+        price: priceNum,
+        size: size ? `${size.trim()}m²` : undefined,
+        vibe: selectedVibes[0] || '',
+        highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+        images: [],
+        property_source_link: sourceLink && sourceLink.trim() ? sourceLink : undefined,
+      };
+
+      propertySchema.parse(validationData);
+    } catch (error: any) {
+      const errorMessage = error.errors?.[0]?.message || "Please check your input and try again.";
+      const fieldName = error.errors?.[0]?.path?.[0] || '';
+
+      toast({
+        title: "Validation Error",
+        description: fieldName ? `${fieldName}: ${errorMessage}` : errorMessage,
         variant: "destructive"
       });
       return;
@@ -203,11 +404,17 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       price: priceInVND,
       size: size ? `${size}m²` : undefined,
       vibe: selectedVibes[0] || null,
-      highlights: currentHighlights.length > 0 ? currentHighlights : selectedVibes,
-      vibeAnalysis: currentVibeAnalysis,
+      highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+      vibeAnalysis: {
+        ...currentVibeAnalysis,
+        amenities: selectedAmenities
+      },
       newImageFiles,
       existingImages,
       amenities: selectedAmenities,
+      propertySourceLink: sourceLink,
+      propertySourceProviderName: sourceProviderName,
+      propertySourceProviderPhone: sourceProviderPhone,
     });
 
     // Reset form
@@ -290,6 +497,33 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
+          {/* Generate Content Button */}
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">AI Content Generation</h3>
+                <p className="text-sm text-gray-600">Regenerate all content based on images</p>
+              </div>
+              <Button
+                onClick={regenerateContent}
+                disabled={isRegenerating || (existingImages.length === 0 && newImagePreviews.length === 0)}
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              >
+                {isRegenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Regenerate All Content
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
           {/* Basic Info */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -297,12 +531,12 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               <Button
                 variant="outline"
                 size="sm"
-                onClick={regenerateContent}
-                disabled={isRegenerating || !property?.images?.length}
+                onClick={regenerateTitle}
+                disabled={isRegeneratingTitle}
                 className="text-purple-600 border-purple-200 hover:bg-purple-50"
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isRegenerating ? 'animate-spin' : ''}`} />
-                {isRegenerating ? 'Regenerating...' : 'Regenerate Content'}
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRegeneratingTitle ? 'animate-spin' : ''}`} />
+                {isRegeneratingTitle ? 'Regenerating...' : 'Regenerate'}
               </Button>
             </div>
             <Input 
@@ -324,9 +558,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="Select or type location"
                   className="pl-10"
-                  list="location-suggestions"
+                  list="location-suggestions-edit"
                 />
-                <datalist id="location-suggestions">
+                <datalist id="location-suggestions-edit">
                   {locationSuggestions.map((suggestion, index) => (
                     <option key={index} value={suggestion} />
                   ))}
@@ -341,6 +575,36 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
                 placeholder="e.g., 75"
+              />
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="source-link">Property Source Link</Label>
+              <Input 
+                id="source-link"
+                value={sourceLink}
+                onChange={(e) => setSourceLink(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <Label htmlFor="provider-name">Provider Name</Label>
+              <Input 
+                id="provider-name"
+                value={sourceProviderName}
+                onChange={(e) => setSourceProviderName(e.target.value)}
+                placeholder="e.g., John Doe"
+              />
+            </div>
+            <div>
+              <Label htmlFor="provider-phone">Provider Phone</Label>
+              <Input 
+                id="provider-phone"
+                value={sourceProviderPhone}
+                onChange={(e) => setSourceProviderPhone(e.target.value)}
+                placeholder="+1234567890"
               />
             </div>
           </div>
@@ -361,7 +625,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           </div>
 
           {/* Image Highlights */}
-          {property.images && property.images.length > 0 && (
+          {(existingImages.length > 0 || newImagePreviews.length > 0) && (
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -371,7 +635,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsHighlightEditorOpen(true)}
+                  onClick={() => setShowHighlightEditor(true)}
                   className="text-blue-600 border-blue-200 hover:bg-blue-50"
                 >
                   <Wand2 className="w-4 h-4 mr-2" />
@@ -379,24 +643,23 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 </Button>
               </div>
               
-              {/* Display image highlights */}
-              {currentVibeAnalysis?.image_analyses && currentVibeAnalysis.image_analyses.length > 0 ? (
+              {imageHighlights.length > 0 ? (
                 <div className="space-y-3">
-                  {property.images.map((image, index) => {
-                    const analysisForImage = currentVibeAnalysis.image_analyses.find((a: any) => a.image_index === index);
-                    const highlight = analysisForImage?.image_highlight;
+                  {imageHighlights.map((highlight, index) => {
+                    const allImages = [...existingImages, ...newImagePreviews];
+                    const imageIndex = highlight.imageIndexes[0];
                     
                     return (
                       <div key={index} className="flex items-center gap-3 p-3 bg-gradient-to-r from-orange-50 to-pink-50 rounded-lg border border-orange-100">
-                        <img
-                          src={image}
-                          alt={`Property feature ${index + 1}`}
-                          className="w-16 h-12 object-cover rounded-md flex-shrink-0"
-                        />
+                        {allImages[imageIndex] && (
+                          <img
+                            src={allImages[imageIndex]}
+                            alt={`Property feature ${index + 1}`}
+                            className="w-16 h-12 object-cover rounded-md flex-shrink-0"
+                          />
+                        )}
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">
-                            {highlight || "No highlight generated for this image"}
-                          </p>
+                          <p className="text-sm font-medium text-gray-900">{highlight.text}</p>
                         </div>
                       </div>
                     );
@@ -415,61 +678,27 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             <Label className="text-base font-semibold">Property Vibes & Tags</Label>
             <p className="text-sm text-gray-600 mb-3">Select vibes and tags that best describe your property</p>
             
-            {/* Show AI-detected vibes first if available */}
-            {currentVibeAnalysis && (
-              <div className="mb-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">AI-Detected Vibes:</p>
-                <div className="flex flex-wrap gap-2">
-                {Object.entries(currentVibeAnalysis)
-                    .filter(([key, value]) => 
-                      ['modern', 'cozy', 'luxurious', 'minimalist', 'colorful', 'spacious', 'natural_light', 'urban', 'rustic', 'elegant'].includes(key) && 
-                      typeof value === 'number' && (value as number) >= 7
-                    )
-                    .map(([vibe, score]) => (
-                      <Badge
-                        key={vibe}
-                        variant="secondary"
-                        className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300 cursor-pointer"
-                        onClick={() => {
-                          const vibeLabel = vibe.charAt(0).toUpperCase() + vibe.slice(1).replace('_', ' ');
-                          const matchingVibe = vibeOptions.find(v => v.toLowerCase().includes(vibeLabel.toLowerCase()));
-                          if (matchingVibe && !selectedVibes.includes(matchingVibe)) {
-                            setSelectedVibes(prev => [...prev, matchingVibe]);
-                          }
-                        }}
-                      >
-                        {vibe.charAt(0).toUpperCase() + vibe.slice(1).replace('_', ' ')} ({score as number}/10)
-                      </Badge>
-                    ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Manual vibe selection */}
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Manual Selection:</p>
-              <div className="flex flex-wrap gap-2">
-                {vibeOptions.map((vibe) => (
-                  <Badge
-                    key={vibe}
-                    variant={selectedVibes.includes(vibe) ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors ${
-                      selectedVibes.includes(vibe) 
-                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => {
-                      setSelectedVibes(prev => 
-                        prev.includes(vibe) 
-                          ? prev.filter(v => v !== vibe)
-                          : [...prev, vibe]
-                      );
-                    }}
-                  >
-                    {vibe}
-                  </Badge>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-2">
+              {vibeOptions.map((vibe) => (
+                <Badge
+                  key={vibe}
+                  variant={selectedVibes.includes(vibe) ? "default" : "outline"}
+                  className={`cursor-pointer transition-colors ${
+                    selectedVibes.includes(vibe) 
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
+                      : 'hover:bg-gray-100'
+                  }`}
+                  onClick={() => {
+                    setSelectedVibes(prev =>
+                      prev.includes(vibe)
+                        ? prev.filter(v => v !== vibe)
+                        : [...prev, vibe]
+                    );
+                  }}
+                >
+                  {vibe}
+                </Badge>
+              ))}
             </div>
           </div>
 
@@ -477,7 +706,16 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label htmlFor="description" className="text-base font-semibold">Property Description</Label>
-              <p className="text-sm text-gray-500">Use the "Regenerate Content" button above to update</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerateDescription}
+                disabled={isRegeneratingDescription}
+                className="text-purple-600 border-purple-200 hover:bg-purple-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRegeneratingDescription ? 'animate-spin' : ''}`} />
+                {isRegeneratingDescription ? 'Regenerating...' : 'Regenerate'}
+              </Button>
             </div>
             <Textarea
               id="description"
@@ -503,8 +741,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                     variant={isSelected ? "default" : "outline"}
                     className={`cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white'
+                        : 'hover:bg-gray-100'
                     }`}
                     onClick={() => {
                       if (isSelected) {
@@ -555,10 +793,18 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Submit Buttons */}
           <div className="flex justify-end space-x-3 pt-4 border-t">
             <Button variant="outline" onClick={onClose}>
               Cancel
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => setShowPreview(true)}
+              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              Preview
             </Button>
             <Button 
               onClick={handleSubmit}
@@ -571,15 +817,44 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         </div>
       </Card>
 
+      {/* Property Highlight Editor */}
       {property && (
         <PropertyHighlightEditor
           property={property}
-          isOpen={isHighlightEditorOpen}
-          onClose={() => setIsHighlightEditorOpen(false)}
+          isOpen={showHighlightEditor}
+          onClose={() => setShowHighlightEditor(false)}
           onHighlightsUpdate={(highlights, vibeAnalysis) => {
-            setCurrentHighlights(highlights);
+            // Convert highlights array to image highlights format
+            const newImageHighlights = highlights.map((text, index) => ({
+              text,
+              imageIndexes: [index]
+            }));
+            setImageHighlights(newImageHighlights);
             setCurrentVibeAnalysis(vibeAnalysis);
-            setIsHighlightEditorOpen(false);
+            setShowHighlightEditor(false);
+          }}
+        />
+      )}
+
+      {/* Preview Modal */}
+      {showPreview && property && (
+        <PropertyPreviewModal
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          property={{
+            ...property,
+            title,
+            description,
+            location,
+            price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
+            size: size ? `${size}m²` : '',
+            highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+            images: [...existingImages, ...newImagePreviews],
+            vibe_analysis: currentVibeAnalysis,
+            amenities: selectedAmenities,
+            property_source_link: sourceLink,
+            property_source_provider_name: sourceProviderName,
+            property_source_provider_phone: sourceProviderPhone,
           }}
         />
       )}

@@ -276,6 +276,9 @@ export const useProperties = () => {
       newImageFiles?: File[];
       existingImages?: string[];
       amenities?: string[];
+      propertySourceLink?: string;
+      propertySourceProviderName?: string;
+      propertySourceProviderPhone?: string;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -315,6 +318,9 @@ export const useProperties = () => {
         highlights: propertyData.highlights,
         images: imageUrls,
         amenities: propertyData.amenities || [],
+        property_source_link: propertyData.propertySourceLink,
+        property_source_provider_name: propertyData.propertySourceProviderName,
+        property_source_provider_phone: propertyData.propertySourceProviderPhone,
         updated_at: new Date().toISOString(),
       };
 
