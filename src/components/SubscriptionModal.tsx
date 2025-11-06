@@ -32,21 +32,46 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
 
     setLoading(true);
     try {
+      console.log('Getting user session...');
+      
+      // Verify user session is valid
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('Session error:', sessionError);
+        toast.error('Your session has expired. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Session valid, fetching profile...');
+      
       // Get user profile for name
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('name, email')
         .eq('id', user.id)
         .single();
 
-      const { error } = await supabase.functions.invoke('notify-premium-interest', {
+      if (profileError) {
+        console.error('Profile error:', profileError);
+      }
+
+      console.log('Invoking edge function...');
+      
+      const { data, error } = await supabase.functions.invoke('notify-premium-interest', {
         body: {
           userEmail: profile?.email || user.email,
           userName: profile?.name || 'Valued Customer',
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      console.log('Success:', data);
 
       toast.success(
         'Request received! You will receive a payment request email from Payoneer soon.',
@@ -55,7 +80,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
       onClose();
     } catch (error: any) {
       console.error('Error requesting premium:', error);
-      toast.error('Failed to process request. Please try again.');
+      toast.error(`Failed to process request: ${error.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
