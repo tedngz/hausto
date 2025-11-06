@@ -44,6 +44,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [newAmenity, setNewAmenity] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [aiDetectedVibes, setAiDetectedVibes] = useState<string[]>([]);
 
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
@@ -115,6 +116,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         aiVibes = Array.from(new Set(tmp)).slice(0, 5);
       }
 
+      setAiDetectedVibes(aiVibes);
       setSelectedVibes(savedVibes.length ? savedVibes : aiVibes);
       
       // Extract image highlights
@@ -255,7 +257,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         if (analysis.elegant >= 5) aiVibes.push('Contemporary');
         
         const uniqueVibes = [...new Set(aiVibes)];
-        setSelectedVibes(uniqueVibes.slice(0, 5));
+        const finalVibes = uniqueVibes.slice(0, 5);
+        setAiDetectedVibes(finalVibes);
+        setSelectedVibes(finalVibes);
 
         toast({
           title: "Content Regenerated!",
@@ -649,28 +653,42 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           {/* Step 3: AI Generated Content */}
           <div>
             <Label className="text-base font-semibold">Selected Vibes</Label>
-            <p className="text-sm text-gray-600 mb-3">AI has selected these vibes - you can modify them</p>
+            <p className="text-sm text-gray-600 mb-3">
+              {aiDetectedVibes.length > 0 && (
+                <>
+                  <Sparkles className="w-3 h-3 inline mr-1 text-purple-500" />
+                  AI detected: <span className="font-medium">{aiDetectedVibes.join(', ')}</span>
+                  {' • '}
+                </>
+              )}
+              Click to select/deselect vibes
+            </p>
             <div className="flex flex-wrap gap-2">
-              {vibeOptions.map((vibe) => (
-                <Badge
-                  key={vibe}
-                  variant={selectedVibes.includes(vibe) ? "default" : "outline"}
-                  className={`cursor-pointer transition-colors ${
-                    selectedVibes.includes(vibe) 
-                      ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
-                      : 'hover:bg-gray-100'
-                  }`}
-                  onClick={() => {
-                    setSelectedVibes(prev => 
-                      prev.includes(vibe) 
-                        ? prev.filter(v => v !== vibe)
-                        : [...prev, vibe]
-                    );
-                  }}
-                >
-                  {vibe}
-                </Badge>
-              ))}
+              {vibeOptions.map((vibe) => {
+                const isAiDetected = aiDetectedVibes.includes(vibe);
+                const isSelected = selectedVibes.includes(vibe);
+                return (
+                  <Badge
+                    key={vibe}
+                    variant={isSelected ? "default" : "outline"}
+                    className={`cursor-pointer transition-colors relative ${
+                      isSelected 
+                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
+                        : 'hover:bg-gray-100'
+                    }`}
+                    onClick={() => {
+                      setSelectedVibes(prev => 
+                        prev.includes(vibe) 
+                          ? prev.filter(v => v !== vibe)
+                          : [...prev, vibe]
+                      );
+                    }}
+                  >
+                    {isAiDetected && <Sparkles className="w-3 h-3 inline mr-1" />}
+                    {vibe}
+                  </Badge>
+                );
+              })}
             </div>
           </div>
 
