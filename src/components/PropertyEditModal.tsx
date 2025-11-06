@@ -91,7 +91,31 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setSourceProviderPhone((property as any).property_source_provider_phone || '');
       setPrice(convertPrice(property.price).toString());
       setSize(property.size?.replace('m²', '') || '');
-      setSelectedVibes(property.highlights || []);
+      // Vibes: prefer saved highlights, otherwise fall back to AI-detected from vibe_analysis
+      const savedVibes = property.highlights || [];
+      const analysis = property.vibe_analysis || {};
+
+      // Try to read AI-provided highlights directly
+      let aiVibes: string[] = Array.isArray(analysis?.generated_content?.highlights)
+        ? analysis.generated_content.highlights
+        : [];
+
+      // If no direct highlights, derive from analysis scores (kept concise)
+      if (!aiVibes.length && analysis) {
+        const a: any = analysis;
+        const tmp: string[] = [];
+        if (a.modern >= 5) tmp.push('Modern');
+        if (a.cozy >= 5) tmp.push('Cozy');
+        if (a.luxurious >= 6) tmp.push('Luxury');
+        if (a.urban >= 5) tmp.push('Urban');
+        if (a.minimalist >= 5) tmp.push('Minimalist');
+        if (a.elegant >= 5) tmp.push('Contemporary');
+        if (a.natural_light >= 5) tmp.push('Natural Light');
+        if (a.industrial >= 4) tmp.push('Industrial');
+        aiVibes = Array.from(new Set(tmp)).slice(0, 5);
+      }
+
+      setSelectedVibes(savedVibes.length ? savedVibes : aiVibes);
       
       // Extract image highlights
       if (property.vibe_analysis?.image_analyses && Array.isArray(property.vibe_analysis.image_analyses)) {
@@ -111,9 +135,14 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       
       setCurrentVibeAnalysis(property.vibe_analysis);
       setExistingImages(property.images || []);
-      const propertyAmenities = (property as any).amenities || [];
-      setDetectedAmenities(propertyAmenities);
-      setSelectedAmenities(propertyAmenities);
+
+      // Amenities: show AI-detected + saved; select saved if present otherwise AI
+      const savedAmenities: string[] = (property as any).amenities || [];
+      const aiAmenities: string[] = Array.isArray(analysis?.amenities) ? analysis.amenities : [];
+      const detected = Array.from(new Set([...(aiAmenities || []), ...(savedAmenities || [])]));
+      setDetectedAmenities(detected);
+      setSelectedAmenities(savedAmenities.length ? savedAmenities : aiAmenities);
+
     }
   }, [property, convertPrice]);
 
