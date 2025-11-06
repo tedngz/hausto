@@ -524,32 +524,6 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           </div>
 
           {/* Step 2: Basic Information */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="title">Property Title *</Label>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={regenerateTitle}
-                disabled={isRegeneratingTitle}
-                className="text-purple-600 hover:text-purple-700"
-              >
-                {isRegeneratingTitle ? (
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                ) : (
-                  <Wand2 className="w-3 h-3 mr-1" />
-                )}
-                Regenerate
-              </Button>
-            </div>
-            <Input 
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Stunning Downtown Loft"
-            />
-          </div>
-
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="location">Location *</Label>
@@ -648,6 +622,34 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 )}
               </Button>
             </div>
+          </div>
+
+          {/* Property Title - After Monthly Rent */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="title" className="text-base font-semibold">Generated Title *</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerateTitle}
+                disabled={isRegeneratingTitle}
+                className="text-purple-600 hover:text-purple-700"
+              >
+                {isRegeneratingTitle ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Wand2 className="w-3 h-3 mr-1" />
+                )}
+                Regenerate
+              </Button>
+            </div>
+            <Input 
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="AI will generate this"
+              className="mt-2"
+            />
           </div>
 
           {/* Step 3: AI Generated Content */}
