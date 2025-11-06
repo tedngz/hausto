@@ -85,7 +85,7 @@ export const SubscriptionStatus = ({
           {isPremium ? <div className="space-y-3">
               <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                 <div className="flex items-center gap-2 text-primary font-medium">
-                  <Crown className="h-4 w-4" />
+                  
                   Premium Benefits Active
                 </div>
                 <ul className="text-sm text-muted-foreground mt-2 space-y-1">
