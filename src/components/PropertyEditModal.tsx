@@ -5,11 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, MapPin, Wand2, RefreshCw, Eye, Sparkles, Loader2 } from 'lucide-react';
-import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
+import { X, Upload, MapPin, Wand2, Eye, Sparkles, Loader2 } from 'lucide-react';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
-import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
@@ -37,9 +35,6 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
-  const [isHighlightEditorOpen, setIsHighlightEditorOpen] = useState(false);
-  const [showHighlightEditor, setShowHighlightEditor] = useState(false);
-  const [currentHighlights, setCurrentHighlights] = useState<string[]>([]);
   const [imageHighlights, setImageHighlights] = useState<{text: string, imageIndexes: number[]}[]>([]);
   const [currentVibeAnalysis, setCurrentVibeAnalysis] = useState<any>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -97,7 +92,6 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setPrice(convertPrice(property.price).toString());
       setSize(property.size?.replace('m²', '') || '');
       setSelectedVibes(property.highlights || []);
-      setCurrentHighlights(property.vibe_analysis?.generated_content?.highlights || property.highlights || []);
       
       // Extract image highlights
       if (property.vibe_analysis?.image_analyses && Array.isArray(property.vibe_analysis.image_analyses)) {
@@ -329,11 +323,6 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     }
   };
 
-  const handleHighlightsUpdate = (newHighlights: {text: string, imageIndexes: number[]}[], newVibeAnalysis: any) => {
-    setImageHighlights(newHighlights);
-    setCurrentVibeAnalysis(newVibeAnalysis);
-  };
-
   const handleSubmit = () => {
     if (!property || !title || !location || !price) {
       toast({
@@ -439,92 +428,69 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Existing Images */}
-          <div>
-            <Label className="text-base font-semibold">Current Images</Label>
-            {existingImages.length > 0 ? (
-              <div className="grid grid-cols-4 gap-2 mt-2">
-                {existingImages.map((img, index) => (
-                  <div key={index} className="relative group">
-                    <img src={img} alt={`Property ${index + 1}`} className="w-full h-20 object-cover rounded" />
-                    <button
-                      onClick={() => removeExistingImage(index)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      ×
-                    </button>
+          {/* Step 1: Upload and Manage Images */}
+          <div className="space-y-4">
+            <div>
+              <Label className="text-base font-semibold">Property Images *</Label>
+              <p className="text-sm text-gray-600 mb-3">Upload images of your property</p>
+              
+              <div className="space-y-4">
+                {/* Image Upload Area */}
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600">Click to upload images</p>
+                    <p className="text-xs text-gray-500 mt-1">PNG, JPG, AVIF up to 10 images</p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 mt-2">No existing images</p>
-            )}
-          </div>
+                  <input 
+                    type="file" 
+                    multiple 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleNewImageUpload}
+                  />
+                </label>
 
-          {/* Add New Images */}
-          <div>
-            <Label htmlFor="new-images" className="text-base font-semibold">Add New Images</Label>
-            <div className="mt-2">
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">Click to add more images</p>
-                </div>
-                <input 
-                  id="new-images" 
-                  type="file" 
-                  multiple 
-                  accept="image/*" 
-                  className="hidden" 
-                  onChange={handleNewImageUpload}
-                />
-              </label>
-              {newImagePreviews.length > 0 && (
-                <div className="grid grid-cols-4 gap-2 mt-4">
-                  {newImagePreviews.map((img, index) => (
-                    <div key={index} className="relative group">
-                      <img src={img} alt={`New ${index + 1}`} className="w-full h-20 object-cover rounded" />
-                      <button
-                        onClick={() => removeNewImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Generate Content Button */}
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">AI Content Generation</h3>
-                <p className="text-sm text-gray-600">Regenerate all content based on images</p>
-              </div>
-              <Button
-                onClick={regenerateContent}
-                disabled={isRegenerating || (existingImages.length === 0 && newImagePreviews.length === 0)}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-              >
-                {isRegenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Regenerate All Content
-                  </>
+                {/* Image Grid */}
+                {(existingImages.length > 0 || newImagePreviews.length > 0) && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {existingImages.map((img, index) => (
+                      <div key={`existing-${index}`} className="relative group">
+                        <img 
+                          src={img} 
+                          alt={`Property ${index + 1}`} 
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                        <button
+                          onClick={() => removeExistingImage(index)}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {newImagePreviews.map((img, index) => (
+                      <div key={`new-${index}`} className="relative group">
+                        <img 
+                          src={img} 
+                          alt={`New ${index + 1}`} 
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                        <button
+                          onClick={() => removeNewImage(index)}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </Button>
+              </div>
             </div>
           </div>
 
-          {/* Basic Info */}
+          {/* Step 2: Basic Information */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label htmlFor="title">Property Title *</Label>
@@ -533,10 +499,14 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 size="sm"
                 onClick={regenerateTitle}
                 disabled={isRegeneratingTitle}
-                className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                className="text-purple-600 hover:text-purple-700"
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isRegeneratingTitle ? 'animate-spin' : ''}`} />
-                {isRegeneratingTitle ? 'Regenerating...' : 'Regenerate'}
+                {isRegeneratingTitle ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Wand2 className="w-3 h-3 mr-1" />
+                )}
+                Regenerate
               </Button>
             </div>
             <Input 
@@ -568,7 +538,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               </div>
             </div>
             <div>
-              <Label htmlFor="size">Size (m²)</Label>
+              <Label htmlFor="size">Size (m²) *</Label>
               <Input 
                 id="size"
                 type="number"
@@ -579,105 +549,78 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="sourceLink">Property Source Link (Optional)</Label>
+            <Input 
+              id="sourceLink"
+              type="url"
+              value={sourceLink}
+              onChange={(e) => setSourceLink(e.target.value)}
+              placeholder="https://example.com/property-listing (optional)"
+            />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="source-link">Property Source Link</Label>
+              <Label htmlFor="sourceProviderName">Source Provider Name (Optional)</Label>
               <Input 
-                id="source-link"
-                value={sourceLink}
-                onChange={(e) => setSourceLink(e.target.value)}
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <Label htmlFor="provider-name">Provider Name</Label>
-              <Input 
-                id="provider-name"
+                id="sourceProviderName"
                 value={sourceProviderName}
                 onChange={(e) => setSourceProviderName(e.target.value)}
-                placeholder="e.g., John Doe"
+                placeholder="e.g., ABC Real Estate"
               />
             </div>
             <div>
-              <Label htmlFor="provider-phone">Provider Phone</Label>
+              <Label htmlFor="sourceProviderPhone">Source Provider Phone (Optional)</Label>
               <Input 
-                id="provider-phone"
+                id="sourceProviderPhone"
                 value={sourceProviderPhone}
                 onChange={(e) => setSourceProviderPhone(e.target.value)}
-                placeholder="+1234567890"
+                placeholder="e.g., +84123456789"
               />
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="price">Monthly Rent *</Label>
-            <div className="flex space-x-2">
-              <Input 
-                id="price"
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder={currency === 'VND' ? "e.g., 15000000" : "e.g., 600"}
-                className="flex-1"
-              />
-              <CurrencySelector />
-            </div>
-          </div>
-
-          {/* Image Highlights */}
-          {(existingImages.length > 0 || newImagePreviews.length > 0) && (
+          <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <Label className="text-base font-semibold">Image Highlights</Label>
-                  <p className="text-sm text-gray-600">AI-generated highlights for each image</p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowHighlightEditor(true)}
-                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                >
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  Edit Image Highlights
-                </Button>
+              <Label htmlFor="price">Monthly Rent *</Label>
+              <div className="flex space-x-2">
+                <Input 
+                  id="price"
+                  type="number"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder={currency === 'VND' ? "e.g., 15000000" : "e.g., 600"}
+                  className="flex-1"
+                />
+                <CurrencySelector />
               </div>
-              
-              {imageHighlights.length > 0 ? (
-                <div className="space-y-3">
-                  {imageHighlights.map((highlight, index) => {
-                    const allImages = [...existingImages, ...newImagePreviews];
-                    const imageIndex = highlight.imageIndexes[0];
-                    
-                    return (
-                      <div key={index} className="flex items-center gap-3 p-3 bg-gradient-to-r from-orange-50 to-pink-50 rounded-lg border border-orange-100">
-                        {allImages[imageIndex] && (
-                          <img
-                            src={allImages[imageIndex]}
-                            alt={`Property feature ${index + 1}`}
-                            className="w-16 h-12 object-cover rounded-md flex-shrink-0"
-                          />
-                        )}
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">{highlight.text}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center">
-                  <p className="text-gray-500">No image highlights yet. Click "Edit Image Highlights" to generate them.</p>
-                </div>
-              )}
             </div>
-          )}
+            <div className="flex items-end">
+              <Button
+                onClick={regenerateContent}
+                disabled={isRegenerating || (existingImages.length === 0 && newImagePreviews.length === 0)}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+              >
+                {isRegenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Regenerate Content with AI
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
 
-          {/* Property Vibes */}
+          {/* Step 3: AI Generated Content */}
           <div>
-            <Label className="text-base font-semibold">Property Vibes & Tags</Label>
+            <Label className="text-base font-semibold">Selected Vibes</Label>
             <p className="text-sm text-gray-600 mb-3">Select vibes and tags that best describe your property</p>
-            
             <div className="flex flex-wrap gap-2">
               {vibeOptions.map((vibe) => (
                 <Badge
@@ -689,8 +632,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                       : 'hover:bg-gray-100'
                   }`}
                   onClick={() => {
-                    setSelectedVibes(prev =>
-                      prev.includes(vibe)
+                    setSelectedVibes(prev => 
+                      prev.includes(vibe) 
                         ? prev.filter(v => v !== vibe)
                         : [...prev, vibe]
                     );
@@ -702,32 +645,47 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
-          {/* Description */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="description" className="text-base font-semibold">Property Description</Label>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={regenerateDescription}
-                disabled={isRegeneratingDescription}
-                className="text-purple-600 border-purple-200 hover:bg-purple-50"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isRegeneratingDescription ? 'animate-spin' : ''}`} />
-                {isRegeneratingDescription ? 'Regenerating...' : 'Regenerate'}
-              </Button>
+          {/* Image Highlights Section */}
+          {(existingImages.length > 0 || newImagePreviews.length > 0) && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-base font-semibold">Review Images & Highlights</Label>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">Review and edit your images and AI-generated highlights</p>
+              
+              {/* Image Review Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                {[...existingImages, ...newImagePreviews].map((preview, index) => {
+                  const imageHighlight = imageHighlights.find(h => h.imageIndexes.includes(index));
+                  
+                  const handleHighlightUpdate = (highlightIndex: number, newHighlight: { text: string; imageIndexes: number[] }) => {
+                    const updatedHighlights = [...imageHighlights];
+                    const existingIndex = updatedHighlights.findIndex(h => h.imageIndexes.includes(highlightIndex));
+                    
+                    if (existingIndex >= 0) {
+                      updatedHighlights[existingIndex] = newHighlight;
+                    } else {
+                      updatedHighlights.push(newHighlight);
+                    }
+                    
+                    setImageHighlights(updatedHighlights);
+                  };
+                  
+                  return (
+                    <ImageHighlightEditor
+                      key={index}
+                      preview={preview}
+                      index={index}
+                      highlight={imageHighlight}
+                      onHighlightUpdate={handleHighlightUpdate}
+                    />
+                  );
+                })}
+              </div>
             </div>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe what makes this property special..."
-              rows={6}
-              className="resize-none"
-            />
-          </div>
+          )}
 
-          {/* Amenities */}
+          {/* Amenities Section */}
           <div>
             <Label className="text-base font-semibold">Amenities</Label>
             <p className="text-sm text-gray-600 mb-3">Click to select/deselect amenities</p>
@@ -741,14 +699,14 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                     variant={isSelected ? "default" : "outline"}
                     className={`cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white'
-                        : 'hover:bg-gray-100'
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                     onClick={() => {
                       if (isSelected) {
-                        setSelectedAmenities(selectedAmenities.filter(a => a !== amenity));
+                        setSelectedAmenities(prev => prev.filter(a => a !== amenity));
                       } else {
-                        setSelectedAmenities([...selectedAmenities, amenity]);
+                        setSelectedAmenities(prev => [...prev, amenity]);
                       }
                     }}
                   >
@@ -758,34 +716,35 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               })}
             </div>
             
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-2">
               <Input
                 value={newAmenity}
                 onChange={(e) => setNewAmenity(e.target.value)}
                 placeholder="Add custom amenity..."
                 onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && newAmenity.trim()) {
                     e.preventDefault();
                     const trimmed = newAmenity.trim();
-                    if (trimmed && !detectedAmenities.includes(trimmed)) {
-                      setDetectedAmenities([...detectedAmenities, trimmed]);
-                      setSelectedAmenities([...selectedAmenities, trimmed]);
-                      setNewAmenity('');
+                    if (!detectedAmenities.includes(trimmed)) {
+                      setDetectedAmenities(prev => [...prev, trimmed]);
+                      setSelectedAmenities(prev => [...prev, trimmed]);
                     }
+                    setNewAmenity('');
                   }
                 }}
               />
               <Button
-                type="button"
+                variant="outline"
                 onClick={() => {
-                  const trimmed = newAmenity.trim();
-                  if (trimmed && !detectedAmenities.includes(trimmed)) {
-                    setDetectedAmenities([...detectedAmenities, trimmed]);
-                    setSelectedAmenities([...selectedAmenities, trimmed]);
+                  if (newAmenity.trim()) {
+                    const trimmed = newAmenity.trim();
+                    if (!detectedAmenities.includes(trimmed)) {
+                      setDetectedAmenities(prev => [...prev, trimmed]);
+                      setSelectedAmenities(prev => [...prev, trimmed]);
+                    }
                     setNewAmenity('');
                   }
                 }}
-                variant="outline"
                 disabled={!newAmenity.trim()}
               >
                 Add
@@ -793,7 +752,36 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </div>
           </div>
 
-          {/* Submit Buttons */}
+          {/* Description Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="description" className="text-base font-semibold">Generated Description *</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerateDescription}
+                disabled={isRegeneratingDescription}
+                className="text-purple-600 hover:text-purple-700"
+              >
+                {isRegeneratingDescription ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Wand2 className="w-3 h-3 mr-1" />
+                )}
+                Regenerate
+              </Button>
+            </div>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="AI will generate this"
+              rows={8}
+              className="resize-none"
+            />
+          </div>
+
+          {/* Preview and Submit Buttons */}
           <div className="flex justify-end space-x-3 pt-4 border-t">
             <Button variant="outline" onClick={onClose}>
               Cancel
@@ -801,40 +789,28 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             <Button 
               variant="outline"
               onClick={() => setShowPreview(true)}
-              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+              className="border-blue-500 text-blue-500 hover:bg-blue-50"
             >
               <Eye className="w-4 h-4 mr-2" />
-              Preview
+              Preview Listing
             </Button>
             <Button 
               onClick={handleSubmit}
               disabled={isUpdating || !title || !location || !price}
-              className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600"
+              className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
             >
-              {isUpdating ? 'Updating...' : 'Update Property'}
+              {isUpdating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Update Property'
+              )}
             </Button>
           </div>
         </div>
       </Card>
-
-      {/* Property Highlight Editor */}
-      {property && (
-        <PropertyHighlightEditor
-          property={property}
-          isOpen={showHighlightEditor}
-          onClose={() => setShowHighlightEditor(false)}
-          onHighlightsUpdate={(highlights, vibeAnalysis) => {
-            // Convert highlights array to image highlights format
-            const newImageHighlights = highlights.map((text, index) => ({
-              text,
-              imageIndexes: [index]
-            }));
-            setImageHighlights(newImageHighlights);
-            setCurrentVibeAnalysis(vibeAnalysis);
-            setShowHighlightEditor(false);
-          }}
-        />
-      )}
 
       {/* Preview Modal */}
       {showPreview && property && (
