@@ -115,7 +115,7 @@ export const SubscriptionModal = ({
                 Premium Plan
               </CardTitle>
               <CardDescription>Unlimited access to everything</CardDescription>
-              <div className="text-2xl sm:text-3xl font-bold">$20/ 2 months<span className="text-sm font-normal">/month</span></div>
+              <div className="text-2xl sm:text-3xl font-bold">$20/2 months<span className="text-sm font-normal">/month</span></div>
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
