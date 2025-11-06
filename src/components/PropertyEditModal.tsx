@@ -653,16 +653,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           {/* Step 3: AI Generated Content */}
           <div>
             <Label className="text-base font-semibold">Selected Vibes</Label>
-            <p className="text-sm text-gray-600 mb-3">
-              {aiDetectedVibes.length > 0 && (
-                <>
-                  <Sparkles className="w-3 h-3 inline mr-1 text-purple-500" />
-                  AI detected: <span className="font-medium">{aiDetectedVibes.join(', ')}</span>
-                  {' • '}
-                </>
-              )}
-              Click to select/deselect vibes
-            </p>
+            <p className="text-sm text-gray-600 mb-3">AI has selected these vibes - you can modify them</p>
             <div className="flex flex-wrap gap-2">
               {vibeOptions.map((vibe) => {
                 const isAiDetected = aiDetectedVibes.includes(vibe);
@@ -671,9 +662,11 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                   <Badge
                     key={vibe}
                     variant={isSelected ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors relative ${
-                      isSelected 
+                    className={`cursor-pointer transition-colors ${
+                      isSelected && isAiDetected
                         ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
+                        : isSelected
+                        ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-gray-100'
                     }`}
                     onClick={() => {
@@ -684,7 +677,6 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                       );
                     }}
                   >
-                    {isAiDetected && <Sparkles className="w-3 h-3 inline mr-1" />}
                     {vibe}
                   </Badge>
                 );
