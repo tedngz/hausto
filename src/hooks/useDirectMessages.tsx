@@ -41,6 +41,8 @@ interface MatchConversation {
     location: string;
     price: number;
     images: string[];
+    property_source_provider_name?: string;
+    property_source_provider_phone?: string;
   }>;
 }
 
@@ -100,7 +102,7 @@ export const useDirectMessages = () => {
           if (p.avatar_url) avatarById.set(p.id, p.avatar_url);
         });
 
-        const propertiesByPair = new Map<string, Array<{ property_id: string; title: string; location: string; price: number; images: string[] }>>();
+        const propertiesByPair = new Map<string, Array<{ property_id: string; title: string; location: string; price: number; images: string[]; property_source_provider_name?: string; property_source_provider_phone?: string }>>();
         (allProperties || []).forEach((row: any) => {
           const key = `${row.renter_id}::${row.realtor_id}`;
           const list = propertiesByPair.get(key) || [];
@@ -112,6 +114,8 @@ export const useDirectMessages = () => {
               location: row.location,
               price: Number(row.price ?? 0),
               images: row.images || [],
+              property_source_provider_name: row.property_source_provider_name,
+              property_source_provider_phone: row.property_source_provider_phone,
             });
           }
           propertiesByPair.set(key, list);

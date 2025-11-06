@@ -675,6 +675,8 @@ export type Database = {
           matched_at: string
           price: number
           property_id: string
+          property_source_provider_name: string
+          property_source_provider_phone: string
           realtor_id: string
           renter_id: string
           title: string
