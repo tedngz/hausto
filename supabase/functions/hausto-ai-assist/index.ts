@@ -76,30 +76,49 @@ Keep your response professional and consultative, 2-3 sentences.`;
 - Offer to help coordinate the exchange
 Keep your response professional and organized, 2-3 sentences.`;
           break;
-        case 'get_provider_contact':
-          if (providerName && providerPhone) {
+        case 'get_provider_contact': {
+          // Find the first property in the list that has provider info
+          const contactProp = Array.isArray(properties)
+            ? properties.find((p: any) => {
+                const n = (p?.property_source_provider_name ?? '').toString().trim();
+                const ph = (p?.property_source_provider_phone ?? '').toString().trim();
+                return n !== '' || ph !== '';
+              })
+            : null;
+
+          const finalName = (contactProp?.property_source_provider_name ?? '').toString().trim();
+          const finalPhone = (contactProp?.property_source_provider_phone ?? '').toString().trim();
+
+          console.log('Resolved provider contact:', { finalName, finalPhone });
+
+          if (finalName || finalPhone) {
+            const lines: string[] = [];
+            if (finalName) lines.push(`📋 Provider: ${finalName}`);
+            if (finalPhone) lines.push(`📞 Phone: ${finalPhone}`);
+
+            const suggestion = `Here's the listing provider's contact information:\n\n${lines.join('\n')}\n\nThis is the original source where the property was listed (not necessarily the realtor in this chat). You can contact them directly for more details about the property, schedule viewings, or discuss terms.`;
+
             return new Response(
-              JSON.stringify({ 
-                suggestion: `Here's the listing provider's contact information:\n\n📋 Provider: ${providerName}\n📞 Phone: ${providerPhone}\n\nThis is the original source where the property was listed. You can contact them directly for more details about the property, schedule viewings, or discuss terms.`,
-                suggestedActions: []
-              }),
-              { 
+              JSON.stringify({ suggestion, suggestedActions: [] }),
+              {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200 
+                status: 200,
               }
             );
           } else {
             return new Response(
-              JSON.stringify({ 
-                suggestion: `I apologize, but the listing provider's contact information is not available for this property. The contact details may not have been included when the property was imported. Please ask the property owner in this conversation for alternative contact options.`,
-                suggestedActions: []
+              JSON.stringify({
+                suggestion:
+                  `I couldn't find the listing provider's contact information for this property. It may not have been included when the property was imported. Please ask the property owner here for alternative contact options.`,
+                suggestedActions: [],
               }),
-              { 
+              {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200 
+                status: 200,
               }
             );
           }
+        }
         default:
           systemPrompt = `You are Hausto AI, a professional real estate assistant responding to: "${action}". As an experienced realtor, provide knowledgeable guidance in 2-3 sentences.`;
       }
