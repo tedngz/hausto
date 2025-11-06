@@ -78,10 +78,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
   const premiumFeatures = [
     'Unlimited property views',
     'Unlimited matches',
-    'Unlimited quiz retakes',
-    'Advanced search filters',
-    'Priority customer support',
-    'Early access to new features',
+    'Unlimited AI Search',
   ];
 
   return (
@@ -132,7 +129,8 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
                 Premium Plan
               </CardTitle>
               <CardDescription>Unlimited access to everything</CardDescription>
-              <div className="text-2xl sm:text-3xl font-bold">$5<span className="text-sm font-normal">/month</span></div>
+              <div className="text-2xl sm:text-3xl font-bold">$10<span className="text-sm font-normal">/month</span></div>
+              <p className="text-xs text-muted-foreground mt-1">2-month minimum subscription</p>
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
