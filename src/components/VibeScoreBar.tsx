@@ -140,6 +140,15 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
                 </Badge>
               </div>
             </div>
+
+            <div className="flex items-center space-x-2">
+              <DollarSign className="w-3 h-3 text-emerald-500" />
+              <span className="text-xs text-gray-600 flex-1">Price Match</span>
+              <div className="flex items-center gap-2 flex-1">
+                <Progress value={score.breakdown.price} className="h-2 flex-1" />
+                <span className="text-xs font-medium text-gray-700">{Math.round(score.breakdown.price)}%</span>
+              </div>
+            </div>
           </div>
         </PopoverContent>
       </Popover>

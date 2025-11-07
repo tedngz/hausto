@@ -178,6 +178,17 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
                 <span className="text-xs font-medium text-gray-700">{roundedScore.breakdown.location}%</span>
               </div>
             </div>
+            
+            <div>
+              <div className="flex items-center mb-2">
+                <Sparkles className="w-4 h-4 text-emerald-600 inline mr-1" />
+                <span className="text-gray-600 font-medium text-xs">Price Match</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Progress value={roundedScore.breakdown.price} className="h-2 flex-1" />
+                <span className="text-xs font-medium text-gray-700">{roundedScore.breakdown.price}%</span>
+              </div>
+            </div>
           </div>
         </PopoverContent>
       </Popover>
