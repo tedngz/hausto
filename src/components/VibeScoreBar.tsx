@@ -1,7 +1,7 @@
 import { VibeScore } from '@/utils/vibeScoring';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Home, Palette, Activity, DollarSign } from 'lucide-react';
+import { Home, Palette, Activity, DollarSign, MapPin } from 'lucide-react';
 
 interface VibeScoreBarProps {
   score: VibeScore;
@@ -128,6 +128,16 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
                 {activity}
               </Badge>
             ))}
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <MapPin className="w-3 h-3 text-orange-500" />
+          <span className="text-xs text-gray-600 flex-1">Location</span>
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-orange-50 text-orange-700 border-orange-200">
+              {apartment?.location || 'Not specified'}
+            </Badge>
           </div>
         </div>
       </div>

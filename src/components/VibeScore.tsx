@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { VibeScore as VibeScoreType } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, MapPin } from 'lucide-react';
 
 interface VibeScoreProps {
   score: VibeScoreType;
@@ -109,7 +109,8 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
       style: Math.round(score.breakdown.style),
       color: Math.round(score.breakdown.color),
       activities: Math.round(score.breakdown.activities),
-      price: Math.round(score.breakdown.price)
+      price: Math.round(score.breakdown.price),
+      location: Math.round(score.breakdown.location)
     }
   };
 
@@ -160,6 +161,17 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
                     {activity}
                   </Badge>
                 ))}
+              </div>
+            </div>
+            
+            <div>
+              <div className="flex items-center mb-2">
+                <MapPin className="w-4 h-4 text-orange-600 inline mr-1" />
+                <span className="text-gray-600 font-medium">Location Match</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Progress value={roundedScore.breakdown.location} className="h-2 flex-1" />
+                <span className="text-xs font-medium text-gray-700">{roundedScore.breakdown.location}%</span>
               </div>
             </div>
           </div>

@@ -45,7 +45,8 @@ export const PropertyDetailModal = ({
           style: 75,
           color: 75,
           activities: 75,
-          price: 75
+          price: 75,
+          location: 75
         }
       }; // Default "Good vibe" for anonymous users
 

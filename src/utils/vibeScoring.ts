@@ -8,27 +8,32 @@ export interface VibeScore {
     color: number;
     activities: number;
     price: number;
+    location: number;
   };
 }
 
 export const calculateVibeScore = (apartment: Apartment, preferences: UserPreferences): VibeScore => {
-  // Style matching (40% weight)
+  // Style matching (30% weight)
   const styleScore = calculateStyleMatch(apartment, preferences.styles);
   
-  // Color matching (25% weight)
+  // Location matching (20% weight)
+  const locationScore = calculateLocationMatch(apartment.location, preferences.location);
+  
+  // Color matching (20% weight)
   const colorScore = calculateColorMatch(apartment, preferences.colors);
   
-  // Activities matching (25% weight)
+  // Activities matching (20% weight)
   const activityScore = calculateActivityMatch(apartment, preferences.activities);
   
   // Price matching (10% weight)
   const priceScore = calculatePriceMatch(apartment.price, preferences.priceRange);
   
   const overall = Math.round(
-    styleScore * 0.4 + 
-    colorScore * 0.25 + 
-    activityScore * 0.25 + 
-    priceScore * 0.1
+    styleScore * 0.30 + 
+    locationScore * 0.20 +
+    colorScore * 0.20 + 
+    activityScore * 0.20 + 
+    priceScore * 0.10
   );
 
   return {
@@ -37,7 +42,8 @@ export const calculateVibeScore = (apartment: Apartment, preferences: UserPrefer
       style: Math.round(styleScore),
       color: Math.round(colorScore),
       activities: Math.round(activityScore),
-      price: Math.round(priceScore)
+      price: Math.round(priceScore),
+      location: Math.round(locationScore)
     }
   };
 };
@@ -226,6 +232,27 @@ const calculateActivityMatch = (apartment: Apartment, userActivities: string[]):
   }
   
   return Math.min(100, matchScore);
+};
+
+const calculateLocationMatch = (propertyLocation: string, userLocations: string[]): number => {
+  if (!propertyLocation || !userLocations || userLocations.length === 0) {
+    return 50; // Neutral score if no location data
+  }
+
+  // Check for exact match (district level)
+  if (userLocations.includes(propertyLocation)) {
+    return 100;
+  }
+
+  // Check for city match (same city, different district)
+  const propertyCity = propertyLocation.split(',')[1]?.trim();
+  const userCities = userLocations.map(loc => loc.split(',')[1]?.trim());
+  
+  if (propertyCity && userCities.includes(propertyCity)) {
+    return 60; // Same city but different district
+  }
+
+  return 0; // No match at all
 };
 
 const calculatePriceMatch = (apartmentPrice: number, priceRange: [number, number]): number => {
