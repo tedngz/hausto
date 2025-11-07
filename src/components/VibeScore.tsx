@@ -133,29 +133,56 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
               <div className="text-2xl font-bold text-primary">{roundedScore.overall}%</div>
             </div>
             
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Home className="w-4 h-4 text-blue-500" />
-                  <span className="text-xs text-gray-600">Style</span>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <Home className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs text-gray-600">Style</span>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.style}%</span>
                 </div>
-                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.style}%</span>
+                <div className="flex flex-wrap gap-1">
+                  {getStyleTags(roundedScore.breakdown.style, score).slice(0, 3).map((tag, index) => (
+                    <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Palette className="w-4 h-4 text-purple-500" />
-                  <span className="text-xs text-gray-600">Color</span>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-purple-500" />
+                    <span className="text-xs text-gray-600">Color</span>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.color}%</span>
                 </div>
-                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.color}%</span>
+                <div className="flex flex-wrap gap-1">
+                  {getColorPalette(roundedScore.breakdown.color, score).slice(0, 3).map((color, index) => (
+                    <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
+                      {color}
+                    </Badge>
+                  ))}
+                </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-green-500" />
-                  <span className="text-xs text-gray-600">Activities</span>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-green-500" />
+                    <span className="text-xs text-gray-600">Activities</span>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.activities}%</span>
                 </div>
-                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.activities}%</span>
+                <div className="flex flex-wrap gap-1">
+                  {getActivities(roundedScore.breakdown.activities, score).slice(0, 3).map((activity, index) => (
+                    <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700 border-green-200">
+                      {activity}
+                    </Badge>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center justify-between">
