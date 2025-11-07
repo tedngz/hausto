@@ -1,6 +1,7 @@
 import { VibeScore } from '@/utils/vibeScoring';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Home, Palette, Activity, DollarSign, MapPin } from 'lucide-react';
 
 interface VibeScoreBarProps {
@@ -83,11 +84,65 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
 
   if (!showBreakdown) {
     return (
-      <div className={`flex items-center space-x-2 ${className}`}>
-        <Badge className={`text-xs font-medium ${vibeLevel.color}`}>
-          {vibeLevel.emoji} {vibeLevel.level}
-        </Badge>
-      </div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <div className={`flex items-center space-x-2 ${className}`}>
+            <Badge className={`text-xs font-medium ${vibeLevel.color} cursor-pointer hover:opacity-80 transition-opacity`}>
+              {vibeLevel.emoji} {vibeLevel.level}
+            </Badge>
+          </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-80" align="start">
+          <div className="space-y-3">
+            <h4 className="font-semibold text-sm mb-3">Vibe Score Breakdown</h4>
+            <div className="flex items-center space-x-2">
+              <Home className="w-3 h-3 text-blue-500" />
+              <span className="text-xs text-gray-600 flex-1">Style</span>
+              <div className="flex flex-wrap gap-1">
+                {categorizedHighlights.style.map((tag, index) => (
+                  <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Palette className="w-3 h-3 text-purple-500" />
+              <span className="text-xs text-gray-600 flex-1">Color</span>
+              <div className="flex flex-wrap gap-1">
+                {categorizedHighlights.color.map((color, index) => (
+                  <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
+                    {color}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Activity className="w-3 h-3 text-green-500" />
+              <span className="text-xs text-gray-600 flex-1">Activities</span>
+              <div className="flex flex-wrap gap-1">
+                {categorizedHighlights.activity.map((activity, index) => (
+                  <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700 border-green-200">
+                    {activity}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <MapPin className="w-3 h-3 text-orange-500" />
+              <span className="text-xs text-gray-600 flex-1">Location</span>
+              <div className="flex flex-wrap gap-1">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-orange-50 text-orange-700 border-orange-200">
+                  {apartment?.location || 'Not specified'}
+                </Badge>
+              </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
     );
   }
 

@@ -1,6 +1,6 @@
-
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { VibeScore as VibeScoreType } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { Sparkles, MapPin } from 'lucide-react';
@@ -118,9 +118,67 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
 
   return (
     <div className="space-y-2">
-      <Badge className={`${vibeLevel.color} ${sizeClasses[size]} font-semibold flex items-center gap-1 shadow-lg border`}>
-        {vibeLevel.emoji} {vibeLevel.level}
-      </Badge>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Badge className={`${vibeLevel.color} ${sizeClasses[size]} font-semibold flex items-center gap-1 shadow-lg border cursor-pointer hover:opacity-80 transition-opacity`}>
+            {vibeLevel.emoji} {vibeLevel.level}
+          </Badge>
+        </PopoverTrigger>
+        <PopoverContent className="w-80" align="start">
+          <div className="space-y-3">
+            <h4 className="font-semibold text-sm mb-3">Vibe Score Breakdown</h4>
+            <div>
+              <div className="flex items-center mb-2">
+                <span className="text-gray-600 font-medium text-xs">Style</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {getStyleTags(roundedScore.breakdown.style, score).map((tag, index) => (
+                  <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <div className="flex items-center mb-2">
+                <span className="text-gray-600 font-medium text-xs">Color</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {getColorPalette(roundedScore.breakdown.color, score).map((color, index) => (
+                  <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
+                    {color}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <div className="flex items-center mb-2">
+                <span className="text-gray-600 font-medium text-xs">Lifestyle Activities</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {getActivities(roundedScore.breakdown.activities, score).map((activity, index) => (
+                  <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-200">
+                    {activity}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <div className="flex items-center mb-2">
+                <MapPin className="w-4 h-4 text-orange-600 inline mr-1" />
+                <span className="text-gray-600 font-medium text-xs">Location Match</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Progress value={roundedScore.breakdown.location} className="h-2 flex-1" />
+                <span className="text-xs font-medium text-gray-700">{roundedScore.breakdown.location}%</span>
+              </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       {showBreakdown && (
         <div className="space-y-3 text-xs">
