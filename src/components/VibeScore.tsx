@@ -120,9 +120,11 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
     <div className="space-y-2">
       <Popover>
         <PopoverTrigger asChild>
-          <Badge className={`${vibeLevel.color} ${sizeClasses[size]} font-semibold flex items-center gap-1 shadow-lg border cursor-pointer hover:opacity-80 transition-opacity`}>
-            {vibeLevel.emoji} {vibeLevel.level}
-          </Badge>
+          <button>
+            <Badge className={`${vibeLevel.color} ${sizeClasses[size]} font-semibold flex items-center gap-1 shadow-lg border cursor-pointer hover:opacity-80 transition-opacity`}>
+              {vibeLevel.emoji} {vibeLevel.level}
+            </Badge>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-80" align="start">
           <div className="space-y-3">

@@ -86,11 +86,11 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <div className={`flex items-center space-x-2 ${className}`}>
+          <button className={`flex items-center space-x-2 ${className}`}>
             <Badge className={`text-xs font-medium ${vibeLevel.color} cursor-pointer hover:opacity-80 transition-opacity`}>
               {vibeLevel.emoji} {vibeLevel.level}
             </Badge>
-          </div>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-80" align="start">
           <div className="space-y-3">
