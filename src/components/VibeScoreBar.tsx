@@ -92,7 +92,7 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
             </Badge>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-80" align="start">
+        <PopoverContent className="w-72 sm:w-80" align="start">
           <div className="space-y-3">
             <div className="pb-3 border-b">
               <h4 className="font-semibold text-sm mb-1">Overall Match</h4>
