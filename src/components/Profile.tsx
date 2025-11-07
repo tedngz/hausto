@@ -86,7 +86,8 @@ const PreferencesCard = ({
     'minimalist': 'Minimalist',
     'bohemian': 'Bohemian',
     'industrial': 'Industrial',
-    'scandinavian': 'Scandinavian'
+    'scandinavian': 'Scandinavian',
+    'cozy': 'Cozy'
   };
   const colorLabels: {
     [key: string]: string;
