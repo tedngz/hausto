@@ -94,59 +94,50 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
         </PopoverTrigger>
         <PopoverContent className="w-80" align="start">
           <div className="space-y-3">
-            <h4 className="font-semibold text-sm mb-3">Vibe Score Breakdown</h4>
-            <div className="flex items-center space-x-2">
-              <Home className="w-3 h-3 text-blue-500" />
-              <span className="text-xs text-gray-600 flex-1">Style</span>
-              <div className="flex flex-wrap gap-1">
-                {categorizedHighlights.style.map((tag, index) => (
-                  <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+            <div className="pb-3 border-b">
+              <h4 className="font-semibold text-sm mb-1">Overall Match</h4>
+              <div className="text-2xl font-bold text-primary">{Math.round(score.overall)}%</div>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Palette className="w-3 h-3 text-purple-500" />
-              <span className="text-xs text-gray-600 flex-1">Color</span>
-              <div className="flex flex-wrap gap-1">
-                {categorizedHighlights.color.map((color, index) => (
-                  <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
-                    {color}
-                  </Badge>
-                ))}
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Home className="w-3 h-3 text-blue-500" />
+                  <span className="text-xs text-gray-600">Style</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.style)}%</span>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-2">
-              <Activity className="w-3 h-3 text-green-500" />
-              <span className="text-xs text-gray-600 flex-1">Activities</span>
-              <div className="flex flex-wrap gap-1">
-                {categorizedHighlights.activity.map((activity, index) => (
-                  <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700 border-green-200">
-                    {activity}
-                  </Badge>
-                ))}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Palette className="w-3 h-3 text-purple-500" />
+                  <span className="text-xs text-gray-600">Color</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.color)}%</span>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-2">
-              <MapPin className="w-3 h-3 text-orange-500" />
-              <span className="text-xs text-gray-600 flex-1">Location</span>
-              <div className="flex flex-wrap gap-1">
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-orange-50 text-orange-700 border-orange-200">
-                  {apartment?.location || 'Not specified'}
-                </Badge>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-3 h-3 text-green-500" />
+                  <span className="text-xs text-gray-600">Activities</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.activities)}%</span>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-2">
-              <DollarSign className="w-3 h-3 text-emerald-500" />
-              <span className="text-xs text-gray-600 flex-1">Price Match</span>
-              <div className="flex items-center gap-2 flex-1">
-                <Progress value={score.breakdown.price} className="h-2 flex-1" />
-                <span className="text-xs font-medium text-gray-700">{Math.round(score.breakdown.price)}%</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-3 h-3 text-orange-500" />
+                  <span className="text-xs text-gray-600">Location</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.location)}%</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-3 h-3 text-emerald-500" />
+                  <span className="text-xs text-gray-600">Price</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.price)}%</span>
               </div>
             </div>
           </div>

@@ -3,7 +3,7 @@ import { Progress } from '@/components/ui/progress';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { VibeScore as VibeScoreType } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
-import { Sparkles, MapPin } from 'lucide-react';
+import { Sparkles, MapPin, Home, Palette, Activity } from 'lucide-react';
 
 interface VibeScoreProps {
   score: VibeScoreType;
@@ -128,65 +128,50 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
         </PopoverTrigger>
         <PopoverContent className="w-80" align="start">
           <div className="space-y-3">
-            <h4 className="font-semibold text-sm mb-3">Vibe Score Breakdown</h4>
-            <div>
-              <div className="flex items-center mb-2">
-                <span className="text-gray-600 font-medium text-xs">Style</span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {getStyleTags(roundedScore.breakdown.style, score).map((tag, index) => (
-                  <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+            <div className="pb-3 border-b">
+              <h4 className="font-semibold text-sm mb-1">Overall Match</h4>
+              <div className="text-2xl font-bold text-primary">{roundedScore.overall}%</div>
             </div>
             
-            <div>
-              <div className="flex items-center mb-2">
-                <span className="text-gray-600 font-medium text-xs">Color</span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Home className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs text-gray-600">Style</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.style}%</span>
               </div>
-              <div className="flex flex-wrap gap-1">
-                {getColorPalette(roundedScore.breakdown.color, score).map((color, index) => (
-                  <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
-                    {color}
-                  </Badge>
-                ))}
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs text-gray-600">Color</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.color}%</span>
               </div>
-            </div>
-            
-            <div>
-              <div className="flex items-center mb-2">
-                <span className="text-gray-600 font-medium text-xs">Lifestyle Activities</span>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-green-500" />
+                  <span className="text-xs text-gray-600">Activities</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.activities}%</span>
               </div>
-              <div className="flex flex-wrap gap-1">
-                {getActivities(roundedScore.breakdown.activities, score).map((activity, index) => (
-                  <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-200">
-                    {activity}
-                  </Badge>
-                ))}
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs text-gray-600">Location</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.location}%</span>
               </div>
-            </div>
-            
-            <div>
-              <div className="flex items-center mb-2">
-                <MapPin className="w-4 h-4 text-orange-600 inline mr-1" />
-                <span className="text-gray-600 font-medium text-xs">Location Match</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Progress value={roundedScore.breakdown.location} className="h-2 flex-1" />
-                <span className="text-xs font-medium text-gray-700">{roundedScore.breakdown.location}%</span>
-              </div>
-            </div>
-            
-            <div>
-              <div className="flex items-center mb-2">
-                <Sparkles className="w-4 h-4 text-emerald-600 inline mr-1" />
-                <span className="text-gray-600 font-medium text-xs">Price Match</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Progress value={roundedScore.breakdown.price} className="h-2 flex-1" />
-                <span className="text-xs font-medium text-gray-700">{roundedScore.breakdown.price}%</span>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-500" />
+                  <span className="text-xs text-gray-600">Price</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.price}%</span>
               </div>
             </div>
           </div>
