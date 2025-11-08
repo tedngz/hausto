@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ const Auth = () => {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const recoveryRef = useRef(false);
 
   useEffect(() => {
     // Check URL hash for password recovery tokens
@@ -43,6 +44,7 @@ const Auth = () => {
     
     if (type === 'recovery' && accessToken) {
       setIsRecoveryMode(true);
+      recoveryRef.current = true;
     }
 
     // Check if user is already logged in
@@ -52,11 +54,12 @@ const Auth = () => {
       // Check if this is a password recovery event
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
+        recoveryRef.current = true;
         return;
       }
       
       setUser(session?.user ?? null);
-      if (session?.user && !isRecoveryMode) {
+      if (session?.user && !recoveryRef.current) {
         const returnTo = location.state?.returnTo || '/';
         navigate(returnTo, { replace: true });
       }
@@ -65,7 +68,7 @@ const Auth = () => {
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user && !isRecoveryMode) {
+      if (session?.user && !recoveryRef.current) {
         const returnTo = location.state?.returnTo || '/';
         navigate(returnTo, { replace: true });
       }
