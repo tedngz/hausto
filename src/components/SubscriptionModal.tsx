@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Crown } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
 import { toast } from 'sonner';
 
 interface SubscriptionModalProps {
@@ -16,6 +16,7 @@ interface SubscriptionModalProps {
 
 export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModalProps) => {
   const { user } = useAuth();
+  const { createSubscription } = useSubscription();
   const [loading, setLoading] = useState(false);
 
   const reasonMessages = {
@@ -32,55 +33,17 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
 
     setLoading(true);
     try {
-      console.log('Getting user session...');
+      const approvalUrl = await createSubscription();
       
-      // Verify user session is valid
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        console.error('Session error:', sessionError);
-        toast.error('Your session has expired. Please log in again.');
-        setLoading(false);
-        return;
+      if (approvalUrl) {
+        // Redirect to PayPal checkout
+        window.location.href = approvalUrl;
+      } else {
+        toast.error('Failed to create subscription. Please try again.');
       }
-
-      console.log('Session valid, fetching profile...');
-      
-      // Get user profile for name
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('name, email')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        console.error('Profile error:', profileError);
-      }
-
-      console.log('Invoking edge function...');
-      
-      const { data, error } = await supabase.functions.invoke('notify-premium-interest', {
-        body: {
-          userEmail: profile?.email || user.email,
-          userName: profile?.name || 'Valued Customer',
-        },
-      });
-
-      if (error) {
-        console.error('Edge function error:', error);
-        throw error;
-      }
-
-      console.log('Success:', data);
-
-      toast.success(
-        'Request received! You will receive a payment request email from Payoneer soon.',
-        { duration: 5000 }
-      );
-      onClose();
     } catch (error: any) {
-      console.error('Error requesting premium:', error);
-      toast.error(`Failed to process request: ${error.message || 'Please try again.'}`);
+      console.error('Error creating subscription:', error);
+      toast.error('Failed to process payment. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -171,7 +134,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
         </div>
 
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
-          <p>✓ Cancel anytime • ✓ Secure Payoneer payment • ✓ Fast activation</p>
+          <p>✓ Cancel anytime • ✓ Secure PayPal payment • ✓ Fast activation</p>
         </div>
       </DialogContent>
     </Dialog>
