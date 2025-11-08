@@ -36,8 +36,19 @@ const Auth = () => {
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   useEffect(() => {
+    // Check URL hash for password recovery tokens
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    const type = hashParams.get('type');
+    
+    if (type === 'recovery' && accessToken) {
+      setIsRecoveryMode(true);
+    }
+
     // Check if user is already logged in
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state change:', event, session);
+      
       // Check if this is a password recovery event
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
