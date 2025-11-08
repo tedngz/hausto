@@ -27,6 +27,13 @@ serve(async (req) => {
     }
     logStep("PayPal credentials verified");
 
+    const apiBase = Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com";
+    const planId = Deno.env.get("PAYPAL_PLAN_ID");
+    if (!planId) {
+      throw new Error("PAYPAL_PLAN_ID not configured");
+    }
+    logStep("Using PayPal API base", { apiBase, hasPlanId: true });
+
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -45,7 +52,7 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     // Get PayPal access token
-    const authResponse = await fetch("https://api.sandbox.paypal.com/v1/oauth2/token", {
+    const authResponse = await fetch(`${apiBase}/v1/oauth2/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -65,7 +72,7 @@ serve(async (req) => {
     const cancelUrl = `${req.headers.get("origin")}/subscription-cancel`;
 
     // Create PayPal subscription
-    const subscriptionResponse = await fetch("https://api.sandbox.paypal.com/v1/billing/subscriptions", {
+    const subscriptionResponse = await fetch(`${apiBase}/v1/billing/subscriptions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -73,7 +80,7 @@ serve(async (req) => {
         "PayPal-Request-Id": `subscription-${user.id}-${Date.now()}`,
       },
       body: JSON.stringify({
-        plan_id: "P-5ML4271244454362WXNWU5NQ", // Replace with your actual plan ID
+        plan_id: planId,
         subscriber: {
           email_address: user.email,
         },
