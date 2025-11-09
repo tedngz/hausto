@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { userType, messages, properties, action } = await req.json();
+    const { userType, messages, properties, action, isPremium } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -60,11 +60,19 @@ serve(async (req) => {
           );
         }
         case 'get_fast_track':
-          systemPrompt = `You are Hausto AI, a renter support assistant. The renter selected "Get Fast Track". This is a PREMIUM FEATURE for premium subscribers only.
+          if (isPremium) {
+            systemPrompt = `You are Hausto AI, a renter support assistant. The renter selected "Get Fast Track" and they ARE a premium subscriber.
 
-Explain that Fast Track is a premium service where Hausto Agent handles all coordination with listing providers (up to 3 properties) at no extra cost. If they're premium: Ask for their preferred viewing schedule (dates, times, special requirements). If not premium: Encourage them to upgrade to access this convenient service.
+Ask them for their preferred viewing schedule (dates, times, and any special requirements). Let them know that Hausto Agent will coordinate with up to 3 listing providers and provide them with the viewing address and timeline at no extra cost.
 
 Keep response to 2-3 sentences.`;
+          } else {
+            systemPrompt = `You are Hausto AI, a renter support assistant. The renter selected "Get Fast Track" but they are NOT a premium subscriber.
+
+Politely explain that Fast Track is a premium service where Hausto Agent handles all coordination with listing providers (up to 3 properties) at no extra cost. Encourage them to upgrade to premium to access this convenient service.
+
+Keep response to 2-3 sentences.`;
+          }
           break;
         default:
           systemPrompt = `You are Hausto AI, a renter support assistant responding to: "${action}". Provide helpful guidance for renters in 2-3 sentences.`;

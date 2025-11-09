@@ -11,6 +11,7 @@ import { useDirectMessages } from '@/hooks/useDirectMessages';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useSubscription } from '@/hooks/useSubscription';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
@@ -57,6 +58,7 @@ export const HaustoChat = ({
   const {
     user
   } = useAuth();
+  const { subscription_tier } = useSubscription();
   const { toast } = useToast();
   const {
     conversations,
@@ -215,6 +217,7 @@ export const HaustoChat = ({
             messages: recentMessages,
             properties: propertiesContext,
             action: null,
+            isPremium: subscription_tier === 'premium',
           },
         });
 
@@ -401,7 +404,8 @@ export const HaustoChat = ({
           conversationId: selectedMatch,
           userType,
           messages: recentMessages,
-          properties: propertiesWithProvider
+          properties: propertiesWithProvider,
+          isPremium: subscription_tier === 'premium',
         }
       });
 
@@ -491,7 +495,8 @@ export const HaustoChat = ({
           userType,
           messages: recentMessages,
           properties: propertiesWithProvider,
-          action
+          action,
+          isPremium: subscription_tier === 'premium',
         }
       });
 
