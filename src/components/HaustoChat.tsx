@@ -891,7 +891,22 @@ export const HaustoChat = ({
                                   </div>
                                   <span className="text-xs font-semibold text-purple-700">Hausto AI Assistant</span>
                                 </div>
-                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                  {message.content.split(/(\[View My Matches\]\(\/\))/).map((part, idx) => {
+                                    if (part === '[View My Matches](/)') {
+                                      return (
+                                        <button
+                                          key={idx}
+                                          onClick={() => setShowPropertyList(true)}
+                                          className="text-blue-600 hover:text-blue-800 underline font-medium"
+                                        >
+                                          View My Matches
+                                        </button>
+                                      );
+                                    }
+                                    return part;
+                                  })}
+                                </p>
                                 <span className="text-xs text-gray-400 mt-2 block">
                                   {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
