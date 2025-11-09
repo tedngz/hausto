@@ -7,34 +7,36 @@ import { Check, Crown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { toast } from 'sonner';
-
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   reason?: 'views' | 'matches' | 'quiz';
 }
-
-export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModalProps) => {
-  const { user } = useAuth();
-  const { createSubscription } = useSubscription();
+export const SubscriptionModal = ({
+  isOpen,
+  onClose,
+  reason
+}: SubscriptionModalProps) => {
+  const {
+    user
+  } = useAuth();
+  const {
+    createSubscription
+  } = useSubscription();
   const [loading, setLoading] = useState(false);
-
   const reasonMessages = {
     views: "You've reached your daily limit of 10 property views.",
     matches: "You've reached your weekly limit of 20 matches.",
-    quiz: "You've used both weekly quiz retakes.",
+    quiz: "You've used both weekly quiz retakes."
   };
-
   const handleGoPremium = async () => {
     if (!user) {
       toast.error('Please log in to upgrade to premium');
       return;
     }
-
     setLoading(true);
     try {
       const approvalUrl = await createSubscription();
-      
       if (approvalUrl) {
         // Redirect to PayPal checkout
         window.location.href = approvalUrl;
@@ -48,21 +50,9 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
       setLoading(false);
     }
   };
-
-  const freeFeatures = [
-    '10 property views per day',
-    '20 matches per week',
-    '10 AI searches per day',
-  ];
-
-  const premiumFeatures = [
-    'Unlimited property views',
-    'Unlimited matches',
-    'Unlimited AI Search',
-  ];
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+  const freeFeatures = ['10 property views per day', '20 matches per week', '10 AI searches per day'];
+  const premiumFeatures = ['Unlimited property views', 'Unlimited matches', 'Unlimited AI Search'];
+  return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
@@ -88,12 +78,10 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="space-y-2 sm:space-y-3">
-                {freeFeatures.map((feature, index) => (
-                  <li key={index} className="flex items-center gap-2">
+                {freeFeatures.map((feature, index) => <li key={index} className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="text-xs sm:text-sm">{feature}</span>
-                  </li>
-                ))}
+                  </li>)}
               </ul>
             </CardContent>
           </Card>
@@ -110,23 +98,16 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
               </CardTitle>
               <CardDescription>Unlimited access to everything</CardDescription>
               <div className="text-2xl sm:text-3xl font-bold">$10<span className="text-sm font-normal">/month</span></div>
-              <p className="text-xs text-muted-foreground mt-1">2-month minimum subscription</p>
+              
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-                {premiumFeatures.map((feature, index) => (
-                  <li key={index} className="flex items-center gap-2">
+                {premiumFeatures.map((feature, index) => <li key={index} className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-primary shrink-0" />
                     <span className="text-xs sm:text-sm font-medium">{feature}</span>
-                  </li>
-                ))}
+                  </li>)}
               </ul>
-              <Button 
-                onClick={handleGoPremium}
-                disabled={loading}
-                className="w-full"
-                size="lg"
-              >
+              <Button onClick={handleGoPremium} disabled={loading} className="w-full" size="lg">
                 {loading ? 'Processing...' : 'Go Premium'}
               </Button>
             </CardContent>
@@ -137,6 +118,5 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
           <p>✓ Cancel anytime • ✓ Secure PayPal payment • ✓ Fast activation</p>
         </div>
       </DialogContent>
-    </Dialog>
-  );
+    </Dialog>;
 };
