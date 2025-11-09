@@ -100,17 +100,64 @@ export const HaustoChat = ({
       setSelectedMatch(initialMatchId);
     }
   }, [initialMatchId, isOpen]);
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
     if (selectedMatch) {
       const currentConv = conversations.find(c => c.id === selectedMatch);
       if (currentConv) {
         const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+        const messageContent = inputMessage.trim();
+        
         sendDirectMessage({
           conversationId: selectedMatch,
-          content: inputMessage.trim(),
+          content: messageContent,
           receiverId
         });
+
+        // Check if message is a number (property selection)
+        const propertyNumber = parseInt(messageContent);
+        if (!isNaN(propertyNumber) && propertyNumber > 0 && currentConv.properties && propertyNumber <= currentConv.properties.length) {
+          // User selected a property by number
+          const selectedProperty = currentConv.properties[propertyNumber - 1];
+          
+          // Automatically trigger AI response with selected property contact info
+          setIsRequestingAI(true);
+          
+          try {
+            const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
+              body: {
+                conversationId: selectedMatch,
+                userType,
+                messages: [],
+                properties: [selectedProperty], // Pass only the selected property
+                action: 'contact_provider',
+                isPremium: subscription_tier === 'premium',
+              }
+            });
+
+            if (error) throw error;
+
+            // Send AI response with contact info
+            await supabase.from('direct_messages').insert({
+              conversation_id: selectedMatch,
+              sender_id: user?.id || '',
+              receiver_id: receiverId,
+              content: data.suggestion,
+              metadata: { type: 'ai-confirmation' }
+            });
+
+            await refetchMessages();
+          } catch (error) {
+            console.error('Error getting property contact:', error);
+            toast({
+              title: "Error",
+              description: "Failed to get property information",
+              variant: "destructive"
+            });
+          } finally {
+            setIsRequestingAI(false);
+          }
+        }
       }
     }
     setInputMessage('');

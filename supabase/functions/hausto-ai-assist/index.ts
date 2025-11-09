@@ -24,17 +24,19 @@ serve(async (req) => {
       `Property ${i + 1}: ${p.title} at ${p.location} - $${p.price}/mo`
     ).join('\n') || 'No properties in conversation';
     
-    // Get provider contact info from first property
-    const firstProperty = properties?.[0];
-    const providerName = firstProperty?.property_source_provider_name;
-    const providerPhone = firstProperty?.property_source_provider_phone;
+    // Get provider contact info from property (could be single or first in array)
+    const targetProperty = Array.isArray(properties) && properties.length > 0 ? properties[0] : properties;
+    const providerName = targetProperty?.property_source_provider_name;
+    const providerPhone = targetProperty?.property_source_provider_phone;
+    const propertyTitle = targetProperty?.title;
     
     // Debug logging to verify provider data
     console.log('Provider info received:', { 
       providerName, 
-      providerPhone, 
+      providerPhone,
+      propertyTitle,
       hasProperties: properties?.length > 0,
-      firstPropertyKeys: firstProperty ? Object.keys(firstProperty) : []
+      isArray: Array.isArray(properties)
     });
 
     // Build conversation context
@@ -61,7 +63,7 @@ serve(async (req) => {
             );
           }
 
-          const suggestion = `📞 **Listing Provider Contact**\n\n**Name:** ${providerName}\n**Phone:** ${providerPhone}\n\nFeel free to reach out directly to discuss "${firstProperty.title}" and schedule a viewing. Good luck! 🏡`;
+          const suggestion = `📞 **Listing Provider Contact**\n\n**Name:** ${providerName}\n**Phone:** ${providerPhone}\n\nFeel free to reach out directly to discuss "${propertyTitle}" and schedule a viewing. Good luck! 🏡`;
 
           return new Response(
             JSON.stringify({ suggestion, suggestedActions: [] }),
