@@ -8,6 +8,7 @@ import { X, Send, MessageCircle, MapPin, ArrowLeft } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
+import { format } from 'date-fns';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -15,6 +16,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
+import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { Apartment } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -46,6 +48,7 @@ export const HaustoChat = ({
   const [isRequestingAI, setIsRequestingAI] = useState(false);
   const [isAIActive, setIsAIActive] = useState(false);
   const [aiLastActiveTime, setAiLastActiveTime] = useState<number | null>(null);
+  const [isViewingScheduleModalOpen, setIsViewingScheduleModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const aiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Track per-conversation proactive timers and last scheduled message IDs
@@ -445,6 +448,12 @@ export const HaustoChat = ({
   const handleAIAction = async (action: string) => {
     if (!selectedMatch || isRequestingAI || !user?.id) return;
     
+    // Special handling for Get Fast Track for premium users
+    if (action === 'get_fast_track' && subscription_tier === 'premium') {
+      setIsViewingScheduleModalOpen(true);
+      return;
+    }
+    
     setIsRequestingAI(true);
     setAiLastActiveTime(Date.now()); // Reset timer
     
@@ -523,11 +532,64 @@ export const HaustoChat = ({
       setIsRequestingAI(false);
     }
   };
+
+  const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
+    if (!selectedMatch || !user?.id) return;
+
+    try {
+      const currentConv = conversations.find(c => c.id === selectedMatch);
+      if (!currentConv) return;
+
+      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+
+      // Format the viewing schedule message
+      const datesText = scheduleData.dates
+        .map(d => format(d, 'MMM dd, yyyy'))
+        .join(', ');
+      const timesText = scheduleData.preferredTimes.join(', ');
+      const requirementsText = scheduleData.specialRequirements 
+        ? `\n\nSpecial Requirements: ${scheduleData.specialRequirements}`
+        : '';
+
+      const scheduleMessage = `🎯 **Fast Track Request Submitted**\n\nPreferred Dates: ${datesText}\nPreferred Times: ${timesText}${requirementsText}\n\nHausto Agent will coordinate with up to 3 listing providers and get back to you with viewing details soon!`;
+
+      // Insert the schedule request message
+      const { error: insertError } = await supabase.from('direct_messages').insert({
+        conversation_id: selectedMatch,
+        sender_id: user.id,
+        receiver_id: receiverId,
+        content: scheduleMessage,
+        metadata: { 
+          type: 'viewing-schedule-request',
+          scheduleData: scheduleData as any
+        }
+      });
+
+      if (insertError) throw insertError;
+
+      await refetchMessages();
+
+      toast({
+        title: "Fast Track Request Submitted!",
+        description: "Hausto Agent will coordinate the viewings and get back to you soon.",
+      });
+    } catch (error) {
+      console.error('Error submitting viewing schedule:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit viewing schedule",
+        variant: "destructive"
+      });
+    }
+  };
+
   const getPlaceholder = () => {
     return 'Type your message...';
   };
   const convs = conversations;
-  return <Dialog open={isOpen} onOpenChange={onClose}>
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col bg-white overflow-hidden sm:rounded-lg">
         <DialogTitle className="sr-only">Hausto Chat Assistant</DialogTitle>
         <DialogDescription className="sr-only">
@@ -903,6 +965,13 @@ export const HaustoChat = ({
         {selectedRealtorId && <RealtorProfileModal realtorId={selectedRealtorId} isOpen={!!selectedRealtorId} onClose={() => setSelectedRealtorId(null)} />}
 
         {selectedRenterId && <RenterProfileModal userId={selectedRenterId} isOpen={!!selectedRenterId} onClose={() => setSelectedRenterId(null)} />}
+
+        <ViewingScheduleModal 
+          isOpen={isViewingScheduleModalOpen}
+          onClose={() => setIsViewingScheduleModalOpen(false)}
+          onSubmit={handleViewingScheduleSubmit}
+        />
       </DialogContent>
     </Dialog>
+  );
 };
