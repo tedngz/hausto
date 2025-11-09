@@ -274,6 +274,62 @@ export type Database = {
           },
         ]
       }
+      fast_track_requests: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          preferred_dates: string[]
+          preferred_times: string[]
+          property_ids: string[]
+          realtor_id: string
+          renter_id: string
+          scheduled_viewings: Json | null
+          special_requirements: string | null
+          status: Database["public"]["Enums"]["fast_track_status"]
+          updated_at: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          preferred_dates: string[]
+          preferred_times: string[]
+          property_ids?: string[]
+          realtor_id: string
+          renter_id: string
+          scheduled_viewings?: Json | null
+          special_requirements?: string | null
+          status?: Database["public"]["Enums"]["fast_track_status"]
+          updated_at?: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          preferred_dates?: string[]
+          preferred_times?: string[]
+          property_ids?: string[]
+          realtor_id?: string
+          renter_id?: string
+          scheduled_viewings?: Json | null
+          special_requirements?: string | null
+          status?: Database["public"]["Enums"]["fast_track_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fast_track_requests_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "match_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       match_conversations: {
         Row: {
           created_at: string
@@ -760,6 +816,12 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      fast_track_status:
+        | "pending"
+        | "in_progress"
+        | "scheduled"
+        | "completed"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -888,6 +950,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      fast_track_status: [
+        "pending",
+        "in_progress",
+        "scheduled",
+        "completed",
+        "cancelled",
+      ],
     },
   },
 } as const

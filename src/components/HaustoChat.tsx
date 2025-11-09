@@ -541,6 +541,21 @@ export const HaustoChat = ({
       if (!currentConv) return;
 
       const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+      const propertyIds = currentConv.properties?.map(p => p.property_id) || [];
+
+      // Insert into fast_track_requests table
+      const { error: requestError } = await supabase.from('fast_track_requests').insert({
+        conversation_id: selectedMatch,
+        renter_id: user.id,
+        realtor_id: currentConv.realtor_id,
+        property_ids: propertyIds,
+        preferred_dates: scheduleData.dates.map(d => format(d, 'yyyy-MM-dd')),
+        preferred_times: scheduleData.preferredTimes,
+        special_requirements: scheduleData.specialRequirements || null,
+        status: 'pending'
+      });
+
+      if (requestError) throw requestError;
 
       // Format the viewing schedule message
       const datesText = scheduleData.dates
