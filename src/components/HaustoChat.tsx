@@ -892,7 +892,7 @@ export const HaustoChat = ({
                                   <span className="text-xs font-semibold text-purple-700">Hausto AI Assistant</span>
                                 </div>
                                 <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {message.content.split(/(\[View My Matches\]\(\/\))/).map((part, idx) => {
+                                  {message.content.split(/(\[View My Matches\]\(\/\)|"[^"]+")/).map((part, idx) => {
                                     if (part === '[View My Matches](/)') {
                                       return (
                                         <button
@@ -903,6 +903,71 @@ export const HaustoChat = ({
                                           View My Matches
                                         </button>
                                       );
+                                    }
+                                    // Check if this is a quoted property title
+                                    if (part.startsWith('"') && part.endsWith('"')) {
+                                      const propertyTitle = part.slice(1, -1);
+                                      const matchedProperty = currentConv?.properties?.find(
+                                        p => p.title === propertyTitle
+                                      );
+                                      
+                                      if (matchedProperty) {
+                                        return (
+                                          <button
+                                            key={idx}
+                                            onClick={async () => {
+                                              try {
+                                                const { data: fullProperty, error } = await supabase
+                                                  .from('properties')
+                                                  .select('*')
+                                                  .eq('id', matchedProperty.property_id)
+                                                  .maybeSingle();
+
+                                                if (error) throw error;
+
+                                                if (!fullProperty || !fullProperty.is_active) {
+                                                  toast({
+                                                    title: 'Property No Longer Available',
+                                                    description: 'This property is no longer listed.',
+                                                  });
+                                                  return;
+                                                }
+
+                                                setDetailModalApartment({
+                                                  id: fullProperty.id,
+                                                  images: fullProperty.images || [],
+                                                  title: fullProperty.title,
+                                                  location: fullProperty.location,
+                                                  price: Number(fullProperty.price || 0),
+                                                  size: fullProperty.size || '',
+                                                  vibe: fullProperty.vibe || '',
+                                                  description: fullProperty.description || '',
+                                                  highlights: fullProperty.highlights || [],
+                                                  vibe_analysis: fullProperty.vibe_analysis,
+                                                  property_source_link: fullProperty.property_source_link,
+                                                  realtor: {
+                                                    id: currentConv.realtor_id,
+                                                    name: currentConv.realtor_name || 'Property Owner',
+                                                    phone: '+1-234-567-8900',
+                                                    email: 'contact@realtor.com'
+                                                  },
+                                                  matchId: currentConv.id
+                                                });
+                                              } catch (error) {
+                                                console.error('Error fetching property details:', error);
+                                                toast({
+                                                  title: 'Error',
+                                                  description: 'Failed to load property details',
+                                                  variant: 'destructive'
+                                                });
+                                              }
+                                            }}
+                                            className="text-blue-600 hover:text-blue-800 underline font-medium"
+                                          >
+                                            {part}
+                                          </button>
+                                        );
+                                      }
                                     }
                                     return part;
                                   })}
