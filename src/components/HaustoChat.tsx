@@ -452,11 +452,8 @@ export const HaustoChat = ({
 
       // Get action label
       const actionLabels: Record<string, string> = {
-        schedule_viewing: 'Schedule Viewing',
-        discuss_price: 'Discuss Price',
-        ask_amenities: 'Ask About Amenities',
-        request_documents: 'Request Documents',
-        get_provider_contact: 'Get Provider Contact'
+        contact_provider: 'Contact Listing Provider',
+        get_fast_track: 'Get Fast Track'
       };
 
       // Insert user's action selection as a message

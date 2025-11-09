@@ -48,35 +48,7 @@ serve(async (req) => {
     if (action) {
       // Handle specific actions
       switch (action) {
-        case 'schedule_viewing':
-          systemPrompt = `You are Hausto AI, a professional real estate assistant. The ${userType} wants to schedule a property viewing. As a knowledgeable realtor, guide them through the scheduling process:
-- Ask about their preferred dates and time slots (weekdays vs weekends, morning/afternoon/evening)
-- Mention typical viewing duration (30-45 minutes)
-- Offer to coordinate with the other party
-Keep your response professional yet warm, 2-3 sentences.`;
-          break;
-        case 'discuss_price':
-          systemPrompt = `You are Hausto AI, a professional real estate negotiation assistant. The ${userType} wants to discuss pricing. As an experienced realtor, help facilitate the negotiation:
-- If they're a renter: Ask about their budget range and what value they're looking for
-- If they're a realtor: Help them understand the renter's perspective and find common ground
-- Mention market conditions or property value factors when relevant
-Keep your response professional and strategic, 2-3 sentences.`;
-          break;
-        case 'ask_amenities':
-          systemPrompt = `You are Hausto AI, a professional real estate consultant. The ${userType} wants to know more about amenities. As a knowledgeable realtor, guide the conversation:
-- Ask which specific amenities matter most (parking, laundry, gym, storage, etc.)
-- Help prioritize must-haves vs nice-to-haves
-- Connect amenities to lifestyle needs
-Keep your response professional and consultative, 2-3 sentences.`;
-          break;
-        case 'request_documents':
-          systemPrompt = `You are Hausto AI, a professional real estate transaction assistant. The ${userType} wants to request documents. As an experienced realtor, guide them through the documentation process:
-- List common documents needed (lease agreement, proof of income, ID, references for renters; property deed, inspection reports for realtors)
-- Explain the purpose of key documents
-- Offer to help coordinate the exchange
-Keep your response professional and organized, 2-3 sentences.`;
-          break;
-        case 'get_provider_contact': {
+        case 'contact_provider': {
           // Find the first property in the list that has provider info
           const contactProp = Array.isArray(properties)
             ? properties.find((p: any) => {
@@ -96,7 +68,8 @@ Keep your response professional and organized, 2-3 sentences.`;
             if (finalName) lines.push(`📋 Provider: ${finalName}`);
             if (finalPhone) lines.push(`📞 Phone: ${finalPhone}`);
 
-            const suggestion = `Here's the listing provider's contact information:\n\n${lines.join('\n')}\n\nThis is the original source where the property was listed (not necessarily the realtor in this chat). You can contact them directly for more details about the property, schedule viewings, or discuss terms.`;
+            const propertyTitle = contactProp?.title || 'the property';
+            const suggestion = `Here's the listing provider's contact information for **${propertyTitle}**:\n\n${lines.join('\n')}\n\nYou can contact them directly to discuss the property, schedule viewings, or get more details.`;
 
             return new Response(
               JSON.stringify({ suggestion, suggestedActions: [] }),
@@ -108,8 +81,7 @@ Keep your response professional and organized, 2-3 sentences.`;
           } else {
             return new Response(
               JSON.stringify({
-                suggestion:
-                  `I couldn't find the listing provider's contact information for this property. It may not have been included when the property was imported. Please ask the property owner here for alternative contact options.`,
+                suggestion: `I couldn't find the listing provider's contact information for this property. Please ask the realtor in this conversation for more details.`,
                 suggestedActions: [],
               }),
               {
@@ -119,6 +91,15 @@ Keep your response professional and organized, 2-3 sentences.`;
             );
           }
         }
+        case 'get_fast_track':
+          systemPrompt = `You are Hausto AI. The user selected "Get Fast Track". This is a PREMIUM FEATURE for subscribers only.
+
+If this is a premium user: Ask them for their preferred viewing schedule (dates, times, any special requirements). Let them know that Hausto Agent will coordinate with up to 3 listing providers and provide the viewing address and timeline.
+
+If not a premium user: Politely inform them that Fast Track is a premium feature that allows Hausto Agent to handle all coordination with listing providers and arrange up to 3 property viewings at no extra cost. Encourage them to upgrade to premium.
+
+Keep response to 2-3 sentences.`;
+          break;
         default:
           systemPrompt = `You are Hausto AI, a professional real estate assistant responding to: "${action}". As an experienced realtor, provide knowledgeable guidance in 2-3 sentences.`;
       }
@@ -143,11 +124,8 @@ ${conversationContext}
 
 As a professional realtor would, provide expert guidance (2-3 sentences max) that moves the conversation forward strategically. Be knowledgeable, trustworthy, and proactive. Show expertise while remaining approachable.`;
       
-      // Suggest relevant actions based on conversation and user type
-      // Put get_provider_contact first so renters can easily call the listing provider
-      suggestedActions = ['get_provider_contact', 'schedule_viewing', 'discuss_price', 'ask_amenities', 'request_documents'];
-      
-      // Always include provider contact action; the function will handle missing info gracefully
+      // Simplified to 2 actions only
+      suggestedActions = ['contact_provider', 'get_fast_track'];
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
