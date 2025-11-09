@@ -188,7 +188,8 @@ export const HaustoChat = ({
     const isAIMessage = lastMessage?.metadata && 
       (lastMessage.metadata.type === 'ai-greeting' || 
        lastMessage.metadata.type === 'ai-suggestion' ||
-       lastMessage.metadata.type === 'ai-exit');
+       lastMessage.metadata.type === 'ai-exit' ||
+       lastMessage.metadata.type === 'ai-confirmation');
     
     if (isAIMessage) return;
 
@@ -257,7 +258,8 @@ export const HaustoChat = ({
       const lastMessage = directMessages[directMessages.length - 1];
       const isAIMessage = lastMessage?.metadata && 
         (lastMessage.metadata.type === 'ai-greeting' || 
-         lastMessage.metadata.type === 'ai-suggestion');
+         lastMessage.metadata.type === 'ai-suggestion' ||
+         lastMessage.metadata.type === 'ai-confirmation');
       
       if (isAIMessage) {
         setAiLastActiveTime(Date.now());
@@ -568,14 +570,14 @@ export const HaustoChat = ({
 
       const scheduleMessage = `🎯 **Fast Track Request Submitted**\n\nPreferred Dates: ${datesText}\nPreferred Times: ${timesText}${requirementsText}\n\nHausto Agent will coordinate with up to 3 listing providers and get back to you with viewing details soon!`;
 
-      // Insert the schedule request message
+      // Insert the schedule request message from AI
       const { error: insertError } = await supabase.from('direct_messages').insert({
         conversation_id: selectedMatch,
         sender_id: user.id,
         receiver_id: receiverId,
         content: scheduleMessage,
         metadata: { 
-          type: 'viewing-schedule-request',
+          type: 'ai-confirmation',
           scheduleData: scheduleData as any
         }
       });
@@ -871,7 +873,7 @@ export const HaustoChat = ({
                   </div> : <div className="space-y-4">
                     {directMessages.map(message => {
                       const isOwnMessage = message.sender_id === user?.id;
-                      const isAIMessage = message.metadata?.type === 'ai-greeting' || message.metadata?.type === 'ai-suggestion' || message.metadata?.type === 'ai-exit';
+                      const isAIMessage = message.metadata?.type === 'ai-greeting' || message.metadata?.type === 'ai-suggestion' || message.metadata?.type === 'ai-exit' || message.metadata?.type === 'ai-confirmation';
                       const isUserAction = message.metadata?.type === 'user-action';
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       const isRealtor = userType === 'realtor';

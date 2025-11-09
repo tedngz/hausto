@@ -14,7 +14,7 @@ interface DirectMessage {
   read_at: string | null;
   deleted_by: string[];
   metadata?: {
-    type?: 'system' | 'ai-greeting' | 'ai-suggestion' | 'ai-exit' | 'user-action';
+    type?: 'system' | 'ai-greeting' | 'ai-suggestion' | 'ai-exit' | 'ai-confirmation' | 'user-action';
     property_id?: string;
     property_title?: string;
     property_location?: string;
