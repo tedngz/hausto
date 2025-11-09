@@ -821,11 +821,8 @@ export const HaustoChat = ({
                               <div className="flex justify-center gap-2 mt-2 flex-wrap">
                                 {message.metadata.suggestedActions.map((action: string) => {
                                   const actionLabels: Record<string, string> = {
-                                    schedule_viewing: '📅 Schedule Viewing',
-                                    discuss_price: '💰 Discuss Price',
-                                    ask_amenities: '🏠 Ask About Amenities',
-                                    request_documents: '📄 Request Documents',
-                                    get_provider_contact: '📞 Get Provider Contact'
+                                    contact_provider: 'Contact Listing Provider',
+                                    get_fast_track: 'Get Fast Track'
                                   };
                                   return (
                                     <Button
