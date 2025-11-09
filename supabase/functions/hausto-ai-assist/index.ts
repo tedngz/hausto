@@ -49,47 +49,15 @@ serve(async (req) => {
       // Handle specific actions
       switch (action) {
         case 'contact_provider': {
-          // Find the first property in the list that has provider info
-          const contactProp = Array.isArray(properties)
-            ? properties.find((p: any) => {
-                const n = (p?.property_source_provider_name ?? '').toString().trim();
-                const ph = (p?.property_source_provider_phone ?? '').toString().trim();
-                return n !== '' || ph !== '';
-              })
-            : null;
+          const suggestion = `Which property would you like to contact the listing provider about?\n\n💡 **Tip:** You can respond with the order number of the property from your matched list.\n\n[View My Matches](/)`;
 
-          const finalName = (contactProp?.property_source_provider_name ?? '').toString().trim();
-          const finalPhone = (contactProp?.property_source_provider_phone ?? '').toString().trim();
-
-          console.log('Resolved provider contact:', { finalName, finalPhone });
-
-          if (finalName || finalPhone) {
-            const lines: string[] = [];
-            if (finalName) lines.push(`📋 Provider: ${finalName}`);
-            if (finalPhone) lines.push(`📞 Phone: ${finalPhone}`);
-
-            const propertyTitle = contactProp?.title || 'the property';
-            const suggestion = `Here's the listing provider's contact information for **${propertyTitle}**:\n\n${lines.join('\n')}\n\nYou can contact them directly to discuss the property, schedule viewings, or get more details.`;
-
-            return new Response(
-              JSON.stringify({ suggestion, suggestedActions: [] }),
-              {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-              }
-            );
-          } else {
-            return new Response(
-              JSON.stringify({
-                suggestion: `I couldn't find the listing provider's contact information for this property. Please ask the realtor in this conversation for more details.`,
-                suggestedActions: [],
-              }),
-              {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-              }
-            );
-          }
+          return new Response(
+            JSON.stringify({ suggestion, suggestedActions: [] }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200,
+            }
+          );
         }
         case 'get_fast_track':
           systemPrompt = `You are Hausto AI, a renter support assistant. The renter selected "Get Fast Track". This is a PREMIUM FEATURE for premium subscribers only.
