@@ -63,7 +63,7 @@ serve(async (req) => {
             );
           }
 
-          const suggestion = `📞 **Listing Provider Contact**\n\n**Name:** ${providerName}\n**Phone:** ${providerPhone}\n\nFeel free to reach out directly to discuss "${propertyTitle}" and schedule a viewing. Good luck! 🏡`;
+          const suggestion = `📞 Listing Provider Contact\n\nName: ${providerName}\nPhone: ${providerPhone}\n\nFeel free to reach out directly to discuss "${propertyTitle}" and schedule a viewing. Good luck! 🏡`;
 
           return new Response(
             JSON.stringify({ suggestion, suggestedActions: [] }),
