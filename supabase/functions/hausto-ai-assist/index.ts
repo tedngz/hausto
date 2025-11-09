@@ -49,7 +49,19 @@ serve(async (req) => {
       // Handle specific actions
       switch (action) {
         case 'contact_provider': {
-          const suggestion = `Which property would you like to contact the listing provider about?\n\n💡 **Tip:** You can respond with the order number of the property from your matched list.\n\n[View My Matches](/)`;
+          // Directly provide contact information
+          if (!providerName || !providerPhone) {
+            const suggestion = `I don't have the listing provider's contact information for this property. Please check the property listing or contact support for assistance.`;
+            return new Response(
+              JSON.stringify({ suggestion, suggestedActions: [] }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+              }
+            );
+          }
+
+          const suggestion = `📞 **Listing Provider Contact**\n\n**Name:** ${providerName}\n**Phone:** ${providerPhone}\n\nFeel free to reach out directly to discuss "${firstProperty.title}" and schedule a viewing. Good luck! 🏡`;
 
           return new Response(
             JSON.stringify({ suggestion, suggestedActions: [] }),
