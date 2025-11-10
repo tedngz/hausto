@@ -523,6 +523,9 @@ export const HomeAI = ({
               const parsed = JSON.parse(message.content);
               if (parsed.results && Array.isArray(parsed.results)) {
                 searchResults = parsed;
+              } else if (parsed.response) {
+                // Extract text response from JSON wrapper
+                displayContent = parsed.response;
               }
             } catch (e) {
               // Not JSON, treat as regular text
