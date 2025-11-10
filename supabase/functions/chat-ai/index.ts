@@ -257,7 +257,7 @@ Provide creative, engaging, and professional content that stands out in the rent
 
 🏠 AVAILABLE PROPERTIES DATABASE (${properties.length} total properties):
 ${properties.map((p, index) => {
-  const amenities = p.vibe_analysis?.amenities || [];
+  const amenities = p.amenities || [];
   const imageUrls = Array.isArray(p.images) ? p.images : [];
   const providerName = p.property_source_provider_name;
   const providerPhone = p.property_source_provider_phone;
