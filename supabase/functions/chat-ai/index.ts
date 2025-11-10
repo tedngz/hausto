@@ -279,11 +279,12 @@ ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
 }).join('\n')}
 
 ⚠️ CRITICAL AMENITY RULES:
-- ONLY mention amenities that are explicitly listed in "**AMENITIES**" section above
-- DO NOT assume or infer amenities from photos, descriptions, or property names
-- DO NOT make up amenities that are not in the property's amenity list
-- If a property shows "None listed", say amenities are not specified - do NOT guess
-- When describing properties, ONLY reference the exact amenities shown in the data
+- ANALYZE THE PROPERTY IMAGES provided to verify and identify amenities visually
+- Cross-reference visual amenities with the listed amenities in "**AMENITIES**" section
+- If you see amenities in images that aren't listed, you CAN mention them but note they were "observed in photos"
+- If amenities are listed but not visible in photos, still mention them as "listed amenities"
+- Be specific about what you see: pool, gym equipment, balcony, parking, kitchen appliances, etc.
+- When describing properties, combine both listed amenities AND what you observe in the images
 
 🎯 RESPONSE FORMAT - Return ONLY valid JSON:
 {
@@ -390,6 +391,21 @@ Current user message: ${message}`;
 
     console.log('Calling OpenAI API...');
     
+    // Collect property images for visual amenity analysis (max 8 images to avoid token limits)
+    const propertyImagesForAnalysis = properties
+      .slice(0, 4) // First 4 properties
+      .flatMap(p => {
+        const images = Array.isArray(p.images) ? p.images : [];
+        return images.slice(0, 2); // Max 2 images per property
+      })
+      .filter(Boolean);
+    
+    // Combine uploaded reference images with property images
+    const allImagesToAnalyze = [
+      ...(Array.isArray(propertyImages) ? propertyImages : []),
+      ...propertyImagesForAnalysis
+    ];
+    
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -398,13 +414,13 @@ Current user message: ${message}`;
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages: propertyImages && propertyImages.length > 0 ? [
+        messages: allImagesToAnalyze.length > 0 ? [
           { role: 'system', content: fullContext },
           { 
             role: 'user', 
             content: [
               { type: 'text', text: message },
-              ...propertyImages.map((image: any) => ({
+              ...allImagesToAnalyze.map((image: any) => ({
                 type: 'image_url',
                 image_url: { url: image }
               }))
