@@ -268,7 +268,7 @@ Location: ${p.location}
 Price: ${p.price?.toLocaleString()} VND/month
 Description: ${(p.description || 'Modern living space').substring(0, 200)}
 Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
-Amenities: ${amenities.length > 0 ? amenities.join(', ') : 'Not specified'}
+**AMENITIES (ONLY USE THESE - DO NOT ADD OTHERS)**: ${amenities.length > 0 ? amenities.join(', ') : 'None listed'}
 Property ID (for matching): ${p.id}
 Realtor ID: ${p.realtor_id}
 **ACTUAL IMAGE URLS (MUST COPY EXACTLY)**: ${JSON.stringify(imageUrls)}
@@ -276,6 +276,13 @@ ${providerName ? `Property Source Provider: ${providerName}` : ''}
 ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
 `;
 }).join('\n')}
+
+⚠️ CRITICAL AMENITY RULES:
+- ONLY mention amenities that are explicitly listed in "**AMENITIES**" section above
+- DO NOT assume or infer amenities from photos, descriptions, or property names
+- DO NOT make up amenities that are not in the property's amenity list
+- If a property shows "None listed", say amenities are not specified - do NOT guess
+- When describing properties, ONLY reference the exact amenities shown in the data
 
 🎯 RESPONSE FORMAT - Return ONLY valid JSON:
 {
