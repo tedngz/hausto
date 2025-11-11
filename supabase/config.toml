@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.notify-premium-interest]
 verify_jwt = true
+
+[functions.notify-fast-track-request]
+verify_jwt = true

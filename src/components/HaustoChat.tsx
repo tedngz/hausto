@@ -606,6 +606,33 @@ export const HaustoChat = ({
 
       if (requestError) throw requestError;
 
+      // Send notification emails to admin and renter
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, email')
+          .eq('id', user.id)
+          .single();
+
+        const propertyTitles = currentConv.properties?.map(p => p.title || 'Untitled Property') || [];
+
+        await supabase.functions.invoke('notify-fast-track-request', {
+          body: {
+            renterName: profile?.name || 'User',
+            renterEmail: profile?.email || user.email || '',
+            preferredDates: scheduleData.dates.map(d => format(d, 'MMM dd, yyyy')),
+            preferredTimes: scheduleData.preferredTimes,
+            specialRequirements: scheduleData.specialRequirements || '',
+            propertyTitles: propertyTitles,
+            conversationId: selectedMatch,
+          },
+        });
+        console.log('Fast track notification sent successfully');
+      } catch (notificationError) {
+        console.error('Error sending fast track notification:', notificationError);
+        // Don't throw - continue with chat message even if notification fails
+      }
+
       // Format the viewing schedule message
       const datesText = scheduleData.dates
         .map(d => format(d, 'MMM dd, yyyy'))
