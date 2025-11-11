@@ -590,14 +590,13 @@ export const HaustoChat = ({
       if (!currentConv) return;
 
       const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
-      const propertyIds = currentConv.properties?.map(p => p.property_id) || [];
 
-      // Insert into fast_track_requests table
+      // Insert into fast_track_requests table with selected properties
       const { error: requestError } = await supabase.from('fast_track_requests').insert({
         conversation_id: selectedMatch,
         renter_id: user.id,
         realtor_id: currentConv.realtor_id,
-        property_ids: propertyIds,
+        property_ids: scheduleData.selectedPropertyIds,
         preferred_dates: scheduleData.dates.map(d => format(d, 'yyyy-MM-dd')),
         preferred_times: scheduleData.preferredTimes,
         special_requirements: scheduleData.specialRequirements || null,
@@ -614,7 +613,11 @@ export const HaustoChat = ({
           .eq('id', user.id)
           .single();
 
-        const propertyTitles = currentConv.properties?.map(p => p.title || 'Untitled Property') || [];
+        // Get titles for selected properties only
+        const selectedProperties = currentConv.properties?.filter(p => 
+          scheduleData.selectedPropertyIds.includes(p.property_id)
+        ) || [];
+        const propertyTitles = selectedProperties.map(p => p.title || 'Untitled Property');
 
         await supabase.functions.invoke('notify-fast-track-request', {
           body: {
@@ -1141,6 +1144,12 @@ export const HaustoChat = ({
           isOpen={isViewingScheduleModalOpen}
           onClose={() => setIsViewingScheduleModalOpen(false)}
           onSubmit={handleViewingScheduleSubmit}
+          matchedProperties={
+            conversations.find(c => c.id === selectedMatch)?.properties?.map(p => ({
+              id: p.property_id,
+              title: p.title || 'Untitled Property'
+            })) || []
+          }
         />
       </DialogContent>
     </Dialog>

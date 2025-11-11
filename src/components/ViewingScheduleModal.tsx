@@ -6,27 +6,36 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CalendarIcon, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
+interface Property {
+  id: string;
+  title: string;
+}
+
 interface ViewingScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (scheduleData: ViewingScheduleData) => void;
+  matchedProperties: Property[];
 }
 
 export interface ViewingScheduleData {
   dates: Date[];
   preferredTimes: string[];
   specialRequirements: string;
+  selectedPropertyIds: string[];
 }
 
-export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit }: ViewingScheduleModalProps) => {
+export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedProperties }: ViewingScheduleModalProps) => {
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['']);
   const [specialRequirements, setSpecialRequirements] = useState('');
+  const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const { toast } = useToast();
 
   const handleAddDate = (date: Date | undefined) => {
@@ -68,8 +77,35 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit }: ViewingSched
     setPreferredTimes(newTimes);
   };
 
+  const handlePropertyToggle = (propertyId: string) => {
+    setSelectedPropertyIds(prev => {
+      if (prev.includes(propertyId)) {
+        return prev.filter(id => id !== propertyId);
+      } else {
+        if (prev.length >= 3) {
+          toast({
+            title: "Maximum Properties Reached",
+            description: "You can select up to 3 properties for fast track viewing.",
+            variant: "destructive"
+          });
+          return prev;
+        }
+        return [...prev, propertyId];
+      }
+    });
+  };
+
   const handleSubmit = () => {
     // Validation
+    if (selectedPropertyIds.length === 0) {
+      toast({
+        title: "Properties Required",
+        description: "Please select at least one property for viewing.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (selectedDates.length === 0) {
       toast({
         title: "Dates Required",
@@ -93,13 +129,15 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit }: ViewingSched
     onSubmit({
       dates: selectedDates,
       preferredTimes: filledTimes,
-      specialRequirements: specialRequirements.trim()
+      specialRequirements: specialRequirements.trim(),
+      selectedPropertyIds
     });
 
     // Reset form
     setSelectedDates([]);
     setPreferredTimes(['']);
     setSpecialRequirements('');
+    setSelectedPropertyIds([]);
     onClose();
   };
 
@@ -107,6 +145,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit }: ViewingSched
     setSelectedDates([]);
     setPreferredTimes(['']);
     setSpecialRequirements('');
+    setSelectedPropertyIds([]);
     onClose();
   };
 
@@ -121,6 +160,42 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit }: ViewingSched
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* Property Selection */}
+          <div className="space-y-2">
+            <Label>Select Properties (Up to 3) *</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose the properties you want to schedule viewings for
+            </p>
+            <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded-md p-3">
+              {matchedProperties.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No matched properties available
+                </p>
+              ) : (
+                matchedProperties.map((property) => (
+                  <div key={property.id} className="flex items-start space-x-2">
+                    <Checkbox
+                      id={`property-${property.id}`}
+                      checked={selectedPropertyIds.includes(property.id)}
+                      onCheckedChange={() => handlePropertyToggle(property.id)}
+                    />
+                    <label
+                      htmlFor={`property-${property.id}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                    >
+                      {property.title}
+                    </label>
+                  </div>
+                ))
+              )}
+            </div>
+            {selectedPropertyIds.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {selectedPropertyIds.length} of 3 properties selected
+              </p>
+            )}
+          </div>
+
           {/* Date Selection */}
           <div className="space-y-2">
             <Label>Preferred Viewing Dates *</Label>
