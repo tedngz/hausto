@@ -376,20 +376,22 @@ ${chatHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
 
 Current user message: ${message}`;
 
-    // Call OpenAI API
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      console.error('OpenAI API key not found');
+    // Call Lovable AI Gateway
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    if (!lovableApiKey) {
+      console.error('LOVABLE_API_KEY not found');
       return new Response(
-        JSON.stringify({ error: 'OpenAI API key not configured' }),
+        JSON.stringify({ 
+          response: "I'm having trouble connecting to the AI service right now. But I'd be happy to help you find properties! Could you tell me more about what you're looking for - location preferences, budget, or lifestyle needs?"
+        }),
         { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
+          status: 200,
         }
       );
     }
 
-    console.log('Calling OpenAI API...');
+    console.log('Calling Lovable AI Gateway...');
     
     // Collect property images for visual amenity analysis (max 8 images to avoid token limits)
     const propertyImagesForAnalysis = properties
@@ -406,14 +408,14 @@ Current user message: ${message}`;
       ...propertyImagesForAnalysis
     ];
     
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
+        'Authorization': `Bearer ${lovableApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-2.5-flash',
         messages: allImagesToAnalyze.length > 0 ? [
           { role: 'system', content: fullContext },
           { 
@@ -431,16 +433,15 @@ Current user message: ${message}`;
           { role: 'user', content: message }
         ],
         max_tokens: 2000,
-        temperature: 0.7,
       }),
     });
 
-    console.log('OpenAI response status:', openaiResponse.status);
+    console.log('AI Gateway response status:', aiResponse.status);
     
-    if (!openaiResponse.ok) {
-      console.error('OpenAI API error:', openaiResponse.status, openaiResponse.statusText);
-      const errorText = await openaiResponse.text();
-      console.error('OpenAI error response:', errorText);
+    if (!aiResponse.ok) {
+      console.error('AI Gateway error:', aiResponse.status, aiResponse.statusText);
+      const errorText = await aiResponse.text();
+      console.error('AI Gateway error response:', errorText);
       
       // Provide fallback response
       const fallbackResponse = userType === 'realtor' 
@@ -467,21 +468,21 @@ Current user message: ${message}`;
       );
     }
 
-    const openaiData = await openaiResponse.json();
-    console.log('OpenAI response received, choices length:', openaiData.choices?.length);
+    const aiData = await aiResponse.json();
+    console.log('AI Gateway response received, choices length:', aiData.choices?.length);
     
-    if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
-      console.error('Invalid OpenAI response structure:', openaiData);
-      throw new Error('Invalid response from OpenAI');
+    if (!aiData.choices || !aiData.choices[0] || !aiData.choices[0].message) {
+      console.error('Invalid AI Gateway response structure:', aiData);
+      throw new Error('Invalid response from AI Gateway');
     }
     
     // Parse the AI's response
-    const aiResponse = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
+    const aiMessageContent = aiData.choices[0].message.content || 'Sorry, I could not process your request.';
 
     // Check if the response contains search results
     let searchData = null;
     try {
-      const parsed = JSON.parse(aiResponse);
+      const parsed = JSON.parse(aiMessageContent);
       if (parsed.results && Array.isArray(parsed.results)) {
         searchData = parsed;
       }
@@ -496,7 +497,7 @@ Current user message: ${message}`;
         .insert({
           conversation_id: conversationId,
           role: 'assistant',
-          content: aiResponse
+          content: aiMessageContent
         });
 
       if (aiMessageError) {
@@ -642,7 +643,7 @@ Current user message: ${message}`;
       }
     }
 
-    return new Response(JSON.stringify({ response: aiResponse }), {
+    return new Response(JSON.stringify({ response: aiMessageContent }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
