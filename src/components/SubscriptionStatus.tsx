@@ -140,14 +140,16 @@ export const SubscriptionStatus = ({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Cancel Premium Subscription?</AlertDialogTitle>
-          <AlertDialogDescription className="space-y-2">
-            <p>Your premium benefits will remain active until the end of your current billing period.</p>
-            <p className="text-muted-foreground">After that, you'll lose access to:</p>
-            <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
-              <li>Unlimited property views</li>
-              <li>Unlimited matches</li>
-              <li>Unlimited AI search</li>
-            </ul>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              <p>Your premium benefits will remain active until the end of your current billing period.</p>
+              <p className="text-muted-foreground">After that, you'll lose access to:</p>
+              <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
+                <li>Unlimited property views</li>
+                <li>Unlimited matches</li>
+                <li>Unlimited AI search</li>
+              </ul>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

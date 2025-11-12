@@ -50,9 +50,21 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .single();
 
-    if (subscriberError || !subscriberData?.paypal_subscription_id) {
-      throw new Error("No active subscription found");
+    if (subscriberError || !subscriberData) {
+      throw new Error("No subscription record found");
     }
+
+    // Check if user has premium status
+    if (!subscriberData.subscribed && subscriberData.subscription_tier === "free") {
+      throw new Error("No active subscription to cancel");
+    }
+
+    const hasPayPalSubscription = Boolean(subscriberData.paypal_subscription_id);
+    logStep("Subscription status", { 
+      hasPayPalId: hasPayPalSubscription, 
+      tier: subscriberData.subscription_tier,
+      subscribed: subscriberData.subscribed 
+    });
 
     // Get PayPal access token
     let accessToken: string | null = null;
@@ -80,9 +92,9 @@ serve(async (req) => {
       logStep("Skipping PayPal auth - credentials missing");
     }
 
-    // Cancel PayPal subscription
+    // Cancel PayPal subscription (only if PayPal subscription exists)
     let paypalCancelled = false;
-    if (accessToken) {
+    if (accessToken && hasPayPalSubscription) {
       try {
         const cancelResponse = await fetch(
           `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
@@ -111,7 +123,11 @@ serve(async (req) => {
         // Continue with database update even if PayPal fails
       }
     } else {
-      logStep("Skipping PayPal cancellation - no PayPal access token available");
+      if (!hasPayPalSubscription) {
+        logStep("Skipping PayPal cancellation - no PayPal subscription ID (manual premium grant)");
+      } else {
+        logStep("Skipping PayPal cancellation - no PayPal access token available");
+      }
     }
 
     // Update subscriber record in our database
