@@ -140,7 +140,7 @@ const handler = async (req: Request): Promise<Response> => {
         <p><strong>Conversation ID:</strong> ${conversationId}</p>
         
         <p style="margin-top: 20px; padding: 15px; background-color: #f0f9ff; border-left: 4px solid #3b82f6;">
-          <strong>Action Required:</strong> Please coordinate with up to 3 listing providers and schedule viewings based on the renter's preferences.
+          <strong>Action Required:</strong> Please coordinate viewings for up to 3 property listings based on the renter's preferences.
         </p>
       `,
     });
@@ -167,7 +167,7 @@ const handler = async (req: Request): Promise<Response> => {
         <h2>Properties Included:</h2>
         ${propertiesHtml}
         
-        <p>We'll coordinate with up to 3 listing providers and get back to you with confirmed viewing details as soon as possible - typically within 24-48 hours.</p>
+        <p>We'll coordinate viewings for up to 3 property listings and get back to you with confirmed viewing details as soon as possible - typically within 24-48 hours.</p>
         
         <p>You can continue to chat with Hausto Agent in your conversation for any questions or updates.</p>
         

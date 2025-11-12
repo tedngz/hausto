@@ -652,7 +652,7 @@ export const HaustoChat = ({
         ? `\n\nSpecial Requirements: ${scheduleData.specialRequirements}`
         : '';
 
-      const scheduleMessage = `🎯 **Fast Track Request Submitted**\n\nPreferred Dates: ${datesText}\nPreferred Times: ${timesText}${requirementsText}\n\nHausto Agent will coordinate with up to 3 listing providers and get back to you with viewing details soon!`;
+      const scheduleMessage = `🎯 **Fast Track Request Submitted**\n\nPreferred Dates: ${datesText}\nPreferred Times: ${timesText}${requirementsText}\n\nHausto Agent will coordinate viewings for up to 3 property listings and get back to you with viewing details soon!`;
 
       // Insert the schedule request message from AI
       const { error: insertError } = await supabase.from('direct_messages').insert({
