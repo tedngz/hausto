@@ -5,6 +5,16 @@ import { Crown, Calendar, RefreshCw, CreditCard } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 interface SubscriptionStatusProps {
   onUpgrade?: () => void;
   showHistory?: boolean;
@@ -23,6 +33,7 @@ export const SubscriptionStatus = ({
   } = useSubscription();
   const [cancelling, setCancelling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const isPremium = subscribed === true || subscription_tier === 'premium';
 
   // Debug logging - more detailed
@@ -41,10 +52,12 @@ export const SubscriptionStatus = ({
     setRefreshing(false);
     toast.success('Subscription status refreshed');
   };
-  const handleCancel = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your billing period.')) {
-      return;
-    }
+  const handleCancelClick = () => {
+    setShowCancelDialog(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    setShowCancelDialog(false);
     setCancelling(true);
     await cancelSubscription();
     setCancelling(false);
@@ -59,7 +72,8 @@ export const SubscriptionStatus = ({
         </CardContent>
       </Card>;
   }
-  return <div className="space-y-6">
+  return <>
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -97,7 +111,7 @@ export const SubscriptionStatus = ({
               
               <Button 
                 variant="outline" 
-                onClick={handleCancel} 
+                onClick={handleCancelClick} 
                 disabled={cancelling}
                 className="w-full"
               >
@@ -120,5 +134,29 @@ export const SubscriptionStatus = ({
             </div>}
         </CardContent>
       </Card>
-    </div>;
+    </div>
+
+    <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel Premium Subscription?</AlertDialogTitle>
+          <AlertDialogDescription className="space-y-2">
+            <p>Your premium benefits will remain active until the end of your current billing period.</p>
+            <p className="text-muted-foreground">After that, you'll lose access to:</p>
+            <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
+              <li>Unlimited property views</li>
+              <li>Unlimited matches</li>
+              <li>Unlimited AI search</li>
+            </ul>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep Subscription</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirmCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Cancel Subscription
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>;
 };
