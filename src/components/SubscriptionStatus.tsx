@@ -5,16 +5,7 @@ import { Crown, Calendar, RefreshCw, CreditCard } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 interface SubscriptionStatusProps {
   onUpgrade?: () => void;
   showHistory?: boolean;
@@ -55,7 +46,6 @@ export const SubscriptionStatus = ({
   const handleCancelClick = () => {
     setShowCancelDialog(true);
   };
-
   const handleConfirmCancel = async () => {
     setShowCancelDialog(false);
     setCancelling(true);
@@ -76,7 +66,7 @@ export const SubscriptionStatus = ({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 text-lg">
             {isPremium ? <>
                 <Crown className="h-4 w-4 text-primary" />
                 Premium Plan
@@ -106,18 +96,10 @@ export const SubscriptionStatus = ({
               </ul>
             </div>
             
-            {subscribed && (
-              <Button 
-                variant="outline" 
-                onClick={handleCancelClick} 
-                disabled={cancelling}
-                className="w-full h-9 text-sm"
-                size="sm"
-              >
+            {subscribed && <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
                 <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                 {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button>
-            )}
+              </Button>}
           </div> : <div className="space-y-2.5">
             <p className="text-xs text-muted-foreground">
               Upgrade to unlock unlimited access
