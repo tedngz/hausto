@@ -131,11 +131,9 @@ serve(async (req) => {
     }
 
     // Update subscriber record in our database
+    // Keep premium active until subscription_end, just clear PayPal ID
     const { error: updateError } = await supabaseClient.from("subscribers").update({
-      subscribed: false,
-      subscription_tier: "free",
-      subscription_end: null,
-      paypal_subscription_id: null, // Clear the PayPal ID
+      paypal_subscription_id: null, // Clear the PayPal ID to prevent auto-renewal
       updated_at: new Date().toISOString(),
     }).eq("user_id", user.id);
 

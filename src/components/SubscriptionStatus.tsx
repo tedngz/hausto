@@ -91,9 +91,11 @@ export const SubscriptionStatus = ({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isPremium && subscription_end && <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Calendar className="h-3 w-3" />
-              Renews {new Date(subscription_end).toLocaleDateString()}
+          {isPremium && subscription_end && <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              <span>
+                {subscribed ? 'Renews' : 'Active until'} {new Date(subscription_end).toLocaleDateString()}
+              </span>
             </div>}
 
           {isPremium ? <div className="space-y-3">
@@ -109,15 +111,17 @@ export const SubscriptionStatus = ({
                 </ul>
               </div>
               
-              <Button 
-                variant="outline" 
-                onClick={handleCancelClick} 
-                disabled={cancelling}
-                className="w-full"
-              >
-                <CreditCard className="h-4 w-4 mr-2" />
-                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button>
+              {subscribed && (
+                <Button 
+                  variant="outline" 
+                  onClick={handleCancelClick} 
+                  disabled={cancelling}
+                  className="w-full"
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+                </Button>
+              )}
             </div> : <div className="space-y-3">
               <div className="text-sm text-muted-foreground">
                 Upgrade to unlock unlimited access to all features
@@ -142,8 +146,8 @@ export const SubscriptionStatus = ({
           <AlertDialogTitle>Cancel Premium Subscription?</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2">
-              <p>Your premium benefits will remain active until the end of your current billing period.</p>
-              <p className="text-muted-foreground">After that, you'll lose access to:</p>
+              <p>Your premium benefits will remain active until {subscription_end ? new Date(subscription_end).toLocaleDateString() : 'the end of your current billing period'}.</p>
+              <p className="text-muted-foreground">After that date, you'll lose access to:</p>
               <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
                 <li>Unlimited property views</li>
                 <li>Unlimited matches</li>
