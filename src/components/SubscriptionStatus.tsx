@@ -73,72 +73,67 @@ export const SubscriptionStatus = ({
       </Card>;
   }
   return <>
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-lg">
-              {isPremium ? <>
-                  <Crown className="h-5 w-5 text-primary" />
-                  Premium Plan
-                </> : 'Free Plan'}
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between text-base">
+          <span className="flex items-center gap-2">
+            {isPremium ? <>
+                <Crown className="h-4 w-4 text-primary" />
+                Premium Plan
+              </> : 'Free Plan'}
+          </span>
+          <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-8 w-8 p-0">
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </CardTitle>
+        {isPremium && subscription_end && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+            <Calendar className="h-3 w-3" />
+            <span>
+              {subscribed ? 'Renews' : 'Active until'} {new Date(subscription_end).toLocaleDateString()}
             </span>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
-                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isPremium && subscription_end && <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              <span>
-                {subscribed ? 'Renews' : 'Active until'} {new Date(subscription_end).toLocaleDateString()}
-              </span>
-            </div>}
-
-          {isPremium ? <div className="space-y-3">
-              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
-                <div className="flex items-center gap-2 text-primary font-medium">
-                  
-                  Premium Benefits Active
-                </div>
-                <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                  <li>• Unlimited property views</li>
-                  <li>• Unlimited matches</li>
-                  <li>• Unlimited AI search</li>
-                </ul>
+          </div>}
+      </CardHeader>
+      <CardContent className="space-y-3 pt-0">
+        {isPremium ? <div className="space-y-2.5">
+            <div className="p-2.5 bg-primary/5 rounded-lg border border-primary/20">
+              <div className="text-sm font-medium text-primary mb-1.5">
+                Premium Benefits Active
               </div>
-              
-              {subscribed && (
-                <Button 
-                  variant="outline" 
-                  onClick={handleCancelClick} 
-                  disabled={cancelling}
-                  className="w-full"
-                >
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-                </Button>
-              )}
-            </div> : <div className="space-y-3">
-              <div className="text-sm text-muted-foreground">
-                Upgrade to unlock unlimited access to all features
-              </div>
-              <ul className="text-sm text-muted-foreground space-y-1">
+              <ul className="text-xs text-muted-foreground space-y-0.5">
                 <li>• Unlimited property views</li>
                 <li>• Unlimited matches</li>
-                <li>• Unlimited AI Search</li>
+                <li>• Unlimited AI search</li>
               </ul>
-              <Button onClick={onUpgrade} className="w-full">
-                <Crown className="h-4 w-4 mr-2" />
-                Upgrade to Premium
+            </div>
+            
+            {subscribed && (
+              <Button 
+                variant="outline" 
+                onClick={handleCancelClick} 
+                disabled={cancelling}
+                className="w-full h-9 text-sm"
+                size="sm"
+              >
+                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
               </Button>
-            </div>}
-        </CardContent>
-      </Card>
-    </div>
+            )}
+          </div> : <div className="space-y-2.5">
+            <p className="text-xs text-muted-foreground">
+              Upgrade to unlock unlimited access
+            </p>
+            <ul className="text-xs text-muted-foreground space-y-0.5">
+              <li>• Unlimited property views</li>
+              <li>• Unlimited matches</li>
+              <li>• Unlimited AI Search</li>
+            </ul>
+            <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+              <Crown className="h-3.5 w-3.5 mr-1.5" />
+              Upgrade to Premium
+            </Button>
+          </div>}
+      </CardContent>
+    </Card>
 
     <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
       <AlertDialogContent>
