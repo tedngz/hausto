@@ -15,7 +15,13 @@ interface FastTrackNotificationRequest {
   preferredDates: string[];
   preferredTimes: string[];
   specialRequirements?: string;
-  propertyTitles: string[];
+  properties: Array<{
+    id: string;
+    title: string;
+    location: string;
+    price: number;
+    imageUrl: string;
+  }>;
   conversationId: string;
 }
 
@@ -80,7 +86,7 @@ const handler = async (req: Request): Promise<Response> => {
       preferredDates,
       preferredTimes,
       specialRequirements,
-      propertyTitles,
+      properties,
       conversationId,
     }: FastTrackNotificationRequest = await req.json();
 
@@ -89,8 +95,20 @@ const handler = async (req: Request): Promise<Response> => {
     // Format dates and times for email
     const datesText = preferredDates.join(", ");
     const timesText = preferredTimes.join(", ");
-    const propertiesText = propertyTitles.length > 0 
-      ? `<ul>${propertyTitles.map(title => `<li>${title}</li>`).join("")}</ul>`
+    const propertiesHtml = properties.length > 0 
+      ? `<div style="margin-top: 15px;">
+          ${properties.map(prop => `
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; gap: 12px; align-items: start;">
+              ${prop.imageUrl ? `<img src="${prop.imageUrl}" alt="${prop.title}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px; flex-shrink: 0;" />` : ''}
+              <div style="flex: 1;">
+                <strong style="color: #111827; font-size: 14px;">${prop.title}</strong>
+                <p style="margin: 4px 0; color: #6b7280; font-size: 13px;">${prop.location}</p>
+                <p style="margin: 4px 0; color: #ea580c; font-weight: 600; font-size: 13px;">$${prop.price.toLocaleString()}/mo</p>
+                <a href="https://hausto.com/property/${prop.id}" style="color: #2563eb; text-decoration: none; font-size: 12px; margin-top: 4px; display: inline-block;">View Property →</a>
+              </div>
+            </div>
+          `).join('')}
+        </div>`
       : "<p>No specific properties listed</p>";
 
     // Send email to the Hausto Agent (admin)
@@ -117,7 +135,7 @@ const handler = async (req: Request): Promise<Response> => {
         </ul>
         
         <h2>Properties of Interest:</h2>
-        ${propertiesText}
+        ${propertiesHtml}
         
         <p><strong>Conversation ID:</strong> ${conversationId}</p>
         
@@ -147,7 +165,7 @@ const handler = async (req: Request): Promise<Response> => {
         </ul>
         
         <h2>Properties Included:</h2>
-        ${propertiesText}
+        ${propertiesHtml}
         
         <p>We'll coordinate with up to 3 listing providers and get back to you with confirmed viewing details as soon as possible - typically within 24-48 hours.</p>
         

@@ -617,7 +617,14 @@ export const HaustoChat = ({
         const selectedProperties = currentConv.properties?.filter(p => 
           scheduleData.selectedPropertyIds.includes(p.property_id)
         ) || [];
-        const propertyTitles = selectedProperties.map(p => p.title || 'Untitled Property');
+        
+        const propertyData = selectedProperties.map(p => ({
+          id: p.property_id,
+          title: p.title || 'Untitled Property',
+          location: p.location,
+          price: p.price,
+          imageUrl: p.images?.[0] || ''
+        }));
 
         await supabase.functions.invoke('notify-fast-track-request', {
           body: {
@@ -626,7 +633,7 @@ export const HaustoChat = ({
             preferredDates: scheduleData.dates.map(d => format(d, 'MMM dd, yyyy')),
             preferredTimes: scheduleData.preferredTimes,
             specialRequirements: scheduleData.specialRequirements || '',
-            propertyTitles: propertyTitles,
+            properties: propertyData,
             conversationId: selectedMatch,
           },
         });
@@ -1147,9 +1154,38 @@ export const HaustoChat = ({
           matchedProperties={
             conversations.find(c => c.id === selectedMatch)?.properties?.map(p => ({
               id: p.property_id,
-              title: p.title || 'Untitled Property'
+              title: p.title || 'Untitled Property',
+              images: p.images,
+              location: p.location,
+              price: p.price
             })) || []
           }
+          onPropertyClick={(propertyId) => {
+            // Find the property and open detail modal
+            const conv = conversations.find(c => c.id === selectedMatch);
+            const property = conv?.properties?.find(p => p.property_id === propertyId);
+            if (property) {
+              setDetailModalApartment({
+                id: property.property_id,
+                title: property.title,
+                location: property.location,
+                price: property.price,
+                images: property.images,
+                size: 'N/A',
+                vibe: 'N/A',
+                description: '',
+                highlights: [],
+                realtor: {
+                  id: '',
+                  name: property.property_source_provider_name || 'Property Provider',
+                  phone: property.property_source_provider_phone || '',
+                  email: ''
+                },
+                propertySourceProviderName: property.property_source_provider_name,
+                propertySourceProviderPhone: property.property_source_provider_phone
+              } as Apartment);
+            }
+          }}
         />
       </DialogContent>
     </Dialog>

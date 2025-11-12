@@ -15,6 +15,9 @@ import { useToast } from '@/hooks/use-toast';
 interface Property {
   id: string;
   title: string;
+  images?: string[];
+  location?: string;
+  price?: number;
 }
 
 interface ViewingScheduleModalProps {
@@ -22,6 +25,7 @@ interface ViewingScheduleModalProps {
   onClose: () => void;
   onSubmit: (scheduleData: ViewingScheduleData) => void;
   matchedProperties: Property[];
+  onPropertyClick?: (propertyId: string) => void;
 }
 
 export interface ViewingScheduleData {
@@ -31,7 +35,7 @@ export interface ViewingScheduleData {
   selectedPropertyIds: string[];
 }
 
-export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedProperties }: ViewingScheduleModalProps) => {
+export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedProperties, onPropertyClick }: ViewingScheduleModalProps) => {
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['']);
   const [specialRequirements, setSpecialRequirements] = useState('');
@@ -173,18 +177,41 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
                 </p>
               ) : (
                 matchedProperties.map((property) => (
-                  <div key={property.id} className="flex items-start space-x-2">
+                  <div key={property.id} className="flex items-start space-x-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
                     <Checkbox
                       id={`property-${property.id}`}
                       checked={selectedPropertyIds.includes(property.id)}
                       onCheckedChange={() => handlePropertyToggle(property.id)}
+                      className="mt-1"
                     />
-                    <label
-                      htmlFor={`property-${property.id}`}
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                    >
-                      {property.title}
-                    </label>
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      {property.images && property.images.length > 0 && (
+                        <img 
+                          src={property.images[0]} 
+                          alt={property.title}
+                          className="w-16 h-16 object-cover rounded-md flex-shrink-0"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <label
+                          htmlFor={`property-${property.id}`}
+                          className="text-sm font-medium leading-tight cursor-pointer hover:text-primary block mb-1"
+                          onClick={(e) => {
+                            if (onPropertyClick) {
+                              e.preventDefault();
+                              onPropertyClick(property.id);
+                            }
+                          }}
+                        >
+                          {property.title}
+                        </label>
+                        {property.location && (
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {property.location}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))
               )}
