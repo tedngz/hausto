@@ -79,7 +79,7 @@ export const SubscriptionStatus = ({
         {isPremium && subscription_end && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
             <Calendar className="h-3 w-3" />
             <span>
-              {subscribed ? 'Renews' : 'Active until'} {new Date(subscription_end).toLocaleDateString()}
+              {subscribed ? 'Renews' : 'Effective until'} {new Date(subscription_end).toLocaleDateString()}
             </span>
           </div>}
       </CardHeader>
@@ -96,9 +96,12 @@ export const SubscriptionStatus = ({
               </ul>
             </div>
             
-            {subscribed && <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
+            {subscribed ? <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
                 <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                 {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+              </Button> : <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+                <Crown className="h-3.5 w-3.5 mr-1.5" />
+                Reactivate Subscription
               </Button>}
           </div> : <div className="space-y-2.5">
             <p className="text-xs text-muted-foreground">
