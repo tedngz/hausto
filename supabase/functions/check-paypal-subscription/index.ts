@@ -72,6 +72,7 @@ serve(async (req) => {
       subscribed: false,
       subscription_tier: null as string | null,
       subscription_end: null as string | null,
+      paypal_subscription_id: null as string | null,
     };
 
     if (subscriberData?.paypal_subscription_id) {
@@ -97,9 +98,21 @@ serve(async (req) => {
             subscribed: true,
             subscription_tier: "premium",
             subscription_end: subscription.billing_info?.next_billing_time || null,
+            paypal_subscription_id: subscriberData.paypal_subscription_id,
           };
         }
       }
+    } else if (subscriberData?.subscribed && subscriberData?.subscription_end) {
+      // User has cancelled but still has premium until end date
+      logStep("No PayPal subscription ID but user still has premium status", { 
+        subscription_end: subscriberData.subscription_end 
+      });
+      subscriptionStatus = {
+        subscribed: subscriberData.subscribed,
+        subscription_tier: subscriberData.subscription_tier || "free",
+        subscription_end: subscriberData.subscription_end,
+        paypal_subscription_id: null,
+      };
     } else {
       logStep("No PayPal subscription ID found");
     }
@@ -131,6 +144,7 @@ serve(async (req) => {
       subscribed: false,
       subscription_tier: "free",
       subscription_end: null,
+      paypal_subscription_id: null,
       error: "Unable to verify subscription status"
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

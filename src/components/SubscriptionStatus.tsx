@@ -18,6 +18,7 @@ export const SubscriptionStatus = ({
     subscribed,
     subscription_tier,
     subscription_end,
+    paypal_subscription_id,
     loading,
     checkSubscription,
     cancelSubscription
@@ -26,13 +27,16 @@ export const SubscriptionStatus = ({
   const [refreshing, setRefreshing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const isPremium = subscribed === true || subscription_tier === 'premium';
+  const isCancelled = isPremium && !paypal_subscription_id;
 
   // Debug logging - more detailed
   console.log('Subscription Status Debug:', {
     subscribed,
     subscription_tier,
     subscription_end,
+    paypal_subscription_id,
     isPremium,
+    isCancelled,
     loading,
     subscribedType: typeof subscribed,
     tierType: typeof subscription_tier
@@ -79,7 +83,7 @@ export const SubscriptionStatus = ({
         {isPremium && subscription_end && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
             <Calendar className="h-3 w-3" />
             <span>
-              {subscribed ? 'Renews' : 'Effective until'} {new Date(subscription_end).toLocaleDateString()}
+              {isCancelled ? 'Effective until' : 'Renews'} {new Date(subscription_end).toLocaleDateString()}
             </span>
           </div>}
       </CardHeader>
@@ -96,12 +100,12 @@ export const SubscriptionStatus = ({
               </ul>
             </div>
             
-            {subscribed ? <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
-                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
-                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button> : <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+            {isCancelled ? <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
                 <Crown className="h-3.5 w-3.5 mr-1.5" />
                 Reactivate Subscription
+              </Button> : <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
+                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
               </Button>}
           </div> : <div className="space-y-2.5">
             <p className="text-xs text-muted-foreground">
