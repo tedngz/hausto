@@ -26,21 +26,12 @@ export const SubscriptionStatus = ({
   const [cancelling, setCancelling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const isPremium = subscribed === true || subscription_tier === 'premium';
+  // Premium status based on tier and subscription end date
+  const isPremium = subscription_tier === 'premium' && subscription_end;
+  
+  // Active subscription has PayPal ID, cancelled subscription doesn't but still has premium benefits
+  const hasActiveSubscription = isPremium && !!paypal_subscription_id;
   const isCancelled = isPremium && !paypal_subscription_id;
-
-  // Debug logging - more detailed
-  console.log('Subscription Status Debug:', {
-    subscribed,
-    subscription_tier,
-    subscription_end,
-    paypal_subscription_id,
-    isPremium,
-    isCancelled,
-    loading,
-    subscribedType: typeof subscribed,
-    tierType: typeof subscription_tier
-  });
   const handleRefresh = async () => {
     setRefreshing(true);
     await checkSubscription();
@@ -100,12 +91,12 @@ export const SubscriptionStatus = ({
               </ul>
             </div>
             
-            {isCancelled ? <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
-                <Crown className="h-3.5 w-3.5 mr-1.5" />
-                Reactivate Subscription
-              </Button> : <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
+            {hasActiveSubscription ? <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
                 <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                 {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+              </Button> : <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+                <Crown className="h-3.5 w-3.5 mr-1.5" />
+                Reactivate Subscription
               </Button>}
           </div> : <div className="space-y-2.5">
             <p className="text-xs text-muted-foreground">
