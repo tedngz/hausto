@@ -34,7 +34,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [size, setSize] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
+  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
   const [imageHighlights, setImageHighlights] = useState<{text: string, imageIndexes: number[]}[]>([]);
   const [currentVibeAnalysis, setCurrentVibeAnalysis] = useState<any>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -50,16 +52,12 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const { toast } = useToast();
   const { currency, convertPrice } = useCurrency();
 
-  const vibeOptions = [
-    'Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
-    'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage',
-    'Pet Friendly', 'Gym Access', 'Pool', 'Parking', 'Balcony', 'Garden', 
-    'Elevator', 'Security', 'WiFi', 'Furnished', 'Air Conditioning', 'Washing Machine',
-    'City Center', 'Quiet Neighborhood', 'Near Metro', 'Shopping Nearby', 
-    'School District', 'Business District', 'Riverside', 'Mountain View', 'Beach Access',
-    'High Ceilings', 'Natural Light', 'Open Plan', 'Walk-in Closet', 
-    'En-suite Bathroom', 'Kitchen Island', 'Hardwood Floors', 'Marble Counters', 'Smart Home'
-  ];
+  const styleOptions = ['Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
+    'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage'];
+  
+  const colorOptions = ['Neutral', 'Warm', 'Cool', 'Bright', 'Dark', 'Colorful', 'Natural', 'White', 'Earth', 'Bold'];
+  
+  const activityOptions = ['Working', 'Reading', 'Relaxing', 'Entertaining', 'Cooking', 'Exercising'];
 
   const locationSuggestions = [
     '45 Nguyen Hue Street, District 1, Ho Chi Minh City',
@@ -92,32 +90,48 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setSourceProviderPhone((property as any).property_source_provider_phone || '');
       setPrice(convertPrice(property.price).toString());
       setSize(property.size?.replace('m²', '') || '');
-      // Vibes: prefer saved highlights, otherwise fall back to AI-detected from vibe_analysis
-      const savedVibes = property.highlights || [];
+      
+      // Extract styles, colors, activities from vibe_analysis or highlights
       const analysis = property.vibe_analysis || {};
-
-      // Try to read AI-provided highlights directly
-      let aiVibes: string[] = Array.isArray(analysis?.generated_content?.highlights)
-        ? analysis.generated_content.highlights
-        : [];
-
-      // If no direct highlights, derive from analysis scores (kept concise)
-      if (!aiVibes.length && analysis) {
-        const a: any = analysis;
-        const tmp: string[] = [];
-        if (a.modern >= 5) tmp.push('Modern');
-        if (a.cozy >= 5) tmp.push('Cozy');
-        if (a.luxurious >= 6) tmp.push('Luxury');
-        if (a.urban >= 5) tmp.push('Urban');
-        if (a.minimalist >= 5) tmp.push('Minimalist');
-        if (a.elegant >= 5) tmp.push('Contemporary');
-        if (a.natural_light >= 5) tmp.push('Natural Light');
-        if (a.industrial >= 4) tmp.push('Industrial');
-        aiVibes = Array.from(new Set(tmp)).slice(0, 5);
+      const savedHighlights = property.highlights || [];
+      
+      // Try to extract from saved structure first
+      const savedStyles = analysis?.styles || [];
+      const savedColors = analysis?.colors || [];
+      const savedActivities = analysis?.activities || [];
+      
+      // If no saved structure, derive from AI analysis
+      if (!savedStyles.length && !savedColors.length && !savedActivities.length && analysis) {
+        const aiStyles = [];
+        const aiColors = [];
+        const aiActivities = [];
+        
+        // Extract styles
+        if (analysis.modern >= 5) aiStyles.push('Modern');
+        if (analysis.cozy >= 5) aiStyles.push('Cozy');
+        if (analysis.luxurious >= 6) aiStyles.push('Luxury');
+        if (analysis.urban >= 5) aiStyles.push('Urban');
+        if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
+        if (analysis.elegant >= 5) aiStyles.push('Contemporary');
+        
+        // Extract colors
+        if (analysis.neutral >= 5) aiColors.push('Neutral');
+        if (analysis.warm >= 5) aiColors.push('Warm');
+        if (analysis.natural_light >= 7) aiColors.push('Bright');
+        
+        // Extract activities
+        if (analysis.modern >= 5) aiActivities.push('Working');
+        if (analysis.cozy >= 6) aiActivities.push('Reading');
+        if (analysis.elegant >= 5) aiActivities.push('Relaxing');
+        
+        setSelectedStyles(aiStyles.slice(0, 3));
+        setSelectedColors(aiColors.slice(0, 3));
+        setSelectedActivities(aiActivities.slice(0, 3));
+      } else {
+        setSelectedStyles(savedStyles);
+        setSelectedColors(savedColors);
+        setSelectedActivities(savedActivities);
       }
-
-      setAiDetectedVibes(aiVibes);
-      setSelectedVibes(savedVibes.length ? savedVibes : aiVibes);
       
       // Extract image highlights
       if (property.vibe_analysis?.image_analyses && Array.isArray(property.vibe_analysis.image_analyses)) {
@@ -247,19 +261,42 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           setSelectedAmenities(analysis.amenities);
         }
         
-        // Auto-select vibes based on AI analysis
-        const aiVibes = [];
-        if (analysis.modern >= 5) aiVibes.push('Modern');
-        if (analysis.cozy >= 5) aiVibes.push('Cozy');
-        if (analysis.luxurious >= 6) aiVibes.push('Luxury');
-        if (analysis.urban >= 5) aiVibes.push('Urban');
-        if (analysis.minimalist >= 5) aiVibes.push('Minimalist');
-        if (analysis.elegant >= 5) aiVibes.push('Contemporary');
+        // Extract styles, colors, and activities from AI analysis
+        const aiStyles = [];
+        const aiColors = [];
+        const aiActivities = [];
         
-        const uniqueVibes = [...new Set(aiVibes)];
-        const finalVibes = uniqueVibes.slice(0, 5);
-        setAiDetectedVibes(finalVibes);
-        setSelectedVibes(finalVibes);
+        // Extract styles
+        if (analysis.modern >= 5) aiStyles.push('Modern');
+        if (analysis.cozy >= 5) aiStyles.push('Cozy');
+        if (analysis.luxurious >= 6) aiStyles.push('Luxury');
+        if (analysis.urban >= 5) aiStyles.push('Urban');
+        if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
+        if (analysis.elegant >= 5) aiStyles.push('Contemporary');
+        if (analysis.rustic >= 4) aiStyles.push('Rustic');
+        if (analysis.industrial >= 4) aiStyles.push('Industrial');
+        
+        // Extract colors
+        if (analysis.neutral >= 5) aiColors.push('Neutral');
+        if (analysis.warm >= 5) aiColors.push('Warm');
+        if (analysis.cool >= 5) aiColors.push('Cool');
+        if (analysis.bright >= 5 || analysis.natural_light >= 7) aiColors.push('Bright');
+        if (analysis.colorful >= 6) aiColors.push('Colorful');
+        if (analysis.natural_light >= 6) aiColors.push('Natural');
+        
+        // Extract activities
+        if (analysis.modern >= 5 || analysis.spacious >= 6) aiActivities.push('Working');
+        if (analysis.cozy >= 6 || analysis.natural_light >= 6) aiActivities.push('Reading');
+        if (analysis.cozy >= 5 || analysis.elegant >= 5) aiActivities.push('Relaxing');
+        if (analysis.spacious >= 6 || analysis.modern >= 6) aiActivities.push('Entertaining');
+        
+        const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
+        const uniqueColors = [...new Set(aiColors)].slice(0, 3);
+        const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        
+        setSelectedStyles(uniqueStyles);
+        setSelectedColors(uniqueColors);
+        setSelectedActivities(uniqueActivities);
 
         toast({
           title: "Content Regenerated!",
@@ -396,8 +433,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         location,
         price: priceNum,
         size: size ? `${size.trim()}m²` : undefined,
-        vibe: selectedVibes[0] || '',
-        highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+        vibe: selectedStyles[0] || '',
+        highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
         images: [],
         property_source_link: sourceLink && sourceLink.trim() ? sourceLink : undefined,
       };
@@ -425,10 +462,13 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       location,
       price: priceInVND,
       size: size ? `${size}m²` : undefined,
-      vibe: selectedVibes[0] || null,
-      highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+      vibe: selectedStyles[0] || null,
+      highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
       vibeAnalysis: {
         ...currentVibeAnalysis,
+        styles: selectedStyles,
+        colors: selectedColors,
+        activities: selectedActivities,
         amenities: selectedAmenities
       },
       newImageFiles,
@@ -653,38 +693,88 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           </div>
 
           {/* Step 3: AI Generated Content */}
-          <div>
-            <Label className="text-base font-semibold">Selected Vibes</Label>
-            <p className="text-sm text-gray-600 mb-3">AI has selected these vibes - you can modify them</p>
-            <div className="flex flex-wrap gap-2">
-              {vibeOptions.map((vibe) => {
-                const isAiDetected = aiDetectedVibes.includes(vibe);
-                const isSelected = selectedVibes.includes(vibe);
-                return (
-                  <Badge
-                    key={vibe}
-                    variant={(isAiDetected || isSelected) ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors ${
-                      isAiDetected
-                        ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
-                        : isSelected
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => {
-                      setSelectedVibes(prev => 
-                        prev.includes(vibe) 
-                          ? prev.filter(v => v !== vibe)
-                          : [...prev, vibe]
-                      );
-                    }}
-                  >
-                    {vibe}
-                  </Badge>
-                );
-              })}
-            </div>
-          </div>
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-base font-semibold">AI Selected Style</Label>
+                  <p className="text-sm text-gray-600 mb-3">Select up to 3 styles that best describe this property</p>
+                  <div className="flex flex-wrap gap-2">
+                    {styleOptions.map((style) => (
+                      <Badge
+                        key={style}
+                        variant={selectedStyles.includes(style) ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors ${
+                          selectedStyles.includes(style) 
+                            ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => {
+                          setSelectedStyles(prev => 
+                            prev.includes(style) 
+                              ? prev.filter(v => v !== style)
+                              : prev.length < 3 ? [...prev, style] : prev
+                          );
+                        }}
+                      >
+                        {style}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-base font-semibold">AI Selected Color</Label>
+                  <p className="text-sm text-gray-600 mb-3">Select up to 3 color schemes</p>
+                  <div className="flex flex-wrap gap-2">
+                    {colorOptions.map((color) => (
+                      <Badge
+                        key={color}
+                        variant={selectedColors.includes(color) ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors ${
+                          selectedColors.includes(color) 
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => {
+                          setSelectedColors(prev => 
+                            prev.includes(color) 
+                              ? prev.filter(v => v !== color)
+                              : prev.length < 3 ? [...prev, color] : prev
+                          );
+                        }}
+                      >
+                        {color}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-base font-semibold">AI Selected Activity</Label>
+                  <p className="text-sm text-gray-600 mb-3">Select up to 3 activities suited for this space</p>
+                  <div className="flex flex-wrap gap-2">
+                    {activityOptions.map((activity) => (
+                      <Badge
+                        key={activity}
+                        variant={selectedActivities.includes(activity) ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors ${
+                          selectedActivities.includes(activity) 
+                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => {
+                          setSelectedActivities(prev => 
+                            prev.includes(activity) 
+                              ? prev.filter(v => v !== activity)
+                              : prev.length < 3 ? [...prev, activity] : prev
+                          );
+                        }}
+                      >
+                        {activity}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
           {/* Image Highlights Section */}
           {(existingImages.length > 0 || newImagePreviews.length > 0) && (
@@ -865,9 +955,15 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             location,
             price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
             size: size ? `${size}m²` : '',
-            highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+            highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
             images: [...existingImages, ...newImagePreviews],
-            vibe_analysis: currentVibeAnalysis,
+            vibe_analysis: {
+              ...currentVibeAnalysis,
+              styles: selectedStyles,
+              colors: selectedColors,
+              activities: selectedActivities,
+              amenities: selectedAmenities
+            },
             amenities: selectedAmenities,
             property_source_link: sourceLink,
             property_source_provider_name: sourceProviderName,

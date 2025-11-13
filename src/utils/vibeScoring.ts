@@ -51,10 +51,26 @@ export const calculateVibeScore = (apartment: Apartment, preferences: UserPrefer
 const calculateStyleMatch = (apartment: Apartment, userStyles: string[]): number => {
   let matchScore = 0;
   
-  // First, try to use AI-detected style metrics from vibe_analysis
+  // First, try to use stored styles from vibe_analysis
   const vibeAnalysis = (apartment as any).vibe_analysis;
-  if (vibeAnalysis) {
-    // Map user style preferences to AI analysis metrics
+  const storedStyles = vibeAnalysis?.styles || [];
+  
+  if (storedStyles.length > 0) {
+    // Direct style matching
+    userStyles.forEach(userStyle => {
+      if (storedStyles.includes(userStyle)) {
+        matchScore += 30; // Strong match for direct style overlap
+      }
+    });
+    
+    // Base score if any styles are present
+    if (matchScore > 0) {
+      matchScore += 40;
+    } else {
+      matchScore = 30; // Base compatibility score
+    }
+  } else if (vibeAnalysis) {
+    // Fallback to AI metrics if no stored styles
     const styleMap: { [key: string]: string[] } = {
       'modern': ['modern', 'minimalist', 'contemporary'],
       'minimalist': ['minimalist', 'modern', 'elegant'],
@@ -74,19 +90,18 @@ const calculateStyleMatch = (apartment: Apartment, userStyles: string[]): number
       const mappedMetrics = styleMap[userStyle.toLowerCase()] || [userStyle.toLowerCase()];
       mappedMetrics.forEach(metric => {
         if (vibeAnalysis[metric] && vibeAnalysis[metric] >= 7) {
-          matchScore += 25; // Higher score for AI-detected strong matches
+          matchScore += 25;
         } else if (vibeAnalysis[metric] && vibeAnalysis[metric] >= 5) {
-          matchScore += 15; // Moderate score for medium matches
+          matchScore += 15;
         }
       });
     });
     
-    // Bonus for overall quality metrics
     if (vibeAnalysis.elegant >= 7 || vibeAnalysis.spacious >= 7 || vibeAnalysis.natural_light >= 8) {
       matchScore += 20;
     }
   } else {
-    // Fallback to original logic if no AI analysis available
+    // Last resort: use apartment vibe string
     const apartmentStyleMap: { [key: string]: string[] } = {
       'Modern': ['modern', 'minimalist', 'clean', 'sleek', 'contemporary'],
       'Cozy': ['cozy', 'traditional', 'warm', 'family', 'comfortable'],
@@ -121,10 +136,26 @@ const calculateStyleMatch = (apartment: Apartment, userStyles: string[]): number
 const calculateColorMatch = (apartment: Apartment, userColors: string[]): number => {
   let matchScore = 0;
   
-  // First, try to use AI-detected color metrics from vibe_analysis
+  // First, try to use stored colors from vibe_analysis
   const vibeAnalysis = (apartment as any).vibe_analysis;
-  if (vibeAnalysis) {
-    // Map user color preferences to AI analysis metrics
+  const storedColors = vibeAnalysis?.colors || [];
+  
+  if (storedColors.length > 0) {
+    // Direct color matching
+    userColors.forEach(userColor => {
+      if (storedColors.includes(userColor)) {
+        matchScore += 30; // Strong match for direct color overlap
+      }
+    });
+    
+    // Base score if any colors are present
+    if (matchScore > 0) {
+      matchScore += 40;
+    } else {
+      matchScore = 30; // Base compatibility score
+    }
+  } else if (vibeAnalysis) {
+    // Fallback to AI metrics if no stored colors
     const colorMap: { [key: string]: string[] } = {
       'neutral': ['minimalist', 'elegant'],
       'warm': ['cozy', 'rustic'],
@@ -142,24 +173,22 @@ const calculateColorMatch = (apartment: Apartment, userColors: string[]): number
       const mappedMetrics = colorMap[userColor.toLowerCase()] || [userColor.toLowerCase()];
       mappedMetrics.forEach(metric => {
         if (vibeAnalysis[metric] && vibeAnalysis[metric] >= 7) {
-          matchScore += 25; // Higher score for AI-detected strong color matches
+          matchScore += 25;
         } else if (vibeAnalysis[metric] && vibeAnalysis[metric] >= 5) {
-          matchScore += 15; // Moderate score for medium matches
+          matchScore += 15;
         }
       });
     });
     
-    // Special bonus for natural light as it affects color perception
     if (vibeAnalysis.natural_light >= 8) {
       matchScore += 20;
     }
     
-    // Bonus for colorful properties if user likes colorful spaces
     if (userColors.includes('colorful') && vibeAnalysis.colorful >= 6) {
       matchScore += 30;
     }
   } else {
-    // Fallback to original logic if no AI analysis available
+    // Last resort: use apartment vibe string
     const apartmentColorMap: { [key: string]: string[] } = {
       'Modern': ['neutral', 'cool', 'white', 'grey'],
       'Cozy': ['warm', 'earth', 'brown', 'beige'],
@@ -192,43 +221,54 @@ const calculateColorMatch = (apartment: Apartment, userColors: string[]): number
 };
 
 const calculateActivityMatch = (apartment: Apartment, userActivities: string[]): number => {
-  // Updated activity mapping for new vibe system
-  const apartmentActivityMap: { [key: string]: string[] } = {
-    'Modern': ['working', 'reading', 'relaxing', 'entertaining'],
-    'Cozy': ['reading', 'relaxing', 'cooking', 'family time'],
-    'Industrial': ['working', 'entertaining', 'exercising', 'creating'],
-    'Bohemian': ['creating', 'entertaining', 'relaxing', 'artistic'],
-    'Scandinavian': ['relaxing', 'reading', 'meditating', 'family time'],
-    'Minimalist': ['relaxing', 'working', 'reading', 'meditating'],
-    'Contemporary': ['working', 'entertaining', 'relaxing', 'socializing'],
-    'Traditional': ['family time', 'cooking', 'reading', 'relaxing'],
-    'Rustic': ['relaxing', 'cooking', 'family time', 'outdoor activities'],
-    'Luxury': ['entertaining', 'relaxing', 'socializing', 'formal dining'],
-    'Urban': ['working', 'socializing', 'exercising', 'entertainment'],
-    'Vintage': ['collecting', 'reading', 'entertaining', 'crafting'],
-    
-    // Fallback mappings
-    'Modern Minimalist': ['working', 'reading', 'relaxing'],
-    'Urban Sanctuary': ['working', 'entertaining', 'exercising'],
-    'Creative Haven': ['working', 'creating', 'entertaining'],
-    'Cozy Traditional': ['reading', 'relaxing', 'cooking', 'family time'],
-    'Industrial Chic': ['working', 'entertaining', 'exercising'],
-    'Bohemian Eclectic': ['creating', 'entertaining', 'relaxing'],
-    'Zen Retreat': ['relaxing', 'exercising', 'reading', 'meditating']
-  };
-
-  const apartmentActivities = apartmentActivityMap[apartment.vibe] || [];
   let matchScore = 0;
   
-  userActivities.forEach(userActivity => {
-    if (apartmentActivities.includes(userActivity.toLowerCase())) {
-      matchScore += 20; // Each match adds 20 points
-    }
-  });
+  // First, try to use stored activities from vibe_analysis
+  const vibeAnalysis = (apartment as any).vibe_analysis;
+  const storedActivities = vibeAnalysis?.activities || [];
   
-  // Add base score - be more generous
-  if (apartmentActivities.length > 0 || apartment.vibe) {
-    matchScore += 50; // Higher base activity compatibility
+  if (storedActivities.length > 0) {
+    // Direct activity matching
+    userActivities.forEach(userActivity => {
+      if (storedActivities.some((a: string) => a.toLowerCase() === userActivity.toLowerCase())) {
+        matchScore += 30; // Strong match for direct activity overlap
+      }
+    });
+    
+    // Base score if any activities are present
+    if (matchScore > 0) {
+      matchScore += 40;
+    } else {
+      matchScore = 30; // Base compatibility score
+    }
+  } else {
+    // Fallback to vibe-based activity mapping
+    const apartmentActivityMap: { [key: string]: string[] } = {
+      'Modern': ['working', 'reading', 'relaxing', 'entertaining'],
+      'Cozy': ['reading', 'relaxing', 'cooking', 'family time'],
+      'Industrial': ['working', 'entertaining', 'exercising', 'creating'],
+      'Bohemian': ['creating', 'entertaining', 'relaxing', 'artistic'],
+      'Scandinavian': ['relaxing', 'reading', 'meditating', 'family time'],
+      'Minimalist': ['relaxing', 'working', 'reading', 'meditating'],
+      'Contemporary': ['working', 'entertaining', 'relaxing', 'socializing'],
+      'Traditional': ['family time', 'cooking', 'reading', 'relaxing'],
+      'Rustic': ['relaxing', 'cooking', 'family time', 'outdoor activities'],
+      'Luxury': ['entertaining', 'relaxing', 'socializing', 'formal dining'],
+      'Urban': ['working', 'socializing', 'exercising', 'entertainment'],
+      'Vintage': ['collecting', 'reading', 'entertaining', 'crafting'],
+    };
+
+    const apartmentActivities = apartmentActivityMap[apartment.vibe] || [];
+    
+    userActivities.forEach(userActivity => {
+      if (apartmentActivities.includes(userActivity.toLowerCase())) {
+        matchScore += 20;
+      }
+    });
+    
+    if (apartmentActivities.length > 0 || apartment.vibe) {
+      matchScore += 50;
+    }
   }
   
   return Math.min(100, matchScore);

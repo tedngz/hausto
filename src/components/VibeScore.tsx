@@ -37,7 +37,13 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
   };
 
   const getStyleTags = (styleScore: number, apartment: any) => {
-    // Get style tags based on apartment vibe
+    // Try to get styles from vibe_analysis first
+    const vibeAnalysis = apartment?.vibe_analysis;
+    if (vibeAnalysis?.styles && vibeAnalysis.styles.length > 0) {
+      return vibeAnalysis.styles;
+    }
+    
+    // Fallback to style mapping based on apartment vibe
     const styleMap: { [key: string]: string[] } = {
       'Modern': ['Contemporary', 'Sleek', 'Minimalist', 'Clean Lines'],
       'Cozy': ['Warm', 'Comfortable', 'Traditional', 'Homey'],
@@ -51,14 +57,19 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
       'Luxury': ['Upscale', 'Premium', 'High-end', 'Sophisticated']
     };
     
-    // Default tags if vibe not found
     const defaultTags = ['Modern', 'Clean', 'Bright', 'Spacious'];
     const vibeKey = apartment?.vibe || 'Modern';
     return styleMap[vibeKey] || defaultTags;
   };
 
   const getColorPalette = (colorScore: number, apartment: any) => {
-    // Get color palette based on apartment vibe
+    // Try to get colors from vibe_analysis first
+    const vibeAnalysis = apartment?.vibe_analysis;
+    if (vibeAnalysis?.colors && vibeAnalysis.colors.length > 0) {
+      return vibeAnalysis.colors;
+    }
+    
+    // Fallback to color mapping based on apartment vibe
     const colorMap: { [key: string]: string[] } = {
       'Modern': ['Neutral Tones', 'Cool Grays', 'Clean Whites'],
       'Cozy': ['Warm Earth', 'Rich Browns', 'Soft Beiges'],
@@ -78,7 +89,13 @@ export const VibeScore = ({ score, showBreakdown = false, size = 'md', isAnonymo
   };
 
   const getActivities = (activityScore: number, apartment: any) => {
-    // Get activities based on apartment vibe
+    // Try to get activities from vibe_analysis first
+    const vibeAnalysis = apartment?.vibe_analysis;
+    if (vibeAnalysis?.activities && vibeAnalysis.activities.length > 0) {
+      return vibeAnalysis.activities;
+    }
+    
+    // Fallback to activity mapping based on apartment vibe
     const activityMap: { [key: string]: string[] } = {
       'Modern': ['Working', 'Entertaining', 'Reading'],
       'Cozy': ['Relaxing', 'Cooking', 'Family Time'],

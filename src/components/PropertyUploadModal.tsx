@@ -33,7 +33,9 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [size, setSize] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
+  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRegeneratingTitle, setIsRegeneratingTitle] = useState(false);
   const [isRegeneratingDescription, setIsRegeneratingDescription] = useState(false);
@@ -51,16 +53,12 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const { toast } = useToast();
   const { currency, convertPrice } = useCurrency();
 
-  const vibeOptions = [
-    'Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
-    'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage',
-    'Pet Friendly', 'Gym Access', 'Pool', 'Parking', 'Balcony', 'Garden', 
-    'Elevator', 'Security', 'WiFi', 'Furnished', 'Air Conditioning', 'Washing Machine',
-    'City Center', 'Quiet Neighborhood', 'Near Metro', 'Shopping Nearby', 
-    'School District', 'Business District', 'Riverside', 'Mountain View', 'Beach Access',
-    'High Ceilings', 'Natural Light', 'Open Plan', 'Walk-in Closet', 
-    'En-suite Bathroom', 'Kitchen Island', 'Hardwood Floors', 'Marble Counters', 'Smart Home'
-  ];
+  const styleOptions = ['Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
+    'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage'];
+  
+  const colorOptions = ['Neutral', 'Warm', 'Cool', 'Bright', 'Dark', 'Colorful', 'Natural', 'White', 'Earth', 'Bold'];
+  
+  const activityOptions = ['Working', 'Reading', 'Relaxing', 'Entertaining', 'Cooking', 'Exercising'];
 
   const locationSuggestions = [
     '45 Nguyen Hue Street, District 1, Ho Chi Minh City',
@@ -213,73 +211,58 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
           setSelectedAmenities(analysis.amenities); // All detected amenities are selected by default
         }
         
-        // Auto-select vibes based on comprehensive AI analysis with improved accuracy
-        const aiVibes = [];
+        // Auto-select styles, colors, and activities based on AI analysis
+        const aiStyles = [];
+        const aiColors = [];
+        const aiActivities = [];
         
-        // More accurate style analysis based on AI scores
-        if (analysis.modern >= 5) aiVibes.push('Modern');
-        if (analysis.cozy >= 5) aiVibes.push('Cozy');
-        if (analysis.luxurious >= 6) aiVibes.push('Luxury');
-        if (analysis.urban >= 5) aiVibes.push('Urban');
-        if (analysis.minimalist >= 5) aiVibes.push('Minimalist');
-        if (analysis.elegant >= 5) aiVibes.push('Contemporary');
-        if (analysis.rustic >= 4) aiVibes.push('Rustic');
-        if (analysis.colorful >= 5) aiVibes.push('Bohemian');
-        if (analysis.natural_light >= 5) aiVibes.push('Natural Light');
-        if (analysis.spacious >= 5) aiVibes.push('Open Plan');
-        if (analysis.industrial >= 4) aiVibes.push('Industrial');
+        // Extract styles from AI analysis
+        if (analysis.modern >= 5) aiStyles.push('Modern');
+        if (analysis.cozy >= 5) aiStyles.push('Cozy');
+        if (analysis.luxurious >= 6) aiStyles.push('Luxury');
+        if (analysis.urban >= 5) aiStyles.push('Urban');
+        if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
+        if (analysis.elegant >= 5) aiStyles.push('Contemporary');
+        if (analysis.rustic >= 4) aiStyles.push('Rustic');
+        if (analysis.colorful >= 5) aiStyles.push('Bohemian');
+        if (analysis.industrial >= 4) aiStyles.push('Industrial');
+        if (analysis.scandinavian >= 5) aiStyles.push('Scandinavian');
+        if (analysis.traditional >= 5) aiStyles.push('Traditional');
+        if (analysis.vintage >= 5) aiStyles.push('Vintage');
         
-        // Additional feature detection from analysis
-        if (analysis.furnished >= 5) aiVibes.push('Furnished');
-        if (analysis.pet_friendly >= 5) aiVibes.push('Pet Friendly');
-        if (analysis.gym_access >= 5) aiVibes.push('Gym Access');
-        if (analysis.pool >= 5) aiVibes.push('Pool');
-        if (analysis.parking >= 5) aiVibes.push('Parking');
-        if (analysis.balcony >= 5) aiVibes.push('Balcony');
-        if (analysis.garden >= 5) aiVibes.push('Garden');
-        if (analysis.elevator >= 5) aiVibes.push('Elevator');
-        if (analysis.security >= 5) aiVibes.push('Security');
-        if (analysis.air_conditioning >= 5) aiVibes.push('Air Conditioning');
-        if (analysis.washing_machine >= 5) aiVibes.push('Washing Machine');
-        if (analysis.high_ceilings >= 5) aiVibes.push('High Ceilings');
-        if (analysis.walk_in_closet >= 5) aiVibes.push('Walk-in Closet');
-        if (analysis.ensuite_bathroom >= 5) aiVibes.push('En-suite Bathroom');
-        if (analysis.kitchen_island >= 5) aiVibes.push('Kitchen Island');
-        if (analysis.hardwood_floors >= 5) aiVibes.push('Hardwood Floors');
-        if (analysis.marble_counters >= 5) aiVibes.push('Marble Counters');
-        if (analysis.smart_home >= 5) aiVibes.push('Smart Home');
+        // Extract colors from AI analysis
+        if (analysis.neutral >= 5) aiColors.push('Neutral');
+        if (analysis.warm >= 5) aiColors.push('Warm');
+        if (analysis.cool >= 5) aiColors.push('Cool');
+        if (analysis.bright >= 5 || analysis.natural_light >= 7) aiColors.push('Bright');
+        if (analysis.dark >= 5) aiColors.push('Dark');
+        if (analysis.colorful >= 6) aiColors.push('Colorful');
+        if (analysis.natural_light >= 6) aiColors.push('Natural');
+        if (analysis.minimalist >= 6) aiColors.push('White');
+        if (analysis.rustic >= 5 || analysis.cozy >= 5) aiColors.push('Earth');
+        if (analysis.colorful >= 7 || analysis.modern >= 6) aiColors.push('Bold');
         
-        // Location-based vibes with broader criteria
-        if (location.toLowerCase().includes('district 1') || location.toLowerCase().includes('hoan kiem')) {
-          aiVibes.push('City Center');
-        } else if (location.toLowerCase().includes('district 2') || location.toLowerCase().includes('cau giay')) {
-          aiVibes.push('Near Metro');
-        } else if (location.toLowerCase().includes('quiet') || location.toLowerCase().includes('district 7')) {
-          aiVibes.push('Quiet Neighborhood');
-        }
+        // Extract activities from AI analysis and property characteristics
+        if (analysis.modern >= 5 || analysis.spacious >= 6) aiActivities.push('Working');
+        if (analysis.cozy >= 6 || analysis.natural_light >= 6) aiActivities.push('Reading');
+        if (analysis.cozy >= 5 || analysis.elegant >= 5) aiActivities.push('Relaxing');
+        if (analysis.spacious >= 6 || analysis.modern >= 6) aiActivities.push('Entertaining');
+        if (analysis.kitchen_quality >= 5) aiActivities.push('Cooking');
+        if (analysis.spacious >= 5) aiActivities.push('Exercising');
         
-        // Remove duplicates and ensure we have good vibes
-        let uniqueVibes = [...new Set(aiVibes)];
+        // Remove duplicates and limit selections
+        const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
+        const uniqueColors = [...new Set(aiColors)].slice(0, 3);
+        const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
         
-        // If we have too few vibes, add some based on price and location
-        if (uniqueVibes.length < 2) {
-          const priceNum = parseInt(price);
-          if (priceNum > 20000000 && !uniqueVibes.includes('Luxury')) {
-            uniqueVibes.push('Luxury');
-          }
-          if (priceNum > 15000000 && !uniqueVibes.includes('Contemporary')) {
-            uniqueVibes.push('Contemporary');
-          }
-          if (!uniqueVibes.includes('Modern')) {
-            uniqueVibes.push('Modern');
-          }
-          if (!uniqueVibes.includes('Natural Light')) {
-            uniqueVibes.push('Natural Light');
-          }
-        }
+        // Fallbacks if AI didn't detect enough
+        if (uniqueStyles.length === 0) uniqueStyles.push('Modern');
+        if (uniqueColors.length === 0) uniqueColors.push('Neutral');
+        if (uniqueActivities.length === 0) uniqueActivities.push('Relaxing');
         
-        // Limit to 5 vibes and prioritize the most relevant ones
-        setSelectedVibes(uniqueVibes.slice(0, 5));
+        setSelectedStyles(uniqueStyles);
+        setSelectedColors(uniqueColors);
+        setSelectedActivities(uniqueActivities);
       } else {
         // Fallback content if AI generation fails
         const locationShort = location.split(',')[0];
@@ -287,7 +270,9 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         
         setTitle(`Stunning ${size}m² Apartment in ${locationShort} - ${priceFormatted}/month`);
         setDescription(`Welcome to this exceptional ${size}m² property located in the heart of ${location}. This beautifully designed space offers the perfect blend of comfort and modern living.`);
-        setSelectedVibes(['Modern', 'Natural Light']);
+        setSelectedStyles(['Modern']);
+        setSelectedColors(['Neutral']);
+        setSelectedActivities(['Relaxing']);
       }
       
       setHasGenerated(true);
@@ -311,7 +296,9 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       
       setTitle(`Beautiful ${size}m² Property in ${locationShort}`);
       setDescription(`Discover this amazing ${size}m² property in ${location}. A perfect space for modern living.`);
-      setSelectedVibes(['Modern', 'Natural Light']);
+      setSelectedStyles(['Modern']);
+      setSelectedColors(['Neutral']);
+      setSelectedActivities(['Relaxing']);
       setImageHighlights([{ text: 'Natural Light', imageIndexes: [0] }, { text: 'Modern Design', imageIndexes: [0] }]);
       setHasGenerated(true);
     } finally {
@@ -368,8 +355,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
         location,
         price: priceNum,
         size: `${size.trim()}m²`,
-        vibe: selectedVibes[0] || '',
-        highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+        vibe: selectedStyles[0] || '',
+        highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
         images: [],
         property_source_link: sourceLink && sourceLink.trim() ? sourceLink : undefined,
       };
@@ -396,11 +383,14 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       location,
       price: priceInVND,
       size: `${size}m²`,
-      vibe: selectedVibes[0] || null,
-      highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+      vibe: selectedStyles[0] || null,
+      highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
       imageFiles,
       vibeAnalysis: {
         ...vibeAnalysis,
+        styles: selectedStyles,
+        colors: selectedColors,
+        activities: selectedActivities,
         amenities: selectedAmenities
       },
       propertySourceLink: sourceLink,
@@ -417,7 +407,9 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     setPrice('');
     setSize('');
     setDescription('');
-    setSelectedVibes([]);
+    setSelectedStyles([]);
+    setSelectedColors([]);
+    setSelectedActivities([]);
     setImageFiles([]);
     setImagePreviews([]);
     setImageHighlights([]);
@@ -713,30 +705,86 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                 />
               </div>
 
-              <div>
-                <Label className="text-base font-semibold">Selected Vibes</Label>
-                <p className="text-sm text-gray-600 mb-3">AI has selected these vibes - you can modify them</p>
-                <div className="flex flex-wrap gap-2">
-                  {vibeOptions.map((vibe) => (
-                    <Badge
-                      key={vibe}
-                      variant={selectedVibes.includes(vibe) ? "default" : "outline"}
-                      className={`cursor-pointer transition-colors ${
-                        selectedVibes.includes(vibe) 
-                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' 
-                          : 'hover:bg-gray-100'
-                      }`}
-                      onClick={() => {
-                        setSelectedVibes(prev => 
-                          prev.includes(vibe) 
-                            ? prev.filter(v => v !== vibe)
-                            : [...prev, vibe]
-                        );
-                      }}
-                    >
-                      {vibe}
-                    </Badge>
-                  ))}
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-base font-semibold">AI Selected Style</Label>
+                  <p className="text-sm text-gray-600 mb-3">Select up to 3 styles that best describe this property</p>
+                  <div className="flex flex-wrap gap-2">
+                    {styleOptions.map((style) => (
+                      <Badge
+                        key={style}
+                        variant={selectedStyles.includes(style) ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors ${
+                          selectedStyles.includes(style) 
+                            ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => {
+                          setSelectedStyles(prev => 
+                            prev.includes(style) 
+                              ? prev.filter(v => v !== style)
+                              : prev.length < 3 ? [...prev, style] : prev
+                          );
+                        }}
+                      >
+                        {style}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-base font-semibold">AI Selected Color</Label>
+                  <p className="text-sm text-gray-600 mb-3">Select up to 3 color schemes</p>
+                  <div className="flex flex-wrap gap-2">
+                    {colorOptions.map((color) => (
+                      <Badge
+                        key={color}
+                        variant={selectedColors.includes(color) ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors ${
+                          selectedColors.includes(color) 
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => {
+                          setSelectedColors(prev => 
+                            prev.includes(color) 
+                              ? prev.filter(v => v !== color)
+                              : prev.length < 3 ? [...prev, color] : prev
+                          );
+                        }}
+                      >
+                        {color}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-base font-semibold">AI Selected Activity</Label>
+                  <p className="text-sm text-gray-600 mb-3">Select up to 3 activities suited for this space</p>
+                  <div className="flex flex-wrap gap-2">
+                    {activityOptions.map((activity) => (
+                      <Badge
+                        key={activity}
+                        variant={selectedActivities.includes(activity) ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors ${
+                          selectedActivities.includes(activity) 
+                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => {
+                          setSelectedActivities(prev => 
+                            prev.includes(activity) 
+                              ? prev.filter(v => v !== activity)
+                              : prev.length < 3 ? [...prev, activity] : prev
+                          );
+                        }}
+                      >
+                        {activity}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -917,17 +965,20 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             location,
             price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
             size: `${size}m²`,
-            vibe: selectedVibes[0] || '',
-            highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+            vibe: selectedStyles[0] || '',
+            highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
             images: imagePreviews,
             realtor_id: 'preview',
             amenities: selectedAmenities,
             vibe_analysis: {
               ...vibeAnalysis,
+              styles: selectedStyles,
+              colors: selectedColors,
+              activities: selectedActivities,
               amenities: selectedAmenities,
               generated_content: {
                 ...vibeAnalysis?.generated_content,
-                highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes
+                highlights: [...selectedStyles, ...selectedColors, ...selectedActivities]
               }
             },
             property_source_link: sourceLink,
@@ -951,17 +1002,20 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             location,
             price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
             size: `${size}m²`,
-            vibe: selectedVibes[0] || '',
-            highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes,
+            vibe: selectedStyles[0] || '',
+            highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
             images: imagePreviews,
             realtor_id: 'preview',
             amenities: selectedAmenities,
             vibe_analysis: {
               ...vibeAnalysis,
+              styles: selectedStyles,
+              colors: selectedColors,
+              activities: selectedActivities,
               amenities: selectedAmenities,
               generated_content: {
                 ...vibeAnalysis?.generated_content,
-                highlights: imageHighlights.length > 0 ? imageHighlights.map(h => h.text) : selectedVibes
+                highlights: [...selectedStyles, ...selectedColors, ...selectedActivities]
               }
             },
             property_source_link: sourceLink,
