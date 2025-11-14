@@ -114,11 +114,70 @@ serve(async (req) => {
           continue;
         }
 
+        // Convert raw scores to selected tags (styles, colors, activities)
+        const analysis = analysisData.analysis || analysisData;
+        
+        const aiStyles = [];
+        const aiColors = [];
+        const aiActivities = [];
+        
+        // Extract styles from AI analysis
+        if (analysis.modern >= 5) aiStyles.push('Modern');
+        if (analysis.cozy >= 5) aiStyles.push('Cozy');
+        if (analysis.luxurious >= 6) aiStyles.push('Luxury');
+        if (analysis.urban >= 5) aiStyles.push('Urban');
+        if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
+        if (analysis.elegant >= 5) aiStyles.push('Contemporary');
+        if (analysis.rustic >= 4) aiStyles.push('Rustic');
+        if (analysis.colorful >= 5) aiStyles.push('Bohemian');
+        if (analysis.industrial >= 4) aiStyles.push('Industrial');
+        if (analysis.scandinavian >= 5) aiStyles.push('Scandinavian');
+        if (analysis.traditional >= 5) aiStyles.push('Traditional');
+        if (analysis.vintage >= 5) aiStyles.push('Vintage');
+        
+        // Extract colors from AI analysis
+        if (analysis.neutral >= 5) aiColors.push('Neutral');
+        if (analysis.warm >= 5) aiColors.push('Warm');
+        if (analysis.cool >= 5) aiColors.push('Cool');
+        if (analysis.bright >= 5 || analysis.natural_light >= 7) aiColors.push('Bright');
+        if (analysis.dark >= 5) aiColors.push('Dark');
+        if (analysis.colorful >= 6) aiColors.push('Colorful');
+        if (analysis.natural_light >= 6) aiColors.push('Natural');
+        if (analysis.minimalist >= 6) aiColors.push('White');
+        if (analysis.rustic >= 5 || analysis.cozy >= 5) aiColors.push('Earth');
+        if (analysis.colorful >= 7 || analysis.modern >= 6) aiColors.push('Bold');
+        
+        // Extract activities from AI analysis
+        if (analysis.modern >= 5 || analysis.spacious >= 6) aiActivities.push('Working');
+        if (analysis.cozy >= 6 || analysis.natural_light >= 6) aiActivities.push('Reading');
+        if (analysis.cozy >= 5 || analysis.elegant >= 5) aiActivities.push('Relaxing');
+        if (analysis.spacious >= 6 || analysis.modern >= 6) aiActivities.push('Entertaining');
+        if (analysis.kitchen_quality >= 5) aiActivities.push('Cooking');
+        if (analysis.spacious >= 5) aiActivities.push('Exercising');
+        
+        // Remove duplicates and limit selections
+        const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
+        const uniqueColors = [...new Set(aiColors)].slice(0, 3);
+        const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        
+        // Fallbacks if AI didn't detect enough
+        if (uniqueStyles.length === 0) uniqueStyles.push('Modern');
+        if (uniqueColors.length === 0) uniqueColors.push('Neutral');
+        if (uniqueActivities.length === 0) uniqueActivities.push('Relaxing');
+
+        // Build properly formatted vibe_analysis
+        const formattedVibeAnalysis = {
+          ...analysis,
+          styles: uniqueStyles,
+          colors: uniqueColors,
+          activities: uniqueActivities
+        };
+
         // Update property with new vibe_analysis
         const { error: updateError } = await supabase
           .from('properties')
           .update({
-            vibe_analysis: analysisData,
+            vibe_analysis: formattedVibeAnalysis,
             updated_at: new Date().toISOString()
           })
           .eq('id', property.id);
