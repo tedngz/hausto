@@ -158,38 +158,38 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
         { 
           id: 'Contemporary', 
           label: 'Contemporary', 
-          emoji: '✨', 
-          description: 'Stylish & current' 
+          description: 'Stylish & current',
+          image: '/lovable-uploads/contemporary-style.png'
         },
         { 
           id: 'Traditional', 
           label: 'Traditional', 
-          emoji: '🏛️', 
-          description: 'Timeless classics' 
+          description: 'Timeless classics',
+          image: '/lovable-uploads/traditional-style.png'
         },
         { 
           id: 'Rustic', 
           label: 'Rustic', 
-          emoji: '🪵', 
-          description: 'Natural & earthy' 
+          description: 'Natural & earthy',
+          image: '/lovable-uploads/rustic-style.png'
         },
         { 
           id: 'Luxury', 
           label: 'Luxury', 
-          emoji: '💎', 
-          description: 'Premium elegance' 
+          description: 'Premium elegance',
+          image: '/lovable-uploads/luxury-style.png'
         },
         { 
           id: 'Urban', 
           label: 'Urban', 
-          emoji: '🏙️', 
-          description: 'City sophistication' 
+          description: 'City sophistication',
+          image: '/lovable-uploads/urban-style.png'
         },
         { 
           id: 'Vintage', 
           label: 'Vintage', 
-          emoji: '📻', 
-          description: 'Retro charm' 
+          description: 'Retro charm',
+          image: '/lovable-uploads/vintage-style.png'
         }
       ]
     },
