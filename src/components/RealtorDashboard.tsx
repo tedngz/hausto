@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square } from 'lucide-react';
 import { PropertyCard } from '@/components/PropertyCard';
 import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
@@ -38,6 +38,7 @@ export const RealtorDashboard = ({
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<PropertyMatch | null>(null);
   const [isReanalyzing, setIsReanalyzing] = useState(false);
+  const [selectedPropertyIds, setSelectedPropertyIds] = useState<Set<string>>(new Set());
   const {
     realtorProperties,
     isLoading,
@@ -96,7 +97,11 @@ export const RealtorDashboard = ({
   };
 
   const handleBatchReanalyze = async () => {
-    if (!realtorProperties.length) {
+    const propertyIdsToAnalyze = selectedPropertyIds.size > 0 
+      ? Array.from(selectedPropertyIds)
+      : realtorProperties.map(p => p.id);
+
+    if (propertyIdsToAnalyze.length === 0) {
       toast({
         title: "No properties",
         description: "You don't have any properties to re-analyze.",
@@ -105,7 +110,11 @@ export const RealtorDashboard = ({
       return;
     }
 
-    if (!window.confirm(`Re-analyze vibe data for all ${realtorProperties.length} properties?\n\nThis will update the style, color, and activities for each property based on their images.`)) {
+    const confirmMessage = selectedPropertyIds.size > 0
+      ? `Re-analyze vibe data for ${selectedPropertyIds.size} selected properties?`
+      : `Re-analyze vibe data for all ${realtorProperties.length} properties?`;
+
+    if (!window.confirm(`${confirmMessage}\n\nThis will update the style, color, and activities for each property based on their images.`)) {
       return;
     }
 
@@ -116,6 +125,7 @@ export const RealtorDashboard = ({
       if (!session) throw new Error('No session');
 
       const { data, error } = await supabase.functions.invoke('batch-reanalyze-properties', {
+        body: { propertyIds: propertyIdsToAnalyze },
         headers: {
           Authorization: `Bearer ${session.access_token}`
         }
@@ -130,7 +140,8 @@ export const RealtorDashboard = ({
         description: `Successfully updated ${successCount} properties${failureCount > 0 ? `, ${failureCount} failed` : ''}.`,
       });
 
-      // Refresh properties list
+      // Clear selection and refresh properties list
+      setSelectedPropertyIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
 
     } catch (error) {
@@ -143,6 +154,26 @@ export const RealtorDashboard = ({
     } finally {
       setIsReanalyzing(false);
     }
+  };
+
+  const togglePropertySelection = (propertyId: string) => {
+    setSelectedPropertyIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(propertyId)) {
+        newSet.delete(propertyId);
+      } else {
+        newSet.add(propertyId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllProperties = () => {
+    setSelectedPropertyIds(new Set(realtorProperties.map(p => p.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedPropertyIds(new Set());
   };
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-16">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
@@ -214,10 +245,39 @@ export const RealtorDashboard = ({
                   size={isMobile ? "sm" : "default"}
                 >
                   <RefreshCw className={`w-4 h-4 mr-2 ${isReanalyzing ? 'animate-spin' : ''}`} />
-                  {isMobile ? "Re-analyze" : "Re-analyze All"}
+                  {selectedPropertyIds.size > 0 
+                    ? `Re-analyze (${selectedPropertyIds.size})`
+                    : isMobile ? "Re-analyze" : "Re-analyze All"}
                 </Button>
               </div>
             </div>
+            {realtorProperties.length > 0 && (
+              <div className="flex items-center gap-2 px-4 md:px-6 pb-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={selectedPropertyIds.size === realtorProperties.length ? clearSelection : selectAllProperties}
+                  className="text-xs"
+                >
+                  {selectedPropertyIds.size === realtorProperties.length ? (
+                    <>
+                      <CheckSquare className="w-4 h-4 mr-1" />
+                      Clear Selection
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-4 h-4 mr-1" />
+                      Select All ({realtorProperties.length})
+                    </>
+                  )}
+                </Button>
+                {selectedPropertyIds.size > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {selectedPropertyIds.size} selected
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="p-4 md:p-6">
             {isLoading ? <div className="text-center py-8">
@@ -227,9 +287,26 @@ export const RealtorDashboard = ({
                 <h3 className="text-base md:text-lg font-medium text-slate-900 mb-2">No properties yet</h3>
                 <p className="text-slate-600 text-sm">Upload your first property to start getting matches!</p>
               </div> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {realtorProperties.map(property => <Card key={property.id} className="overflow-hidden border border-slate-200 hover:shadow-lg transition-shadow">
+                {realtorProperties.map(property => <Card key={property.id} className={`overflow-hidden border transition-shadow ${selectedPropertyIds.has(property.id) ? 'border-primary ring-2 ring-primary/20' : 'border-slate-200 hover:shadow-lg'}`}>
                     {property.images && property.images.length > 0 && <div className="relative">
                         <img src={property.images[0]} alt={property.title} className="w-full h-32 md:h-48 object-cover" />
+                        <div className="absolute top-2 left-2">
+                          <Button
+                            size="icon"
+                            variant={selectedPropertyIds.has(property.id) ? "default" : "secondary"}
+                            className="h-8 w-8 rounded-md shadow-lg"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePropertySelection(property.id);
+                            }}
+                          >
+                            {selectedPropertyIds.has(property.id) ? (
+                              <CheckSquare className="w-4 h-4" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
                         <div className="absolute top-2 right-2">
                           <Badge className="bg-white/90 text-slate-800 font-semibold text-xs">
                             {formatPrice(property.price)}/mo
