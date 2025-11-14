@@ -55,7 +55,7 @@ export const PropertyDetailModal = ({
         <div className="p-3 sm:p-4 relative">
           {/* Vibe Score Overlay */}
           <div className="absolute top-6 left-6 z-10">
-            <VibeScore score={vibeScore} size="sm" isAnonymous={isAnonymous} />
+            <VibeScore score={vibeScore} apartment={apartment} size="sm" isAnonymous={isAnonymous} />
           </div>
           
           <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} hideVibeScore={true} />
