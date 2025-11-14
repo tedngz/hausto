@@ -118,7 +118,7 @@ export const PropertyCard = ({
         {/* Vibe Ranking Overlay */}
         {vibeScore && !hideVibeScore && (
           <div className="absolute top-3 left-3 z-10">
-            <VibeScore score={vibeScore} size="sm" isAnonymous={isAnonymous} />
+            <VibeScore score={vibeScore} apartment={apartment} size="sm" isAnonymous={isAnonymous} />
           </div>
         )}
 
