@@ -120,40 +120,76 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       icon: Sparkles,
       options: [
         { 
-          id: 'modern', 
+          id: 'Modern', 
           label: 'Modern', 
           description: 'Clean lines, sleek vibes',
           image: '/lovable-uploads/56eaf19c-2080-4831-8b77-4d00dc7570c0.png'
         },
         { 
-          id: 'cozy', 
+          id: 'Cozy', 
           label: 'Cozy', 
           description: 'Warm hugs everywhere',
           image: '/lovable-uploads/dd1fb7df-2deb-4b9a-8627-316bf4fa3a0a.png'
         },
         { 
-          id: 'industrial', 
+          id: 'Industrial', 
           label: 'Industrial', 
           description: 'Raw, urban edge',
           image: '/lovable-uploads/bc78b489-f8ff-4c97-85ef-65446bfb59dd.png'
         },
         { 
-          id: 'bohemian', 
+          id: 'Bohemian', 
           label: 'Bohemian', 
           description: 'Artistic, free spirit',
           image: '/lovable-uploads/5fee52da-6f45-4cbe-88a3-d3868ca23d6d.png'
         },
         { 
-          id: 'scandinavian', 
+          id: 'Scandinavian', 
           label: 'Scandinavian', 
           description: 'Light, airy perfection',
           image: '/lovable-uploads/f1a210c9-bdfa-4180-a680-983793a494d8.png'
         },
         { 
-          id: 'minimalist', 
+          id: 'Minimalist', 
           label: 'Minimalist', 
           description: 'Less is more magic',
           image: '/lovable-uploads/de3ec921-af90-424b-9f8e-01c4368a5ae4.png'
+        },
+        { 
+          id: 'Contemporary', 
+          label: 'Contemporary', 
+          emoji: '✨', 
+          description: 'Stylish & current' 
+        },
+        { 
+          id: 'Traditional', 
+          label: 'Traditional', 
+          emoji: '🏛️', 
+          description: 'Timeless classics' 
+        },
+        { 
+          id: 'Rustic', 
+          label: 'Rustic', 
+          emoji: '🪵', 
+          description: 'Natural & earthy' 
+        },
+        { 
+          id: 'Luxury', 
+          label: 'Luxury', 
+          emoji: '💎', 
+          description: 'Premium elegance' 
+        },
+        { 
+          id: 'Urban', 
+          label: 'Urban', 
+          emoji: '🏙️', 
+          description: 'City sophistication' 
+        },
+        { 
+          id: 'Vintage', 
+          label: 'Vintage', 
+          emoji: '📻', 
+          description: 'Retro charm' 
         }
       ]
     },
@@ -164,11 +200,16 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       key: "colors" as keyof UserPreferences,
       icon: Heart,
       options: [
-        { id: 'neutral', label: 'Peaceful Neutrals', emoji: '🤍', description: 'Calming whites & grays' },
-        { id: 'warm', label: 'Warm Embrace', emoji: '🧡', description: 'Cozy oranges & reds' },
-        { id: 'cool', label: 'Cool Serenity', emoji: '💙', description: 'Refreshing blues & greens' },
-        { id: 'earth', label: 'Earthy Grounding', emoji: '🤎', description: 'Natural browns & terracotta' },
-        { id: 'bold', label: 'Bold & Vibrant', emoji: '🌈', description: 'Life in full color!' }
+        { id: 'Neutral', label: 'Neutral', emoji: '🤍', description: 'Calming neutrals' },
+        { id: 'Warm', label: 'Warm', emoji: '🧡', description: 'Cozy warmth' },
+        { id: 'Cool', label: 'Cool', emoji: '💙', description: 'Refreshing cool tones' },
+        { id: 'Bright', label: 'Bright', emoji: '☀️', description: 'Light & airy' },
+        { id: 'Dark', label: 'Dark', emoji: '🌙', description: 'Deep & moody' },
+        { id: 'Colorful', label: 'Colorful', emoji: '🌈', description: 'Vibrant colors' },
+        { id: 'Natural', label: 'Natural', emoji: '🌿', description: 'Organic tones' },
+        { id: 'White', label: 'White', emoji: '⚪', description: 'Pure & clean' },
+        { id: 'Earth', label: 'Earth', emoji: '🤎', description: 'Earthy browns' },
+        { id: 'Bold', label: 'Bold', emoji: '💥', description: 'Bold statements' }
       ]
     },
     {
@@ -178,12 +219,12 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       key: "activities" as keyof UserPreferences,
       icon: Home,
       options: [
-        { id: 'working', label: 'Focus Zone', emoji: '💻', description: 'Home office productivity' },
-        { id: 'entertaining', label: 'Party Central', emoji: '🎉', description: 'Friends & gatherings' },
-        { id: 'relaxing', label: 'Chill Master', emoji: '🛋️', description: 'Pure relaxation mode' },
-        { id: 'cooking', label: 'Kitchen Wizard', emoji: '👨‍🍳', description: 'Culinary adventures' },
-        { id: 'exercising', label: 'Home Gym Hero', emoji: '🏋️', description: 'Fitness at home' },
-        { id: 'reading', label: 'Book Lover', emoji: '📚', description: 'Quiet reading nooks' }
+        { id: 'Working', label: 'Working', emoji: '💻', description: 'Home office productivity' },
+        { id: 'Reading', label: 'Reading', emoji: '📚', description: 'Quiet reading nooks' },
+        { id: 'Relaxing', label: 'Relaxing', emoji: '🛋️', description: 'Pure relaxation mode' },
+        { id: 'Entertaining', label: 'Entertaining', emoji: '🎉', description: 'Friends & gatherings' },
+        { id: 'Cooking', label: 'Cooking', emoji: '👨‍🍳', description: 'Culinary adventures' },
+        { id: 'Exercising', label: 'Exercising', emoji: '🏋️', description: 'Fitness at home' }
       ]
     },
     {
