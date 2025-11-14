@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet } from 'lucide-react';
+import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { PropertyCard } from '@/components/PropertyCard';
 import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
@@ -17,6 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 interface RealtorDashboardProps {
   onSwitchUserType: () => void;
   onViewProfile?: () => void;
@@ -35,6 +37,7 @@ export const RealtorDashboard = ({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<PropertyMatch | null>(null);
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
   const {
     realtorProperties,
     isLoading,
@@ -43,6 +46,7 @@ export const RealtorDashboard = ({
     toggleProperty,
     isToggling
   } = useProperties();
+  const queryClient = useQueryClient();
   const {
     realtorMatches,
     isLoadingMatches
@@ -89,6 +93,56 @@ export const RealtorDashboard = ({
     const diffTime = 10 * 24 * 60 * 60 * 1000 - (now.getTime() - activatedDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
+  };
+
+  const handleBatchReanalyze = async () => {
+    if (!realtorProperties.length) {
+      toast({
+        title: "No properties",
+        description: "You don't have any properties to re-analyze.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!window.confirm(`Re-analyze vibe data for all ${realtorProperties.length} properties?\n\nThis will update the style, color, and activities for each property based on their images.`)) {
+      return;
+    }
+
+    setIsReanalyzing(true);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+
+      const { data, error } = await supabase.functions.invoke('batch-reanalyze-properties', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      if (error) throw error;
+
+      const { successCount, failureCount } = data;
+
+      toast({
+        title: "Batch re-analysis complete",
+        description: `Successfully updated ${successCount} properties${failureCount > 0 ? `, ${failureCount} failed` : ''}.`,
+      });
+
+      // Refresh properties list
+      queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
+
+    } catch (error) {
+      console.error('Batch re-analyze error:', error);
+      toast({
+        title: "Re-analysis failed",
+        description: error instanceof Error ? error.message : "Failed to re-analyze properties",
+        variant: "destructive"
+      });
+    } finally {
+      setIsReanalyzing(false);
+    }
   };
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-16">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
@@ -151,6 +205,16 @@ export const RealtorDashboard = ({
                 <Button onClick={() => setIsBulkUploadModalOpen(true)} variant="outline" className="border-green-200 text-green-700 hover:bg-green-50" size={isMobile ? "sm" : "default"}>
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                   {isMobile ? "Bulk" : "Bulk Upload"}
+                </Button>
+                <Button 
+                  onClick={handleBatchReanalyze}
+                  disabled={isReanalyzing || !realtorProperties.length}
+                  variant="outline" 
+                  className="border-primary/20 hover:bg-primary/5" 
+                  size={isMobile ? "sm" : "default"}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isReanalyzing ? 'animate-spin' : ''}`} />
+                  {isMobile ? "Re-analyze" : "Re-analyze All"}
                 </Button>
               </div>
             </div>
