@@ -37,11 +37,22 @@ serve(async (req) => {
 
     console.log(`[BATCH-REANALYZE] Starting batch re-analysis for realtor: ${user.id}`);
 
-    // Get all properties for this realtor
-    const { data: properties, error: propertiesError } = await supabase
+    // Parse request body for optional property IDs
+    const { propertyIds } = await req.json().catch(() => ({ propertyIds: null }));
+
+    // Get properties for this realtor
+    let query = supabase
       .from('properties')
       .select('id, title, images')
       .eq('realtor_id', user.id);
+
+    // If specific property IDs provided, filter by them
+    if (propertyIds && Array.isArray(propertyIds) && propertyIds.length > 0) {
+      query = query.in('id', propertyIds);
+      console.log(`[BATCH-REANALYZE] Filtering to ${propertyIds.length} specific properties`);
+    }
+
+    const { data: properties, error: propertiesError } = await query;
 
     if (propertiesError) {
       console.error('[BATCH-REANALYZE] Error fetching properties:', propertiesError);
