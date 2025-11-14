@@ -56,9 +56,9 @@ const calculateStyleMatch = (apartment: Apartment, userStyles: string[]): number
   const storedStyles = vibeAnalysis?.styles || [];
   
   if (storedStyles.length > 0) {
-    // Direct style matching
+    // Direct style matching (case-insensitive)
     userStyles.forEach(userStyle => {
-      if (storedStyles.includes(userStyle)) {
+      if (storedStyles.some((s: string) => s.toLowerCase() === userStyle.toLowerCase())) {
         matchScore += 30; // Strong match for direct style overlap
       }
     });
@@ -141,9 +141,9 @@ const calculateColorMatch = (apartment: Apartment, userColors: string[]): number
   const storedColors = vibeAnalysis?.colors || [];
   
   if (storedColors.length > 0) {
-    // Direct color matching
+    // Direct color matching (case-insensitive)
     userColors.forEach(userColor => {
-      if (storedColors.includes(userColor)) {
+      if (storedColors.some((c: string) => c.toLowerCase() === userColor.toLowerCase())) {
         matchScore += 30; // Strong match for direct color overlap
       }
     });
@@ -184,7 +184,7 @@ const calculateColorMatch = (apartment: Apartment, userColors: string[]): number
       matchScore += 20;
     }
     
-    if (userColors.includes('colorful') && vibeAnalysis.colorful >= 6) {
+    if (userColors.some(c => c.toLowerCase() === 'colorful') && vibeAnalysis.colorful >= 6) {
       matchScore += 30;
     }
   } else {
@@ -228,7 +228,7 @@ const calculateActivityMatch = (apartment: Apartment, userActivities: string[]):
   const storedActivities = vibeAnalysis?.activities || [];
   
   if (storedActivities.length > 0) {
-    // Direct activity matching
+    // Direct activity matching (case-insensitive)
     userActivities.forEach(userActivity => {
       if (storedActivities.some((a: string) => a.toLowerCase() === userActivity.toLowerCase())) {
         matchScore += 30; // Strong match for direct activity overlap
