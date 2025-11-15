@@ -25,30 +25,21 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client and verify user
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Verify user authentication
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      console.error('Authentication failed:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 401,
-        }
-      );
+    // Extract user id from JWT (gateway already verified JWT)
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    let userId = 'unknown';
+    try {
+      const base64 = token.split('.')[1]?.replace(/-/g, '+').replace(/_/g, '/');
+      if (base64) {
+        const payload = JSON.parse(atob(base64));
+        userId = payload.sub || payload.user_id || userId;
+      }
+    } catch (_) {
+      // Non-fatal: continue without user id
     }
 
     const { imageUrls, generateContent = false, propertyInfo, regenerate = false, previousHighlight } = await req.json();
-    console.log('Authenticated user requesting vibe analysis:', user.id);
+    console.log('Authenticated user requesting vibe analysis:', userId);
 
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openaiApiKey) {
