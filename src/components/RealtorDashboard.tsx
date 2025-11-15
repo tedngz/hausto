@@ -194,28 +194,39 @@ export const RealtorDashboard = ({
           const aiColors: string[] = [];
           const aiActivities: string[] = [];
 
-          // Styles
+          // Styles (aligned with analyze-vibe fields)
           if (analysis.modern >= 5) aiStyles.push('Modern');
-          if (analysis.traditional >= 5) aiStyles.push('Traditional');
-          if (analysis.luxury >= 5) aiStyles.push('Luxury');
-          if (analysis.rustic >= 5) aiStyles.push('Rustic');
-          if (analysis.contemporary >= 5) aiStyles.push('Contemporary');
-          if (analysis.vintage >= 5) aiStyles.push('Vintage');
+          if (analysis.cozy >= 5) aiStyles.push('Cozy');
+          if (analysis.luxurious >= 6) aiStyles.push('Luxury');
           if (analysis.urban >= 5) aiStyles.push('Urban');
+          if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
+          if (analysis.elegant >= 5) aiStyles.push('Contemporary');
+          if (analysis.rustic >= 4) aiStyles.push('Rustic');
+          if (analysis.colorful >= 5) aiStyles.push('Bohemian');
 
-          // Colors
-          if (analysis.neutral >= 5) aiColors.push('Neutral');
-          if (analysis.warm >= 5) aiColors.push('Warm');
-          if (analysis.cool >= 5) aiColors.push('Cool');
-          if (analysis.vibrant >= 5) aiColors.push('Vibrant');
-          if (analysis.monochrome >= 5) aiColors.push('Monochrome');
+          // Colors (derived from available properties)
+          if (analysis.minimalist >= 6 || (analysis.modern >= 6 && analysis.colorful < 5)) aiColors.push('Neutral');
+          if (analysis.cozy >= 6 || analysis.rustic >= 5) aiColors.push('Warm');
+          if (analysis.modern >= 7 || analysis.elegant >= 6) aiColors.push('Cool');
+          if (analysis.natural_light >= 7) aiColors.push('Bright');
+          if (analysis.colorful >= 6) aiColors.push('Colorful');
+          if (analysis.natural_light >= 6 && analysis.cozy >= 5) aiColors.push('Natural');
+          if (analysis.minimalist >= 7) aiColors.push('White');
+          if (analysis.rustic >= 6 || (analysis.cozy >= 6 && analysis.natural_light >= 5)) aiColors.push('Earth');
+          if (analysis.colorful >= 7 || (analysis.modern >= 7 && analysis.colorful >= 5)) aiColors.push('Bold');
 
-          // Activities
-          if (analysis.peaceful >= 5) aiActivities.push('Peaceful');
-          if (analysis.social >= 5) aiActivities.push('Social');
-          if (analysis.active >= 5) aiActivities.push('Active');
-          if (analysis.professional >= 5) aiActivities.push('Professional');
-          if (analysis.creative >= 5) aiActivities.push('Creative');
+          // Activities (derived from available properties)
+          if (analysis.modern >= 6 || analysis.spacious >= 7) aiActivities.push('Working');
+          if ((analysis.cozy >= 6 && analysis.natural_light >= 6) || analysis.natural_light >= 8) aiActivities.push('Reading');
+          if (analysis.cozy >= 6 || analysis.elegant >= 6) aiActivities.push('Relaxing');
+          if (analysis.spacious >= 7 || (analysis.modern >= 6 && analysis.spacious >= 5) || analysis.luxurious >= 7) aiActivities.push('Entertaining');
+          if (analysis.spacious >= 6 && analysis.modern >= 5) aiActivities.push('Cooking');
+          if (analysis.spacious >= 8) aiActivities.push('Exercising');
+
+          // Deduplicate and cap to 3 each
+          const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
+          const uniqueColors = [...new Set(aiColors)].slice(0, 3);
+          const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
 
           const formattedVibeAnalysis = {
             ...analysis,
@@ -229,6 +240,7 @@ export const RealtorDashboard = ({
             .from('properties')
             .update({
               vibe_analysis: formattedVibeAnalysis,
+              highlights: [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
               updated_at: new Date().toISOString()
             })
             .eq('id', property.id);
@@ -255,6 +267,7 @@ export const RealtorDashboard = ({
 
       // Refresh properties list
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
       setSelectedPropertyIds(new Set());
 
       const successCount = propertyProgress.filter(p => p.status === 'success').length;
