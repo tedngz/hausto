@@ -30,6 +30,8 @@ export type Apartment = {
   property_source_link?: string;
   property_source_provider_name?: string;
   property_source_provider_phone?: string;
+  created_at?: string;
+  last_activated_at?: string;
 };
 
 export type Match = {
