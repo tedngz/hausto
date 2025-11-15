@@ -7,6 +7,7 @@ import { UserProfile } from '@/components/LoginModal';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { calculateVibeScore } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
+import { sortPropertiesForDiscovery } from '@/utils/propertyDiscovery';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useMatches } from '@/hooks/useMatches';
@@ -81,7 +82,7 @@ export const SwipeInterface = ({
     fetchDeclinedProperties();
   }, [user?.id]);
 
-  // Transform Property to Apartment with realtor info
+  // Transform Property to Apartment with realtor info (preserve metadata for discovery algorithm)
   const transformPropertyToApartment = (property: Property, realtorProfiles: Map<string, any>): Apartment => {
     const realtorProfile = realtorProfiles.get(property.realtor_id);
     return {
@@ -101,8 +102,11 @@ export const SwipeInterface = ({
         email: realtorProfile?.email || '',
         avatar: realtorProfile?.avatar_url || ''
       },
-      vibe_analysis: property.vibe_analysis
-    };
+      vibe_analysis: property.vibe_analysis,
+      // Preserve metadata for discovery algorithm
+      created_at: property.created_at,
+      last_activated_at: property.last_activated_at
+    } as Apartment;
   };
   useEffect(() => {
     const loadPropertiesWithRealtors = async () => {
@@ -167,9 +171,11 @@ export const SwipeInterface = ({
     if (!userPreferences) {
       console.log('No user preferences available');
       setNoMatchReason('invalid-preferences');
-      // Don't clear apartments here, let user still see properties
+      // Don't clear apartments here, let user still see properties with basic sorting
       if (apartments.length === 0) {
-        setApartments(availableProperties);
+        // Sort by recency even without preferences
+        const sortedAvailable = sortPropertiesForDiscovery(availableProperties, null);
+        setApartments(sortedAvailable);
         setCurrentApartmentIndex(0);
       }
       return;
@@ -213,16 +219,20 @@ export const SwipeInterface = ({
 
     // If we have filtered apartments, use them
     if (filteredApartments.length > 0) {
-      setApartments(filteredApartments);
+      console.log('Applying dynamic discovery algorithm to', filteredApartments.length, 'properties');
+      // Apply strategic sorting for dynamic and exciting discovery
+      const sortedApartments = sortPropertiesForDiscovery(filteredApartments, userPreferences);
+      setApartments(sortedApartments);
       setCurrentApartmentIndex(0);
       setNoMatchReason('');
-    console.log('Using filtered properties:', filteredApartments.length);
+    console.log('Using dynamically sorted properties:', sortedApartments.length);
         return;
       }
 
       // If no properties pass filters, show all available properties anyway
-      console.log('No properties pass filters, showing all available properties');
-      setApartments(availableProperties);
+      console.log('No properties pass filters, showing all available properties with dynamic sorting');
+      const sortedAvailable = sortPropertiesForDiscovery(availableProperties, userPreferences);
+      setApartments(sortedAvailable);
       setCurrentApartmentIndex(0);
       setNoMatchReason('');
     };
