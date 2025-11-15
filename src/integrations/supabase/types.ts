@@ -721,6 +721,7 @@ export type Database = {
         Args: { user_email: string }
         Returns: undefined
       }
+      deactivate_expired_properties: { Args: never; Returns: undefined }
       get_conversation_properties: {
         Args: never
         Returns: {
