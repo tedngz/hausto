@@ -106,27 +106,43 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         const aiColors = [];
         const aiActivities = [];
         
-        // Extract styles
+        // Extract styles (same logic as batch-reanalyze)
         if (analysis.modern >= 5) aiStyles.push('Modern');
         if (analysis.cozy >= 5) aiStyles.push('Cozy');
         if (analysis.luxurious >= 6) aiStyles.push('Luxury');
         if (analysis.urban >= 5) aiStyles.push('Urban');
         if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
         if (analysis.elegant >= 5) aiStyles.push('Contemporary');
+        if (analysis.rustic >= 4) aiStyles.push('Rustic');
+        if (analysis.colorful >= 5) aiStyles.push('Bohemian');
         
-        // Extract colors
-        if (analysis.neutral >= 5) aiColors.push('Neutral');
-        if (analysis.warm >= 5) aiColors.push('Warm');
+        // Extract colors (map from available AI properties)
+        if (analysis.minimalist >= 6 || (analysis.modern >= 6 && analysis.colorful < 5)) aiColors.push('Neutral');
+        if (analysis.cozy >= 6 || analysis.rustic >= 5) aiColors.push('Warm');
+        if (analysis.modern >= 7 || analysis.elegant >= 6) aiColors.push('Cool');
         if (analysis.natural_light >= 7) aiColors.push('Bright');
+        if (analysis.colorful >= 6) aiColors.push('Colorful');
+        if (analysis.natural_light >= 6 && analysis.cozy >= 5) aiColors.push('Natural');
+        if (analysis.minimalist >= 7) aiColors.push('White');
+        if (analysis.rustic >= 6 || (analysis.cozy >= 6 && analysis.natural_light >= 5)) aiColors.push('Earth');
+        if (analysis.colorful >= 7 || (analysis.modern >= 7 && analysis.colorful >= 5)) aiColors.push('Bold');
         
-        // Extract activities
-        if (analysis.modern >= 5) aiActivities.push('Working');
-        if (analysis.cozy >= 6) aiActivities.push('Reading');
-        if (analysis.elegant >= 5) aiActivities.push('Relaxing');
+        // Extract activities (map from available AI properties)
+        if (analysis.modern >= 6 || analysis.spacious >= 7) aiActivities.push('Working');
+        if ((analysis.cozy >= 6 && analysis.natural_light >= 6) || analysis.natural_light >= 8) aiActivities.push('Reading');
+        if (analysis.cozy >= 6 || analysis.elegant >= 6) aiActivities.push('Relaxing');
+        if (analysis.spacious >= 7 || (analysis.modern >= 6 && analysis.spacious >= 5) || analysis.luxurious >= 7) aiActivities.push('Entertaining');
+        if (analysis.spacious >= 6 && analysis.modern >= 5) aiActivities.push('Cooking');
+        if (analysis.spacious >= 8) aiActivities.push('Exercising');
         
-        setSelectedStyles(aiStyles.slice(0, 3));
-        setSelectedColors(aiColors.slice(0, 3));
-        setSelectedActivities(aiActivities.slice(0, 3));
+        // Remove duplicates and limit selections
+        const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
+        const uniqueColors = [...new Set(aiColors)].slice(0, 3);
+        const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        
+        setSelectedStyles(uniqueStyles.length ? uniqueStyles : ['Modern']);
+        setSelectedColors(uniqueColors.length ? uniqueColors : ['Neutral']);
+        setSelectedActivities(uniqueActivities.length ? uniqueActivities : ['Relaxing']);
       } else {
         setSelectedStyles(savedStyles);
         setSelectedColors(savedColors);
