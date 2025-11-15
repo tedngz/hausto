@@ -2,7 +2,17 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square } from 'lucide-react';
+import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square, Sparkles } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { PropertyCard } from '@/components/PropertyCard';
 import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
@@ -41,6 +51,8 @@ export const RealtorDashboard = ({
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<Set<string>>(new Set());
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+  const [isReanalyzeDialogOpen, setIsReanalyzeDialogOpen] = useState(false);
+  const [reanalyzeCount, setReanalyzeCount] = useState(0);
   const [propertyProgress, setPropertyProgress] = useState<Array<{
     id: string;
     title: string;
@@ -119,13 +131,16 @@ export const RealtorDashboard = ({
       return;
     }
 
-    const confirmMessage = selectedPropertyIds.size > 0
-      ? `Re-analyze vibe data for ${selectedPropertyIds.size} selected properties?`
-      : `Re-analyze vibe data for all ${realtorProperties.length} properties?`;
+    setReanalyzeCount(propertiesToAnalyze.length);
+    setIsReanalyzeDialogOpen(true);
+  };
 
-    if (!window.confirm(`${confirmMessage}\n\nThis will update the style, color, and activities for each property based on their images.`)) {
-      return;
-    }
+  const confirmBatchReanalyze = async () => {
+    setIsReanalyzeDialogOpen(false);
+    
+    const propertiesToAnalyze = selectedPropertyIds.size > 0 
+      ? realtorProperties.filter(p => selectedPropertyIds.has(p.id))
+      : realtorProperties;
 
     // Initialize progress tracking
     const initialProgress = propertiesToAnalyze.map(p => ({
@@ -509,5 +524,34 @@ export const RealtorDashboard = ({
         currentIndex={currentAnalyzingIndex}
         totalProperties={propertyProgress.length}
       />
+
+      <AlertDialog open={isReanalyzeDialogOpen} onOpenChange={setIsReanalyzeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Sparkles className="h-6 w-6 text-primary" />
+              </div>
+              <AlertDialogTitle className="text-xl">
+                Refresh Property Vibes?
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-base pt-2">
+              {selectedPropertyIds.size > 0 
+                ? `We'll analyze ${reanalyzeCount} selected ${reanalyzeCount === 1 ? 'property' : 'properties'} and update the style, colors, and activities based on the latest images.`
+                : `We'll analyze all ${reanalyzeCount} ${reanalyzeCount === 1 ? 'property' : 'properties'} and update the style, colors, and activities based on the latest images.`
+              }
+              <br /><br />
+              This usually takes just a few moments per property.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Not Now</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBatchReanalyze}>
+              Let's Go!
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>;
 };
