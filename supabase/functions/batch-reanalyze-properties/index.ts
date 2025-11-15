@@ -137,30 +137,40 @@ serve(async (req) => {
         if (analysis.elegant >= 5) aiStyles.push('Contemporary');
         if (analysis.rustic >= 4) aiStyles.push('Rustic');
         if (analysis.colorful >= 5) aiStyles.push('Bohemian');
-        if (analysis.industrial >= 4) aiStyles.push('Industrial');
-        if (analysis.scandinavian >= 5) aiStyles.push('Scandinavian');
-        if (analysis.traditional >= 5) aiStyles.push('Traditional');
-        if (analysis.vintage >= 5) aiStyles.push('Vintage');
         
-        // Extract colors from AI analysis
-        if (analysis.neutral >= 5) aiColors.push('Neutral');
-        if (analysis.warm >= 5) aiColors.push('Warm');
-        if (analysis.cool >= 5) aiColors.push('Cool');
-        if (analysis.bright >= 5 || analysis.natural_light >= 7) aiColors.push('Bright');
-        if (analysis.dark >= 5) aiColors.push('Dark');
+        // Extract colors from AI analysis (map from available properties)
+        // Neutral colors from minimalist/modern
+        if (analysis.minimalist >= 6 || (analysis.modern >= 6 && analysis.colorful < 5)) aiColors.push('Neutral');
+        // Warm colors from cozy/rustic
+        if (analysis.cozy >= 6 || analysis.rustic >= 5) aiColors.push('Warm');
+        // Cool colors from modern/elegant
+        if (analysis.modern >= 7 || analysis.elegant >= 6) aiColors.push('Cool');
+        // Bright from natural light
+        if (analysis.natural_light >= 7) aiColors.push('Bright');
+        // Colorful
         if (analysis.colorful >= 6) aiColors.push('Colorful');
-        if (analysis.natural_light >= 6) aiColors.push('Natural');
-        if (analysis.minimalist >= 6) aiColors.push('White');
-        if (analysis.rustic >= 5 || analysis.cozy >= 5) aiColors.push('Earth');
-        if (analysis.colorful >= 7 || analysis.modern >= 6) aiColors.push('Bold');
+        // Natural from natural light + cozy
+        if (analysis.natural_light >= 6 && analysis.cozy >= 5) aiColors.push('Natural');
+        // White from minimalist
+        if (analysis.minimalist >= 7) aiColors.push('White');
+        // Earth from rustic/cozy
+        if (analysis.rustic >= 6 || (analysis.cozy >= 6 && analysis.natural_light >= 5)) aiColors.push('Earth');
+        // Bold from colorful/modern
+        if (analysis.colorful >= 7 || (analysis.modern >= 7 && analysis.colorful >= 5)) aiColors.push('Bold');
         
-        // Extract activities from AI analysis
-        if (analysis.modern >= 5 || analysis.spacious >= 6) aiActivities.push('Working');
-        if (analysis.cozy >= 6 || analysis.natural_light >= 6) aiActivities.push('Reading');
-        if (analysis.cozy >= 5 || analysis.elegant >= 5) aiActivities.push('Relaxing');
-        if (analysis.spacious >= 6 || analysis.modern >= 6) aiActivities.push('Entertaining');
-        if (analysis.kitchen_quality >= 5) aiActivities.push('Cooking');
-        if (analysis.spacious >= 5) aiActivities.push('Exercising');
+        // Extract activities from AI analysis (map from available properties)
+        // Working from modern/spacious
+        if (analysis.modern >= 6 || analysis.spacious >= 7) aiActivities.push('Working');
+        // Reading from cozy/natural_light
+        if ((analysis.cozy >= 6 && analysis.natural_light >= 6) || analysis.natural_light >= 8) aiActivities.push('Reading');
+        // Relaxing from cozy/elegant
+        if (analysis.cozy >= 6 || analysis.elegant >= 6) aiActivities.push('Relaxing');
+        // Entertaining from spacious/modern/elegant
+        if (analysis.spacious >= 7 || (analysis.modern >= 6 && analysis.spacious >= 5) || analysis.luxurious >= 7) aiActivities.push('Entertaining');
+        // Cooking - use spacious as proxy for kitchen
+        if (analysis.spacious >= 6 && analysis.modern >= 5) aiActivities.push('Cooking');
+        // Exercising from spacious
+        if (analysis.spacious >= 8) aiActivities.push('Exercising');
         
         // Remove duplicates and limit selections
         const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
