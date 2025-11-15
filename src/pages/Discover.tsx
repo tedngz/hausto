@@ -25,11 +25,10 @@ const Discover = () => {
     user,
     loading
   } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
 
-  // Check if user is admin
-  const isAdmin = user?.email === 'ted.ngz@gmail.com';
   const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile'>('ai-chat');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [matches, setMatches] = useState<Apartment[]>([]);
@@ -45,33 +44,15 @@ const Discover = () => {
     }
   }, [user, loading, navigate]);
 
-  // Load saved preferences from localStorage
+  // Load saved preferences from localStorage and default to renter
   useEffect(() => {
     if (user) {
       const savedUserType = localStorage.getItem(`userType_${user.id}`);
       const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
 
-      // Force non-admin users to renter flow
-      if (!isAdmin && savedUserType === 'realtor') {
-        localStorage.removeItem(`userType_${user.id}`);
-        setUserType('renter');
-        if (savedPreferences) {
-          try {
-            const preferences = JSON.parse(savedPreferences);
-            setUserPreferences(preferences);
-            setCurrentView('ai-chat');
-          } catch (error) {
-            console.error('Error parsing saved preferences:', error);
-            setCurrentView('ai-chat');
-          }
-        } else {
-          setCurrentView('ai-chat');
-        }
-        return;
-      }
-      if (savedUserType && (savedUserType === 'renter' || isAdmin)) {
+      if (savedUserType) {
         setUserType(savedUserType as 'renter' | 'realtor');
-        if (savedUserType === 'realtor' && isAdmin) {
+        if (savedUserType === 'realtor') {
           setCurrentView('dashboard');
         } else if (savedPreferences) {
           try {
@@ -85,8 +66,8 @@ const Discover = () => {
         } else {
           setCurrentView('ai-chat');
         }
-      } else if (!isAdmin) {
-        // Auto-set non-admin users as renters
+      } else {
+        // Default to renter for new users
         setUserType('renter');
         localStorage.setItem(`userType_${user.id}`, 'renter');
         if (savedPreferences) {
@@ -103,7 +84,7 @@ const Discover = () => {
         }
       }
     }
-  }, [user, isAdmin]);
+  }, [user]);
   useEffect(() => {
     // Listen for AI chat opening event from SwipeInterface
     const handleOpenAIChat = () => {
@@ -129,15 +110,11 @@ const Discover = () => {
     };
   }, []);
   const handleUserTypeSelect = (type: 'renter' | 'realtor') => {
-    // Only allow admin to select realtor
-    if (type === 'realtor' && !isAdmin) {
-      type = 'renter';
-    }
     setUserType(type);
     if (user) {
       localStorage.setItem(`userType_${user.id}`, type);
     }
-    if (type === 'realtor' && isAdmin) {
+    if (type === 'realtor') {
       setCurrentView('dashboard');
     } else {
       // Auto skip to ai-chat if user has completed quiz before
@@ -192,15 +169,6 @@ const Discover = () => {
     setRealtorMatches(prev => [...prev, newMatch]);
   };
   const switchUserType = () => {
-    // Only allow admin to switch to realtor
-    if (!isAdmin) {
-      setUserType('renter');
-      setCurrentView('ai-chat');
-      if (user) {
-        localStorage.setItem(`userType_${user.id}`, 'renter');
-      }
-      return;
-    }
     setUserType(null);
     setCurrentView('onboarding');
     setUserPreferences(null);
@@ -232,19 +200,27 @@ const Discover = () => {
             <h1 className="text-2xl font-bold mt-20 mb-2 text-center text-inherit">Describe Your Dream Home</h1>
           </div>}
         
-        {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation currentView={currentView} setCurrentView={view => {
-        if (view === 'profile') {
-          setCurrentView('profile');
-        } else if (view === 'ai-chat') {
-          setCurrentView('ai-chat');
-        } else {
-          setCurrentView(view as 'swipe' | 'matches');
-        }
-      }} matchCount={matches.length} userType={userType} onSwitchUserType={switchUserType} onOpenAIChat={() => setCurrentView('ai-chat')} onRestartOnboarding={userType === 'renter' ? handleRestartOnboarding : undefined} isAdmin={isAdmin} />}
+        {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation
+          currentView={currentView}
+          setCurrentView={view => {
+            if (view === 'profile') {
+              setCurrentView('profile');
+            } else if (view === 'ai-chat') {
+              setCurrentView('ai-chat');
+            } else {
+              setCurrentView(view as 'swipe' | 'matches');
+            }
+          }}
+          matchCount={matches.length}
+          userType={userType}
+          onSwitchUserType={switchUserType}
+          onOpenAIChat={() => setCurrentView('ai-chat')}
+          onRestartOnboarding={userType === 'renter' ? handleRestartOnboarding : undefined}
+        />}
 
-        {userType === 'realtor' && isAdmin && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatches.length} onSwitchUserType={switchUserType} onOpenAIChat={() => setIsAIChatOpen(true)} onAddProperty={() => setIsUploadModalOpen(true)} />}
+        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatches.length} onSwitchUserType={switchUserType} onOpenAIChat={() => setIsAIChatOpen(true)} onAddProperty={() => setIsUploadModalOpen(true)} />}
         
-        {!userType && isAdmin && <UserTypeSelector onSelect={handleUserTypeSelect} />}
+        {!userType && <UserTypeSelector onSelect={handleUserTypeSelect} />}
         
         {userType === 'renter' && currentView === 'onboarding' && <OnboardingQuiz onComplete={handleOnboardingComplete} onSkip={() => setCurrentView('ai-chat')} />}
         
@@ -260,7 +236,7 @@ const Discover = () => {
         phone: user.user_metadata?.phone || ''
       }} />}
 
-        {currentView === 'profile' && userType && (userType === 'realtor' && isAdmin ? <RealtorProfile /> : <div className="space-y-6">
+        {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="space-y-6">
               <Profile userType={userType} />
               <div className="max-w-4xl mx-auto px-4 pb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -273,7 +249,7 @@ const Discover = () => {
         {currentView === 'ai-chat' && userType && <HomeAI />}
 
 
-        {userType === 'realtor' && isAdmin && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
+        {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
 
         {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
 
