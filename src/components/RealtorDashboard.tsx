@@ -10,6 +10,7 @@ import { BulkUploadModal } from '@/components/BulkUploadModal';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { HaustoChat } from '@/components/HaustoChat';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
+import { BatchReanalyzeProgressModal } from '@/components/BatchReanalyzeProgressModal';
 import { useProperties, Property } from '@/hooks/useProperties';
 import { useMatches, PropertyMatch } from '@/hooks/useMatches';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -39,6 +40,14 @@ export const RealtorDashboard = ({
   const [selectedMatch, setSelectedMatch] = useState<PropertyMatch | null>(null);
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<Set<string>>(new Set());
+  const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+  const [propertyProgress, setPropertyProgress] = useState<Array<{
+    id: string;
+    title: string;
+    status: 'pending' | 'analyzing' | 'success' | 'failed';
+    error?: string;
+  }>>([]);
+  const [currentAnalyzingIndex, setCurrentAnalyzingIndex] = useState(0);
   const {
     realtorProperties,
     isLoading,
@@ -97,11 +106,11 @@ export const RealtorDashboard = ({
   };
 
   const handleBatchReanalyze = async () => {
-    const propertyIdsToAnalyze = selectedPropertyIds.size > 0 
-      ? Array.from(selectedPropertyIds)
-      : realtorProperties.map(p => p.id);
+    const propertiesToAnalyze = selectedPropertyIds.size > 0 
+      ? realtorProperties.filter(p => selectedPropertyIds.has(p.id))
+      : realtorProperties;
 
-    if (propertyIdsToAnalyze.length === 0) {
+    if (propertiesToAnalyze.length === 0) {
       toast({
         title: "No properties",
         description: "You don't have any properties to re-analyze.",
@@ -118,31 +127,128 @@ export const RealtorDashboard = ({
       return;
     }
 
+    // Initialize progress tracking
+    const initialProgress = propertiesToAnalyze.map(p => ({
+      id: p.id,
+      title: p.title,
+      status: 'pending' as const
+    }));
+    setPropertyProgress(initialProgress);
+    setCurrentAnalyzingIndex(0);
+    setIsProgressModalOpen(true);
     setIsReanalyzing(true);
-    
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
 
-      const { data, error } = await supabase.functions.invoke('batch-reanalyze-properties', {
-        body: { propertyIds: propertyIdsToAnalyze },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
+      // Process each property one by one
+      for (let i = 0; i < propertiesToAnalyze.length; i++) {
+        const property = propertiesToAnalyze[i];
+        setCurrentAnalyzingIndex(i);
+
+        // Update status to analyzing
+        setPropertyProgress(prev => prev.map((p, idx) => 
+          idx === i ? { ...p, status: 'analyzing' as const } : p
+        ));
+
+        try {
+          if (!property.images || property.images.length === 0) {
+            throw new Error('No images to analyze');
+          }
+
+          // Call analyze-vibe function
+          const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
+            'analyze-vibe',
+            {
+              body: {
+                imageUrls: property.images,
+                generateContent: false
+              },
+              headers: {
+                Authorization: `Bearer ${session.access_token}`
+              }
+            }
+          );
+
+          if (analysisError) throw analysisError;
+
+          // Convert raw scores to formatted vibe_analysis
+          const analysis = analysisData?.analysis || {};
+          const aiStyles: string[] = [];
+          const aiColors: string[] = [];
+          const aiActivities: string[] = [];
+
+          // Styles
+          if (analysis.modern >= 5) aiStyles.push('Modern');
+          if (analysis.traditional >= 5) aiStyles.push('Traditional');
+          if (analysis.luxury >= 5) aiStyles.push('Luxury');
+          if (analysis.rustic >= 5) aiStyles.push('Rustic');
+          if (analysis.contemporary >= 5) aiStyles.push('Contemporary');
+          if (analysis.vintage >= 5) aiStyles.push('Vintage');
+          if (analysis.urban >= 5) aiStyles.push('Urban');
+
+          // Colors
+          if (analysis.neutral >= 5) aiColors.push('Neutral');
+          if (analysis.warm >= 5) aiColors.push('Warm');
+          if (analysis.cool >= 5) aiColors.push('Cool');
+          if (analysis.vibrant >= 5) aiColors.push('Vibrant');
+          if (analysis.monochrome >= 5) aiColors.push('Monochrome');
+
+          // Activities
+          if (analysis.peaceful >= 5) aiActivities.push('Peaceful');
+          if (analysis.social >= 5) aiActivities.push('Social');
+          if (analysis.active >= 5) aiActivities.push('Active');
+          if (analysis.professional >= 5) aiActivities.push('Professional');
+          if (analysis.creative >= 5) aiActivities.push('Creative');
+
+          const formattedVibeAnalysis = {
+            ...analysis,
+            styles: [...new Set(aiStyles)].slice(0, 3),
+            colors: [...new Set(aiColors)].slice(0, 3),
+            activities: [...new Set(aiActivities)].slice(0, 3)
+          };
+
+          // Update the property in the database
+          const { error: updateError } = await supabase
+            .from('properties')
+            .update({
+              vibe_analysis: formattedVibeAnalysis,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', property.id);
+
+          if (updateError) throw updateError;
+
+          // Update status to success
+          setPropertyProgress(prev => prev.map((p, idx) => 
+            idx === i ? { ...p, status: 'success' as const } : p
+          ));
+
+        } catch (error) {
+          console.error(`Error analyzing property ${property.id}:`, error);
+          // Update status to failed
+          setPropertyProgress(prev => prev.map((p, idx) => 
+            idx === i ? { 
+              ...p, 
+              status: 'failed' as const,
+              error: error instanceof Error ? error.message : 'Analysis failed'
+            } : p
+          ));
         }
-      });
+      }
 
-      if (error) throw error;
+      // Refresh properties list
+      queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
+      setSelectedPropertyIds(new Set());
 
-      const { successCount, failureCount } = data;
+      const successCount = propertyProgress.filter(p => p.status === 'success').length;
+      const failureCount = propertyProgress.filter(p => p.status === 'failed').length;
 
       toast({
         title: "Batch re-analysis complete",
         description: `Successfully updated ${successCount} properties${failureCount > 0 ? `, ${failureCount} failed` : ''}.`,
       });
-
-      // Clear selection and refresh properties list
-      setSelectedPropertyIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
 
     } catch (error) {
       console.error('Batch re-analyze error:', error);
@@ -395,5 +501,13 @@ export const RealtorDashboard = ({
       setIsProfileModalOpen(false);
       setSelectedMatch(null);
     }} />}
+
+      <BatchReanalyzeProgressModal
+        isOpen={isProgressModalOpen}
+        onClose={() => setIsProgressModalOpen(false)}
+        properties={propertyProgress}
+        currentIndex={currentAnalyzingIndex}
+        totalProperties={propertyProgress.length}
+      />
     </div>;
 };
