@@ -91,30 +91,34 @@ serve(async (req) => {
           continue;
         }
 
-        // Call analyze-vibe function
-        const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
-          'analyze-vibe',
-          {
-            body: {
-              imageUrls: property.images,
-              generateContent: false
-            },
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        );
+        // Call analyze-vibe function directly with fetch to properly forward auth
+        const analyzeVibeUrl = `${supabaseUrl}/functions/v1/analyze-vibe`;
+        const analyzeVibeResponse = await fetch(analyzeVibeUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey
+          },
+          body: JSON.stringify({
+            imageUrls: property.images,
+            generateContent: false
+          })
+        });
 
-        if (analysisError) {
-          console.error(`[BATCH-REANALYZE] Error analyzing property ${property.id}:`, analysisError);
+        if (!analyzeVibeResponse.ok) {
+          const errorText = await analyzeVibeResponse.text();
+          console.error(`[BATCH-REANALYZE] analyze-vibe returned ${analyzeVibeResponse.status}:`, errorText);
           results.push({
             id: property.id,
             title: property.title,
             success: false,
-            error: analysisError.message || 'Analysis failed'
+            error: `Analysis failed: ${analyzeVibeResponse.status} ${errorText}`
           });
           continue;
         }
+
+        const analysisData = await analyzeVibeResponse.json();
 
         // Convert raw scores to selected tags (styles, colors, activities)
         const analysis = analysisData.analysis || analysisData;
