@@ -12,7 +12,9 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
+    // Normalize and validate auth header
+    const rawAuthHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+    const authHeader = rawAuthHeader?.startsWith('Bearer') ? rawAuthHeader : (rawAuthHeader ? `Bearer ${rawAuthHeader}` : undefined);
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
         status: 401,
@@ -25,10 +27,10 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Verify user
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace(/^Bearer\s+/i, '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
     if (userError || !user) {
+      console.error('[BATCH-REANALYZE] Invalid or missing JWT when verifying user', userError);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -98,7 +100,7 @@ serve(async (req) => {
               generateContent: false
             },
             headers: {
-              Authorization: authHeader
+              Authorization: `Bearer ${token}`
             }
           }
         );
