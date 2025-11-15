@@ -26,12 +26,14 @@ export const SubscriptionStatus = ({
   const [cancelling, setCancelling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  // Premium status based on tier and subscription end date
-  const isPremium = subscription_tier === 'premium' && subscription_end;
+  // Premium status based on tier and subscription status
+  // Allow premium display for both PayPal subscriptions (with end date) and manual upgrades (without end date)
+  const isPremium = subscription_tier === 'premium' && subscribed;
   
-  // Active subscription has PayPal ID, cancelled subscription doesn't but still has premium benefits
-  const hasActiveSubscription = isPremium && !!paypal_subscription_id;
-  const isCancelled = isPremium && !paypal_subscription_id;
+  // Active subscription has PayPal ID, manual/cancelled subscriptions don't
+  const hasActiveSubscription = isPremium && !!paypal_subscription_id && subscription_end;
+  const isCancelled = isPremium && subscription_end && !paypal_subscription_id;
+  const isManuallyUpgraded = isPremium && !subscription_end;
   const handleRefresh = async () => {
     setRefreshing(true);
     await checkSubscription();
@@ -77,6 +79,10 @@ export const SubscriptionStatus = ({
               {isCancelled ? 'Effective until' : 'Renews'} {new Date(subscription_end).toLocaleDateString()}
             </span>
           </div>}
+        {isManuallyUpgraded && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+            <Crown className="h-3 w-3" />
+            <span>Lifetime Premium</span>
+          </div>}
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
         {isPremium ? <div className="space-y-2.5">
@@ -94,7 +100,12 @@ export const SubscriptionStatus = ({
             {hasActiveSubscription ? <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
                 <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                 {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button> : <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+              </Button> : isCancelled ? <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs font-normal">
+                  Subscription Cancelled - Benefits until {subscription_end && new Date(subscription_end).toLocaleDateString()}
+                </Badge> : isManuallyUpgraded ? <Badge variant="default" className="w-full justify-center py-1.5 text-xs font-normal">
+                  <Crown className="h-3 w-3 mr-1" />
+                  Manually Upgraded
+                </Badge> : <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
                 <Crown className="h-3.5 w-3.5 mr-1.5" />
                 Reactivate Subscription
               </Button>}
