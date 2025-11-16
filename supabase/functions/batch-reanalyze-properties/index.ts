@@ -134,7 +134,8 @@ serve(async (req) => {
         
         if (analysis.image_analyses && Array.isArray(analysis.image_analyses)) {
           analysis.image_analyses.forEach((imgAnalysis: any) => {
-            if (imgAnalysis.image_highlight) {
+            // Only include highlights that exist - don't add placeholders
+            if (imgAnalysis.image_highlight && imgAnalysis.image_highlight.trim()) {
               imageHighlights.push(capitalize(String(imgAnalysis.image_highlight)));
             }
             if (imgAnalysis.suggested_activities && Array.isArray(imgAnalysis.suggested_activities)) {
@@ -228,14 +229,14 @@ serve(async (req) => {
             ? analysis.image_analyses.map((ia: any, idx: number) => {
                 const rawIndex = Number(ia?.image_index);
                 const imageIndex = !Number.isFinite(rawIndex) || rawIndex < 1 ? (idx + 1) : rawIndex;
-                // CRITICAL: Ensure every image has a highlight - use fallback if missing
+                // Trust the AI-generated highlight - it should always be present from analyze-vibe
                 const highlight = ia?.image_highlight 
                   ? capitalize(String(ia.image_highlight))
-                  : `Featured space ${imageIndex}`;
+                  : undefined; // Don't add fallback - analyze-vibe handles this
                 return {
                   ...ia,
                   image_index: imageIndex,
-                  image_highlight: highlight,
+                  ...(highlight ? { image_highlight: highlight } : {}), // Only include if present
                   suggested_amenities: Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : [],
                   suggested_activities: Array.isArray(ia?.suggested_activities) ? ia.suggested_activities : []
                 };
