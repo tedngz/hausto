@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper: capitalize first letter for nicer display
+const capitalize = (s: string) => (s && typeof s === 'string' ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -46,7 +49,7 @@ serve(async (req) => {
     // Get properties for this realtor
     let query = supabase
       .from('properties')
-      .select('id, title, images')
+      .select('id, title, images, amenities, highlights')
       .eq('realtor_id', user.id);
 
     // If specific property IDs provided, filter by them
@@ -132,7 +135,7 @@ serve(async (req) => {
         if (analysisData.image_analyses && Array.isArray(analysisData.image_analyses)) {
           analysisData.image_analyses.forEach((imgAnalysis: any) => {
             if (imgAnalysis.image_highlight) {
-              imageHighlights.push(imgAnalysis.image_highlight);
+              imageHighlights.push(capitalize(String(imgAnalysis.image_highlight)));
             }
             if (imgAnalysis.suggested_activities && Array.isArray(imgAnalysis.suggested_activities)) {
               suggestedActivitiesFromImages.push(...imgAnalysis.suggested_activities);
@@ -215,6 +218,13 @@ serve(async (req) => {
           colors: uniqueColors,
           activities: uniqueActivities,
           image_highlights: imageHighlights,
+          image_analyses: Array.isArray(analysisData.image_analyses)
+            ? analysisData.image_analyses.map((ia: any, idx: number) => ({
+                ...ia,
+                image_index: ia?.image_index ?? idx + 1,
+                image_highlight: ia?.image_highlight ? capitalize(String(ia.image_highlight)) : ia?.image_highlight,
+              }))
+            : undefined,
           amenities: [...new Set([...(analysis?.amenities || []), ...uniqueAmenities])]
         };
 
