@@ -124,6 +124,17 @@ serve(async (req) => {
         // Convert raw scores to selected tags (styles, colors, activities)
         const analysis = analysisData.analysis || analysisData;
         
+        // Extract image highlights from individual image analyses
+        const imageHighlights: string[] = [];
+        if (analysisData.image_analyses && Array.isArray(analysisData.image_analyses)) {
+          analysisData.image_analyses.forEach((imgAnalysis: any) => {
+            if (imgAnalysis.image_highlight) {
+              imageHighlights.push(imgAnalysis.image_highlight);
+            }
+          });
+        }
+        console.log(`[BATCH-REANALYZE] Extracted ${imageHighlights.length} image highlights for property ${property.id}`);
+        
         const aiStyles = [];
         const aiColors = [];
         const aiActivities = [];
@@ -187,14 +198,16 @@ serve(async (req) => {
           ...analysis,
           styles: uniqueStyles,
           colors: uniqueColors,
-          activities: uniqueActivities
+          activities: uniqueActivities,
+          image_highlights: imageHighlights
         };
 
-        // Update property with new vibe_analysis
+        // Update property with new vibe_analysis AND highlights field
         const { error: updateError } = await supabase
           .from('properties')
           .update({
             vibe_analysis: formattedVibeAnalysis,
+            highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
             updated_at: new Date().toISOString()
           })
           .eq('id', property.id);

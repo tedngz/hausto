@@ -235,12 +235,22 @@ export const RealtorDashboard = ({
             activities: [...new Set(aiActivities)].slice(0, 3)
           };
 
+          // Extract image highlights from individual image analyses
+          const imageHighlights: string[] = [];
+          if (analysisData?.image_analyses && Array.isArray(analysisData.image_analyses)) {
+            analysisData.image_analyses.forEach((imgAnalysis: any) => {
+              if (imgAnalysis.image_highlight) {
+                imageHighlights.push(imgAnalysis.image_highlight);
+              }
+            });
+          }
+
           // Update the property in the database
           const { error: updateError } = await supabase
             .from('properties')
             .update({
               vibe_analysis: formattedVibeAnalysis,
-              highlights: [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
+              highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
               updated_at: new Date().toISOString()
             })
             .eq('id', property.id);
