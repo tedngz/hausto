@@ -235,11 +235,20 @@ export const RealtorDashboard = ({
             activities: [...new Set(aiActivities)].slice(0, 3)
           };
 
-          // Extract image highlights from individual image analyses
+          // Extract image highlights and suggested amenities from individual image analyses
           const imageHighlights: string[] = [];
           const suggestedAmenitiesFromImages: string[] = [];
+          let mappedImageAnalyses: any[] | undefined = undefined;
           if (analysisData?.image_analyses && Array.isArray(analysisData.image_analyses)) {
-            analysisData.image_analyses.forEach((imgAnalysis: any) => {
+            mappedImageAnalyses = analysisData.image_analyses.map((ia: any, idx: number) => ({
+              ...ia,
+              image_index: ia?.image_index ?? idx + 1,
+              image_highlight: ia?.image_highlight
+                ? String(ia.image_highlight).charAt(0).toUpperCase() + String(ia.image_highlight).slice(1)
+                : ia?.image_highlight,
+            }));
+
+            mappedImageAnalyses.forEach((imgAnalysis: any) => {
               if (imgAnalysis.image_highlight) {
                 imageHighlights.push(imgAnalysis.image_highlight);
               }
@@ -248,12 +257,16 @@ export const RealtorDashboard = ({
               }
             });
           }
-          const uniqueAmenities = [...new Set(suggestedAmenitiesFromImages)].slice(0, 5);
 
-          // Attach amenities into vibe_analysis as well for editor convenience
+          // Unique amenities from images and from overall analysis
+          const uniqueAmenitiesFromImages = [...new Set(suggestedAmenitiesFromImages)].slice(0, 5);
+          const mergedAmenities = Array.from(new Set([...(analysisData?.analysis?.amenities || []), ...uniqueAmenitiesFromImages]));
+
+          // Attach amenities and image analyses into vibe_analysis for editor convenience
           formattedVibeAnalysis = {
             ...formattedVibeAnalysis,
-            amenities: [...new Set([...(analysisData?.analysis?.amenities || []), ...uniqueAmenities])]
+            image_analyses: mappedImageAnalyses,
+            amenities: mergedAmenities,
           };
 
           // Update the property in the database
@@ -262,7 +275,7 @@ export const RealtorDashboard = ({
             .update({
               vibe_analysis: formattedVibeAnalysis,
               highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
-              amenities: uniqueAmenities.length > 0 ? uniqueAmenities : (property as any).amenities || [],
+              amenities: mergedAmenities.length > 0 ? mergedAmenities : (property as any).amenities || [],
               updated_at: new Date().toISOString()
             })
             .eq('id', property.id);

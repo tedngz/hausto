@@ -228,13 +228,16 @@ serve(async (req) => {
           amenities: [...new Set([...(analysis?.amenities || []), ...uniqueAmenities])]
         };
 
+        // Compute merged amenities (from image suggestions + overall analysis)
+        const mergedAmenities = Array.from(new Set([...(analysis?.amenities || []), ...uniqueAmenities]));
+
         // Update property with new vibe_analysis, highlights, AND amenities
         const { error: updateError } = await supabase
           .from('properties')
           .update({
             vibe_analysis: formattedVibeAnalysis,
             highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
-            amenities: uniqueAmenities.length > 0 ? uniqueAmenities : property.amenities || [],
+            amenities: mergedAmenities.length > 0 ? mergedAmenities : property.amenities || [],
             updated_at: new Date().toISOString()
           })
           .eq('id', property.id);
