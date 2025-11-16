@@ -18,6 +18,7 @@ export type Apartment = {
   vibe: string;
   description: string;
   highlights: string[];
+  amenities?: string[];
   realtor: {
     id: string;
     name: string;
