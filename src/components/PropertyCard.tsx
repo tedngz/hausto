@@ -228,13 +228,15 @@ export const PropertyCard = ({
           });
 
           // Get full highlight for this image from image_analyses only (not from highlights array)
-          const imageHighlight = analysisForImage?.image_highlight || 
-                                 `Featured space ${actualImageIndex}`;
+          const imageHighlight = analysisForImage?.image_highlight;
+          
           return <div key={index} className="space-y-2">
-                    <div className="flex items-center gap-1 text-xs text-primary">
-                      <Sparkles className="w-2.5 h-2.5" />
-                      <span className="font-medium">{imageHighlight}</span>
-                    </div>
+                    {imageHighlight && (
+                      <div className="flex items-center gap-1 text-xs text-primary">
+                        <Sparkles className="w-2.5 h-2.5" />
+                        <span className="font-medium">{imageHighlight}</span>
+                      </div>
+                    )}
                     <div className="relative h-48">
                       <img src={image} alt={`${apartment.title} - Image ${actualImageIndex}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
                 setCurrentImageIndex(index + 1);
