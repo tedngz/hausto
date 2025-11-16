@@ -154,8 +154,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         const highlightsWithImages = property.vibe_analysis.image_analyses
           .map((imgAnalysis: any) => {
             if (imgAnalysis.image_highlight) {
-              // image_index from AI is 1-based, convert to 0-based for UI
-              const imageIndex = (imgAnalysis.image_index ?? 1) - 1;
+              // image_index from AI is 1-based; guard against 0/invalid and convert to 0-based for UI
+              const rawIdx = Number(imgAnalysis.image_index);
+              const imageIndex = Math.max(0, (Number.isFinite(rawIdx) ? rawIdx : 1) - 1);
               return {
                 text: imgAnalysis.image_highlight,
                 imageIndexes: [imageIndex]
@@ -205,8 +206,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           const highlightsWithImages = analysis.image_analyses
             .map((imgAnalysis: any) => {
               if (imgAnalysis.image_highlight) {
-                // image_index from AI is 1-based, convert to 0-based for UI
-                const imageIndex = (imgAnalysis.image_index ?? 1) - 1;
+                // image_index from AI is 1-based; guard against 0/invalid and convert to 0-based for UI
+                const rawIdx = Number(imgAnalysis.image_index);
+                const imageIndex = Math.max(0, (Number.isFinite(rawIdx) ? rawIdx : 1) - 1);
                 return {
                   text: imgAnalysis.image_highlight,
                   imageIndexes: [imageIndex]
@@ -261,7 +263,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               const highlightsWithImages = analysis.image_analyses
                 .map((ia: any) => {
                   if (!ia?.image_highlight) return null;
-                  const imageIndex = (ia.image_index ?? 1) - 1;
+                  const rawIdx = Number(ia.image_index);
+                  const imageIndex = Math.max(0, (Number.isFinite(rawIdx) ? rawIdx : 1) - 1);
                   return { text: ia.image_highlight, imageIndexes: [imageIndex] };
                 })
                 .filter(Boolean);

@@ -217,22 +217,23 @@ serve(async (req) => {
         if (uniqueActivities.length === 0) uniqueActivities.push('Relaxing');
 
         // Build properly formatted vibe_analysis with correct image indices
+        const uniqueImageHighlights = Array.from(new Set(imageHighlights.filter(Boolean)));
         const formattedVibeAnalysis = {
           ...analysis,
           styles: uniqueStyles,
           colors: uniqueColors,
           activities: uniqueActivities,
-          image_highlights: imageHighlights,
+          image_highlights: uniqueImageHighlights,
           image_analyses: Array.isArray(analysis.image_analyses)
             ? analysis.image_analyses.map((ia: any, idx: number) => {
-                // Ensure image_index is 1-based and matches the actual image position
-                const imageIndex = ia?.image_index ?? (idx + 1);
+                const rawIndex = Number(ia?.image_index);
+                const imageIndex = !Number.isFinite(rawIndex) || rawIndex < 1 ? (idx + 1) : rawIndex;
                 return {
                   ...ia,
                   image_index: imageIndex,
                   image_highlight: ia?.image_highlight ? capitalize(String(ia.image_highlight)) : null,
-                  suggested_amenities: Array.isArray(ia.suggested_amenities) ? ia.suggested_amenities : [],
-                  suggested_activities: Array.isArray(ia.suggested_activities) ? ia.suggested_activities : []
+                  suggested_amenities: Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : [],
+                  suggested_activities: Array.isArray(ia?.suggested_activities) ? ia.suggested_activities : []
                 };
               })
             : [],
@@ -256,7 +257,7 @@ serve(async (req) => {
           .from('properties')
           .update({
             vibe_analysis: formattedVibeAnalysis,
-            highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
+            highlights: uniqueImageHighlights.length > 0 ? uniqueImageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
             amenities: mergedAmenities.length > 0 ? mergedAmenities : property.amenities || [],
             updated_at: new Date().toISOString()
           })
