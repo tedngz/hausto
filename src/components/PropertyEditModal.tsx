@@ -181,7 +181,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     }
   }, [property, convertPrice]);
 
-  // Ensure we load fresh amenities when modal opens (after batch re-analyze updates)
+  // Ensure we load fresh amenities when modal opens or property data changes (after batch re-analyze updates)
   useEffect(() => {
     let cancelled = false;
     const fetchFresh = async () => {
@@ -204,14 +204,13 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           : [];
         const detected = Array.from(new Set([...(aiAmenities || []), ...imageSuggested, ...(savedAmenities || [])]));
         setDetectedAmenities(detected);
-        if (selectedAmenities.length === 0) {
-          setSelectedAmenities(savedAmenities.length ? savedAmenities : Array.from(new Set([...(aiAmenities || []), ...imageSuggested])));
-        }
+        // Always refresh selected amenities from saved data after re-analyze
+        setSelectedAmenities(savedAmenities.length ? savedAmenities : Array.from(new Set([...(aiAmenities || []), ...imageSuggested])));
       }
     };
     fetchFresh();
     return () => { cancelled = true; };
-  }, [isOpen, property?.id]);
+  }, [isOpen, property?.id, property?.updated_at]);
 
 
   const handleNewImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
