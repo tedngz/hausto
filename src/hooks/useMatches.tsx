@@ -28,6 +28,7 @@ export interface PropertyMatch {
     size?: string;
     realtor_id?: string;
     vibe_analysis?: any;
+    amenities?: string[];
   };
 }
 
@@ -61,7 +62,8 @@ export const useMatches = () => {
             vibe_analysis,
             property_source_link,
             property_source_provider_name,
-            property_source_provider_phone
+            property_source_provider_phone,
+            amenities
           )
         `)
         .eq('realtor_id', user.id)
@@ -125,7 +127,8 @@ export const useMatches = () => {
             vibe_analysis,
             property_source_link,
             property_source_provider_name,
-            property_source_provider_phone
+            property_source_provider_phone,
+            amenities
           )
         `)
         .eq('renter_id', user.id)
