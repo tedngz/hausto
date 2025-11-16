@@ -164,9 +164,9 @@ export const PropertyCard = ({
         </div>
 
         {/* Amenities Section */}
-        {apartment.vibe_analysis?.amenities && apartment.vibe_analysis.amenities.length > 0 && (
+        {apartment.amenities && apartment.amenities.length > 0 && (
           <div className="mb-3 pb-3 border-b border-border">
-            <PropertyAmenities amenities={apartment.vibe_analysis.amenities} compact />
+            <PropertyAmenities amenities={apartment.amenities} compact />
           </div>
         )}
 
