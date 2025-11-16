@@ -133,6 +133,31 @@ export const PropertyCard = ({
             <Share2 className="w-4 h-4" />
           </Button>
         </div>
+
+        {/* Main Image Highlight - Display highlight for current viewing image */}
+        {(() => {
+          const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
+          // currentImageIndex is 0-based, so image at position 0 should match index 1 (1-based) or 0 (0-based old data)
+          const targetIndex = currentImageIndex + 1;
+          const analysisForImage = imageAnalyses.find(a => {
+            const analysisIndex = Number(a.image_index);
+            if (!Number.isFinite(analysisIndex)) return false;
+            // Support both 0-based (old) and 1-based (new) formats
+            return analysisIndex === targetIndex || analysisIndex === currentImageIndex;
+          });
+          
+          const imageHighlight = analysisForImage?.image_highlight;
+          if (!imageHighlight) return null;
+          
+          return (
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+              <div className="flex items-center gap-1.5 text-white">
+                <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-sm font-medium">{imageHighlight}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
       
       <div className="p-4 sm:p-6">
