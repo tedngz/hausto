@@ -377,6 +377,20 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     // Convert price to VND if in USD
     const priceInVND = currency === 'USD' ? parseInt(price) * 24500 : parseInt(price);
 
+    // Merge edited per-image highlights into vibe_analysis.image_analyses before creating
+    const existingAnalyses = Array.isArray(vibeAnalysis?.image_analyses)
+      ? vibeAnalysis.image_analyses
+      : [];
+    const analysesByIndex = new Map<number, any>(
+      existingAnalyses.map((a: any) => [Number(a.image_index) || 0, a])
+    );
+    imageHighlights.forEach((h) => {
+      const idx = (h.imageIndexes && h.imageIndexes[0] !== undefined) ? h.imageIndexes[0] : 0;
+      const prev = analysesByIndex.get(idx) || { image_index: idx };
+      analysesByIndex.set(idx, { ...prev, image_index: idx, image_highlight: h.text });
+    });
+    const mergedImageAnalyses = Array.from(analysesByIndex.values());
+
     createProperty({
       title,
       description,
@@ -387,7 +401,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
       imageFiles,
       vibeAnalysis: {
-        ...vibeAnalysis,
+        ...(vibeAnalysis || {}),
+        image_analyses: mergedImageAnalyses,
         styles: selectedStyles,
         colors: selectedColors,
         activities: selectedActivities,
