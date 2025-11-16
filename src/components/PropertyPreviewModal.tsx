@@ -25,6 +25,7 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
     vibe: property.vibe || '',
     description: property.description || '',
     highlights: property.highlights || [],
+    amenities: property.amenities || [],
     realtor: {
       id: property.realtor_id,
       name: 'Licensed Realtor',

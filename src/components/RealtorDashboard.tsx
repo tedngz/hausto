@@ -237,13 +237,18 @@ export const RealtorDashboard = ({
 
           // Extract image highlights from individual image analyses
           const imageHighlights: string[] = [];
+          const suggestedAmenitiesFromImages: string[] = [];
           if (analysisData?.image_analyses && Array.isArray(analysisData.image_analyses)) {
             analysisData.image_analyses.forEach((imgAnalysis: any) => {
               if (imgAnalysis.image_highlight) {
                 imageHighlights.push(imgAnalysis.image_highlight);
               }
+              if (Array.isArray(imgAnalysis.suggested_amenities)) {
+                suggestedAmenitiesFromImages.push(...imgAnalysis.suggested_amenities);
+              }
             });
           }
+          const uniqueAmenities = [...new Set(suggestedAmenitiesFromImages)].slice(0, 5);
 
           // Update the property in the database
           const { error: updateError } = await supabase
@@ -251,6 +256,7 @@ export const RealtorDashboard = ({
             .update({
               vibe_analysis: formattedVibeAnalysis,
               highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
+              amenities: uniqueAmenities.length > 0 ? uniqueAmenities : (property as any).amenities || [],
               updated_at: new Date().toISOString()
             })
             .eq('id', property.id);
