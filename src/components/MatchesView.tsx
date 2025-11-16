@@ -64,6 +64,7 @@ export const MatchesView = ({
       vibe: match.properties.vibe || '',
       description: match.properties.description || '',
       highlights: match.properties.highlights || [],
+      amenities: match.properties.amenities || [],
       vibe_analysis: parsedVA,
       property_source_link: match.properties.property_source_link,
       property_source_provider_name: match.properties.property_source_provider_name,

@@ -95,6 +95,7 @@ export const SwipeInterface = ({
       vibe: property.vibe || '',
       description: property.description || '',
       highlights: property.highlights || [],
+      amenities: property.amenities || [],
       realtor: {
         id: property.realtor_id,
         name: realtorProfile?.name || 'Property Manager',
