@@ -149,15 +149,30 @@ export const PropertyAmenities = ({ amenities, compact = true }: PropertyAmeniti
   return (
     <div className={`flex flex-wrap gap-2 ${compact ? 'py-2' : 'py-3'}`}>
       {uniqueAmenities.map((amenity) => {
-        const { icon: Icon, label } = amenityIconMap[amenity];
+        const mapped = amenityIconMap[amenity];
+        
+        if (mapped) {
+          const { icon: Icon, label } = mapped;
+          return (
+            <div
+              key={amenity}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground ${compact ? 'text-xs' : 'text-sm'}`}
+              title={label}
+            >
+              <Icon className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+              <span className="font-medium">{label}</span>
+            </div>
+          );
+        }
+        
+        // Render AI-detected amenities without icons
         return (
           <div
             key={amenity}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground ${compact ? 'text-xs' : 'text-sm'}`}
-            title={label}
+            title={amenity}
           >
-            <Icon className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-            <span className="font-medium">{label}</span>
+            <span className="font-medium">{amenity}</span>
           </div>
         );
       })}
