@@ -870,8 +870,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
 
           {/* Amenities Section */}
           <div>
-            <Label className="text-base font-semibold">Amenities</Label>
-            <p className="text-sm text-gray-600 mb-3">Click to select/deselect amenities</p>
+            <Label className="text-base font-semibold">AI-detected Amenities</Label>
+            <p className="text-sm text-gray-600 mb-3">Click to select/deselect which detected amenities to save</p>
             
             <div className="flex flex-wrap gap-2 mb-4">
               {detectedAmenities.map((amenity, index) => {

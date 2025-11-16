@@ -586,8 +586,8 @@ export const RealtorDashboard = ({
             </div>
             <AlertDialogDescription className="text-base pt-2">
               {selectedPropertyIds.size > 0 
-                ? `We'll analyze ${reanalyzeCount} selected ${reanalyzeCount === 1 ? 'property' : 'properties'} and update the style, colors, and activities based on the latest images.`
-                : `We'll analyze all ${reanalyzeCount} ${reanalyzeCount === 1 ? 'property' : 'properties'} and update the style, colors, and activities based on the latest images.`
+                ? `We'll analyze ${reanalyzeCount} selected ${reanalyzeCount === 1 ? 'property' : 'properties'} and update the style, colors, activities, and amenities based on the latest images.`
+                : `We'll analyze all ${reanalyzeCount} ${reanalyzeCount === 1 ? 'property' : 'properties'} and update the style, colors, activities, and amenities based on the latest images.`
               }
               <br /><br />
               This usually takes just a few moments per property.
