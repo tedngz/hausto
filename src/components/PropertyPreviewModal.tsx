@@ -15,6 +15,13 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
   if (!isOpen || !property) return null;
 
   // Transform Property to Apartment for preview to ensure identical card design
+  // Extract amenities from both property.amenities and image_analyses
+  const imageAnalyses = property.vibe_analysis?.image_analyses || [];
+  const imageSuggestedAmenities = imageAnalyses
+    .flatMap((ia: any) => ia.suggested_amenities || [])
+    .filter((a: string) => a && a.trim());
+  const allAmenities = Array.from(new Set([...(property.amenities || []), ...imageSuggestedAmenities]));
+
   const previewApartment: Apartment = {
     id: property.id,
     images: property.images || [],
@@ -25,7 +32,7 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
     vibe: property.vibe || '',
     description: property.description || '',
     highlights: property.highlights || [],
-    amenities: property.amenities || [],
+    amenities: allAmenities,
     realtor: {
       id: property.realtor_id,
       name: 'Licensed Realtor',
