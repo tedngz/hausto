@@ -152,11 +152,13 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       // Extract image highlights
       if (property.vibe_analysis?.image_analyses && Array.isArray(property.vibe_analysis.image_analyses)) {
         const highlightsWithImages = property.vibe_analysis.image_analyses
-          .map((imgAnalysis: any, index: number) => {
+          .map((imgAnalysis: any) => {
             if (imgAnalysis.image_highlight) {
+              // image_index from AI is 1-based, convert to 0-based for UI
+              const imageIndex = (imgAnalysis.image_index ?? 1) - 1;
               return {
                 text: imgAnalysis.image_highlight,
-                imageIndexes: [index]
+                imageIndexes: [imageIndex]
               };
             }
             return null;
@@ -197,6 +199,27 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       }
       if (!cancelled && fresh) {
         const analysis = (fresh as any)?.vibe_analysis || {};
+        
+        // Extract and update image highlights
+        if (analysis?.image_analyses && Array.isArray(analysis.image_analyses)) {
+          const highlightsWithImages = analysis.image_analyses
+            .map((imgAnalysis: any) => {
+              if (imgAnalysis.image_highlight) {
+                // image_index from AI is 1-based, convert to 0-based for UI
+                const imageIndex = (imgAnalysis.image_index ?? 1) - 1;
+                return {
+                  text: imgAnalysis.image_highlight,
+                  imageIndexes: [imageIndex]
+                };
+              }
+              return null;
+            })
+            .filter((h: any) => h !== null);
+          setImageHighlights(highlightsWithImages);
+          console.log('[PropertyEditModal] Loaded image highlights:', highlightsWithImages);
+        }
+        
+        // Extract and update amenities
         const savedAmenities: string[] = (fresh as any)?.amenities || [];
         const aiAmenities: string[] = Array.isArray(analysis?.amenities) ? analysis.amenities : [];
         const imageSuggested: string[] = Array.isArray(analysis?.image_analyses)
@@ -206,6 +229,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         setDetectedAmenities(detected);
         // Always refresh selected amenities from saved data after re-analyze
         setSelectedAmenities(savedAmenities.length ? savedAmenities : Array.from(new Set([...(aiAmenities || []), ...imageSuggested])));
+        console.log('[PropertyEditModal] Loaded amenities - detected:', detected.length, 'selected:', savedAmenities.length || imageSuggested.length);
       }
     };
     fetchFresh();
