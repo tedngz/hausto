@@ -181,6 +181,39 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     }
   }, [property, convertPrice]);
 
+  // Ensure we load fresh amenities when modal opens (after batch re-analyze updates)
+  useEffect(() => {
+    let cancelled = false;
+    const fetchFresh = async () => {
+      if (!isOpen || !property?.id) return;
+      const { data: fresh, error } = await supabase
+        .from('properties')
+        .select('id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, property_source_link, property_source_provider_name, property_source_provider_phone, updated_at')
+        .eq('id', property.id)
+        .single();
+      if (error) {
+        console.error('Failed to fetch fresh property for edit modal:', error);
+        return;
+      }
+      if (!cancelled && fresh) {
+        const analysis = (fresh as any)?.vibe_analysis || {};
+        const savedAmenities: string[] = (fresh as any)?.amenities || [];
+        const aiAmenities: string[] = Array.isArray(analysis?.amenities) ? analysis.amenities : [];
+        const imageSuggested: string[] = Array.isArray(analysis?.image_analyses)
+          ? analysis.image_analyses.flatMap((ia: any) => Array.isArray(ia.suggested_amenities) ? ia.suggested_amenities : [])
+          : [];
+        const detected = Array.from(new Set([...(aiAmenities || []), ...imageSuggested, ...(savedAmenities || [])]));
+        setDetectedAmenities(detected);
+        if (selectedAmenities.length === 0) {
+          setSelectedAmenities(savedAmenities.length ? savedAmenities : Array.from(new Set([...(aiAmenities || []), ...imageSuggested])));
+        }
+      }
+    };
+    fetchFresh();
+    return () => { cancelled = true; };
+  }, [isOpen, property?.id]);
+
+
   const handleNewImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
