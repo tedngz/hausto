@@ -174,7 +174,7 @@ export const PropertyCard = ({
         {/* Additional Images with AI-Generated Highlights */}
         {apartment.images.length > 1 && <div className="mb-4 space-y-3">
             <div className="flex items-center gap-1.5 mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              
               <p className="text-xs font-semibold text-foreground">More Photos</p>
             </div>
             <div className="space-y-3">
