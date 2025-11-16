@@ -138,16 +138,24 @@ serve(async (req) => {
               imageHighlights.push(capitalize(String(imgAnalysis.image_highlight)));
             }
             if (imgAnalysis.suggested_activities && Array.isArray(imgAnalysis.suggested_activities)) {
-              suggestedActivitiesFromImages.push(...imgAnalysis.suggested_activities);
+              imgAnalysis.suggested_activities.forEach((act: string) => {
+                if (act && typeof act === 'string' && act.trim()) {
+                  suggestedActivitiesFromImages.push(capitalize(act.trim()));
+                }
+              });
             }
             if (imgAnalysis.suggested_amenities && Array.isArray(imgAnalysis.suggested_amenities)) {
-              suggestedAmenitiesFromImages.push(...imgAnalysis.suggested_amenities);
+              imgAnalysis.suggested_amenities.forEach((amenity: string) => {
+                if (amenity && typeof amenity === 'string' && amenity.trim()) {
+                  suggestedAmenitiesFromImages.push(capitalize(amenity.trim()));
+                }
+              });
             }
           });
         }
         console.log(`[BATCH-REANALYZE] Extracted ${imageHighlights.length} image highlights for property ${property.id}`);
-        console.log(`[BATCH-REANALYZE] Suggested activities from images: ${suggestedActivitiesFromImages.length}`);
-        console.log(`[BATCH-REANALYZE] Suggested amenities from images: ${suggestedAmenitiesFromImages.length}`);
+        console.log(`[BATCH-REANALYZE] Suggested activities from images: ${suggestedActivitiesFromImages.length}`, suggestedActivitiesFromImages);
+        console.log(`[BATCH-REANALYZE] Suggested amenities from images: ${suggestedAmenitiesFromImages.length}`, suggestedAmenitiesFromImages);
         console.log(`[BATCH-REANALYZE] Image analyses structure:`, JSON.stringify(analysis.image_analyses?.map((ia: any) => ({
           image_index: ia.image_index,
           highlight: ia.image_highlight,
@@ -206,15 +214,17 @@ serve(async (req) => {
         if (analysis.spacious >= 8) aiActivities.push('Exercising');
         
         // Remove duplicates and limit selections
-        const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
-        const uniqueColors = [...new Set(aiColors)].slice(0, 3);
-        const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
-        const uniqueAmenities = [...new Set(suggestedAmenitiesFromImages)].slice(0, 5);
+        const uniqueStyles = [...new Set(aiStyles.map(s => capitalize(s)))].slice(0, 3);
+        const uniqueColors = [...new Set(aiColors.map(c => capitalize(c)))].slice(0, 3);
+        const uniqueActivities = [...new Set(aiActivities.map(a => capitalize(a)))].slice(0, 3);
+        const uniqueAmenities = [...new Set(suggestedAmenitiesFromImages.map(a => capitalize(a)))].slice(0, 10);
         
         // Fallbacks if AI didn't detect enough
         if (uniqueStyles.length === 0) uniqueStyles.push('Modern');
         if (uniqueColors.length === 0) uniqueColors.push('Neutral');
         if (uniqueActivities.length === 0) uniqueActivities.push('Relaxing');
+        
+        console.log(`[BATCH-REANALYZE] Final unique amenities for ${property.id}:`, uniqueAmenities);
 
         // Build properly formatted vibe_analysis with correct image indices
         const formattedVibeAnalysis = {
@@ -231,25 +241,39 @@ serve(async (req) => {
                   ...ia,
                   image_index: imageIndex,
                   image_highlight: ia?.image_highlight ? capitalize(String(ia.image_highlight)) : null,
-                  suggested_amenities: Array.isArray(ia.suggested_amenities) ? ia.suggested_amenities : [],
-                  suggested_activities: Array.isArray(ia.suggested_activities) ? ia.suggested_activities : []
+                  suggested_amenities: Array.isArray(ia.suggested_amenities) 
+                    ? ia.suggested_amenities.map((a: string) => capitalize(a.trim())).filter((a: string) => a)
+                    : [],
+                  suggested_activities: Array.isArray(ia.suggested_activities) 
+                    ? ia.suggested_activities.map((a: string) => capitalize(a.trim())).filter((a: string) => a)
+                    : []
                 };
               })
             : [],
-          amenities: [...new Set([...(analysis?.amenities || []), ...uniqueAmenities])]
+          amenities: uniqueAmenities
         };
         
         console.log(`[BATCH-REANALYZE] Formatted vibe_analysis for ${property.id}:`, JSON.stringify({
+          styles: formattedVibeAnalysis.styles,
+          colors: formattedVibeAnalysis.colors,
+          activities: formattedVibeAnalysis.activities,
           image_count: formattedVibeAnalysis.image_analyses?.length,
           highlights: formattedVibeAnalysis.image_analyses?.map((ia: any) => ({
             index: ia.image_index,
-            highlight: ia.image_highlight
+            highlight: ia.image_highlight,
+            amenities: ia.suggested_amenities
           })),
           total_amenities: formattedVibeAnalysis.amenities?.length
         }));
 
-        // Compute merged amenities (from image suggestions + overall analysis)
-        const mergedAmenities = Array.from(new Set([...(analysis?.amenities || []), ...uniqueAmenities]));
+        // Compute merged amenities (from image suggestions + existing property amenities + overall analysis)
+        const mergedAmenities = Array.from(new Set([
+          ...(property.amenities || []),
+          ...(analysis?.amenities || []),
+          ...uniqueAmenities
+        ])).map(a => capitalize(String(a).trim())).filter(a => a);
+        
+        console.log(`[BATCH-REANALYZE] Final merged amenities for ${property.id} (${mergedAmenities.length}):`, mergedAmenities);
 
         // Update property with new vibe_analysis, highlights, AND amenities
         const { error: updateError } = await supabase
@@ -257,7 +281,7 @@ serve(async (req) => {
           .update({
             vibe_analysis: formattedVibeAnalysis,
             highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
-            amenities: mergedAmenities.length > 0 ? mergedAmenities : property.amenities || [],
+            amenities: mergedAmenities,
             updated_at: new Date().toISOString()
           })
           .eq('id', property.id);
