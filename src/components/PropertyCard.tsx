@@ -172,17 +172,18 @@ export const PropertyCard = ({
           </div>}
 
         {/* Additional Images with AI-Generated Highlights */}
-        {apartment.images && apartment.images.length > 0 && (
+        {apartment.images && apartment.images.length > 1 && (
           <div className="mb-4 space-y-3">
             <div className="flex items-center gap-1.5 mb-2">
-              <p className="text-xs font-semibold text-foreground">Photos</p>
+              <p className="text-xs font-semibold text-foreground">More Photos</p>
             </div>
             <div className="space-y-3">
-              {apartment.images.map((image, index) => {
+              {apartment.images.slice(1).map((image, sliceIndex) => {
+                const index = sliceIndex + 1; // Adjust to original array index (starting from 1)
                 const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
 
                 // Find the analysis for this specific image
-                // image_index from DB is 1-based; convert index (0-based) to 1-based for matching
+                // image_index from DB is 1-based; our index here represents position in original array
                 const analysisForImage = imageAnalyses.find((a: any) => {
                   const rawIdx = Number(a?.image_index);
                   if (!Number.isFinite(rawIdx)) return false;
@@ -193,7 +194,7 @@ export const PropertyCard = ({
                 const imageHighlight = analysisForImage?.image_highlight;
 
                 return (
-                  <div key={index} className="space-y-2">
+                  <div key={sliceIndex} className="space-y-2">
                     <div className="relative">
                       <img
                         src={image}
