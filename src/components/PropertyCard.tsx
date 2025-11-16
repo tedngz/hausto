@@ -210,9 +210,12 @@ export const PropertyCard = ({
               </Button>}
           </div>}
 
-        {/* Additional Images with Highlights */}
+        {/* Additional Images with AI-Generated Highlights */}
         {apartment.images.length > 1 && <div className="mb-4 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground">More Photos</p>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <p className="text-xs font-semibold text-foreground">AI-Generated Image Highlights</p>
+            </div>
             <div className="space-y-4">
               {apartment.images.slice(1).map((image, index) => {
           const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
@@ -231,17 +234,26 @@ export const PropertyCard = ({
           const imageHighlight = analysisForImage?.image_highlight;
           
           return <div key={index} className="space-y-2">
-                    {imageHighlight && (
-                      <div className="flex items-center gap-1 text-xs text-primary">
-                        <Sparkles className="w-2.5 h-2.5" />
-                        <span className="font-medium">{imageHighlight}</span>
+                    <div className="relative border border-border/50 rounded-lg overflow-hidden bg-card">
+                      <div className="relative h-48">
+                        <img src={image} alt={`${apartment.title} - Image ${actualImageIndex}`} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
+                  setCurrentImageIndex(index + 1);
+                  setIsImageModalOpen(true);
+                }} />
+                        <div className="absolute top-2 left-2">
+                          <Badge variant="secondary" className="text-xs font-semibold shadow-sm">
+                            {actualImageIndex}
+                          </Badge>
+                        </div>
                       </div>
-                    )}
-                    <div className="relative h-48">
-                      <img src={image} alt={`${apartment.title} - Image ${actualImageIndex}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
-                setCurrentImageIndex(index + 1);
-                setIsImageModalOpen(true);
-              }} />
+                      {imageHighlight && (
+                        <div className="p-2 border-t border-border/50 bg-muted/30">
+                          <div className="flex items-start gap-1.5">
+                            <Sparkles className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                            <span className="text-xs text-foreground/90 leading-relaxed">{imageHighlight}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>;
         })}
