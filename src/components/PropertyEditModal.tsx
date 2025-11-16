@@ -236,7 +236,60 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     return () => { cancelled = true; };
   }, [isOpen, property?.id, property?.updated_at]);
 
+  // Live-refresh amenities when property is re-analyzed elsewhere (e.g., batch)
+  useEffect(() => {
+    if (!isOpen || !property?.id) return;
 
+    const channel = supabase
+      .channel(`property-updates-${property.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'properties', filter: `id=eq.${property.id}` },
+        async () => {
+          try {
+            const { data: fresh, error } = await supabase
+              .from('properties')
+              .select('id, amenities, vibe_analysis, highlights, images, updated_at')
+              .eq('id', property.id)
+              .single();
+            if (error || !fresh) return;
+
+            const analysis: any = (fresh as any).vibe_analysis || {};
+
+            // Update image highlights (keep indices in UI 0-based)
+            if (Array.isArray(analysis.image_analyses)) {
+              const highlightsWithImages = analysis.image_analyses
+                .map((ia: any) => {
+                  if (!ia?.image_highlight) return null;
+                  const imageIndex = (ia.image_index ?? 1) - 1;
+                  return { text: ia.image_highlight, imageIndexes: [imageIndex] };
+                })
+                .filter(Boolean);
+              setImageHighlights(highlightsWithImages as any);
+            }
+
+            // Merge amenities from overall analysis + image suggestions + saved
+            const savedAmenities: string[] = (fresh as any).amenities || [];
+            const aiAmenities: string[] = Array.isArray(analysis.amenities) ? analysis.amenities : [];
+            const imageSuggested: string[] = Array.isArray(analysis.image_analyses)
+              ? analysis.image_analyses.flatMap((ia: any) =>
+                  Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : []
+                )
+              : [];
+            const detected = Array.from(new Set([...(aiAmenities || []), ...imageSuggested, ...(savedAmenities || [])]));
+            setDetectedAmenities(detected);
+            setSelectedAmenities(savedAmenities.length ? savedAmenities : Array.from(new Set([...(aiAmenities || []), ...imageSuggested])));
+          } catch (e) {
+            console.error('[PropertyEditModal] Realtime refresh failed:', e);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOpen, property?.id]);
   const handleNewImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
@@ -330,10 +383,15 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         
         setCurrentVibeAnalysis(analysis);
         
-        // Extract and set amenities
-        if (analysis.amenities && Array.isArray(analysis.amenities)) {
-          setDetectedAmenities(analysis.amenities);
-          setSelectedAmenities(analysis.amenities);
+        // Extract and set amenities (merge overall + image-suggested)
+        const aiAmenities: string[] = Array.isArray(analysis.amenities) ? analysis.amenities : [];
+        const imageSuggested: string[] = Array.isArray(analysis.image_analyses)
+          ? analysis.image_analyses.flatMap((ia: any) => Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : [])
+          : [];
+        const mergedAmenities = Array.from(new Set([...(aiAmenities || []), ...imageSuggested]));
+        if (mergedAmenities.length) {
+          setDetectedAmenities(mergedAmenities);
+          setSelectedAmenities(mergedAmenities);
         }
         
         // Extract styles, colors, and activities from AI analysis
