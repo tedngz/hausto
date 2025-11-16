@@ -199,9 +199,8 @@ export const PropertyCard = ({
             return Number.isFinite(analysisIndex) && analysisIndex === actualImageIndex;
           });
 
-          // Get full highlight for this image from image_analyses, ensuring it exists
+          // Get full highlight for this image from image_analyses only (not from highlights array)
           const imageHighlight = analysisForImage?.image_highlight || 
-                                 (apartment.highlights && apartment.highlights[index + 1]) ||
                                  `Featured space ${actualImageIndex}`;
           return <div key={index} className="space-y-2">
                     <div className="flex items-center gap-1 text-xs text-primary">
