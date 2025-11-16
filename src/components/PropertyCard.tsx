@@ -163,43 +163,6 @@ export const PropertyCard = ({
           </div>
         </div>
 
-        {/* AI-Generated Highlights from Vibe Analysis */}
-        {apartment.vibe_analysis && (
-          (() => {
-            const styles = apartment.vibe_analysis.styles || [];
-            const colors = apartment.vibe_analysis.colors || [];
-            const activities = apartment.vibe_analysis.activities || [];
-            const allHighlights = [...styles, ...colors, ...activities];
-            
-            if (allHighlights.length > 0) {
-              const displayHighlights = showAllHighlights ? allHighlights : allHighlights.slice(0, 6);
-              return (
-                <div className="mb-3 pb-3 border-b border-border">
-                  <div className="flex items-center gap-1 mb-2">
-                    <Sparkles className="w-3 h-3 text-primary" />
-                    <span className="text-xs font-medium text-muted-foreground">AI-Detected Style</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {displayHighlights.map((highlight, idx) => {
-                      const category = getHighlightCategory(highlight);
-                      return (
-                        <Badge
-                          key={idx}
-                          variant="outline"
-                          className={`text-xs px-2 py-0.5 ${categoryClasses[category]}`}
-                        >
-                          {highlight}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            }
-            return null;
-          })()
-        )}
-
         {/* Amenities Section */}
         {apartment.amenities && apartment.amenities.length > 0 && (
           <div className="mb-3 pb-3 border-b border-border">
