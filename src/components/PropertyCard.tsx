@@ -71,21 +71,20 @@ export const PropertyCard = ({
     moveInDate: new Date().toISOString()
   };
   const vibeScore = calculateVibeScore(apartment, userPreferences || defaultPreferences);
-
   const handleShare = async () => {
     const shareUrl = `${window.location.origin}/property/${apartment.id}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
       toast({
         title: "Link Copied!",
-        description: "Property link has been copied to your clipboard.",
+        description: "Property link has been copied to your clipboard."
       });
     } catch (error) {
       console.error('Failed to copy link:', error);
       toast({
         title: "Failed to copy",
         description: "Please try again.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -108,28 +107,16 @@ export const PropertyCard = ({
   };
   return <Card className={`bg-white/70 backdrop-blur-md overflow-hidden ${className}`}>
       <div className="relative h-48">
-        <img
-          src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'}
-          alt={`${apartment.title} - Image ${currentImageIndex + 1}`}
-          className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
-          onClick={() => setIsImageModalOpen(true)}
-        />
+        <img src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'} alt={`${apartment.title} - Image ${currentImageIndex + 1}`} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => setIsImageModalOpen(true)} />
 
         {/* Vibe Ranking Overlay */}
-        {vibeScore && !hideVibeScore && (
-          <div className="absolute top-3 left-3 z-10">
+        {vibeScore && !hideVibeScore && <div className="absolute top-3 left-3 z-10">
             <VibeScore score={vibeScore} apartment={apartment} size="sm" isAnonymous={isAnonymous} />
-          </div>
-        )}
+          </div>}
 
         {/* Share Button Overlay */}
         <div className={`absolute top-3 z-10 ${hasDeleteButton ? 'right-12' : 'right-3'}`}>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md w-8 h-8 p-0"
-            onClick={handleShare}
-          >
+          <Button size="sm" variant="secondary" className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md w-8 h-8 p-0" onClick={handleShare}>
             <Share2 className="w-4 h-4" />
           </Button>
         </div>
@@ -165,11 +152,9 @@ export const PropertyCard = ({
         </div>
 
         {/* Amenities Section */}
-        {apartment.amenities && apartment.amenities.length > 0 && (
-          <div className="mb-3 pb-3 border-b border-border">
+        {apartment.amenities && apartment.amenities.length > 0 && <div className="mb-3 pb-3 border-b border-border">
             <PropertyAmenities amenities={apartment.amenities} compact />
-          </div>
-        )}
+          </div>}
 
         {apartment.description && <div className="mb-4">
             <div className={`text-gray-700 text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
@@ -194,102 +179,70 @@ export const PropertyCard = ({
             </div>
             <div className="space-y-3">
               {apartment.images.slice(1).map((image, index) => {
-          const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
-          // For slice(1), index 0 is apartment.images[1], which should have image_index: 2
-          const actualImageIndex = index + 2;
-          
-          // Find the analysis for this specific image
-          const analysisForImage = imageAnalyses.find(a => {
-            const analysisIndex = Number(a.image_index);
-            if (!Number.isFinite(analysisIndex)) return false;
-            // Match against 1-based index (new format) or 0-based index (old format)
-            return analysisIndex === actualImageIndex || analysisIndex === (index + 1);
-          });
-          
-          const imageHighlight = analysisForImage?.image_highlight;
-          
-          return <div key={index} className="space-y-2">
+            const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
+            // For slice(1), index 0 is apartment.images[1], which should have image_index: 2
+            const actualImageIndex = index + 2;
+
+            // Find the analysis for this specific image
+            const analysisForImage = imageAnalyses.find(a => {
+              const analysisIndex = Number(a.image_index);
+              if (!Number.isFinite(analysisIndex)) return false;
+              // Match against 1-based index (new format) or 0-based index (old format)
+              return analysisIndex === actualImageIndex || analysisIndex === index + 1;
+            });
+            const imageHighlight = analysisForImage?.image_highlight;
+            return <div key={index} className="space-y-2">
                     <div className="relative">
-                      <img 
-                        src={image} 
-                        alt={`${apartment.title} - Image ${actualImageIndex}`} 
-                        className="w-full h-32 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" 
-                        onClick={() => {
-                          setCurrentImageIndex(index + 1);
-                          setIsImageModalOpen(true);
-                        }} 
-                      />
+                      <img src={image} alt={`${apartment.title} - Image ${actualImageIndex}`} className="w-full h-32 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
+                  setCurrentImageIndex(index + 1);
+                  setIsImageModalOpen(true);
+                }} />
                       <div className="absolute top-2 left-2">
-                        <Badge variant="secondary" className="text-xs font-semibold shadow-sm">
-                          {actualImageIndex}
-                        </Badge>
+                        
                       </div>
                     </div>
-                    {imageHighlight && (
-                      <div className="flex items-start gap-1.5 px-1">
+                    {imageHighlight && <div className="flex items-start gap-1.5 px-1">
                         <Sparkles className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
                         <span className="text-xs text-foreground/90 leading-relaxed">{imageHighlight}</span>
-                      </div>
-                    )}
+                      </div>}
                   </div>;
-        })}
+          })}
             </div>
           </div>}
 
 
-        {showRealtorInfo && (
-        <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+        {showRealtorInfo && <div className="flex items-center justify-between pt-3 border-t border-gray-200">
             <div className="flex items-center space-x-2">
-              {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? (
-                <img 
-                  src={apartment.realtor.avatar} 
-                  alt={apartment.realtor.name || 'Realtor'} 
-                  className="w-8 h-8 rounded-full object-cover"
-                />
-              ) : (
-                <div 
-                  className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center"
-                >
+              {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? <img src={apartment.realtor.avatar} alt={apartment.realtor.name || 'Realtor'} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
                   <User className="w-4 h-4 text-white" />
-                </div>
-              )}
+                </div>}
               <div>
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-medium text-gray-900">{apartment.realtor.name || 'Realtor'}</span>
                 </div>
-                {apartment.property_source_provider_name && (
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {isOwnProperty ? (
-                      <>
+                {apartment.property_source_provider_name && <div className="text-xs text-muted-foreground mt-0.5">
+                    {isOwnProperty ? <>
                         Provider: {apartment.property_source_provider_name}
-                        {apartment.property_source_provider_phone && (
-                          <span className="ml-1">• {apartment.property_source_provider_phone}</span>
-                        )}
-                      </>
-                    ) : (
-                      `Listed on behalf of ${apartment.property_source_provider_name}`
-                    )}
-                  </div>
-                )}
+                        {apartment.property_source_provider_phone && <span className="ml-1">• {apartment.property_source_provider_phone}</span>}
+                      </> : `Listed on behalf of ${apartment.property_source_provider_name}`}
+                  </div>}
               </div>
             </div>
             
             <div className="flex items-center gap-2">
               {apartment.property_source_link && (() => {
-              const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
-              const logoSize = sourceInfo.name === 'Batdongsan.com.vn' ? 'w-14 h-14' : 
-                              sourceInfo.name === 'Airbnb' ? 'w-11 h-11' : 'w-10 h-10';
-              return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center justify-center h-9 rounded-md hover:opacity-80 transition-opacity">
+            const sourceInfo = getPropertySourceLogo(apartment.property_source_link);
+            const logoSize = sourceInfo.name === 'Batdongsan.com.vn' ? 'w-14 h-14' : sourceInfo.name === 'Airbnb' ? 'w-11 h-11' : 'w-10 h-10';
+            return <a href={apartment.property_source_link} target="_blank" rel="noopener noreferrer" title={`View on ${sourceInfo.name}`} className="flex items-center justify-center h-9 rounded-md hover:opacity-80 transition-opacity">
                     <img src={sourceInfo.logo} alt={sourceInfo.name} className={`${logoSize} object-contain`} />
                     
                   </a>;
-            })()}
+          })()}
               {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
                   Contact
                 </Button>}
             </div>
-          </div>
-        )}
+          </div>}
       </div>
 
       {/* Full-size image modal */}
