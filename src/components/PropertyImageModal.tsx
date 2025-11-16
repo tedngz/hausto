@@ -30,7 +30,14 @@ export const PropertyImageModal = ({
 
   // Get image-specific highlight
   const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
-  const analysisForImage = imageAnalyses.find(a => a.image_index === currentImageIndex);
+  // image_index from DB is 1-based (1 for first image, 2 for second, etc.)
+  // currentImageIndex is 0-based, so add 1 to match DB format
+  const dbImageIndex = currentImageIndex + 1;
+  const analysisForImage = imageAnalyses.find((a: any) => {
+    const rawIdx = Number(a?.image_index);
+    if (!Number.isFinite(rawIdx)) return false;
+    return rawIdx === dbImageIndex;
+  });
   const selectedHighlight = analysisForImage?.image_highlight || null;
 
   return (
