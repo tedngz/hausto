@@ -186,32 +186,6 @@ export const PropertyCard = ({
               </Button>}
           </div>}
 
-        {/* AI-Generated Image Highlights for All Images */}
-        {apartment.vibe_analysis?.image_analyses && apartment.vibe_analysis.image_analyses.length > 0 && (
-          <div className="mb-4 space-y-2">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <p className="text-xs font-semibold text-foreground">AI-Generated Highlights</p>
-            </div>
-            {apartment.vibe_analysis.image_analyses.map((analysis: any, idx: number) => {
-              const imageHighlight = analysis?.image_highlight;
-              if (!imageHighlight) return null;
-              
-              const imageIndex = Number(analysis.image_index);
-              const displayIndex = Number.isFinite(imageIndex) && imageIndex > 0 ? imageIndex : idx + 1;
-              
-              return (
-                <div key={idx} className="flex items-start gap-2 text-sm">
-                  <Badge variant="secondary" className="text-xs font-semibold flex-shrink-0 mt-0.5">
-                    {displayIndex}
-                  </Badge>
-                  <span className="text-foreground/90 leading-relaxed">{imageHighlight}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         {/* Additional Images with AI-Generated Highlights */}
         {apartment.images.length > 1 && <div className="mb-4 space-y-3">
             <div className="flex items-center gap-1.5 mb-2">
