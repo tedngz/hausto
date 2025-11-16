@@ -142,7 +142,6 @@ export const PropertyAmenities = ({ amenities, compact = true }: PropertyAmeniti
 
   // Deduplicate and normalize amenities
   const uniqueAmenities = Array.from(new Set(amenities.map(normalizeAmenity)))
-    .filter(a => amenityIconMap[a])
     .slice(0, compact ? 8 : 12);
 
   if (uniqueAmenities.length === 0) return null;
