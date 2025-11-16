@@ -184,12 +184,12 @@ export const PropertyCard = ({
                 // sliceIndex 0 = original array position 1 (2nd image)
                 // arrayIndex in original array is sliceIndex + 1
                 const arrayIndex = sliceIndex + 1;
-                // image_index from DB is 1-based (1 for first image, 2 for second, etc.)
-                const dbImageIndex = arrayIndex + 1;
+                // image_index from DB is 0-based (0 for first image, 1 for second, etc.)
+                // arrayIndex matches the DB image_index for the 2nd+ images
                 const analysisForImage = imageAnalyses.find((a: any) => {
                   const rawIdx = Number(a?.image_index);
                   if (!Number.isFinite(rawIdx)) return false;
-                  return rawIdx === dbImageIndex;
+                  return rawIdx === arrayIndex;
                 });
 
                 const imageHighlight = analysisForImage?.image_highlight;
@@ -199,7 +199,7 @@ export const PropertyCard = ({
                     <div className="relative">
                       <img
                         src={image}
-                        alt={`${apartment.title} - Image ${dbImageIndex}`}
+                        alt={`${apartment.title} - Image ${arrayIndex + 1}`}
                         className="w-full h-32 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200"
                         onClick={() => {
                           setCurrentImageIndex(arrayIndex);
