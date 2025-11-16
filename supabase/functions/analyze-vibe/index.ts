@@ -169,7 +169,10 @@ serve(async (req) => {
                 - Unique features that stand out
                 - How the space flows and feels
              
-             2. IMAGE_HIGHLIGHT: Create a descriptive sentence or phrase (at least 7 words) that captures the key lifestyle benefit or feature from your detailed analysis
+             2. IMAGE_HIGHLIGHT: Create a concise descriptive PHRASE (7-12 words max) capturing the most significant feature or functionality
+                ❌ FORBIDDEN: No complete sentences with periods, no generic statements
+                ✅ REQUIRED: Specific, unique detail visible in THIS image
+                🚨 CRITICAL: Must be COMPLETELY DIFFERENT from other images in this property - focus on different room/feature/benefit
              
              Return JSON with EXACT format:
              {
@@ -183,11 +186,11 @@ serve(async (req) => {
                "urban": [1-10],
                "rustic": [1-10],
                "elegant": [1-10],
-               "amenities": ["list of amenities you can clearly identify in the image"],
-               "image_highlight": "descriptive sentence or phrase (at least 7 words) capturing key lifestyle benefit from detailed analysis",
-               "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
-               "raw_analysis": "Brief one-sentence summary of what you see",
-               "image_index": ${index}
+                "amenities": ["list of amenities you can clearly identify in the image"],
+                "image_highlight": "concise phrase (7-12 words, NO period) of most significant unique feature/functionality",
+                "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
+                "raw_analysis": "Brief one-sentence summary of what you see",
+                "image_index": ${index}
              }
              
              CRITICAL: Focus on TRANSFORMATION over FEATURES:
@@ -197,7 +200,7 @@ serve(async (req) => {
              ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
              ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
              ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
-            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant.\n\nReturn JSON with EXACT format:\n{\n  \"modern\": [1-10],\n  \"cozy\": [1-10],\n  \"luxurious\": [1-10],\n  \"minimalist\": [1-10],\n  \"colorful\": [1-10],\n  \"spacious\": [1-10],\n  \"natural_light\": [1-10],\n  \"urban\": [1-10],\n  \"rustic\": [1-10],\n  \"elegant\": [1-10],\n  \"image_highlight\": \"descriptive sentence (>=7 words) focusing on a unique renter benefit\",\n  \"detailed_analysis\": \"60-100 word comprehensive description\",\n  \"raw_analysis\": \"Brief one-sentence summary\",\n  \"image_index\": ${index}\n}`;
+            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant.${highlightContext}\n\nReturn JSON with EXACT format:\n{\n  \"modern\": [1-10],\n  \"cozy\": [1-10],\n  \"luxurious\": [1-10],\n  \"minimalist\": [1-10],\n  \"colorful\": [1-10],\n  \"spacious\": [1-10],\n  \"natural_light\": [1-10],\n  \"urban\": [1-10],\n  \"rustic\": [1-10],\n  \"elegant\": [1-10],\n  \"image_highlight\": \"concise phrase (7-12 words, NO period) of most significant unique feature/functionality NOT mentioned in previous images\",\n  \"detailed_analysis\": \"60-100 word comprehensive description\",\n  \"raw_analysis\": \"Brief one-sentence summary\",\n  \"image_index\": ${index}\n}`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
