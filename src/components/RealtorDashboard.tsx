@@ -228,7 +228,7 @@ export const RealtorDashboard = ({
           const uniqueColors = [...new Set(aiColors)].slice(0, 3);
           const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
 
-          const formattedVibeAnalysis = {
+          let formattedVibeAnalysis = {
             ...analysis,
             styles: [...new Set(aiStyles)].slice(0, 3),
             colors: [...new Set(aiColors)].slice(0, 3),
@@ -249,6 +249,12 @@ export const RealtorDashboard = ({
             });
           }
           const uniqueAmenities = [...new Set(suggestedAmenitiesFromImages)].slice(0, 5);
+
+          // Attach amenities into vibe_analysis as well for editor convenience
+          formattedVibeAnalysis = {
+            ...formattedVibeAnalysis,
+            amenities: [...new Set([...(analysisData?.analysis?.amenities || []), ...uniqueAmenities])]
+          };
 
           // Update the property in the database
           const { error: updateError } = await supabase

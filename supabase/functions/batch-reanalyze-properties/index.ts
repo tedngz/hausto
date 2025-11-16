@@ -214,7 +214,8 @@ serve(async (req) => {
           styles: uniqueStyles,
           colors: uniqueColors,
           activities: uniqueActivities,
-          image_highlights: imageHighlights
+          image_highlights: imageHighlights,
+          amenities: [...new Set([...(analysis?.amenities || []), ...uniqueAmenities])]
         };
 
         // Update property with new vibe_analysis, highlights, AND amenities

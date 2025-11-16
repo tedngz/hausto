@@ -171,9 +171,12 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       // Amenities: show AI-detected + saved; select saved if present otherwise AI
       const savedAmenities: string[] = (property as any).amenities || [];
       const aiAmenities: string[] = Array.isArray(analysis?.amenities) ? analysis.amenities : [];
-      const detected = Array.from(new Set([...(aiAmenities || []), ...(savedAmenities || [])]));
+      const imageSuggested: string[] = Array.isArray(property.vibe_analysis?.image_analyses)
+        ? property.vibe_analysis.image_analyses.flatMap((ia: any) => Array.isArray(ia.suggested_amenities) ? ia.suggested_amenities : [])
+        : [];
+      const detected = Array.from(new Set([...(aiAmenities || []), ...imageSuggested, ...(savedAmenities || [])]));
       setDetectedAmenities(detected);
-      setSelectedAmenities(savedAmenities.length ? savedAmenities : aiAmenities);
+      setSelectedAmenities(savedAmenities.length ? savedAmenities : Array.from(new Set([...(aiAmenities || []), ...imageSuggested])));
 
     }
   }, [property, convertPrice]);
