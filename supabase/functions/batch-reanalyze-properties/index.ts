@@ -228,10 +228,14 @@ serve(async (req) => {
             ? analysis.image_analyses.map((ia: any, idx: number) => {
                 const rawIndex = Number(ia?.image_index);
                 const imageIndex = !Number.isFinite(rawIndex) || rawIndex < 1 ? (idx + 1) : rawIndex;
+                // CRITICAL: Ensure every image has a highlight - use fallback if missing
+                const highlight = ia?.image_highlight 
+                  ? capitalize(String(ia.image_highlight))
+                  : `Featured space ${imageIndex}`;
                 return {
                   ...ia,
                   image_index: imageIndex,
-                  image_highlight: ia?.image_highlight ? capitalize(String(ia.image_highlight)) : null,
+                  image_highlight: highlight,
                   suggested_amenities: Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : [],
                   suggested_activities: Array.isArray(ia?.suggested_activities) ? ia.suggested_activities : []
                 };

@@ -192,11 +192,17 @@ export const PropertyCard = ({
               {apartment.images.slice(1).map((image, index) => {
           const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
           // index + 2 because we're showing images starting from the second image (index 1)
+          // actualImageIndex is 1-based: image at position 0 is index 1, position 1 is index 2, etc.
           const actualImageIndex = index + 2;
-          const analysisForImage = imageAnalyses.find(a => a.image_index === actualImageIndex);
+          const analysisForImage = imageAnalyses.find(a => {
+            const analysisIndex = Number(a.image_index);
+            return Number.isFinite(analysisIndex) && analysisIndex === actualImageIndex;
+          });
 
-          // Get full highlight for this image from image_analyses
-          const imageHighlight = analysisForImage?.image_highlight || `Premium feature in ${apartment.title.toLowerCase()}`;
+          // Get full highlight for this image from image_analyses, ensuring it exists
+          const imageHighlight = analysisForImage?.image_highlight || 
+                                 (apartment.highlights && apartment.highlights[index + 1]) ||
+                                 `Featured space ${actualImageIndex}`;
           return <div key={index} className="space-y-2">
                     <div className="flex items-center gap-1 text-xs text-primary">
                       <Sparkles className="w-2.5 h-2.5" />

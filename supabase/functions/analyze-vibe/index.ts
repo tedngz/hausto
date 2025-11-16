@@ -377,7 +377,7 @@ serve(async (req) => {
           console.error(`JSON parsing failed for image ${index + 1}:`, parseError);
           console.error('Content that failed to parse:', content.substring(0, 200));
           
-          // Fallback if JSON parsing fails
+          // Fallback if JSON parsing fails - MUST include image_highlight
           analyses.push({
             modern: 5,
             cozy: 5,
@@ -391,6 +391,10 @@ serve(async (req) => {
             elegant: 5,
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? content : 'Analysis failed',
+            image_highlight: `Premium feature ${index + 1}`,
+            suggested_amenities: [],
+            suggested_activities: [],
+            amenities: [],
             image_index: index + 1, // 1-based index
             raw_analysis: content
           });
@@ -404,12 +408,16 @@ serve(async (req) => {
           minimalist: 5,
           colorful: 5,
           spacious: 5,
-          natural_light: 5,
+          natural_light: 7,
           urban: 5,
           rustic: 5,
           elegant: 5,
           description: 'Unable to analyze image',
           detailed_analysis: generateContent ? 'Processing error' : 'Analysis failed',
+          image_highlight: `Quality living space ${index + 1}`,
+          suggested_amenities: [],
+          suggested_activities: [],
+          amenities: [],
           image_index: index + 1, // 1-based index
           raw_analysis: 'Processing Error'
         });
