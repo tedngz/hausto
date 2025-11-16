@@ -180,13 +180,14 @@ export const PropertyCard = ({
             <div className="space-y-3">
               {apartment.images.map((image, index) => {
                 const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
-                const actualImageIndex = index + 1; // 1-based for new format, 0-based compatibility below
 
-                // Find the analysis for this specific image (supports both 0-based and 1-based saved indices)
+                // Find the analysis for this specific image
+                // image_index from DB is 1-based; convert index (0-based) to 1-based for matching
                 const analysisForImage = imageAnalyses.find((a: any) => {
-                  const analysisIndex = Number(a?.image_index);
-                  if (!Number.isFinite(analysisIndex)) return false;
-                  return analysisIndex === actualImageIndex || analysisIndex === index;
+                  const rawIdx = Number(a?.image_index);
+                  if (!Number.isFinite(rawIdx)) return false;
+                  // Match 1-based image_index against our current 1-based position
+                  return rawIdx === (index + 1);
                 });
 
                 const imageHighlight = analysisForImage?.image_highlight;
@@ -196,7 +197,7 @@ export const PropertyCard = ({
                     <div className="relative">
                       <img
                         src={image}
-                        alt={`${apartment.title} - Image ${actualImageIndex}`}
+                        alt={`${apartment.title} - Image ${index + 1}`}
                         className="w-full h-32 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200"
                         onClick={() => {
                           setCurrentImageIndex(index);
