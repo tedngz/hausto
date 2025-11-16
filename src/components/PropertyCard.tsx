@@ -194,9 +194,12 @@ export const PropertyCard = ({
           // index + 2 because we're showing images starting from the second image (index 1)
           // actualImageIndex is 1-based: image at position 0 is index 1, position 1 is index 2, etc.
           const actualImageIndex = index + 2;
+          // Support both 0-based (old data) and 1-based (new data) image_index
           const analysisForImage = imageAnalyses.find(a => {
             const analysisIndex = Number(a.image_index);
-            return Number.isFinite(analysisIndex) && analysisIndex === actualImageIndex;
+            if (!Number.isFinite(analysisIndex)) return false;
+            // Check both 1-based (actualImageIndex) and 0-based (actualImageIndex - 1)
+            return analysisIndex === actualImageIndex || analysisIndex === (actualImageIndex - 1);
           });
 
           // Get full highlight for this image from image_analyses only (not from highlights array)
