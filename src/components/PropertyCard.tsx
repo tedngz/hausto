@@ -214,47 +214,47 @@ export const PropertyCard = ({
         {apartment.images.length > 1 && <div className="mb-4 space-y-3">
             <div className="flex items-center gap-1.5 mb-2">
               <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <p className="text-xs font-semibold text-foreground">AI-Generated Image Highlights</p>
+              <p className="text-xs font-semibold text-foreground">More Photos</p>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {apartment.images.slice(1).map((image, index) => {
           const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
-          // index + 2 because we're showing images starting from the second image (index 1)
-          // actualImageIndex is 1-based: image at position 0 is index 1, position 1 is index 2, etc.
+          // For slice(1), index 0 is apartment.images[1], which should have image_index: 2
           const actualImageIndex = index + 2;
-          // Support both 0-based (old data) and 1-based (new data) image_index
+          
+          // Find the analysis for this specific image
           const analysisForImage = imageAnalyses.find(a => {
             const analysisIndex = Number(a.image_index);
             if (!Number.isFinite(analysisIndex)) return false;
-            // Check both 1-based (actualImageIndex) and 0-based (actualImageIndex - 1)
-            return analysisIndex === actualImageIndex || analysisIndex === (actualImageIndex - 1);
+            // Match against 1-based index (new format) or 0-based index (old format)
+            return analysisIndex === actualImageIndex || analysisIndex === (index + 1);
           });
-
-          // Get full highlight for this image from image_analyses only (not from highlights array)
+          
           const imageHighlight = analysisForImage?.image_highlight;
           
           return <div key={index} className="space-y-2">
-                    <div className="relative border border-border/50 rounded-lg overflow-hidden bg-card">
-                      <div className="relative h-48">
-                        <img src={image} alt={`${apartment.title} - Image ${actualImageIndex}`} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
-                  setCurrentImageIndex(index + 1);
-                  setIsImageModalOpen(true);
-                }} />
-                        <div className="absolute top-2 left-2">
-                          <Badge variant="secondary" className="text-xs font-semibold shadow-sm">
-                            {actualImageIndex}
-                          </Badge>
-                        </div>
+                    <div className="relative">
+                      <img 
+                        src={image} 
+                        alt={`${apartment.title} - Image ${actualImageIndex}`} 
+                        className="w-full h-32 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" 
+                        onClick={() => {
+                          setCurrentImageIndex(index + 1);
+                          setIsImageModalOpen(true);
+                        }} 
+                      />
+                      <div className="absolute top-2 left-2">
+                        <Badge variant="secondary" className="text-xs font-semibold shadow-sm">
+                          {actualImageIndex}
+                        </Badge>
                       </div>
-                      {imageHighlight && (
-                        <div className="p-2 border-t border-border/50 bg-muted/30">
-                          <div className="flex items-start gap-1.5">
-                            <Sparkles className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
-                            <span className="text-xs text-foreground/90 leading-relaxed">{imageHighlight}</span>
-                          </div>
-                        </div>
-                      )}
                     </div>
+                    {imageHighlight && (
+                      <div className="flex items-start gap-1.5 px-1">
+                        <Sparkles className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+                        <span className="text-xs text-foreground/90 leading-relaxed">{imageHighlight}</span>
+                      </div>
+                    )}
                   </div>;
         })}
             </div>
