@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -82,6 +82,21 @@ export const useProperties = () => {
       });
     },
   });
+
+  // Realtime: refresh properties when backend updates happen (e.g., re-analyze)
+  useEffect(() => {
+    const channel = supabase
+      .channel('properties-updates')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'properties' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['properties'] });
+        queryClient.invalidateQueries({ queryKey: ['realtor-properties', user?.id] });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient, user?.id]);
 
   // Fetch realtor's own properties with profile data
   const { data: realtorProperties = [] } = useQuery({
