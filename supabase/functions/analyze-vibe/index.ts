@@ -174,6 +174,12 @@ serve(async (req) => {
                 ✅ REQUIRED: Specific, unique detail visible in THIS image
                 🚨 CRITICAL: Must be COMPLETELY DIFFERENT from other images in this property - focus on different room/feature/benefit
              
+             3. SUGGESTED_ACTIVITIES: Based on the image highlight, list 1-2 specific activities this space enables
+                Examples: If you see "well-integrated kitchen appliances" → "Cooking"; if "dedicated workspace" → "Working"
+             
+             4. SUGGESTED_AMENITIES: Based on the image highlight, list 1-2 specific amenities visible in this image
+                Examples: If you see "well-integrated kitchen appliances" → "Kitchen Appliances"; if "marble bathroom" → "Luxury Bathroom"
+             
              Return JSON with EXACT format:
              {
                "modern": [1-10],
@@ -188,6 +194,8 @@ serve(async (req) => {
                "elegant": [1-10],
                 "amenities": ["list of amenities you can clearly identify in the image"],
                 "image_highlight": "concise phrase (7-12 words, NO period) of most significant unique feature/functionality",
+                "suggested_activities": ["Activity 1", "Activity 2"],
+                "suggested_amenities": ["Amenity 1", "Amenity 2"],
                 "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
                 "raw_analysis": "Brief one-sentence summary of what you see",
                 "image_index": ${index}

@@ -124,16 +124,27 @@ serve(async (req) => {
         // Convert raw scores to selected tags (styles, colors, activities)
         const analysis = analysisData.analysis || analysisData;
         
-        // Extract image highlights from individual image analyses
+        // Extract image highlights and suggested tags from individual image analyses
         const imageHighlights: string[] = [];
+        const suggestedActivitiesFromImages: string[] = [];
+        const suggestedAmenitiesFromImages: string[] = [];
+        
         if (analysisData.image_analyses && Array.isArray(analysisData.image_analyses)) {
           analysisData.image_analyses.forEach((imgAnalysis: any) => {
             if (imgAnalysis.image_highlight) {
               imageHighlights.push(imgAnalysis.image_highlight);
             }
+            if (imgAnalysis.suggested_activities && Array.isArray(imgAnalysis.suggested_activities)) {
+              suggestedActivitiesFromImages.push(...imgAnalysis.suggested_activities);
+            }
+            if (imgAnalysis.suggested_amenities && Array.isArray(imgAnalysis.suggested_amenities)) {
+              suggestedAmenitiesFromImages.push(...imgAnalysis.suggested_amenities);
+            }
           });
         }
         console.log(`[BATCH-REANALYZE] Extracted ${imageHighlights.length} image highlights for property ${property.id}`);
+        console.log(`[BATCH-REANALYZE] Suggested activities from images: ${suggestedActivitiesFromImages.length}`);
+        console.log(`[BATCH-REANALYZE] Suggested amenities from images: ${suggestedAmenitiesFromImages.length}`);
         
         const aiStyles = [];
         const aiColors = [];
@@ -170,6 +181,9 @@ serve(async (req) => {
         if (analysis.colorful >= 7 || (analysis.modern >= 7 && analysis.colorful >= 5)) aiColors.push('Bold');
         
         // Extract activities from AI analysis (map from available properties)
+        // Start with image-suggested activities
+        aiActivities.push(...suggestedActivitiesFromImages);
+        
         // Working from modern/spacious
         if (analysis.modern >= 6 || analysis.spacious >= 7) aiActivities.push('Working');
         // Reading from cozy/natural_light
@@ -187,6 +201,7 @@ serve(async (req) => {
         const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
         const uniqueColors = [...new Set(aiColors)].slice(0, 3);
         const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        const uniqueAmenities = [...new Set(suggestedAmenitiesFromImages)].slice(0, 5);
         
         // Fallbacks if AI didn't detect enough
         if (uniqueStyles.length === 0) uniqueStyles.push('Modern');
@@ -202,12 +217,13 @@ serve(async (req) => {
           image_highlights: imageHighlights
         };
 
-        // Update property with new vibe_analysis AND highlights field
+        // Update property with new vibe_analysis, highlights, AND amenities
         const { error: updateError } = await supabase
           .from('properties')
           .update({
             vibe_analysis: formattedVibeAnalysis,
             highlights: imageHighlights.length > 0 ? imageHighlights : [...uniqueStyles, ...uniqueColors, ...uniqueActivities],
+            amenities: uniqueAmenities.length > 0 ? uniqueAmenities : property.amenities || [],
             updated_at: new Date().toISOString()
           })
           .eq('id', property.id);
