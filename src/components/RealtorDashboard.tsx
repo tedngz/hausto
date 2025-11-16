@@ -158,6 +158,8 @@ export const RealtorDashboard = ({
       if (!session) throw new Error('No session');
 
       // Process each property one by one
+      let successCounter = 0;
+      let failureCounter = 0;
       for (let i = 0; i < propertiesToAnalyze.length; i++) {
         const property = propertiesToAnalyze[i];
         setCurrentAnalyzingIndex(i);
@@ -178,7 +180,7 @@ export const RealtorDashboard = ({
             {
               body: {
                 imageUrls: property.images,
-                generateContent: false
+                generateContent: true
               },
               headers: {
                 Authorization: `Bearer ${session.access_token}`
@@ -283,6 +285,7 @@ export const RealtorDashboard = ({
           if (updateError) throw updateError;
 
           // Update status to success
+          successCounter += 1;
           setPropertyProgress(prev => prev.map((p, idx) => 
             idx === i ? { ...p, status: 'success' as const } : p
           ));
@@ -290,6 +293,7 @@ export const RealtorDashboard = ({
         } catch (error) {
           console.error(`Error analyzing property ${property.id}:`, error);
           // Update status to failed
+          failureCounter += 1;
           setPropertyProgress(prev => prev.map((p, idx) => 
             idx === i ? { 
               ...p, 
@@ -305,12 +309,9 @@ export const RealtorDashboard = ({
       queryClient.invalidateQueries({ queryKey: ['properties'] });
       setSelectedPropertyIds(new Set());
 
-      const successCount = propertyProgress.filter(p => p.status === 'success').length;
-      const failureCount = propertyProgress.filter(p => p.status === 'failed').length;
-
       toast({
         title: "Batch re-analysis complete",
-        description: `Successfully updated ${successCount} properties${failureCount > 0 ? `, ${failureCount} failed` : ''}.`,
+        description: `Successfully updated ${successCounter} properties${failureCounter > 0 ? `, ${failureCounter} failed` : ''}.`,
       });
 
     } catch (error) {

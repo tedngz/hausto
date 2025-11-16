@@ -106,7 +106,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             imageUrls: property.images,
-            generateContent: false
+            generateContent: true
           })
         });
 
