@@ -132,8 +132,8 @@ serve(async (req) => {
         const suggestedActivitiesFromImages: string[] = [];
         const suggestedAmenitiesFromImages: string[] = [];
         
-        if (analysisData.image_analyses && Array.isArray(analysisData.image_analyses)) {
-          analysisData.image_analyses.forEach((imgAnalysis: any) => {
+        if (analysis.image_analyses && Array.isArray(analysis.image_analyses)) {
+          analysis.image_analyses.forEach((imgAnalysis: any) => {
             if (imgAnalysis.image_highlight) {
               imageHighlights.push(capitalize(String(imgAnalysis.image_highlight)));
             }
@@ -218,8 +218,8 @@ serve(async (req) => {
           colors: uniqueColors,
           activities: uniqueActivities,
           image_highlights: imageHighlights,
-          image_analyses: Array.isArray(analysisData.image_analyses)
-            ? analysisData.image_analyses.map((ia: any, idx: number) => ({
+          image_analyses: Array.isArray(analysis.image_analyses)
+            ? analysis.image_analyses.map((ia: any, idx: number) => ({
                 ...ia,
                 image_index: ia?.image_index ?? idx + 1,
                 image_highlight: ia?.image_highlight ? capitalize(String(ia.image_highlight)) : ia?.image_highlight,
