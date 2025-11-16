@@ -171,23 +171,20 @@ export const PropertyCard = ({
               </Button>}
           </div>}
 
-        {/* Additional Images with AI-Generated Highlights */}
-        {apartment.images && apartment.images.length > 1 && (
+        {/* All Images with AI-Generated Highlights */}
+        {apartment.images && apartment.images.length > 0 && (
           <div className="mb-4 space-y-3">
             <div className="flex items-center gap-1.5 mb-2">
-              <p className="text-xs font-semibold text-foreground">More Photos</p>
+              <p className="text-xs font-semibold text-foreground">Photos</p>
             </div>
             <div className="space-y-3">
-              {apartment.images.slice(1).map((image, sliceIndex) => {
-                // sliceIndex 0 = original array position 1 (2nd image)
-                // Convert to original array index: sliceIndex in slice(1) maps to sliceIndex+1 in original
-                const originalArrayIndex = sliceIndex + 1;
+              {apartment.images.map((image, arrayIndex) => {
                 const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
 
                 // Find the analysis for this specific image
                 // image_index from DB is 1-based (1 for first image, 2 for second, etc.)
-                // Our originalArrayIndex is 0-based, so we need to add 1
-                const dbImageIndex = originalArrayIndex + 1;
+                // arrayIndex is 0-based, so add 1 to match DB format
+                const dbImageIndex = arrayIndex + 1;
                 const analysisForImage = imageAnalyses.find((a: any) => {
                   const rawIdx = Number(a?.image_index);
                   if (!Number.isFinite(rawIdx)) return false;
@@ -197,14 +194,14 @@ export const PropertyCard = ({
                 const imageHighlight = analysisForImage?.image_highlight;
 
                 return (
-                  <div key={sliceIndex} className="space-y-2">
+                  <div key={arrayIndex} className="space-y-2">
                     <div className="relative">
                       <img
                         src={image}
                         alt={`${apartment.title} - Image ${dbImageIndex}`}
                         className="w-full h-32 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200"
                         onClick={() => {
-                          setCurrentImageIndex(originalArrayIndex);
+                          setCurrentImageIndex(arrayIndex);
                           setIsImageModalOpen(true);
                         }}
                       />
