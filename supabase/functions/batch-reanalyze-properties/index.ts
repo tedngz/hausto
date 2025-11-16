@@ -148,6 +148,11 @@ serve(async (req) => {
         console.log(`[BATCH-REANALYZE] Extracted ${imageHighlights.length} image highlights for property ${property.id}`);
         console.log(`[BATCH-REANALYZE] Suggested activities from images: ${suggestedActivitiesFromImages.length}`);
         console.log(`[BATCH-REANALYZE] Suggested amenities from images: ${suggestedAmenitiesFromImages.length}`);
+        console.log(`[BATCH-REANALYZE] Image analyses structure:`, JSON.stringify(analysis.image_analyses?.map((ia: any) => ({
+          image_index: ia.image_index,
+          highlight: ia.image_highlight,
+          amenities: ia.suggested_amenities
+        }))));
         
         const aiStyles = [];
         const aiColors = [];
@@ -211,7 +216,7 @@ serve(async (req) => {
         if (uniqueColors.length === 0) uniqueColors.push('Neutral');
         if (uniqueActivities.length === 0) uniqueActivities.push('Relaxing');
 
-        // Build properly formatted vibe_analysis
+        // Build properly formatted vibe_analysis with correct image indices
         const formattedVibeAnalysis = {
           ...analysis,
           styles: uniqueStyles,
@@ -219,14 +224,29 @@ serve(async (req) => {
           activities: uniqueActivities,
           image_highlights: imageHighlights,
           image_analyses: Array.isArray(analysis.image_analyses)
-            ? analysis.image_analyses.map((ia: any, idx: number) => ({
-                ...ia,
-                image_index: ia?.image_index ?? idx + 1,
-                image_highlight: ia?.image_highlight ? capitalize(String(ia.image_highlight)) : ia?.image_highlight,
-              }))
-            : undefined,
+            ? analysis.image_analyses.map((ia: any, idx: number) => {
+                // Ensure image_index is 1-based and matches the actual image position
+                const imageIndex = ia?.image_index ?? (idx + 1);
+                return {
+                  ...ia,
+                  image_index: imageIndex,
+                  image_highlight: ia?.image_highlight ? capitalize(String(ia.image_highlight)) : null,
+                  suggested_amenities: Array.isArray(ia.suggested_amenities) ? ia.suggested_amenities : [],
+                  suggested_activities: Array.isArray(ia.suggested_activities) ? ia.suggested_activities : []
+                };
+              })
+            : [],
           amenities: [...new Set([...(analysis?.amenities || []), ...uniqueAmenities])]
         };
+        
+        console.log(`[BATCH-REANALYZE] Formatted vibe_analysis for ${property.id}:`, JSON.stringify({
+          image_count: formattedVibeAnalysis.image_analyses?.length,
+          highlights: formattedVibeAnalysis.image_analyses?.map((ia: any) => ({
+            index: ia.image_index,
+            highlight: ia.image_highlight
+          })),
+          total_amenities: formattedVibeAnalysis.amenities?.length
+        }));
 
         // Compute merged amenities (from image suggestions + overall analysis)
         const mergedAmenities = Array.from(new Set([...(analysis?.amenities || []), ...uniqueAmenities]));

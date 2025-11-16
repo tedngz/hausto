@@ -191,17 +191,19 @@ export const PropertyCard = ({
             <div className="space-y-4">
               {apartment.images.slice(1).map((image, index) => {
           const imageAnalyses = apartment.vibe_analysis?.image_analyses || [];
-          const analysisForImage = imageAnalyses.find(a => a.image_index === index + 1);
+          // index + 2 because we're showing images starting from the second image (index 1)
+          const actualImageIndex = index + 2;
+          const analysisForImage = imageAnalyses.find(a => a.image_index === actualImageIndex);
 
-          // Get full highlight for this image
-          const imageHighlight = analysisForImage?.image_highlight || apartment.highlights?.[index + 1] || apartment.highlights?.[index] || `Beautiful ${apartment.title.toLowerCase()} feature`;
+          // Get full highlight for this image from image_analyses
+          const imageHighlight = analysisForImage?.image_highlight || `Premium feature in ${apartment.title.toLowerCase()}`;
           return <div key={index} className="space-y-2">
                     <div className="flex items-center gap-1 text-xs text-primary">
                       <Sparkles className="w-2.5 h-2.5" />
                       <span className="font-medium">{imageHighlight}</span>
                     </div>
                     <div className="relative h-48">
-                      <img src={image} alt={`${apartment.title} - Image ${index + 2}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
+                      <img src={image} alt={`${apartment.title} - Image ${actualImageIndex}`} className="w-full h-full object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => {
                 setCurrentImageIndex(index + 1);
                 setIsImageModalOpen(true);
               }} />

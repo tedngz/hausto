@@ -194,12 +194,12 @@ serve(async (req) => {
                "elegant": [1-10],
                 "amenities": ["list of amenities you can clearly identify in the image"],
                 "image_highlight": "concise phrase (7-12 words, NO period) of most significant unique feature/functionality",
-                "suggested_activities": ["Activity 1", "Activity 2"],
-                "suggested_amenities": ["Amenity 1", "Amenity 2"],
-                "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
-                "raw_analysis": "Brief one-sentence summary of what you see",
-                "image_index": ${index}
-             }
+                 "suggested_activities": ["Activity 1", "Activity 2"],
+                 "suggested_amenities": ["Amenity 1", "Amenity 2"],
+                 "detailed_analysis": "60-100 word comprehensive description of everything visible and the atmosphere/lifestyle it creates",
+                 "raw_analysis": "Brief one-sentence summary of what you see",
+                 "image_index": ${index + 1}
+              }
              
              CRITICAL: Focus on TRANSFORMATION over FEATURES:
              ❌ "Large windows" → ✅ "Natural energy boost"
@@ -208,7 +208,7 @@ serve(async (req) => {
              ❌ "Updated kitchen" → ✅ "Culinary creativity hub"
              ❌ "Spacious bedroom" → ✅ "Restorative sleep sanctuary"
              ❌ "Nice bathroom" → ✅ "Daily spa ritual"`
-            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant.${highlightContext}\n\nReturn JSON with EXACT format:\n{\n  \"modern\": [1-10],\n  \"cozy\": [1-10],\n  \"luxurious\": [1-10],\n  \"minimalist\": [1-10],\n  \"colorful\": [1-10],\n  \"spacious\": [1-10],\n  \"natural_light\": [1-10],\n  \"urban\": [1-10],\n  \"rustic\": [1-10],\n  \"elegant\": [1-10],\n  \"image_highlight\": \"concise phrase (7-12 words, NO period) of most significant unique feature/functionality NOT mentioned in previous images\",\n  \"detailed_analysis\": \"60-100 word comprehensive description\",\n  \"raw_analysis\": \"Brief one-sentence summary\",\n  \"image_index\": ${index}\n}`;
+            : `Analyze this rental property image and return a JSON object with the following vibe characteristics (scale 1-10): modern, cozy, luxurious, minimalist, colorful, spacious, natural_light, urban, rustic, elegant.${highlightContext}\n\nReturn JSON with EXACT format:\n{\n  \"modern\": [1-10],\n  \"cozy\": [1-10],\n  \"luxurious\": [1-10],\n  \"minimalist\": [1-10],\n  \"colorful\": [1-10],\n  \"spacious\": [1-10],\n  \"natural_light\": [1-10],\n  \"urban\": [1-10],\n  \"rustic\": [1-10],\n  \"elegant\": [1-10],\n  \"image_highlight\": \"concise phrase (7-12 words, NO period) of most significant unique feature/functionality NOT mentioned in previous images\",\n  \"detailed_analysis\": \"60-100 word comprehensive description\",\n  \"raw_analysis\": \"Brief one-sentence summary\",\n  \"image_index\": ${index + 1}\n}`;
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
@@ -306,7 +306,7 @@ serve(async (req) => {
             elegant: 5,
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? `Analysis failed due to API error: ${errorText}` : 'Analysis failed',
-            image_index: index,
+            image_index: index + 1, // 1-based index
             raw_analysis: errorText || 'API Error'
           });
           continue;
@@ -330,7 +330,7 @@ serve(async (req) => {
             elegant: 5,
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? 'No analysis returned' : 'Analysis failed',
-            image_index: index,
+            image_index: index + 1, // 1-based index
             raw_analysis: 'No Response'
           });
           continue;
@@ -351,7 +351,7 @@ serve(async (req) => {
             elegant: 5,
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? 'Invalid response format' : 'Analysis failed',
-            image_index: index,
+            image_index: index + 1, // 1-based index
             raw_analysis: 'Invalid Format'
           });
           continue;
@@ -368,7 +368,7 @@ serve(async (req) => {
           
           analyses.push({
             ...parsed,
-            image_index: index,
+            image_index: index + 1, // 1-based index for consistency
             raw_analysis: content
           });
           
@@ -391,7 +391,7 @@ serve(async (req) => {
             elegant: 5,
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? content : 'Analysis failed',
-            image_index: index,
+            image_index: index + 1, // 1-based index
             raw_analysis: content
           });
         }
@@ -410,7 +410,7 @@ serve(async (req) => {
           elegant: 5,
           description: 'Unable to analyze image',
           detailed_analysis: generateContent ? 'Processing error' : 'Analysis failed',
-          image_index: index,
+          image_index: index + 1, // 1-based index
           raw_analysis: 'Processing Error'
         });
       }
