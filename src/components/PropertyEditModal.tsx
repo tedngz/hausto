@@ -42,6 +42,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isRegeneratingTitle, setIsRegeneratingTitle] = useState(false);
   const [isRegeneratingDescription, setIsRegeneratingDescription] = useState(false);
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [detectedAmenities, setDetectedAmenities] = useState<string[]>([]);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [newAmenity, setNewAmenity] = useState('');
@@ -529,6 +530,97 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     }
   };
 
+  const reanalyzeCategories = async () => {
+    const allImages = [...existingImages, ...newImagePreviews];
+    
+    if (allImages.length === 0) {
+      toast({
+        title: "No Images",
+        description: "Please add images to re-analyze categories.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsReanalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-vibe', {
+        body: {
+          imageUrls: allImages,
+          generateContent: false
+        }
+      });
+
+      if (error) throw error;
+
+      const analysis = data?.analysis;
+
+      if (analysis) {
+        // Extract styles, colors, and activities from AI analysis
+        const aiStyles = [];
+        const aiColors = [];
+        const aiActivities = [];
+        
+        // Extract styles
+        if (analysis.modern >= 5) aiStyles.push('Modern');
+        if (analysis.cozy >= 5) aiStyles.push('Cozy');
+        if (analysis.luxurious >= 6) aiStyles.push('Luxury');
+        if (analysis.urban >= 5) aiStyles.push('Urban');
+        if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
+        if (analysis.elegant >= 5) aiStyles.push('Contemporary');
+        if (analysis.rustic >= 4) aiStyles.push('Rustic');
+        if (analysis.industrial >= 4) aiStyles.push('Industrial');
+        
+        // Extract colors
+        if (analysis.neutral >= 5) aiColors.push('Neutral');
+        if (analysis.warm >= 5) aiColors.push('Warm');
+        if (analysis.cool >= 5) aiColors.push('Cool');
+        if (analysis.bright >= 5 || analysis.natural_light >= 7) aiColors.push('Bright');
+        if (analysis.colorful >= 6) aiColors.push('Colorful');
+        if (analysis.natural_light >= 6) aiColors.push('Natural');
+        
+        // Extract activities
+        if (analysis.modern >= 5 || analysis.spacious >= 6) aiActivities.push('Working');
+        if (analysis.cozy >= 6 || analysis.natural_light >= 6) aiActivities.push('Reading');
+        if (analysis.cozy >= 5 || analysis.elegant >= 5) aiActivities.push('Relaxing');
+        if (analysis.spacious >= 6 || analysis.modern >= 6) aiActivities.push('Entertaining');
+        
+        const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
+        const uniqueColors = [...new Set(aiColors)].slice(0, 3);
+        const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        
+        setSelectedStyles(uniqueStyles);
+        setSelectedColors(uniqueColors);
+        setSelectedActivities(uniqueActivities);
+
+        // Extract and set amenities
+        const aiAmenities: string[] = Array.isArray(analysis.amenities) ? analysis.amenities : [];
+        const imageSuggested: string[] = Array.isArray(analysis.image_analyses)
+          ? analysis.image_analyses.flatMap((ia: any) => Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : [])
+          : [];
+        const mergedAmenities = Array.from(new Set([...(aiAmenities || []), ...imageSuggested]));
+        if (mergedAmenities.length) {
+          setDetectedAmenities(mergedAmenities);
+          setSelectedAmenities(mergedAmenities);
+        }
+
+        toast({
+          title: "Categories Re-analyzed!",
+          description: "AI has updated styles, colors, activities, and amenities.",
+        });
+      }
+    } catch (error) {
+      console.error('Error reanalyzing categories:', error);
+      toast({
+        title: "Re-analysis Failed",
+        description: "Failed to re-analyze categories. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsReanalyzing(false);
+    }
+  };
+
   const handleSubmit = () => {
     if (!property || !title || !location || !price) {
       toast({
@@ -845,7 +937,23 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
           {/* Step 3: AI Generated Content */}
               <div className="space-y-4">
                 <div>
-                  <Label className="text-base font-semibold">AI Selected Style</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-base font-semibold">AI Selected Style</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={reanalyzeCategories}
+                      disabled={isReanalyzing}
+                      className="text-purple-600 hover:text-purple-700"
+                    >
+                      {isReanalyzing ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <Wand2 className="w-3 h-3 mr-1" />
+                      )}
+                      Re-analyze
+                    </Button>
+                  </div>
                   <p className="text-sm text-gray-600 mb-3">Select up to 3 styles that best describe this property</p>
                   <div className="flex flex-wrap gap-2">
                     {styleOptions.map((style) => (
@@ -872,7 +980,23 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 </div>
 
                 <div>
-                  <Label className="text-base font-semibold">AI Selected Color</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-base font-semibold">AI Selected Color</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={reanalyzeCategories}
+                      disabled={isReanalyzing}
+                      className="text-purple-600 hover:text-purple-700"
+                    >
+                      {isReanalyzing ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <Wand2 className="w-3 h-3 mr-1" />
+                      )}
+                      Re-analyze
+                    </Button>
+                  </div>
                   <p className="text-sm text-gray-600 mb-3">Select up to 3 color schemes</p>
                   <div className="flex flex-wrap gap-2">
                     {colorOptions.map((color) => (
@@ -899,7 +1023,23 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 </div>
 
                 <div>
-                  <Label className="text-base font-semibold">AI Selected Activity</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-base font-semibold">AI Selected Activity</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={reanalyzeCategories}
+                      disabled={isReanalyzing}
+                      className="text-purple-600 hover:text-purple-700"
+                    >
+                      {isReanalyzing ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <Wand2 className="w-3 h-3 mr-1" />
+                      )}
+                      Re-analyze
+                    </Button>
+                  </div>
                   <p className="text-sm text-gray-600 mb-3">Select up to 3 activities suited for this space</p>
                   <div className="flex flex-wrap gap-2">
                     {activityOptions.map((activity) => (
@@ -968,7 +1108,23 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
 
           {/* Amenities Section */}
           <div>
-            <Label className="text-base font-semibold">AI-detected Amenities</Label>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-base font-semibold">AI-detected Amenities</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={reanalyzeCategories}
+                disabled={isReanalyzing}
+                className="text-purple-600 hover:text-purple-700"
+              >
+                {isReanalyzing ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Wand2 className="w-3 h-3 mr-1" />
+                )}
+                Re-analyze
+              </Button>
+            </div>
             <p className="text-sm text-gray-600 mb-3">Click to select/deselect which detected amenities to save</p>
             
             <div className="flex flex-wrap gap-2 mb-4">
