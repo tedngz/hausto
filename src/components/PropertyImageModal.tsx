@@ -37,7 +37,7 @@ export const PropertyImageModal = ({
     if (!Number.isFinite(rawIdx)) return false;
     return rawIdx === currentImageIndex;
   });
-  const selectedHighlight = analysisForImage?.image_highlight || null;
+  const selectedHighlight = analysisForImage?.image_highlight || analysisForImage?.highlight || null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
