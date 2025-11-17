@@ -155,9 +155,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         const highlightsWithImages = property.vibe_analysis.image_analyses
           .map((imgAnalysis: any) => {
             if (imgAnalysis.image_highlight) {
-              // image_index from AI is 1-based; guard against 0/invalid and convert to 0-based for UI
+              // image_index is 0-based (0 for first image, 1 for second, etc.)
               const rawIdx = Number(imgAnalysis.image_index);
-              const imageIndex = Math.max(0, (Number.isFinite(rawIdx) ? rawIdx : 1) - 1);
+              const imageIndex = Number.isFinite(rawIdx) && rawIdx >= 0 ? rawIdx : 0;
               return {
                 text: imgAnalysis.image_highlight,
                 imageIndexes: [imageIndex]
