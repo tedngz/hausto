@@ -185,7 +185,7 @@ export const PropertyCard = ({
                 // arrayIndex in original array is sliceIndex + 1
                 const arrayIndex = sliceIndex + 1;
                 // image_index from DB is 0-based (0 for first image, 1 for second, etc.)
-                // arrayIndex matches the DB image_index for the 2nd+ images
+                // So for the 2nd image (arrayIndex=1), we look for image_index=1
                 const analysisForImage = imageAnalyses.find((a: any) => {
                   const rawIdx = Number(a?.image_index);
                   if (!Number.isFinite(rawIdx)) return false;
