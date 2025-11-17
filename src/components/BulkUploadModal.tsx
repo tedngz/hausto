@@ -23,7 +23,9 @@ interface ExcelProperty {
   size?: string;
   title?: string;
   description?: string;
-  vibe?: string;
+  style?: string;
+  color?: string;
+  activity?: string;
   highlights?: string;
   amenities?: string;
   image_urls?: string;
@@ -40,7 +42,9 @@ const sampleData = [
     size: "120 sqm",
     title: "Modern Downtown Apartment",
     description: "Spacious apartment in the heart of the city",
-    vibe: "Urban Professional",
+    style: "Modern,Urban",
+    color: "Neutral,Bright",
+    activity: "Working,Entertaining",
     highlights: "24/7 Security, Gym, Rooftop Terrace",
     amenities: "Parking, Pool, WiFi",
     image_urls: "https://example.com/image1.jpg,https://example.com/image2.jpg",
@@ -55,7 +59,9 @@ const sampleData = [
     size: "95 sqm",
     title: "Cozy Suburban Home",
     description: "Perfect for families, quiet neighborhood",
-    vibe: "Family Friendly",
+    style: "Cozy,Traditional",
+    color: "Warm,Earth",
+    activity: "Relaxing,Reading",
     highlights: "Garden, Parking, Near Schools",
     amenities: "Furnished, Air Conditioning, Security",
     image_urls: "https://example.com/image3.jpg",
@@ -128,14 +134,19 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
           priceInVND = Math.round(priceInVND * VND_TO_USD_RATE);
         }
         
+        // Extract style, color, and activity from Excel columns
+        const styles = item.style ? item.style.split(',').map(s => s.trim()) : [];
+        const colors = item.color ? item.color.split(',').map(c => c.trim()) : [];
+        const activities = item.activity ? item.activity.split(',').map(a => a.trim()) : [];
+        
         return {
           location: item.location,
           price: priceInVND,
           size: item.size || '',
           realtor_id: user.id,
           title: item.title,
-          description: item.description, 
-          vibe: item.vibe,
+          description: item.description,
+          vibe: styles[0] || undefined, // Use first style as vibe for backward compatibility
           highlights: item.highlights ? item.highlights.split(',').map(h => h.trim()) : undefined,
           amenities: item.amenities ? item.amenities.split(',').map(a => a.trim()) : undefined,
           images: item.image_urls ? item.image_urls.split(',').map(url => url.trim()) : [],
@@ -308,7 +319,9 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
               <li>• <strong>size</strong>: Property size (optional)</li>
               <li>• <strong>title</strong>: Property title (optional - AI will generate if empty)</li>
               <li>• <strong>description</strong>: Property description (optional - AI will generate if empty)</li>
-              <li>• <strong>vibe</strong>: Property vibe/style (optional - AI will generate if empty)</li>
+              <li>• <strong>style</strong>: Comma-separated style categories like "Modern,Urban" (optional - AI will generate if empty)</li>
+              <li>• <strong>color</strong>: Comma-separated color categories like "Neutral,Bright" (optional - AI will generate if empty)</li>
+              <li>• <strong>activity</strong>: Comma-separated activity categories like "Working,Relaxing" (optional - AI will generate if empty)</li>
               <li>• <strong>highlights</strong>: Comma-separated features (optional - AI will generate if empty)</li>
               <li>• <strong>amenities</strong>: Comma-separated amenities (optional - AI will generate if empty)</li>
               <li>• <strong>image_urls</strong>: Comma-separated image URLs (optional)</li>
