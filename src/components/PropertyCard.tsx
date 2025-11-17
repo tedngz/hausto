@@ -110,9 +110,11 @@ export const PropertyCard = ({
         <img src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'} alt={`${apartment.title} - Image ${currentImageIndex + 1}`} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => setIsImageModalOpen(true)} />
 
         {/* Vibe Ranking Overlay */}
-        {vibeScore && !hideVibeScore && <div className="absolute top-3 left-3 z-10">
+        {vibeScore && !hideVibeScore && (
+          <div className="absolute top-3 left-3 z-10">
             <VibeScore score={vibeScore} apartment={apartment} size="sm" isAnonymous={isAnonymous} />
-          </div>}
+          </div>
+        )}
 
         {/* Share Button Overlay */}
         <div className={`absolute top-3 z-10 ${hasDeleteButton ? 'right-12' : 'right-3'}`}>
@@ -192,7 +194,7 @@ export const PropertyCard = ({
                   return rawIdx === arrayIndex;
                 });
 
-                const imageHighlight = analysisForImage?.image_highlight;
+                const imageHighlight = analysisForImage?.image_highlight || analysisForImage?.highlight;
 
                 return (
                   <div key={sliceIndex} className="space-y-2">
