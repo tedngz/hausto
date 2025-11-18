@@ -150,23 +150,28 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         setSelectedActivities(savedActivities);
       }
       
-      // Extract image highlights
+      // Extract image highlights - build array parallel to images
+      const allImages = property.images || [];
       if (property.vibe_analysis?.image_analyses && Array.isArray(property.vibe_analysis.image_analyses)) {
-        const highlightsWithImages = property.vibe_analysis.image_analyses
-          .map((imgAnalysis: any) => {
-            if (imgAnalysis.image_highlight) {
-              // image_index is 0-based (0 for first image, 1 for second, etc.)
-              const rawIdx = Number(imgAnalysis.image_index);
-              const imageIndex = Number.isFinite(rawIdx) && rawIdx >= 0 ? rawIdx : 0;
-              return {
-                text: imgAnalysis.image_highlight,
-                imageIndexes: [imageIndex]
-              };
-            }
-            return null;
-          })
-          .filter((h: any) => h !== null);
-        setImageHighlights(highlightsWithImages);
+        // Create a map of image_index -> highlight
+        const highlightMap = new Map<number, string>();
+        property.vibe_analysis.image_analyses.forEach((imgAnalysis: any) => {
+          if (imgAnalysis.image_highlight) {
+            const rawIdx = Number(imgAnalysis.image_index);
+            const imageIndex = Number.isFinite(rawIdx) && rawIdx >= 0 ? rawIdx : 0;
+            highlightMap.set(imageIndex, imgAnalysis.image_highlight);
+          }
+        });
+        
+        // Build highlights array parallel to images array
+        const highlightsArray = allImages.map((_, idx) => {
+          const text = highlightMap.get(idx) || '';
+          return { text, imageIndexes: [idx] };
+        });
+        setImageHighlights(highlightsArray);
+      } else {
+        // Initialize empty highlights for all images
+        setImageHighlights(allImages.map((_, idx) => ({ text: '', imageIndexes: [idx] })));
       }
       
       setCurrentVibeAnalysis(property.vibe_analysis);
@@ -1078,18 +1083,19 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               {/* Image Review Grid */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
                 {[...existingImages, ...newImagePreviews].map((preview, index) => {
-                  const imageHighlight = imageHighlights.find(h => h.imageIndexes.includes(index));
+                  // Ensure imageHighlights array is large enough
+                  while (imageHighlights.length <= index) {
+                    imageHighlights.push({ text: '', imageIndexes: [imageHighlights.length] });
+                  }
+                  const imageHighlight = imageHighlights[index];
                   
                   const handleHighlightUpdate = (highlightIndex: number, newHighlight: { text: string; imageIndexes: number[] }) => {
                     const updatedHighlights = [...imageHighlights];
-                    const existingIndex = updatedHighlights.findIndex(h => h.imageIndexes.includes(highlightIndex));
-                    
-                    if (existingIndex >= 0) {
-                      updatedHighlights[existingIndex] = newHighlight;
-                    } else {
-                      updatedHighlights.push(newHighlight);
+                    // Ensure array is large enough
+                    while (updatedHighlights.length <= highlightIndex) {
+                      updatedHighlights.push({ text: '', imageIndexes: [updatedHighlights.length] });
                     }
-                    
+                    updatedHighlights[highlightIndex] = newHighlight;
                     setImageHighlights(updatedHighlights);
                   };
                   
