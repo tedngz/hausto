@@ -155,9 +155,21 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       if (property.vibe_analysis?.image_analyses && Array.isArray(property.vibe_analysis.image_analyses)) {
         // Create a map of image_index -> highlight
         const highlightMap = new Map<number, string>();
+        
+        // Check if database uses 1-based indexing (legacy AI data)
+        const indices = property.vibe_analysis.image_analyses
+          .map((a: any) => Number(a.image_index))
+          .filter(n => Number.isFinite(n));
+        const minIndex = indices.length > 0 ? Math.min(...indices) : 0;
+        const isOneBased = minIndex === 1 && indices.length === allImages.length;
+        
         property.vibe_analysis.image_analyses.forEach((imgAnalysis: any) => {
           if (imgAnalysis.image_highlight) {
-            const rawIdx = Number(imgAnalysis.image_index);
+            let rawIdx = Number(imgAnalysis.image_index);
+            // Convert 1-based to 0-based if needed
+            if (isOneBased && rawIdx >= 1) {
+              rawIdx = rawIdx - 1;
+            }
             const imageIndex = Number.isFinite(rawIdx) && rawIdx >= 0 ? rawIdx : 0;
             highlightMap.set(imageIndex, imgAnalysis.image_highlight);
           }
@@ -1083,20 +1095,18 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               {/* Image Review Grid */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
                 {[...existingImages, ...newImagePreviews].map((preview, index) => {
-                  // Ensure imageHighlights array is large enough
-                  while (imageHighlights.length <= index) {
-                    imageHighlights.push({ text: '', imageIndexes: [imageHighlights.length] });
-                  }
-                  const imageHighlight = imageHighlights[index];
+                  const imageHighlight = imageHighlights[index] || { text: '', imageIndexes: [index] };
                   
                   const handleHighlightUpdate = (highlightIndex: number, newHighlight: { text: string; imageIndexes: number[] }) => {
-                    const updatedHighlights = [...imageHighlights];
-                    // Ensure array is large enough
-                    while (updatedHighlights.length <= highlightIndex) {
-                      updatedHighlights.push({ text: '', imageIndexes: [updatedHighlights.length] });
-                    }
-                    updatedHighlights[highlightIndex] = newHighlight;
-                    setImageHighlights(updatedHighlights);
+                    setImageHighlights(prev => {
+                      const updated = [...prev];
+                      // Ensure array is large enough
+                      while (updated.length <= highlightIndex) {
+                        updated.push({ text: '', imageIndexes: [updated.length] });
+                      }
+                      updated[highlightIndex] = newHighlight;
+                      return updated;
+                    });
                   };
                   
                   return (
