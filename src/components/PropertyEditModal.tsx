@@ -690,7 +690,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     const analysesByIndex = new Map<number, any>(
       existingAnalyses.map((a: any) => [Number(a.image_index) || 0, a])
     );
-    imageHighlights.forEach((h, idx) => {
+    imageHighlights.forEach((h) => {
+      const idx = (h.imageIndexes && h.imageIndexes[0] !== undefined) ? h.imageIndexes[0] : 0;
       const prev = analysesByIndex.get(idx) || { image_index: idx };
       analysesByIndex.set(idx, { ...prev, image_index: idx, image_highlight: h.text });
     });
@@ -1250,33 +1251,50 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       </Card>
 
       {/* Preview Modal */}
-      {showPreview && property && (
-        <PropertyPreviewModal
-          isOpen={showPreview}
-          onClose={() => setShowPreview(false)}
-          property={{
-            ...property,
-            title,
-            description,
-            location,
-            price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
-            size: size ? `${size}m²` : '',
-            highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
-            images: [...existingImages, ...newImagePreviews],
-            vibe_analysis: {
-              ...currentVibeAnalysis,
-              styles: selectedStyles,
-              colors: selectedColors,
-              activities: selectedActivities,
-              amenities: selectedAmenities
-            },
-            amenities: selectedAmenities,
-            property_source_link: sourceLink,
-            property_source_provider_name: sourceProviderName,
-            property_source_provider_phone: sourceProviderPhone,
-          }}
-        />
-      )}
+      {showPreview && property && (() => {
+        // Build preview image_analyses by merging current analysis with in-editor edits
+        const existingAnalyses = Array.isArray(currentVibeAnalysis?.image_analyses)
+          ? currentVibeAnalysis.image_analyses
+          : [];
+        const analysesByIndex = new Map<number, any>(
+          existingAnalyses.map((a: any) => [Number(a?.image_index) || 0, a])
+        );
+        imageHighlights.forEach((h) => {
+          const idx = (h.imageIndexes && h.imageIndexes[0] !== undefined) ? h.imageIndexes[0] : 0;
+          const prev = analysesByIndex.get(idx) || { image_index: idx };
+          analysesByIndex.set(idx, { ...prev, image_index: idx, image_highlight: h.text });
+        });
+        const previewImageAnalyses = Array.from(analysesByIndex.values());
+
+        return (
+          <PropertyPreviewModal
+            isOpen={showPreview}
+            onClose={() => setShowPreview(false)}
+            property={{
+              ...property,
+              title,
+              description,
+              location,
+              price: currency === 'USD' ? parseInt(price) * 24500 : parseInt(price),
+              size: size ? `${size}m²` : '',
+              highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
+              images: [...existingImages, ...newImagePreviews],
+              vibe_analysis: {
+                ...currentVibeAnalysis,
+                image_analyses: previewImageAnalyses,
+                styles: selectedStyles,
+                colors: selectedColors,
+                activities: selectedActivities,
+                amenities: selectedAmenities
+              },
+              amenities: selectedAmenities,
+              property_source_link: sourceLink,
+              property_source_provider_name: sourceProviderName,
+              property_source_provider_phone: sourceProviderPhone,
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };
