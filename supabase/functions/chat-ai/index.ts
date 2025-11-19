@@ -1,10 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { Redis } from "https://esm.sh/@upstash/redis@latest";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Initialize Upstash Redis client
+const redis = new Redis({
+  url: Deno.env.get('UPSTASH_REDIS_REST_URL')!,
+  token: Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!,
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -50,7 +57,7 @@ serve(async (req) => {
 
     console.log('Chat AI function called');
 
-    // Rate limiting for anonymous users - 2 free searches per day
+    // Rate limiting for anonymous users - 2 free searches per day using Redis
     if (isAnonymous) {
       // Get the client IP address with multiple fallbacks
       const xForwardedFor = req.headers.get('x-forwarded-for');
@@ -67,37 +74,40 @@ serve(async (req) => {
       });
 
       if (clientIP !== 'unknown') {
-        // Check if this IP has exceeded their daily limit
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const { data: existingAttempt, error: attemptError } = await supabase
-          .from('anonymous_chat_attempts')
-          .select('*')
-          .eq('ip_address', clientIP)
-          .gte('last_attempt_at', today.toISOString())
-          .single();
-
-        if (attemptError && attemptError.code !== 'PGRST116') {
-          // PGRST116 is "no rows returned", which is fine
-          console.error('Error checking rate limit:', attemptError);
+        try {
+          // Redis key format: anon_rate:IP:YYYY-MM-DD
+          const today = new Date().toISOString().split('T')[0];
+          const rateLimitKey = `anon_rate:${clientIP}:${today}`;
+          
+          // Get current attempt count from Redis
+          const attempts = await redis.get(rateLimitKey) as number | null;
+          const currentAttempts = attempts || 0;
+          
+          console.log(`[Redis] Anonymous user search count: ${currentAttempts}/2 for IP: ${clientIP}`);
+          
+          if (currentAttempts >= 2) {
+            console.log(`[Redis] Anonymous user rate limited (${currentAttempts}/2)`);
+            return new Response(
+              JSON.stringify({ 
+                response: 'You\'ve used your 2 free searches today! To get unlimited AI-powered property searches and personalized recommendations, please sign in or create a free account.',
+                requiresAuth: true
+              }),
+              { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+              }
+            );
+          }
+          
+          // Increment counter and set expiry to end of day (86400 seconds = 24 hours)
+          await redis.incr(rateLimitKey);
+          await redis.expire(rateLimitKey, 86400);
+          
+          console.log(`[Redis] Incremented attempts to ${currentAttempts + 1}/2`);
+        } catch (redisError) {
+          console.error('[Redis] Error checking rate limit:', redisError);
+          // Continue with request if Redis fails - graceful degradation
         }
-
-        if (existingAttempt && existingAttempt.attempt_count >= 2) {
-          console.log(`Anonymous user has used ${existingAttempt.attempt_count}/2 free searches today`);
-          return new Response(
-            JSON.stringify({ 
-              response: 'You\'ve used your 2 free searches today! To get unlimited AI-powered property searches and personalized recommendations, please sign in or create a free account.',
-              requiresAuth: true
-            }),
-            { 
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200,
-            }
-          );
-        }
-
-        console.log(`Anonymous user search count: ${existingAttempt?.attempt_count || 0}/2`);
       }
     }
     
@@ -391,92 +401,133 @@ Current user message: ${message}`;
 
     console.log('Calling OpenAI API...');
     
-    // Collect property images for visual amenity analysis (max 8 images to avoid token limits)
-    const propertyImagesForAnalysis = properties
-      .slice(0, 4) // First 4 properties
-      .flatMap(p => {
-        const images = Array.isArray(p.images) ? p.images : [];
-        return images.slice(0, 2); // Max 2 images per property
-      })
-      .filter(Boolean);
+    // Check Redis cache for AI responses (only for simple queries without images)
+    let aiResponse = null;
+    let cacheHit = false;
     
-    // Combine uploaded reference images with property images
-    const allImagesToAnalyze = [
-      ...(Array.isArray(propertyImages) ? propertyImages : []),
-      ...propertyImagesForAnalysis
-    ];
+    // Create cache key from normalized query + user preferences
+    const normalizedQuery = message.toLowerCase().trim();
+    const hasImages = Array.isArray(propertyImages) && propertyImages.length > 0;
     
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: allImagesToAnalyze.length > 0 ? [
-          { role: 'system', content: fullContext },
-          { 
-            role: 'user', 
-            content: [
-              { type: 'text', text: message },
-              ...allImagesToAnalyze.map((image: any) => ({
-                type: 'image_url',
-                image_url: { url: image }
-              }))
-            ]
-          }
-        ] : [
-          { role: 'system', content: fullContext },
-          { role: 'user', content: message }
-        ],
-        max_tokens: 2000,
-        temperature: 0.7,
-      }),
-    });
+    if (!hasImages && !isAnonymous) {
+      try {
+        const cacheKey = `ai_search:${user?.id}:${Buffer.from(normalizedQuery).toString('base64').substring(0, 50)}`;
+        const cachedResponse = await redis.get(cacheKey) as string | null;
+        
+        if (cachedResponse) {
+          aiResponse = cachedResponse;
+          cacheHit = true;
+          console.log('[Redis] Cache HIT - returning cached AI response');
+        } else {
+          console.log('[Redis] Cache MISS - will call OpenAI API');
+        }
+      } catch (cacheError) {
+        console.error('[Redis] Cache check error:', cacheError);
+        // Continue to API call if cache fails
+      }
+    }
+    
+    // Only call OpenAI if we don't have a cached response
+    if (!cacheHit) {
+      // Collect property images for visual amenity analysis (max 8 images to avoid token limits)
+      const propertyImagesForAnalysis = properties
+        .slice(0, 4) // First 4 properties
+        .flatMap(p => {
+          const images = Array.isArray(p.images) ? p.images : [];
+          return images.slice(0, 2); // Max 2 images per property
+        })
+        .filter(Boolean);
+      
+      // Combine uploaded reference images with property images
+      const allImagesToAnalyze = [
+        ...(Array.isArray(propertyImages) ? propertyImages : []),
+        ...propertyImagesForAnalysis
+      ];
+      
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: allImagesToAnalyze.length > 0 ? [
+            { role: 'system', content: fullContext },
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: message },
+                ...allImagesToAnalyze.map((image: any) => ({
+                  type: 'image_url',
+                  image_url: { url: image }
+                }))
+              ]
+            }
+          ] : [
+            { role: 'system', content: fullContext },
+            { role: 'user', content: message }
+          ],
+          max_tokens: 2000,
+          temperature: 0.7,
+        }),
+      });
 
-    console.log('OpenAI response status:', openaiResponse.status);
-    
-    if (!openaiResponse.ok) {
-      console.error('OpenAI API error:', openaiResponse.status, openaiResponse.statusText);
-      const errorText = await openaiResponse.text();
-      console.error('OpenAI error response:', errorText);
+      console.log('OpenAI response status:', openaiResponse.status);
       
-      // Provide fallback response
-      const fallbackResponse = userType === 'realtor' 
-        ? "I'm having trouble connecting to the AI service right now. Please try again in a moment, or feel free to ask me about property marketing strategies!"
-        : "I'm having trouble connecting to the AI service right now. But I'd be happy to help you find properties! Could you tell me more about what you're looking for - location preferences, budget, or lifestyle needs?";
-      
-      // Save fallback response to database when persistence is allowed
-      if (canPersist) {
-        await supabase
-          .from('chat_messages')
-          .insert({
-            conversation_id: conversationId,
-            role: 'assistant',
-            content: fallbackResponse
-          });
+      if (!openaiResponse.ok) {
+        console.error('OpenAI API error:', openaiResponse.status, openaiResponse.statusText);
+        const errorText = await openaiResponse.text();
+        console.error('OpenAI error response:', errorText);
+        
+        // Provide fallback response
+        const fallbackResponse = userType === 'realtor' 
+          ? "I'm having trouble connecting to the AI service right now. Please try again in a moment, or feel free to ask me about property marketing strategies!"
+          : "I'm having trouble connecting to the AI service right now. But I'd be happy to help you find properties! Could you tell me more about what you're looking for - location preferences, budget, or lifestyle needs?";
+        
+        // Save fallback response to database when persistence is allowed
+        if (canPersist) {
+          await supabase
+            .from('chat_messages')
+            .insert({
+              conversation_id: conversationId,
+              role: 'assistant',
+              content: fallbackResponse
+            });
+        }
+
+        return new Response(
+          JSON.stringify({ response: fallbackResponse }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        );
       }
 
-      return new Response(
-        JSON.stringify({ response: fallbackResponse }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
+      const openaiData = await openaiResponse.json();
+      console.log('OpenAI response received, choices length:', openaiData.choices?.length);
+      
+      if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
+        console.error('Invalid OpenAI response structure:', openaiData);
+        throw new Error('Invalid response from OpenAI');
+      }
+      
+      // Parse the AI's response
+      aiResponse = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
+      
+      // Cache the response in Redis (1 hour TTL) for authenticated users without images
+      if (!hasImages && !isAnonymous && user?.id) {
+        try {
+          const cacheKey = `ai_search:${user.id}:${Buffer.from(normalizedQuery).toString('base64').substring(0, 50)}`;
+          await redis.setex(cacheKey, 3600, aiResponse); // 1 hour = 3600 seconds
+          console.log('[Redis] Cached AI response for future requests');
+        } catch (cacheError) {
+          console.error('[Redis] Error caching response:', cacheError);
+          // Continue even if caching fails
         }
-      );
+      }
     }
-
-    const openaiData = await openaiResponse.json();
-    console.log('OpenAI response received, choices length:', openaiData.choices?.length);
-    
-    if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
-      console.error('Invalid OpenAI response structure:', openaiData);
-      throw new Error('Invalid response from OpenAI');
-    }
-    
-    // Parse the AI's response
-    const aiResponse = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
 
     // Check if the response contains search results
     let searchData = null;
@@ -589,58 +640,8 @@ Current user message: ${message}`;
       }
     }
 
-    // Record successful anonymous search attempt
-    if (isAnonymous) {
-      const xForwardedFor = req.headers.get('x-forwarded-for');
-      const xRealIp = req.headers.get('x-real-ip');
-      const cfConnectingIp = req.headers.get('cf-connecting-ip');
-      const clientIP = (xForwardedFor?.split(',')[0].trim() || xRealIp || cfConnectingIp || 'unknown');
-
-      if (clientIP !== 'unknown') {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        // Check existing attempts for today
-        const { data: existingAttempt } = await supabase
-          .from('anonymous_chat_attempts')
-          .select('*')
-          .eq('ip_address', clientIP)
-          .gte('last_attempt_at', today.toISOString())
-          .single();
-
-        if (existingAttempt) {
-          // Update existing attempt count
-          const { error: updateError } = await supabase
-            .from('anonymous_chat_attempts')
-            .update({
-              attempt_count: existingAttempt.attempt_count + 1,
-              last_attempt_at: new Date().toISOString()
-            })
-            .eq('id', existingAttempt.id);
-
-          if (updateError) {
-            console.error('Error updating chat attempt:', updateError);
-          } else {
-            console.log(`Updated anonymous search count to ${existingAttempt.attempt_count + 1}/2 for IP:`, clientIP);
-          }
-        } else {
-          // Create new attempt record
-          const { error: insertError } = await supabase
-            .from('anonymous_chat_attempts')
-            .insert({
-              ip_address: clientIP,
-              attempt_count: 1,
-              last_attempt_at: new Date().toISOString()
-            });
-
-          if (insertError) {
-            console.error('Error recording chat attempt:', insertError);
-          } else {
-            console.log('Successfully recorded first anonymous search (1/2) for IP:', clientIP);
-          }
-        }
-      }
-    }
+    // Anonymous search tracking is now handled by Redis rate limiting above
+    // No need for separate database tracking
 
     return new Response(JSON.stringify({ response: aiResponse }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
