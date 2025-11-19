@@ -219,24 +219,37 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       if (!cancelled && fresh) {
         const analysis = (fresh as any)?.vibe_analysis || {};
         
-        // Extract and update image highlights
+        // Extract and update image highlights - use same logic as main useEffect
+        const allImages = (fresh as any)?.images || [];
         if (analysis?.image_analyses && Array.isArray(analysis.image_analyses)) {
-          const highlightsWithImages = analysis.image_analyses
-            .map((imgAnalysis: any) => {
-              if (imgAnalysis.image_highlight) {
-                // image_index from AI is 1-based; guard against 0/invalid and convert to 0-based for UI
-                const rawIdx = Number(imgAnalysis.image_index);
-                const imageIndex = Math.max(0, (Number.isFinite(rawIdx) ? rawIdx : 1) - 1);
-                return {
-                  text: imgAnalysis.image_highlight,
-                  imageIndexes: [imageIndex]
-                };
+          const highlightMap = new Map<number, string>();
+          
+          // Check if database uses 1-based indexing (legacy AI data)
+          const indices = analysis.image_analyses
+            .map((a: any) => Number(a.image_index))
+            .filter(n => Number.isFinite(n));
+          const minIndex = indices.length > 0 ? Math.min(...indices) : 0;
+          const isOneBased = minIndex === 1 && indices.length === allImages.length;
+          
+          analysis.image_analyses.forEach((imgAnalysis: any) => {
+            if (imgAnalysis.image_highlight) {
+              let rawIdx = Number(imgAnalysis.image_index);
+              // Convert 1-based to 0-based if needed
+              if (isOneBased && rawIdx >= 1) {
+                rawIdx = rawIdx - 1;
               }
-              return null;
-            })
-            .filter((h: any) => h !== null);
-          setImageHighlights(highlightsWithImages);
-          console.log('[PropertyEditModal] Loaded image highlights:', highlightsWithImages);
+              const imageIndex = Number.isFinite(rawIdx) && rawIdx >= 0 ? rawIdx : 0;
+              highlightMap.set(imageIndex, imgAnalysis.image_highlight);
+            }
+          });
+          
+          // Build highlights array parallel to images array
+          const highlightsArray = allImages.map((_, idx) => {
+            const text = highlightMap.get(idx) || '';
+            return { text, imageIndexes: [idx] };
+          });
+          setImageHighlights(highlightsArray);
+          console.log('[PropertyEditModal] Loaded image highlights:', highlightsArray);
         }
         
         // Extract and update amenities
