@@ -32,7 +32,6 @@ export const useUsageTracking = () => {
   });
   const [weeklyMatches, setWeeklyMatches] = useState(0);
   const [viewedPropertiesToday, setViewedPropertiesToday] = useState<Set<string>>(() => {
-    // Load viewed properties from localStorage on initialization
     const today = new Date().toISOString().split('T')[0];
     const stored = localStorage.getItem(`viewedProperties_${today}`);
     return stored ? new Set(JSON.parse(stored)) : new Set();
@@ -45,84 +44,49 @@ export const useUsageTracking = () => {
 
   const fetchUsage = async () => {
     if (!user?.id) {
-      console.log('No user available for fetchUsage, user:', user);
+      console.log('[Usage Tracking] No user available');
       return;
     }
 
-    console.log('Fetching usage for user:', user.id);
+    console.log('[Usage Tracking] Fetching usage via Redis for user:', user.id);
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      // Calculate exactly 7 days ago (including today = 7 days total)
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-      const weekAgo = sevenDaysAgo.toISOString().split('T')[0];
 
-      console.log('Fetching usage for date range:', { today, weekAgo });
-
-      // Load viewed properties from localStorage for today, or reset if it's a new day
+      // Load viewed properties from localStorage
       const stored = localStorage.getItem(`viewedProperties_${today}`);
       const viewedSet = stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set<string>();
       setViewedPropertiesToday(viewedSet);
 
-      // Clean up old viewed properties from localStorage (keep only today's)
+      // Clean up old localStorage entries
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('viewedProperties_') && key !== `viewedProperties_${today}`) {
           localStorage.removeItem(key);
         }
       });
 
-      // Get today's usage
-      const { data: todayData, error: todayError } = await supabase
-        .from('daily_usage')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('usage_date', today)
-        .maybeSingle();
+      // Get usage from Redis via edge function
+      const { data: usageData, error: usageError } = await supabase.functions.invoke(
+        'usage-tracking-redis',
+        { body: { action: 'get' } }
+      );
 
-      if (todayError) {
-        console.error('Error fetching today\'s usage:', todayError);
-      } else {
-        console.log('Today\'s usage data:', todayData);
+      if (usageError) {
+        console.error('[Usage Tracking] Redis error, falling back to database:', usageError);
+        await fetchUsageFromDatabase();
+        return;
       }
 
-      if (todayData) {
-        setTodayUsage({
-          propertiesViewed: todayData.properties_viewed,
-          propertiesMatched: todayData.properties_matched,
-          quizRetakes: todayData.quiz_retakes,
-          aiSearches: todayData.ai_requests || 0,
-        });
-      } else {
-        // Reset to zero if no data for today
-        setTodayUsage({
-          propertiesViewed: 0,
-          propertiesMatched: 0,
-          quizRetakes: 0,
-          aiSearches: 0,
-        });
-      }
+      console.log('[Usage Tracking] Retrieved usage from Redis:', usageData);
 
-      // Get weekly matches (last 7 days including today)
-      const { data: weeklyData, error: weeklyError } = await supabase
-        .from('daily_usage')
-        .select('usage_date, properties_matched')
-        .eq('user_id', user.id)
-        .gte('usage_date', weekAgo)
-        .lte('usage_date', today)
-        .order('usage_date', { ascending: true });
+      setTodayUsage({
+        propertiesViewed: usageData.propertiesViewed || 0,
+        propertiesMatched: usageData.propertiesMatched || 0,
+        quizRetakes: usageData.quizRetakes || 0,
+        aiSearches: usageData.aiSearches || 0,
+      });
 
-      if (weeklyError) {
-        console.error('Error fetching weekly usage:', weeklyError);
-      } else {
-        console.log('Weekly usage data:', weeklyData);
-      }
-
-      if (weeklyData) {
-        const weeklyMatchesSum = weeklyData.reduce((sum, day) => sum + day.properties_matched, 0);
-        console.log('Weekly totals calculated:', { weeklyMatchesSum });
-        setWeeklyMatches(weeklyMatchesSum);
-      }
+      setWeeklyMatches(usageData.weeklyMatches || 0);
 
       // Get subscription status
       const { data: subData, error: subError } = await supabase
@@ -132,9 +96,7 @@ export const useUsageTracking = () => {
         .maybeSingle();
 
       if (subError) {
-        console.error('Error fetching subscription:', subError);
-      } else {
-        console.log('Subscription data:', subData);
+        console.error('[Usage Tracking] Error fetching subscription:', subError);
       }
 
       if (subData) {
@@ -144,16 +106,57 @@ export const useUsageTracking = () => {
           subscription_end: subData.subscription_end,
         });
       } else {
-        // If no subscription record, ensure user shows as free tier
         setSubscriptionStatus({
           subscribed: false,
           subscription_tier: 'free',
         });
       }
     } catch (error) {
-      console.error('Error fetching usage data:', error);
+      console.error('[Usage Tracking] Error in fetchUsage:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fallback to database if Redis is unavailable
+  const fetchUsageFromDatabase = async () => {
+    if (!user?.id) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      const weekAgo = sevenDaysAgo.toISOString().split('T')[0];
+
+      const { data: todayData } = await supabase
+        .from('daily_usage')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('usage_date', today)
+        .maybeSingle();
+
+      if (todayData) {
+        setTodayUsage({
+          propertiesViewed: todayData.properties_viewed,
+          propertiesMatched: todayData.properties_matched,
+          quizRetakes: todayData.quiz_retakes,
+          aiSearches: todayData.ai_requests || 0,
+        });
+      }
+
+      const { data: weeklyData } = await supabase
+        .from('daily_usage')
+        .select('properties_matched')
+        .eq('user_id', user.id)
+        .gte('usage_date', weekAgo)
+        .lte('usage_date', today);
+
+      if (weeklyData) {
+        const total = weeklyData.reduce((sum, day) => sum + day.properties_matched, 0);
+        setWeeklyMatches(total);
+      }
+    } catch (error) {
+      console.error('[Usage Tracking] Database fallback error:', error);
     }
   };
 
@@ -161,7 +164,6 @@ export const useUsageTracking = () => {
     fetchUsage();
   }, [user?.id]);
 
-  // Listen for cross-component usage updates
   useEffect(() => {
     const handler = (event: Event) => {
       const custom = event as CustomEvent;
@@ -172,7 +174,6 @@ export const useUsageTracking = () => {
       if (typeof detail.weeklyMatches === 'number') {
         setWeeklyMatches(detail.weeklyMatches);
       }
-      // As a fallback, re-fetch to stay consistent with DB
       if (!detail.todayUsage) {
         fetchUsage();
       }
@@ -181,157 +182,148 @@ export const useUsageTracking = () => {
     return () => window.removeEventListener('usage:updated', handler as EventListener);
   }, []);
 
-
-  // Add new function to track unique property views
   const updatePropertyView = async (propertyId: string) => {
     if (!user?.id || !propertyId) {
-      console.error('No user ID or property ID available for view tracking');
+      console.error('[Usage Tracking] No user ID or property ID');
       return false;
     }
 
-    // Check if this property was already viewed today
     if (viewedPropertiesToday.has(propertyId)) {
-      console.log('Property already viewed today, not counting again:', propertyId);
+      console.log('[Usage Tracking] Property already viewed today:', propertyId);
       return true;
     }
 
-    // Track the view directly
-    const today = new Date().toISOString().split('T')[0];
-    const newViews = todayUsage.propertiesViewed + 1;
-    
     try {
-      const { error } = await supabase
-        .from('daily_usage')
-        .upsert({
-          user_id: user.id,
-          usage_date: today,
-          properties_viewed: newViews,
-          properties_matched: todayUsage.propertiesMatched,
-          quiz_retakes: todayUsage.quizRetakes,
-          ai_requests: todayUsage.aiSearches,
-        }, { 
-          onConflict: 'user_id,usage_date',
-          ignoreDuplicates: false 
-        });
+      console.log('[Usage Tracking] Incrementing property view via Redis');
+
+      const { error } = await supabase.functions.invoke(
+        'usage-tracking-redis',
+        {
+          body: {
+            action: 'increment',
+            type: 'view',
+          },
+        }
+      );
 
       if (error) {
-        console.error('Supabase error updating property view:', error);
+        console.error('[Usage Tracking] Error incrementing view:', error);
         return false;
       }
 
       // Update local state
-      const updatedTodayUsage = {
-        propertiesViewed: newViews,
-        propertiesMatched: todayUsage.propertiesMatched,
-        quizRetakes: todayUsage.quizRetakes,
-        aiSearches: todayUsage.aiSearches,
-      };
-      setTodayUsage(updatedTodayUsage);
-      
-      // Update the Set and persist to localStorage
+      setTodayUsage(prev => ({
+        ...prev,
+        propertiesViewed: prev.propertiesViewed + 1,
+      }));
+
+      // Update viewed properties set
+      const today = new Date().toISOString().split('T')[0];
       const newSet = new Set(viewedPropertiesToday).add(propertyId);
       setViewedPropertiesToday(newSet);
       localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
 
-      // Broadcast usage update so other components refresh their counters immediately
-      window.dispatchEvent(new CustomEvent('usage:updated', { detail: {
-        todayUsage: updatedTodayUsage,
-        weeklyMatches,
-      }}));
+      // Broadcast update
+      window.dispatchEvent(new CustomEvent('usage:updated', {
+        detail: {
+          todayUsage: {
+            ...todayUsage,
+            propertiesViewed: todayUsage.propertiesViewed + 1,
+          },
+        },
+      }));
 
-      console.log('Successfully tracked unique property view for:', propertyId);
+      console.log('[Usage Tracking] Successfully tracked property view:', propertyId);
       return true;
     } catch (error) {
-      console.error('Error updating property view:', error);
+      console.error('[Usage Tracking] Error updating property view:', error);
       return false;
     }
   };
 
-  const updateUsage = async (type: 'view' | 'match' | 'quiz' | 'ai-search' | 'match-with-view') => {
+  const updateUsage = async (
+    type: 'view' | 'match' | 'quiz' | 'ai-search' | 'match-with-view'
+  ) => {
     if (!user?.id) {
-      console.error('No user ID available for usage tracking');
-      return false;
+      console.log('[Usage Tracking] Cannot update usage - no user');
+      return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    
     try {
-      // Calculate new values
-      let newViews = todayUsage.propertiesViewed;
-      let newMatches = todayUsage.propertiesMatched;
-      let newQuizRetakes = todayUsage.quizRetakes;
-      let newAiSearches = todayUsage.aiSearches;
-
+      let redisType: string;
       switch (type) {
         case 'view':
-          newViews += 1;
+          redisType = 'view';
           break;
         case 'match':
-          newMatches += 1;
-          break;
         case 'match-with-view':
-          newMatches += 1;
-          newViews += 1;
+          redisType = 'match';
           break;
         case 'quiz':
-          newQuizRetakes += 1;
+          redisType = 'quiz';
           break;
         case 'ai-search':
-          newAiSearches += 1;
+          redisType = 'ai-search';
           break;
+        default:
+          return;
       }
 
-      console.log('Updating usage:', { type, user_id: user.id, usage_date: today, newViews, newMatches, newQuizRetakes });
+      console.log(`[Usage Tracking] Incrementing usage: ${redisType}`);
 
-      const { error } = await supabase
-        .from('daily_usage')
-        .upsert({
-          user_id: user.id,
-          usage_date: today,
-          properties_viewed: newViews,
-          properties_matched: newMatches,
-          quiz_retakes: newQuizRetakes,
-          ai_requests: newAiSearches,
-        }, { 
-          onConflict: 'user_id,usage_date',
-          ignoreDuplicates: false 
-        });
+      const { data, error } = await supabase.functions.invoke(
+        'usage-tracking-redis',
+        {
+          body: {
+            action: 'increment',
+            type: redisType,
+          },
+        }
+      );
 
       if (error) {
-        console.error('Supabase error updating usage:', error);
-        toast.error(`Failed to track ${type}: ${error.message}`);
-        return false;
+        console.error('[Usage Tracking] Error incrementing usage:', error);
+        toast.error('Failed to update usage');
+        return;
       }
 
-      console.log('Successfully updated usage tracking for', type);
+      console.log('[Usage Tracking] Successfully incremented:', data);
 
-      // Update local state
-      setTodayUsage({
-        propertiesViewed: newViews,
-        propertiesMatched: newMatches,
-        quizRetakes: newQuizRetakes,
-        aiSearches: newAiSearches,
+      // Update local state optimistically
+      setTodayUsage(prev => {
+        const updated = { ...prev };
+        switch (type) {
+          case 'view':
+            updated.propertiesViewed += 1;
+            break;
+          case 'match':
+          case 'match-with-view':
+            updated.propertiesMatched += 1;
+            break;
+          case 'quiz':
+            updated.quizRetakes += 1;
+            break;
+          case 'ai-search':
+            updated.aiSearches += 1;
+            break;
+        }
+        return updated;
       });
 
-      // Notify listeners (e.g., UsageMeter) to refresh
-      window.dispatchEvent(new CustomEvent('usage:updated'));
-
-      // Update weekly counters immediately only after successful database update
       if (type === 'match' || type === 'match-with-view') {
-        console.log('Incrementing weekly matches from', weeklyMatches, 'to', weeklyMatches + 1);
         setWeeklyMatches(prev => prev + 1);
       }
 
-      return true;
+      window.dispatchEvent(new CustomEvent('usage:updated'));
+
     } catch (error) {
-      console.error('Error updating usage:', error);
-      toast.error('Failed to update usage tracking');
-      return false;
+      console.error('[Usage Tracking] Error in updateUsage:', error);
+      toast.error('Failed to update usage');
     }
   };
 
   const canPerformAction = (type: 'view' | 'match' | 'quiz' | 'ai-search'): boolean => {
-    console.log(`Checking if can perform ${type}:`, {
+    console.log(`[Usage Tracking] Checking if can perform ${type}:`, {
       subscribed: subscriptionStatus.subscribed,
       tier: subscriptionStatus.subscription_tier,
       todayViews: todayUsage.propertiesViewed,
@@ -339,30 +331,25 @@ export const useUsageTracking = () => {
       todayAiSearches: todayUsage.aiSearches
     });
 
-    // Premium users have unlimited access
     if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
-      console.log('Premium user - unlimited access');
+      console.log('[Usage Tracking] Premium user - unlimited access');
       return true;
     }
 
-    // Quiz is now unlimited for all users
-    if (type === 'quiz') {
-      return true;
-    }
-
-    // Check free tier limits
     switch (type) {
       case 'view':
         const canView = todayUsage.propertiesViewed < FREE_TIER_LIMITS.dailyViews;
-        console.log(`Can view: ${canView} (${todayUsage.propertiesViewed}/${FREE_TIER_LIMITS.dailyViews})`);
+        console.log(`[Usage Tracking] Can view: ${canView} (${todayUsage.propertiesViewed}/${FREE_TIER_LIMITS.dailyViews})`);
         return canView;
       case 'match':
         const canMatch = weeklyMatches < FREE_TIER_LIMITS.weeklyMatches;
-        console.log(`Can match: ${canMatch} (${weeklyMatches}/${FREE_TIER_LIMITS.weeklyMatches})`);
+        console.log(`[Usage Tracking] Can match: ${canMatch} (${weeklyMatches}/${FREE_TIER_LIMITS.weeklyMatches})`);
         return canMatch;
+      case 'quiz':
+        return true;
       case 'ai-search':
         const canAiSearch = todayUsage.aiSearches < FREE_TIER_LIMITS.dailyAiRequests;
-        console.log(`Can AI search: ${canAiSearch} (${todayUsage.aiSearches}/${FREE_TIER_LIMITS.dailyAiRequests})`);
+        console.log(`[Usage Tracking] Can AI search: ${canAiSearch} (${todayUsage.aiSearches}/${FREE_TIER_LIMITS.dailyAiRequests})`);
         return canAiSearch;
       default:
         return false;
@@ -374,16 +361,13 @@ export const useUsageTracking = () => {
       return Infinity;
     }
 
-    // Quiz is now unlimited for all users
-    if (type === 'quiz') {
-      return Infinity;
-    }
-
     switch (type) {
       case 'view':
         return Math.max(0, FREE_TIER_LIMITS.dailyViews - todayUsage.propertiesViewed);
       case 'match':
         return Math.max(0, FREE_TIER_LIMITS.weeklyMatches - weeklyMatches);
+      case 'quiz':
+        return Infinity;
       case 'ai-search':
         return Math.max(0, FREE_TIER_LIMITS.dailyAiRequests - todayUsage.aiSearches);
       default:
@@ -391,16 +375,22 @@ export const useUsageTracking = () => {
     }
   };
 
+  const refetchUsage = async () => {
+    console.log('[Usage Tracking] Manually refetching usage data');
+    await fetchUsage();
+  };
+
   return {
     todayUsage,
     weeklyMatches,
     subscriptionStatus,
     loading,
+    limits: FREE_TIER_LIMITS,
     updateUsage,
     updatePropertyView,
     canPerformAction,
     getRemainingActions,
-    refetchUsage: fetchUsage,
-    limits: FREE_TIER_LIMITS,
+    refetchUsage,
+    FREE_TIER_LIMITS,
   };
 };
