@@ -1,5 +1,6 @@
 import { Apartment, UserPreferences } from '@/types';
 import { calculateVibeScore } from './vibeScoring';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PropertyWithMetadata extends Apartment {
   created_at?: string;
@@ -70,15 +71,50 @@ const calculateUrgencyScore = (daysUntilInactive: number): number => {
 /**
  * Strategically sort properties for discovery
  * Balances recency, urgency, match quality, and randomization
+ * NOW WITH VECTOR SEARCH for semantic matching!
  */
-export const sortPropertiesForDiscovery = (
+export const sortPropertiesForDiscovery = async (
   properties: Apartment[],
   userPreferences: UserPreferences | null
-): Apartment[] => {
+): Promise<Apartment[]> => {
   if (properties.length === 0) return [];
+
+  // Try vector search for semantic filtering if preferences exist
+  let filteredProperties = properties;
   
-  // Score each property
-  const scoredProperties: ScoredProperty[] = properties.map(property => {
+  if (userPreferences) {
+    try {
+      console.log('[Property Discovery] Using vector search for semantic matching');
+      
+      const { data, error } = await supabase.functions.invoke('vector-property-search', {
+        body: {
+          preferences: userPreferences,
+          topK: Math.min(properties.length, 100), // Get more candidates for better results
+          filters: {
+            priceMin: userPreferences.priceRange?.[0],
+            priceMax: userPreferences.priceRange?.[1],
+            location: userPreferences.location,
+            styles: userPreferences.styles,
+          }
+        }
+      });
+
+      if (!error && data?.results && data.results.length > 0) {
+        // Map vector search results back to property objects
+        const vectorScoredPropertyIds = new Set(data.results.map((r: any) => r.id));
+        filteredProperties = properties.filter(p => vectorScoredPropertyIds.has(p.id));
+        console.log(`[Property Discovery] Vector search filtered to ${filteredProperties.length} properties`);
+      } else {
+        console.log('[Property Discovery] Vector search returned no results, using all properties');
+      }
+    } catch (err) {
+      console.error('[Property Discovery] Vector search error, falling back to traditional scoring:', err);
+      // Fallback: use all properties
+    }
+  }
+  
+  // Score each property (now from filtered set)
+  const scoredProperties: ScoredProperty[] = filteredProperties.map(property => {
     const propertyWithMeta = property as PropertyWithMetadata;
     
     // Calculate individual scores

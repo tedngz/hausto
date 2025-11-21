@@ -302,7 +302,22 @@ export const useProperties = () => {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
+      // Generate embedding for new property (fire and forget)
+      supabase.functions.invoke('generate-property-embedding', {
+        body: {
+          propertyId: data.id,
+          title: data.title,
+          description: data.description,
+          vibe_analysis: data.vibe_analysis,
+          amenities: data.amenities || [],
+          location: data.location,
+          price: data.price,
+        }
+      }).catch(err => {
+        console.error('[Property Create] Failed to generate embedding:', err);
+      });
+
       // Invalidate cache
       supabase.functions.invoke('property-discovery-cache', {
         body: { action: 'invalidate' },
@@ -404,7 +419,22 @@ export const useProperties = () => {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      // Regenerate embedding for updated property (fire and forget)
+      supabase.functions.invoke('generate-property-embedding', {
+        body: {
+          propertyId: data.id,
+          title: data.title,
+          description: data.description,
+          vibe_analysis: data.vibe_analysis,
+          amenities: data.amenities || [],
+          location: data.location,
+          price: data.price,
+        }
+      }).catch(err => {
+        console.error('[Property Update] Failed to regenerate embedding:', err);
+      });
+
       // Invalidate cache for this specific property
       supabase.functions.invoke('property-discovery-cache', {
         body: { action: 'invalidate', propertyId: data?.id },

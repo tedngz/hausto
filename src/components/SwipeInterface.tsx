@@ -175,7 +175,7 @@ export const SwipeInterface = ({
       // Don't clear apartments here, let user still see properties with basic sorting
       if (apartments.length === 0) {
         // Sort by recency even without preferences
-        const sortedAvailable = sortPropertiesForDiscovery(availableProperties, null);
+        const sortedAvailable = await sortPropertiesForDiscovery(availableProperties, null);
         setApartments(sortedAvailable);
         setCurrentApartmentIndex(0);
       }
@@ -222,7 +222,7 @@ export const SwipeInterface = ({
     if (filteredApartments.length > 0) {
       console.log('Applying dynamic discovery algorithm to', filteredApartments.length, 'properties');
       // Apply strategic sorting for dynamic and exciting discovery
-      const sortedApartments = sortPropertiesForDiscovery(filteredApartments, userPreferences);
+      const sortedApartments = await sortPropertiesForDiscovery(filteredApartments, userPreferences);
       setApartments(sortedApartments);
       setCurrentApartmentIndex(0);
       setNoMatchReason('');
@@ -232,7 +232,7 @@ export const SwipeInterface = ({
 
       // If no properties pass filters, show all available properties anyway
       console.log('No properties pass filters, showing all available properties with dynamic sorting');
-      const sortedAvailable = sortPropertiesForDiscovery(availableProperties, userPreferences);
+      const sortedAvailable = await sortPropertiesForDiscovery(availableProperties, userPreferences);
       setApartments(sortedAvailable);
       setCurrentApartmentIndex(0);
       setNoMatchReason('');

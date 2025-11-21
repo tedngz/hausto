@@ -32,3 +32,12 @@ verify_jwt = true
 
 [functions.notify-fast-track-request]
 verify_jwt = true
+
+[functions.generate-property-embedding]
+verify_jwt = true
+
+[functions.vector-property-search]
+verify_jwt = true
+
+[functions.batch-generate-embeddings]
+verify_jwt = true
