@@ -122,7 +122,7 @@ export const SwipeInterface = ({
       }
 
       // Fetch realtor profiles for all properties
-      const realtorIds = [...new Set((realProperties || []).map(p => p.realtor_id))];
+      const realtorIds = [...new Set((realProperties || []).map(p => p.realtor_id))] as string[];
       const realtorProfiles = new Map<string, any>();
       
       if (realtorIds.length > 0) {

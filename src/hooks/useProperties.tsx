@@ -42,6 +42,31 @@ export const useProperties = () => {
   const { data: properties = [], isLoading } = useQuery({
     queryKey: ['properties'],
     queryFn: async () => {
+      const cacheKey = 'properties:all';
+
+      // Try to get from cache first
+      try {
+        const { data: cachedData, error: cacheError } = await supabase.functions.invoke(
+          'property-discovery-cache',
+          {
+            body: {
+              action: 'get',
+              cacheKey,
+            },
+          }
+        );
+
+        if (!cacheError && cachedData?.properties) {
+          console.log('[Properties] Cache hit - returning cached properties');
+          return cachedData.properties;
+        }
+      } catch (cacheError) {
+        console.log('[Properties] Cache error, fetching from DB:', cacheError);
+      }
+
+      // Cache miss - fetch from database
+      console.log('[Properties] Cache miss - fetching from database');
+      
       // First get properties
       const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
@@ -67,7 +92,7 @@ export const useProperties = () => {
       const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
       
       // Transform data to match Apartment interface
-      return propertiesData.map(property => {
+      const transformedProperties = propertiesData.map(property => {
         const profile = profilesMap.get(property.realtor_id);
         return {
           ...property,
@@ -80,6 +105,25 @@ export const useProperties = () => {
           }
         };
       });
+
+      // Cache the result (fire and forget)
+      supabase.functions
+        .invoke('property-discovery-cache', {
+          body: {
+            action: 'set',
+            cacheKey,
+            properties: transformedProperties,
+          },
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error('[Properties] Error caching properties:', error);
+          } else {
+            console.log('[Properties] Cached properties successfully');
+          }
+        });
+
+      return transformedProperties;
     },
   });
 
@@ -259,6 +303,11 @@ export const useProperties = () => {
       return data;
     },
     onSuccess: () => {
+      // Invalidate cache
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate' },
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['properties'] });
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
       toast({
@@ -355,7 +404,12 @@ export const useProperties = () => {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Invalidate cache for this specific property
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate', propertyId: data?.id },
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['properties'] });
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
       toast({
@@ -387,6 +441,11 @@ export const useProperties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
+      // Invalidate cache
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate' },
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['properties'] });
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
       toast({
@@ -427,6 +486,11 @@ export const useProperties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
+      // Invalidate cache when toggling property status
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate' },
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['properties'] });
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
       toast({
