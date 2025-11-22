@@ -41,3 +41,6 @@ verify_jwt = true
 
 [functions.batch-generate-embeddings]
 verify_jwt = true
+
+[functions.verify-embeddings]
+verify_jwt = true
