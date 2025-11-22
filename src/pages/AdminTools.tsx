@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Sparkles, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 const AdminTools = () => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -22,6 +24,9 @@ const AdminTools = () => {
     totalMissing: number;
     sampleEmbeddings: any[];
   } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testQuery, setTestQuery] = useState("Modern cozy apartment with natural light and workspace");
+  const [testResults, setTestResults] = useState<any>(null);
 
   const handleBatchGenerate = async () => {
     setIsGenerating(true);
@@ -79,6 +84,43 @@ const AdminTools = () => {
       });
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleTestVectorSearch = async () => {
+    setIsTesting(true);
+    setTestResults(null);
+    
+    try {
+      toast.info("Running vector search test...");
+
+      const { data, error } = await supabase.functions.invoke('vector-property-search', {
+        body: {
+          query: testQuery,
+          topK: 5,
+        }
+      });
+
+      if (error) throw error;
+
+      setTestResults(data);
+      
+      if (data.results?.length > 0) {
+        toast.success(`Found ${data.results.length} matching properties!`, {
+          description: `Average similarity: ${(data.results.reduce((sum: number, r: any) => sum + r.similarity, 0) / data.results.length).toFixed(3)}`
+        });
+      } else {
+        toast.warning("No results found", {
+          description: "Try a different query or check embeddings"
+        });
+      }
+    } catch (error: any) {
+      console.error('Vector search test error:', error);
+      toast.error("Vector search failed", {
+        description: error.message
+      });
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -237,6 +279,102 @@ const AdminTools = () => {
               )}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Test Vector Search
+          </CardTitle>
+          <CardDescription>
+            Test semantic property search with natural language queries to verify vector DB is working correctly.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="testQuery">Natural Language Query</Label>
+            <Textarea
+              id="testQuery"
+              value={testQuery}
+              onChange={(e) => setTestQuery(e.target.value)}
+              placeholder="Describe what you're looking for..."
+              rows={3}
+            />
+          </div>
+          
+          <Button 
+            onClick={handleTestVectorSearch} 
+            disabled={isTesting || !testQuery.trim()}
+            size="lg"
+            className="w-full"
+          >
+            {isTesting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Searching...
+              </>
+            ) : (
+              <>
+                <Search className="mr-2 h-4 w-4" />
+                Test Vector Search
+              </>
+            )}
+          </Button>
+
+          {testResults && (
+            <div className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold">Search Results:</p>
+                  <Badge>{testResults.results?.length || 0} matches</Badge>
+                </div>
+                
+                {testResults.cached && (
+                  <p className="text-xs text-muted-foreground mb-2">⚡ Cached result</p>
+                )}
+              </div>
+
+              {testResults.results && testResults.results.length > 0 && (
+                <div className="space-y-2">
+                  {testResults.results.slice(0, 5).map((result: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-background rounded border space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold truncate">{result.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{result.location}</p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0">
+                          {(result.similarity * 100).toFixed(1)}%
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        ${result.price?.toLocaleString()}
+                        {result.styles && ` • ${result.styles.slice(0, 2).join(', ')}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {testResults.processingTime && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Processed in {testResults.processingTime}ms
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
+            <p><strong>Try queries like:</strong></p>
+            <ul className="list-disc list-inside space-y-0.5 text-xs">
+              <li>"Bright apartment with modern kitchen"</li>
+              <li>"Cozy space perfect for remote work"</li>
+              <li>"Luxury penthouse with city views"</li>
+              <li>"Industrial loft with high ceilings"</li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
     </div>
