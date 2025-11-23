@@ -433,33 +433,39 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         const aiColors = [];
         const aiActivities = [];
         
-        // Extract styles
+        // Extract styles with lower thresholds
         if (analysis.modern >= 5) aiStyles.push('Modern');
         if (analysis.cozy >= 5) aiStyles.push('Cozy');
-        if (analysis.luxurious >= 6) aiStyles.push('Luxury');
+        if (analysis.luxurious >= 5) aiStyles.push('Luxury');
         if (analysis.urban >= 5) aiStyles.push('Urban');
         if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
         if (analysis.elegant >= 5) aiStyles.push('Contemporary');
         if (analysis.rustic >= 4) aiStyles.push('Rustic');
         if (analysis.industrial >= 4) aiStyles.push('Industrial');
         
-        // Extract colors
+        // Extract colors with lower thresholds
         if (analysis.neutral >= 5) aiColors.push('Neutral');
         if (analysis.warm >= 5) aiColors.push('Warm');
         if (analysis.cool >= 5) aiColors.push('Cool');
-        if (analysis.bright >= 5 || analysis.natural_light >= 7) aiColors.push('Bright');
-        if (analysis.colorful >= 6) aiColors.push('Colorful');
+        if (analysis.bright >= 5 || analysis.natural_light >= 6) aiColors.push('Bright');
+        if (analysis.colorful >= 5) aiColors.push('Colorful');
         if (analysis.natural_light >= 6) aiColors.push('Natural');
         
-        // Extract activities
-        if (analysis.modern >= 5 || analysis.spacious >= 6) aiActivities.push('Working');
-        if (analysis.cozy >= 6 || analysis.natural_light >= 6) aiActivities.push('Reading');
+        // Extract activities with lower thresholds
+        if (analysis.modern >= 5 || analysis.spacious >= 5) aiActivities.push('Working');
+        if (analysis.cozy >= 5 || analysis.natural_light >= 6) aiActivities.push('Reading');
         if (analysis.cozy >= 5 || analysis.elegant >= 5) aiActivities.push('Relaxing');
-        if (analysis.spacious >= 6 || analysis.modern >= 6) aiActivities.push('Entertaining');
+        if (analysis.spacious >= 5 || analysis.modern >= 5) aiActivities.push('Entertaining');
         
+        // Ensure we always have at least one item in each category
         const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
         const uniqueColors = [...new Set(aiColors)].slice(0, 3);
         const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        
+        // If any category is empty, add default values
+        if (uniqueStyles.length === 0) uniqueStyles.push('Modern');
+        if (uniqueColors.length === 0) uniqueColors.push('Neutral');
+        if (uniqueActivities.length === 0) uniqueActivities.push('Relaxing');
         
         setSelectedStyles(uniqueStyles);
         setSelectedColors(uniqueColors);
@@ -591,33 +597,39 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         const aiColors = [];
         const aiActivities = [];
         
-        // Extract styles
+        // Extract styles with lower thresholds
         if (analysis.modern >= 5) aiStyles.push('Modern');
         if (analysis.cozy >= 5) aiStyles.push('Cozy');
-        if (analysis.luxurious >= 6) aiStyles.push('Luxury');
+        if (analysis.luxurious >= 5) aiStyles.push('Luxury');
         if (analysis.urban >= 5) aiStyles.push('Urban');
         if (analysis.minimalist >= 5) aiStyles.push('Minimalist');
         if (analysis.elegant >= 5) aiStyles.push('Contemporary');
         if (analysis.rustic >= 4) aiStyles.push('Rustic');
         if (analysis.industrial >= 4) aiStyles.push('Industrial');
         
-        // Extract colors
+        // Extract colors with lower thresholds
         if (analysis.neutral >= 5) aiColors.push('Neutral');
         if (analysis.warm >= 5) aiColors.push('Warm');
         if (analysis.cool >= 5) aiColors.push('Cool');
-        if (analysis.bright >= 5 || analysis.natural_light >= 7) aiColors.push('Bright');
-        if (analysis.colorful >= 6) aiColors.push('Colorful');
+        if (analysis.bright >= 5 || analysis.natural_light >= 6) aiColors.push('Bright');
+        if (analysis.colorful >= 5) aiColors.push('Colorful');
         if (analysis.natural_light >= 6) aiColors.push('Natural');
         
-        // Extract activities
-        if (analysis.modern >= 5 || analysis.spacious >= 6) aiActivities.push('Working');
-        if (analysis.cozy >= 6 || analysis.natural_light >= 6) aiActivities.push('Reading');
+        // Extract activities with lower thresholds
+        if (analysis.modern >= 5 || analysis.spacious >= 5) aiActivities.push('Working');
+        if (analysis.cozy >= 5 || analysis.natural_light >= 6) aiActivities.push('Reading');
         if (analysis.cozy >= 5 || analysis.elegant >= 5) aiActivities.push('Relaxing');
-        if (analysis.spacious >= 6 || analysis.modern >= 6) aiActivities.push('Entertaining');
+        if (analysis.spacious >= 5 || analysis.modern >= 5) aiActivities.push('Entertaining');
         
+        // Ensure we always have at least one item in each category
         const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
         const uniqueColors = [...new Set(aiColors)].slice(0, 3);
         const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        
+        // If any category is empty, add default values
+        if (uniqueStyles.length === 0) uniqueStyles.push('Modern');
+        if (uniqueColors.length === 0) uniqueColors.push('Neutral');
+        if (uniqueActivities.length === 0) uniqueActivities.push('Relaxing');
         
         setSelectedStyles(uniqueStyles);
         setSelectedColors(uniqueColors);
