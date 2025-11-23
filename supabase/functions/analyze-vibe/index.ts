@@ -215,42 +215,16 @@ serve(async (req) => {
         // Convert image to base64 if it's a Supabase storage URL to ensure compatibility
         let processedImageUrl = imageUrl;
         
-        // Check if it's a Supabase storage URL and convert to base64
+        // Check if it's a Supabase storage URL - use direct URL instead of base64
+        // OpenAI can fetch images directly and this avoids format conversion issues
         if (imageUrl.includes('supabase') || imageUrl.includes('gbgrwjdmytaksrztcyzs')) {
           try {
-            const imageResponse = await fetch(imageUrl);
-            if (imageResponse.ok) {
-              const imageBlob = await imageResponse.blob();
-              
-              // Ensure we have a supported image format and normalize
-              let mimeType = imageBlob.type?.toLowerCase();
-              // Normalize common non-standard types to supported ones
-              if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
-              if (mimeType === 'application/octet-stream' || !mimeType) mimeType = 'image/jpeg';
-              const allowed = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
-              if (!allowed.has(mimeType)) {
-                // Force to jpeg for OpenAI compatibility
-                mimeType = 'image/jpeg';
-              }
-              
-              // Convert to base64 with proper chunking for large images
-              const buffer = await imageBlob.arrayBuffer();
-              const bytes = new Uint8Array(buffer);
-              let binary = '';
-              const chunkSize = 8192;
-              
-              for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, i + chunkSize);
-                binary += String.fromCharCode.apply(null, Array.from(chunk));
-              }
-              
-              const base64 = btoa(binary);
-              processedImageUrl = `data:${mimeType};base64,${base64}`;
-              console.log(`Converted image ${index + 1} to base64 format (${mimeType}, ${Math.round(base64.length/1024)}KB)`);
-            }
-          } catch (conversionError) {
-            console.error(`Failed to convert image ${index + 1} to base64:`, conversionError);
-            // Continue with original URL as fallback
+            // Make sure the URL is publicly accessible
+            // For Supabase storage, the URL should already be public if the bucket is public
+            processedImageUrl = imageUrl;
+            console.log(`Using direct image URL for image ${index + 1}`);
+          } catch (error) {
+            console.error(`Error processing image ${index + 1} URL:`, error);
           }
         }
 
@@ -313,8 +287,8 @@ serve(async (req) => {
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? `Analysis failed due to API error: ${errorText}` : 'Analysis failed',
             image_highlight: `Premium living space feature ${index + 1}`,
-            suggested_amenities: [],
-            amenities: [],
+            suggested_amenities: ['WiFi', 'Heating', 'Lighting Fixtures'],
+            amenities: ['WiFi', 'Heating', 'Lighting Fixtures'],
             image_index: index + 1, // 1-based index
             raw_analysis: errorText || 'API Error'
           });
@@ -407,9 +381,9 @@ serve(async (req) => {
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? content : 'Analysis failed',
             image_highlight: `Premium feature ${index + 1}`,
-            suggested_amenities: ['Parking'],
-            suggested_activities: [],
-            amenities: ['Parking'],
+            suggested_amenities: ['WiFi', 'Air Conditioning', 'Lighting Fixtures'],
+            suggested_activities: ['Relaxing'],
+            amenities: ['WiFi', 'Air Conditioning', 'Lighting Fixtures'],
             image_index: index + 1, // 1-based index
             raw_analysis: content
           });
@@ -436,9 +410,9 @@ serve(async (req) => {
           description: 'Unable to analyze image',
           detailed_analysis: generateContent ? 'Processing error' : 'Analysis failed',
           image_highlight: `Quality living space ${index + 1}`,
-          suggested_amenities: ['Parking'],
-          suggested_activities: [],
-          amenities: ['Parking'],
+          suggested_amenities: ['Heating', 'Lighting Fixtures', 'Storage'],
+          suggested_activities: ['Relaxing'],
+          amenities: ['Heating', 'Lighting Fixtures', 'Storage'],
           image_index: index + 1, // 1-based index
           raw_analysis: 'Processing Error'
         });

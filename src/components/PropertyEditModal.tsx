@@ -417,16 +417,22 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         
         setCurrentVibeAnalysis(analysis);
         
-        // Extract and set amenities (merge overall + image-suggested)
+        // Extract and set amenities (merge overall + image-suggested) - always update
         const aiAmenities: string[] = Array.isArray(analysis.amenities) ? analysis.amenities : [];
         const imageSuggested: string[] = Array.isArray(analysis.image_analyses)
           ? analysis.image_analyses.flatMap((ia: any) => Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : [])
           : [];
         const mergedAmenities = Array.from(new Set([...(aiAmenities || []), ...imageSuggested]));
-        if (mergedAmenities.length) {
-          setDetectedAmenities(mergedAmenities);
-          setSelectedAmenities(mergedAmenities);
-        }
+        
+        console.log('[PropertyEditModal] Regenerate - Extracted amenities:', { 
+          aiAmenities, 
+          imageSuggested, 
+          mergedAmenities 
+        });
+        
+        // Always update amenities
+        setDetectedAmenities(mergedAmenities);
+        setSelectedAmenities(mergedAmenities);
         
         // Extract styles, colors, and activities from AI analysis
         const aiStyles = [];
@@ -635,16 +641,23 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
         setSelectedColors(uniqueColors);
         setSelectedActivities(uniqueActivities);
 
-        // Extract and set amenities
+        // Extract and set amenities - always update, even if empty
         const aiAmenities: string[] = Array.isArray(analysis.amenities) ? analysis.amenities : [];
         const imageSuggested: string[] = Array.isArray(analysis.image_analyses)
           ? analysis.image_analyses.flatMap((ia: any) => Array.isArray(ia?.suggested_amenities) ? ia.suggested_amenities : [])
           : [];
         const mergedAmenities = Array.from(new Set([...(aiAmenities || []), ...imageSuggested]));
-        if (mergedAmenities.length) {
-          setDetectedAmenities(mergedAmenities);
-          setSelectedAmenities(mergedAmenities);
-        }
+        
+        console.log('[PropertyEditModal] Extracted amenities:', { 
+          aiAmenities, 
+          imageSuggested, 
+          mergedAmenities,
+          analysisObject: analysis 
+        });
+        
+        // Always update amenities, even if the list is empty (to clear previous values)
+        setDetectedAmenities(mergedAmenities);
+        setSelectedAmenities(mergedAmenities);
 
         toast({
           title: "Categories Re-analyzed!",
