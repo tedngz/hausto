@@ -1122,46 +1122,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
                 </div>
               </div>
 
-          {/* Image Highlights Section */}
-          {(existingImages.length > 0 || newImagePreviews.length > 0) && (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-base font-semibold">Review Images & Highlights</Label>
-              </div>
-              <p className="text-sm text-gray-600 mb-3">Review and edit your images and AI-generated highlights</p>
-              
-              {/* Image Review Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
-                {[...existingImages, ...newImagePreviews].map((preview, index) => {
-                  const imageHighlight = imageHighlights[index] || { text: '', imageIndexes: [index] };
-                  
-                  const handleHighlightUpdate = (highlightIndex: number, newHighlight: { text: string; imageIndexes: number[] }) => {
-                    setImageHighlights(prev => {
-                      const updated = [...prev];
-                      // Ensure array is large enough
-                      while (updated.length <= highlightIndex) {
-                        updated.push({ text: '', imageIndexes: [updated.length] });
-                      }
-                      updated[highlightIndex] = newHighlight;
-                      return updated;
-                    });
-                  };
-                  
-                  return (
-                    <ImageHighlightEditor
-                      key={index}
-                      preview={preview}
-                      index={index}
-                      highlight={imageHighlight}
-                      onHighlightUpdate={handleHighlightUpdate}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Amenities Section */}
+          {/* Amenities Section - Moved above images */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label className="text-base font-semibold">AI-detected Amenities</Label>
@@ -1243,6 +1204,45 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               </Button>
             </div>
           </div>
+
+          {/* Image Highlights Section */}
+          {(existingImages.length > 0 || newImagePreviews.length > 0) && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-base font-semibold">Review Images & Highlights</Label>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">Review and edit your images and AI-generated highlights</p>
+              
+              {/* Image Review Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                {[...existingImages, ...newImagePreviews].map((preview, index) => {
+                  const imageHighlight = imageHighlights[index] || { text: '', imageIndexes: [index] };
+                  
+                  const handleHighlightUpdate = (highlightIndex: number, newHighlight: { text: string; imageIndexes: number[] }) => {
+                    setImageHighlights(prev => {
+                      const updated = [...prev];
+                      // Ensure array is large enough
+                      while (updated.length <= highlightIndex) {
+                        updated.push({ text: '', imageIndexes: [updated.length] });
+                      }
+                      updated[highlightIndex] = newHighlight;
+                      return updated;
+                    });
+                  };
+                  
+                  return (
+                    <ImageHighlightEditor
+                      key={index}
+                      preview={preview}
+                      index={index}
+                      highlight={imageHighlight}
+                      onHighlightUpdate={handleHighlightUpdate}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Description Section */}
           <div>

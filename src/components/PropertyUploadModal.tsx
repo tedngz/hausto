@@ -804,43 +804,6 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-base font-semibold">Review Images & Highlights</Label>
-                </div>
-                <p className="text-sm text-gray-600 mb-3">Review and edit your images and AI-generated highlights</p>
-                
-                {/* Image Review Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
-                  {imagePreviews.map((preview, index) => {
-                    const imageHighlight = imageHighlights.find(h => h.imageIndexes.includes(index));
-                    
-                    const handleHighlightUpdate = (highlightIndex: number, newHighlight: { text: string; imageIndexes: number[] }) => {
-                      const updatedHighlights = [...imageHighlights];
-                      const existingIndex = updatedHighlights.findIndex(h => h.imageIndexes.includes(highlightIndex));
-                      
-                      if (existingIndex >= 0) {
-                        updatedHighlights[existingIndex] = newHighlight;
-                      } else {
-                        updatedHighlights.push(newHighlight);
-                      }
-                      
-                      setImageHighlights(updatedHighlights);
-                    };
-                    
-                    return (
-                      <ImageHighlightEditor
-                        key={index}
-                        preview={preview}
-                        index={index}
-                        highlight={imageHighlight}
-                        onHighlightUpdate={handleHighlightUpdate}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
                 <Label className="text-base font-semibold">Amenities</Label>
                 <p className="text-sm text-gray-600 mb-3">Click to select/deselect amenities</p>
                 
@@ -904,6 +867,43 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                   >
                     Add
                   </Button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="text-base font-semibold">Review Images & Highlights</Label>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Review and edit your images and AI-generated highlights</p>
+                
+                {/* Image Review Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                  {imagePreviews.map((preview, index) => {
+                    const imageHighlight = imageHighlights.find(h => h.imageIndexes.includes(index));
+                    
+                    const handleHighlightUpdate = (highlightIndex: number, newHighlight: { text: string; imageIndexes: number[] }) => {
+                      const updatedHighlights = [...imageHighlights];
+                      const existingIndex = updatedHighlights.findIndex(h => h.imageIndexes.includes(highlightIndex));
+                      
+                      if (existingIndex >= 0) {
+                        updatedHighlights[existingIndex] = newHighlight;
+                      } else {
+                        updatedHighlights.push(newHighlight);
+                      }
+                      
+                      setImageHighlights(updatedHighlights);
+                    };
+                    
+                    return (
+                      <ImageHighlightEditor
+                        key={index}
+                        preview={preview}
+                        index={index}
+                        highlight={imageHighlight}
+                        onHighlightUpdate={handleHighlightUpdate}
+                      />
+                    );
+                  })}
                 </div>
               </div>
 
