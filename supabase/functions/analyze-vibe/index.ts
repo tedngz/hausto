@@ -97,43 +97,123 @@ serve(async (req) => {
 
             CORE MISSION: Discover the UNIQUE LIFESTYLE TRANSFORMATION this specific space offers renters.${regenerateContext}${highlightContext}
 
-            AMENITY DETECTION: Identify all visible amenities from this list:
-            - TV, Smart TV, Large Screen TV
-            - WiFi Router, Internet Equipment
-            - Air Conditioning, AC Unit, Climate Control
-            - Washing Machine, Dryer, Laundry
-            - Dishwasher, Kitchen Appliances
-            - Microwave, Oven, Stove, Refrigerator
-            - Gym Equipment, Fitness Area
-            - Pool, Swimming Pool
-            - Balcony, Terrace, Outdoor Space
-            - Parking, Garage, Car Space
-            - Security System, Cameras, Safe
-            - Workspace, Desk, Office Setup
-            - Pet Amenities, Pet Bed, Pet Bowls
-            - Garden, Plants, Green Space
-            - Fireplace, Heating
-            - Bathtub, Jacuzzi, Spa
-            - Walk-in Closet, Storage
-            - Kitchen Island, Breakfast Bar
-            - Hardwood Floors, Marble, Premium Finishes
-            - Smart Home Devices, Automation
-            - Elevator Access
-            - High Ceilings
-            - Natural Light, Large Windows
-            - Bed, Queen Bed, King Bed, Double Bed
-            - Cabinets, Storage Cabinets
-            - Shelves, Bookshelf
-            - Chair, Dining Chair, Office Chair
-            - Table, Dining Table, Coffee Table
-            - Couch, Sofa, Sectional
-            - Fan, Ceiling Fan
-            - Air Purifier
+            🔍 CRITICAL AMENITY DETECTION MISSION:
+            You MUST carefully scan the image and identify ALL visible amenities. Be thorough and specific.
+            
+            APPLIANCES & ELECTRONICS:
+            - TV, Smart TV, Large Screen TV, Television
+            - WiFi Router, Internet Equipment, Modem
+            - Air Conditioning, AC Unit, Climate Control, Split AC, Central AC
+            - Washing Machine, Dryer, Washer/Dryer Combo
+            - Dishwasher
+            - Microwave, Microwave Oven
+            - Oven, Built-in Oven, Gas Oven, Electric Oven
+            - Stove, Cooktop, Gas Stove, Induction Cooktop
+            - Refrigerator, Fridge, Double-door Fridge
+            - Freezer
+            - Water Heater, Instant Water Heater
+            - Coffee Maker, Espresso Machine
+            - Toaster, Toaster Oven
+            - Blender, Food Processor
+            - Rice Cooker
+            - Kettle, Electric Kettle
+            - Water Dispenser, Water Purifier
             - Vacuum Cleaner
-            - Speaker, Sound System, Radio
-            - Plants, Indoor Plants
-            - Painting, Artwork, Wall Art
-            - Chandelier, Lighting Fixtures, Pendant Light
+            - Iron, Ironing Board
+            
+            FURNITURE & FIXTURES:
+            - Bed, Queen Bed, King Bed, Double Bed, Single Bed
+            - Mattress, Premium Mattress
+            - Sofa, Couch, Sectional, Loveseat, L-shaped Sofa
+            - Dining Table, Breakfast Table
+            - Coffee Table, Side Table
+            - Desk, Computer Desk, Study Desk, Work Desk
+            - Office Chair, Desk Chair
+            - Dining Chairs, Bar Stools
+            - Cabinets, Kitchen Cabinets, Storage Cabinets
+            - Wardrobe, Closet, Walk-in Closet
+            - Shelves, Bookshelf, Storage Shelves
+            - Drawers, Chest of Drawers
+            - TV Stand, Entertainment Center
+            - Nightstand, Bedside Table
+            - Mirror, Full-length Mirror
+            - Curtains, Blinds, Blackout Curtains
+            
+            LIGHTING & DECOR:
+            - Chandelier, Pendant Light
+            - Ceiling Lights, Recessed Lighting
+            - Floor Lamp, Table Lamp, Reading Lamp
+            - Natural Light, Large Windows, Floor-to-ceiling Windows
+            - Artwork, Wall Art, Paintings, Decorations
+            - Plants, Indoor Plants, Potted Plants
+            
+            KITCHEN FEATURES:
+            - Kitchen Island, Breakfast Bar
+            - Kitchen Sink, Double Sink
+            - Kitchen Hood, Range Hood, Exhaust Fan
+            - Backsplash, Tile Backsplash
+            - Granite Countertops, Marble Countertops, Quartz Countertops
+            - Modern Kitchen, Fully Equipped Kitchen
+            
+            BATHROOM FEATURES:
+            - Bathtub, Soaking Tub
+            - Shower, Walk-in Shower, Rain Shower, Shower Enclosure
+            - Jacuzzi, Spa, Hot Tub
+            - Toilet, Modern Toilet
+            - Bathroom Sink, Vanity, Double Vanity
+            - Mirror, Bathroom Mirror
+            - Towel Rack, Towel Warmer
+            
+            CLIMATE CONTROL:
+            - Fan, Ceiling Fan, Standing Fan
+            - Heater, Heating System, Radiator
+            - Air Purifier, Air Filter
+            - Humidifier, Dehumidifier
+            - Fireplace, Electric Fireplace, Gas Fireplace
+            
+            OUTDOOR & BUILDING AMENITIES:
+            - Balcony, Terrace, Patio
+            - Garden, Private Garden, Green Space
+            - Pool, Swimming Pool, Rooftop Pool
+            - Gym, Fitness Center, Gym Equipment
+            - Parking, Garage, Car Space, Underground Parking
+            - Elevator, Lift Access
+            - Security System, Cameras, CCTV, Intercom, Safe
+            - Building Lobby, Reception
+            
+            ARCHITECTURAL FEATURES:
+            - High Ceilings, Vaulted Ceilings
+            - Hardwood Floors, Wood Flooring
+            - Tile Flooring, Marble Floors
+            - Carpet, Area Rug
+            - Exposed Brick, Accent Wall
+            - Bay Windows, Corner Unit
+            - Open Floor Plan, Loft-style
+            - Built-in Storage
+            
+            SMART HOME & TECH:
+            - Smart Home System, Home Automation
+            - Smart Thermostat
+            - Smart Locks, Keyless Entry
+            - Speaker System, Sound System, Bluetooth Speaker
+            - Smart Lighting
+            
+            OTHER AMENITIES:
+            - Workspace, Home Office Setup
+            - Pet-friendly Features, Pet Bed, Pet Bowls
+            - Laundry Room, In-unit Laundry
+            - Storage Room, Storage Space
+            - Wine Fridge, Wine Rack
+            - Mini Bar
+            
+            🚨 DETECTION RULES:
+            1. List EVERY amenity you can clearly see in the image
+            2. Be specific: Don't just say "Kitchen" - list individual items like "Stove", "Refrigerator", "Microwave"
+            3. Don't just say "Furniture" - list specific items like "Sofa", "Coffee Table", "TV Stand"
+            4. Include both obvious and subtle amenities
+            5. If you see modern finishes, list them: "Marble Countertops", "Hardwood Floors", "Granite"
+            6. Minimum 5-10 amenities per image unless it's a very minimal space
+            7. Be generous with detection - if something looks like it could be there, include it
 
             ANALYSIS FRAMEWORK:
             1. ESSENCE: What's the ONE thing that makes this space irreplaceable?
@@ -287,8 +367,8 @@ serve(async (req) => {
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? `Analysis failed due to API error: ${errorText}` : 'Analysis failed',
             image_highlight: `Premium living space feature ${index + 1}`,
-            suggested_amenities: ['WiFi', 'Heating', 'Lighting Fixtures'],
-            amenities: ['WiFi', 'Heating', 'Lighting Fixtures'],
+            suggested_amenities: ['Air Conditioning', 'Natural Light', 'Modern Fixtures', 'Storage Cabinets', 'Lighting Fixtures'],
+            amenities: ['Air Conditioning', 'Natural Light', 'Modern Fixtures', 'Storage Cabinets', 'Lighting Fixtures'],
             image_index: index + 1, // 1-based index
             raw_analysis: errorText || 'API Error'
           });
@@ -381,9 +461,9 @@ serve(async (req) => {
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? content : 'Analysis failed',
             image_highlight: `Premium feature ${index + 1}`,
-            suggested_amenities: ['WiFi', 'Air Conditioning', 'Lighting Fixtures'],
+            suggested_amenities: ['Modern Fixtures', 'Storage Cabinets', 'Natural Light', 'Ceiling Lights', 'Flooring'],
             suggested_activities: ['Relaxing'],
-            amenities: ['WiFi', 'Air Conditioning', 'Lighting Fixtures'],
+            amenities: ['Modern Fixtures', 'Storage Cabinets', 'Natural Light', 'Ceiling Lights', 'Flooring'],
             image_index: index + 1, // 1-based index
             raw_analysis: content
           });
@@ -410,9 +490,9 @@ serve(async (req) => {
           description: 'Unable to analyze image',
           detailed_analysis: generateContent ? 'Processing error' : 'Analysis failed',
           image_highlight: `Quality living space ${index + 1}`,
-          suggested_amenities: ['Heating', 'Lighting Fixtures', 'Storage'],
+          suggested_amenities: ['Flooring', 'Walls', 'Windows', 'Doors', 'Storage'],
           suggested_activities: ['Relaxing'],
-          amenities: ['Heating', 'Lighting Fixtures', 'Storage'],
+          amenities: ['Flooring', 'Walls', 'Windows', 'Doors', 'Storage'],
           image_index: index + 1, // 1-based index
           raw_analysis: 'Processing Error'
         });
