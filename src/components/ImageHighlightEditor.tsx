@@ -58,9 +58,19 @@ export const ImageHighlightEditor = ({
           }
         });
         if (error) throw error;
-        const first = data?.analysis?.image_analyses?.[0] ?? {};
-        const candidate = first.image_highlight || first.highlight || '';
-        return String(candidate).trim();
+      const first = data?.analysis?.image_analyses?.[0] ?? {};
+      const candidate = first.image_highlight || first.highlight || '';
+      const trimmed = String(candidate).trim();
+      
+      // Reject generic/fallback highlights
+      if (!trimmed || 
+          trimmed.toLowerCase().includes('premium living space feature') ||
+          trimmed.toLowerCase().includes('premium feature') ||
+          trimmed.toLowerCase().includes('quality living space')) {
+        return '';
+      }
+      
+      return trimmed;
       };
 
       // Try up to 2 times to encourage variation
@@ -83,8 +93,9 @@ export const ImageHighlightEditor = ({
         });
       } else {
         toast({
-          title: "No Highlight Returned",
-          description: "AI didn't detect a clear highlight. Try again or edit manually.",
+          title: "Unable to Generate Highlight",
+          description: "AI couldn't analyze this image properly. This may be due to image format or quality issues. Try uploading a different image or edit manually.",
+          variant: "destructive"
         });
       }
     } catch (error) {
