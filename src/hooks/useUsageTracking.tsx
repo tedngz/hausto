@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -42,7 +42,49 @@ export const useUsageTracking = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  const fetchUsage = async () => {
+  // Fallback to database if Redis is unavailable
+  const fetchUsageFromDatabase = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      const weekAgo = sevenDaysAgo.toISOString().split('T')[0];
+
+      const { data: todayData } = await supabase
+        .from('daily_usage')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('usage_date', today)
+        .maybeSingle();
+
+      if (todayData) {
+        setTodayUsage({
+          propertiesViewed: todayData.properties_viewed,
+          propertiesMatched: todayData.properties_matched,
+          quizRetakes: todayData.quiz_retakes,
+          aiSearches: todayData.ai_requests || 0,
+        });
+      }
+
+      const { data: weeklyData } = await supabase
+        .from('daily_usage')
+        .select('properties_matched')
+        .eq('user_id', user.id)
+        .gte('usage_date', weekAgo)
+        .lte('usage_date', today);
+
+      if (weeklyData) {
+        const total = weeklyData.reduce((sum, day) => sum + day.properties_matched, 0);
+        setWeeklyMatches(total);
+      }
+    } catch (error) {
+      console.error('[Usage Tracking] Database fallback error:', error);
+    }
+  }, [user?.id]);
+
+  const fetchUsage = useCallback(async () => {
     if (!user?.id) {
       console.log('[Usage Tracking] No user available');
       return;
@@ -116,53 +158,11 @@ export const useUsageTracking = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Fallback to database if Redis is unavailable
-  const fetchUsageFromDatabase = async () => {
-    if (!user?.id) return;
-
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-      const weekAgo = sevenDaysAgo.toISOString().split('T')[0];
-
-      const { data: todayData } = await supabase
-        .from('daily_usage')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('usage_date', today)
-        .maybeSingle();
-
-      if (todayData) {
-        setTodayUsage({
-          propertiesViewed: todayData.properties_viewed,
-          propertiesMatched: todayData.properties_matched,
-          quizRetakes: todayData.quiz_retakes,
-          aiSearches: todayData.ai_requests || 0,
-        });
-      }
-
-      const { data: weeklyData } = await supabase
-        .from('daily_usage')
-        .select('properties_matched')
-        .eq('user_id', user.id)
-        .gte('usage_date', weekAgo)
-        .lte('usage_date', today);
-
-      if (weeklyData) {
-        const total = weeklyData.reduce((sum, day) => sum + day.properties_matched, 0);
-        setWeeklyMatches(total);
-      }
-    } catch (error) {
-      console.error('[Usage Tracking] Database fallback error:', error);
-    }
-  };
+  }, [user?.id, fetchUsageFromDatabase]);
 
   useEffect(() => {
     fetchUsage();
-  }, [user?.id]);
+  }, [fetchUsage]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -182,7 +182,7 @@ export const useUsageTracking = () => {
     return () => window.removeEventListener('usage:updated', handler as EventListener);
   }, []);
 
-  const updatePropertyView = async (propertyId: string) => {
+  const updatePropertyView = useCallback(async (propertyId: string) => {
     if (!user?.id || !propertyId) {
       console.error('[Usage Tracking] No user ID or property ID');
       return false;
@@ -211,24 +211,25 @@ export const useUsageTracking = () => {
         return false;
       }
 
-      // Update local state
-      setTodayUsage(prev => ({
-        ...prev,
-        propertiesViewed: prev.propertiesViewed + 1,
-      }));
-
-      // Update viewed properties set
+      // Update viewed properties set first
       const today = new Date().toISOString().split('T')[0];
       const newSet = new Set(viewedPropertiesToday).add(propertyId);
       setViewedPropertiesToday(newSet);
       localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
 
-      // Broadcast update
+      // Update local state and get the new value
+      const newViewCount = todayUsage.propertiesViewed + 1;
+      setTodayUsage(prev => ({
+        ...prev,
+        propertiesViewed: newViewCount,
+      }));
+
+      // Broadcast update with correct new value
       window.dispatchEvent(new CustomEvent('usage:updated', {
         detail: {
           todayUsage: {
             ...todayUsage,
-            propertiesViewed: todayUsage.propertiesViewed + 1,
+            propertiesViewed: newViewCount,
           },
         },
       }));
@@ -239,7 +240,7 @@ export const useUsageTracking = () => {
       console.error('[Usage Tracking] Error updating property view:', error);
       return false;
     }
-  };
+  }, [user?.id, viewedPropertiesToday, todayUsage]);
 
   const updateUsage = async (
     type: 'view' | 'match' | 'quiz' | 'ai-search' | 'match-with-view'
@@ -322,7 +323,7 @@ export const useUsageTracking = () => {
     }
   };
 
-  const canPerformAction = (type: 'view' | 'match' | 'quiz' | 'ai-search'): boolean => {
+  const canPerformAction = useCallback((type: 'view' | 'match' | 'quiz' | 'ai-search'): boolean => {
     console.log(`[Usage Tracking] Checking if can perform ${type}:`, {
       subscribed: subscriptionStatus.subscribed,
       tier: subscriptionStatus.subscription_tier,
@@ -354,7 +355,7 @@ export const useUsageTracking = () => {
       default:
         return false;
     }
-  };
+  }, [subscriptionStatus, todayUsage, weeklyMatches]);
 
   const getRemainingActions = (type: 'view' | 'match' | 'quiz' | 'ai-search'): number => {
     if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
@@ -375,10 +376,10 @@ export const useUsageTracking = () => {
     }
   };
 
-  const refetchUsage = async () => {
+  const refetchUsage = useCallback(async () => {
     console.log('[Usage Tracking] Manually refetching usage data');
     await fetchUsage();
-  };
+  }, [fetchUsage]);
 
   return {
     todayUsage,
