@@ -292,20 +292,52 @@ serve(async (req) => {
 
         console.log(`Processing image ${index + 1}/${imageUrls.length}`);
 
-        // Convert image to base64 if it's a Supabase storage URL to ensure compatibility
+        // Fetch and convert image to base64 in a supported format
         let processedImageUrl = imageUrl;
         
-        // Check if it's a Supabase storage URL - use direct URL instead of base64
-        // OpenAI can fetch images directly and this avoids format conversion issues
-        if (imageUrl.includes('supabase') || imageUrl.includes('gbgrwjdmytaksrztcyzs')) {
-          try {
-            // Make sure the URL is publicly accessible
-            // For Supabase storage, the URL should already be public if the bucket is public
-            processedImageUrl = imageUrl;
-            console.log(`Using direct image URL for image ${index + 1}`);
-          } catch (error) {
-            console.error(`Error processing image ${index + 1} URL:`, error);
+        try {
+          console.log(`Fetching image ${index + 1} from: ${imageUrl.substring(0, 100)}...`);
+          
+          // Fetch the image
+          const imageResponse = await fetch(imageUrl);
+          if (!imageResponse.ok) {
+            throw new Error(`Failed to fetch image: ${imageResponse.status}`);
           }
+          
+          // Get the content type
+          const contentType = imageResponse.headers.get('content-type') || '';
+          console.log(`Image ${index + 1} content-type: ${contentType}`);
+          
+          // Get the image data as array buffer
+          const imageBuffer = await imageResponse.arrayBuffer();
+          const imageBytes = new Uint8Array(imageBuffer);
+          
+          // Convert to base64
+          let base64String = '';
+          const chunk = 8192;
+          for (let i = 0; i < imageBytes.length; i += chunk) {
+            const chunkBytes = imageBytes.subarray(i, Math.min(i + chunk, imageBytes.length));
+            base64String += String.fromCharCode.apply(null, Array.from(chunkBytes));
+          }
+          const base64 = btoa(base64String);
+          
+          // Determine format - default to JPEG for compatibility
+          let mimeType = 'image/jpeg';
+          if (contentType.includes('png')) {
+            mimeType = 'image/png';
+          } else if (contentType.includes('webp')) {
+            mimeType = 'image/webp';
+          } else if (contentType.includes('gif')) {
+            mimeType = 'image/gif';
+          }
+          
+          processedImageUrl = `data:${mimeType};base64,${base64}`;
+          console.log(`Converted image ${index + 1} to base64 (${mimeType}), size: ${base64.length} chars`);
+          
+        } catch (error) {
+          console.error(`Error processing image ${index + 1}:`, error);
+          // Fall back to direct URL if conversion fails
+          console.log(`Falling back to direct URL for image ${index + 1}`);
         }
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
