@@ -346,8 +346,10 @@ serve(async (req) => {
           const errorText = await response.text();
           console.error('Error response:', errorText);
           
-          // Use fallback for this image instead of failing completely
-          // Ensure fallback has enough variety to trigger at least some categories
+          // Log the error but don't use generic fallbacks
+          console.error(`Failed to analyze image ${index + 1} - skipping highlight generation`);
+          
+          // Use fallback for this image but WITHOUT generic highlight text
           analyses.push({
             modern: 6,
             cozy: 6,
@@ -366,10 +368,10 @@ serve(async (req) => {
             industrial: 4,
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? `Analysis failed due to API error: ${errorText}` : 'Analysis failed',
-            image_highlight: `Premium living space feature ${index + 1}`,
+            image_highlight: '', // Empty instead of generic text
             suggested_amenities: ['Air Conditioning', 'Natural Light', 'Modern Fixtures', 'Storage Cabinets', 'Lighting Fixtures'],
             amenities: ['Air Conditioning', 'Natural Light', 'Modern Fixtures', 'Storage Cabinets', 'Lighting Fixtures'],
-            image_index: index + 1, // 1-based index
+            image_index: index + 1,
             raw_analysis: errorText || 'API Error'
           });
           continue;
@@ -440,8 +442,9 @@ serve(async (req) => {
           console.error(`JSON parsing failed for image ${index + 1}:`, parseError);
           console.error('Content that failed to parse:', content.substring(0, 200));
           
-          // Fallback if JSON parsing fails - MUST include image_highlight
-          // Ensure fallback has enough variety to trigger at least some categories
+          // Fallback if JSON parsing fails - WITHOUT generic highlight
+          console.error(`JSON parse failed for image ${index + 1} - skipping highlight`);
+          
           analyses.push({
             modern: 6,
             cozy: 6,
@@ -460,17 +463,17 @@ serve(async (req) => {
             industrial: 4,
             description: 'Unable to analyze image',
             detailed_analysis: generateContent ? content : 'Analysis failed',
-            image_highlight: `Premium feature ${index + 1}`,
+            image_highlight: '', // Empty instead of generic text
             suggested_amenities: ['Modern Fixtures', 'Storage Cabinets', 'Natural Light', 'Ceiling Lights', 'Flooring'],
             suggested_activities: ['Relaxing'],
             amenities: ['Modern Fixtures', 'Storage Cabinets', 'Natural Light', 'Ceiling Lights', 'Flooring'],
-            image_index: index + 1, // 1-based index
+            image_index: index + 1,
             raw_analysis: content
           });
         }
       } catch (imageError) {
         console.error(`Error processing image ${index + 1}:`, imageError);
-        // Ensure fallback has enough variety to trigger at least some categories
+        // Use fallback WITHOUT generic highlight text
         analyses.push({
           modern: 6,
           cozy: 6,
@@ -489,11 +492,11 @@ serve(async (req) => {
           industrial: 4,
           description: 'Unable to analyze image',
           detailed_analysis: generateContent ? 'Processing error' : 'Analysis failed',
-          image_highlight: `Quality living space ${index + 1}`,
+          image_highlight: '', // Empty instead of generic text
           suggested_amenities: ['Flooring', 'Walls', 'Windows', 'Doors', 'Storage'],
           suggested_activities: ['Relaxing'],
           amenities: ['Flooring', 'Walls', 'Windows', 'Doors', 'Storage'],
-          image_index: index + 1, // 1-based index
+          image_index: index + 1,
           raw_analysis: 'Processing Error'
         });
       }
