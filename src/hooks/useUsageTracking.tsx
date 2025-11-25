@@ -211,28 +211,31 @@ export const useUsageTracking = () => {
         return false;
       }
 
-      // Update viewed properties set first
+      // Update viewed properties set
       const today = new Date().toISOString().split('T')[0];
       const newSet = new Set(viewedPropertiesToday).add(propertyId);
       setViewedPropertiesToday(newSet);
       localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
 
-      // Update local state and get the new value
-      const newViewCount = todayUsage.propertiesViewed + 1;
-      setTodayUsage(prev => ({
-        ...prev,
-        propertiesViewed: newViewCount,
-      }));
-
-      // Broadcast update with correct new value
-      window.dispatchEvent(new CustomEvent('usage:updated', {
-        detail: {
-          todayUsage: {
-            ...todayUsage,
-            propertiesViewed: newViewCount,
+      // Update local state with new count
+      setTodayUsage(prev => {
+        const newViewCount = prev.propertiesViewed + 1;
+        
+        // Broadcast update with new value
+        window.dispatchEvent(new CustomEvent('usage:updated', {
+          detail: {
+            todayUsage: {
+              ...prev,
+              propertiesViewed: newViewCount,
+            },
           },
-        },
-      }));
+        }));
+        
+        return {
+          ...prev,
+          propertiesViewed: newViewCount,
+        };
+      });
 
       console.log('[Usage Tracking] Successfully tracked property view:', propertyId);
       return true;
@@ -240,7 +243,7 @@ export const useUsageTracking = () => {
       console.error('[Usage Tracking] Error updating property view:', error);
       return false;
     }
-  }, [user?.id, viewedPropertiesToday, todayUsage]);
+  }, [user?.id, viewedPropertiesToday]);
 
   const updateUsage = async (
     type: 'view' | 'match' | 'quiz' | 'ai-search' | 'match-with-view'
