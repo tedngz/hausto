@@ -193,6 +193,16 @@ export const useUsageTracking = () => {
       return true;
     }
 
+    // Check if user can view more properties BEFORE incrementing
+    const canView = subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium' 
+      ? true 
+      : todayUsage.propertiesViewed < FREE_TIER_LIMITS.dailyViews;
+
+    if (!canView) {
+      console.log('[Usage Tracking] View limit reached, cannot track view:', propertyId);
+      return false;
+    }
+
     try {
       console.log('[Usage Tracking] Incrementing property view via Redis');
 
@@ -243,7 +253,7 @@ export const useUsageTracking = () => {
       console.error('[Usage Tracking] Error updating property view:', error);
       return false;
     }
-  }, [user?.id, viewedPropertiesToday]);
+  }, [user?.id, viewedPropertiesToday, subscriptionStatus, todayUsage.propertiesViewed]);
 
   const updateUsage = async (
     type: 'view' | 'match' | 'quiz' | 'ai-search' | 'match-with-view'

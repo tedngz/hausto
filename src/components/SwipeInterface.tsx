@@ -247,12 +247,21 @@ export const SwipeInterface = ({
       const currentApartment = apartments[currentApartmentIndex];
       if (!currentApartment || !user?.id) return;
       
+      // Check if user can view before tracking
+      if (!canPerformAction('view')) {
+        console.log('View limit reached, showing limit screen');
+        setNoMatchReason('view-limit-reached');
+        return;
+      }
+      
       try {
         const success = await updatePropertyView(currentApartment.id);
         if (success) {
           console.log('Tracked unique view for property:', currentApartment.title);
         } else {
           console.log('Failed to track view for:', currentApartment.title);
+          // If tracking failed due to limit, show limit screen
+          setNoMatchReason('view-limit-reached');
         }
       } catch (error) {
         console.error('Error tracking property view:', error);
@@ -263,7 +272,7 @@ export const SwipeInterface = ({
     if (apartments.length > 0 && currentApartmentIndex >= 0) {
       trackView();
     }
-  }, [currentApartmentIndex, apartments, user?.id, updatePropertyView]);
+  }, [currentApartmentIndex, apartments, user?.id, updatePropertyView, canPerformAction]);
   const handleLike = async () => {
     if (apartments.length === 0) return;
 
