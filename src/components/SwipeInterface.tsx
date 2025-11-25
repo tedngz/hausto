@@ -247,18 +247,12 @@ export const SwipeInterface = ({
       const currentApartment = apartments[currentApartmentIndex];
       if (!currentApartment || !user?.id) return;
       
-      // Check if user can view more properties
-      if (!canPerformAction('view')) {
-        console.log('View limit reached, not tracking view for:', currentApartment.title);
-        // Set no match reason to show limit reached message
-        setNoMatchReason('view-limit-reached');
-        return;
-      }
-      
       try {
         const success = await updatePropertyView(currentApartment.id);
         if (success) {
           console.log('Tracked unique view for property:', currentApartment.title);
+        } else {
+          console.log('Failed to track view for:', currentApartment.title);
         }
       } catch (error) {
         console.error('Error tracking property view:', error);
@@ -269,20 +263,9 @@ export const SwipeInterface = ({
     if (apartments.length > 0 && currentApartmentIndex >= 0) {
       trackView();
     }
-  }, [currentApartmentIndex, apartments, user?.id, updatePropertyView, canPerformAction]);
+  }, [currentApartmentIndex, apartments, user?.id, updatePropertyView]);
   const handleLike = async () => {
     if (apartments.length === 0) return;
-
-    // Check if user has reached daily view limit before moving to next property
-    if (currentApartmentIndex < apartments.length - 1 && !canPerformAction('view')) {
-      toast.error('You\'ve reached your daily view limit. Upgrade to premium for unlimited views!', {
-        action: {
-          label: 'Upgrade',
-          onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
-        }
-      });
-      return;
-    }
 
     // Check if user can create more matches
     if (!canPerformAction('match')) {
@@ -321,17 +304,6 @@ export const SwipeInterface = ({
   const handleDislike = async () => {
     if (apartments.length === 0) return;
     
-    // Check if user has reached daily view limit before moving to next property
-    if (currentApartmentIndex < apartments.length - 1 && !canPerformAction('view')) {
-      toast.error('You\'ve reached your daily view limit. Upgrade to premium for unlimited views!', {
-        action: {
-          label: 'Upgrade',
-          onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
-        }
-      });
-      return;
-    }
-    
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Disliking apartment:', currentApartment?.title);
     try {
@@ -356,6 +328,12 @@ export const SwipeInterface = ({
     moveToNext();
   };
   const moveToNext = () => {
+    // Check if user can view more properties before moving to next
+    if (!canPerformAction('view')) {
+      setNoMatchReason('view-limit-reached');
+      return;
+    }
+    
     if (currentApartmentIndex < apartments.length - 1) {
       setCurrentApartmentIndex(prev => prev + 1);
     } else {
