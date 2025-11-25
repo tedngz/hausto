@@ -35,7 +35,12 @@ export const SwipeInterface = ({
     user
   } = useAuth();
   const [apartments, setApartments] = useState<Apartment[]>([]);
-  const [currentApartmentIndex, setCurrentApartmentIndex] = useState(0);
+  const [currentApartmentIndex, setCurrentApartmentIndex] = useState(() => {
+    // Load saved position from localStorage
+    if (!user?.id) return 0;
+    const saved = localStorage.getItem(`swipe_position_${user.id}`);
+    return saved ? parseInt(saved, 10) : 0;
+  });
   const [likedApartmentIds, setLikedApartmentIds] = useState<string[]>([]);
   const [declinedPropertyIds, setDeclinedPropertyIds] = useState<string[]>([]);
   const [imageIndices, setImageIndices] = useState<Record<string, number>>({});
@@ -224,7 +229,8 @@ export const SwipeInterface = ({
       // Apply strategic sorting for dynamic and exciting discovery
       const sortedApartments = await sortPropertiesForDiscovery(filteredApartments, userPreferences);
       setApartments(sortedApartments);
-      setCurrentApartmentIndex(0);
+      // Only reset index to 0 if apartments list changed significantly
+      setCurrentApartmentIndex(prev => prev >= sortedApartments.length ? 0 : prev);
       setNoMatchReason('');
     console.log('Using dynamically sorted properties:', sortedApartments.length);
         return;
@@ -234,7 +240,8 @@ export const SwipeInterface = ({
       console.log('No properties pass filters, showing all available properties with dynamic sorting');
       const sortedAvailable = await sortPropertiesForDiscovery(availableProperties, userPreferences);
       setApartments(sortedAvailable);
-      setCurrentApartmentIndex(0);
+      // Only reset index to 0 if apartments list changed significantly
+      setCurrentApartmentIndex(prev => prev >= sortedAvailable.length ? 0 : prev);
       setNoMatchReason('');
     };
 
@@ -344,7 +351,12 @@ export const SwipeInterface = ({
     }
     
     if (currentApartmentIndex < apartments.length - 1) {
-      setCurrentApartmentIndex(prev => prev + 1);
+      const newIndex = currentApartmentIndex + 1;
+      setCurrentApartmentIndex(newIndex);
+      // Save position to localStorage
+      if (user?.id) {
+        localStorage.setItem(`swipe_position_${user.id}`, newIndex.toString());
+      }
     } else {
       // No more apartments
       setNoMatchReason('no-more-matches');
@@ -352,6 +364,10 @@ export const SwipeInterface = ({
   };
   const handleRetry = () => {
     setCurrentApartmentIndex(0);
+    // Reset saved position
+    if (user?.id) {
+      localStorage.removeItem(`swipe_position_${user.id}`);
+    }
     setLikedApartmentIds([]);
     setNoMatchReason('');
   };
