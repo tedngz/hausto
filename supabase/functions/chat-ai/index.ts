@@ -525,8 +525,9 @@ Current user message: ${message}`;
         throw new Error('Invalid response from OpenAI');
       }
       
-      // Parse the AI's response
-      aiResponse = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
+      // Parse the AI's response and normalize it (strip markdown/code fences)
+      const rawContent = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
+      aiResponse = normalizeAiResponse(rawContent);
       
       // Cache the response in Redis (1 hour TTL) for authenticated users without images
       if (!hasImages && !isAnonymous && user?.id) {
@@ -655,7 +656,7 @@ Current user message: ${message}`;
     // Anonymous search tracking is now handled by Redis rate limiting above
     // No need for separate database tracking
 
-    return new Response(JSON.stringify({ response: aiResponse }), {
+    return new Response(JSON.stringify({ response: normalizeAiResponse(aiResponse) }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
@@ -672,3 +673,24 @@ Current user message: ${message}`;
     );
   }
 });
+
+// Helper to clean AI responses that might be wrapped in Markdown code fences
+function normalizeAiResponse(content: string): string {
+  if (!content) return '';
+  let cleaned = content.trim();
+
+  // Remove leading triple backtick block (``` or ```json)
+  if (cleaned.startsWith('```')) {
+    const firstNewline = cleaned.indexOf('\n');
+    if (firstNewline !== -1) {
+      cleaned = cleaned.slice(firstNewline + 1);
+    }
+  }
+
+  // Remove trailing triple backticks if present
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3);
+  }
+
+  return cleaned.trim();
+}
