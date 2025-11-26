@@ -95,7 +95,6 @@ export const HomeAI = ({
       // Check if the most recent user message matches our temporary message
       const userMessages = messages.filter(message => message.role === 'user');
       const latestUserMessage = userMessages[userMessages.length - 1];
-      
       if (latestUserMessage && latestUserMessage.content === tempUserMessageForLoggedIn) {
         setTempUserMessageForLoggedIn(null);
         setTempUserImages([]);
@@ -357,7 +356,6 @@ export const HomeAI = ({
         const response = await supabase.functions.invoke('chat-ai', {
           body: messageData
         });
-        
         if (response.error) {
           throw response.error;
         }
@@ -366,11 +364,13 @@ export const HomeAI = ({
         if (response.data?.requiresAuth) {
           toast({
             title: "Sign in to continue",
-            description: response.data.response || "Please sign in to continue chatting.",
+            description: response.data.response || "Please sign in to continue chatting."
           });
           setTimeout(() => {
             navigate('/auth', {
-              state: { returnTo: '/' }
+              state: {
+                returnTo: '/'
+              }
             });
           }, 2000);
           return;
@@ -428,12 +428,9 @@ export const HomeAI = ({
   const handlePropertyClick = async (property: PropertyMatch) => {
     try {
       // Try to fetch full property details from database by ID
-      const { data: fullProperty } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('id', property.id)
-        .single();
-
+      const {
+        data: fullProperty
+      } = await supabase.from('properties').select('*').eq('id', property.id).single();
       if (fullProperty) {
         const enriched = {
           ...property,
@@ -444,7 +441,7 @@ export const HomeAI = ({
           price: Number(fullProperty.price ?? property.price),
           vibe: fullProperty.vibe || property.vibe,
           vibe_analysis: fullProperty.vibe_analysis ?? property.vibe_analysis,
-          realtor_id: fullProperty.realtor_id || property.realtor_id,
+          realtor_id: fullProperty.realtor_id || property.realtor_id
         } as PropertyMatch;
         setSelectedProperty(enriched);
       } else {
@@ -506,13 +503,9 @@ export const HomeAI = ({
             return <div key={index} className="flex justify-end animate-fade-in">
                   <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
                     <p className="text-sm text-left">{message.content}</p>
-                    {message.metadata?.images && message.metadata.images.length > 0 && (
-                      <div className="flex gap-2 flex-wrap">
-                        {message.metadata.images.map((image, imgIndex) => (
-                          <img key={imgIndex} src={image} alt={`Reference ${imgIndex + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
-                        ))}
-                      </div>
-                    )}
+                    {message.metadata?.images && message.metadata.images.length > 0 && <div className="flex gap-2 flex-wrap">
+                        {message.metadata.images.map((image, imgIndex) => <img key={imgIndex} src={image} alt={`Reference ${imgIndex + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />)}
+                      </div>}
                   </div>
                 </div>;
           } else {
@@ -583,9 +576,9 @@ export const HomeAI = ({
                                          {/* Desktop buttons */}
                                          <div className="hidden sm:flex flex-col items-end gap-1">
                                             <Button onClick={e => {
-                                   e.stopPropagation();
-                                   handleLikeProperty(property.id, property.realtor_id);
-                                 }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
+                                  e.stopPropagation();
+                                  handleLikeProperty(property.id, property.realtor_id);
+                                }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
                                              <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                            </Button>
                                          </div>
@@ -618,7 +611,7 @@ export const HomeAI = ({
               // Regular text message - use cleaned content
               return <div key={index} className="flex justify-start animate-fade-in">
                     <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
-                      <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
+                      <p className="text-sm whitespace-pre-wrap text-justify">{displayContent}</p>
                      </div>
                    </div>;
             }
@@ -629,13 +622,9 @@ export const HomeAI = ({
           {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
               <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
                 <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
-                {tempUserImages.length > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {tempUserImages.map((image, index) => (
-                      <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
-                    ))}
-                  </div>
-                )}
+                {tempUserImages.length > 0 && <div className="flex gap-2 flex-wrap">
+                    {tempUserImages.map((image, index) => <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />)}
+                  </div>}
               </div>
             </div>}
 
@@ -664,13 +653,9 @@ export const HomeAI = ({
           <div className="flex justify-end animate-fade-in">
             <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
               <p className="text-sm text-left">{tempUserMessage}</p>
-              {tempUserImages.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {tempUserImages.map((image, index) => (
-                    <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />
-                  ))}
-                </div>
-              )}
+              {tempUserImages.length > 0 && <div className="flex gap-2 flex-wrap">
+                  {tempUserImages.map((image, index) => <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />)}
+                </div>}
             </div>
           </div>
           
@@ -740,9 +725,9 @@ export const HomeAI = ({
                                {/* Desktop buttons */}
                                <div className="hidden sm:flex flex-col items-end gap-1">
                                  <Button onClick={e => {
-                             e.stopPropagation();
-                             handleLikeProperty(property.id, property.realtor_id);
-                           }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
+                            e.stopPropagation();
+                            handleLikeProperty(property.id, property.realtor_id);
+                          }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
                                    <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
                                  </Button>
                                </div>
@@ -798,8 +783,8 @@ export const HomeAI = ({
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" className="h-8 w-8 p-0">
               <Upload className="h-4 w-4" />
             </Button>
-            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || (!query.trim() && uploadedImages.length === 0)} size="sm" className="h-8 w-8 p-0">
-              {(isSendingMessage || isSearching) ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlaneTakeoff className="h-4 w-4" />}
+            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || !query.trim() && uploadedImages.length === 0} size="sm" className="h-8 w-8 p-0">
+              {isSendingMessage || isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlaneTakeoff className="h-4 w-4" />}
             </Button>
           </div>
         </div>
