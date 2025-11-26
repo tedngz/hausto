@@ -310,13 +310,25 @@ ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
       "highlights": ["Modern", "Cozy", "Pet Friendly"],
       "images": ["COPY-EXACT-IMAGE-URLS-FROM-PROPERTY-DATA"],
       "matchScore": 85,
-      "matchReason": "Perfect match because...",
+      "matchReason": "This cozy apartment in [location] features [key features] that match your search",
       "realtor_id": "copy-exact-realtor-id-from-above"
     }
   ],
   "summary": "Found X properties matching your preferences...",
   "totalMatches": 3
 }
+
+⚠️ MATCH REASON WRITING STYLE:
+- Write naturally and conversationally, not formulaic
+- Start with describing what the property offers, not "Perfect match because..."
+- Examples of GOOD match reasons:
+  • "This cozy apartment in Binh Thanh has a comfortable sofa in the living room"
+  • "Located in District 1 with modern furnishings and city views"
+  • "Features a spacious balcony and natural lighting throughout"
+- Examples of BAD match reasons to AVOID:
+  • "Perfect match because it includes a sofa and is located in Binh Thanh"
+  • "This property matches because it has..."
+  • "Great match due to..."
 
 ⚠️ CRITICAL IMAGE RULES:
 - For "images" field: COPY the EXACT image URL array from "**ACTUAL IMAGE URLS**" in property data
