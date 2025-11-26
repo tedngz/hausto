@@ -288,6 +288,29 @@ ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
 `;
 }).join('\n')}
 
+🚨 CRITICAL LOCATION & PRICE MATCHING RULES (HIGHEST PRIORITY):
+1. LOCATION MATCHING:
+   - ALWAYS prioritize exact location matches FIRST
+   - Same district = perfect match (highest priority)
+   - Adjacent districts in SAME CITY = acceptable alternative (e.g., D1 → D2, D4, D3)
+   - Different city = NEVER suggest (e.g., NEVER suggest Hanoi if user searches in Ho Chi Minh City districts like D1, D2, Binh Thanh)
+   - Vietnam geography context:
+     * Ho Chi Minh City districts: D1, D2, D3, D4, D5, D7, D10, Binh Thanh, Phu Nhuan, Go Vap, Tan Binh, etc.
+     * Hanoi districts: Ba Dinh, Hoan Kiem, Dong Da, Hai Ba Trung, etc.
+     * NEVER cross city boundaries in suggestions
+
+2. PRICE MATCHING:
+   - Within user's stated budget = highest priority
+   - Slightly outside budget (±10%) = acceptable ONLY if location is perfect and user explicitly asks for flexibility
+   - Properties significantly outside budget = only suggest if NO other matches and explicitly explain the price difference
+   - Always show prices clearly in match reasons
+
+3. IF NO EXACT MATCHES:
+   - First try: nearby districts in SAME CITY only
+   - Clearly state "I found these in nearby [District Name], which is close to your preferred [District Name]"
+   - If still no matches: suggest relaxing price range or being flexible with location (within same city)
+   - NEVER suggest a different city as an alternative
+
 ⚠️ CRITICAL AMENITY RULES:
 - ANALYZE THE PROPERTY IMAGES provided to verify and identify amenities visually
 - Cross-reference visual amenities with the listed amenities in "**AMENITIES**" section
@@ -320,15 +343,20 @@ ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
 
 ⚠️ MATCH REASON WRITING STYLE:
 - Write naturally and conversationally, not formulaic
+- ALWAYS mention location and price if relevant to user's search
 - Start with describing what the property offers, not "Perfect match because..."
 - Examples of GOOD match reasons:
-  • "This cozy apartment in Binh Thanh has a comfortable sofa in the living room"
-  • "Located in District 1 with modern furnishings and city views"
-  • "Features a spacious balcony and natural lighting throughout"
+  • "This cozy 2-bedroom apartment in District 1 is priced at 12M VND/month with a comfortable sofa in the living room"
+  • "Located in your preferred District 2 at 15M VND/month with modern furnishings and city views"
+  • "In nearby District 4 (close to D1) at 11M VND/month - features a spacious balcony and natural lighting throughout"
+  • "Found in Binh Thanh (adjacent to your search area) at 13M VND/month with fully furnished kitchen"
 - Examples of BAD match reasons to AVOID:
   • "Perfect match because it includes a sofa and is located in Binh Thanh"
   • "This property matches because it has..."
   • "Great match due to..."
+- When showing properties outside exact criteria:
+  • Clearly state if in nearby district: "in nearby District X (close to your preferred District Y)"
+  • Clearly state if price is outside budget: "at 18M VND/month (slightly above your 15M budget)"
 
 ⚠️ CRITICAL IMAGE RULES:
 - For "images" field: COPY the EXACT image URL array from "**ACTUAL IMAGE URLS**" in property data
