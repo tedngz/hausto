@@ -469,20 +469,9 @@ Current user message: ${message}`;
     
     // Only call OpenAI if we don't have a cached response
     if (!cacheHit) {
-      // Collect property images for visual amenity analysis (max 8 images to avoid token limits)
-      const propertyImagesForAnalysis = properties
-        .slice(0, 4) // First 4 properties
-        .flatMap(p => {
-          const images = Array.isArray(p.images) ? p.images : [];
-          return images.slice(0, 2); // Max 2 images per property
-        })
-        .filter(Boolean);
-      
-      // Combine uploaded reference images with property images
-      const allImagesToAnalyze = [
-        ...(Array.isArray(propertyImages) ? propertyImages : []),
-        ...propertyImagesForAnalysis
-      ];
+      // Only use uploaded reference images to avoid OpenAI timeout issues
+      // when downloading property images from Supabase storage
+      const allImagesToAnalyze = Array.isArray(propertyImages) ? propertyImages : [];
       
       const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
