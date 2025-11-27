@@ -209,7 +209,9 @@ export const useHomeAI = () => {
       
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Track AI search usage
+      updateUsage('ai-search');
       queryClient.invalidateQueries({ queryKey: ['chat-messages', currentConversationId] });
     },
     onError: (error) => {

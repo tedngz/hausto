@@ -204,7 +204,7 @@ export const useUsageTracking = () => {
     }
 
     try {
-      console.log('[Usage Tracking] Incrementing property view via Redis');
+      console.log('[Usage Tracking] Tracking unique property view via Redis');
 
       const { error } = await supabase.functions.invoke(
         'usage-tracking-redis',
@@ -212,6 +212,7 @@ export const useUsageTracking = () => {
           body: {
             action: 'increment',
             type: 'view',
+            propertyId, // Pass propertyId to track unique views
           },
         }
       );
@@ -247,7 +248,7 @@ export const useUsageTracking = () => {
         };
       });
 
-      console.log('[Usage Tracking] Successfully tracked property view:', propertyId);
+      console.log('[Usage Tracking] Successfully tracked unique property view:', propertyId);
       return true;
     } catch (error) {
       console.error('[Usage Tracking] Error updating property view:', error);
