@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, type } = await req.json();
+    const { action, type, propertyId } = await req.json();
     const today = new Date().toISOString().split('T')[0];
     
     // Calculate week start (7 days ago)
@@ -64,13 +64,13 @@ Deno.serve(async (req) => {
 
     if (action === 'get') {
       // Get current usage from Redis
-      const viewsKey = `usage:${user.id}:${today}:views`;
+      const viewsKey = `usage:${user.id}:${today}:views`; // This is now a SET of unique property IDs
       const matchesKey = `usage:${user.id}:${today}:matches`;
       const aiKey = `usage:${user.id}:${today}:ai`;
       const quizKey = `usage:${user.id}:${today}:quiz`;
 
       const [views, matches, ai, quiz] = await Promise.all([
-        redis.get(viewsKey),
+        redis.scard(viewsKey), // Count unique properties in SET
         redis.get(matchesKey),
         redis.get(aiKey),
         redis.get(quizKey),
@@ -105,39 +105,57 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'increment') {
-      // Increment usage counter in Redis
-      let key: string;
+      let newCount: number;
       let dbField: string;
 
       switch (type) {
-        case 'view':
-          key = `usage:${user.id}:${today}:views`;
+        case 'view': {
+          // For views, track unique property IDs in a SET
+          if (!propertyId) {
+            return new Response(JSON.stringify({ error: 'propertyId required for view tracking' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          
+          const viewsKey = `usage:${user.id}:${today}:views`;
+          await redis.sadd(viewsKey, propertyId); // Add property ID to SET
+          await redis.expire(viewsKey, 60 * 60 * 48); // 48 hours
+          newCount = await redis.scard(viewsKey); // Get count of unique properties
           dbField = 'properties_viewed';
+          console.log(`[Usage Tracking] Added property ${propertyId} to views, unique count: ${newCount}`);
           break;
-        case 'match':
-          key = `usage:${user.id}:${today}:matches`;
+        }
+        case 'match': {
+          const matchesKey = `usage:${user.id}:${today}:matches`;
+          newCount = await redis.incr(matchesKey);
+          await redis.expire(matchesKey, 60 * 60 * 48);
           dbField = 'properties_matched';
+          console.log(`[Usage Tracking] Incremented matches: ${newCount}`);
           break;
-        case 'ai-search':
-          key = `usage:${user.id}:${today}:ai`;
+        }
+        case 'ai-search': {
+          const aiKey = `usage:${user.id}:${today}:ai`;
+          newCount = await redis.incr(aiKey);
+          await redis.expire(aiKey, 60 * 60 * 48);
           dbField = 'ai_requests';
+          console.log(`[Usage Tracking] Incremented AI searches: ${newCount}`);
           break;
-        case 'quiz':
-          key = `usage:${user.id}:${today}:quiz`;
+        }
+        case 'quiz': {
+          const quizKey = `usage:${user.id}:${today}:quiz`;
+          newCount = await redis.incr(quizKey);
+          await redis.expire(quizKey, 60 * 60 * 48);
           dbField = 'quiz_retakes';
+          console.log(`[Usage Tracking] Incremented quiz retakes: ${newCount}`);
           break;
+        }
         default:
           return new Response(JSON.stringify({ error: 'Invalid type' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
       }
-
-      // Increment in Redis with 48-hour expiry
-      const newCount = await redis.incr(key);
-      await redis.expire(key, 60 * 60 * 48); // 48 hours
-
-      console.log(`[Usage Tracking] Incremented ${type}: ${newCount}`);
 
       // Sync to database for historical records (async, don't wait)
       supabaseClient
