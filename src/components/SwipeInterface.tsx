@@ -299,6 +299,21 @@ export const SwipeInterface = ({
       trackView();
     }
   }, [currentApartmentIndex, apartments, user?.id, updatePropertyView, canPerformAction]);
+
+  // Persist swipe session so users return to the same listing across visits
+  useEffect(() => {
+    if (!user?.id || apartments.length === 0 || !sessionInitialized) return;
+
+    try {
+      const session = {
+        propertyIds: apartments.map(a => a.id),
+        currentIndex: currentApartmentIndex
+      };
+      localStorage.setItem(`swipe_session_${user.id}`, JSON.stringify(session));
+    } catch (error) {
+      console.error('Error persisting swipe session:', error);
+    }
+  }, [apartments, currentApartmentIndex, user?.id, sessionInitialized]);
   const handleLike = async () => {
     if (apartments.length === 0) return;
 
