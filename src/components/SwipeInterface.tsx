@@ -35,12 +35,8 @@ export const SwipeInterface = ({
     user
   } = useAuth();
   const [apartments, setApartments] = useState<Apartment[]>([]);
-  const [currentApartmentIndex, setCurrentApartmentIndex] = useState(() => {
-    // Load saved position from localStorage
-    if (!user?.id) return 0;
-    const saved = localStorage.getItem(`swipe_position_${user.id}`);
-    return saved ? parseInt(saved, 10) : 0;
-  });
+  const [currentApartmentIndex, setCurrentApartmentIndex] = useState(0);
+  const [sessionInitialized, setSessionInitialized] = useState(false);
   const [likedApartmentIds, setLikedApartmentIds] = useState<string[]>([]);
   const [declinedPropertyIds, setDeclinedPropertyIds] = useState<string[]>([]);
   const [imageIndices, setImageIndices] = useState<Record<string, number>>({});
@@ -119,7 +115,8 @@ export const SwipeInterface = ({
       console.log('SwipeInterface useEffect triggered:', {
         userPreferences,
         realPropertiesCount: realProperties?.length || 0,
-        isLoading
+        isLoading,
+        sessionInitialized
       });
       if (isLoading) {
         console.log('Still loading properties...');
@@ -148,105 +145,127 @@ export const SwipeInterface = ({
       // Transform real properties with realtor info
       const transformedRealProperties = (realProperties || []).map(p => transformPropertyToApartment(p, realtorProfiles));
 
-    // Filter out already matched and declined properties
-    const matchedPropertyIds = new Set(renterMatches?.map(match => match.property_id) || []);
-    const declinedPropertyIdSet = new Set(declinedPropertyIds);
-    const availableProperties = transformedRealProperties.filter(property => !matchedPropertyIds.has(property.id) && !declinedPropertyIdSet.has(property.id));
-    console.log('Real properties available:', transformedRealProperties.length);
-    console.log('Already matched properties:', matchedPropertyIds.size);
-    console.log('Declined properties:', declinedPropertyIds.length);
-    console.log('Available properties:', availableProperties.length);
+      // Filter out already matched and declined properties
+      const matchedPropertyIds = new Set(renterMatches?.map(match => match.property_id) || []);
+      const declinedPropertyIdSet = new Set(declinedPropertyIds);
+      const availableProperties = transformedRealProperties.filter(property => 
+        !matchedPropertyIds.has(property.id) && !declinedPropertyIdSet.has(property.id)
+      );
 
-    // If no real properties available at all, show error
-    if (transformedRealProperties.length === 0) {
-      console.log('No real properties available');
-      setNoMatchReason('no-properties');
-      setApartments([]);
-      return;
-    }
+      console.log('Real properties available:', transformedRealProperties.length);
+      console.log('Already matched properties:', matchedPropertyIds.size);
+      console.log('Declined properties:', declinedPropertyIds.length);
+      console.log('Available properties:', availableProperties.length);
 
-    // If all properties are already matched or declined, show appropriate message  
-    if (availableProperties.length === 0 && transformedRealProperties.length > 0) {
-      console.log('All properties already matched or declined');
-      setNoMatchReason('no-more-available');
-      setApartments([]);
-      return;
-    }
-
-    // If no user preferences, show setup required (but don't clear existing apartments)
-    if (!userPreferences) {
-      console.log('No user preferences available');
-      setNoMatchReason('invalid-preferences');
-      // Don't clear apartments here, let user still see properties with basic sorting
-      if (apartments.length === 0) {
-        // Sort by recency even without preferences
-        const sortedAvailable = await sortPropertiesForDiscovery(availableProperties, null);
-        setApartments(sortedAvailable);
-        setCurrentApartmentIndex(0);
-      }
-      return;
-    }
-
-    // Try filtering by user preferences with very lenient criteria
-    let filteredApartments = availableProperties;
-    try {
-      // Only filter if we have valid price range
-      if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
-        filteredApartments = availableProperties.filter(apartment => {
-          console.log('Filtering apartment:', apartment.title, apartment.location, apartment.price);
-
-          // Ultra-lenient location matching - if no location specified, show all
-          const locationMatch = !userPreferences.location?.length || userPreferences.location.some(loc => {
-            const locMatch = apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0]) || apartment.location.toLowerCase().includes('ho chi minh') || apartment.location.toLowerCase().includes('district') || apartment.location.toLowerCase().includes('saigon');
-            console.log(`Location match for ${apartment.location} vs ${loc}: ${locMatch}`);
-            return locMatch;
-          });
-
-          // Very permissive vibe scoring - only filter out extremely poor matches
-          const vibeScore = calculateVibeScore(apartment, userPreferences);
-          console.log(`Vibe score for ${apartment.title}: ${vibeScore.overall}`);
-          const hasGoodVibeMatch = vibeScore.overall > 1; // Even lower threshold
-
-          // Very flexible price range - up to 5x the max budget
-          const [, maxPrice] = userPreferences.priceRange;
-          const priceInRange = apartment.price <= maxPrice * 5;
-          console.log(`Price check for ${apartment.title}: ${apartment.price} <= ${maxPrice * 5} = ${priceInRange}`);
-          const passes = locationMatch && hasGoodVibeMatch && priceInRange;
-          console.log(`Property ${apartment.title} passes filters: location=${locationMatch}, vibe=${hasGoodVibeMatch}, price=${priceInRange}, overall=${passes}`);
-          return passes;
-        });
-      }
-    } catch (error) {
-      console.error('Error filtering apartments:', error);
-      // If filtering fails, show all available properties
-      filteredApartments = availableProperties;
-    }
-    console.log('Filtered apartments:', filteredApartments.length);
-
-    // If we have filtered apartments, use them
-    if (filteredApartments.length > 0) {
-      console.log('Applying dynamic discovery algorithm to', filteredApartments.length, 'properties');
-      // Apply strategic sorting for dynamic and exciting discovery
-      const sortedApartments = await sortPropertiesForDiscovery(filteredApartments, userPreferences);
-      setApartments(sortedApartments);
-      // Only reset index to 0 if apartments list changed significantly
-      setCurrentApartmentIndex(prev => prev >= sortedApartments.length ? 0 : prev);
-      setNoMatchReason('');
-    console.log('Using dynamically sorted properties:', sortedApartments.length);
+      // If no real properties available at all, show error
+      if (transformedRealProperties.length === 0) {
+        console.log('No real properties available');
+        setNoMatchReason('no-properties');
+        setApartments([]);
         return;
       }
 
-      // If no properties pass filters, show all available properties anyway
-      console.log('No properties pass filters, showing all available properties with dynamic sorting');
-      const sortedAvailable = await sortPropertiesForDiscovery(availableProperties, userPreferences);
-      setApartments(sortedAvailable);
-      // Only reset index to 0 if apartments list changed significantly
-      setCurrentApartmentIndex(prev => prev >= sortedAvailable.length ? 0 : prev);
-      setNoMatchReason('');
+      // If all properties are already matched or declined, show appropriate message  
+      if (availableProperties.length === 0 && transformedRealProperties.length > 0) {
+        console.log('All properties already matched or declined');
+        setNoMatchReason('no-more-available');
+        setApartments([]);
+        return;
+      }
+
+      // If no user preferences, show setup required
+      if (!userPreferences) {
+        console.log('No user preferences available');
+        setNoMatchReason('invalid-preferences');
+        if (apartments.length === 0) {
+          const sortedAvailable = await sortPropertiesForDiscovery(availableProperties, null);
+          setApartments(sortedAvailable);
+          setCurrentApartmentIndex(0);
+        }
+        return;
+      }
+
+      // Try filtering by user preferences with very lenient criteria
+      let filteredApartments = availableProperties;
+      try {
+        if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
+          filteredApartments = availableProperties.filter(apartment => {
+            const locationMatch = !userPreferences.location?.length || 
+              userPreferences.location.some(loc => 
+                apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
+              );
+
+            const vibeScore = calculateVibeScore(apartment, userPreferences);
+            const hasGoodVibeMatch = vibeScore.overall > 1;
+
+            const [, maxPrice] = userPreferences.priceRange;
+            const priceInRange = apartment.price <= maxPrice * 5;
+
+            return locationMatch && hasGoodVibeMatch && priceInRange;
+          });
+        }
+      } catch (error) {
+        console.error('Error filtering apartments:', error);
+        filteredApartments = availableProperties;
+      }
+
+      console.log('Filtered apartments:', filteredApartments.length);
+
+      const propertiesToSort = filteredApartments.length > 0 ? filteredApartments : availableProperties;
+      
+      // Check if session exists in localStorage
+      if (!sessionInitialized && user?.id) {
+        const savedSession = localStorage.getItem(`swipe_session_${user.id}`);
+        if (savedSession) {
+          try {
+            const { propertyIds, currentIndex } = JSON.parse(savedSession);
+            
+            // Reconstruct apartments array from saved property IDs
+            const savedApartments = propertyIds
+              .map((id: string) => propertiesToSort.find(p => p.id === id))
+              .filter(Boolean);
+            
+            // Only use saved session if we have valid properties
+            if (savedApartments.length > 0) {
+              console.log('Restoring saved swipe session:', { 
+                totalProperties: savedApartments.length, 
+                currentIndex 
+              });
+              setApartments(savedApartments);
+              setCurrentApartmentIndex(Math.min(currentIndex, savedApartments.length - 1));
+              setSessionInitialized(true);
+              setNoMatchReason('');
+              return;
+            }
+          } catch (error) {
+            console.error('Error restoring session:', error);
+          }
+        }
+      }
+
+      // If no saved session or session restoration failed, create new sorted list
+      if (!sessionInitialized) {
+        console.log('Creating new swipe session with', propertiesToSort.length, 'properties');
+        const sortedApartments = await sortPropertiesForDiscovery(propertiesToSort, userPreferences);
+        
+        // Save new session to localStorage
+        if (user?.id && sortedApartments.length > 0) {
+          const session = {
+            propertyIds: sortedApartments.map(p => p.id),
+            currentIndex: 0
+          };
+          localStorage.setItem(`swipe_session_${user.id}`, JSON.stringify(session));
+        }
+        
+        setApartments(sortedApartments);
+        setCurrentApartmentIndex(0);
+        setSessionInitialized(true);
+        setNoMatchReason('');
+      }
     };
 
     loadPropertiesWithRealtors();
-  }, [userPreferences, realProperties, renterMatches, likedApartmentIds, declinedPropertyIds, isLoading]);
+  }, [userPreferences, realProperties, renterMatches, declinedPropertyIds, isLoading, user?.id, sessionInitialized]);
 
   // Track property views when apartment changes (unique views only)
   useEffect(() => {
@@ -353,9 +372,19 @@ export const SwipeInterface = ({
     if (currentApartmentIndex < apartments.length - 1) {
       const newIndex = currentApartmentIndex + 1;
       setCurrentApartmentIndex(newIndex);
-      // Save position to localStorage
+      
+      // Update session in localStorage
       if (user?.id) {
-        localStorage.setItem(`swipe_position_${user.id}`, newIndex.toString());
+        const savedSession = localStorage.getItem(`swipe_session_${user.id}`);
+        if (savedSession) {
+          try {
+            const session = JSON.parse(savedSession);
+            session.currentIndex = newIndex;
+            localStorage.setItem(`swipe_session_${user.id}`, JSON.stringify(session));
+          } catch (error) {
+            console.error('Error updating session:', error);
+          }
+        }
       }
     } else {
       // No more apartments
@@ -364,10 +393,13 @@ export const SwipeInterface = ({
   };
   const handleRetry = () => {
     setCurrentApartmentIndex(0);
-    // Reset saved position
+    setSessionInitialized(false);
+    
+    // Clear saved session
     if (user?.id) {
-      localStorage.removeItem(`swipe_position_${user.id}`);
+      localStorage.removeItem(`swipe_session_${user.id}`);
     }
+    
     setLikedApartmentIds([]);
     setNoMatchReason('');
   };
