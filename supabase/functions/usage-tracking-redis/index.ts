@@ -55,6 +55,20 @@ Deno.serve(async (req) => {
     const { action, type, propertyId } = await req.json();
     const today = new Date().toISOString().split('T')[0];
     
+    // Determine subscription status (premium users have no limits)
+    const { data: subscription, error: subError } = await supabaseClient
+      .from('subscribers')
+      .select('subscribed, subscription_tier')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (subError) {
+      console.error('[Usage Tracking] Error fetching subscription status:', subError);
+    }
+
+    const isPremium = !!subscription?.subscribed && subscription.subscription_tier === 'premium';
+
+    
     // Calculate week start (7 days ago)
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 6);
@@ -119,6 +133,22 @@ Deno.serve(async (req) => {
           }
           
           const viewsKey = `usage:${user.id}:${today}:views`;
+
+          // Enforce daily view limit for non-premium users at the server level
+          if (!isPremium) {
+            const currentCount = await redis.scard(viewsKey);
+            if (currentCount >= 10) {
+              console.log(`[Usage Tracking] Daily view limit reached for user ${user.id}: ${currentCount}`);
+              return new Response(
+                JSON.stringify({ error: 'Daily view limit reached', limit: 10, count: currentCount }),
+                {
+                  status: 429,
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                }
+              );
+            }
+          }
+          
           await redis.sadd(viewsKey, propertyId); // Add property ID to SET
           await redis.expire(viewsKey, 60 * 60 * 48); // 48 hours
           newCount = await redis.scard(viewsKey); // Get count of unique properties
