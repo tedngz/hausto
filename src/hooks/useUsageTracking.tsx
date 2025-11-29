@@ -206,7 +206,7 @@ export const useUsageTracking = () => {
     try {
       console.log('[Usage Tracking] Tracking unique property view via Redis');
 
-      const { error } = await supabase.functions.invoke(
+      const { data, error } = await supabase.functions.invoke(
         'usage-tracking-redis',
         {
           body: {
@@ -222,15 +222,37 @@ export const useUsageTracking = () => {
         return false;
       }
 
+      const serverCount = typeof data?.count === 'number' ? data.count : undefined;
+
+      // If server indicates limit reached, sync count and block further views
+      if (!subscriptionStatus.subscribed || subscriptionStatus.subscription_tier !== 'premium') {
+        if (serverCount !== undefined && serverCount >= FREE_TIER_LIMITS.dailyViews) {
+          console.log('[Usage Tracking] Server reports daily view limit reached:', serverCount);
+          setTodayUsage(prev => ({
+            ...prev,
+            propertiesViewed: serverCount,
+          }));
+          window.dispatchEvent(new CustomEvent('usage:updated', {
+            detail: {
+              todayUsage: {
+                ...todayUsage,
+                propertiesViewed: serverCount,
+              },
+            },
+          }));
+          return false;
+        }
+      }
+
       // Update viewed properties set
       const today = new Date().toISOString().split('T')[0];
       const newSet = new Set(viewedPropertiesToday).add(propertyId);
       setViewedPropertiesToday(newSet);
       localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
 
-      // Update local state with new count
+      // Update local state with new count (prefer server value if available)
       setTodayUsage(prev => {
-        const newViewCount = prev.propertiesViewed + 1;
+        const newViewCount = serverCount !== undefined ? serverCount : prev.propertiesViewed + 1;
         
         // Broadcast update with new value
         window.dispatchEvent(new CustomEvent('usage:updated', {
