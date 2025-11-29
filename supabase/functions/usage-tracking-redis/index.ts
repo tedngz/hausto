@@ -135,18 +135,12 @@ Deno.serve(async (req) => {
           const viewsKey = `usage:${user.id}:${today}:views`;
 
           // Enforce daily view limit for non-premium users at the server level
-          if (!isPremium) {
-            const currentCount = await redis.scard(viewsKey);
-            if (currentCount >= 10) {
-              console.log(`[Usage Tracking] Daily view limit reached for user ${user.id}: ${currentCount}`);
-              return new Response(
-                JSON.stringify({ error: 'Daily view limit reached', limit: 10, count: currentCount }),
-                {
-                  status: 429,
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                }
-              );
-            }
+          const currentCount = await redis.scard(viewsKey);
+          if (!isPremium && currentCount >= 10) {
+            console.log(`[Usage Tracking] Daily view limit reached for user ${user.id}: ${currentCount}`);
+            newCount = currentCount;
+            dbField = 'properties_viewed';
+            break;
           }
           
           await redis.sadd(viewsKey, propertyId); // Add property ID to SET
