@@ -123,6 +123,15 @@ export const SwipeInterface = ({
         return;
       }
 
+      // If user has hit the daily view limit, do NOT load or reshuffle listings
+      if (!canPerformAction('view')) {
+        console.log('View limit reached - blocking property loading and showing limit screen');
+        setNoMatchReason('view-limit-reached');
+        setApartments([]);
+        setSessionInitialized(true);
+        return;
+      }
+
       // Fetch realtor profiles for all properties
       const realtorIds = [...new Set((realProperties || []).map(p => p.realtor_id))] as string[];
       const realtorProfiles = new Map<string, any>();
