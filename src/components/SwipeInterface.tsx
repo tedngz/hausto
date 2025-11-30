@@ -188,15 +188,12 @@ export const SwipeInterface = ({
         return;
       }
 
-      // If no user preferences, show setup required
+      // If no user preferences, don't initialize the swipe session yet
+      // This prevents showing a temporary listing before preferences are loaded
       if (!userPreferences) {
-        console.log('No user preferences available');
+        console.log('No user preferences available – waiting before loading properties');
         setNoMatchReason('invalid-preferences');
-        if (apartments.length === 0) {
-          const sortedAvailable = await sortPropertiesForDiscovery(availableProperties, null);
-          setApartments(sortedAvailable);
-          setCurrentApartmentIndex(0);
-        }
+        setApartments([]);
         return;
       }
 
