@@ -112,12 +112,18 @@ export const SwipeInterface = ({
   };
   useEffect(() => {
     const loadPropertiesWithRealtors = async () => {
+      // Only load once - prevent multiple runs
+      if (sessionInitialized) {
+        console.log('Session already initialized, skipping property load');
+        return;
+      }
+
       console.log('SwipeInterface useEffect triggered:', {
         userPreferences,
         realPropertiesCount: realProperties?.length || 0,
-        isLoading,
-        sessionInitialized
+        isLoading
       });
+      
       if (isLoading) {
         console.log('Still loading properties...');
         return;
@@ -274,7 +280,7 @@ export const SwipeInterface = ({
     };
 
     loadPropertiesWithRealtors();
-  }, [userPreferences, realProperties, renterMatches, declinedPropertyIds, isLoading, user?.id, sessionInitialized]);
+  }, [userPreferences, realProperties, renterMatches, declinedPropertyIds, isLoading, user?.id]);
 
   // Track property views when apartment changes (unique views only)
   useEffect(() => {
