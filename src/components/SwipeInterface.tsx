@@ -329,9 +329,9 @@ export const SwipeInterface = ({
   const handleLike = async () => {
     if (apartments.length === 0) return;
 
-    // Check if user can create more matches
-    if (!canPerformAction('match')) {
-      toast.error('You\'ve reached your weekly match limit. Upgrade to premium for unlimited matches!', {
+    // Block like action entirely if user hit daily view limit
+    if (noMatchReason === 'view-limit-reached' || !canPerformAction('view')) {
+      toast.error("You've reached your daily view limit. You can't like more properties today.", {
         action: {
           label: 'Upgrade',
           onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
@@ -339,6 +339,18 @@ export const SwipeInterface = ({
       });
       return;
     }
+
+    // Check if user can create more matches
+    if (!canPerformAction('match')) {
+      toast.error("You've reached your weekly match limit. Upgrade to premium for unlimited matches!", {
+        action: {
+          label: 'Upgrade',
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
+        }
+      });
+      return;
+    }
+
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Liking apartment:', currentApartment.title);
     try {
@@ -365,6 +377,17 @@ export const SwipeInterface = ({
   };
   const handleDislike = async () => {
     if (apartments.length === 0) return;
+
+    // Block dislike action entirely if user hit daily view limit
+    if (noMatchReason === 'view-limit-reached' || !canPerformAction('view')) {
+      toast.error("You've reached your daily view limit. You can't pass more properties today.", {
+        action: {
+          label: 'Upgrade',
+          onClick: () => window.dispatchEvent(new CustomEvent('openSubscriptionModal'))
+        }
+      });
+      return;
+    }
     
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Disliking apartment:', currentApartment?.title);
@@ -583,10 +606,21 @@ export const SwipeInterface = ({
 
           {/* Action buttons */}
           <div className="flex justify-center space-x-4 mb-8">
-            <Button size="lg" variant="outline" className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400" onClick={handleDislike}>
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={handleDislike}
+              disabled={noMatchReason === 'view-limit-reached'}
+            >
               <X className="w-8 h-8" />
             </Button>
-            <Button size="lg" className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white" onClick={handleLike}>
+            <Button
+              size="lg"
+              className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={handleLike}
+              disabled={noMatchReason === 'view-limit-reached'}
+            >
               <Heart className="w-8 h-8" />
             </Button>
           </div>
@@ -616,10 +650,21 @@ export const SwipeInterface = ({
 
         {/* Action buttons */}
         <div className="flex justify-center space-x-4 mb-8">
-          <Button size="lg" variant="outline" className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400" onClick={handleDislike}>
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={handleDislike}
+            disabled={noMatchReason === 'view-limit-reached'}
+          >
             <X className="w-8 h-8" />
           </Button>
-          <Button size="lg" className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white" onClick={handleLike}>
+          <Button
+            size="lg"
+            className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={handleLike}
+            disabled={noMatchReason === 'view-limit-reached'}
+          >
             <Heart className="w-8 h-8" />
           </Button>
         </div>
