@@ -197,23 +197,43 @@ export const SwipeInterface = ({
         return;
       }
 
-      // Try filtering by user preferences with very lenient criteria
+      // Strict filtering by location and price range
       let filteredApartments = availableProperties;
       try {
         if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
           filteredApartments = availableProperties.filter(apartment => {
-            const locationMatch = !userPreferences.location?.length || 
-              userPreferences.location.some(loc => 
-                apartment.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
+            // Strict location matching: ensure property is in the same city
+            let locationMatch = false;
+            if (userPreferences.location?.length) {
+              // Extract city names from user preferences (e.g., "District 1, Ho Chi Minh City" -> "ho chi minh city")
+              const preferredCities = userPreferences.location.map(loc => {
+                const parts = loc.toLowerCase().split(',').map(p => p.trim());
+                return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+              });
+              
+              // Extract city from property location
+              const propertyLocationParts = apartment.location.toLowerCase().split(',').map(p => p.trim());
+              const propertyCity = propertyLocationParts.length > 1 
+                ? propertyLocationParts[propertyLocationParts.length - 1] 
+                : propertyLocationParts[0];
+              
+              // Check if property city matches any preferred city
+              locationMatch = preferredCities.some(city => 
+                propertyCity.includes(city) || city.includes(propertyCity)
               );
+            } else {
+              locationMatch = true; // No location preference means accept all
+            }
 
+            // Strict price filtering: within actual user's price range
+            const [minPrice, maxPrice] = userPreferences.priceRange;
+            const priceInRange = apartment.price >= minPrice && apartment.price <= maxPrice;
+
+            // Vibe match for better experience
             const vibeScore = calculateVibeScore(apartment, userPreferences);
             const hasGoodVibeMatch = vibeScore.overall > 1;
 
-            const [, maxPrice] = userPreferences.priceRange;
-            const priceInRange = apartment.price <= maxPrice * 5;
-
-            return locationMatch && hasGoodVibeMatch && priceInRange;
+            return locationMatch && priceInRange && hasGoodVibeMatch;
           });
         }
       } catch (error) {
