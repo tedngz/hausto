@@ -199,6 +199,7 @@ export const SwipeInterface = ({
             const propertyLocationNorm = apartment.location.toLowerCase().trim();
             const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
             const propertyCityRaw = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
+
             const normalizeCity = (value: string) => {
               const v = value.toLowerCase();
               if (v.includes('ho chi minh') || v.includes('hcm') || v.includes('hồ chí minh')) return 'hcm';
@@ -206,7 +207,9 @@ export const SwipeInterface = ({
               if (v.includes('da nang') || v.includes('danang') || v.includes('đà nẵng')) return 'danang';
               return v.trim();
             };
+
             const propertyCity = normalizeCity(propertyCityRaw);
+
             locationMatch = userPreferences.location.some(preferredLoc => {
               const preferredLocNorm = preferredLoc.toLowerCase().trim();
               const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
@@ -217,6 +220,7 @@ export const SwipeInterface = ({
               if (preferredParts.length > 1) {
                 const preferredDistrict = preferredParts[0];
                 const propertyDistrict = propertyParts[0];
+
                 return preferredCity === propertyCity && preferredDistrict === propertyDistrict;
               }
 
@@ -237,12 +241,14 @@ export const SwipeInterface = ({
           // Vibe match for better experience
           const vibeScore = calculateVibeScore(apartment, userPreferences);
           const hasGoodVibeMatch = vibeScore.overall > 1;
+
           if (!locationMatch) {
             console.log('[SwipeInterface] Filtered out by location:', {
               propertyLocation: apartment.location,
               userLocations: userPreferences.location
             });
           }
+
           return locationMatch && priceInRange && hasGoodVibeMatch;
         });
       } catch (error) {
@@ -259,6 +265,7 @@ export const SwipeInterface = ({
         setSessionInitialized(true);
         return;
       }
+
       const propertiesToSort = filteredApartments;
 
       // Check if session exists in localStorage
@@ -555,7 +562,7 @@ export const SwipeInterface = ({
     return <div className="pt-20 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
         <Card className="max-w-md mx-auto p-8 text-center">
           <h3 className="text-xl font-semibold mb-4">{title}</h3>
-          
+          <p className="text-muted-foreground mb-4">{message}</p>
           <p className="text-sm text-muted-foreground mb-6">{suggestion}</p>
           
           <div className="space-y-3">
