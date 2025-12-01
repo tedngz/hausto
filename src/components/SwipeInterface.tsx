@@ -194,21 +194,40 @@ export const SwipeInterface = ({
       try {
         if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
           filteredApartments = availableProperties.filter(apartment => {
-            // Strict location matching: ensure property is in the same city
+            // Strict location matching with district-level precision
             let locationMatch = false;
             if (userPreferences.location?.length) {
-              // Extract city names from user preferences (e.g., "District 1, Ho Chi Minh City" -> "ho chi minh city")
-              const preferredCities = userPreferences.location.map(loc => {
-                const parts = loc.toLowerCase().split(',').map(p => p.trim());
-                return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+              // Normalize property location for comparison
+              const propertyLocationNorm = apartment.location.toLowerCase().trim();
+              
+              // Check if property matches any preferred location
+              locationMatch = userPreferences.location.some(preferredLoc => {
+                const preferredLocNorm = preferredLoc.toLowerCase().trim();
+                
+                // Split into district and city parts
+                const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
+                const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
+                
+                // If user specified a district (has comma separator), do strict district + city matching
+                if (preferredParts.length > 1) {
+                  const preferredDistrict = preferredParts[0];
+                  const preferredCity = preferredParts[preferredParts.length - 1];
+                  
+                  if (propertyParts.length > 1) {
+                    const propertyDistrict = propertyParts[0];
+                    const propertyCity = propertyParts[propertyParts.length - 1];
+                    
+                    // Both district AND city must match
+                    return propertyDistrict === preferredDistrict && propertyCity === preferredCity;
+                  }
+                  return false; // Property doesn't have district info
+                }
+                
+                // If user only specified city (no district), match any property in that city
+                const preferredCity = preferredParts[0];
+                const propertyCity = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
+                return propertyCity === preferredCity;
               });
-
-              // Extract city from property location
-              const propertyLocationParts = apartment.location.toLowerCase().split(',').map(p => p.trim());
-              const propertyCity = propertyLocationParts.length > 1 ? propertyLocationParts[propertyLocationParts.length - 1] : propertyLocationParts[0];
-
-              // Check if property city matches any preferred city
-              locationMatch = preferredCities.some(city => propertyCity.includes(city) || city.includes(propertyCity));
             } else {
               locationMatch = true; // No location preference means accept all
             }
