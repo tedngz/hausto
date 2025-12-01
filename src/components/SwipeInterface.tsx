@@ -192,70 +192,81 @@ export const SwipeInterface = ({
       // Strict filtering by location and price range
       let filteredApartments = availableProperties;
       try {
-        if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
-          filteredApartments = availableProperties.filter(apartment => {
-            // Strict location matching with city/district groups (HCM vs Hanoi vs Danang)
-            let locationMatch = false;
-            if (userPreferences.location?.length) {
-              const propertyLocationNorm = apartment.location.toLowerCase().trim();
-              const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
-              const propertyCityRaw = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
+        filteredApartments = availableProperties.filter(apartment => {
+          // Strict location matching with city/district groups (HCM vs Hanoi vs Danang)
+          let locationMatch = false;
+          if (userPreferences.location?.length) {
+            const propertyLocationNorm = apartment.location.toLowerCase().trim();
+            const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
+            const propertyCityRaw = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
 
-              const normalizeCity = (value: string) => {
-                const v = value.toLowerCase();
-                if (v.includes('ho chi minh') || v.includes('hcm')) return 'hcm';
-                if (v.includes('ha noi') || v.includes('hanoi')) return 'hanoi';
-                if (v.includes('da nang') || v.includes('danang')) return 'danang';
-                return v.trim();
-              };
+            const normalizeCity = (value: string) => {
+              const v = value.toLowerCase();
+              if (v.includes('ho chi minh') || v.includes('hcm') || v.includes('hồ chí minh')) return 'hcm';
+              if (v.includes('ha noi') || v.includes('hanoi') || v.includes('hà nội')) return 'hanoi';
+              if (v.includes('da nang') || v.includes('danang') || v.includes('đà nẵng')) return 'danang';
+              return v.trim();
+            };
 
-              const propertyCity = normalizeCity(propertyCityRaw);
+            const propertyCity = normalizeCity(propertyCityRaw);
 
-              locationMatch = userPreferences.location.some(preferredLoc => {
-                const preferredLocNorm = preferredLoc.toLowerCase().trim();
-                const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
-                const preferredCityRaw = preferredParts.length > 1 ? preferredParts[preferredParts.length - 1] : preferredParts[0];
-                const preferredCity = normalizeCity(preferredCityRaw);
+            locationMatch = userPreferences.location.some(preferredLoc => {
+              const preferredLocNorm = preferredLoc.toLowerCase().trim();
+              const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
+              const preferredCityRaw = preferredParts.length > 1 ? preferredParts[preferredParts.length - 1] : preferredParts[0];
+              const preferredCity = normalizeCity(preferredCityRaw);
 
-                // If user specified a district (has comma separator), require district text to appear as prefix
-                if (preferredParts.length > 1) {
-                  const preferredDistrict = preferredParts[0];
-                  const propertyDistrict = propertyParts[0];
+              // If user specified a district (has comma separator), require exact district + city match
+              if (preferredParts.length > 1) {
+                const preferredDistrict = preferredParts[0];
+                const propertyDistrict = propertyParts[0];
 
-                  return preferredCity === propertyCity && preferredDistrict === propertyDistrict;
-                }
+                return preferredCity === propertyCity && preferredDistrict === propertyDistrict;
+              }
 
-                // If only city specified, any property in same normalized city is allowed
-                return preferredCity === propertyCity;
-              });
-            } else {
-              locationMatch = true; // No location preference means accept all
-            }
+              // If only city specified, any property in same normalized city is allowed
+              return preferredCity === propertyCity;
+            });
+          } else {
+            locationMatch = true; // No location preference means accept all
+          }
 
-            // Strict price filtering: within actual user's price range
+          // Strict price filtering: within actual user's price range (if provided)
+          let priceInRange = true;
+          if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
             const [minPrice, maxPrice] = userPreferences.priceRange;
-            const priceInRange = apartment.price >= minPrice && apartment.price <= maxPrice;
+            priceInRange = apartment.price >= minPrice && apartment.price <= maxPrice;
+          }
 
-            // Vibe match for better experience
-            const vibeScore = calculateVibeScore(apartment, userPreferences);
-            const hasGoodVibeMatch = vibeScore.overall > 1;
+          // Vibe match for better experience
+          const vibeScore = calculateVibeScore(apartment, userPreferences);
+          const hasGoodVibeMatch = vibeScore.overall > 1;
 
-            if (!locationMatch) {
-              console.log('[SwipeInterface] Filtered out by location:', {
-                propertyLocation: apartment.location,
-                userLocations: userPreferences.location
-              });
-            }
+          if (!locationMatch) {
+            console.log('[SwipeInterface] Filtered out by location:', {
+              propertyLocation: apartment.location,
+              userLocations: userPreferences.location
+            });
+          }
 
-            return locationMatch && priceInRange && hasGoodVibeMatch;
-          });
-        }
+          return locationMatch && priceInRange && hasGoodVibeMatch;
+        });
       } catch (error) {
         console.error('Error filtering apartments:', error);
         filteredApartments = availableProperties;
       }
       console.log('Filtered apartments:', filteredApartments.length);
-      const propertiesToSort = filteredApartments.length > 0 ? filteredApartments : availableProperties;
+
+      // If nothing matches the user's location/price, do NOT fall back to off-location properties
+      if (filteredApartments.length === 0) {
+        console.log('No properties match user preferences (location/price)');
+        setNoMatchReason('no-more-available');
+        setApartments([]);
+        setSessionInitialized(true);
+        return;
+      }
+
+      const propertiesToSort = filteredApartments;
 
       // Check if session exists in localStorage
       if (!sessionInitialized && user?.id) {
