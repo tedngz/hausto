@@ -194,39 +194,39 @@ export const SwipeInterface = ({
       try {
         if (userPreferences.priceRange && userPreferences.priceRange.length === 2) {
           filteredApartments = availableProperties.filter(apartment => {
-            // Strict location matching with district-level precision
+            // Strict location matching with city/district groups (HCM vs Hanoi vs Danang)
             let locationMatch = false;
             if (userPreferences.location?.length) {
-              // Normalize property location for comparison
               const propertyLocationNorm = apartment.location.toLowerCase().trim();
-              
-              // Check if property matches any preferred location
+              const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
+              const propertyCityRaw = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
+
+              const normalizeCity = (value: string) => {
+                const v = value.toLowerCase();
+                if (v.includes('ho chi minh') || v.includes('hcm')) return 'hcm';
+                if (v.includes('ha noi') || v.includes('hanoi')) return 'hanoi';
+                if (v.includes('da nang') || v.includes('danang')) return 'danang';
+                return v.trim();
+              };
+
+              const propertyCity = normalizeCity(propertyCityRaw);
+
               locationMatch = userPreferences.location.some(preferredLoc => {
                 const preferredLocNorm = preferredLoc.toLowerCase().trim();
-                
-                // Split into district and city parts
                 const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
-                const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
-                
-                // If user specified a district (has comma separator), do strict district + city matching
+                const preferredCityRaw = preferredParts.length > 1 ? preferredParts[preferredParts.length - 1] : preferredParts[0];
+                const preferredCity = normalizeCity(preferredCityRaw);
+
+                // If user specified a district (has comma separator), require district text to appear as prefix
                 if (preferredParts.length > 1) {
                   const preferredDistrict = preferredParts[0];
-                  const preferredCity = preferredParts[preferredParts.length - 1];
-                  
-                  if (propertyParts.length > 1) {
-                    const propertyDistrict = propertyParts[0];
-                    const propertyCity = propertyParts[propertyParts.length - 1];
-                    
-                    // Both district AND city must match
-                    return propertyDistrict === preferredDistrict && propertyCity === preferredCity;
-                  }
-                  return false; // Property doesn't have district info
+                  const propertyDistrict = propertyParts[0];
+
+                  return preferredCity === propertyCity && preferredDistrict === propertyDistrict;
                 }
-                
-                // If user only specified city (no district), match any property in that city
-                const preferredCity = preferredParts[0];
-                const propertyCity = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
-                return propertyCity === preferredCity;
+
+                // If only city specified, any property in same normalized city is allowed
+                return preferredCity === propertyCity;
               });
             } else {
               locationMatch = true; // No location preference means accept all
@@ -239,6 +239,14 @@ export const SwipeInterface = ({
             // Vibe match for better experience
             const vibeScore = calculateVibeScore(apartment, userPreferences);
             const hasGoodVibeMatch = vibeScore.overall > 1;
+
+            if (!locationMatch) {
+              console.log('[SwipeInterface] Filtered out by location:', {
+                propertyLocation: apartment.location,
+                userLocations: userPreferences.location
+              });
+            }
+
             return locationMatch && priceInRange && hasGoodVibeMatch;
           });
         }
