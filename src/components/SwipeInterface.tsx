@@ -564,7 +564,7 @@ export const SwipeInterface = ({
             <Button variant="outline" className="w-full border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => {
             window.dispatchEvent(new CustomEvent('switchToAIChat'));
           }}>
-              <MessageCircle className="w-4 h-4 mr-2" />
+              
               Ask Hausto AI
             </Button>
           </div>
