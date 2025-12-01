@@ -558,7 +558,7 @@ export const SwipeInterface = ({
           
           <div className="space-y-3">
             {onRestartOnboarding && <Button onClick={onRestartOnboarding} className="w-full bg-orange-500 hover:bg-orange-600 text-white">
-                Complete Setup Quiz
+                Complete Quiz
               </Button>}
             
             <Button variant="outline" className="w-full border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => {
