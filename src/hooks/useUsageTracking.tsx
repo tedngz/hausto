@@ -23,7 +23,7 @@ const FREE_TIER_LIMITS = {
 };
 
 export const useUsageTracking = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [todayUsage, setTodayUsage] = useState<UsageLimits>({
     propertiesViewed: 0,
     propertiesMatched: 0,
@@ -107,6 +107,14 @@ export const useUsageTracking = () => {
         }
       });
 
+      // Get current session to ensure auth headers are included
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error('[Usage Tracking] No active session');
+        setLoading(false);
+        return;
+      }
+
       // Get usage from Redis via edge function
       const { data: usageData, error: usageError } = await supabase.functions.invoke(
         'usage-tracking-redis',
@@ -161,8 +169,13 @@ export const useUsageTracking = () => {
   }, [user?.id, fetchUsageFromDatabase]);
 
   useEffect(() => {
+    // Don't fetch until auth is initialized
+    if (authLoading) {
+      console.log('[Usage Tracking] Waiting for auth to initialize');
+      return;
+    }
     fetchUsage();
-  }, [fetchUsage]);
+  }, [fetchUsage, authLoading]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -205,6 +218,13 @@ export const useUsageTracking = () => {
 
     try {
       console.log('[Usage Tracking] Tracking unique property view via Redis');
+
+      // Ensure we have an active session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error('[Usage Tracking] No active session for view tracking');
+        return false;
+      }
 
       const { data, error } = await supabase.functions.invoke(
         'usage-tracking-redis',
@@ -307,6 +327,13 @@ export const useUsageTracking = () => {
       }
 
       console.log(`[Usage Tracking] Incrementing usage: ${redisType}`);
+
+      // Ensure we have an active session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error('[Usage Tracking] No active session for usage increment');
+        return;
+      }
 
       const { data, error } = await supabase.functions.invoke(
         'usage-tracking-redis',
