@@ -38,14 +38,31 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Get the user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
+    // Extract user ID from JWT in Authorization header (Supabase already verified JWT)
+    const authHeader = req.headers.get('Authorization');
 
-    if (userError || !user) {
-      console.error('Auth error:', userError);
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('[Usage Tracking] Missing or invalid Authorization header');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    let userId: string;
+    try {
+      const token = authHeader.replace('Bearer ', '');
+      const parts = token.split('.');
+      if (parts.length !== 3) throw new Error('Invalid JWT structure');
+
+      const payloadBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payloadJson = atob(payloadBase64);
+      const payload = JSON.parse(payloadJson);
+
+      userId = payload.sub as string;
+      if (!userId) throw new Error('Missing sub in JWT payload');
+    } catch (err) {
+      console.error('[Usage Tracking] Failed to parse JWT:', err);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -59,7 +76,7 @@ Deno.serve(async (req) => {
     const { data: subscription, error: subError } = await supabaseClient
       .from('subscribers')
       .select('subscribed, subscription_tier')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (subError) {
@@ -74,14 +91,14 @@ Deno.serve(async (req) => {
     weekStart.setDate(weekStart.getDate() - 6);
     const weekStartStr = weekStart.toISOString().split('T')[0];
 
-    console.log(`[Usage Tracking] User: ${user.id}, Action: ${action}, Type: ${type}, Date: ${today}`);
+    console.log(`[Usage Tracking] User: ${userId}, Action: ${action}, Type: ${type}, Date: ${today}`);
 
     if (action === 'get') {
       // Get current usage from Redis
-      const viewsKey = `usage:${user.id}:${today}:views`; // This is now a SET of unique property IDs
-      const matchesKey = `usage:${user.id}:${today}:matches`;
-      const aiKey = `usage:${user.id}:${today}:ai`;
-      const quizKey = `usage:${user.id}:${today}:quiz`;
+      const viewsKey = `usage:${userId}:${today}:views`; // This is now a SET of unique property IDs
+      const matchesKey = `usage:${userId}:${today}:matches`;
+      const aiKey = `usage:${userId}:${today}:ai`;
+      const quizKey = `usage:${userId}:${today}:quiz`;
 
       const [views, matches, ai, quiz] = await Promise.all([
         redis.scard(viewsKey), // Count unique properties in SET
@@ -97,7 +114,7 @@ Deno.serve(async (req) => {
         const date = new Date();
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        weeklyPromises.push(redis.get(`usage:${user.id}:${dateStr}:matches`));
+        weeklyPromises.push(redis.get(`usage:${userId}:${dateStr}:matches`));
       }
       
       const weeklyResults = await Promise.all(weeklyPromises);
@@ -132,12 +149,12 @@ Deno.serve(async (req) => {
             });
           }
           
-          const viewsKey = `usage:${user.id}:${today}:views`;
+          const viewsKey = `usage:${userId}:${today}:views`;
 
           // Enforce daily view limit for non-premium users at the server level
           const currentCount = await redis.scard(viewsKey);
           if (!isPremium && currentCount >= 10) {
-            console.log(`[Usage Tracking] Daily view limit reached for user ${user.id}: ${currentCount}`);
+            console.log(`[Usage Tracking] Daily view limit reached for user ${userId}: ${currentCount}`);
             newCount = currentCount;
             dbField = 'properties_viewed';
             break;
@@ -151,7 +168,7 @@ Deno.serve(async (req) => {
           break;
         }
         case 'match': {
-          const matchesKey = `usage:${user.id}:${today}:matches`;
+          const matchesKey = `usage:${userId}:${today}:matches`;
           newCount = await redis.incr(matchesKey);
           await redis.expire(matchesKey, 60 * 60 * 48);
           dbField = 'properties_matched';
@@ -159,7 +176,7 @@ Deno.serve(async (req) => {
           break;
         }
         case 'ai-search': {
-          const aiKey = `usage:${user.id}:${today}:ai`;
+          const aiKey = `usage:${userId}:${today}:ai`;
           newCount = await redis.incr(aiKey);
           await redis.expire(aiKey, 60 * 60 * 48);
           dbField = 'ai_requests';
@@ -167,7 +184,7 @@ Deno.serve(async (req) => {
           break;
         }
         case 'quiz': {
-          const quizKey = `usage:${user.id}:${today}:quiz`;
+          const quizKey = `usage:${userId}:${today}:quiz`;
           newCount = await redis.incr(quizKey);
           await redis.expire(quizKey, 60 * 60 * 48);
           dbField = 'quiz_retakes';
@@ -186,7 +203,7 @@ Deno.serve(async (req) => {
         .from('daily_usage')
         .upsert(
           {
-            user_id: user.id,
+            user_id: userId,
             usage_date: today,
             [dbField]: newCount,
           },
