@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, X, RotateCcw, MessageCircle, UserCheck } from 'lucide-react';
+import { Heart, X, RotateCcw, UserCheck } from 'lucide-react';
 import { UserPreferences, Apartment } from '@/types';
 import { UserProfile } from '@/components/LoginModal';
 import { useProperties, Property } from '@/hooks/useProperties';
@@ -199,7 +199,6 @@ export const SwipeInterface = ({
             const propertyLocationNorm = apartment.location.toLowerCase().trim();
             const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
             const propertyCityRaw = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
-
             const normalizeCity = (value: string) => {
               const v = value.toLowerCase();
               if (v.includes('ho chi minh') || v.includes('hcm') || v.includes('hồ chí minh')) return 'hcm';
@@ -207,9 +206,7 @@ export const SwipeInterface = ({
               if (v.includes('da nang') || v.includes('danang') || v.includes('đà nẵng')) return 'danang';
               return v.trim();
             };
-
             const propertyCity = normalizeCity(propertyCityRaw);
-
             locationMatch = userPreferences.location.some(preferredLoc => {
               const preferredLocNorm = preferredLoc.toLowerCase().trim();
               const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
@@ -220,7 +217,6 @@ export const SwipeInterface = ({
               if (preferredParts.length > 1) {
                 const preferredDistrict = preferredParts[0];
                 const propertyDistrict = propertyParts[0];
-
                 return preferredCity === propertyCity && preferredDistrict === propertyDistrict;
               }
 
@@ -241,14 +237,12 @@ export const SwipeInterface = ({
           // Vibe match for better experience
           const vibeScore = calculateVibeScore(apartment, userPreferences);
           const hasGoodVibeMatch = vibeScore.overall > 1;
-
           if (!locationMatch) {
             console.log('[SwipeInterface] Filtered out by location:', {
               propertyLocation: apartment.location,
               userLocations: userPreferences.location
             });
           }
-
           return locationMatch && priceInRange && hasGoodVibeMatch;
         });
       } catch (error) {
@@ -265,7 +259,6 @@ export const SwipeInterface = ({
         setSessionInitialized(true);
         return;
       }
-
       const propertiesToSort = filteredApartments;
 
       // Check if session exists in localStorage
@@ -578,7 +571,7 @@ export const SwipeInterface = ({
             <Button variant="outline" className="w-full border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => {
             window.dispatchEvent(new CustomEvent('switchToAIChat'));
           }}>
-              <MessageCircle className="w-4 h-4 mr-2" />
+              
               Ask Hausto AI
             </Button>
           </div>
