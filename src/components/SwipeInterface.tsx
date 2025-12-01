@@ -117,13 +117,11 @@ export const SwipeInterface = ({
         console.log('Session already initialized, skipping property load');
         return;
       }
-
       console.log('SwipeInterface useEffect triggered:', {
         userPreferences,
         realPropertiesCount: realProperties?.length || 0,
         isLoading
       });
-      
       if (isLoading) {
         console.log('Still loading properties...');
         return;
@@ -141,14 +139,11 @@ export const SwipeInterface = ({
       // Fetch realtor profiles for all properties
       const realtorIds = [...new Set((realProperties || []).map(p => p.realtor_id))] as string[];
       const realtorProfiles = new Map<string, any>();
-      
       if (realtorIds.length > 0) {
         try {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, name, email, phone, avatar_url')
-            .in('id', realtorIds);
-          
+          const {
+            data: profiles
+          } = await supabase.from('profiles').select('id, name, email, phone, avatar_url').in('id', realtorIds);
           profiles?.forEach(profile => {
             realtorProfiles.set(profile.id, profile);
           });
@@ -163,10 +158,7 @@ export const SwipeInterface = ({
       // Filter out already matched and declined properties
       const matchedPropertyIds = new Set(renterMatches?.map(match => match.property_id) || []);
       const declinedPropertyIdSet = new Set(declinedPropertyIds);
-      const availableProperties = transformedRealProperties.filter(property => 
-        !matchedPropertyIds.has(property.id) && !declinedPropertyIdSet.has(property.id)
-      );
-
+      const availableProperties = transformedRealProperties.filter(property => !matchedPropertyIds.has(property.id) && !declinedPropertyIdSet.has(property.id));
       console.log('Real properties available:', transformedRealProperties.length);
       console.log('Already matched properties:', matchedPropertyIds.size);
       console.log('Declined properties:', declinedPropertyIds.length);
@@ -210,17 +202,13 @@ export const SwipeInterface = ({
                 const parts = loc.toLowerCase().split(',').map(p => p.trim());
                 return parts.length > 1 ? parts[parts.length - 1] : parts[0];
               });
-              
+
               // Extract city from property location
               const propertyLocationParts = apartment.location.toLowerCase().split(',').map(p => p.trim());
-              const propertyCity = propertyLocationParts.length > 1 
-                ? propertyLocationParts[propertyLocationParts.length - 1] 
-                : propertyLocationParts[0];
-              
+              const propertyCity = propertyLocationParts.length > 1 ? propertyLocationParts[propertyLocationParts.length - 1] : propertyLocationParts[0];
+
               // Check if property city matches any preferred city
-              locationMatch = preferredCities.some(city => 
-                propertyCity.includes(city) || city.includes(propertyCity)
-              );
+              locationMatch = preferredCities.some(city => propertyCity.includes(city) || city.includes(propertyCity));
             } else {
               locationMatch = true; // No location preference means accept all
             }
@@ -232,7 +220,6 @@ export const SwipeInterface = ({
             // Vibe match for better experience
             const vibeScore = calculateVibeScore(apartment, userPreferences);
             const hasGoodVibeMatch = vibeScore.overall > 1;
-
             return locationMatch && priceInRange && hasGoodVibeMatch;
           });
         }
@@ -240,28 +227,27 @@ export const SwipeInterface = ({
         console.error('Error filtering apartments:', error);
         filteredApartments = availableProperties;
       }
-
       console.log('Filtered apartments:', filteredApartments.length);
-
       const propertiesToSort = filteredApartments.length > 0 ? filteredApartments : availableProperties;
-      
+
       // Check if session exists in localStorage
       if (!sessionInitialized && user?.id) {
         const savedSession = localStorage.getItem(`swipe_session_${user.id}`);
         if (savedSession) {
           try {
-            const { propertyIds, currentIndex } = JSON.parse(savedSession);
-            
+            const {
+              propertyIds,
+              currentIndex
+            } = JSON.parse(savedSession);
+
             // Reconstruct apartments array from saved property IDs
-            const savedApartments = propertyIds
-              .map((id: string) => propertiesToSort.find(p => p.id === id))
-              .filter(Boolean);
-            
+            const savedApartments = propertyIds.map((id: string) => propertiesToSort.find(p => p.id === id)).filter(Boolean);
+
             // Only use saved session if we have valid properties
             if (savedApartments.length > 0) {
-              console.log('Restoring saved swipe session:', { 
-                totalProperties: savedApartments.length, 
-                currentIndex 
+              console.log('Restoring saved swipe session:', {
+                totalProperties: savedApartments.length,
+                currentIndex
               });
               setApartments(savedApartments);
               setCurrentApartmentIndex(Math.min(currentIndex, savedApartments.length - 1));
@@ -279,7 +265,7 @@ export const SwipeInterface = ({
       if (!sessionInitialized) {
         console.log('Creating new swipe session with', propertiesToSort.length, 'properties');
         const sortedApartments = await sortPropertiesForDiscovery(propertiesToSort, userPreferences);
-        
+
         // Save new session to localStorage
         if (user?.id && sortedApartments.length > 0) {
           const session = {
@@ -288,14 +274,12 @@ export const SwipeInterface = ({
           };
           localStorage.setItem(`swipe_session_${user.id}`, JSON.stringify(session));
         }
-        
         setApartments(sortedApartments);
         setCurrentApartmentIndex(0);
         setSessionInitialized(true);
         setNoMatchReason('');
       }
     };
-
     loadPropertiesWithRealtors();
   }, [userPreferences, realProperties, renterMatches, declinedPropertyIds, isLoading, user?.id]);
 
@@ -304,14 +288,13 @@ export const SwipeInterface = ({
     const trackView = async () => {
       const currentApartment = apartments[currentApartmentIndex];
       if (!currentApartment || !user?.id) return;
-      
+
       // Check if user can view before tracking
       if (!canPerformAction('view')) {
         console.log('View limit reached, showing limit screen');
         setNoMatchReason('view-limit-reached');
         return;
       }
-      
       try {
         const success = await updatePropertyView(currentApartment.id);
         if (success) {
@@ -335,7 +318,6 @@ export const SwipeInterface = ({
   // Persist swipe session so users return to the same listing across visits
   useEffect(() => {
     if (!user?.id || apartments.length === 0 || !sessionInitialized) return;
-
     try {
       const session = {
         propertyIds: apartments.map(a => a.id),
@@ -370,7 +352,6 @@ export const SwipeInterface = ({
       });
       return;
     }
-
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Liking apartment:', currentApartment.title);
     try {
@@ -408,7 +389,6 @@ export const SwipeInterface = ({
       });
       return;
     }
-    
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Disliking apartment:', currentApartment?.title);
     try {
@@ -438,11 +418,10 @@ export const SwipeInterface = ({
       setNoMatchReason('view-limit-reached');
       return;
     }
-    
     if (currentApartmentIndex < apartments.length - 1) {
       const newIndex = currentApartmentIndex + 1;
       setCurrentApartmentIndex(newIndex);
-      
+
       // Update session in localStorage
       if (user?.id) {
         const savedSession = localStorage.getItem(`swipe_session_${user.id}`);
@@ -464,12 +443,11 @@ export const SwipeInterface = ({
   const handleRetry = () => {
     setCurrentApartmentIndex(0);
     setSessionInitialized(false);
-    
+
     // Clear saved session
     if (user?.id) {
       localStorage.removeItem(`swipe_session_${user.id}`);
     }
-    
     setLikedApartmentIds([]);
     setNoMatchReason('');
   };
@@ -576,7 +554,7 @@ export const SwipeInterface = ({
         <Card className="max-w-md mx-auto p-8 text-center">
           <h3 className="text-xl font-semibold mb-4">Setup Required</h3>
           <p className="text-muted-foreground mb-4">Your preferences need to be set up to find matching properties.</p>
-          <p className="text-sm text-muted-foreground mb-6">Complete the quick quiz to get personalized property recommendations.</p>
+          
           
           <div className="space-y-3">
             {onRestartOnboarding && <Button onClick={onRestartOnboarding} className="w-full bg-orange-500 hover:bg-orange-600 text-white">
@@ -626,21 +604,10 @@ export const SwipeInterface = ({
 
           {/* Action buttons */}
           <div className="flex justify-center space-x-4 mb-8">
-            <Button
-              size="lg"
-              variant="outline"
-              className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-60 disabled:cursor-not-allowed"
-              onClick={handleDislike}
-              disabled={noMatchReason === 'view-limit-reached'}
-            >
+            <Button size="lg" variant="outline" className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-60 disabled:cursor-not-allowed" onClick={handleDislike} disabled={noMatchReason === 'view-limit-reached'}>
               <X className="w-8 h-8" />
             </Button>
-            <Button
-              size="lg"
-              className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
-              onClick={handleLike}
-              disabled={noMatchReason === 'view-limit-reached'}
-            >
+            <Button size="lg" className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed" onClick={handleLike} disabled={noMatchReason === 'view-limit-reached'}>
               <Heart className="w-8 h-8" />
             </Button>
           </div>
@@ -670,21 +637,10 @@ export const SwipeInterface = ({
 
         {/* Action buttons */}
         <div className="flex justify-center space-x-4 mb-8">
-          <Button
-            size="lg"
-            variant="outline"
-            className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-60 disabled:cursor-not-allowed"
-            onClick={handleDislike}
-            disabled={noMatchReason === 'view-limit-reached'}
-          >
+          <Button size="lg" variant="outline" className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 disabled:opacity-60 disabled:cursor-not-allowed" onClick={handleDislike} disabled={noMatchReason === 'view-limit-reached'}>
             <X className="w-8 h-8" />
           </Button>
-          <Button
-            size="lg"
-            className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
-            onClick={handleLike}
-            disabled={noMatchReason === 'view-limit-reached'}
-          >
+          <Button size="lg" className="w-16 h-16 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed" onClick={handleLike} disabled={noMatchReason === 'view-limit-reached'}>
             <Heart className="w-8 h-8" />
           </Button>
         </div>
