@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart } from 'lucide-react';
+import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -31,6 +32,7 @@ interface PropertyMatch {
   matchReason: string;
   realtor_id?: string;
   vibe_analysis?: any;
+  amenities?: string[];
 }
 interface SearchResult {
   results: PropertyMatch[];
@@ -591,7 +593,15 @@ export const HomeAI = ({
                                           {property.size && <span className="font-medium">{property.size}</span>}
                                         </div>
 
-                                      {/* Why it matches - More prominent on mobile */}
+                                       {/* Amenities */}
+                                       {(property.vibe_analysis?.amenities || property.amenities) && (
+                                         <PropertyAmenities 
+                                           amenities={property.vibe_analysis?.amenities || property.amenities || []} 
+                                           compact={true} 
+                                         />
+                                       )}
+
+                                       {/* Why it matches - More prominent on mobile */}
                                       <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
                                         <p className="text-sm text-foreground text-left">
                                           <span className="font-semibold text-primary">Why it matches: </span>
@@ -740,18 +750,26 @@ export const HomeAI = ({
                                {property.size && <span className="font-medium">{property.size}</span>}
                              </div>
 
-                            {/* Property Highlights */}
-                            {property.highlights && property.highlights.length > 0 && <div className="mb-3">
-                                <HighlightTags highlights={property.highlights} maxWords={3} />
-                              </div>}
+                             {/* Property Highlights */}
+                             {property.highlights && property.highlights.length > 0 && <div className="mb-3">
+                                 <HighlightTags highlights={property.highlights} maxWords={3} />
+                               </div>}
 
-                            {/* Why it matches - More prominent on mobile */}
-                            <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
-                              <p className="text-sm text-foreground text-left">
-                                <span className="font-semibold text-primary">Why it matches: </span>
-                                {property.matchReason}
-                              </p>
-                            </div>
+                             {/* Amenities */}
+                             {(property.vibe_analysis?.amenities || property.amenities) && (
+                               <PropertyAmenities 
+                                 amenities={property.vibe_analysis?.amenities || property.amenities || []} 
+                                 compact={true} 
+                               />
+                             )}
+
+                             {/* Why it matches - More prominent on mobile */}
+                             <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
+                               <p className="text-sm text-foreground text-left">
+                                 <span className="font-semibold text-primary">Why it matches: </span>
+                                 {property.matchReason}
+                               </p>
+                             </div>
 
                           </div>
                         </div>

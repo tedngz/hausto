@@ -187,7 +187,17 @@ serve(async (req) => {
     }
     
     const properties = propertiesData || [];
-    console.log(`Found ${properties.length} properties in database${isAnonymous ? ' for anonymous user' : ''}`);
+    
+    // Filter to ONLY include properties with amenities
+    const propertiesWithAmenities = properties.filter(p => {
+      const amenities = p.vibe_analysis?.amenities || p.amenities || [];
+      return amenities.length > 0;
+    });
+    
+    console.log(`Found ${properties.length} total properties, ${propertiesWithAmenities.length} with amenities${isAnonymous ? ' for anonymous user' : ''}`);
+    
+    // Use filtered properties for AI context
+    const filteredProperties = propertiesWithAmenities;
     
     // For anonymous users, we'll limit results in the system prompt
     const maxResults = isAnonymous ? 3 : 5;
@@ -265,8 +275,8 @@ Provide creative, engaging, and professional content that stands out in the rent
       // Renter context - help with property search and recommendations
       systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
-🏠 AVAILABLE PROPERTIES DATABASE (${properties.length} total properties):
-${properties.map((p, index) => {
+🏠 AVAILABLE PROPERTIES DATABASE (${filteredProperties.length} total properties WITH AMENITIES):
+${filteredProperties.map((p, index) => {
   // Get amenities from vibe_analysis (where they're actually stored in PropertyCard) or fallback to amenities field
   const amenities = p.vibe_analysis?.amenities || p.amenities || [];
   const imageUrls = Array.isArray(p.images) ? p.images : [];
@@ -312,12 +322,15 @@ ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
    - NEVER suggest a different city as an alternative
 
 ⚠️ CRITICAL AMENITY RULES:
+- 🚨 ONLY suggest properties that have amenities listed (NEVER suggest properties with "None listed" amenities)
+- ONLY use properties from the database that have actual amenities in the "**AMENITIES**" section
 - ANALYZE THE PROPERTY IMAGES provided to verify and identify amenities visually
 - Cross-reference visual amenities with the listed amenities in "**AMENITIES**" section
 - If you see amenities in images that aren't listed, you CAN mention them but note they were "observed in photos"
 - If amenities are listed but not visible in photos, still mention them as "listed amenities"
 - Be specific about what you see: pool, gym equipment, balcony, parking, kitchen appliances, etc.
 - When describing properties, combine both listed amenities AND what you observe in the images
+- Properties without amenities should NEVER be included in search results
 
 🎯 RESPONSE FORMAT - Return ONLY valid JSON:
 {
