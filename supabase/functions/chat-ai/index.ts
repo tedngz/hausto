@@ -275,6 +275,15 @@ Provide creative, engaging, and professional content that stands out in the rent
       // Renter context - help with property search and recommendations
       systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
+📝 CONVERSATION CONTEXT & MEMORY:
+${chatHistory.length > 0 ? `You have access to the conversation history. USE IT to maintain context across requests:
+- Remember locations mentioned in previous messages (e.g., if user asked about D2 before, stay in Ho Chi Minh City)
+- Remember preferences stated earlier (e.g., budget, size, amenities)
+- Build upon previous searches - don't reset context
+- If user asks for "rooms with sofa" after searching "rooms in D2", search for sofas WITHIN the previously mentioned location (D2/HCM)
+- NEVER jump between cities unless explicitly requested
+- When no specific location mentioned, default to the last mentioned city/area from conversation history` : 'This is the first message in the conversation.'}
+
 🏠 AVAILABLE PROPERTIES DATABASE (${filteredProperties.length} total properties WITH AMENITIES):
 ${filteredProperties.map((p, index) => {
   // Get amenities from vibe_analysis (where they're actually stored in PropertyCard) or fallback to amenities field
@@ -486,6 +495,34 @@ Current user message: ${message}`;
       // when downloading property images from Supabase storage
       const allImagesToAnalyze = Array.isArray(propertyImages) ? propertyImages : [];
       
+      // Build messages array with conversation history for context continuity
+      const messagesWithHistory = [
+        { role: 'system', content: fullContext },
+        ...chatHistory.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })),
+      ];
+      
+      // Add the new user message (with or without images)
+      if (allImagesToAnalyze.length > 0) {
+        messagesWithHistory.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: message },
+            ...allImagesToAnalyze.map((image: any) => ({
+              type: 'image_url',
+              image_url: { url: image }
+            }))
+          ]
+        });
+      } else {
+        messagesWithHistory.push({
+          role: 'user',
+          content: message
+        });
+      }
+      
       const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -494,22 +531,7 @@ Current user message: ${message}`;
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          messages: allImagesToAnalyze.length > 0 ? [
-            { role: 'system', content: fullContext },
-            { 
-              role: 'user', 
-              content: [
-                { type: 'text', text: message },
-                ...allImagesToAnalyze.map((image: any) => ({
-                  type: 'image_url',
-                  image_url: { url: image }
-                }))
-              ]
-            }
-          ] : [
-            { role: 'system', content: fullContext },
-            { role: 'user', content: message }
-          ],
+          messages: messagesWithHistory,
           max_tokens: 2000,
           temperature: 0.7,
         }),
