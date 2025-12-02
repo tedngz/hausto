@@ -830,6 +830,7 @@ export const HomeAI = ({
         description: selectedProperty.description,
         highlights: selectedProperty.highlights,
         images: selectedProperty.images,
+        amenities: selectedProperty.vibe_analysis?.amenities || selectedProperty.amenities || [],
         realtor: {
           id: selectedProperty.realtor_id || "contact",
           name: "Contact for details",
