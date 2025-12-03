@@ -47,3 +47,6 @@ verify_jwt = true
 
 [functions.verify-embeddings]
 verify_jwt = true
+
+[functions.scrape-marketplace]
+verify_jwt = true

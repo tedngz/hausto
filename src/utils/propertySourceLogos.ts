@@ -1,5 +1,5 @@
 export const getPropertySourceLogo = (sourceLink: string): { name: string; logo: string } => {
-  const url = sourceLink.toLowerCase();
+  const url = (sourceLink || '').toLowerCase();
   
   if (url.includes('airbnb')) {
     return {
@@ -36,10 +36,17 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
     };
   }
   
-  if (url.includes('batdongsan.com.vn')) {
+  if (url.includes('batdongsan') || url === 'batdongsan') {
     return {
       name: 'Batdongsan.com.vn',
       logo: '/logos/batdongsan-logo.png'
+    };
+  }
+  
+  if (url.includes('nhatot') || url === 'nhatot') {
+    return {
+      name: 'Nhà Tốt',
+      logo: 'https://static.chotot.com/storage/marketplace/logo-nhatot.svg'
     };
   }
   

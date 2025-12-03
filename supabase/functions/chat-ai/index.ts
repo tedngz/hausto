@@ -201,6 +201,102 @@ serve(async (req) => {
     
     // For anonymous users, we'll limit results in the system prompt
     const maxResults = isAnonymous ? 3 : 5;
+    
+    // ========== EXTERNAL MARKETPLACE SEARCH INTEGRATION ==========
+    // Detect if user wants to search external marketplaces
+    const externalSearchPatterns = [
+      /\b(batdongsan|bds|bat dong san)\b/i,
+      /\b(nhatot|nha tot|nhà tốt)\b/i,
+      /\b(airbnb)\b/i,
+      /search\s+(on|from|in)\s+(batdongsan|nhatot|airbnb)/i,
+      /find\s+(on|from|in)\s+(batdongsan|nhatot|airbnb)/i,
+      /look\s+(on|from|at)\s+(batdongsan|nhatot|airbnb)/i,
+      /check\s+(batdongsan|nhatot|airbnb)/i,
+      /tìm\s+(trên|từ)\s+(batdongsan|nhatot|airbnb)/i,
+    ];
+    
+    const detectMarketplace = (msg: string): 'batdongsan' | 'nhatot' | 'airbnb' | null => {
+      const lower = msg.toLowerCase();
+      if (lower.includes('batdongsan') || lower.includes('bds') || lower.includes('bat dong san')) return 'batdongsan';
+      if (lower.includes('nhatot') || lower.includes('nha tot') || lower.includes('nhà tốt')) return 'nhatot';
+      if (lower.includes('airbnb')) return 'airbnb';
+      return null;
+    };
+    
+    const isExternalSearch = externalSearchPatterns.some(pattern => pattern.test(message));
+    const detectedMarketplace = detectMarketplace(message);
+    let externalProperties: any[] = [];
+    
+    if (isExternalSearch && detectedMarketplace && !isAnonymous) {
+      console.log(`External search detected for marketplace: ${detectedMarketplace}`);
+      
+      try {
+        // Extract location from message or use preferences
+        const locationPatterns = [
+          /\b(d[1-9]|d1[0-2]|district\s*\d+|quận\s*\d+)\b/i,
+          /\b(binh thanh|bình thạnh|phu nhuan|phú nhuận|tan binh|tân bình|go vap|gò vấp)\b/i,
+          /\b(ho chi minh|hcm|saigon|sài gòn|hanoi|hà nội|da nang|đà nẵng)\b/i,
+        ];
+        
+        let searchLocation = '';
+        for (const pattern of locationPatterns) {
+          const match = message.match(pattern);
+          if (match) {
+            searchLocation = match[0];
+            break;
+          }
+        }
+        
+        // Fallback to user preferences location
+        if (!searchLocation && userPreferences?.location?.[0]) {
+          searchLocation = userPreferences.location[0];
+        }
+        
+        // Build search query from message
+        const searchQuery = message
+          .replace(externalSearchPatterns[0], '')
+          .replace(externalSearchPatterns[1], '')
+          .replace(externalSearchPatterns[2], '')
+          .replace(/search|find|look|check|tìm/gi, '')
+          .replace(/on|from|in|at|trên|từ/gi, '')
+          .trim() || 'apartment';
+        
+        console.log(`Calling scrape-marketplace: marketplace=${detectedMarketplace}, query=${searchQuery}, location=${searchLocation}`);
+        
+        // Call scrape-marketplace edge function
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const scrapeResponse = await fetch(`${supabaseUrl}/functions/v1/scrape-marketplace`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({
+            marketplace: detectedMarketplace,
+            query: searchQuery,
+            location: searchLocation,
+            minPrice: userPreferences?.priceRange?.[0],
+            maxPrice: userPreferences?.priceRange?.[1],
+          }),
+        });
+        
+        if (scrapeResponse.ok) {
+          const scrapeData = await scrapeResponse.json();
+          if (scrapeData.success && scrapeData.properties?.length > 0) {
+            externalProperties = scrapeData.properties;
+            console.log(`Found ${externalProperties.length} external properties from ${detectedMarketplace}`);
+          } else {
+            console.log('No external properties found:', scrapeData.message || scrapeData.error);
+          }
+        } else {
+          console.error('Scrape marketplace error:', scrapeResponse.status, await scrapeResponse.text());
+        }
+      } catch (externalError) {
+        console.error('External search error:', externalError);
+        // Continue with internal search only
+      }
+    }
+    // ========== END EXTERNAL MARKETPLACE SEARCH INTEGRATION ==========
 
     // Helper to validate UUIDs and decide if we can persist/history
     const isValidUUID = (v: string | null | undefined) =>
@@ -307,6 +403,27 @@ ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
 `;
 }).join('\n')}
 
+${externalProperties.length > 0 ? `
+🌐 EXTERNAL MARKETPLACE RESULTS (from ${detectedMarketplace || 'external source'}):
+These properties were found on external marketplaces. Include them in results with "isExternal: true".
+
+${externalProperties.map((p, index) => `
+External Property ${index + 1}:
+Title: ${p.title}
+Location: ${p.location}
+Price: ${p.price?.toLocaleString()} VND/month (${p.priceDisplay || 'N/A'})
+Size: ${p.size || 'N/A'}
+Description: ${(p.description || '').substring(0, 200)}
+Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'N/A'}
+Amenities: ${Array.isArray(p.amenities) ? p.amenities.join(', ') : 'N/A'}
+Property ID (for matching): ${p.id}
+Source: ${p.source}
+Source URL: ${p.sourceUrl}
+${p.sourceProviderName ? `Contact Name: ${p.sourceProviderName}` : ''}
+${p.sourceProviderPhone ? `Contact Phone: ${p.sourceProviderPhone}` : ''}
+`).join('\n')}
+` : ''}
+
 🚨 CRITICAL LOCATION & PRICE MATCHING RULES (HIGHEST PRIORITY):
 1. LOCATION MATCHING:
    - ALWAYS prioritize exact location matches FIRST
@@ -356,10 +473,32 @@ ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
       "images": ["COPY-EXACT-IMAGE-URLS-FROM-PROPERTY-DATA"],
       "matchScore": 85,
       "matchReason": "This cozy apartment in [location] features [key features] that match your search",
-      "realtor_id": "copy-exact-realtor-id-from-above"
+      "realtor_id": "copy-exact-realtor-id-from-above",
+      "isExternal": false,
+      "source": null,
+      "sourceUrl": null
+    },
+    {
+      "id": "external-batdongsan-xxx (for external properties)",
+      "title": "External property title",
+      "location": "District 1, Ho Chi Minh City",
+      "price": 8000000,
+      "size": "30m²",
+      "vibe": "Modern",
+      "description": "Property from external marketplace",
+      "highlights": ["Modern", "Furnished"],
+      "images": [],
+      "matchScore": 75,
+      "matchReason": "Found on batdongsan.com.vn - this studio in D1 matches your budget",
+      "realtor_id": null,
+      "isExternal": true,
+      "source": "batdongsan",
+      "sourceUrl": "https://batdongsan.com.vn/...",
+      "sourceProviderName": "Contact name if available",
+      "sourceProviderPhone": "Phone if available"
     }
   ],
-  "summary": "Found X properties matching your preferences...",
+  "summary": "Found X properties matching your preferences (Y from external marketplaces)...",
   "totalMatches": 3
 }
 

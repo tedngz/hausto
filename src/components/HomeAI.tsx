@@ -18,6 +18,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { supabase } from '@/integrations/supabase/client';
+import { ExternalPropertyBadge } from '@/components/ExternalPropertyBadge';
+
 interface PropertyMatch {
   id: string;
   title: string;
@@ -33,6 +35,12 @@ interface PropertyMatch {
   realtor_id?: string;
   vibe_analysis?: any;
   amenities?: string[];
+  // External marketplace properties
+  isExternal?: boolean;
+  source?: 'batdongsan' | 'nhatot' | 'airbnb' | null;
+  sourceUrl?: string | null;
+  sourceProviderName?: string;
+  sourceProviderPhone?: string;
 }
 interface SearchResult {
   results: PropertyMatch[];
@@ -551,6 +559,15 @@ export const HomeAI = ({
                                           {property.matchScore}% match
                                         </Badge>
                                       </div>
+                                      {/* External Source Badge */}
+                                      {property.isExternal && property.source && (
+                                        <div className="absolute bottom-2 left-2">
+                                          <ExternalPropertyBadge 
+                                            source={property.source} 
+                                            sourceUrl={property.sourceUrl || undefined}
+                                          />
+                                        </div>
+                                      )}
                                       {/* Like Button - Mobile position */}
                                       <div className="absolute top-2 right-2 sm:hidden">
                                          <Button onClick={e => {
@@ -710,6 +727,15 @@ export const HomeAI = ({
                                 {property.matchScore}% match
                               </Badge>
                             </div>
+                            {/* External Source Badge */}
+                            {property.isExternal && property.source && (
+                              <div className="absolute bottom-2 left-2">
+                                <ExternalPropertyBadge 
+                                  source={property.source} 
+                                  sourceUrl={property.sourceUrl || undefined}
+                                />
+                              </div>
+                            )}
                             {/* Like Button - Mobile position */}
                             <div className="absolute top-2 right-2 sm:hidden">
                               <Button onClick={e => {
