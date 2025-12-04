@@ -202,19 +202,19 @@ serve(async (req) => {
     // For anonymous users, we'll limit results in the system prompt
     const maxResults = isAnonymous ? 3 : 5;
     
-    // ========== EXTERNAL MARKETPLACE SEARCH INTEGRATION ==========
-    // Detect if user wants to search external marketplaces
-    const externalSearchPatterns = [
-      /\b(batdongsan|bds|bat dong san)\b/i,
-      /\b(nhatot|nha tot|nhà tốt)\b/i,
-      /\b(airbnb)\b/i,
-      /search\s+(on|from|in)\s+(batdongsan|nhatot|airbnb)/i,
-      /find\s+(on|from|in)\s+(batdongsan|nhatot|airbnb)/i,
-      /look\s+(on|from|at)\s+(batdongsan|nhatot|airbnb)/i,
-      /check\s+(batdongsan|nhatot|airbnb)/i,
-      /tìm\s+(trên|từ)\s+(batdongsan|nhatot|airbnb)/i,
+    // ========== AUTOMATIC EXTERNAL MARKETPLACE SEARCH INTEGRATION ==========
+    // Detect property search intent (automatic - doesn't require explicit marketplace mention)
+    const propertySearchPatterns = [
+      /\b(find|search|look for|looking for|show me|get|want|need)\b.*\b(apartment|room|studio|house|flat|condo|property|place|home|rental|rent)\b/i,
+      /\b(apartment|room|studio|house|flat|condo|property|place|home|rental)\b.*\b(in|at|near|around)\b/i,
+      /\b(tìm|kiếm|muốn|cần)\b.*\b(phòng|căn hộ|nhà|chung cư)\b/i,
+      /\b(d[1-9]|d1[0-2]|district\s*\d+|quận\s*\d+)\b/i, // Location mentions suggest property search
+      /\b(budget|price|cheap|affordable|under|below|around)\b.*\b(million|triệu|vnd|đồng)\b/i,
     ];
     
+    const isPropertySearch = propertySearchPatterns.some(pattern => pattern.test(message));
+    
+    // Detect if user explicitly mentions a marketplace (for prioritization)
     const detectMarketplace = (msg: string): 'batdongsan' | 'nhatot' | 'airbnb' | null => {
       const lower = msg.toLowerCase();
       if (lower.includes('batdongsan') || lower.includes('bds') || lower.includes('bat dong san')) return 'batdongsan';
@@ -223,12 +223,12 @@ serve(async (req) => {
       return null;
     };
     
-    const isExternalSearch = externalSearchPatterns.some(pattern => pattern.test(message));
     const detectedMarketplace = detectMarketplace(message);
     let externalProperties: any[] = [];
     
-    if (isExternalSearch && detectedMarketplace && !isAnonymous) {
-      console.log(`External search detected for marketplace: ${detectedMarketplace}`);
+    // Automatic external search for authenticated users when doing property searches
+    if (isPropertySearch && !isAnonymous) {
+      console.log(`Property search detected, enabling automatic external marketplace search`);
       
       try {
         // Extract location from message or use preferences
@@ -254,49 +254,58 @@ serve(async (req) => {
         
         // Build search query from message
         const searchQuery = message
-          .replace(externalSearchPatterns[0], '')
-          .replace(externalSearchPatterns[1], '')
-          .replace(externalSearchPatterns[2], '')
-          .replace(/search|find|look|check|tìm/gi, '')
-          .replace(/on|from|in|at|trên|từ/gi, '')
+          .replace(/find|search|look for|looking for|show me|get|want|need/gi, '')
+          .replace(/apartment|room|studio|house|flat|condo|property|place|home|rental|rent/gi, 'apartment')
+          .replace(/in|at|near|around/gi, '')
           .trim() || 'apartment';
         
-        console.log(`Calling scrape-marketplace: marketplace=${detectedMarketplace}, query=${searchQuery}, location=${searchLocation}`);
+        // Use detected marketplace or default to batdongsan (most popular in Vietnam)
+        const marketplaces = detectedMarketplace 
+          ? [detectedMarketplace] 
+          : ['batdongsan', 'nhatot'] as const;
         
-        // Call scrape-marketplace edge function
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const scrapeResponse = await fetch(`${supabaseUrl}/functions/v1/scrape-marketplace`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-          },
-          body: JSON.stringify({
-            marketplace: detectedMarketplace,
-            query: searchQuery,
-            location: searchLocation,
-            minPrice: userPreferences?.priceRange?.[0],
-            maxPrice: userPreferences?.priceRange?.[1],
-          }),
+        
+        // Search multiple marketplaces in parallel
+        const scrapePromises = marketplaces.map(async (marketplace) => {
+          console.log(`Calling scrape-marketplace: marketplace=${marketplace}, query=${searchQuery}, location=${searchLocation}`);
+          
+          const scrapeResponse = await fetch(`${supabaseUrl}/functions/v1/scrape-marketplace`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({
+              marketplace,
+              query: searchQuery,
+              location: searchLocation,
+              minPrice: userPreferences?.priceRange?.[0],
+              maxPrice: userPreferences?.priceRange?.[1],
+              includeVibeAnalysis: true, // Request vibe analysis
+            }),
+          });
+          
+          if (scrapeResponse.ok) {
+            const scrapeData = await scrapeResponse.json();
+            if (scrapeData.success && scrapeData.properties?.length > 0) {
+              console.log(`Found ${scrapeData.properties.length} external properties from ${marketplace}`);
+              return scrapeData.properties;
+            }
+          }
+          return [];
         });
         
-        if (scrapeResponse.ok) {
-          const scrapeData = await scrapeResponse.json();
-          if (scrapeData.success && scrapeData.properties?.length > 0) {
-            externalProperties = scrapeData.properties;
-            console.log(`Found ${externalProperties.length} external properties from ${detectedMarketplace}`);
-          } else {
-            console.log('No external properties found:', scrapeData.message || scrapeData.error);
-          }
-        } else {
-          console.error('Scrape marketplace error:', scrapeResponse.status, await scrapeResponse.text());
-        }
+        const results = await Promise.all(scrapePromises);
+        externalProperties = results.flat().slice(0, 5); // Limit to 5 external properties
+        console.log(`Total external properties found: ${externalProperties.length}`);
+        
       } catch (externalError) {
         console.error('External search error:', externalError);
         // Continue with internal search only
       }
     }
-    // ========== END EXTERNAL MARKETPLACE SEARCH INTEGRATION ==========
+    // ========== END AUTOMATIC EXTERNAL MARKETPLACE SEARCH INTEGRATION ==========
 
     // Helper to validate UUIDs and decide if we can persist/history
     const isValidUUID = (v: string | null | undefined) =>
