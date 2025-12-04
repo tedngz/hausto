@@ -48,6 +48,14 @@ interface ExternalProperty {
   sourceUrl: string;
   sourceProviderName?: string;
   sourceProviderPhone?: string;
+  vibe?: string;
+  vibe_analysis?: {
+    style?: string;
+    colors?: string[];
+    activities?: string[];
+    amenities?: string[];
+    vibe_scores?: Record<string, number>;
+  };
 }
 
 interface SearchParams {
@@ -57,6 +65,7 @@ interface SearchParams {
   minPrice?: number;
   maxPrice?: number;
   propertyType?: string;
+  includeVibeAnalysis?: boolean;
 }
 
 // Build search URL for each marketplace
@@ -92,14 +101,24 @@ function buildSearchUrl(params: SearchParams): string {
   }
 }
 
-// Use AI to extract structured property data from scraped content
+// Use AI to extract structured property data from scraped content with vibe analysis
 async function extractPropertiesWithAI(
   scrapedContent: string, 
   marketplace: string,
-  searchQuery: string
+  searchQuery: string,
+  includeVibeAnalysis: boolean = true
 ): Promise<ExternalProperty[]> {
-  console.log(`Extracting properties from ${marketplace} using AI...`);
+  console.log(`Extracting properties from ${marketplace} using AI (vibe analysis: ${includeVibeAnalysis})...`);
   
+  const vibeAnalysisInstructions = includeVibeAnalysis ? `
+VIBE ANALYSIS (for each property):
+Analyze the description and amenities to determine:
+- style: One of [Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage]
+- colors: Array of dominant colors based on description [Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold]
+- activities: Array of suitable activities [Working, Reading, Relaxing, Entertaining, Cooking, Exercising]
+- vibe_scores: Object with scores 1-10 for: modern, cozy, luxurious, minimalist, spacious, natural_light, urban, elegant
+` : '';
+
   const extractionPrompt = `You are a property data extraction expert. Extract rental property listings from this ${marketplace} website content.
 
 SCRAPED CONTENT:
@@ -113,12 +132,13 @@ Extract up to 5 property listings. For EACH property found, return:
 - price: Numeric price in VND (convert if needed, e.g., "5 triệu" = 5000000)
 - priceDisplay: Original price text (e.g., "5 triệu/tháng")
 - size: Area in m² if available
-- description: Brief description
-- highlights: Array of 3-5 key features
-- amenities: Array of amenities mentioned
+- description: Brief description (100-200 words)
+- highlights: Array of 3-5 key features as lifestyle benefits (e.g., "Natural light workspace", "Cozy reading nook")
+- amenities: Array of specific amenities mentioned (e.g., "Air Conditioning", "WiFi", "Washing Machine", "Balcony")
 - sourceUrl: The listing URL if found in content
 - contactName: Landlord/agent name if available
 - contactPhone: Phone number if available
+${vibeAnalysisInstructions}
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -129,12 +149,18 @@ RESPOND WITH VALID JSON ONLY:
       "price": 5000000,
       "priceDisplay": "5 triệu/tháng",
       "size": "25m²",
-      "description": "...",
-      "highlights": ["..."],
-      "amenities": ["..."],
+      "description": "Detailed description...",
+      "highlights": ["Natural light living space", "Modern kitchen setup", "Quiet neighborhood retreat"],
+      "amenities": ["Air Conditioning", "WiFi", "Washing Machine", "Balcony", "Furnished"],
       "sourceUrl": "https://...",
       "contactName": "...",
-      "contactPhone": "..."
+      "contactPhone": "...",
+      ${includeVibeAnalysis ? `"vibe_analysis": {
+        "style": "Modern",
+        "colors": ["Neutral", "White"],
+        "activities": ["Working", "Relaxing"],
+        "vibe_scores": {"modern": 8, "cozy": 6, "luxurious": 5, "minimalist": 7, "spacious": 6, "natural_light": 8, "urban": 7, "elegant": 6}
+      }` : ''}
     }
   ]
 }
@@ -151,10 +177,10 @@ If no properties found, return: {"properties": []}`;
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You extract structured property data from scraped website content. Always respond with valid JSON.' },
+          { role: 'system', content: 'You extract structured property data from scraped website content with vibe analysis. Always respond with valid JSON.' },
           { role: 'user', content: extractionPrompt }
         ],
-        max_tokens: 3000,
+        max_tokens: 4000,
         temperature: 0.3,
       }),
     });
@@ -171,24 +197,51 @@ If no properties found, return: {"properties": []}`;
     content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     const parsed = JSON.parse(content);
-    const properties: ExternalProperty[] = (parsed.properties || []).map((p: any, index: number) => ({
-      id: `external-${marketplace}-${Date.now()}-${index}`,
-      title: p.title || 'Untitled Property',
-      location: p.location || 'Ho Chi Minh City',
-      price: typeof p.price === 'number' ? p.price : parseInt(String(p.price).replace(/\D/g, '')) || 0,
-      priceDisplay: p.priceDisplay || `${p.price?.toLocaleString()} VND`,
-      size: p.size || 'N/A',
-      images: [], // Firecrawl doesn't always get images reliably
-      description: p.description || '',
-      highlights: Array.isArray(p.highlights) ? p.highlights : [],
-      amenities: Array.isArray(p.amenities) ? p.amenities : [],
-      source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
-      sourceUrl: p.sourceUrl || buildSearchUrl({ marketplace: marketplace as any, query: searchQuery }),
-      sourceProviderName: p.contactName,
-      sourceProviderPhone: p.contactPhone,
-    }));
+    const properties: ExternalProperty[] = (parsed.properties || []).map((p: any, index: number) => {
+      // Build vibe analysis structure matching internal properties
+      const vibeAnalysis = p.vibe_analysis || {
+        style: 'Modern',
+        colors: ['Neutral'],
+        activities: ['Relaxing'],
+        vibe_scores: { modern: 5, cozy: 5, luxurious: 5, minimalist: 5, spacious: 5, natural_light: 5, urban: 5, elegant: 5 }
+      };
+      
+      // Determine primary vibe from scores
+      const vibeScores = vibeAnalysis.vibe_scores || {};
+      const primaryVibe = Object.entries(vibeScores)
+        .sort(([,a], [,b]) => (b as number) - (a as number))
+        .slice(0, 2)
+        .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1))
+        .join(', ');
 
-    console.log(`Extracted ${properties.length} properties from ${marketplace}`);
+      return {
+        id: `external-${marketplace}-${Date.now()}-${index}`,
+        title: p.title || 'Untitled Property',
+        location: p.location || 'Ho Chi Minh City',
+        price: typeof p.price === 'number' ? p.price : parseInt(String(p.price).replace(/\D/g, '')) || 0,
+        priceDisplay: p.priceDisplay || `${p.price?.toLocaleString()} VND`,
+        size: p.size || 'N/A',
+        images: [], // Firecrawl doesn't always get images reliably
+        description: p.description || '',
+        highlights: Array.isArray(p.highlights) ? p.highlights : [],
+        amenities: Array.isArray(p.amenities) ? p.amenities : [],
+        source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
+        sourceUrl: p.sourceUrl || buildSearchUrl({ marketplace: marketplace as any, query: searchQuery }),
+        sourceProviderName: p.contactName,
+        sourceProviderPhone: p.contactPhone,
+        // Add vibe analysis fields for consistency with internal properties
+        vibe: primaryVibe || vibeAnalysis.style || 'Modern',
+        vibe_analysis: {
+          style: vibeAnalysis.style,
+          colors: vibeAnalysis.colors,
+          activities: vibeAnalysis.activities,
+          amenities: Array.isArray(p.amenities) ? p.amenities : [],
+          vibe_scores: vibeAnalysis.vibe_scores,
+        },
+      };
+    });
+
+    console.log(`Extracted ${properties.length} properties with vibe analysis from ${marketplace}`);
     return properties;
   } catch (error) {
     console.error('AI extraction error:', error);
@@ -203,9 +256,9 @@ serve(async (req) => {
   }
 
   try {
-    const { marketplace, query, location, minPrice, maxPrice } = await req.json() as SearchParams;
+    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true } = await req.json() as SearchParams;
     
-    console.log(`Scraping ${marketplace} for: ${query}, location: ${location}`);
+    console.log(`Scraping ${marketplace} for: ${query}, location: ${location}, includeVibeAnalysis: ${includeVibeAnalysis}`);
 
     if (!FIRECRAWL_API_KEY) {
       throw new Error('FIRECRAWL_API_KEY not configured');
@@ -213,7 +266,7 @@ serve(async (req) => {
 
     // Check cache first
     const cacheKey = `marketplace:${marketplace}:${query}:${location || 'all'}`;
-    const cached = await redis.get(cacheKey);
+    const cached = await redisGet(cacheKey);
     
     if (cached) {
       console.log('Returning cached results for:', cacheKey);
@@ -273,11 +326,12 @@ serve(async (req) => {
       });
     }
 
-    // Extract properties using AI
+    // Extract properties using AI with vibe analysis
     const properties = await extractPropertiesWithAI(
       scrapedData.data.markdown,
       marketplace,
-      query
+      query,
+      includeVibeAnalysis
     );
 
     // Filter by price if specified
@@ -292,7 +346,7 @@ serve(async (req) => {
 
     // Cache results
     if (filteredProperties.length > 0) {
-      await redis.set(cacheKey, JSON.stringify(filteredProperties), { ex: CACHE_TTL });
+      await redisSet(cacheKey, filteredProperties, CACHE_TTL);
     }
 
     console.log(`Returning ${filteredProperties.length} properties from ${marketplace}`);
