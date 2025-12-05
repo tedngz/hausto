@@ -550,9 +550,35 @@ export const HomeAI = ({
                                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                     {/* Property Image - Bigger on mobile */}
                                     <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
-                                      {property.images && property.images.length > 0 ? <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center">
+                                      {property.images && property.images.length > 0 ? (
+                                        <img 
+                                          src={property.images[0]} 
+                                          alt={property.title} 
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            const target = e.target as HTMLImageElement;
+                                            target.onerror = null;
+                                            const currentIndex = property.images.indexOf(target.src);
+                                            if (currentIndex < property.images.length - 1) {
+                                              target.src = property.images[currentIndex + 1];
+                                            } else {
+                                              target.style.display = 'none';
+                                              target.parentElement?.classList.add('fallback-active');
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
                                           <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                                        </div>}
+                                        </div>
+                                      )}
+                                      {/* Fallback overlay for external properties */}
+                                      {property.isExternal && (!property.images || property.images.length === 0) && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/30">
+                                          <Home className="h-10 w-10 text-primary mb-2" />
+                                          <span className="text-xs text-muted-foreground font-medium">External Listing</span>
+                                        </div>
+                                      )}
                                       {/* Match Score Overlay */}
                                       <div className="absolute top-2 left-2">
                                         <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
@@ -718,9 +744,37 @@ export const HomeAI = ({
                         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                           {/* Property Image - Bigger on mobile */}
                           <div className="w-full h-48 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
-                            {property.images && property.images.length > 0 ? <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center">
+                            {property.images && property.images.length > 0 ? (
+                              <img 
+                                src={property.images[0]} 
+                                alt={property.title} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.onerror = null;
+                                  // Try next image if available
+                                  const currentIndex = property.images.indexOf(target.src);
+                                  if (currentIndex < property.images.length - 1) {
+                                    target.src = property.images[currentIndex + 1];
+                                  } else {
+                                    // Show fallback
+                                    target.style.display = 'none';
+                                    target.parentElement?.classList.add('fallback-active');
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
                                 <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                              </div>}
+                              </div>
+                            )}
+                            {/* Fallback overlay for external properties */}
+                            {property.isExternal && (!property.images || property.images.length === 0) && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/30">
+                                <Home className="h-10 w-10 text-primary mb-2" />
+                                <span className="text-xs text-muted-foreground font-medium">External Listing</span>
+                              </div>
+                            )}
                             {/* Match Score Overlay */}
                             <div className="absolute top-2 left-2">
                               <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
