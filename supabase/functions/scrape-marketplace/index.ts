@@ -106,9 +106,12 @@ async function extractPropertiesWithAI(
   scrapedContent: string, 
   marketplace: string,
   searchQuery: string,
-  includeVibeAnalysis: boolean = true
+  includeVibeAnalysis: boolean = true,
+  extractedLinks: string[] = [],
+  extractedImages: string[] = []
 ): Promise<ExternalProperty[]> {
   console.log(`Extracting properties from ${marketplace} using AI (vibe analysis: ${includeVibeAnalysis})...`);
+  console.log(`Available links: ${extractedLinks.length}, Available images: ${extractedImages.length}`);
   
   const vibeAnalysisInstructions = includeVibeAnalysis ? `
 VIBE ANALYSIS (for each property):
@@ -119,22 +122,45 @@ Analyze the description and amenities to determine:
 - vibe_scores: Object with scores 1-10 for: modern, cozy, luxurious, minimalist, spacious, natural_light, urban, elegant
 ` : '';
 
-  const extractionPrompt = `You are a property data extraction expert. Extract rental property listings from this ${marketplace} website content.
+  // Filter images to only include property-related ones
+  const propertyImages = extractedImages.filter(img => 
+    img.includes('cdn') || 
+    img.includes('upload') || 
+    img.includes('image') || 
+    img.includes('photo') ||
+    img.includes('property') ||
+    img.includes('room') ||
+    img.includes('apartment') ||
+    (img.match(/\.(jpg|jpeg|png|webp)/i) && !img.includes('logo') && !img.includes('icon') && !img.includes('avatar'))
+  ).slice(0, 30); // Limit to 30 images for context
+
+  const extractionPrompt = `You are a property data extraction expert. Extract rental property listings from this ${marketplace} Vietnamese website content.
 
 SCRAPED CONTENT:
-${scrapedContent.substring(0, 15000)} 
+${scrapedContent.substring(0, 12000)} 
+
+AVAILABLE IMAGE URLs FROM PAGE (assign 4-6 relevant images to each property based on context):
+${propertyImages.slice(0, 25).join('\n')}
 
 SEARCH CONTEXT: User searched for "${searchQuery}"
 
-Extract up to 5 property listings. For EACH property found, return:
-- title: Property title/name
-- location: Full address or area
+CRITICAL INSTRUCTIONS:
+1. ALL text output (title, description, highlights) MUST be in ENGLISH - translate any Vietnamese content
+2. Extract up to 5 property listings
+3. For each property, find and assign 4-6 image URLs from the available images above
+4. Create engaging English titles (e.g., "Modern Studio with City Views in District 1" not "Phòng trọ quận 1")
+5. Write highlights as lifestyle benefits in English (e.g., "Bright workspace by the window", "Cozy reading corner with natural light")
+
+For EACH property found, return:
+- title: Property title IN ENGLISH (translated, descriptive)
+- location: Location/address (keep Vietnamese area names but add context in English)
 - price: Numeric price in VND (convert if needed, e.g., "5 triệu" = 5000000)
 - priceDisplay: Original price text (e.g., "5 triệu/tháng")
 - size: Area in m² if available
-- description: Brief description (100-200 words)
-- highlights: Array of 3-5 key features as lifestyle benefits (e.g., "Natural light workspace", "Cozy reading nook")
-- amenities: Array of specific amenities mentioned (e.g., "Air Conditioning", "WiFi", "Washing Machine", "Balcony")
+- images: Array of 4-6 image URLs from the available images that match this property
+- description: Brief description IN ENGLISH (100-200 words, translated)
+- highlights: Array of 4-5 lifestyle highlights IN ENGLISH (e.g., "Spacious living area with abundant sunlight", "Modern kitchen setup")
+- amenities: Array of specific amenities IN ENGLISH (e.g., "Air Conditioning", "WiFi", "Washing Machine", "Balcony")
 - sourceUrl: The listing URL if found in content
 - contactName: Landlord/agent name if available
 - contactPhone: Phone number if available
@@ -144,13 +170,14 @@ RESPOND WITH VALID JSON ONLY:
 {
   "properties": [
     {
-      "title": "...",
-      "location": "...",
+      "title": "Modern Studio Apartment with Balcony in District 1",
+      "location": "District 1, Ho Chi Minh City",
       "price": 5000000,
       "priceDisplay": "5 triệu/tháng",
       "size": "25m²",
-      "description": "Detailed description...",
-      "highlights": ["Natural light living space", "Modern kitchen setup", "Quiet neighborhood retreat"],
+      "images": ["https://cdn.example.com/image1.jpg", "https://cdn.example.com/image2.jpg", "https://cdn.example.com/image3.jpg", "https://cdn.example.com/image4.jpg"],
+      "description": "A beautifully designed modern studio apartment featuring floor-to-ceiling windows...",
+      "highlights": ["Bright living space with city views", "Modern fully-equipped kitchen", "Private balcony for relaxation", "Quiet neighborhood near cafes"],
       "amenities": ["Air Conditioning", "WiFi", "Washing Machine", "Balcony", "Furnished"],
       "sourceUrl": "https://...",
       "contactName": "...",
@@ -177,7 +204,7 @@ If no properties found, return: {"properties": []}`;
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You extract structured property data from scraped website content with vibe analysis. Always respond with valid JSON.' },
+          { role: 'system', content: 'You extract structured property data from scraped Vietnamese website content. ALWAYS output English text for titles, descriptions, and highlights. Always respond with valid JSON.' },
           { role: 'user', content: extractionPrompt }
         ],
         max_tokens: 4000,
@@ -214,14 +241,19 @@ If no properties found, return: {"properties": []}`;
         .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1))
         .join(', ');
 
+      // Get images from AI extraction or fallback to extracted images
+      const propertyImageUrls = Array.isArray(p.images) && p.images.length > 0 
+        ? p.images.filter((img: string) => img && img.startsWith('http')).slice(0, 6)
+        : propertyImages.slice(index * 4, index * 4 + 4);
+
       return {
         id: `external-${marketplace}-${Date.now()}-${index}`,
-        title: p.title || 'Untitled Property',
+        title: p.title || 'Modern Rental Property',
         location: p.location || 'Ho Chi Minh City',
         price: typeof p.price === 'number' ? p.price : parseInt(String(p.price).replace(/\D/g, '')) || 0,
         priceDisplay: p.priceDisplay || `${p.price?.toLocaleString()} VND`,
         size: p.size || 'N/A',
-        images: [], // Firecrawl doesn't always get images reliably
+        images: propertyImageUrls,
         description: p.description || '',
         highlights: Array.isArray(p.highlights) ? p.highlights : [],
         amenities: Array.isArray(p.amenities) ? p.amenities : [],
@@ -242,6 +274,9 @@ If no properties found, return: {"properties": []}`;
     });
 
     console.log(`Extracted ${properties.length} properties with vibe analysis from ${marketplace}`);
+    properties.forEach((p, i) => {
+      console.log(`Property ${i + 1}: "${p.title}" - ${p.images.length} images`);
+    });
     return properties;
   } catch (error) {
     console.error('AI extraction error:', error);
@@ -291,8 +326,8 @@ serve(async (req) => {
     const searchUrl = buildSearchUrl({ marketplace, query, location });
     console.log(`[scrape-marketplace] Built search URL: ${searchUrl}`);
 
-    // Use Firecrawl to scrape the marketplace
-    console.log(`[scrape-marketplace] Calling Firecrawl API...`);
+    // Use Firecrawl to scrape the marketplace with images
+    console.log(`[scrape-marketplace] Calling Firecrawl API with image extraction...`);
     const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -301,9 +336,9 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         url: searchUrl,
-        formats: ['markdown', 'links'],
-        onlyMainContent: true,
-        waitFor: 3000, // Wait for dynamic content
+        formats: ['markdown', 'links', 'html'],
+        onlyMainContent: false, // Get full page to extract images
+        waitFor: 4000, // Wait for dynamic content and images to load
       }),
     });
 
@@ -335,13 +370,69 @@ serve(async (req) => {
       });
     }
 
-    // Extract properties using AI with vibe analysis
+    // Extract image URLs from HTML content
+    const htmlContent = scrapedData.data.html || '';
+    const imageRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+    const srcsetRegex = /srcset=["']([^"']+)["']/gi;
+    const backgroundRegex = /background(?:-image)?:\s*url\(["']?([^"')]+)["']?\)/gi;
+    
+    const extractedImages: string[] = [];
+    let match;
+    
+    // Extract from img src
+    while ((match = imageRegex.exec(htmlContent)) !== null) {
+      if (match[1] && match[1].startsWith('http')) {
+        extractedImages.push(match[1]);
+      }
+    }
+    
+    // Extract from srcset (get highest res)
+    while ((match = srcsetRegex.exec(htmlContent)) !== null) {
+      const srcsetParts = match[1].split(',');
+      srcsetParts.forEach(part => {
+        const url = part.trim().split(' ')[0];
+        if (url && url.startsWith('http')) {
+          extractedImages.push(url);
+        }
+      });
+    }
+    
+    // Extract from background images
+    while ((match = backgroundRegex.exec(htmlContent)) !== null) {
+      if (match[1] && match[1].startsWith('http')) {
+        extractedImages.push(match[1]);
+      }
+    }
+
+    // Also check markdown for image links
+    const mdImageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
+    while ((match = mdImageRegex.exec(scrapedData.data.markdown)) !== null) {
+      if (match[1] && match[1].startsWith('http')) {
+        extractedImages.push(match[1]);
+      }
+    }
+
+    // Deduplicate and filter images
+    const uniqueImages = [...new Set(extractedImages)].filter(img => 
+      !img.includes('logo') && 
+      !img.includes('icon') && 
+      !img.includes('sprite') &&
+      !img.includes('avatar') &&
+      !img.includes('placeholder') &&
+      img.match(/\.(jpg|jpeg|png|webp|gif)/i)
+    );
+    
+    console.log(`[scrape-marketplace] Extracted ${uniqueImages.length} unique images from page`);
+
+    // Extract properties using AI with vibe analysis and images
     console.log(`[scrape-marketplace] Calling AI extraction for ${marketplace}...`);
     const properties = await extractPropertiesWithAI(
       scrapedData.data.markdown,
       marketplace,
       query,
-      includeVibeAnalysis
+      includeVibeAnalysis,
+      scrapedData.data.links || [],
+      uniqueImages
     );
     
     console.log(`[scrape-marketplace] AI extracted ${properties.length} properties from ${marketplace}`);
