@@ -226,9 +226,13 @@ serve(async (req) => {
     const detectedMarketplace = detectMarketplace(message);
     let externalProperties: any[] = [];
     
-    // Automatic external search for authenticated users when doing property searches
-    if (isPropertySearch && !isAnonymous) {
-      console.log(`Property search detected, enabling automatic external marketplace search`);
+    // Automatic external search when doing property searches (for both authenticated and anonymous users)
+    const shouldSearchExternal = isPropertySearch;
+    
+    console.log(`[External Search] Detection: isPropertySearch=${isPropertySearch}, detectedMarketplace=${detectedMarketplace}, shouldSearch=${shouldSearchExternal}`);
+    
+    if (shouldSearchExternal) {
+      console.log(`[External Search] Property search detected, enabling automatic external marketplace search`);
       
       try {
         // Extract location from message or use preferences
@@ -252,6 +256,8 @@ serve(async (req) => {
           searchLocation = userPreferences.location[0];
         }
         
+        console.log(`[External Search] Extracted location: "${searchLocation}"`);
+        
         // Build search query from message
         const searchQuery = message
           .replace(/find|search|look for|looking for|show me|get|want|need/gi, '')
@@ -259,49 +265,86 @@ serve(async (req) => {
           .replace(/in|at|near|around/gi, '')
           .trim() || 'apartment';
         
+        console.log(`[External Search] Search query: "${searchQuery}"`);
+        
         // Use detected marketplace or default to batdongsan (most popular in Vietnam)
         const marketplaces = detectedMarketplace 
           ? [detectedMarketplace] 
-          : ['batdongsan', 'nhatot'] as const;
+          : ['batdongsan'] as const; // Start with just batdongsan for reliability
         
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         
-        // Search multiple marketplaces in parallel
+        // Search marketplaces with timeout
         const scrapePromises = marketplaces.map(async (marketplace) => {
-          console.log(`Calling scrape-marketplace: marketplace=${marketplace}, query=${searchQuery}, location=${searchLocation}`);
+          console.log(`[External Search] Calling scrape-marketplace: marketplace=${marketplace}, query=${searchQuery}, location=${searchLocation}`);
           
-          const scrapeResponse = await fetch(`${supabaseUrl}/functions/v1/scrape-marketplace`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            },
-            body: JSON.stringify({
-              marketplace,
-              query: searchQuery,
-              location: searchLocation,
-              minPrice: userPreferences?.priceRange?.[0],
-              maxPrice: userPreferences?.priceRange?.[1],
-              includeVibeAnalysis: true, // Request vibe analysis
-            }),
-          });
-          
-          if (scrapeResponse.ok) {
-            const scrapeData = await scrapeResponse.json();
-            if (scrapeData.success && scrapeData.properties?.length > 0) {
-              console.log(`Found ${scrapeData.properties.length} external properties from ${marketplace}`);
-              return scrapeData.properties;
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            
+            const scrapeResponse = await fetch(`${supabaseUrl}/functions/v1/scrape-marketplace`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({
+                marketplace,
+                query: searchQuery,
+                location: searchLocation,
+                minPrice: userPreferences?.priceRange?.[0],
+                maxPrice: userPreferences?.priceRange?.[1],
+                includeVibeAnalysis: true,
+              }),
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            console.log(`[External Search] Response status from ${marketplace}: ${scrapeResponse.status}`);
+            
+            if (scrapeResponse.ok) {
+              const scrapeData = await scrapeResponse.json();
+              console.log(`[External Search] Response data from ${marketplace}:`, {
+                success: scrapeData.success,
+                propertiesCount: scrapeData.properties?.length || 0,
+                cached: scrapeData.cached,
+                error: scrapeData.error
+              });
+              
+              if (scrapeData.success && scrapeData.properties?.length > 0) {
+                console.log(`[External Search] Found ${scrapeData.properties.length} external properties from ${marketplace}`);
+                return scrapeData.properties.map((p: any) => ({
+                  ...p,
+                  source: marketplace,
+                  isExternal: true,
+                }));
+              }
+            } else {
+              const errorText = await scrapeResponse.text();
+              console.error(`[External Search] Error response from ${marketplace}: ${errorText}`);
             }
+          } catch (fetchError) {
+            console.error(`[External Search] Fetch error for ${marketplace}:`, fetchError);
           }
           return [];
         });
         
         const results = await Promise.all(scrapePromises);
         externalProperties = results.flat().slice(0, 5); // Limit to 5 external properties
-        console.log(`Total external properties found: ${externalProperties.length}`);
+        console.log(`[External Search] Total external properties found: ${externalProperties.length}`);
+        
+        if (externalProperties.length > 0) {
+          console.log(`[External Search] External properties sample:`, externalProperties.slice(0, 2).map(p => ({
+            id: p.id,
+            title: p.title,
+            source: p.source,
+            price: p.price
+          })));
+        }
         
       } catch (externalError) {
-        console.error('External search error:', externalError);
+        console.error('[External Search] Error:', externalError);
         // Continue with internal search only
       }
     }
@@ -748,9 +791,56 @@ Current user message: ${message}`;
       const parsed = JSON.parse(aiResponse);
       if (parsed.results && Array.isArray(parsed.results)) {
         searchData = parsed;
+        console.log(`[Response] Parsed ${searchData.results.length} results from AI response`);
+        
+        // Check if AI included external properties
+        const externalInAI = searchData.results.filter((r: any) => r.isExternal);
+        console.log(`[Response] AI included ${externalInAI.length} external properties`);
+        
+        // If we have external properties but AI didn't include them, manually inject
+        if (externalProperties.length > 0 && externalInAI.length === 0) {
+          console.log(`[Response] AI omitted external properties, manually injecting ${externalProperties.length}`);
+          
+          // Format external properties to match the expected structure
+          const formattedExternal = externalProperties.map((p: any) => ({
+            id: p.id,
+            title: p.title || 'External Property',
+            location: p.location || 'Ho Chi Minh City',
+            price: p.price || 0,
+            size: p.size || 'N/A',
+            vibe: p.vibe || p.vibe_analysis?.style || 'Modern',
+            description: p.description || '',
+            highlights: p.highlights || [],
+            images: p.images || [],
+            matchScore: 70, // Default match score for external
+            matchReason: `Found on ${p.source || 'external marketplace'} - ${p.priceDisplay || `${p.price?.toLocaleString()} VND/month`}`,
+            realtor_id: null,
+            isExternal: true,
+            source: p.source,
+            sourceUrl: p.sourceUrl,
+            sourceProviderName: p.sourceProviderName,
+            sourceProviderPhone: p.sourceProviderPhone,
+            vibe_analysis: p.vibe_analysis,
+            amenities: p.amenities || p.vibe_analysis?.amenities || [],
+          }));
+          
+          // Append external properties to results
+          searchData.results = [...searchData.results, ...formattedExternal];
+          searchData.totalMatches = searchData.results.length;
+          
+          // Update summary to mention external results
+          if (searchData.summary && !searchData.summary.includes('external')) {
+            searchData.summary += ` Also found ${formattedExternal.length} properties from external marketplaces.`;
+          }
+          
+          // Update the aiResponse with injected properties
+          aiResponse = JSON.stringify(searchData);
+          console.log(`[Response] Final response includes ${searchData.results.length} total properties`);
+        }
       }
     } catch (e) {
       // Not JSON, treat as regular text
+      console.log('[Response] AI response is not JSON, treating as text');
     }
 
     // Save AI response to database (only for authenticated users)

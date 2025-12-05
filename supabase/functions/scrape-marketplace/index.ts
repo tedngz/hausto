@@ -256,16 +256,24 @@ serve(async (req) => {
   }
 
   try {
-    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true } = await req.json() as SearchParams;
+    const body = await req.json() as SearchParams;
+    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true } = body;
     
-    console.log(`Scraping ${marketplace} for: ${query}, location: ${location}, includeVibeAnalysis: ${includeVibeAnalysis}`);
+    console.log(`[scrape-marketplace] Request received:`, JSON.stringify({ marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis }));
 
     if (!FIRECRAWL_API_KEY) {
+      console.error('[scrape-marketplace] FIRECRAWL_API_KEY not configured');
       throw new Error('FIRECRAWL_API_KEY not configured');
+    }
+
+    if (!OPENAI_API_KEY) {
+      console.error('[scrape-marketplace] OPENAI_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
     // Check cache first
     const cacheKey = `marketplace:${marketplace}:${query}:${location || 'all'}`;
+    console.log(`[scrape-marketplace] Checking cache for key: ${cacheKey}`);
     const cached = await redisGet(cacheKey);
     
     if (cached) {
@@ -281,9 +289,10 @@ serve(async (req) => {
 
     // Build search URL
     const searchUrl = buildSearchUrl({ marketplace, query, location });
-    console.log('Scraping URL:', searchUrl);
+    console.log(`[scrape-marketplace] Built search URL: ${searchUrl}`);
 
     // Use Firecrawl to scrape the marketplace
+    console.log(`[scrape-marketplace] Calling Firecrawl API...`);
     const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -300,23 +309,23 @@ serve(async (req) => {
 
     if (!firecrawlResponse.ok) {
       const errorText = await firecrawlResponse.text();
-      console.error('Firecrawl error:', firecrawlResponse.status, errorText);
+      console.error(`[scrape-marketplace] Firecrawl error: ${firecrawlResponse.status}`, errorText);
       
       // Return empty results instead of error for graceful degradation
       return new Response(JSON.stringify({ 
-        success: true, 
+        success: false, 
         properties: [],
-        error: `Marketplace temporarily unavailable: ${marketplace}`
+        error: `Marketplace temporarily unavailable: ${marketplace} (Firecrawl error: ${firecrawlResponse.status})`
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const scrapedData = await firecrawlResponse.json();
-    console.log('Firecrawl response success:', scrapedData.success);
+    console.log(`[scrape-marketplace] Firecrawl response: success=${scrapedData.success}, hasMarkdown=${!!scrapedData.data?.markdown}, markdownLength=${scrapedData.data?.markdown?.length || 0}`);
 
     if (!scrapedData.success || !scrapedData.data?.markdown) {
-      console.log('No content scraped from marketplace');
+      console.log(`[scrape-marketplace] No content scraped from ${marketplace}`);
       return new Response(JSON.stringify({ 
         success: true, 
         properties: [],
@@ -327,29 +336,35 @@ serve(async (req) => {
     }
 
     // Extract properties using AI with vibe analysis
+    console.log(`[scrape-marketplace] Calling AI extraction for ${marketplace}...`);
     const properties = await extractPropertiesWithAI(
       scrapedData.data.markdown,
       marketplace,
       query,
       includeVibeAnalysis
     );
+    
+    console.log(`[scrape-marketplace] AI extracted ${properties.length} properties from ${marketplace}`);
 
     // Filter by price if specified
     let filteredProperties = properties;
     if (minPrice || maxPrice) {
+      console.log(`[scrape-marketplace] Filtering by price: min=${minPrice}, max=${maxPrice}`);
       filteredProperties = properties.filter(p => {
         if (minPrice && p.price < minPrice) return false;
         if (maxPrice && p.price > maxPrice) return false;
         return true;
       });
+      console.log(`[scrape-marketplace] After price filter: ${filteredProperties.length} properties`);
     }
 
     // Cache results
     if (filteredProperties.length > 0) {
+      console.log(`[scrape-marketplace] Caching ${filteredProperties.length} properties with key: ${cacheKey}`);
       await redisSet(cacheKey, filteredProperties, CACHE_TTL);
     }
 
-    console.log(`Returning ${filteredProperties.length} properties from ${marketplace}`);
+    console.log(`[scrape-marketplace] SUCCESS: Returning ${filteredProperties.length} properties from ${marketplace}`);
 
     return new Response(JSON.stringify({ 
       success: true, 
