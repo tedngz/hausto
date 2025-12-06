@@ -274,6 +274,90 @@ export type Database = {
           },
         ]
       }
+      external_properties: {
+        Row: {
+          amenities: string[] | null
+          city: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          crawled_at: string | null
+          created_at: string | null
+          description: string | null
+          expires_at: string | null
+          external_id: string
+          highlights: string[] | null
+          id: string
+          images: string[] | null
+          is_active: boolean | null
+          last_verified_at: string | null
+          location: string
+          location_normalized: string | null
+          price: number | null
+          price_display: string | null
+          size: string | null
+          source: string
+          source_url: string
+          title: string
+          updated_at: string | null
+          vibe: string | null
+          vibe_analysis: Json | null
+        }
+        Insert: {
+          amenities?: string[] | null
+          city?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          crawled_at?: string | null
+          created_at?: string | null
+          description?: string | null
+          expires_at?: string | null
+          external_id: string
+          highlights?: string[] | null
+          id?: string
+          images?: string[] | null
+          is_active?: boolean | null
+          last_verified_at?: string | null
+          location: string
+          location_normalized?: string | null
+          price?: number | null
+          price_display?: string | null
+          size?: string | null
+          source: string
+          source_url: string
+          title: string
+          updated_at?: string | null
+          vibe?: string | null
+          vibe_analysis?: Json | null
+        }
+        Update: {
+          amenities?: string[] | null
+          city?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          crawled_at?: string | null
+          created_at?: string | null
+          description?: string | null
+          expires_at?: string | null
+          external_id?: string
+          highlights?: string[] | null
+          id?: string
+          images?: string[] | null
+          is_active?: boolean | null
+          last_verified_at?: string | null
+          location?: string
+          location_normalized?: string | null
+          price?: number | null
+          price_display?: string | null
+          size?: string | null
+          source?: string
+          source_url?: string
+          title?: string
+          updated_at?: string | null
+          vibe?: string | null
+          vibe_analysis?: Json | null
+        }
+        Relationships: []
+      }
       fast_track_requests: {
         Row: {
           conversation_id: string
@@ -721,7 +805,9 @@ export type Database = {
         Args: { user_email: string }
         Returns: undefined
       }
+      cleanup_expired_external_properties: { Args: never; Returns: undefined }
       deactivate_expired_properties: { Args: never; Returns: undefined }
+      detect_city: { Args: { location_text: string }; Returns: string }
       get_conversation_properties: {
         Args: never
         Returns: {
@@ -811,6 +897,7 @@ export type Database = {
         Args: { activated_at: string }
         Returns: boolean
       }
+      normalize_location: { Args: { location_text: string }; Returns: string }
       user_liked_post: { Args: { post_uuid: string }; Returns: boolean }
       validate_email: { Args: { email_input: string }; Returns: boolean }
       validate_phone: { Args: { phone_input: string }; Returns: boolean }
