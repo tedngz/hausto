@@ -50,3 +50,6 @@ verify_jwt = true
 
 [functions.scrape-marketplace]
 verify_jwt = false
+
+[functions.crawl-external-properties]
+verify_jwt = false

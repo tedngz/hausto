@@ -202,7 +202,7 @@ serve(async (req) => {
     // For anonymous users, we'll limit results in the system prompt
     const maxResults = isAnonymous ? 3 : 5;
     
-    // ========== AUTOMATIC EXTERNAL MARKETPLACE SEARCH INTEGRATION ==========
+    // ========== HYBRID EXTERNAL MARKETPLACE SEARCH WITH DATABASE CACHING ==========
     // Detect property search intent (automatic - doesn't require explicit marketplace mention)
     const propertySearchPatterns = [
       /\b(find|search|look for|looking for|show me|get|want|need)\b.*\b(apartment|room|studio|house|flat|condo|property|place|home|rental|rent)\b/i,
@@ -232,7 +232,7 @@ serve(async (req) => {
     console.log(`[External Search] Detection: isPropertySearch=${isPropertySearch}, detectedMarketplace=${detectedMarketplace}, shouldSearch=${shouldSearchExternal}`);
     
     if (shouldSearchExternal) {
-      console.log(`[External Search] Property search detected, enabling automatic external marketplace search`);
+      console.log(`[External Search] Property search detected, using hybrid caching approach`);
       
       try {
         // Extract location from message or use preferences
@@ -258,88 +258,253 @@ serve(async (req) => {
         
         console.log(`[External Search] Extracted location: "${searchLocation}"`);
         
-        // Build search query from message
-        const searchQuery = message
-          .replace(/find|search|look for|looking for|show me|get|want|need/gi, '')
-          .replace(/apartment|room|studio|house|flat|condo|property|place|home|rental|rent/gi, 'apartment')
-          .replace(/in|at|near|around/gi, '')
-          .trim() || 'apartment';
+        // Normalize location for database lookup
+        const normalizedLocation = searchLocation.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
         
-        console.log(`[External Search] Search query: "${searchQuery}"`);
+        // ========== STEP 1: CHECK DATABASE CACHE FIRST ==========
+        console.log(`[External Search] Step 1: Checking database cache for location: ${normalizedLocation}`);
         
-        // Use detected marketplace or default to batdongsan (most popular in Vietnam)
-        const marketplaces = detectedMarketplace 
-          ? [detectedMarketplace] 
-          : ['batdongsan'] as const; // Start with just batdongsan for reliability
+        const { data: cachedExternal, error: cacheError } = await supabase
+          .from('external_properties')
+          .select('*')
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString());
         
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        // Apply location filter if we have a location
+        let filteredCached = cachedExternal || [];
+        if (normalizedLocation && filteredCached.length > 0) {
+          filteredCached = filteredCached.filter((p: any) => 
+            (p.location_normalized && p.location_normalized.includes(normalizedLocation)) ||
+            (p.location && p.location.toLowerCase().includes(normalizedLocation))
+          );
+        }
         
-        // Search marketplaces with timeout
-        const scrapePromises = marketplaces.map(async (marketplace) => {
-          console.log(`[External Search] Calling scrape-marketplace: marketplace=${marketplace}, query=${searchQuery}, location=${searchLocation}`);
+        // Apply price filter if user has preferences
+        if (userPreferences?.priceRange && filteredCached.length > 0) {
+          const [minPrice, maxPrice] = userPreferences.priceRange;
+          filteredCached = filteredCached.filter((p: any) => {
+            if (minPrice && p.price < minPrice * 0.8) return false; // 20% flexibility
+            if (maxPrice && p.price > maxPrice * 1.2) return false;
+            return true;
+          });
+        }
+        
+        // Limit results
+        filteredCached = filteredCached.slice(0, 5);
+        
+        console.log(`[External Search] Database cache: ${filteredCached.length} properties found (from ${cachedExternal?.length || 0} total)`);
+        
+        if (filteredCached.length > 0) {
+          // Check cache freshness
+          const oldestCrawl = filteredCached.reduce((oldest: Date, p: any) => {
+            const crawledAt = new Date(p.crawled_at);
+            return crawledAt < oldest ? crawledAt : oldest;
+          }, new Date());
           
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          const cacheAgeHours = (Date.now() - oldestCrawl.getTime()) / (1000 * 60 * 60);
+          console.log(`[External Search] Cache age: ${cacheAgeHours.toFixed(1)} hours`);
+          
+          // Convert cached properties to external property format
+          externalProperties = filteredCached.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            location: p.location,
+            price: p.price,
+            priceDisplay: p.price_display,
+            size: p.size,
+            images: p.images || [],
+            description: p.description,
+            highlights: p.highlights || [],
+            amenities: p.amenities || [],
+            source: p.source,
+            sourceUrl: p.source_url,
+            sourceProviderName: p.contact_name,
+            sourceProviderPhone: p.contact_phone,
+            vibe: p.vibe,
+            vibe_analysis: p.vibe_analysis,
+            isExternal: true,
+            cached: true,
+            crawledAt: p.crawled_at,
+          }));
+          
+          console.log(`[External Search] Returning ${externalProperties.length} cached properties`);
+          
+          // ========== STEP 2: STALE-WHILE-REVALIDATE ==========
+          // If cache is stale (> 6 hours), trigger background refresh
+          if (cacheAgeHours > 6) {
+            console.log(`[External Search] Cache stale (${cacheAgeHours.toFixed(1)}h), triggering background refresh`);
             
-            const scrapeResponse = await fetch(`${supabaseUrl}/functions/v1/scrape-marketplace`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-              },
-              body: JSON.stringify({
-                marketplace,
-                query: searchQuery,
-                location: searchLocation,
-                minPrice: userPreferences?.priceRange?.[0],
-                maxPrice: userPreferences?.priceRange?.[1],
-                includeVibeAnalysis: true,
-              }),
-              signal: controller.signal,
-            });
+            // Use EdgeRuntime.waitUntil for background task (fire and forget)
+            const backgroundRefresh = async () => {
+              try {
+                const refreshResponse = await fetch(`${supabaseUrl}/functions/v1/crawl-external-properties`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${supabaseServiceKey}`,
+                  },
+                  body: JSON.stringify({
+                    locations: searchLocation ? [searchLocation] : ['D1', 'D2', 'D7', 'Binh Thanh'],
+                    marketplaces: detectedMarketplace ? [detectedMarketplace] : ['batdongsan'],
+                    forceRefresh: true,
+                    storeInDatabase: true,
+                  }),
+                });
+                
+                if (refreshResponse.ok) {
+                  const refreshData = await refreshResponse.json();
+                  console.log(`[Background Refresh] Completed:`, refreshData.summary);
+                } else {
+                  console.error(`[Background Refresh] Failed:`, await refreshResponse.text());
+                }
+              } catch (err) {
+                console.error('[Background Refresh] Error:', err);
+              }
+            };
             
-            clearTimeout(timeoutId);
+            // Fire and forget - don't await
+            backgroundRefresh().catch(err => console.error('[Background Refresh] Uncaught:', err));
+          }
+          
+        } else {
+          // ========== STEP 3: ON-DEMAND CRAWL ==========
+          // No cached data, perform real-time scrape
+          console.log(`[External Search] No cache, performing on-demand crawl for: ${searchLocation || 'default locations'}`);
+          
+          // Build search query from message
+          const searchQuery = message
+            .replace(/find|search|look for|looking for|show me|get|want|need/gi, '')
+            .replace(/apartment|room|studio|house|flat|condo|property|place|home|rental|rent/gi, 'apartment')
+            .replace(/in|at|near|around/gi, '')
+            .trim() || 'apartment';
+          
+          // Use detected marketplace or default to batdongsan
+          const marketplaces = detectedMarketplace 
+            ? [detectedMarketplace] 
+            : ['batdongsan'] as const;
+          
+          // Search marketplaces with timeout
+          const scrapePromises = marketplaces.map(async (marketplace) => {
+            console.log(`[External Search] On-demand scrape: marketplace=${marketplace}, location=${searchLocation}`);
             
-            console.log(`[External Search] Response status from ${marketplace}: ${scrapeResponse.status}`);
-            
-            if (scrapeResponse.ok) {
-              const scrapeData = await scrapeResponse.json();
-              console.log(`[External Search] Response data from ${marketplace}:`, {
-                success: scrapeData.success,
-                propertiesCount: scrapeData.properties?.length || 0,
-                cached: scrapeData.cached,
-                error: scrapeData.error
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+              
+              const scrapeResponse = await fetch(`${supabaseUrl}/functions/v1/scrape-marketplace`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${supabaseServiceKey}`,
+                },
+                body: JSON.stringify({
+                  marketplace,
+                  query: searchQuery,
+                  location: searchLocation,
+                  minPrice: userPreferences?.priceRange?.[0],
+                  maxPrice: userPreferences?.priceRange?.[1],
+                  includeVibeAnalysis: true,
+                }),
+                signal: controller.signal,
               });
               
-              if (scrapeData.success && scrapeData.properties?.length > 0) {
-                console.log(`[External Search] Found ${scrapeData.properties.length} external properties from ${marketplace}`);
-                return scrapeData.properties.map((p: any) => ({
-                  ...p,
-                  source: marketplace,
-                  isExternal: true,
-                }));
+              clearTimeout(timeoutId);
+              
+              console.log(`[External Search] On-demand response from ${marketplace}: ${scrapeResponse.status}`);
+              
+              if (scrapeResponse.ok) {
+                const scrapeData = await scrapeResponse.json();
+                console.log(`[External Search] On-demand data from ${marketplace}:`, {
+                  success: scrapeData.success,
+                  propertiesCount: scrapeData.properties?.length || 0,
+                });
+                
+                if (scrapeData.success && scrapeData.properties?.length > 0) {
+                  console.log(`[External Search] On-demand found ${scrapeData.properties.length} properties from ${marketplace}`);
+                  
+                  // Store in database for future cache (background)
+                  const storeInDb = async () => {
+                    try {
+                      for (const property of scrapeData.properties) {
+                        const externalId = property.sourceUrl 
+                          ? Buffer.from(property.sourceUrl).toString('base64').substring(0, 100)
+                          : `${marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                        
+                        const locationNormalized = (property.location || searchLocation || '').toLowerCase()
+                          .replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+                        
+                        const detectCity = (loc: string) => {
+                          const lower = loc.toLowerCase();
+                          if (/(ho chi minh|hcm|saigon|d[0-9]|binh thanh|phu nhuan)/i.test(lower)) return 'ho_chi_minh';
+                          if (/(ha noi|hanoi|ba dinh|hoan kiem)/i.test(lower)) return 'hanoi';
+                          return 'other';
+                        };
+                        
+                        await supabase.from('external_properties').upsert({
+                          external_id: externalId,
+                          source: marketplace,
+                          source_url: property.sourceUrl || `https://${marketplace}.com.vn`,
+                          title: property.title || 'Rental Property',
+                          location: property.location || searchLocation,
+                          location_normalized: locationNormalized,
+                          city: detectCity(property.location || searchLocation),
+                          price: property.price || 0,
+                          price_display: property.priceDisplay,
+                          size: property.size,
+                          description: property.description,
+                          highlights: property.highlights || [],
+                          amenities: property.amenities || [],
+                          images: property.images || [],
+                          contact_name: property.sourceProviderName,
+                          contact_phone: property.sourceProviderPhone,
+                          vibe: property.vibe,
+                          vibe_analysis: property.vibe_analysis || {},
+                          crawled_at: new Date().toISOString(),
+                          expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+                          is_active: true,
+                        }, { onConflict: 'source,external_id' });
+                      }
+                      console.log(`[External Search] Stored ${scrapeData.properties.length} properties in database`);
+                    } catch (storeErr) {
+                      console.error('[External Search] Error storing properties:', storeErr);
+                    }
+                  };
+                  
+                  // Fire and forget storage
+                  storeInDb().catch(err => console.error('[External Search] Store error:', err));
+                  
+                  return scrapeData.properties.map((p: any) => ({
+                    ...p,
+                    source: marketplace,
+                    isExternal: true,
+                    cached: false,
+                  }));
+                }
+              } else {
+                const errorText = await scrapeResponse.text();
+                console.error(`[External Search] On-demand error from ${marketplace}: ${errorText}`);
               }
-            } else {
-              const errorText = await scrapeResponse.text();
-              console.error(`[External Search] Error response from ${marketplace}: ${errorText}`);
+            } catch (fetchError) {
+              console.error(`[External Search] On-demand fetch error for ${marketplace}:`, fetchError);
             }
-          } catch (fetchError) {
-            console.error(`[External Search] Fetch error for ${marketplace}:`, fetchError);
-          }
-          return [];
-        });
-        
-        const results = await Promise.all(scrapePromises);
-        externalProperties = results.flat().slice(0, 5); // Limit to 5 external properties
-        console.log(`[External Search] Total external properties found: ${externalProperties.length}`);
+            return [];
+          });
+          
+          const results = await Promise.all(scrapePromises);
+          externalProperties = results.flat().slice(0, 5);
+          console.log(`[External Search] On-demand total properties: ${externalProperties.length}`);
+        }
         
         if (externalProperties.length > 0) {
-          console.log(`[External Search] External properties sample:`, externalProperties.slice(0, 2).map(p => ({
+          console.log(`[External Search] Final external properties:`, externalProperties.slice(0, 2).map((p: any) => ({
             id: p.id,
             title: p.title,
             source: p.source,
-            price: p.price
+            price: p.price,
+            cached: p.cached,
           })));
         }
         

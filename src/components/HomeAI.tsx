@@ -41,6 +41,9 @@ interface PropertyMatch {
   sourceUrl?: string | null;
   sourceProviderName?: string;
   sourceProviderPhone?: string;
+  // Cache metadata
+  cached?: boolean;
+  crawledAt?: string;
 }
 interface SearchResult {
   results: PropertyMatch[];
@@ -591,6 +594,8 @@ export const HomeAI = ({
                                           <ExternalPropertyBadge 
                                             source={property.source} 
                                             sourceUrl={property.sourceUrl || undefined}
+                                            cached={property.cached}
+                                            crawledAt={property.crawledAt}
                                           />
                                         </div>
                                       )}
@@ -787,6 +792,8 @@ export const HomeAI = ({
                                 <ExternalPropertyBadge 
                                   source={property.source} 
                                   sourceUrl={property.sourceUrl || undefined}
+                                  cached={property.cached}
+                                  crawledAt={property.crawledAt}
                                 />
                               </div>
                             )}
