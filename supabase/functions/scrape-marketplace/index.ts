@@ -98,13 +98,74 @@ function buildSearchUrl(params: SearchParams): string {
       return `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}`;
       
     case 'nhatot':
-      // nhatot.com search URL pattern - supports apartments and rooms
-      const nhatotDistrict = normalizedLocation
-        .replace(/quan-/g, '')
-        .replace(/-/g, ' ')
-        .trim();
-      if (nhatotDistrict) {
-        return `https://www.nhatot.com/thue-phong-tro-${nhatotCity}?q=${encodeURIComponent(nhatotDistrict)}`;
+      // nhatot.com uses district slugs like "quan-1", "quan-binh-thanh", etc.
+      // Map common district formats to nhatot slugs
+      const districtMappings: Record<string, string> = {
+        'd1': 'quan-1', 'district 1': 'quan-1', 'quan 1': 'quan-1', 'quan-1': 'quan-1',
+        'd2': 'quan-2', 'district 2': 'quan-2', 'quan 2': 'quan-2', 'quan-2': 'quan-2',
+        'd3': 'quan-3', 'district 3': 'quan-3', 'quan 3': 'quan-3', 'quan-3': 'quan-3',
+        'd4': 'quan-4', 'district 4': 'quan-4', 'quan 4': 'quan-4', 'quan-4': 'quan-4',
+        'd5': 'quan-5', 'district 5': 'quan-5', 'quan 5': 'quan-5', 'quan-5': 'quan-5',
+        'd6': 'quan-6', 'district 6': 'quan-6', 'quan 6': 'quan-6', 'quan-6': 'quan-6',
+        'd7': 'quan-7', 'district 7': 'quan-7', 'quan 7': 'quan-7', 'quan-7': 'quan-7',
+        'd8': 'quan-8', 'district 8': 'quan-8', 'quan 8': 'quan-8', 'quan-8': 'quan-8',
+        'd9': 'quan-9', 'district 9': 'quan-9', 'quan 9': 'quan-9', 'quan-9': 'quan-9',
+        'd10': 'quan-10', 'district 10': 'quan-10', 'quan 10': 'quan-10', 'quan-10': 'quan-10',
+        'd11': 'quan-11', 'district 11': 'quan-11', 'quan 11': 'quan-11', 'quan-11': 'quan-11',
+        'd12': 'quan-12', 'district 12': 'quan-12', 'quan 12': 'quan-12', 'quan-12': 'quan-12',
+        'binh thanh': 'quan-binh-thanh', 'binhthanh': 'quan-binh-thanh', 'quan binh thanh': 'quan-binh-thanh',
+        'phu nhuan': 'quan-phu-nhuan', 'phunhuan': 'quan-phu-nhuan', 'quan phu nhuan': 'quan-phu-nhuan',
+        'tan binh': 'quan-tan-binh', 'tanbinh': 'quan-tan-binh', 'quan tan binh': 'quan-tan-binh',
+        'go vap': 'quan-go-vap', 'govap': 'quan-go-vap', 'quan go vap': 'quan-go-vap',
+        'thu duc': 'thanh-pho-thu-duc', 'thuduc': 'thanh-pho-thu-duc',
+        'ba dinh': 'quan-ba-dinh', 'badinh': 'quan-ba-dinh',
+        'hoan kiem': 'quan-hoan-kiem', 'hoankiem': 'quan-hoan-kiem',
+        'dong da': 'quan-dong-da', 'dongda': 'quan-dong-da',
+        'cau giay': 'quan-cau-giay', 'caugiay': 'quan-cau-giay',
+        'hai ba trung': 'quan-hai-ba-trung', 'haibatrung': 'quan-hai-ba-trung',
+      };
+      
+      const locationLower = (location || '').toLowerCase().trim();
+      console.log(`[nhatot] Parsing location: "${locationLower}"`);
+      
+      // Try exact match first
+      let nhatotDistrictSlug = districtMappings[locationLower];
+      
+      // Try without spaces
+      if (!nhatotDistrictSlug) {
+        nhatotDistrictSlug = districtMappings[locationLower.replace(/\s+/g, '')];
+      }
+      
+      // Try to find district pattern in the location string (for locations like "D1, Ho Chi Minh")
+      if (!nhatotDistrictSlug) {
+        const districtMatch = locationLower.match(/\b(d\d+|district\s*\d+|quan\s*\d+|quan-\d+)\b/i);
+        if (districtMatch) {
+          const matchedDistrict = districtMatch[1].toLowerCase().replace(/\s+/g, '');
+          nhatotDistrictSlug = districtMappings[matchedDistrict] || districtMappings[matchedDistrict.replace('district', 'd')];
+          console.log(`[nhatot] Found district pattern: "${districtMatch[1]}" -> "${nhatotDistrictSlug}"`);
+        }
+      }
+      
+      // Try named district matching
+      if (!nhatotDistrictSlug) {
+        for (const [key, slug] of Object.entries(districtMappings)) {
+          if (locationLower.includes(key)) {
+            nhatotDistrictSlug = slug;
+            console.log(`[nhatot] Found named district: "${key}" -> "${slug}"`);
+            break;
+          }
+        }
+      }
+      
+      console.log(`[nhatot] Final district slug: "${nhatotDistrictSlug || 'none'}"`);
+      
+      if (nhatotDistrictSlug) {
+        // Use path-based filtering: /thue-phong-tro-{district}-{city}
+        return `https://www.nhatot.com/thue-phong-tro-${nhatotDistrictSlug}-${nhatotCity}`;
+      }
+      // Fallback to search query
+      if (location) {
+        return `https://www.nhatot.com/thue-phong-tro-${nhatotCity}?q=${encodeURIComponent(location)}`;
       }
       return `https://www.nhatot.com/thue-phong-tro-${nhatotCity}`;
       
