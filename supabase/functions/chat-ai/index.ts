@@ -348,7 +348,7 @@ serve(async (req) => {
                   },
                   body: JSON.stringify({
                     locations: searchLocation ? [searchLocation] : ['D1', 'D2', 'D7', 'Binh Thanh'],
-                    marketplaces: detectedMarketplace ? [detectedMarketplace] : ['batdongsan'],
+                    marketplaces: detectedMarketplace ? [detectedMarketplace] : ['batdongsan', 'nhatot'],
                     forceRefresh: true,
                     storeInDatabase: true,
                   }),
@@ -381,10 +381,10 @@ serve(async (req) => {
             .replace(/in|at|near|around/gi, '')
             .trim() || 'apartment';
           
-          // Use detected marketplace or default to batdongsan
+          // Use detected marketplace or default to batdongsan + nhatot
           const marketplaces = detectedMarketplace 
             ? [detectedMarketplace] 
-            : ['batdongsan'] as const;
+            : ['batdongsan', 'nhatot'] as const;
           
           // Search marketplaces with timeout
           const scrapePromises = marketplaces.map(async (marketplace) => {
@@ -430,7 +430,7 @@ serve(async (req) => {
                     try {
                       for (const property of scrapeData.properties) {
                         const externalId = property.sourceUrl 
-                          ? Buffer.from(property.sourceUrl).toString('base64').substring(0, 100)
+                          ? btoa(property.sourceUrl).substring(0, 100)
                           : `${marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
                         
                         const locationNormalized = (property.location || searchLocation || '').toLowerCase()
