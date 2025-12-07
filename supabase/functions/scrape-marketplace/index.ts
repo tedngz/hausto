@@ -80,21 +80,42 @@ function buildSearchUrl(params: SearchParams): string {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove diacritics
     || '';
   
+  // Detect city for URL building
+  const isHanoi = /(ha noi|hanoi|ba dinh|hoan kiem|dong da|cau giay|hai ba trung)/i.test(location || '');
+  const citySlug = isHanoi ? 'ha-noi' : 'tp-hcm';
+  const nhatotCity = isHanoi ? 'ha-noi' : 'ho-chi-minh';
+  const airbnbCity = isHanoi ? 'Hanoi--Vietnam' : 'Ho-Chi-Minh-City--Vietnam';
+  
   switch (marketplace) {
     case 'batdongsan':
       // batdongsan.com.vn search URL pattern
       if (normalizedLocation.includes('quan-')) {
-        return `https://batdongsan.com.vn/cho-thue-phong-tro-${normalizedLocation}-tp-hcm`;
+        return `https://batdongsan.com.vn/cho-thue-phong-tro-${normalizedLocation}-${citySlug}`;
       }
-      return `https://batdongsan.com.vn/cho-thue-phong-tro-tp-hcm?keyword=${encodeURIComponent(query)}`;
+      if (normalizedLocation) {
+        return `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}?keyword=${encodeURIComponent(location || query)}`;
+      }
+      return `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}`;
       
     case 'nhatot':
-      // nhatot.com search URL pattern  
-      return `https://www.nhatot.com/thue-phong-tro-ho-chi-minh?q=${encodeURIComponent(query)}`;
+      // nhatot.com search URL pattern - supports apartments and rooms
+      const nhatotDistrict = normalizedLocation
+        .replace(/quan-/g, '')
+        .replace(/-/g, ' ')
+        .trim();
+      if (nhatotDistrict) {
+        return `https://www.nhatot.com/thue-phong-tro-${nhatotCity}?q=${encodeURIComponent(nhatotDistrict)}`;
+      }
+      return `https://www.nhatot.com/thue-phong-tro-${nhatotCity}`;
       
     case 'airbnb':
-      // Airbnb search - may be blocked
-      return `https://www.airbnb.com/s/Ho-Chi-Minh-City--Vietnam/homes?query=${encodeURIComponent(query)}`;
+      // Airbnb search - monthly stays for apartment rentals
+      const checkIn = new Date();
+      const checkOut = new Date();
+      checkOut.setMonth(checkOut.getMonth() + 1);
+      const checkinStr = checkIn.toISOString().split('T')[0];
+      const checkoutStr = checkOut.toISOString().split('T')[0];
+      return `https://www.airbnb.com/s/${airbnbCity}/homes?tab_id=home_tab&refinement_paths%5B%5D=%2Fhomes&flexible_trip_lengths%5B%5D=one_month&monthly_start_date=${checkinStr}&monthly_length=1&price_filter_input_type=0&channel=EXPLORE&query=${encodeURIComponent(query || 'apartment')}&place_id=ChIJLZVVBKcvdTERvHHOyEbEN1Q&date_picker_type=monthly_stay`;
       
     default:
       return '';

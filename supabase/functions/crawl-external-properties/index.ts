@@ -19,7 +19,7 @@ const POPULAR_LOCATIONS = {
 
 interface CrawlRequest {
   locations?: string[];
-  marketplaces?: ('batdongsan' | 'nhatot')[];
+  marketplaces?: ('batdongsan' | 'nhatot' | 'airbnb')[];
   city?: 'ho_chi_minh' | 'hanoi';
   forceRefresh?: boolean;
   storeInDatabase?: boolean;
@@ -101,7 +101,7 @@ serve(async (req) => {
     const body: CrawlRequest = await req.json();
     const { 
       locations = [], 
-      marketplaces = ['batdongsan'], 
+      marketplaces = ['batdongsan', 'nhatot'], // Now includes nhatot by default
       city = 'ho_chi_minh',
       forceRefresh = false,
       storeInDatabase = true 
@@ -200,7 +200,7 @@ serve(async (req) => {
                 
                 // Create unique external_id from source URL or generate one
                 const externalId = property.sourceUrl 
-                  ? Buffer.from(property.sourceUrl).toString('base64').substring(0, 100)
+                  ? btoa(property.sourceUrl).substring(0, 100)
                   : `${marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
                 
                 const propertyData = {
