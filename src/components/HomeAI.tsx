@@ -842,7 +842,7 @@ export const HomeAI = ({
               <Upload className="h-4 w-4" />
             </Button>
             <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || !query.trim() && uploadedImages.length === 0} size="sm" className="h-8 w-8 p-0">
-              {isSendingMessage || isSearching ? <Send className="h-4 w-4 animate-spin" /> : <PlaneTakeoff className="h-4 w-4" />}
+              {isSendingMessage || isSearching ? <Send className="h-4 w-4" /> : <PlaneTakeoff className="h-4 w-4" />}
             </Button>
           </div>
         </div>
