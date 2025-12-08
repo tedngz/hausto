@@ -264,6 +264,49 @@ serve(async (req) => {
           .replace(/\s+/g, ' ')
           .trim();
         
+        // Create location matching terms for flexible lookup
+        const locationMatchTerms: string[] = [];
+        if (normalizedLocation) {
+          locationMatchTerms.push(normalizedLocation);
+          
+          // Handle HCM aliases
+          if (['hcm', 'ho chi minh', 'saigon', 'sai gon'].some(alias => normalizedLocation.includes(alias))) {
+            locationMatchTerms.push('ho chi minh', 'hcm', 'ho_chi_minh');
+          }
+          // Handle Hanoi aliases  
+          if (['hanoi', 'ha noi'].some(alias => normalizedLocation.includes(alias))) {
+            locationMatchTerms.push('hanoi', 'ha noi', 'ha_noi');
+          }
+          // Handle district patterns (d1, district 1, quan 1)
+          const districtMatch = normalizedLocation.match(/^d(\d+)$|district\s*(\d+)|quan\s*(\d+)/);
+          if (districtMatch) {
+            const distNum = districtMatch[1] || districtMatch[2] || districtMatch[3];
+            locationMatchTerms.push(`d${distNum}`, `district ${distNum}`, `quan ${distNum}`, `district${distNum}`);
+            // D1-D12 are in HCM
+            if (parseInt(distNum) <= 12) {
+              locationMatchTerms.push('ho chi minh', 'hcm', 'ho_chi_minh');
+            }
+          }
+          // Handle named districts
+          const namedDistricts: Record<string, string> = {
+            'binh thanh': 'ho chi minh',
+            'phu nhuan': 'ho chi minh', 
+            'tan binh': 'ho chi minh',
+            'go vap': 'ho chi minh',
+            'ba dinh': 'hanoi',
+            'hoan kiem': 'hanoi',
+            'dong da': 'hanoi',
+            'cau giay': 'hanoi',
+          };
+          for (const [district, city] of Object.entries(namedDistricts)) {
+            if (normalizedLocation.includes(district)) {
+              locationMatchTerms.push(city, city.replace(' ', '_'));
+            }
+          }
+        }
+        
+        console.log(`[External Search] Location match terms: ${JSON.stringify(locationMatchTerms)}`);
+        
         // ========== STEP 1: CHECK DATABASE CACHE FIRST ==========
         console.log(`[External Search] Step 1: Checking database cache for location: ${normalizedLocation}`);
         
@@ -275,11 +318,14 @@ serve(async (req) => {
         
         // Apply location filter if we have a location
         let filteredCached = cachedExternal || [];
-        if (normalizedLocation && filteredCached.length > 0) {
-          filteredCached = filteredCached.filter((p: any) => 
-            (p.location_normalized && p.location_normalized.includes(normalizedLocation)) ||
-            (p.location && p.location.toLowerCase().includes(normalizedLocation))
-          );
+        if (locationMatchTerms.length > 0 && filteredCached.length > 0) {
+          filteredCached = filteredCached.filter((p: any) => {
+            const propLocation = (p.location_normalized || p.location || '').toLowerCase();
+            const propCity = (p.city || '').toLowerCase().replace('_', ' ');
+            return locationMatchTerms.some(term => 
+              propLocation.includes(term) || propCity.includes(term.replace(' ', '_')) || propCity.includes(term)
+            );
+          });
         }
         
         // Apply price filter if user has preferences
