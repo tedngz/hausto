@@ -873,7 +873,7 @@ export const HomeAI = ({
         amenities: selectedProperty.vibe_analysis?.amenities || selectedProperty.amenities || [],
         realtor: {
           id: selectedProperty.realtor_id || "contact",
-          name: "Contact for details",
+          name: "Match for contact details",
           phone: "",
           email: ""
         },
