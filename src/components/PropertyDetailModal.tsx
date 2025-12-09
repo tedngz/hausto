@@ -37,18 +37,16 @@ export const PropertyDetailModal = ({
     }
     onClose();
   };
-  const vibeScore = userPreferences && !isAnonymous
-    ? calculateVibeScore(apartment, userPreferences)
-    : {
-        overall: 75,
-        breakdown: {
-          style: 75,
-          color: 75,
-          activities: 75,
-          price: 75,
-          location: 75
-        }
-      }; // Default "Good vibe" for anonymous users
+  const vibeScore = userPreferences && !isAnonymous ? calculateVibeScore(apartment, userPreferences) : {
+    overall: 75,
+    breakdown: {
+      style: 75,
+      color: 75,
+      activities: 75,
+      price: 75,
+      location: 75
+    }
+  }; // Default "Good vibe" for anonymous users
 
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md w-[95vw] max-h-[90vh] sm:max-h-[95vh] overflow-y-auto p-0 gap-0">
@@ -61,7 +59,7 @@ export const PropertyDetailModal = ({
           <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} hideVibeScore={true} />
 
           {/* Action Buttons */}
-          {(onLike || onDislike) && <div className="flex justify-center space-x-4 pt-4 mt-4 border-t">
+          {(onLike || onDislike) && <div className="flex justify-center space-x-4 pt-4 mt-4 border-t py-0">
               {onDislike && <Button size="lg" variant="outline" className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400" onClick={handleDislike}>
                   <X className="w-8 h-8" />
                 </Button>}
