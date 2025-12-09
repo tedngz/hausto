@@ -279,82 +279,192 @@ Provide creative, engaging, and professional content that stands out in the rent
       }
     } else {
       // Renter context - help with property search and recommendations
+      
+      // Extract accumulated context from conversation history for better reasoning
+      let accumulatedContext = {
+        locations: [] as string[],
+        maxPrice: null as number | null,
+        minPrice: null as number | null,
+        amenities: [] as string[],
+        styles: [] as string[],
+        previouslyMentionedProperties: [] as string[]
+      };
+      
+      // Parse conversation history to extract accumulated preferences
+      if (chatHistory.length > 0) {
+        for (const msg of chatHistory) {
+          const content = msg.content.toLowerCase();
+          
+          // Extract price constraints (look for patterns like "under 15 mil", "less than 20m", "below 15000000")
+          const pricePatterns = [
+            /under\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+            /less\s*than\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+            /below\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+            /dưới\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+            /(\d+)\s*(mil|million|m|tr|triệu)\s*(or less|max|maximum)/gi,
+            /budget.*?(\d+)\s*(mil|million|m|tr|triệu)/gi,
+            /max.*?(\d+)\s*(mil|million|m|tr|triệu)/gi,
+          ];
+          
+          for (const pattern of pricePatterns) {
+            const matches = content.matchAll(pattern);
+            for (const match of matches) {
+              const value = parseInt(match[1]);
+              if (value > 0 && value < 1000) { // Likely in millions
+                const priceInVND = value * 1000000;
+                if (!accumulatedContext.maxPrice || priceInVND < accumulatedContext.maxPrice) {
+                  accumulatedContext.maxPrice = priceInVND;
+                }
+              }
+            }
+          }
+          
+          // Extract locations mentioned
+          const locationPatterns = [
+            /(?:in|at|near|around)\s+([A-Za-z\s]+(?:district|quan|d\d+))/gi,
+            /\b(d\d+|district\s*\d+|quan\s*\d+)\b/gi,
+            /\b(hanoi|ha noi|hà nội|ho chi minh|hcm|saigon|sài gòn)\b/gi,
+            /\b(binh thanh|bình thạnh|phu nhuan|phú nhuận|tan binh|tân bình|go vap|gò vấp)\b/gi,
+            /\b(ba dinh|ba đình|hoan kiem|hoàn kiếm|dong da|đống đa|cau giay|cầu giấy)\b/gi,
+          ];
+          
+          for (const pattern of locationPatterns) {
+            const matches = content.matchAll(pattern);
+            for (const match of matches) {
+              const location = match[1] || match[0];
+              if (location && !accumulatedContext.locations.includes(location.trim())) {
+                accumulatedContext.locations.push(location.trim());
+              }
+            }
+          }
+          
+          // Extract amenity preferences
+          const amenityKeywords = ['balcony', 'pool', 'gym', 'parking', 'pet', 'furnished', 'wifi', 'elevator', 'security', 'garden', 'sofa', 'washing machine', 'air conditioning'];
+          for (const amenity of amenityKeywords) {
+            if (content.includes(amenity) && !accumulatedContext.amenities.includes(amenity)) {
+              accumulatedContext.amenities.push(amenity);
+            }
+          }
+          
+          // Extract style preferences
+          const styleKeywords = ['luxury', 'modern', 'cozy', 'minimalist', 'industrial', 'bohemian', 'scandinavian', 'contemporary', 'traditional', 'rustic', 'urban', 'vintage'];
+          for (const style of styleKeywords) {
+            if (content.includes(style) && !accumulatedContext.styles.includes(style)) {
+              accumulatedContext.styles.push(style);
+            }
+          }
+        }
+      }
+      
+      // Also parse current message for context
+      const currentMsgLower = message.toLowerCase();
+      const currentPricePatterns = [
+        /under\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+        /less\s*than\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+        /below\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+        /dưới\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
+        /(\d+)\s*(mil|million|m|tr|triệu)\s*(or less|max|maximum)/gi,
+      ];
+      
+      for (const pattern of currentPricePatterns) {
+        const matches = currentMsgLower.matchAll(pattern);
+        for (const match of matches) {
+          const value = parseInt(match[1]);
+          if (value > 0 && value < 1000) {
+            const priceInVND = value * 1000000;
+            if (!accumulatedContext.maxPrice || priceInVND < accumulatedContext.maxPrice) {
+              accumulatedContext.maxPrice = priceInVND;
+            }
+          }
+        }
+      }
+      
+      console.log('Accumulated context from conversation:', JSON.stringify(accumulatedContext));
+      
       systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
-📝 CONVERSATION CONTEXT & MEMORY:
-${chatHistory.length > 0 ? `You have access to the conversation history. USE IT to maintain context across requests:
-- Remember locations mentioned in previous messages (e.g., if user asked about D2 before, stay in Ho Chi Minh City)
-- Remember preferences stated earlier (e.g., budget, size, amenities)
-- Build upon previous searches - don't reset context
-- If user asks for "rooms with sofa" after searching "rooms in D2", search for sofas WITHIN the previously mentioned location (D2/HCM)
-- NEVER jump between cities unless explicitly requested
-- When no specific location mentioned, default to the last mentioned city/area from conversation history` : 'This is the first message in the conversation.'}
+🧠 CRITICAL: CONVERSATION MEMORY & REASONING RULES:
+${chatHistory.length > 0 ? `You have access to the FULL conversation history. You MUST:
+
+1. **REMEMBER ALL CONSTRAINTS FROM PREVIOUS MESSAGES:**
+${accumulatedContext.maxPrice ? `   - USER'S MAX BUDGET: ${accumulatedContext.maxPrice.toLocaleString()} VND/month (${(accumulatedContext.maxPrice/1000000).toFixed(0)} million)` : '   - No specific budget mentioned yet'}
+${accumulatedContext.locations.length > 0 ? `   - PREFERRED LOCATIONS: ${accumulatedContext.locations.join(', ')}` : '   - No specific location mentioned yet'}
+${accumulatedContext.amenities.length > 0 ? `   - REQUIRED AMENITIES: ${accumulatedContext.amenities.join(', ')}` : ''}
+${accumulatedContext.styles.length > 0 ? `   - STYLE PREFERENCES: ${accumulatedContext.styles.join(', ')}` : ''}
+
+2. **BEFORE SAYING "NO RESULTS FOUND":**
+   - THOROUGHLY CHECK the database for ANY properties matching ALL criteria
+   - If you said "no results" before but the criteria hasn't changed, you MUST check again
+   - Cross-reference your previous responses - if you find a property NOW that matched EARLIER criteria, YOU MADE A MISTAKE
+   - Example: If user asked for "under 15 mil" and you said no results, but later find a 13M property, that's WRONG - always find ALL matches first
+
+3. **ACCUMULATE, DON'T RESET:**
+   - New message criteria ADDS to previous criteria unless explicitly changed
+   - "maybe under 20mil" means user is RELAXING the 15mil constraint, not starting fresh
+   - Keep location context - if they searched Hanoi before, stay in Hanoi
+
+4. **CONSISTENCY CHECK:**
+   - Before responding, verify your results match ALL accumulated constraints
+   - If current results would have matched earlier stricter criteria, ACKNOWLEDGE the inconsistency` : 'This is the first message in the conversation. Carefully extract all location, price, and preference constraints from this message.'}
 
 🏠 AVAILABLE PROPERTIES DATABASE (${filteredProperties.length} total properties WITH AMENITIES):
 ${filteredProperties.map((p, index) => {
-  // Get amenities from vibe_analysis (where they're actually stored in PropertyCard) or fallback to amenities field
   const amenities = p.vibe_analysis?.amenities || p.amenities || [];
   const imageUrls = Array.isArray(p.images) ? p.images : [];
   const providerName = p.property_source_provider_name;
   const providerPhone = p.property_source_provider_phone;
+  // Pre-compute if this matches accumulated context
+  const matchesMaxPrice = accumulatedContext.maxPrice ? p.price <= accumulatedContext.maxPrice : true;
   return `
 Property ${index + 1}:
 Title: ${p.title}
 Location: ${p.location}
-Price: ${p.price?.toLocaleString()} VND/month
+Price: ${p.price?.toLocaleString()} VND/month ${matchesMaxPrice && accumulatedContext.maxPrice ? '✓ WITHIN BUDGET' : accumulatedContext.maxPrice ? '⚠ OVER BUDGET' : ''}
 Description: ${(p.description || 'Modern living space').substring(0, 200)}
 Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
-**AMENITIES (ONLY USE THESE - DO NOT ADD OTHERS)**: ${amenities.length > 0 ? amenities.join(', ') : 'None listed'}
-Property ID (for matching): ${p.id}
+**AMENITIES**: ${amenities.length > 0 ? amenities.join(', ') : 'None listed'}
+Property ID: ${p.id}
 Realtor ID: ${p.realtor_id}
-**ACTUAL IMAGE URLS (MUST COPY EXACTLY)**: ${JSON.stringify(imageUrls)}
+**ACTUAL IMAGE URLS**: ${JSON.stringify(imageUrls)}
 ${providerName ? `Property Source Provider: ${providerName}` : ''}
 ${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
 `;
 }).join('\n')}
 
 ${externalProperties.length > 0 ? `
-🌐 EXTERNAL MARKETPLACE RESULTS (from ${detectedMarketplace || 'external source'}):
-These properties were found on external marketplaces. Include them in results with "isExternal: true".
-
+🌐 EXTERNAL MARKETPLACE RESULTS:
 ${externalProperties.map((p, index) => `
 External Property ${index + 1}:
 Title: ${p.title}
 Location: ${p.location}
-Price: ${p.price?.toLocaleString()} VND/month (${p.priceDisplay || 'N/A'})
-Size: ${p.size || 'N/A'}
-Description: ${(p.description || '').substring(0, 200)}
-Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'N/A'}
-Amenities: ${Array.isArray(p.amenities) ? p.amenities.join(', ') : 'N/A'}
-Property ID (for matching): ${p.id}
+Price: ${p.price?.toLocaleString()} VND/month
+Property ID: ${p.id}
 Source: ${p.source}
 Source URL: ${p.sourceUrl}
-${p.sourceProviderName ? `Contact Name: ${p.sourceProviderName}` : ''}
-${p.sourceProviderPhone ? `Contact Phone: ${p.sourceProviderPhone}` : ''}
 `).join('\n')}
 ` : ''}
 
-🚨 CRITICAL LOCATION & PRICE MATCHING RULES (HIGHEST PRIORITY):
+🚨 CRITICAL LOCATION & PRICE MATCHING RULES:
 1. LOCATION MATCHING:
    - ALWAYS prioritize exact location matches FIRST
    - Same district = perfect match (highest priority)
    - Adjacent districts in SAME CITY = acceptable alternative (e.g., D1 → D2, D4, D3)
-   - Different city = NEVER suggest (e.g., NEVER suggest Hanoi if user searches in Ho Chi Minh City districts like D1, D2, Binh Thanh)
-   - Vietnam geography context:
-     * Ho Chi Minh City districts: D1, D2, D3, D4, D5, D7, D10, Binh Thanh, Phu Nhuan, Go Vap, Tan Binh, etc.
-     * Hanoi districts: Ba Dinh, Hoan Kiem, Dong Da, Hai Ba Trung, etc.
-     * NEVER cross city boundaries in suggestions
+   - Different city = NEVER suggest (e.g., NEVER suggest Hanoi if user searches in Ho Chi Minh City)
+   - Vietnam geography:
+     * Ho Chi Minh City districts: D1, D2, D3, D4, D5, D7, D10, Binh Thanh, Phu Nhuan, Go Vap, Tan Binh
+     * Hanoi districts: Ba Dinh, Hoan Kiem, Dong Da, Hai Ba Trung, Nam Tu Liem, Cau Giay
+     * NEVER cross city boundaries
 
-2. PRICE MATCHING:
+2. PRICE MATCHING (CRITICAL - CHECK CAREFULLY):
+   - SCAN ALL PROPERTIES for price matches FIRST before saying "no results"
+   - Properties marked "✓ WITHIN BUDGET" above MUST be considered
    - Within user's stated budget = highest priority
-   - Slightly outside budget (±10%) = acceptable ONLY if location is perfect and user explicitly asks for flexibility
-   - Properties significantly outside budget = only suggest if NO other matches and explicitly explain the price difference
-   - Always show prices clearly in match reasons
+   - If user relaxes budget (e.g., "maybe 20mil" after asking for 15mil), acknowledge both options
+   - ALWAYS show prices clearly in match reasons
 
 3. IF NO EXACT MATCHES:
    - First try: nearby districts in SAME CITY only
-   - Clearly state "I found these in nearby [District Name], which is close to your preferred [District Name]"
-   - If still no matches: suggest relaxing price range or being flexible with location (within same city)
+   - Clearly explain why no exact matches and what you found instead
    - NEVER suggest a different city as an alternative
 
 ⚠️ CRITICAL AMENITY RULES:
