@@ -626,7 +626,7 @@ export const HomeAI = ({
                                        {(property.vibe_analysis?.amenities || property.amenities) && <PropertyAmenities amenities={property.vibe_analysis?.amenities || property.amenities || []} compact={true} />}
 
                                        {/* Why it matches - More prominent on mobile */}
-                                      <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
+                                      <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left px-0 py-0">
                                         <p className="text-sm text-foreground text-left">
                                           <span className="font-semibold text-primary">Why it matches: </span>
                                           {property.matchReason}
