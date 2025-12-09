@@ -59,7 +59,7 @@ export const PropertyDetailModal = ({
           <PropertyCard apartment={apartment} userPreferences={userPreferences} showFullTitle={true} showFullDescription={true} showAllHighlights={true} showContactButton={false} className="shadow-none border-0 bg-transparent" isAnonymous={isAnonymous} hideVibeScore={true} />
 
           {/* Action Buttons */}
-          {(onLike || onDislike) && <div className="flex justify-center space-x-4 pt-4 mt-4 border-t py-0">
+          {(onLike || onDislike) && <div className="space-x-4 pt-4 mt-4 border-t py-0 flex items-center justify-center my-0">
               {onDislike && <Button size="lg" variant="outline" className="w-16 h-16 rounded-full border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400" onClick={handleDislike}>
                   <X className="w-8 h-8" />
                 </Button>}
