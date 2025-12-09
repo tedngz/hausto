@@ -280,6 +280,37 @@ Provide creative, engaging, and professional content that stands out in the rent
     } else {
       // Renter context - help with property search and recommendations
       
+      // ========== ENHANCED CITY & LOCATION DETECTION ==========
+      // Detect primary city from message
+      const detectCity = (text: string): 'hcm' | 'hanoi' | null => {
+        const lowerText = text.toLowerCase();
+        // HCM patterns
+        if (/ho chi minh|hcm|saigon|sài gòn|sai gon|hồ chí minh/.test(lowerText)) return 'hcm';
+        // HCM districts
+        if (/\b(d[1-9]|d1[0-2]|district\s*[1-9]|district\s*1[0-2]|quận\s*[1-9]|quận\s*1[0-2])\b/.test(lowerText)) return 'hcm';
+        if (/binh thanh|bình thạnh|phu nhuan|phú nhuận|tan binh|tân bình|go vap|gò vấp|thu duc|thủ đức/.test(lowerText)) return 'hcm';
+        // Hanoi patterns
+        if (/hanoi|ha noi|hà nội/.test(lowerText)) return 'hanoi';
+        if (/ba dinh|ba đình|hoan kiem|hoàn kiếm|dong da|đống đa|cau giay|cầu giấy|nam tu liem|nam từ liêm|hai ba trung|hai bà trưng|tay ho|tây hồ/.test(lowerText)) return 'hanoi';
+        return null;
+      };
+
+      // Define HCMC center districts
+      const hcmCenterDistricts = ['d1', 'district 1', 'quan 1', 'quận 1', 'd3', 'district 3', 'quan 3', 'quận 3'];
+      const hcmNearCenterDistricts = ['d4', 'district 4', 'd5', 'district 5', 'binh thanh', 'bình thạnh', 'phu nhuan', 'phú nhuận'];
+      const hcmSuburbanDistricts = ['d7', 'district 7', 'd2', 'district 2', 'thu duc', 'thủ đức', 'tan binh', 'tân bình', 'go vap', 'gò vấp'];
+      
+      // Define Hanoi center districts
+      const hanoiCenterDistricts = ['ba dinh', 'ba đình', 'hoan kiem', 'hoàn kiếm', 'dong da', 'đống đa'];
+      const hanoiNearCenterDistricts = ['hai ba trung', 'hai bà trưng', 'cau giay', 'cầu giấy'];
+      const hanoiSuburbanDistricts = ['nam tu liem', 'nam từ liêm', 'tay ho', 'tây hồ'];
+
+      // Detect if user wants center location
+      const isCenterRequest = (text: string): boolean => {
+        const lowerText = text.toLowerCase();
+        return /center|central|trung tâm|trung tam|downtown|city center/.test(lowerText);
+      };
+      
       // Extract accumulated context from conversation history for better reasoning
       let accumulatedContext = {
         locations: [] as string[],
@@ -287,13 +318,26 @@ Provide creative, engaging, and professional content that stands out in the rent
         minPrice: null as number | null,
         amenities: [] as string[],
         styles: [] as string[],
-        previouslyMentionedProperties: [] as string[]
+        previouslyMentionedProperties: [] as string[],
+        city: null as 'hcm' | 'hanoi' | null,
+        wantsCenter: false
       };
       
       // Parse conversation history to extract accumulated preferences
       if (chatHistory.length > 0) {
         for (const msg of chatHistory) {
           const content = msg.content.toLowerCase();
+          
+          // Detect city from history
+          const detectedCity = detectCity(content);
+          if (detectedCity && !accumulatedContext.city) {
+            accumulatedContext.city = detectedCity;
+          }
+          
+          // Detect center preference
+          if (isCenterRequest(content)) {
+            accumulatedContext.wantsCenter = true;
+          }
           
           // Extract price constraints (look for patterns like "under 15 mil", "less than 20m", "below 15000000")
           const pricePatterns = [
@@ -358,6 +402,18 @@ Provide creative, engaging, and professional content that stands out in the rent
       
       // Also parse current message for context
       const currentMsgLower = message.toLowerCase();
+      
+      // Detect city from current message
+      const currentCity = detectCity(currentMsgLower);
+      if (currentCity) {
+        accumulatedContext.city = currentCity;
+      }
+      
+      // Detect center preference from current message
+      if (isCenterRequest(currentMsgLower)) {
+        accumulatedContext.wantsCenter = true;
+      }
+      
       const currentPricePatterns = [
         /under\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
         /less\s*than\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
@@ -379,8 +435,148 @@ Provide creative, engaging, and professional content that stands out in the rent
         }
       }
       
+      // Extract amenities from current message
+      const amenityKeywords = ['balcony', 'pool', 'gym', 'parking', 'pet', 'furnished', 'wifi', 'elevator', 'security', 'garden', 'sofa', 'washing machine', 'air conditioning', 'ban công'];
+      for (const amenity of amenityKeywords) {
+        if (currentMsgLower.includes(amenity) && !accumulatedContext.amenities.includes(amenity)) {
+          accumulatedContext.amenities.push(amenity);
+        }
+      }
+      
+      // Extract styles from current message
+      const styleKeywords = ['luxury', 'modern', 'cozy', 'minimalist', 'industrial', 'bohemian', 'scandinavian', 'contemporary', 'traditional', 'rustic', 'urban', 'vintage'];
+      for (const style of styleKeywords) {
+        if (currentMsgLower.includes(style) && !accumulatedContext.styles.includes(style)) {
+          accumulatedContext.styles.push(style);
+        }
+      }
+      
       console.log('Accumulated context from conversation:', JSON.stringify(accumulatedContext));
       
+      // ========== PRE-FILTER PROPERTIES BY CITY ==========
+      const cityFilteredProperties = accumulatedContext.city 
+        ? filteredProperties.filter(p => {
+            const locLower = p.location.toLowerCase();
+            if (accumulatedContext.city === 'hcm') {
+              // Must be in HCMC, not Hanoi
+              const isHanoi = /hanoi|ha noi|hà nội|nam tu liem|nam từ liêm|ba dinh|ba đình|hoan kiem|hoàn kiếm|dong da|đống đa|cau giay|cầu giấy/.test(locLower);
+              return !isHanoi;
+            } else if (accumulatedContext.city === 'hanoi') {
+              // Must be in Hanoi, not HCMC
+              const isHCM = /ho chi minh|hcm|saigon|sài gòn|d[1-9]|d1[0-2]|district [1-9]|binh thanh|bình thạnh|phu nhuan|phú nhuận|tan binh|tân bình|go vap|gò vấp|thu duc|thủ đức/.test(locLower);
+              return !isHCM;
+            }
+            return true;
+          })
+        : filteredProperties;
+      
+      console.log(`City filtered: ${cityFilteredProperties.length} properties (from ${filteredProperties.length})`);
+      
+      // ========== PRE-CLASSIFY PROPERTIES FOR AI ==========
+      const classifiedProperties = cityFilteredProperties.map((p) => {
+        const locLower = p.location.toLowerCase();
+        const amenities = p.vibe_analysis?.amenities || p.amenities || [];
+        const styles = p.vibe_analysis?.styles || [];
+        const imageUrls = Array.isArray(p.images) ? p.images : [];
+        const providerName = p.property_source_provider_name;
+        const providerPhone = p.property_source_provider_phone;
+        
+        // Price match
+        const matchesMaxPrice = accumulatedContext.maxPrice ? p.price <= accumulatedContext.maxPrice : true;
+        const priceStatus = matchesMaxPrice && accumulatedContext.maxPrice 
+          ? `✓ WITHIN BUDGET (${(p.price/1000000).toFixed(1)}M < ${(accumulatedContext.maxPrice/1000000).toFixed(0)}M limit)` 
+          : accumulatedContext.maxPrice 
+            ? `⚠ OVER BUDGET (${(p.price/1000000).toFixed(1)}M > ${(accumulatedContext.maxPrice/1000000).toFixed(0)}M limit)` 
+            : '';
+        
+        // Location classification
+        let locationTier = 'other';
+        if (accumulatedContext.city === 'hcm') {
+          if (hcmCenterDistricts.some(d => locLower.includes(d))) {
+            locationTier = 'center';
+          } else if (hcmNearCenterDistricts.some(d => locLower.includes(d))) {
+            locationTier = 'near-center';
+          } else if (hcmSuburbanDistricts.some(d => locLower.includes(d))) {
+            locationTier = 'suburban';
+          }
+        } else if (accumulatedContext.city === 'hanoi') {
+          if (hanoiCenterDistricts.some(d => locLower.includes(d))) {
+            locationTier = 'center';
+          } else if (hanoiNearCenterDistricts.some(d => locLower.includes(d))) {
+            locationTier = 'near-center';
+          } else if (hanoiSuburbanDistricts.some(d => locLower.includes(d))) {
+            locationTier = 'suburban';
+          }
+        }
+        
+        // Center match status
+        let locationStatus = '';
+        if (accumulatedContext.wantsCenter) {
+          if (locationTier === 'center') {
+            locationStatus = '✓ CENTER LOCATION';
+          } else if (locationTier === 'near-center') {
+            locationStatus = '⚠ NEAR CENTER (not center)';
+          } else {
+            locationStatus = '❌ NOT CENTER (suburban area)';
+          }
+        }
+        
+        // Amenity match
+        const requestedAmenities = accumulatedContext.amenities.map(a => a.toLowerCase());
+        const propertyAmenities = amenities.map((a: string) => a.toLowerCase());
+        const matchedAmenities = requestedAmenities.filter(a => 
+          propertyAmenities.some((pa: string) => pa.includes(a) || a.includes(pa))
+        );
+        const amenityStatus = requestedAmenities.length > 0 
+          ? matchedAmenities.length === requestedAmenities.length 
+            ? `✓ HAS ALL REQUESTED AMENITIES (${matchedAmenities.join(', ')})` 
+            : matchedAmenities.length > 0
+              ? `⚠ PARTIAL MATCH (has: ${matchedAmenities.join(', ')}, missing: ${requestedAmenities.filter(a => !matchedAmenities.includes(a)).join(', ')})`
+              : `❌ MISSING REQUESTED AMENITIES (missing: ${requestedAmenities.join(', ')})`
+          : '';
+        
+        // Style match
+        const requestedStyles = accumulatedContext.styles.map(s => s.toLowerCase());
+        const propertyStyles = styles.map((s: string) => s.toLowerCase());
+        const matchedStyles = requestedStyles.filter(s => 
+          propertyStyles.some((ps: string) => ps.includes(s) || s.includes(ps))
+        );
+        const styleStatus = requestedStyles.length > 0
+          ? matchedStyles.length > 0 
+            ? `✓ STYLE MATCH (${matchedStyles.join(', ')})`
+            : `⚠ STYLE MISMATCH (wanted: ${requestedStyles.join(', ')}, has: ${propertyStyles.join(', ') || 'none'})`
+          : '';
+        
+        return {
+          ...p,
+          priceStatus,
+          locationStatus,
+          locationTier,
+          amenityStatus,
+          styleStatus,
+          imageUrls,
+          providerName,
+          providerPhone,
+          amenities
+        };
+      });
+      
+      // Sort properties: center first, then near-center, then price match
+      const sortedProperties = classifiedProperties.sort((a, b) => {
+        // Location tier priority
+        const tierOrder = { center: 0, 'near-center': 1, suburban: 2, other: 3 };
+        const tierDiff = (tierOrder[a.locationTier as keyof typeof tierOrder] || 3) - (tierOrder[b.locationTier as keyof typeof tierOrder] || 3);
+        if (tierDiff !== 0) return tierDiff;
+        
+        // Then price match
+        const aInBudget = a.priceStatus.includes('WITHIN BUDGET');
+        const bInBudget = b.priceStatus.includes('WITHIN BUDGET');
+        if (aInBudget && !bInBudget) return -1;
+        if (!aInBudget && bInBudget) return 1;
+        
+        return 0;
+      });
+
       systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
 
 🧠 CRITICAL: CONVERSATION MEMORY & REASONING RULES:
@@ -388,7 +584,9 @@ ${chatHistory.length > 0 ? `You have access to the FULL conversation history. Yo
 
 1. **REMEMBER ALL CONSTRAINTS FROM PREVIOUS MESSAGES:**
 ${accumulatedContext.maxPrice ? `   - USER'S MAX BUDGET: ${accumulatedContext.maxPrice.toLocaleString()} VND/month (${(accumulatedContext.maxPrice/1000000).toFixed(0)} million)` : '   - No specific budget mentioned yet'}
-${accumulatedContext.locations.length > 0 ? `   - PREFERRED LOCATIONS: ${accumulatedContext.locations.join(', ')}` : '   - No specific location mentioned yet'}
+${accumulatedContext.city ? `   - CITY: ${accumulatedContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'} (NEVER suggest properties from other cities!)` : '   - No specific city mentioned yet'}
+${accumulatedContext.wantsCenter ? `   - LOCATION: User wants CENTER/DOWNTOWN area (D1, D3 for HCMC or Ba Dinh, Hoan Kiem for Hanoi)` : ''}
+${accumulatedContext.locations.length > 0 ? `   - PREFERRED LOCATIONS: ${accumulatedContext.locations.join(', ')}` : ''}
 ${accumulatedContext.amenities.length > 0 ? `   - REQUIRED AMENITIES: ${accumulatedContext.amenities.join(', ')}` : ''}
 ${accumulatedContext.styles.length > 0 ? `   - STYLE PREFERENCES: ${accumulatedContext.styles.join(', ')}` : ''}
 
@@ -401,33 +599,37 @@ ${accumulatedContext.styles.length > 0 ? `   - STYLE PREFERENCES: ${accumulatedC
 3. **ACCUMULATE, DON'T RESET:**
    - New message criteria ADDS to previous criteria unless explicitly changed
    - "maybe under 20mil" means user is RELAXING the 15mil constraint, not starting fresh
-   - Keep location context - if they searched Hanoi before, stay in Hanoi
+   - Keep location context - if they searched HCMC before, stay in HCMC
 
 4. **CONSISTENCY CHECK:**
-   - Before responding, verify your results match ALL accumulated constraints
-   - If current results would have matched earlier stricter criteria, ACKNOWLEDGE the inconsistency` : 'This is the first message in the conversation. Carefully extract all location, price, and preference constraints from this message.'}
+   - Before responding, verify your results match ALL accumulated constraints` : 'This is the first message in the conversation. Carefully extract all location, price, and preference constraints from this message.'}
 
-🏠 AVAILABLE PROPERTIES DATABASE (${filteredProperties.length} total properties WITH AMENITIES):
-${filteredProperties.map((p, index) => {
-  const amenities = p.vibe_analysis?.amenities || p.amenities || [];
-  const imageUrls = Array.isArray(p.images) ? p.images : [];
-  const providerName = p.property_source_provider_name;
-  const providerPhone = p.property_source_provider_phone;
-  // Pre-compute if this matches accumulated context
-  const matchesMaxPrice = accumulatedContext.maxPrice ? p.price <= accumulatedContext.maxPrice : true;
+🚨 CRITICAL MATH CHECK - READ CAREFULLY:
+- 13.7M is LESS THAN 15M (13.7 < 15 = within budget)
+- 14.5M is LESS THAN 15M (14.5 < 15 = within budget)
+- 15.5M is MORE THAN 15M (15.5 > 15 = over budget)
+- When user says "under 15 mil", any price BELOW 15M is WITHIN BUDGET!
+- Properties marked "✓ WITHIN BUDGET" below ARE within the user's budget
+- Properties marked "⚠ OVER BUDGET" below are ABOVE the user's budget
+
+🏠 AVAILABLE PROPERTIES DATABASE (${sortedProperties.length} pre-filtered properties for ${accumulatedContext.city ? (accumulatedContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi') : 'all cities'}):
+${sortedProperties.map((p, index) => {
   return `
 Property ${index + 1}:
 Title: ${p.title}
 Location: ${p.location}
-Price: ${p.price?.toLocaleString()} VND/month ${matchesMaxPrice && accumulatedContext.maxPrice ? '✓ WITHIN BUDGET' : accumulatedContext.maxPrice ? '⚠ OVER BUDGET' : ''}
+Price: ${p.price?.toLocaleString()} VND/month ${p.priceStatus}
+${p.locationStatus ? `Location Status: ${p.locationStatus}` : ''}
+${p.amenityStatus ? `Amenity Status: ${p.amenityStatus}` : ''}
+${p.styleStatus ? `Style Status: ${p.styleStatus}` : ''}
 Description: ${(p.description || 'Modern living space').substring(0, 200)}
 Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
-**AMENITIES**: ${amenities.length > 0 ? amenities.join(', ') : 'None listed'}
+**AMENITIES**: ${p.amenities.length > 0 ? p.amenities.join(', ') : 'None listed'}
 Property ID: ${p.id}
 Realtor ID: ${p.realtor_id}
-**ACTUAL IMAGE URLS**: ${JSON.stringify(imageUrls)}
-${providerName ? `Property Source Provider: ${providerName}` : ''}
-${providerPhone ? `Provider Contact: ${providerPhone}` : ''}
+**ACTUAL IMAGE URLS**: ${JSON.stringify(p.imageUrls)}
+${p.providerName ? `Property Source Provider: ${p.providerName}` : ''}
+${p.providerPhone ? `Provider Contact: ${p.providerPhone}` : ''}
 `;
 }).join('\n')}
 
@@ -445,24 +647,35 @@ Source URL: ${p.sourceUrl}
 ` : ''}
 
 🚨 CRITICAL LOCATION & PRICE MATCHING RULES:
-1. LOCATION MATCHING:
-   - ALWAYS prioritize exact location matches FIRST
-   - Same district = perfect match (highest priority)
-   - Adjacent districts in SAME CITY = acceptable alternative (e.g., D1 → D2, D4, D3)
-   - Different city = NEVER suggest (e.g., NEVER suggest Hanoi if user searches in Ho Chi Minh City)
-   - Vietnam geography:
-     * Ho Chi Minh City districts: D1, D2, D3, D4, D5, D7, D10, Binh Thanh, Phu Nhuan, Go Vap, Tan Binh
-     * Hanoi districts: Ba Dinh, Hoan Kiem, Dong Da, Hai Ba Trung, Nam Tu Liem, Cau Giay
-     * NEVER cross city boundaries
 
-2. PRICE MATCHING (CRITICAL - CHECK CAREFULLY):
-   - SCAN ALL PROPERTIES for price matches FIRST before saying "no results"
-   - Properties marked "✓ WITHIN BUDGET" above MUST be considered
-   - Within user's stated budget = highest priority
-   - If user relaxes budget (e.g., "maybe 20mil" after asking for 15mil), acknowledge both options
-   - ALWAYS show prices clearly in match reasons
+1. **CITY MATCHING (ABSOLUTE RULE - NEVER BREAK):**
+   - ${accumulatedContext.city ? `User wants: ${accumulatedContext.city === 'hcm' ? 'HO CHI MINH CITY' : 'HANOI'}` : 'No city specified yet'}
+   - NEVER suggest Hanoi properties when user asks for Ho Chi Minh City
+   - NEVER suggest HCMC properties when user asks for Hanoi
+   - Properties from wrong city = 0% match, DO NOT INCLUDE
 
-3. IF NO EXACT MATCHES:
+2. **CENTER LOCATION MATCHING:**
+${accumulatedContext.wantsCenter ? `   ⚠️ USER WANTS CENTER/DOWNTOWN LOCATION - PRIORITIZE:
+   - HCMC CENTER: District 1 (D1), District 3 (D3) - these are TRUE center
+   - HCMC NEAR-CENTER: District 4, District 5, Binh Thanh, Phu Nhuan
+   - HCMC SUBURBAN (NOT CENTER): District 7, District 2, Thu Duc, Tan Binh, Go Vap
+   - HANOI CENTER: Ba Dinh, Hoan Kiem - these are TRUE center  
+   - HANOI NEAR-CENTER: Dong Da, Hai Ba Trung, Cau Giay
+   - HANOI SUBURBAN (NOT CENTER): Nam Tu Liem, Tay Ho
+   
+   🚨 D7 IS NOT CENTER OF HCMC - it's a suburban/new development area!
+   🚨 Nam Tu Liem IS NOT CENTER OF HANOI - it's a suburban area!
+   
+   If showing non-center properties, CLEARLY state "Note: This is in D7 which is a suburban area, not city center"` : '   No center preference specified'}
+
+3. **PRICE MATCHING (CHECK MATH CAREFULLY):**
+   - Properties marked "✓ WITHIN BUDGET" are BELOW user's max price = GOOD
+   - Properties marked "⚠ OVER BUDGET" are ABOVE user's max price = BAD
+   - REMEMBER: 13.7M < 15M (within budget), 15.5M > 15M (over budget)
+   - SCAN ALL "✓ WITHIN BUDGET" properties FIRST before saying "no results"
+   - ALWAYS show actual price in match reasons
+
+4. **IF NO EXACT MATCHES:**
    - First try: nearby districts in SAME CITY only
    - Clearly explain why no exact matches and what you found instead
    - NEVER suggest a different city as an alternative
