@@ -13,6 +13,403 @@ const redis = new Redis({
   token: Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!,
 });
 
+// ========== LOCATION KNOWLEDGE BASE ==========
+const LOCATION_DATA = {
+  hcm: {
+    name: 'Ho Chi Minh City',
+    aliases: ['ho chi minh', 'hcm', 'saigon', 'sài gòn', 'sai gon', 'hồ chí minh', 'tp.hcm', 'tphcm'],
+    districts: {
+      center: {
+        names: ['d1', 'district 1', 'quan 1', 'quận 1', 'q1', 'd3', 'district 3', 'quan 3', 'quận 3', 'q3'],
+        description: 'Central business district with premium pricing, walkable, vibrant nightlife',
+        avgPrice: { min: 15000000, max: 40000000 }
+      },
+      nearCenter: {
+        names: ['d4', 'district 4', 'quan 4', 'quận 4', 'q4', 'd5', 'district 5', 'quan 5', 'quận 5', 'q5', 
+                'binh thanh', 'bình thạnh', 'phu nhuan', 'phú nhuận', 'd10', 'district 10', 'quan 10', 'quận 10'],
+        description: 'Close to center, good value, mix of local and expat communities',
+        avgPrice: { min: 10000000, max: 25000000 }
+      },
+      suburban: {
+        names: ['d7', 'district 7', 'quan 7', 'quận 7', 'q7', 'd2', 'district 2', 'quan 2', 'quận 2', 'q2',
+                'thu duc', 'thủ đức', 'tan binh', 'tân bình', 'go vap', 'gò vấp', 'd9', 'district 9', 'quan 9', 'quận 9',
+                'binh tan', 'bình tân', 'tan phu', 'tân phú', 'd12', 'district 12', 'quan 12', 'quận 12'],
+        description: 'Modern developments, more space, family-friendly, requires transportation',
+        avgPrice: { min: 7000000, max: 18000000 }
+      }
+    }
+  },
+  hanoi: {
+    name: 'Hanoi',
+    aliases: ['hanoi', 'ha noi', 'hà nội', 'hn'],
+    districts: {
+      center: {
+        names: ['ba dinh', 'ba đình', 'hoan kiem', 'hoàn kiếm', 'dong da', 'đống đa'],
+        description: 'Historic center, government area, traditional neighborhoods',
+        avgPrice: { min: 12000000, max: 35000000 }
+      },
+      nearCenter: {
+        names: ['hai ba trung', 'hai bà trưng', 'cau giay', 'cầu giấy', 'thanh xuan', 'thanh xuân'],
+        description: 'Mixed residential/commercial, good connectivity',
+        avgPrice: { min: 8000000, max: 20000000 }
+      },
+      suburban: {
+        names: ['nam tu liem', 'nam từ liêm', 'tay ho', 'tây hồ', 'long bien', 'long biên', 
+                'hoang mai', 'hoàng mai', 'ha dong', 'hà đông'],
+        description: 'New developments, larger apartments, requires transportation',
+        avgPrice: { min: 6000000, max: 15000000 }
+      }
+    }
+  }
+};
+
+// ========== ENHANCED DETECTION FUNCTIONS ==========
+function detectCity(text: string): 'hcm' | 'hanoi' | null {
+  const lowerText = text.toLowerCase();
+  
+  // Check HCMC aliases and districts
+  if (LOCATION_DATA.hcm.aliases.some(a => lowerText.includes(a))) return 'hcm';
+  for (const tier of Object.values(LOCATION_DATA.hcm.districts)) {
+    if (tier.names.some(d => lowerText.includes(d))) return 'hcm';
+  }
+  
+  // Check Hanoi aliases and districts
+  if (LOCATION_DATA.hanoi.aliases.some(a => lowerText.includes(a))) return 'hanoi';
+  for (const tier of Object.values(LOCATION_DATA.hanoi.districts)) {
+    if (tier.names.some(d => lowerText.includes(d))) return 'hanoi';
+  }
+  
+  return null;
+}
+
+function getLocationTier(location: string, city: 'hcm' | 'hanoi'): 'center' | 'near-center' | 'suburban' | 'unknown' {
+  const locLower = location.toLowerCase();
+  const cityData = LOCATION_DATA[city];
+  
+  if (cityData.districts.center.names.some(d => locLower.includes(d))) return 'center';
+  if (cityData.districts.nearCenter.names.some(d => locLower.includes(d))) return 'near-center';
+  if (cityData.districts.suburban.names.some(d => locLower.includes(d))) return 'suburban';
+  
+  return 'unknown';
+}
+
+function isCenterRequest(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  return /\b(center|central|trung tâm|trung tam|downtown|city center|nội thành|noi thanh)\b/.test(lowerText);
+}
+
+function parsePrice(text: string): number | null {
+  const patterns = [
+    /(?:under|below|less than|dưới|max|maximum|budget)\s*(\d+(?:\.\d+)?)\s*(mil|million|m|tr|triệu|trieu)/gi,
+    /(\d+(?:\.\d+)?)\s*(mil|million|m|tr|triệu|trieu)\s*(?:or less|max|maximum|budget|vnd)/gi,
+    /(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:vnd|đồng|dong)/gi, // Direct VND amounts
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = text.toLowerCase().matchAll(pattern);
+    for (const match of matches) {
+      let value = parseFloat(match[1].replace(/,/g, ''));
+      
+      // Convert to VND if in millions
+      if (match[2] && /mil|million|m|tr|triệu|trieu/i.test(match[2])) {
+        value = value * 1000000;
+      }
+      
+      if (value > 0 && value < 100000000) { // Reasonable price range
+        return value;
+      }
+    }
+  }
+  return null;
+}
+
+function extractAmenities(text: string): string[] {
+  const lowerText = text.toLowerCase();
+  const amenityMap: Record<string, string[]> = {
+    'balcony': ['balcony', 'ban công', 'ban cong'],
+    'pool': ['pool', 'swimming', 'hồ bơi', 'ho boi', 'bể bơi', 'be boi'],
+    'gym': ['gym', 'fitness', 'phòng gym', 'phong gym', 'tập gym', 'tap gym'],
+    'parking': ['parking', 'đỗ xe', 'do xe', 'bãi đỗ', 'bai do', 'garage'],
+    'pet': ['pet', 'thú cưng', 'thu cung', 'dog', 'cat', 'chó', 'cho', 'mèo', 'meo'],
+    'furnished': ['furnished', 'nội thất', 'noi that', 'đầy đủ', 'day du'],
+    'wifi': ['wifi', 'internet', 'mạng', 'mang'],
+    'elevator': ['elevator', 'thang máy', 'thang may', 'lift'],
+    'security': ['security', 'bảo vệ', 'bao ve', 'an ninh'],
+    'garden': ['garden', 'vườn', 'vuon', 'sân vườn', 'san vuon'],
+    'sofa': ['sofa', 'ghế sofa', 'ghe sofa', 'couch'],
+    'washing machine': ['washing machine', 'máy giặt', 'may giat', 'laundry'],
+    'air conditioning': ['air conditioning', 'ac', 'điều hòa', 'dieu hoa', 'máy lạnh', 'may lanh'],
+    'kitchen': ['kitchen', 'bếp', 'bep', 'nhà bếp', 'nha bep'],
+  };
+  
+  const found: string[] = [];
+  for (const [canonical, variations] of Object.entries(amenityMap)) {
+    if (variations.some(v => lowerText.includes(v))) {
+      found.push(canonical);
+    }
+  }
+  return found;
+}
+
+function extractStyles(text: string): string[] {
+  const lowerText = text.toLowerCase();
+  const styles = ['luxury', 'modern', 'cozy', 'minimalist', 'industrial', 'bohemian', 
+                  'scandinavian', 'contemporary', 'traditional', 'rustic', 'urban', 'vintage'];
+  return styles.filter(s => lowerText.includes(s));
+}
+
+// ========== ACCUMULATED CONTEXT TYPE ==========
+interface AccumulatedContext {
+  city: 'hcm' | 'hanoi' | null;
+  wantsCenter: boolean;
+  locationTier: 'center' | 'near-center' | 'suburban' | null;
+  maxPrice: number | null;
+  minPrice: number | null;
+  amenities: string[];
+  styles: string[];
+  specificDistricts: string[];
+}
+
+function buildAccumulatedContext(chatHistory: Array<{role: string, content: string}>, currentMessage: string): AccumulatedContext {
+  const context: AccumulatedContext = {
+    city: null,
+    wantsCenter: false,
+    locationTier: null,
+    maxPrice: null,
+    minPrice: null,
+    amenities: [],
+    styles: [],
+    specificDistricts: []
+  };
+  
+  // Parse all messages (history + current)
+  const allTexts = [...chatHistory.map(m => m.content), currentMessage];
+  
+  for (const text of allTexts) {
+    // City detection (later messages override earlier)
+    const detectedCity = detectCity(text);
+    if (detectedCity) context.city = detectedCity;
+    
+    // Center preference
+    if (isCenterRequest(text)) context.wantsCenter = true;
+    
+    // Price detection (take the most restrictive)
+    const price = parsePrice(text);
+    if (price && (!context.maxPrice || price < context.maxPrice)) {
+      context.maxPrice = price;
+    }
+    
+    // Amenities (accumulate)
+    const amenities = extractAmenities(text);
+    for (const a of amenities) {
+      if (!context.amenities.includes(a)) context.amenities.push(a);
+    }
+    
+    // Styles (accumulate)
+    const styles = extractStyles(text);
+    for (const s of styles) {
+      if (!context.styles.includes(s)) context.styles.push(s);
+    }
+  }
+  
+  // Determine location tier based on center preference
+  if (context.wantsCenter) {
+    context.locationTier = 'center';
+  }
+  
+  return context;
+}
+
+// ========== PROPERTY FILTERING & SCORING ==========
+interface PropertyWithScore {
+  id: string;
+  title: string;
+  location: string;
+  price: number;
+  description: string;
+  highlights: string[];
+  amenities: string[];
+  styles: string[];
+  images: string[];
+  realtor_id: string;
+  size: string;
+  vibe: string;
+  providerName?: string;
+  providerPhone?: string;
+  // Scoring
+  matchScore: number;
+  priceMatch: boolean;
+  locationMatch: boolean;
+  amenityMatchCount: number;
+  styleMatchCount: number;
+  locationTier: string;
+  matchReasons: string[];
+}
+
+function filterAndScoreProperties(
+  properties: any[], 
+  context: AccumulatedContext
+): PropertyWithScore[] {
+  const scored: PropertyWithScore[] = [];
+  
+  for (const p of properties) {
+    const locLower = p.location.toLowerCase();
+    const amenities = p.vibe_analysis?.amenities || p.amenities || [];
+    const styles = p.vibe_analysis?.styles || [];
+    
+    // ========== HARD FILTERS (Eliminate non-matching) ==========
+    
+    // 1. City filter (STRICT)
+    if (context.city) {
+      const otherCityData = context.city === 'hcm' ? LOCATION_DATA.hanoi : LOCATION_DATA.hcm;
+      const isOtherCity = otherCityData.aliases.some(a => locLower.includes(a)) ||
+        Object.values(otherCityData.districts).some(tier => 
+          tier.names.some(d => locLower.includes(d))
+        );
+      if (isOtherCity) continue; // Skip properties from wrong city
+    }
+    
+    // 2. Must have amenities
+    if (amenities.length === 0) continue;
+    
+    // ========== SCORING ==========
+    let score = 50; // Base score
+    const matchReasons: string[] = [];
+    
+    // Price match
+    const priceMatch = context.maxPrice ? p.price <= context.maxPrice : true;
+    if (priceMatch && context.maxPrice) {
+      score += 25;
+      const savings = context.maxPrice - p.price;
+      if (savings > 0) {
+        matchReasons.push(`${(savings/1000000).toFixed(1)}M under budget`);
+      }
+    } else if (!priceMatch) {
+      score -= 30; // Penalty for over budget
+    }
+    
+    // Location tier match
+    const locationTier = context.city ? getLocationTier(p.location, context.city) : 'unknown';
+    let locationMatch = true;
+    
+    if (context.wantsCenter) {
+      if (locationTier === 'center') {
+        score += 25;
+        matchReasons.push('in city center');
+        locationMatch = true;
+      } else if (locationTier === 'near-center') {
+        score += 10;
+        matchReasons.push('near city center');
+        locationMatch = false; // Partial match
+      } else {
+        score -= 20;
+        locationMatch = false;
+      }
+    }
+    
+    // Amenity match
+    const lowerAmenities = amenities.map((a: string) => a.toLowerCase());
+    let amenityMatchCount = 0;
+    for (const reqAmenity of context.amenities) {
+      if (lowerAmenities.some((a: string) => a.includes(reqAmenity) || reqAmenity.includes(a))) {
+        amenityMatchCount++;
+        score += 10;
+      }
+    }
+    if (context.amenities.length > 0 && amenityMatchCount === context.amenities.length) {
+      matchReasons.push(`has ${context.amenities.join(', ')}`);
+    } else if (amenityMatchCount > 0) {
+      matchReasons.push(`has ${amenityMatchCount}/${context.amenities.length} requested amenities`);
+    }
+    
+    // Style match
+    const lowerStyles = styles.map((s: string) => s.toLowerCase());
+    let styleMatchCount = 0;
+    for (const reqStyle of context.styles) {
+      if (lowerStyles.some((s: string) => s.includes(reqStyle))) {
+        styleMatchCount++;
+        score += 5;
+      }
+    }
+    if (styleMatchCount > 0) {
+      matchReasons.push(`${context.styles.filter(s => lowerStyles.some((ls: string) => ls.includes(s))).join(', ')} style`);
+    }
+    
+    // Cap score at 100
+    score = Math.min(100, Math.max(0, score));
+    
+    scored.push({
+      id: p.id,
+      title: p.title,
+      location: p.location,
+      price: p.price,
+      description: p.description || '',
+      highlights: p.highlights || [],
+      amenities,
+      styles,
+      images: p.images || [],
+      realtor_id: p.realtor_id,
+      size: p.size || '',
+      vibe: p.vibe || styles.join(', ') || 'Modern',
+      providerName: p.property_source_provider_name,
+      providerPhone: p.property_source_provider_phone,
+      matchScore: score,
+      priceMatch,
+      locationMatch,
+      amenityMatchCount,
+      styleMatchCount,
+      locationTier,
+      matchReasons
+    });
+  }
+  
+  // Sort by score descending
+  return scored.sort((a, b) => b.matchScore - a.matchScore);
+}
+
+// ========== POST-PROCESSING VALIDATION ==========
+function validateAndFixAIResults(
+  aiResults: any[], 
+  validProperties: PropertyWithScore[],
+  context: AccumulatedContext
+): any[] {
+  const validIds = new Set(validProperties.map(p => p.id));
+  const validatedResults: any[] = [];
+  
+  for (const result of aiResults) {
+    // Skip if property doesn't exist in our filtered set
+    if (!validIds.has(result.id)) {
+      console.log(`[Validation] Rejecting AI result ${result.id} - not in valid property set`);
+      continue;
+    }
+    
+    // Find the actual property data
+    const actualProperty = validProperties.find(p => p.id === result.id);
+    if (!actualProperty) continue;
+    
+    // Fix any incorrect data
+    const fixed = {
+      ...result,
+      price: actualProperty.price, // Use actual price
+      location: actualProperty.location, // Use actual location
+      images: actualProperty.images, // Use actual images
+      realtor_id: actualProperty.realtor_id,
+      matchScore: actualProperty.matchScore, // Use our calculated score
+    };
+    
+    // Verify price constraint
+    if (context.maxPrice && actualProperty.price > context.maxPrice) {
+      console.log(`[Validation] Property ${result.id} is over budget (${actualProperty.price} > ${context.maxPrice}), flagging`);
+      fixed.matchReason = `⚠️ Over budget: ${(actualProperty.price/1000000).toFixed(1)}M VND/month (your budget: ${(context.maxPrice/1000000).toFixed(0)}M). ${result.matchReason || ''}`;
+      fixed.matchScore = Math.max(10, fixed.matchScore - 30);
+    }
+    
+    validatedResults.push(fixed);
+  }
+  
+  return validatedResults;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -32,12 +429,8 @@ serve(async (req) => {
     let isAnonymous = false;
 
     if (authHeader && !authHeader.includes(supabaseAnonKey)) {
-      // Verify user token (ignore anon key)
       const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
+        auth: { autoRefreshToken: false, persistSession: false }
       });
       
       const token = authHeader.replace('Bearer ', '');
@@ -57,71 +450,45 @@ serve(async (req) => {
 
     console.log('Chat AI function called');
 
-    // Rate limiting for anonymous users - 2 free searches per day using Redis
+    // Rate limiting for anonymous users
     if (isAnonymous) {
-      // Get the client IP address with multiple fallbacks
       const xForwardedFor = req.headers.get('x-forwarded-for');
       const xRealIp = req.headers.get('x-real-ip');
-      const cfConnectingIp = req.headers.get('cf-connecting-ip'); // Cloudflare
-      
+      const cfConnectingIp = req.headers.get('cf-connecting-ip');
       const clientIP = (xForwardedFor?.split(',')[0].trim() || xRealIp || cfConnectingIp || 'unknown');
-
-      console.log('Anonymous user IP detection:', { 
-        xForwardedFor, 
-        xRealIp, 
-        cfConnectingIp, 
-        finalIP: clientIP 
-      });
 
       if (clientIP !== 'unknown') {
         try {
-          // Redis key format: anon_rate:IP:YYYY-MM-DD
           const today = new Date().toISOString().split('T')[0];
           const rateLimitKey = `anon_rate:${clientIP}:${today}`;
-          
-          // Get current attempt count from Redis
           const attempts = await redis.get(rateLimitKey) as number | null;
           const currentAttempts = attempts || 0;
           
           console.log(`[Redis] Anonymous user search count: ${currentAttempts}/2 for IP: ${clientIP}`);
           
           if (currentAttempts >= 2) {
-            console.log(`[Redis] Anonymous user rate limited (${currentAttempts}/2)`);
             return new Response(
               JSON.stringify({ 
-                response: 'You\'ve used your 2 free searches today! To get unlimited AI-powered property searches and personalized recommendations, please sign in or create a free account.',
+                response: 'You\'ve used your 2 free searches today! To get unlimited AI-powered property searches, please sign in or create a free account.',
                 requiresAuth: true
               }),
-              { 
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-              }
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
             );
           }
           
-          // Increment counter and set expiry to end of day (86400 seconds = 24 hours)
           await redis.incr(rateLimitKey);
           await redis.expire(rateLimitKey, 86400);
-          
-          console.log(`[Redis] Incremented attempts to ${currentAttempts + 1}/2`);
         } catch (redisError) {
           console.error('[Redis] Error checking rate limit:', redisError);
-          // Continue with request if Redis fails - graceful degradation
         }
       }
     }
     
     const requestBody = await req.text();
-    console.log('Raw request body length:', requestBody.length);
-    
     if (!requestBody) {
-      console.error('Empty request body');
       return new Response(
         JSON.stringify({ error: 'Empty request body' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
@@ -129,13 +496,9 @@ serve(async (req) => {
     try {
       parsedBody = JSON.parse(requestBody);
     } catch (parseError) {
-      console.error('JSON parse error:', parseError);
       return new Response(
         JSON.stringify({ error: 'Invalid JSON in request body' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
@@ -147,31 +510,17 @@ serve(async (req) => {
       userType, 
       hasPreferences: !!userPreferences,
       hasPropertyImages: !!propertyImages,
-      propertyImagesType: typeof propertyImages,
-      propertyImagesLength: Array.isArray(propertyImages) ? propertyImages.length : 'not-array',
       isAnonymous
     });
 
     if (!message) {
-      console.error('Missing message in request');
       return new Response(
         JSON.stringify({ error: 'Message is required' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    // For authenticated users, conversationId is optional. If missing or invalid, we'll proceed without persistence.
-    if (!isAnonymous && !conversationId) {
-      console.log('No conversationId provided for authenticated user - proceeding without persistence');
-    }
-
-    // Supabase client already initialized above (const supabase)
-
-    // Fetch active properties from database (for all users)
-    // Only include properties that are active and within the 10-day active window
+    // Fetch active properties
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
     
@@ -187,34 +536,15 @@ serve(async (req) => {
     }
     
     const properties = propertiesData || [];
-    
-    // Filter to ONLY include properties with amenities
-    const propertiesWithAmenities = properties.filter(p => {
-      const amenities = p.vibe_analysis?.amenities || p.amenities || [];
-      return amenities.length > 0;
-    });
-    
-    console.log(`Found ${properties.length} total properties, ${propertiesWithAmenities.length} with amenities${isAnonymous ? ' for anonymous user' : ''}`);
-    
-    // Use filtered properties for AI context
-    const filteredProperties = propertiesWithAmenities;
-    
-    // For anonymous users, we'll limit results in the system prompt
-    const maxResults = isAnonymous ? 3 : 5;
-    
-    // ========== EXTERNAL MARKETPLACE SEARCH DISABLED ==========
-    // External marketplace integration is temporarily disabled - only internal realtor properties are returned
-    const externalProperties: any[] = [];
-    console.log('[External Search] Disabled - returning internal properties only');
-    
+    console.log(`Found ${properties.length} active properties`);
 
-    // Helper to validate UUIDs and decide if we can persist/history
+    // Helper functions
     const isValidUUID = (v: string | null | undefined) =>
       typeof v === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
     const canPersist = !isAnonymous && isValidUUID(conversationId);
     let chatHistory: Array<{role: string, content: string}> = [];
     
-    // For authenticated users with a valid conversationId, verify and get history
+    // Get conversation history for authenticated users
     if (canPersist) {
       const { data: conversation, error: convError } = await supabase
         .from('chat_conversations')
@@ -224,826 +554,290 @@ serve(async (req) => {
         .single();
       
       if (convError || !conversation) {
-        console.error('Conversation access denied:', convError);
         return new Response(
           JSON.stringify({ error: 'Conversation not found or access denied' }),
-          { 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 403,
-          }
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
         );
       }
 
-      // Get conversation history
-      const { data: history, error: historyError } = await supabase
+      const { data: history } = await supabase
         .from('chat_messages')
         .select('role, content')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
-        .limit(10);
+        .limit(15); // Increased history limit for better context
 
-      if (historyError) {
-        console.error('Error fetching chat history:', historyError);
-        throw historyError;
-      }
-      
       chatHistory = history || [];
-    } else if (!isAnonymous && conversationId) {
-      console.log('Ephemeral or invalid conversationId provided; skipping persistence and history');
     }
 
-    let context = '';
-    let systemPrompt = '';
+    const maxResults = isAnonymous ? 3 : 5;
 
+    // ========== REALTOR MODE ==========
     if (userType === 'realtor') {
-      // Realtor context - help with property descriptions and marketing
-      systemPrompt = `You are Hausto AI, a helpful assistant for real estate professionals. You help realtors create compelling property descriptions, titles, and marketing content that highlights unique features and appeals to potential renters.
+      const systemPrompt = `You are Hausto AI, a helpful assistant for real estate professionals. You help realtors create compelling property descriptions, titles, and marketing content.
 
-STANDARD PROPERTY HIGHLIGHTS (use these tags only):
+STANDARD PROPERTY HIGHLIGHTS:
 Style Tags: Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage
 Amenity Tags: Pet Friendly, Gym Access, Pool, Parking, Balcony, Garden, Elevator, Security, WiFi, Furnished, Air Conditioning, Washing Machine
-Location Tags: City Center, Quiet Neighborhood, Near Metro, Shopping Nearby, School District, Business District, Riverside, Mountain View, Beach Access
-Feature Tags: High Ceilings, Natural Light, Open Plan, Walk-in Closet, En-suite Bathroom, Kitchen Island, Hardwood Floors, Marble Counters, Smart Home
+Location Tags: City Center, Quiet Neighborhood, Near Metro, Shopping Nearby, School District, Business District
+Feature Tags: High Ceilings, Natural Light, Open Plan, Walk-in Closet, En-suite Bathroom, Kitchen Island, Hardwood Floors
 
-When analyzing property images, ONLY use tags from the standard list above. Match the visual style and features you see to these predefined categories. Do not create new tags.
+When analyzing property images, ONLY use tags from the standard list above.`;
 
-IMPORTANT: When users ask about property source providers or property owner contacts:
-- If a property has property_source_provider_name and property_source_provider_phone, you can provide this contact information when requested
-- Explain that these are partner properties listed on behalf of the named provider
-- The contact details are shared through the Hausto messaging system after initial contact
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-Provide creative, engaging, and professional content that stands out in the rental market.`;
-
-      if (Array.isArray(propertyImages) && propertyImages.length > 0) {
-        context += `\nProperty images provided: ${propertyImages.length} images to analyze for creating descriptions.`;
-      }
-    } else {
-      // Renter context - help with property search and recommendations
-      
-      // ========== ENHANCED CITY & LOCATION DETECTION ==========
-      // Detect primary city from message
-      const detectCity = (text: string): 'hcm' | 'hanoi' | null => {
-        const lowerText = text.toLowerCase();
-        // HCM patterns
-        if (/ho chi minh|hcm|saigon|sài gòn|sai gon|hồ chí minh/.test(lowerText)) return 'hcm';
-        // HCM districts
-        if (/\b(d[1-9]|d1[0-2]|district\s*[1-9]|district\s*1[0-2]|quận\s*[1-9]|quận\s*1[0-2])\b/.test(lowerText)) return 'hcm';
-        if (/binh thanh|bình thạnh|phu nhuan|phú nhuận|tan binh|tân bình|go vap|gò vấp|thu duc|thủ đức/.test(lowerText)) return 'hcm';
-        // Hanoi patterns
-        if (/hanoi|ha noi|hà nội/.test(lowerText)) return 'hanoi';
-        if (/ba dinh|ba đình|hoan kiem|hoàn kiếm|dong da|đống đa|cau giay|cầu giấy|nam tu liem|nam từ liêm|hai ba trung|hai bà trưng|tay ho|tây hồ/.test(lowerText)) return 'hanoi';
-        return null;
-      };
-
-      // Define HCMC center districts
-      const hcmCenterDistricts = ['d1', 'district 1', 'quan 1', 'quận 1', 'd3', 'district 3', 'quan 3', 'quận 3'];
-      const hcmNearCenterDistricts = ['d4', 'district 4', 'd5', 'district 5', 'binh thanh', 'bình thạnh', 'phu nhuan', 'phú nhuận'];
-      const hcmSuburbanDistricts = ['d7', 'district 7', 'd2', 'district 2', 'thu duc', 'thủ đức', 'tan binh', 'tân bình', 'go vap', 'gò vấp'];
-      
-      // Define Hanoi center districts
-      const hanoiCenterDistricts = ['ba dinh', 'ba đình', 'hoan kiem', 'hoàn kiếm', 'dong da', 'đống đa'];
-      const hanoiNearCenterDistricts = ['hai ba trung', 'hai bà trưng', 'cau giay', 'cầu giấy'];
-      const hanoiSuburbanDistricts = ['nam tu liem', 'nam từ liêm', 'tay ho', 'tây hồ'];
-
-      // Detect if user wants center location
-      const isCenterRequest = (text: string): boolean => {
-        const lowerText = text.toLowerCase();
-        return /center|central|trung tâm|trung tam|downtown|city center/.test(lowerText);
-      };
-      
-      // Extract accumulated context from conversation history for better reasoning
-      let accumulatedContext = {
-        locations: [] as string[],
-        maxPrice: null as number | null,
-        minPrice: null as number | null,
-        amenities: [] as string[],
-        styles: [] as string[],
-        previouslyMentionedProperties: [] as string[],
-        city: null as 'hcm' | 'hanoi' | null,
-        wantsCenter: false
-      };
-      
-      // Parse conversation history to extract accumulated preferences
-      if (chatHistory.length > 0) {
-        for (const msg of chatHistory) {
-          const content = msg.content.toLowerCase();
-          
-          // Detect city from history
-          const detectedCity = detectCity(content);
-          if (detectedCity && !accumulatedContext.city) {
-            accumulatedContext.city = detectedCity;
-          }
-          
-          // Detect center preference
-          if (isCenterRequest(content)) {
-            accumulatedContext.wantsCenter = true;
-          }
-          
-          // Extract price constraints (look for patterns like "under 15 mil", "less than 20m", "below 15000000")
-          const pricePatterns = [
-            /under\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-            /less\s*than\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-            /below\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-            /dưới\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-            /(\d+)\s*(mil|million|m|tr|triệu)\s*(or less|max|maximum)/gi,
-            /budget.*?(\d+)\s*(mil|million|m|tr|triệu)/gi,
-            /max.*?(\d+)\s*(mil|million|m|tr|triệu)/gi,
-          ];
-          
-          for (const pattern of pricePatterns) {
-            const matches = content.matchAll(pattern);
-            for (const match of matches) {
-              const value = parseInt(match[1]);
-              if (value > 0 && value < 1000) { // Likely in millions
-                const priceInVND = value * 1000000;
-                if (!accumulatedContext.maxPrice || priceInVND < accumulatedContext.maxPrice) {
-                  accumulatedContext.maxPrice = priceInVND;
-                }
-              }
-            }
-          }
-          
-          // Extract locations mentioned
-          const locationPatterns = [
-            /(?:in|at|near|around)\s+([A-Za-z\s]+(?:district|quan|d\d+))/gi,
-            /\b(d\d+|district\s*\d+|quan\s*\d+)\b/gi,
-            /\b(hanoi|ha noi|hà nội|ho chi minh|hcm|saigon|sài gòn)\b/gi,
-            /\b(binh thanh|bình thạnh|phu nhuan|phú nhuận|tan binh|tân bình|go vap|gò vấp)\b/gi,
-            /\b(ba dinh|ba đình|hoan kiem|hoàn kiếm|dong da|đống đa|cau giay|cầu giấy)\b/gi,
-          ];
-          
-          for (const pattern of locationPatterns) {
-            const matches = content.matchAll(pattern);
-            for (const match of matches) {
-              const location = match[1] || match[0];
-              if (location && !accumulatedContext.locations.includes(location.trim())) {
-                accumulatedContext.locations.push(location.trim());
-              }
-            }
-          }
-          
-          // Extract amenity preferences
-          const amenityKeywords = ['balcony', 'pool', 'gym', 'parking', 'pet', 'furnished', 'wifi', 'elevator', 'security', 'garden', 'sofa', 'washing machine', 'air conditioning'];
-          for (const amenity of amenityKeywords) {
-            if (content.includes(amenity) && !accumulatedContext.amenities.includes(amenity)) {
-              accumulatedContext.amenities.push(amenity);
-            }
-          }
-          
-          // Extract style preferences
-          const styleKeywords = ['luxury', 'modern', 'cozy', 'minimalist', 'industrial', 'bohemian', 'scandinavian', 'contemporary', 'traditional', 'rustic', 'urban', 'vintage'];
-          for (const style of styleKeywords) {
-            if (content.includes(style) && !accumulatedContext.styles.includes(style)) {
-              accumulatedContext.styles.push(style);
-            }
-          }
-        }
-      }
-      
-      // Also parse current message for context
-      const currentMsgLower = message.toLowerCase();
-      
-      // Detect city from current message
-      const currentCity = detectCity(currentMsgLower);
-      if (currentCity) {
-        accumulatedContext.city = currentCity;
-      }
-      
-      // Detect center preference from current message
-      if (isCenterRequest(currentMsgLower)) {
-        accumulatedContext.wantsCenter = true;
-      }
-      
-      const currentPricePatterns = [
-        /under\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-        /less\s*than\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-        /below\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-        /dưới\s*(\d+)\s*(mil|million|m|tr|triệu)/gi,
-        /(\d+)\s*(mil|million|m|tr|triệu)\s*(or less|max|maximum)/gi,
-      ];
-      
-      for (const pattern of currentPricePatterns) {
-        const matches = currentMsgLower.matchAll(pattern);
-        for (const match of matches) {
-          const value = parseInt(match[1]);
-          if (value > 0 && value < 1000) {
-            const priceInVND = value * 1000000;
-            if (!accumulatedContext.maxPrice || priceInVND < accumulatedContext.maxPrice) {
-              accumulatedContext.maxPrice = priceInVND;
-            }
-          }
-        }
-      }
-      
-      // Extract amenities from current message
-      const amenityKeywords = ['balcony', 'pool', 'gym', 'parking', 'pet', 'furnished', 'wifi', 'elevator', 'security', 'garden', 'sofa', 'washing machine', 'air conditioning', 'ban công'];
-      for (const amenity of amenityKeywords) {
-        if (currentMsgLower.includes(amenity) && !accumulatedContext.amenities.includes(amenity)) {
-          accumulatedContext.amenities.push(amenity);
-        }
-      }
-      
-      // Extract styles from current message
-      const styleKeywords = ['luxury', 'modern', 'cozy', 'minimalist', 'industrial', 'bohemian', 'scandinavian', 'contemporary', 'traditional', 'rustic', 'urban', 'vintage'];
-      for (const style of styleKeywords) {
-        if (currentMsgLower.includes(style) && !accumulatedContext.styles.includes(style)) {
-          accumulatedContext.styles.push(style);
-        }
-      }
-      
-      console.log('Accumulated context from conversation:', JSON.stringify(accumulatedContext));
-      
-      // ========== PRE-FILTER PROPERTIES BY CITY ==========
-      const cityFilteredProperties = accumulatedContext.city 
-        ? filteredProperties.filter(p => {
-            const locLower = p.location.toLowerCase();
-            if (accumulatedContext.city === 'hcm') {
-              // Must be in HCMC, not Hanoi
-              const isHanoi = /hanoi|ha noi|hà nội|nam tu liem|nam từ liêm|ba dinh|ba đình|hoan kiem|hoàn kiếm|dong da|đống đa|cau giay|cầu giấy/.test(locLower);
-              return !isHanoi;
-            } else if (accumulatedContext.city === 'hanoi') {
-              // Must be in Hanoi, not HCMC
-              const isHCM = /ho chi minh|hcm|saigon|sài gòn|d[1-9]|d1[0-2]|district [1-9]|binh thanh|bình thạnh|phu nhuan|phú nhuận|tan binh|tân bình|go vap|gò vấp|thu duc|thủ đức/.test(locLower);
-              return !isHCM;
-            }
-            return true;
-          })
-        : filteredProperties;
-      
-      console.log(`City filtered: ${cityFilteredProperties.length} properties (from ${filteredProperties.length})`);
-      
-      // ========== PRE-CLASSIFY PROPERTIES FOR AI ==========
-      const classifiedProperties = cityFilteredProperties.map((p) => {
-        const locLower = p.location.toLowerCase();
-        const amenities = p.vibe_analysis?.amenities || p.amenities || [];
-        const styles = p.vibe_analysis?.styles || [];
-        const imageUrls = Array.isArray(p.images) ? p.images : [];
-        const providerName = p.property_source_provider_name;
-        const providerPhone = p.property_source_provider_phone;
-        
-        // Price match
-        const matchesMaxPrice = accumulatedContext.maxPrice ? p.price <= accumulatedContext.maxPrice : true;
-        const priceStatus = matchesMaxPrice && accumulatedContext.maxPrice 
-          ? `✓ WITHIN BUDGET (${(p.price/1000000).toFixed(1)}M < ${(accumulatedContext.maxPrice/1000000).toFixed(0)}M limit)` 
-          : accumulatedContext.maxPrice 
-            ? `⚠ OVER BUDGET (${(p.price/1000000).toFixed(1)}M > ${(accumulatedContext.maxPrice/1000000).toFixed(0)}M limit)` 
-            : '';
-        
-        // Location classification
-        let locationTier = 'other';
-        if (accumulatedContext.city === 'hcm') {
-          if (hcmCenterDistricts.some(d => locLower.includes(d))) {
-            locationTier = 'center';
-          } else if (hcmNearCenterDistricts.some(d => locLower.includes(d))) {
-            locationTier = 'near-center';
-          } else if (hcmSuburbanDistricts.some(d => locLower.includes(d))) {
-            locationTier = 'suburban';
-          }
-        } else if (accumulatedContext.city === 'hanoi') {
-          if (hanoiCenterDistricts.some(d => locLower.includes(d))) {
-            locationTier = 'center';
-          } else if (hanoiNearCenterDistricts.some(d => locLower.includes(d))) {
-            locationTier = 'near-center';
-          } else if (hanoiSuburbanDistricts.some(d => locLower.includes(d))) {
-            locationTier = 'suburban';
-          }
-        }
-        
-        // Center match status
-        let locationStatus = '';
-        if (accumulatedContext.wantsCenter) {
-          if (locationTier === 'center') {
-            locationStatus = '✓ CENTER LOCATION';
-          } else if (locationTier === 'near-center') {
-            locationStatus = '⚠ NEAR CENTER (not center)';
-          } else {
-            locationStatus = '❌ NOT CENTER (suburban area)';
-          }
-        }
-        
-        // Amenity match
-        const requestedAmenities = accumulatedContext.amenities.map(a => a.toLowerCase());
-        const propertyAmenities = amenities.map((a: string) => a.toLowerCase());
-        const matchedAmenities = requestedAmenities.filter(a => 
-          propertyAmenities.some((pa: string) => pa.includes(a) || a.includes(pa))
-        );
-        const amenityStatus = requestedAmenities.length > 0 
-          ? matchedAmenities.length === requestedAmenities.length 
-            ? `✓ HAS ALL REQUESTED AMENITIES (${matchedAmenities.join(', ')})` 
-            : matchedAmenities.length > 0
-              ? `⚠ PARTIAL MATCH (has: ${matchedAmenities.join(', ')}, missing: ${requestedAmenities.filter(a => !matchedAmenities.includes(a)).join(', ')})`
-              : `❌ MISSING REQUESTED AMENITIES (missing: ${requestedAmenities.join(', ')})`
-          : '';
-        
-        // Style match
-        const requestedStyles = accumulatedContext.styles.map(s => s.toLowerCase());
-        const propertyStyles = styles.map((s: string) => s.toLowerCase());
-        const matchedStyles = requestedStyles.filter(s => 
-          propertyStyles.some((ps: string) => ps.includes(s) || s.includes(ps))
-        );
-        const styleStatus = requestedStyles.length > 0
-          ? matchedStyles.length > 0 
-            ? `✓ STYLE MATCH (${matchedStyles.join(', ')})`
-            : `⚠ STYLE MISMATCH (wanted: ${requestedStyles.join(', ')}, has: ${propertyStyles.join(', ') || 'none'})`
-          : '';
-        
-        return {
-          ...p,
-          priceStatus,
-          locationStatus,
-          locationTier,
-          amenityStatus,
-          styleStatus,
-          imageUrls,
-          providerName,
-          providerPhone,
-          amenities
-        };
-      });
-      
-      // Sort properties: center first, then near-center, then price match
-      const sortedProperties = classifiedProperties.sort((a, b) => {
-        // Location tier priority
-        const tierOrder = { center: 0, 'near-center': 1, suburban: 2, other: 3 };
-        const tierDiff = (tierOrder[a.locationTier as keyof typeof tierOrder] || 3) - (tierOrder[b.locationTier as keyof typeof tierOrder] || 3);
-        if (tierDiff !== 0) return tierDiff;
-        
-        // Then price match
-        const aInBudget = a.priceStatus.includes('WITHIN BUDGET');
-        const bInBudget = b.priceStatus.includes('WITHIN BUDGET');
-        if (aInBudget && !bInBudget) return -1;
-        if (!aInBudget && bInBudget) return 1;
-        
-        return 0;
-      });
-
-      systemPrompt = `You are Hausto AI, a friendly rental property assistant. For property searches, you MUST return valid JSON responses only.
-
-🧠 CRITICAL: CONVERSATION MEMORY & REASONING RULES:
-${chatHistory.length > 0 ? `You have access to the FULL conversation history. You MUST:
-
-1. **REMEMBER ALL CONSTRAINTS FROM PREVIOUS MESSAGES:**
-${accumulatedContext.maxPrice ? `   - USER'S MAX BUDGET: ${accumulatedContext.maxPrice.toLocaleString()} VND/month (${(accumulatedContext.maxPrice/1000000).toFixed(0)} million)` : '   - No specific budget mentioned yet'}
-${accumulatedContext.city ? `   - CITY: ${accumulatedContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'} (NEVER suggest properties from other cities!)` : '   - No specific city mentioned yet'}
-${accumulatedContext.wantsCenter ? `   - LOCATION: User wants CENTER/DOWNTOWN area (D1, D3 for HCMC or Ba Dinh, Hoan Kiem for Hanoi)` : ''}
-${accumulatedContext.locations.length > 0 ? `   - PREFERRED LOCATIONS: ${accumulatedContext.locations.join(', ')}` : ''}
-${accumulatedContext.amenities.length > 0 ? `   - REQUIRED AMENITIES: ${accumulatedContext.amenities.join(', ')}` : ''}
-${accumulatedContext.styles.length > 0 ? `   - STYLE PREFERENCES: ${accumulatedContext.styles.join(', ')}` : ''}
-
-2. **BEFORE SAYING "NO RESULTS FOUND":**
-   - THOROUGHLY CHECK the database for ANY properties matching ALL criteria
-   - If you said "no results" before but the criteria hasn't changed, you MUST check again
-   - Cross-reference your previous responses - if you find a property NOW that matched EARLIER criteria, YOU MADE A MISTAKE
-   - Example: If user asked for "under 15 mil" and you said no results, but later find a 13M property, that's WRONG - always find ALL matches first
-
-3. **ACCUMULATE, DON'T RESET:**
-   - New message criteria ADDS to previous criteria unless explicitly changed
-   - "maybe under 20mil" means user is RELAXING the 15mil constraint, not starting fresh
-   - Keep location context - if they searched HCMC before, stay in HCMC
-
-4. **CONSISTENCY CHECK:**
-   - Before responding, verify your results match ALL accumulated constraints` : 'This is the first message in the conversation. Carefully extract all location, price, and preference constraints from this message.'}
-
-🚨 CRITICAL MATH CHECK - READ CAREFULLY:
-- 13.7M is LESS THAN 15M (13.7 < 15 = within budget)
-- 14.5M is LESS THAN 15M (14.5 < 15 = within budget)
-- 15.5M is MORE THAN 15M (15.5 > 15 = over budget)
-- When user says "under 15 mil", any price BELOW 15M is WITHIN BUDGET!
-- Properties marked "✓ WITHIN BUDGET" below ARE within the user's budget
-- Properties marked "⚠ OVER BUDGET" below are ABOVE the user's budget
-
-🏠 AVAILABLE PROPERTIES DATABASE (${sortedProperties.length} pre-filtered properties for ${accumulatedContext.city ? (accumulatedContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi') : 'all cities'}):
-${sortedProperties.map((p, index) => {
-  return `
-Property ${index + 1}:
-Title: ${p.title}
-Location: ${p.location}
-Price: ${p.price?.toLocaleString()} VND/month ${p.priceStatus}
-${p.locationStatus ? `Location Status: ${p.locationStatus}` : ''}
-${p.amenityStatus ? `Amenity Status: ${p.amenityStatus}` : ''}
-${p.styleStatus ? `Style Status: ${p.styleStatus}` : ''}
-Description: ${(p.description || 'Modern living space').substring(0, 200)}
-Highlights: ${Array.isArray(p.highlights) ? p.highlights.join(', ') : 'Modern features'}
-**AMENITIES**: ${p.amenities.length > 0 ? p.amenities.join(', ') : 'None listed'}
-Property ID: ${p.id}
-Realtor ID: ${p.realtor_id}
-**ACTUAL IMAGE URLS**: ${JSON.stringify(p.imageUrls)}
-${p.providerName ? `Property Source Provider: ${p.providerName}` : ''}
-${p.providerPhone ? `Provider Contact: ${p.providerPhone}` : ''}
-`;
-}).join('\n')}
-
-${externalProperties.length > 0 ? `
-🌐 EXTERNAL MARKETPLACE RESULTS:
-${externalProperties.map((p, index) => `
-External Property ${index + 1}:
-Title: ${p.title}
-Location: ${p.location}
-Price: ${p.price?.toLocaleString()} VND/month
-Property ID: ${p.id}
-Source: ${p.source}
-Source URL: ${p.sourceUrl}
-`).join('\n')}
-` : ''}
-
-🚨 CRITICAL LOCATION & PRICE MATCHING RULES:
-
-1. **CITY MATCHING (ABSOLUTE RULE - NEVER BREAK):**
-   - ${accumulatedContext.city ? `User wants: ${accumulatedContext.city === 'hcm' ? 'HO CHI MINH CITY' : 'HANOI'}` : 'No city specified yet'}
-   - NEVER suggest Hanoi properties when user asks for Ho Chi Minh City
-   - NEVER suggest HCMC properties when user asks for Hanoi
-   - Properties from wrong city = 0% match, DO NOT INCLUDE
-
-2. **CENTER LOCATION MATCHING:**
-${accumulatedContext.wantsCenter ? `   ⚠️ USER WANTS CENTER/DOWNTOWN LOCATION - PRIORITIZE:
-   - HCMC CENTER: District 1 (D1), District 3 (D3) - these are TRUE center
-   - HCMC NEAR-CENTER: District 4, District 5, Binh Thanh, Phu Nhuan
-   - HCMC SUBURBAN (NOT CENTER): District 7, District 2, Thu Duc, Tan Binh, Go Vap
-   - HANOI CENTER: Ba Dinh, Hoan Kiem - these are TRUE center  
-   - HANOI NEAR-CENTER: Dong Da, Hai Ba Trung, Cau Giay
-   - HANOI SUBURBAN (NOT CENTER): Nam Tu Liem, Tay Ho
-   
-   🚨 D7 IS NOT CENTER OF HCMC - it's a suburban/new development area!
-   🚨 Nam Tu Liem IS NOT CENTER OF HANOI - it's a suburban area!
-   
-   If showing non-center properties, CLEARLY state "Note: This is in D7 which is a suburban area, not city center"` : '   No center preference specified'}
-
-3. **PRICE MATCHING (CHECK MATH CAREFULLY):**
-   - Properties marked "✓ WITHIN BUDGET" are BELOW user's max price = GOOD
-   - Properties marked "⚠ OVER BUDGET" are ABOVE user's max price = BAD
-   - REMEMBER: 13.7M < 15M (within budget), 15.5M > 15M (over budget)
-   - SCAN ALL "✓ WITHIN BUDGET" properties FIRST before saying "no results"
-   - ALWAYS show actual price in match reasons
-
-4. **IF NO EXACT MATCHES:**
-   - First try: nearby districts in SAME CITY only
-   - Clearly explain why no exact matches and what you found instead
-   - NEVER suggest a different city as an alternative
-
-⚠️ CRITICAL AMENITY RULES:
-- 🚨 ONLY suggest properties that have amenities listed (NEVER suggest properties with "None listed" amenities)
-- ONLY use properties from the database that have actual amenities in the "**AMENITIES**" section
-- ANALYZE THE PROPERTY IMAGES provided to verify and identify amenities visually
-- Cross-reference visual amenities with the listed amenities in "**AMENITIES**" section
-- If you see amenities in images that aren't listed, you CAN mention them but note they were "observed in photos"
-- If amenities are listed but not visible in photos, still mention them as "listed amenities"
-- Be specific about what you see: pool, gym equipment, balcony, parking, kitchen appliances, etc.
-- When describing properties, combine both listed amenities AND what you observe in the images
-- Properties without amenities should NEVER be included in search results
-
-🎯 RESPONSE FORMAT - Return ONLY valid JSON:
-{
-  "results": [
-    {
-      "id": "copy-exact-property-id-from-above",
-      "title": "Copy exact title",
-      "location": "Copy exact location", 
-      "price": 12000000,
-      "size": "50m²",
-      "vibe": "Modern, Cozy",
-      "description": "Brief description",
-      "highlights": ["Modern", "Cozy", "Pet Friendly"],
-      "images": ["COPY-EXACT-IMAGE-URLS-FROM-PROPERTY-DATA"],
-      "matchScore": 85,
-      "matchReason": "This cozy apartment in [location] features [key features] that match your search",
-      "realtor_id": "copy-exact-realtor-id-from-above",
-      "isExternal": false,
-      "source": null,
-      "sourceUrl": null
-    },
-    {
-      "id": "external-batdongsan-xxx (for external properties)",
-      "title": "External property title",
-      "location": "District 1, Ho Chi Minh City",
-      "price": 8000000,
-      "size": "30m²",
-      "vibe": "Modern",
-      "description": "Property from external marketplace",
-      "highlights": ["Modern", "Furnished"],
-      "images": [],
-      "matchScore": 75,
-      "matchReason": "Found on batdongsan.com.vn - this studio in D1 matches your budget",
-      "realtor_id": null,
-      "isExternal": true,
-      "source": "batdongsan",
-      "sourceUrl": "https://batdongsan.com.vn/...",
-      "sourceProviderName": "Contact name if available",
-      "sourceProviderPhone": "Phone if available"
-    }
-  ],
-  "summary": "Found X properties matching your preferences (Y from external marketplaces)...",
-  "totalMatches": 3
-}
-
-⚠️ MATCH REASON WRITING STYLE:
-- Write naturally and conversationally, not formulaic
-- ALWAYS mention location and price if relevant to user's search
-- Start with describing what the property offers, not "Perfect match because..."
-- Examples of GOOD match reasons:
-  • "This cozy 2-bedroom apartment in District 1 is priced at 12M VND/month with a comfortable sofa in the living room"
-  • "Located in your preferred District 2 at 15M VND/month with modern furnishings and city views"
-  • "In nearby District 4 (close to D1) at 11M VND/month - features a spacious balcony and natural lighting throughout"
-  • "Found in Binh Thanh (adjacent to your search area) at 13M VND/month with fully furnished kitchen"
-- Examples of BAD match reasons to AVOID:
-  • "Perfect match because it includes a sofa and is located in Binh Thanh"
-  • "This property matches because it has..."
-  • "Great match due to..."
-- When showing properties outside exact criteria:
-  • Clearly state if in nearby district: "in nearby District X (close to your preferred District Y)"
-  • Clearly state if price is outside budget: "at 18M VND/month (slightly above your 15M budget)"
-
-⚠️ CRITICAL IMAGE RULES:
-- For "images" field: COPY the EXACT image URL array from "**ACTUAL IMAGE URLS**" in property data
-- Do NOT create fake image URLs or placeholder URLs
-- Do NOT use generic descriptions like "image-url-1"
-- MUST copy the complete array exactly as shown in property data
-- Example: If property shows "**ACTUAL IMAGE URLS**: ["https://...", "https://..."]", copy that EXACT array
-
-OTHER RULES:
-- ALWAYS return valid JSON format above
-- Maximum ${maxResults} properties in results array ${isAnonymous ? '(limited for guest users)' : ''}
-- Copy exact property ID and realtor ID from property data
-- Match preferences when provided
-- Include realistic match scores (60-95%)
-- NO markdown, NO text, ONLY JSON
-
-🔍 PROPERTY OWNER INFORMATION:
-- When users ask about property owners or contacts, check if the property has "Property Source Provider" information
-- If available, tell them the property is managed by that provider
-- Explain that contact details will be shared through the Hausto messaging system after they express interest
-- If they explicitly request contact info and it's available, you can mention that the provider's contact will be shared when they send a message`;
-
-      if (!isAnonymous) {
-        // Add user preferences context for authenticated renters
-        if (userPreferences) {
-          const matchingProperties = properties.filter(p => {
-            const locationMatch = userPreferences.location?.some((loc: any) => 
-              p.location.toLowerCase().includes(loc.toLowerCase().split(',')[0])
-            );
-            const budgetMatch = userPreferences.priceRange ? 
-              p.price <= userPreferences.priceRange[1] * 1.2 : true;
-            return locationMatch && budgetMatch;
-          });
-
-          console.log(`Found ${matchingProperties.length} properties matching user preferences`);
-
-          if (matchingProperties.length > 0) {
-            systemPrompt += `\n\nUSER'S TOP MATCHES (prioritize these):
-${matchingProperties.slice(0, 5).map(p => `
-ID: ${p.id} | ${p.title} | ${p.location} | ${p.price?.toLocaleString()} VND
-`).join('')}`;
-          }
-        }
-      }
-
-      if (Array.isArray(propertyImages) && propertyImages.length > 0) {
-        systemPrompt += `\n\n📸 UPLOADED REFERENCE IMAGES:
-The user has uploaded ${propertyImages.length} reference image(s). When they ask to "find similar apartments" or mention the uploaded images:
-1. Analyze the visual style, color scheme, layout, and design elements from their description
-2. Look for properties that match those aesthetic preferences
-3. Focus on properties with similar vibes (Modern, Cozy, Minimalist, etc.)
-4. Consider architectural features, interior design, lighting, and overall ambiance
-5. Prioritize properties that would appeal to someone who likes the reference style
-
-The images have been processed and included in this search request.`;
-        
-        context += `\n\nUser uploaded ${propertyImages.length} reference image(s) for style matching and similarity search.`;
-      }
-    }
-
-    const fullContext = `${systemPrompt}
-
-${context}
-
-Conversation History:
-${chatHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
-
-Current user message: ${message}`;
-
-    // Call OpenAI API
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      console.error('OpenAI API key not found');
-      return new Response(
-        JSON.stringify({ error: 'OpenAI API key not configured' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
-        }
-      );
-    }
-
-    console.log('Calling OpenAI API...');
-    
-    // Check Redis cache for AI responses (only for simple queries without images)
-    let aiResponse = null;
-    let cacheHit = false;
-    
-    // Create cache key from normalized query + user preferences
-    const normalizedQuery = message.toLowerCase().trim();
-    const hasImages = Array.isArray(propertyImages) && propertyImages.length > 0;
-    
-    if (!hasImages && !isAnonymous) {
-      try {
-        const cacheKey = `ai_search:${user?.id}:${Buffer.from(normalizedQuery).toString('base64').substring(0, 50)}`;
-        const cachedResponse = await redis.get(cacheKey) as string | null;
-        
-        if (cachedResponse) {
-          aiResponse = cachedResponse;
-          cacheHit = true;
-          console.log('[Redis] Cache HIT - returning cached AI response');
-        } else {
-          console.log('[Redis] Cache MISS - will call OpenAI API');
-        }
-      } catch (cacheError) {
-        console.error('[Redis] Cache check error:', cacheError);
-        // Continue to API call if cache fails
-      }
-    }
-    
-    // Only call OpenAI if we don't have a cached response
-    if (!cacheHit) {
-      // Only use uploaded reference images to avoid OpenAI timeout issues
-      // when downloading property images from Supabase storage
-      const allImagesToAnalyze = Array.isArray(propertyImages) ? propertyImages : [];
-      
-      // Build messages array with conversation history for context continuity
-      const messagesWithHistory = [
-        { role: 'system', content: fullContext },
-        ...chatHistory.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        })),
-      ];
-      
-      // Add the new user message (with or without images)
-      if (allImagesToAnalyze.length > 0) {
-        messagesWithHistory.push({
-          role: 'user',
-          content: [
-            { type: 'text', text: message },
-            ...allImagesToAnalyze.map((image: any) => ({
-              type: 'image_url',
-              image_url: { url: image }
-            }))
-          ]
-        });
-      } else {
-        messagesWithHistory.push({
-          role: 'user',
-          content: message
-        });
-      }
-      
-      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: messagesWithHistory,
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message }
+          ],
           max_tokens: 2000,
-          temperature: 0.7,
         }),
       });
 
-      console.log('OpenAI response status:', openaiResponse.status);
-      
-      if (!openaiResponse.ok) {
-        console.error('OpenAI API error:', openaiResponse.status, openaiResponse.statusText);
-        const errorText = await openaiResponse.text();
-        console.error('OpenAI error response:', errorText);
-        
-        // Provide fallback response
-        const fallbackResponse = userType === 'realtor' 
-          ? "I'm having trouble connecting to the AI service right now. Please try again in a moment, or feel free to ask me about property marketing strategies!"
-          : "I'm having trouble connecting to the AI service right now. But I'd be happy to help you find properties! Could you tell me more about what you're looking for - location preferences, budget, or lifestyle needs?";
-        
-        // Save fallback response to database when persistence is allowed
-        if (canPersist) {
-          await supabase
-            .from('chat_messages')
-            .insert({
-              conversation_id: conversationId,
-              role: 'assistant',
-              content: fallbackResponse
-            });
-        }
-
-        return new Response(
-          JSON.stringify({ response: fallbackResponse }),
-          { 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-          }
-        );
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Lovable AI error:', response.status, errorText);
+        throw new Error(`AI service error: ${response.status}`);
       }
 
-      const openaiData = await openaiResponse.json();
-      console.log('OpenAI response received, choices length:', openaiData.choices?.length);
-      
-      if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
-        console.error('Invalid OpenAI response structure:', openaiData);
-        throw new Error('Invalid response from OpenAI');
-      }
-      
-      // Parse the AI's response and normalize it (strip markdown/code fences)
-      const rawContent = openaiData.choices[0].message.content || 'Sorry, I could not process your request.';
-      aiResponse = normalizeAiResponse(rawContent);
-      
-      // Cache the response in Redis (1 hour TTL) for authenticated users without images
-      if (!hasImages && !isAnonymous && user?.id) {
-        try {
-          const cacheKey = `ai_search:${user.id}:${Buffer.from(normalizedQuery).toString('base64').substring(0, 50)}`;
-          await redis.setex(cacheKey, 3600, aiResponse); // 1 hour = 3600 seconds
-          console.log('[Redis] Cached AI response for future requests');
-        } catch (cacheError) {
-          console.error('[Redis] Error caching response:', cacheError);
-          // Continue even if caching fails
-        }
-      }
-    }
+      const data = await response.json();
+      const aiResponse = data.choices[0].message.content;
 
-    // Check if the response contains search results
-    let searchData = null;
-    try {
-      const parsed = JSON.parse(aiResponse);
-      if (parsed.results && Array.isArray(parsed.results)) {
-        searchData = parsed;
-        console.log(`[Response] Parsed ${searchData.results.length} results from AI response`);
-        
-        // Check if AI included external properties
-        const externalInAI = searchData.results.filter((r: any) => r.isExternal);
-        console.log(`[Response] AI included ${externalInAI.length} external properties`);
-        
-        // If we have external properties but AI didn't include them, manually inject
-        if (externalProperties.length > 0 && externalInAI.length === 0) {
-          console.log(`[Response] AI omitted external properties, manually injecting ${externalProperties.length}`);
-          
-          // Format external properties to match the expected structure
-          const formattedExternal = externalProperties.map((p: any) => ({
-            id: p.id,
-            title: p.title || 'External Property',
-            location: p.location || 'Ho Chi Minh City',
-            price: p.price || 0,
-            size: p.size || 'N/A',
-            vibe: p.vibe || p.vibe_analysis?.style || 'Modern',
-            description: p.description || '',
-            highlights: p.highlights || [],
-            images: p.images || [],
-            matchScore: 70, // Default match score for external
-            matchReason: `Found on ${p.source || 'external marketplace'} - ${p.priceDisplay || `${p.price?.toLocaleString()} VND/month`}`,
-            realtor_id: null,
-            isExternal: true,
-            source: p.source,
-            sourceUrl: p.sourceUrl,
-            sourceProviderName: p.sourceProviderName,
-            sourceProviderPhone: p.sourceProviderPhone,
-            vibe_analysis: p.vibe_analysis,
-            amenities: p.amenities || p.vibe_analysis?.amenities || [],
-          }));
-          
-          // Append external properties to results
-          searchData.results = [...searchData.results, ...formattedExternal];
-          searchData.totalMatches = searchData.results.length;
-          
-          // Update summary to mention external results
-          if (searchData.summary && !searchData.summary.includes('external')) {
-            searchData.summary += ` Also found ${formattedExternal.length} properties from external marketplaces.`;
-          }
-          
-          // Update the aiResponse with injected properties
-          aiResponse = JSON.stringify(searchData);
-          console.log(`[Response] Final response includes ${searchData.results.length} total properties`);
-        }
-      }
-    } catch (e) {
-      // Not JSON, treat as regular text
-      console.log('[Response] AI response is not JSON, treating as text');
-    }
-
-    // Save AI response to database (only for authenticated users)
-    if (canPersist) {
-      const { error: aiMessageError } = await supabase
-        .from('chat_messages')
-        .insert({
+      if (canPersist) {
+        await supabase.from('chat_messages').insert({
           conversation_id: conversationId,
           role: 'assistant',
           content: aiResponse
         });
-
-      if (aiMessageError) {
-        console.error('Error saving AI message:', aiMessageError);
-        throw aiMessageError;
       }
+
+      return new Response(JSON.stringify({ response: aiResponse }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
     }
 
-    // If this is a search result, save it to the ai_searches and ai_search_results tables (only for authenticated users)
+    // ========== RENTER MODE - Enhanced AI Search ==========
+    
+    // Build accumulated context from conversation history
+    const accContext = buildAccumulatedContext(chatHistory, message);
+    console.log('[Context] Accumulated preferences:', JSON.stringify(accContext));
+
+    // Filter and score properties based on accumulated context
+    const scoredProperties = filterAndScoreProperties(properties, accContext);
+    console.log(`[Filtering] ${scoredProperties.length} properties after filtering (from ${properties.length})`);
+
+    // Separate into matching and non-matching
+    const perfectMatches = scoredProperties.filter(p => p.matchScore >= 70);
+    const partialMatches = scoredProperties.filter(p => p.matchScore >= 40 && p.matchScore < 70);
+    const topProperties = [...perfectMatches, ...partialMatches].slice(0, maxResults + 2);
+
+    console.log(`[Scoring] Perfect matches: ${perfectMatches.length}, Partial: ${partialMatches.length}`);
+
+    // Build context-aware system prompt
+    const constraintsSummary = [];
+    if (accContext.city) constraintsSummary.push(`City: ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`);
+    if (accContext.maxPrice) constraintsSummary.push(`Budget: under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`);
+    if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
+    if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
+    if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
+
+    const systemPrompt = `You are Hausto AI, a friendly and intelligent rental property assistant in Vietnam. You help renters find their perfect home.
+
+🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
+${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
+
+📊 PRE-FILTERED PROPERTIES (${topProperties.length} best matches from ${properties.length} total):
+${topProperties.length > 0 ? topProperties.map((p, i) => `
+[${i+1}] ${p.title}
+   ID: ${p.id}
+   Location: ${p.location} (${p.locationTier})
+   Price: ${(p.price/1000000).toFixed(1)}M VND/month ${p.priceMatch ? '✓ within budget' : '⚠️ over budget'}
+   Match Score: ${p.matchScore}/100
+   Match Reasons: ${p.matchReasons.join(', ') || 'General match'}
+   Amenities: ${p.amenities.join(', ')}
+   Styles: ${p.styles.join(', ') || 'Not specified'}
+   Images: ${JSON.stringify(p.images)}
+   Realtor ID: ${p.realtor_id}
+   ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
+`).join('\n') : 'No properties match the current criteria.'}
+
+🧠 CRITICAL INSTRUCTIONS:
+
+1. **RESPECT ALL CONSTRAINTS**: Never suggest properties that violate the user's requirements.
+   - If user said "under 15M", a 16M property is NOT a match
+   - If user wants HCMC center, D7 is NOT center (it's suburban)
+   - If user needs a balcony, don't suggest properties without one
+
+2. **USE THE PRE-FILTERED DATA**: I've already filtered properties for you. Only use properties from the list above.
+
+3. **BE HONEST ABOUT LIMITATIONS**:
+   - If no perfect matches exist, say so clearly
+   - Suggest nearby alternatives with explicit disclaimers
+   - Example: "I couldn't find center apartments under 15M, but here's one in nearby D4 for 14M..."
+
+4. **NATURAL MATCH REASONS**: Write conversationally, not formulaically.
+   - GOOD: "This cozy studio in D3 at 12M/month has the balcony you wanted and is right in the center"
+   - BAD: "Perfect match because it includes balcony and is located in District 3"
+
+5. **JSON RESPONSE FORMAT** (for property searches):
+{
+  "results": [
+    {
+      "id": "exact-property-id",
+      "title": "Property title",
+      "location": "Exact location",
+      "price": 12000000,
+      "size": "45m²",
+      "vibe": "Modern, Cozy",
+      "description": "Brief description",
+      "highlights": ["Modern", "Balcony"],
+      "images": ["copy-exact-urls-from-above"],
+      "matchScore": 85,
+      "matchReason": "Natural, conversational reason mentioning key features",
+      "realtor_id": "exact-realtor-id",
+      "isExternal": false,
+      "source": null,
+      "sourceUrl": null
+    }
+  ],
+  "summary": "Human-friendly summary of what was found",
+  "totalMatches": 3
+}
+
+6. **FOR NON-SEARCH QUERIES**: If the user is asking general questions, chatting, or not searching for properties, respond conversationally WITHOUT the JSON format.
+
+7. **LOCATION KNOWLEDGE**:
+   - HCMC Center: District 1, District 3 (premium, walkable, expensive)
+   - HCMC Near-Center: District 4, 5, Binh Thanh, Phu Nhuan (good value, close)
+   - HCMC Suburban: District 7, 2, Thu Duc (modern, spacious, needs transport)
+   - Hanoi Center: Ba Dinh, Hoan Kiem (historic, government area)
+   - Hanoi Near-Center: Dong Da, Cau Giay, Hai Ba Trung
+
+Maximum ${maxResults} properties in results.`;
+
+    // Call Lovable AI Gateway with the enhanced prompt
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+
+    // Build messages with history
+    const messagesWithHistory = [
+      { role: 'system', content: systemPrompt },
+      ...chatHistory.slice(-10).map(msg => ({ role: msg.role, content: msg.content })),
+      { role: 'user', content: message }
+    ];
+
+    console.log('[AI] Calling Lovable AI Gateway with google/gemini-2.5-flash');
+
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: messagesWithHistory,
+        max_tokens: 2500,
+      }),
+    });
+
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error('[AI] Lovable AI error:', aiResponse.status, errorText);
+      
+      // Handle rate limits
+      if (aiResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        );
+      }
+      if (aiResponse.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'AI service credits exhausted. Please contact support.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
+        );
+      }
+      
+      throw new Error(`AI service error: ${aiResponse.status}`);
+    }
+
+    const aiData = await aiResponse.json();
+    let responseContent = aiData.choices[0].message.content || '';
+    
+    // Normalize response (remove markdown code fences)
+    responseContent = normalizeAiResponse(responseContent);
+
+    // ========== POST-PROCESSING VALIDATION ==========
+    let searchData = null;
+    try {
+      const parsed = JSON.parse(responseContent);
+      if (parsed.results && Array.isArray(parsed.results)) {
+        console.log(`[Validation] AI returned ${parsed.results.length} results, validating...`);
+        
+        // Validate and fix AI results
+        const validatedResults = validateAndFixAIResults(parsed.results, scoredProperties, accContext);
+        
+        console.log(`[Validation] ${validatedResults.length} results passed validation`);
+        
+        // Update the response with validated results
+        parsed.results = validatedResults;
+        parsed.totalMatches = validatedResults.length;
+        
+        // If AI returned results that all got filtered out, provide fallback
+        if (validatedResults.length === 0 && topProperties.length > 0) {
+          console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
+          parsed.results = topProperties.slice(0, maxResults).map(p => ({
+            id: p.id,
+            title: p.title,
+            location: p.location,
+            price: p.price,
+            size: p.size,
+            vibe: p.vibe,
+            description: p.description,
+            highlights: p.highlights,
+            images: p.images,
+            matchScore: p.matchScore,
+            matchReason: p.matchReasons.join('. ') || `Located in ${p.location} at ${(p.price/1000000).toFixed(1)}M VND/month`,
+            realtor_id: p.realtor_id,
+            isExternal: false,
+            source: null,
+            sourceUrl: null
+          }));
+          parsed.totalMatches = parsed.results.length;
+          parsed.summary = `Found ${parsed.results.length} properties matching your criteria.`;
+        }
+        
+        searchData = parsed;
+        responseContent = JSON.stringify(parsed);
+      }
+    } catch (e) {
+      // Not JSON, treat as conversational response
+      console.log('[Response] Non-JSON response, treating as conversation');
+    }
+
+    // Save response to database
+    if (canPersist) {
+      await supabase.from('chat_messages').insert({
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: responseContent
+      });
+    }
+
+    // Save search results for authenticated users
     if (searchData && user?.id && canPersist) {
       try {
-        // Create AI search record
         const { data: searchRecord, error: searchError } = await supabase
           .from('ai_searches')
           .insert({
@@ -1056,10 +850,7 @@ Current user message: ${message}`;
           .select()
           .single();
 
-        if (searchError) {
-          console.error('Error saving search record:', searchError);
-        } else if (searchRecord && searchData.results.length > 0) {
-          // Save individual search results
+        if (!searchError && searchRecord && searchData.results.length > 0) {
           const searchResults = searchData.results.map((result: any) => ({
             search_id: searchRecord.id,
             property_id: result.id,
@@ -1067,28 +858,18 @@ Current user message: ${message}`;
             match_reason: result.matchReason
           }));
 
-          const { error: resultsError } = await supabase
-            .from('ai_search_results')
-            .insert(searchResults);
-
-          if (resultsError) {
-            console.error('Error saving search results:', resultsError);
-          } else {
-            console.log(`Saved ${searchResults.length} search results for search ${searchRecord.id}`);
-          }
+          await supabase.from('ai_search_results').insert(searchResults);
+          console.log(`Saved ${searchResults.length} search results`);
         }
       } catch (searchSaveError) {
-        console.error('Error processing search results:', searchSaveError);
-        // Don't fail the whole request if search saving fails
+        console.error('Error saving search results:', searchSaveError);
       }
     }
 
-    // Track AI search usage for authenticated users
+    // Track AI usage
     if (user?.id && !isAnonymous) {
       try {
         const today = new Date().toISOString().split('T')[0];
-        
-        // Get current usage for today
         const { data: currentUsage } = await supabase
           .from('daily_usage')
           .select('ai_requests, properties_viewed, properties_matched, quiz_retakes')
@@ -1096,61 +877,38 @@ Current user message: ${message}`;
           .eq('usage_date', today)
           .maybeSingle();
 
-        const newAiRequests = (currentUsage?.ai_requests || 0) + 1;
-
-        // Upsert usage record
-        const { error: usageError } = await supabase
-          .from('daily_usage')
-          .upsert({
-            user_id: user.id,
-            usage_date: today,
-            ai_requests: newAiRequests,
-            properties_viewed: currentUsage?.properties_viewed || 0,
-            properties_matched: currentUsage?.properties_matched || 0,
-            quiz_retakes: currentUsage?.quiz_retakes || 0,
-          }, {
-            onConflict: 'user_id,usage_date',
-            ignoreDuplicates: false
-          });
-
-        if (usageError) {
-          console.error('Error tracking AI search usage:', usageError);
-        } else {
-          console.log(`Successfully tracked AI search usage for user ${user.id}, total today: ${newAiRequests}`);
-        }
-      } catch (usageTrackError) {
-        console.error('Error in usage tracking:', usageTrackError);
-        // Don't fail the whole request if usage tracking fails
+        await supabase.from('daily_usage').upsert({
+          user_id: user.id,
+          usage_date: today,
+          ai_requests: (currentUsage?.ai_requests || 0) + 1,
+          properties_viewed: currentUsage?.properties_viewed || 0,
+          properties_matched: currentUsage?.properties_matched || 0,
+          quiz_retakes: currentUsage?.quiz_retakes || 0,
+        }, { onConflict: 'user_id,usage_date' });
+      } catch (usageError) {
+        console.error('Error tracking usage:', usageError);
       }
     }
 
-    // Anonymous search tracking is now handled by Redis rate limiting above
-    // No need for separate database tracking
-
-    return new Response(JSON.stringify({ response: normalizeAiResponse(aiResponse) }), {
+    return new Response(JSON.stringify({ response: responseContent }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (error) {
     console.error('Error in chat-ai function:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error occurred' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
 
-// Helper to clean AI responses that might be wrapped in Markdown code fences
+// Helper to clean AI responses
 function normalizeAiResponse(content: string): string {
   if (!content) return '';
   let cleaned = content.trim();
 
-  // Remove leading triple backtick block (``` or ```json)
   if (cleaned.startsWith('```')) {
     const firstNewline = cleaned.indexOf('\n');
     if (firstNewline !== -1) {
@@ -1158,7 +916,6 @@ function normalizeAiResponse(content: string): string {
     }
   }
 
-  // Remove trailing triple backticks if present
   if (cleaned.endsWith('```')) {
     cleaned = cleaned.slice(0, -3);
   }
