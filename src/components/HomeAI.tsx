@@ -525,18 +525,47 @@ export const HomeAI = ({
             let searchResults: SearchResult | null = null;
             let displayContent = message.content;
             try {
+              let jsonContent = message.content;
+              
+              // First try to parse - might be wrapped in { response: ... }
               const parsed = JSON.parse(message.content);
-              if (parsed.results && Array.isArray(parsed.results)) {
+              
+              // Check if it's wrapped in a response object
+              if (parsed.response && typeof parsed.response === 'string') {
+                jsonContent = parsed.response;
+                // Try to parse the inner response as JSON
+                try {
+                  const innerParsed = JSON.parse(parsed.response);
+                  if (innerParsed.results && Array.isArray(innerParsed.results)) {
+                    searchResults = innerParsed;
+                  } else {
+                    displayContent = parsed.response;
+                  }
+                } catch {
+                  displayContent = parsed.response;
+                }
+              } else if (parsed.results && Array.isArray(parsed.results)) {
+                // Direct JSON with results
                 searchResults = parsed;
-              } else if (parsed.response) {
-                // Extract text response from JSON wrapper
-                displayContent = parsed.response;
               }
             } catch (e) {
               // Not JSON, treat as regular text
               // Clean up any JSON artifacts that might be visible
               if (message.content.includes('{"results":') || message.content.includes('"summary":')) {
-                displayContent = "I found some amazing properties that match your preferences! Let me show you the top matches.";
+                // Try one more time to extract JSON from the message
+                const jsonMatch = message.content.match(/\{[\s\S]*"results"[\s\S]*\}/);
+                if (jsonMatch) {
+                  try {
+                    const extracted = JSON.parse(jsonMatch[0]);
+                    if (extracted.results && Array.isArray(extracted.results)) {
+                      searchResults = extracted;
+                    }
+                  } catch {
+                    displayContent = "I found some properties that match your preferences! Let me show you the results.";
+                  }
+                } else {
+                  displayContent = "I found some properties that match your preferences! Let me show you the results.";
+                }
               }
             }
             if (searchResults) {
