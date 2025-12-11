@@ -797,55 +797,106 @@ Maximum ${maxResults} properties in results.`;
     const aiData = await aiResponse.json();
     let responseContent = aiData.choices[0].message.content || '';
     
+    console.log('[AI] Raw response length:', responseContent.length);
+    
     // Normalize response (remove markdown code fences)
     responseContent = normalizeAiResponse(responseContent);
+    
+    // Try to extract JSON from the response if it contains JSON-like content
+    let extractedJson = null;
+    
+    // First try direct parse
+    try {
+      extractedJson = JSON.parse(responseContent);
+    } catch {
+      // Try to find JSON within the text
+      const jsonMatch = responseContent.match(/\{[\s\S]*"results"\s*:\s*\[[\s\S]*\][\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          extractedJson = JSON.parse(jsonMatch[0]);
+          console.log('[AI] Extracted JSON from mixed content');
+        } catch {
+          console.log('[AI] Failed to extract JSON from mixed content');
+        }
+      }
+    }
 
     // ========== POST-PROCESSING VALIDATION ==========
     let searchData = null;
-    try {
-      const parsed = JSON.parse(responseContent);
-      if (parsed.results && Array.isArray(parsed.results)) {
-        console.log(`[Validation] AI returned ${parsed.results.length} results, validating...`);
-        
-        // Validate and fix AI results
-        const validatedResults = validateAndFixAIResults(parsed.results, scoredProperties, accContext);
-        
-        console.log(`[Validation] ${validatedResults.length} results passed validation`);
-        
-        // Update the response with validated results
-        parsed.results = validatedResults;
-        parsed.totalMatches = validatedResults.length;
-        
-        // If AI returned results that all got filtered out, provide fallback
-        if (validatedResults.length === 0 && topProperties.length > 0) {
-          console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
-          parsed.results = topProperties.slice(0, maxResults).map(p => ({
-            id: p.id,
-            title: p.title,
-            location: p.location,
-            price: p.price,
-            size: p.size,
-            vibe: p.vibe,
-            description: p.description,
-            highlights: p.highlights,
-            images: p.images,
-            matchScore: p.matchScore,
-            matchReason: p.matchReasons.join('. ') || `Located in ${p.location} at ${(p.price/1000000).toFixed(1)}M VND/month`,
-            realtor_id: p.realtor_id,
-            isExternal: false,
-            source: null,
-            sourceUrl: null
-          }));
-          parsed.totalMatches = parsed.results.length;
-          parsed.summary = `Found ${parsed.results.length} properties matching your criteria.`;
-        }
-        
-        searchData = parsed;
-        responseContent = JSON.stringify(parsed);
+    let usedFallback = false;
+    
+    if (extractedJson && extractedJson.results && Array.isArray(extractedJson.results)) {
+      console.log(`[Validation] AI returned ${extractedJson.results.length} results, validating...`);
+      
+      // Validate and fix AI results
+      const validatedResults = validateAndFixAIResults(extractedJson.results, scoredProperties, accContext);
+      
+      console.log(`[Validation] ${validatedResults.length} results passed validation`);
+      
+      // Update the response with validated results
+      extractedJson.results = validatedResults;
+      extractedJson.totalMatches = validatedResults.length;
+      
+      // If AI returned results that all got filtered out, provide fallback
+      if (validatedResults.length === 0 && topProperties.length > 0) {
+        console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
+        usedFallback = true;
+      } else {
+        searchData = extractedJson;
+        responseContent = JSON.stringify(extractedJson);
       }
-    } catch (e) {
-      // Not JSON, treat as conversational response
-      console.log('[Response] Non-JSON response, treating as conversation');
+    }
+    
+    // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
+    if (!searchData && topProperties.length > 0) {
+      console.log('[Fallback] Generating results from pre-scored properties');
+      usedFallback = true;
+      
+      const fallbackResults = topProperties.slice(0, maxResults).map(p => ({
+        id: p.id,
+        title: p.title,
+        location: p.location,
+        price: p.price,
+        size: p.size,
+        vibe: p.vibe,
+        description: p.description,
+        highlights: p.highlights,
+        images: p.images,
+        matchScore: p.matchScore,
+        matchReason: p.matchReasons.length > 0 
+          ? p.matchReasons.join('. ') 
+          : `Great ${p.styles[0] || 'modern'} apartment in ${p.location.split(',')[0]} at ${(p.price/1000000).toFixed(1)}M VND/month`,
+        realtor_id: p.realtor_id,
+        isExternal: false,
+        source: null,
+        sourceUrl: null
+      }));
+      
+      // Generate a summary based on context
+      let summary = `I found ${fallbackResults.length} properties`;
+      if (accContext.city) {
+        summary += ` in ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`;
+      }
+      if (accContext.maxPrice) {
+        summary += ` under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`;
+      }
+      if (accContext.wantsCenter && !topProperties.some(p => p.locationTier === 'center')) {
+        summary += `. Note: No center properties matched your criteria, showing nearby alternatives`;
+      }
+      summary += '.';
+      
+      searchData = {
+        results: fallbackResults,
+        summary: summary,
+        totalMatches: fallbackResults.length
+      };
+      responseContent = JSON.stringify(searchData);
+      console.log(`[Fallback] Generated ${fallbackResults.length} property results`);
+    }
+    
+    // If still no search data and no properties, keep the AI's conversational response
+    if (!searchData) {
+      console.log('[Response] No properties to show, using conversational response');
     }
 
     // Save response to database
