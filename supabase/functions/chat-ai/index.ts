@@ -661,15 +661,15 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
 
     // Check if we have center matches when user wants center
-    const hasCenterMatches = context.wantsCenter && topProperties.some(p => p.locationTier === 'center');
-    const hasNearCenterMatches = context.wantsCenter && topProperties.some(p => p.locationTier === 'near-center');
+    const hasCenterMatches = accContext.wantsCenter && topProperties.some(p => p.locationTier === 'center');
+    const hasNearCenterMatches = accContext.wantsCenter && topProperties.some(p => p.locationTier === 'near-center');
     
     let locationNote = '';
-    if (context.wantsCenter && !hasCenterMatches) {
+    if (accContext.wantsCenter && !hasCenterMatches) {
       if (hasNearCenterMatches) {
         locationNote = `\n\n⚠️ NOTE: No properties found in the city CENTER matching the budget. The results below are from NEAR-CENTER areas which offer good connectivity to the center.`;
       } else if (topProperties.length > 0) {
-        locationNote = `\n\n⚠️ NOTE: No properties found in the city CENTER or NEAR-CENTER matching the budget. The results below are from SUBURBAN areas of ${context.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}. These areas offer modern apartments at better prices but require transportation to the center.`;
+        locationNote = `\n\n⚠️ NOTE: No properties found in the city CENTER or NEAR-CENTER matching the budget. The results below are from SUBURBAN areas of ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}. These areas offer modern apartments at better prices but require transportation to the center.`;
       }
     }
 
