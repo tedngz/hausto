@@ -49,13 +49,16 @@ const LOCATION_DATA = {
         avgPrice: { min: 12000000, max: 35000000 }
       },
       nearCenter: {
-        names: ['hai ba trung', 'hai bà trưng', 'cau giay', 'cầu giấy', 'thanh xuan', 'thanh xuân'],
+        names: ['hai ba trung', 'hai bà trưng', 'cau giay', 'cầu giấy', 'thanh xuan', 'thanh xuân',
+                'hoang mai', 'hoàng mai'],
         description: 'Mixed residential/commercial, good connectivity',
         avgPrice: { min: 8000000, max: 20000000 }
       },
       suburban: {
-        names: ['nam tu liem', 'nam từ liêm', 'tay ho', 'tây hồ', 'long bien', 'long biên', 
-                'hoang mai', 'hoàng mai', 'ha dong', 'hà đông'],
+        names: ['nam tu liem', 'nam từ liêm', 'bac tu liem', 'bắc từ liêm', 'tay ho', 'tây hồ', 
+                'long bien', 'long biên', 'ha dong', 'hà đông', 'gia lam', 'gia lâm',
+                'thanh tri', 'thanh trì', 'dong anh', 'đông anh', 'me linh', 'mê linh',
+                'soc son', 'sóc sơn', 'hoai duc', 'hoài đức'],
         description: 'New developments, larger apartments, requires transportation',
         avgPrice: { min: 6000000, max: 15000000 }
       }
@@ -288,21 +291,27 @@ function filterAndScoreProperties(
       score -= 30; // Penalty for over budget
     }
     
-    // Location tier match
+    // Location tier match - RELAXED: don't heavily penalize suburban when center requested
     const locationTier = context.city ? getLocationTier(p.location, context.city) : 'unknown';
     let locationMatch = true;
     
     if (context.wantsCenter) {
       if (locationTier === 'center') {
-        score += 25;
+        score += 30;
         matchReasons.push('in city center');
         locationMatch = true;
       } else if (locationTier === 'near-center') {
-        score += 10;
+        score += 15;
         matchReasons.push('near city center');
         locationMatch = false; // Partial match
+      } else if (locationTier === 'suburban') {
+        // Don't heavily penalize - just don't give bonus
+        score += 0;
+        matchReasons.push(`in ${p.location.split(',')[0]} area`);
+        locationMatch = false;
       } else {
-        score -= 20;
+        // Unknown location in the target city - mild penalty
+        score -= 5;
         locationMatch = false;
       }
     }
@@ -651,12 +660,26 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
 
+    // Check if we have center matches when user wants center
+    const hasCenterMatches = context.wantsCenter && topProperties.some(p => p.locationTier === 'center');
+    const hasNearCenterMatches = context.wantsCenter && topProperties.some(p => p.locationTier === 'near-center');
+    
+    let locationNote = '';
+    if (context.wantsCenter && !hasCenterMatches) {
+      if (hasNearCenterMatches) {
+        locationNote = `\n\n⚠️ NOTE: No properties found in the city CENTER matching the budget. The results below are from NEAR-CENTER areas which offer good connectivity to the center.`;
+      } else if (topProperties.length > 0) {
+        locationNote = `\n\n⚠️ NOTE: No properties found in the city CENTER or NEAR-CENTER matching the budget. The results below are from SUBURBAN areas of ${context.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}. These areas offer modern apartments at better prices but require transportation to the center.`;
+      }
+    }
+
     const systemPrompt = `You are Hausto AI, a friendly and intelligent rental property assistant in Vietnam. You help renters find their perfect home.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
+${locationNote}
 
-📊 PRE-FILTERED PROPERTIES (${topProperties.length} best matches from ${properties.length} total):
+📊 AVAILABLE PROPERTIES (${topProperties.length} matches from ${properties.length} total in database):
 ${topProperties.length > 0 ? topProperties.map((p, i) => `
 [${i+1}] ${p.title}
    ID: ${p.id}
@@ -664,36 +687,34 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    Price: ${(p.price/1000000).toFixed(1)}M VND/month ${p.priceMatch ? '✓ within budget' : '⚠️ over budget'}
    Match Score: ${p.matchScore}/100
    Match Reasons: ${p.matchReasons.join(', ') || 'General match'}
-   Amenities: ${p.amenities.join(', ')}
+   Amenities: ${p.amenities.slice(0, 10).join(', ')}${p.amenities.length > 10 ? '...' : ''}
    Styles: ${p.styles.join(', ') || 'Not specified'}
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : 'No properties match the current criteria.'}
+`).join('\n') : 'No properties currently match these criteria in our database.'}
 
 🧠 CRITICAL INSTRUCTIONS:
 
-1. **RESPECT ALL CONSTRAINTS**: Never suggest properties that violate the user's requirements.
-   - If user said "under 15M", a 16M property is NOT a match
-   - If user wants HCMC center, D7 is NOT center (it's suburban)
-   - If user needs a balcony, don't suggest properties without one
+1. **ALWAYS SHOW AVAILABLE PROPERTIES**: If there are properties listed above, you MUST include them in your response JSON. Never say "I found properties" without showing them.
 
-2. **USE THE PRE-FILTERED DATA**: I've already filtered properties for you. Only use properties from the list above.
+2. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
 
-3. **BE HONEST ABOUT LIMITATIONS**:
-   - If no perfect matches exist, say so clearly
-   - Suggest nearby alternatives with explicit disclaimers
-   - Example: "I couldn't find center apartments under 15M, but here's one in nearby D4 for 14M..."
+3. **BE TRANSPARENT ABOUT LOCATION**:
+   - If user wanted CENTER but only SUBURBAN available, explain: "I couldn't find center apartments under your budget, but here are great options in [area] which is a modern suburb with good value..."
+   - Never pretend suburban is center
 
-4. **NATURAL MATCH REASONS**: Write conversationally, not formulaically.
-   - GOOD: "This cozy studio in D3 at 12M/month has the balcony you wanted and is right in the center"
-   - BAD: "Perfect match because it includes balcony and is located in District 3"
+4. **RESPECT PRICE CONSTRAINTS**: Never suggest over-budget properties as matches. If including one, clearly mark it as "slightly over budget".
 
-5. **JSON RESPONSE FORMAT** (for property searches):
+5. **NATURAL MATCH REASONS**: Write conversationally.
+   - GOOD: "This cozy 13M/month apartment in Nam Tu Liem has the balcony you wanted. While not in the center, it's in a modern development area with good facilities."
+   - BAD: "Property matches criteria."
+
+6. **JSON RESPONSE FORMAT** (REQUIRED for any property search):
 {
   "results": [
     {
-      "id": "exact-property-id",
+      "id": "exact-property-id-from-above",
       "title": "Property title",
       "location": "Exact location",
       "price": 12000000,
@@ -701,27 +722,28 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
       "vibe": "Modern, Cozy",
       "description": "Brief description",
       "highlights": ["Modern", "Balcony"],
-      "images": ["copy-exact-urls-from-above"],
+      "images": ["copy-exact-urls-from-property-data"],
       "matchScore": 85,
-      "matchReason": "Natural, conversational reason mentioning key features",
-      "realtor_id": "exact-realtor-id",
+      "matchReason": "Natural reason explaining why this matches, mentioning location honestly",
+      "realtor_id": "exact-realtor-id-from-above",
       "isExternal": false,
       "source": null,
       "sourceUrl": null
     }
   ],
-  "summary": "Human-friendly summary of what was found",
+  "summary": "I found X properties in [area]. [Explain if not exact match to their request]",
   "totalMatches": 3
 }
 
-6. **FOR NON-SEARCH QUERIES**: If the user is asking general questions, chatting, or not searching for properties, respond conversationally WITHOUT the JSON format.
+7. **FOR CONVERSATIONAL QUERIES**: Only respond without JSON if user is NOT searching for properties (asking about neighborhoods, prices, advice, etc.)
 
-7. **LOCATION KNOWLEDGE**:
-   - HCMC Center: District 1, District 3 (premium, walkable, expensive)
-   - HCMC Near-Center: District 4, 5, Binh Thanh, Phu Nhuan (good value, close)
-   - HCMC Suburban: District 7, 2, Thu Duc (modern, spacious, needs transport)
-   - Hanoi Center: Ba Dinh, Hoan Kiem (historic, government area)
-   - Hanoi Near-Center: Dong Da, Cau Giay, Hai Ba Trung
+8. **LOCATION KNOWLEDGE**:
+   - HCMC Center: District 1, 3 (premium, walkable, expensive ~15-40M)
+   - HCMC Near-Center: District 4, 5, Binh Thanh, Phu Nhuan (~10-25M)
+   - HCMC Suburban: District 7, 2, Thu Duc (~7-18M, modern, spacious)
+   - Hanoi Center: Ba Dinh, Hoan Kiem, Dong Da (historic ~12-35M)
+   - Hanoi Near-Center: Hai Ba Trung, Cau Giay, Thanh Xuan, Hoang Mai (~8-20M)
+   - Hanoi Suburban: Nam Tu Liem, Bac Tu Liem, Tay Ho, Long Bien, Gia Lam (~6-15M)
 
 Maximum ${maxResults} properties in results.`;
 
