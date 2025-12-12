@@ -51,9 +51,40 @@ serve(async (req) => {
       // Handle specific actions
       switch (action) {
         case 'contact_provider': {
-          // Directly provide contact information
+          // Check if we have multiple properties - prompt user to select
+          if (Array.isArray(properties) && properties.length > 1) {
+            const propertyList = properties.map((p: any, i: number) => 
+              `${i + 1}. ${p.title} (${p.location})`
+            ).join('\n');
+            
+            const suggestion = `You have ${properties.length} matched properties! Which one would you like to contact the provider for?\n\n${propertyList}\n\nPlease select a property to see the listing provider's contact information.`;
+            
+            return new Response(
+              JSON.stringify({ 
+                suggestion, 
+                suggestedActions: [],
+                requirePropertySelection: true,
+                availableProperties: properties.map((p: any, i: number) => ({
+                  index: i,
+                  id: p.id || p.property_id,
+                  title: p.title,
+                  location: p.location,
+                  price: p.price,
+                  providerName: p.property_source_provider_name,
+                  providerPhone: p.property_source_provider_phone,
+                  images: p.images
+                }))
+              }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+              }
+            );
+          }
+
+          // Single property or selected property - provide contact info
           if (!providerName || !providerPhone) {
-            const suggestion = `I don't have the listing provider's contact information for this property. Please check the property listing or contact support for assistance.`;
+            const suggestion = `I don't have the listing provider's contact information for "${propertyTitle || 'this property'}". The listing may not have contact details available. You can try viewing the original property listing for more information.`;
             return new Response(
               JSON.stringify({ suggestion, suggestedActions: [] }),
               {
@@ -63,7 +94,7 @@ serve(async (req) => {
             );
           }
 
-          const suggestion = `📞 Listing Provider Contact\n\nName: ${providerName}\nPhone: ${providerPhone}\n\nFeel free to reach out directly to discuss "${propertyTitle}" and schedule a viewing. Good luck! 🏡`;
+          const suggestion = `📞 Listing Provider Contact for "${propertyTitle}"\n\nName: ${providerName}\nPhone: ${providerPhone}\n\nFeel free to reach out directly to schedule a viewing. Good luck with your property search! 🏡`;
 
           return new Response(
             JSON.stringify({ suggestion, suggestedActions: [] }),
