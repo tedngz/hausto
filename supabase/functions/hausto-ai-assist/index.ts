@@ -25,9 +25,10 @@ serve(async (req) => {
     ).join('\n') || 'No properties in conversation';
     
     // Get provider contact info from property (could be single or first in array)
+    // Handle both naming conventions: property_source_provider_* and providerName/providerPhone
     const targetProperty = Array.isArray(properties) && properties.length > 0 ? properties[0] : properties;
-    const providerName = targetProperty?.property_source_provider_name;
-    const providerPhone = targetProperty?.property_source_provider_phone;
+    const providerName = targetProperty?.property_source_provider_name || targetProperty?.providerName;
+    const providerPhone = targetProperty?.property_source_provider_phone || targetProperty?.providerPhone;
     const propertyTitle = targetProperty?.title;
     
     // Debug logging to verify provider data
@@ -36,7 +37,8 @@ serve(async (req) => {
       providerPhone,
       propertyTitle,
       hasProperties: properties?.length > 0,
-      isArray: Array.isArray(properties)
+      isArray: Array.isArray(properties),
+      targetPropertyKeys: targetProperty ? Object.keys(targetProperty) : []
     });
 
     // Build conversation context
