@@ -185,11 +185,16 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     specificDistricts: []
   };
   
-  // Parse all messages (history + current)
-  const allTexts = [...chatHistory.map(m => m.content), currentMessage];
+  // Parse ONLY USER messages for preferences (ignore AI responses to prevent contamination)
+  const userMessages = chatHistory
+    .filter(m => m.role === 'user')
+    .map(m => m.content);
   
-  for (const text of allTexts) {
-    // City detection (later messages override earlier)
+  // Add current message (which is always from user)
+  const allUserTexts = [...userMessages, currentMessage];
+  
+  for (const text of allUserTexts) {
+    // City detection - PRIORITY: current message overrides history, but only user input matters
     const detectedCity = detectCity(text);
     if (detectedCity) context.city = detectedCity;
     
