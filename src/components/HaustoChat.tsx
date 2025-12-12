@@ -49,6 +49,8 @@ export const HaustoChat = ({
   const [isAIActive, setIsAIActive] = useState(false);
   const [aiLastActiveTime, setAiLastActiveTime] = useState<number | null>(null);
   const [isViewingScheduleModalOpen, setIsViewingScheduleModalOpen] = useState(false);
+  const [showPropertySelectionForContact, setShowPropertySelectionForContact] = useState(false);
+  const [propertiesToSelect, setPropertiesToSelect] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const aiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Track per-conversation proactive timers and last scheduled message IDs
@@ -538,9 +540,11 @@ export const HaustoChat = ({
 
       // Ensure properties include provider info
       const propertiesWithProvider = currentConv.properties?.map(p => ({
+        id: p.property_id,
         title: p.title,
         location: p.location,
         price: p.price,
+        images: p.images,
         property_source_provider_name: p.property_source_provider_name,
         property_source_provider_phone: p.property_source_provider_phone,
       })) || [];
@@ -560,21 +564,76 @@ export const HaustoChat = ({
 
       if (error) throw error;
 
-      // Send AI follow-up
-      await supabase.from('direct_messages').insert({
-        conversation_id: selectedMatch,
-        sender_id: user?.id,
-        receiver_id: receiverId,
-        content: data.suggestion,
-        metadata: { type: 'ai-suggestion' }
-      });
+      // Check if AI is requesting property selection
+      if (data.requirePropertySelection && data.availableProperties) {
+        setPropertiesToSelect(data.availableProperties);
+        setShowPropertySelectionForContact(true);
+        // Don't send the suggestion message when showing property selection UI
+      } else {
+        // Send AI follow-up
+        await supabase.from('direct_messages').insert({
+          conversation_id: selectedMatch,
+          sender_id: user?.id,
+          receiver_id: receiverId,
+          content: data.suggestion,
+          metadata: { type: 'ai-suggestion' }
+        });
 
-      await refetchMessages();
+        await refetchMessages();
+      }
     } catch (error) {
       console.error('Error handling AI action:', error);
       toast({
         title: "Error",
         description: "Failed to process action",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRequestingAI(false);
+    }
+  };
+
+  const handlePropertySelectionForContact = async (property: any) => {
+    if (!selectedMatch || !user?.id) return;
+    
+    setShowPropertySelectionForContact(false);
+    setPropertiesToSelect([]);
+    setIsRequestingAI(true);
+    
+    try {
+      const currentConv = conversations.find(c => c.id === selectedMatch);
+      if (!currentConv) return;
+
+      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+
+      // Call AI with the selected property
+      const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
+        body: {
+          userType,
+          messages: [],
+          properties: [property], // Send only the selected property
+          action: 'contact_provider',
+          isPremium: subscription_tier === 'premium',
+        }
+      });
+
+      if (error) throw error;
+
+      // Send AI response with contact info
+      await supabase.from('direct_messages').insert({
+        conversation_id: selectedMatch,
+        sender_id: user?.id,
+        receiver_id: receiverId,
+        content: data.suggestion,
+        metadata: { type: 'ai-confirmation' }
+      });
+
+      await refetchMessages();
+    } catch (error) {
+      console.error('Error getting property contact:', error);
+      toast({
+        title: "Error",
+        description: "Failed to get property information",
         variant: "destructive"
       });
     } finally {
@@ -1187,6 +1246,66 @@ export const HaustoChat = ({
             }
           }}
         />
+
+        {/* Property Selection for Contact Provider */}
+        <Dialog open={showPropertySelectionForContact} onOpenChange={setShowPropertySelectionForContact}>
+          <DialogContent className="max-w-md bg-white">
+            <DialogTitle className="text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              Select a Property
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              Choose which property you'd like to contact the listing provider for:
+            </DialogDescription>
+            <div className="space-y-3 mt-4 max-h-[400px] overflow-y-auto">
+              {propertiesToSelect.map((property, index) => (
+                <button
+                  key={property.id || index}
+                  onClick={() => handlePropertySelectionForContact(property)}
+                  className="w-full flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors text-left"
+                >
+                  {property.images?.[0] ? (
+                    <img 
+                      src={property.images[0]} 
+                      alt={property.title}
+                      className="w-16 h-16 object-cover rounded-md flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-6 h-6 text-gray-400" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-sm text-gray-900 truncate">{property.title}</h4>
+                    <p className="text-xs text-gray-500 truncate">{property.location}</p>
+                    {property.price && (
+                      <p className="text-xs font-medium text-purple-600 mt-1">
+                        {formatPrice(property.price)}/mo
+                      </p>
+                    )}
+                    {property.providerName && (
+                      <p className="text-xs text-green-600 mt-1">✓ Contact available</p>
+                    )}
+                    {!property.providerName && (
+                      <p className="text-xs text-gray-400 mt-1">No contact info</p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setShowPropertySelectionForContact(false);
+                  setPropertiesToSelect([]);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
