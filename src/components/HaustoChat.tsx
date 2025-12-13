@@ -789,102 +789,7 @@ export const HaustoChat = ({
         
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          {showPropertyList ? (
-            /* Property List View */
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
-                <div className="flex items-center space-x-3">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setShowPropertyList(false)} 
-                    className="hover:bg-white/50 p-1" 
-                    aria-label="Back to conversation"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </Button>
-                  <h3 className="font-semibold text-gray-900">Matched Properties</h3>
-                </div>
-              </div>
-
-              <ScrollArea className="flex-1 p-4">
-                <div className="space-y-3">
-                  {(() => {
-                    const currentConv = conversations.find(c => c.id === selectedMatch);
-                    return currentConv?.properties?.map((prop, index) => (
-                      <button
-                        key={prop.property_id}
-                        onClick={async () => {
-                          try {
-                            const { data: fullProperty, error } = await supabase
-                              .from('properties')
-                              .select('*')
-                              .eq('id', prop.property_id)
-                              .maybeSingle();
-
-                            if (error) throw error;
-
-                            // Check if property is still available
-                            if (!fullProperty || !fullProperty.is_active) {
-                              toast({
-                                title: 'Property No Longer Available',
-                                description: 'This property is no longer listed. It may have been rented or removed by the owner.',
-                              });
-                              return;
-                            }
-
-                            setDetailModalApartment({
-                              id: fullProperty.id,
-                              images: fullProperty.images || [],
-                              title: fullProperty.title,
-                              location: fullProperty.location,
-                              price: Number(fullProperty.price || 0),
-                              size: fullProperty.size || '',
-                              vibe: fullProperty.vibe || '',
-                              description: fullProperty.description || '',
-                              highlights: fullProperty.highlights || [],
-                              vibe_analysis: fullProperty.vibe_analysis,
-                              property_source_link: fullProperty.property_source_link,
-                              realtor: {
-                                id: currentConv.realtor_id,
-                                name: currentConv.realtor_name || 'Property Owner',
-                                phone: '+1-234-567-8900',
-                                email: 'contact@realtor.com'
-                              },
-                              matchId: currentConv.id
-                            });
-                            setShowPropertyList(false);
-                          } catch (error) {
-                            console.error('Error fetching property details:', error);
-                            toast({
-                              title: 'Error',
-                              description: 'Failed to load property details',
-                              variant: 'destructive'
-                            });
-                          }
-                        }}
-                        className="w-full text-left p-4 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200 hover:border-orange-200"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="font-semibold text-orange-600 mt-1 flex-shrink-0 text-lg">{index + 1}.</span>
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <p className="font-medium text-base break-words">{prop.title}</p>
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                              <p className="text-sm text-gray-600 break-words">{prop.location}</p>
-                            </div>
-                            <Badge variant="secondary" className="text-sm bg-orange-100 text-orange-800">
-                              {formatPrice(Number(prop.price || 0))}/mo
-                            </Badge>
-                          </div>
-                        </div>
-                      </button>
-                    ));
-                  })()}
-                </div>
-              </ScrollArea>
-            </div>
-          ) : !selectedMatch && !isStartingNewChat ? <div className="flex-1 flex flex-col overflow-hidden">
+          {!selectedMatch && !isStartingNewChat ? <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
                 <div>
                   
@@ -1274,9 +1179,111 @@ export const HaustoChat = ({
         />
 
         {/* Property Selection for Contact Provider */}
+        {/* Property List Modal */}
+        <Dialog open={showPropertyList} onOpenChange={setShowPropertyList}>
+          <DialogContent className="max-w-md bg-white">
+            <DialogTitle className="text-lg font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
+              Matched Properties
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              View and explore your matched properties:
+            </DialogDescription>
+            <div className="space-y-3 mt-4 max-h-[400px] overflow-y-auto">
+              {(() => {
+                const currentConv = conversations.find(c => c.id === selectedMatch);
+                return currentConv?.properties?.map((prop, index) => (
+                  <button
+                    key={prop.property_id}
+                    onClick={async () => {
+                      try {
+                        const { data: fullProperty, error } = await supabase
+                          .from('properties')
+                          .select('*')
+                          .eq('id', prop.property_id)
+                          .maybeSingle();
+
+                        if (error) throw error;
+
+                        if (!fullProperty || !fullProperty.is_active) {
+                          toast({
+                            title: 'Property No Longer Available',
+                            description: 'This property is no longer listed. It may have been rented or removed by the owner.',
+                          });
+                          return;
+                        }
+
+                        setDetailModalApartment({
+                          id: fullProperty.id,
+                          images: fullProperty.images || [],
+                          title: fullProperty.title,
+                          location: fullProperty.location,
+                          price: Number(fullProperty.price || 0),
+                          size: fullProperty.size || '',
+                          vibe: fullProperty.vibe || '',
+                          description: fullProperty.description || '',
+                          highlights: fullProperty.highlights || [],
+                          vibe_analysis: fullProperty.vibe_analysis,
+                          property_source_link: fullProperty.property_source_link,
+                          realtor: {
+                            id: currentConv.realtor_id,
+                            name: currentConv.realtor_name || 'Property Owner',
+                            phone: '+1-234-567-8900',
+                            email: 'contact@realtor.com'
+                          },
+                          matchId: currentConv.id
+                        });
+                        setShowPropertyList(false);
+                      } catch (error) {
+                        console.error('Error fetching property details:', error);
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to load property details',
+                          variant: 'destructive'
+                        });
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors text-left"
+                  >
+                    {prop.images?.[0] ? (
+                      <img 
+                        src={prop.images[0]} 
+                        alt={prop.title}
+                        className="w-16 h-16 object-cover rounded-md flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center flex-shrink-0">
+                        <MapPin className="w-6 h-6 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm text-gray-900 truncate">{prop.title}</h4>
+                      <p className="text-xs text-gray-500 truncate">{prop.location}</p>
+                      {prop.price && (
+                        <p className="text-xs font-medium text-orange-600 mt-1">
+                          {formatPrice(Number(prop.price))}/mo
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ));
+              })()}
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowPropertyList(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Property Selection for Contact Modal */}
         <Dialog open={showPropertySelectionForContact} onOpenChange={setShowPropertySelectionForContact}>
           <DialogContent className="max-w-md bg-white">
-            <DialogTitle className="text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            <DialogTitle className="text-lg font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
               Select a Property
             </DialogTitle>
             <DialogDescription className="text-sm text-gray-600">
@@ -1287,7 +1294,7 @@ export const HaustoChat = ({
                 <button
                   key={property.id || index}
                   onClick={() => handlePropertySelectionForContact(property)}
-                  className="w-full flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors text-left"
                 >
                   {property.images?.[0] ? (
                     <img 
@@ -1304,7 +1311,7 @@ export const HaustoChat = ({
                     <h4 className="font-medium text-sm text-gray-900 truncate">{property.title}</h4>
                     <p className="text-xs text-gray-500 truncate">{property.location}</p>
                     {property.price && (
-                      <p className="text-xs font-medium text-purple-600 mt-1">
+                      <p className="text-xs font-medium text-orange-600 mt-1">
                         {formatPrice(property.price)}/mo
                       </p>
                     )}
