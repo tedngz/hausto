@@ -76,13 +76,39 @@ export const HaustoChat = ({
     refetchMessages
   } = useDirectMessages();
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: 'smooth'
-    });
+    // Use setTimeout to ensure DOM has updated before scrolling
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: 'smooth'
+      });
+    }, 50);
   };
+  
+  // Scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
   }, [directMessages]);
+
+  // Scroll to bottom when returning from property list or detail views
+  useEffect(() => {
+    if (!showPropertyList && selectedMatch && directMessages.length > 0) {
+      scrollToBottom();
+    }
+  }, [showPropertyList, selectedMatch]);
+
+  // Scroll to bottom when property selection dialog closes
+  useEffect(() => {
+    if (!showPropertySelectionForContact && selectedMatch && directMessages.length > 0) {
+      scrollToBottom();
+    }
+  }, [showPropertySelectionForContact, selectedMatch]);
+
+  // Scroll to bottom when detail modal closes
+  useEffect(() => {
+    if (!detailModalApartment && selectedMatch && directMessages.length > 0) {
+      scrollToBottom();
+    }
+  }, [detailModalApartment, selectedMatch]);
 
   // Sync selected match with direct messages hook
   useEffect(() => {
