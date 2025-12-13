@@ -1029,7 +1029,7 @@ export const HaustoChat = ({
                         return (
                           <div key={message.id}>
                             <div className="flex justify-center my-4">
-                              <div className="max-w-[85%] bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 shadow-sm">
+                              <div className="w-[75%] max-w-md bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 shadow-sm mx-auto">
                                 <div className="flex items-center gap-2 mb-2">
                                   <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
                                     <MessageCircle className="w-4 h-4 text-white" />
