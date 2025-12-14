@@ -589,6 +589,7 @@ function filterAndScoreProperties(
     // Specific district match (HIGHEST PRIORITY when user mentions specific areas)
     let locationMatch = true;
     let matchedSpecificDistrict = false;
+    let isExactSubAreaMatch = false;
     
     if (context.specificDistricts.length > 0) {
       // Sub-areas mapped to parent districts
@@ -650,8 +651,6 @@ function filterAndScoreProperties(
       const requestedSubAreas = context.specificDistricts.filter(d => 
         !['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)
       );
-      
-      let isExactSubAreaMatch = false;
       
       const matchesExactSubArea = requestedSubAreas.length > 0 && requestedSubAreas.some(subArea => {
         if (subArea === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return (isExactSubAreaMatch = true);
