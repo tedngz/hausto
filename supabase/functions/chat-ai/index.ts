@@ -949,6 +949,31 @@ serve(async (req) => {
 
     const maxResults = isAnonymous ? 3 : 5;
 
+    // Collect properties that were already suggested in this conversation so we can surface fresh options
+    let previouslySuggestedIds = new Set<string>();
+    if (canPersist && user?.id) {
+      try {
+        const { data: pastSearches } = await supabase
+          .from('ai_searches')
+          .select('id')
+          .eq('conversation_id', conversationId)
+          .eq('user_id', user.id);
+
+        const searchIds = (pastSearches || []).map((s: any) => s.id);
+
+        if (searchIds.length > 0) {
+          const { data: pastResults } = await supabase
+            .from('ai_search_results')
+            .select('property_id')
+            .in('search_id', searchIds);
+
+          previouslySuggestedIds = new Set((pastResults || []).map((r: any) => r.property_id));
+        }
+      } catch (historyError) {
+        console.error('[Search History] Error loading previous results:', historyError);
+      }
+    }
+
     // ========== REALTOR MODE ==========
     if (userType === 'realtor') {
       const systemPrompt = `You are Hausto AI, a helpful assistant for real estate professionals. You help realtors create compelling property descriptions, titles, and marketing content.
@@ -1010,13 +1035,22 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     console.log('[Context] Accumulated preferences:', JSON.stringify(accContext));
 
     // Filter and score properties based on accumulated context
-    const scoredProperties = filterAndScoreProperties(properties, accContext);
+    // Prefer showing properties that have NOT been suggested before in this conversation
+    const basePropertySet = (() => {
+      if (previouslySuggestedIds.size === 0) return properties;
+      const fresh = properties.filter((p: any) => !previouslySuggestedIds.has(p.id));
+      return fresh.length > 0 ? fresh : properties; // if we run out of new ones, allow reuse
+    })();
+
+    const scoredProperties = filterAndScoreProperties(basePropertySet, accContext);
     console.log(`[Filtering] ${scoredProperties.length} properties after filtering (from ${properties.length})`);
 
-    // Separate into matching and non-matching
+    // Take top scored properties directly instead of discarding lower-scored, but still sorted by score
+    const topProperties = scoredProperties.slice(0, maxResults + 2);
+
+    // Separate into matching and non-matching buckets for logging only
     const perfectMatches = scoredProperties.filter(p => p.matchScore >= 70);
     const partialMatches = scoredProperties.filter(p => p.matchScore >= 40 && p.matchScore < 70);
-    const topProperties = [...perfectMatches, ...partialMatches].slice(0, maxResults + 2);
 
     console.log(`[Scoring] Perfect matches: ${perfectMatches.length}, Partial: ${partialMatches.length}`);
 
