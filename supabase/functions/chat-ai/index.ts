@@ -1100,13 +1100,13 @@ When analyzing property images, ONLY use tags from the standard list above.`;
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
 ${locationNote}
 
-📊 AVAILABLE PROPERTIES (${topProperties.length} matches from ${properties.length} total in database):
+📊 AVAILABLE PROPERTIES (${topProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${topProperties.length > 0 ? topProperties.map((p, i) => `
-[${i+1}] ${p.title}
+[${i+1}] ${p.matchReasons.some(r => r.includes('exactly')) ? '⭐ EXACT MATCH' : '📍 NEARBY'} ${p.title}
    ID: ${p.id}
    Location: ${p.location} (${p.locationTier})
    Price: ${(p.price/1000000).toFixed(1)}M VND/month ${p.priceMatch ? '✓ within budget' : '⚠️ over budget'}
-   Match Score: ${p.matchScore}/100
+   Match Score: ${p.matchScore}/100 ${p.matchScore >= 90 ? '🎯 TOP MATCH' : ''}
    Match Reasons: ${p.matchReasons.join(', ') || 'General match'}
    Amenities: ${p.amenities.slice(0, 10).join(', ')}${p.amenities.length > 10 ? '...' : ''}
    Styles: ${p.styles.join(', ') || 'Not specified'}
@@ -1123,25 +1123,31 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    - If NONE of the previous results have it, say so clearly: "None of the properties I showed you earlier have a sofa listed. Let me find some that do..."
    - ONLY THEN suggest new properties with that feature
 
-2. **ALWAYS SHOW AVAILABLE PROPERTIES**: If there are properties listed above, you MUST include them in your response JSON. Never say "I found properties" without showing them.
+2. **PRESERVE PROPERTY ORDER - CRITICAL**: The properties are listed above in PRIORITY ORDER (highest match score first). When user asks for a specific area like "Thao Dien":
+   - Properties DIRECTLY in Thao Dien MUST appear FIRST in your results
+   - Properties in nearby areas (like "District 2") should appear AFTER
+   - DO NOT reorder the properties - keep them in the exact order provided above
+   - The [1], [2], [3] numbering indicates priority - always return [1] first, then [2], etc.
 
-3. **DETAILED SUMMARIES REQUIRED**: Your summary must explain the search in detail. Instead of just "I found 5 properties", write something like:
-   - "I searched for cozy apartments in Thao Dien under your 15M budget. I found 3 properties directly in Thao Dien and 2 more in nearby District 2 areas. Properties are sorted with Thao Dien listings first."
+3. **ALWAYS SHOW AVAILABLE PROPERTIES**: If there are properties listed above, you MUST include them in your response JSON. Never say "I found properties" without showing them.
+
+4. **DETAILED SUMMARIES REQUIRED**: Your summary must explain the search in detail. Instead of just "I found 5 properties", write something like:
+   - "I searched for modern apartments in Thao Dien under your 15M budget. I found 3 properties directly in Thao Dien and 2 more in nearby District 2 areas. Properties are sorted with Thao Dien listings first."
    - Explain WHAT you searched for, WHERE you searched, HOW MANY match exactly vs nearby areas
 
-3. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
+5. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
 
-4. **BE TRANSPARENT ABOUT LOCATION**:
+6. **BE TRANSPARENT ABOUT LOCATION**:
    - If user wanted CENTER but only SUBURBAN available, explain: "I couldn't find center apartments under your budget, but here are great options in [area] which is a modern suburb with good value..."
    - Never pretend suburban is center
 
-5. **RESPECT PRICE CONSTRAINTS**: Never suggest over-budget properties as matches. If including one, clearly mark it as "slightly over budget".
+7. **RESPECT PRICE CONSTRAINTS**: Never suggest over-budget properties as matches. If including one, clearly mark it as "slightly over budget".
 
-6. **NATURAL MATCH REASONS**: Write conversationally.
+8. **NATURAL MATCH REASONS**: Write conversationally.
    - GOOD: "This cozy 13M/month apartment in Nam Tu Liem has the balcony you wanted. While not in the center, it's in a modern development area with good facilities."
    - BAD: "Property matches criteria."
 
-6. **JSON RESPONSE FORMAT** (REQUIRED for any property search):
+9. **JSON RESPONSE FORMAT** (REQUIRED for any property search):
 {
   "results": [
     {
