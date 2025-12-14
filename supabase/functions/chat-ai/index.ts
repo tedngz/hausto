@@ -339,9 +339,21 @@ function filterAndScoreProperties(
     let matchedSpecificDistrict = false;
     
     if (context.specificDistricts.length > 0) {
-      // Check if property location matches any of the user's requested districts
+      // D2 sub-areas: Thao Dien, An Phu, etc. should also match "District 2" properties
+      const d2Areas = ['thao dien', 'an phu', 'thu thiem', 'cat lai', 'thanh my loi'];
+      const d1Areas = ['da kao', 'ben nghe', 'ben thanh', 'nguyen thai binh'];
+      
+      // If user mentions D2 sub-area, also consider generic D2 properties
+      const wantsD2 = context.specificDistricts.some(d => 
+        d === 'district 2' || d2Areas.includes(d)
+      );
+      const wantsD1 = context.specificDistricts.some(d => 
+        d === 'district 1' || d1Areas.includes(d)
+      );
+      
+      // Check if property matches any requested area OR its parent district
       const matchesRequestedDistrict = context.specificDistricts.some(district => {
-        // Match variations: "district 2", "d2", "thao dien", etc.
+        // Match variations
         if (district === 'district 1' && (locLower.includes('district 1') || locLower.includes('d1') || locLower.includes('quan 1'))) return true;
         if (district === 'district 2' && (locLower.includes('district 2') || locLower.includes('d2') || locLower.includes('quan 2'))) return true;
         if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
@@ -352,15 +364,24 @@ function filterAndScoreProperties(
         return locLower.includes(district);
       });
       
+      // Also match if user wants D2 sub-area and property is in D2
+      const matchesParentDistrict = 
+        (wantsD2 && (locLower.includes('district 2') || locLower.includes('d2') || locLower.includes('quan 2'))) ||
+        (wantsD1 && (locLower.includes('district 1') || locLower.includes('d1') || locLower.includes('quan 1')));
+      
       if (matchesRequestedDistrict) {
-        score += 35; // Strong bonus for matching specific district
+        score += 35; // Strong bonus for exact match
         matchedSpecificDistrict = true;
         matchReasons.push(`in requested area: ${p.location.split(',')[0]}`);
-        console.log(`[Scoring] Property ${p.id} matches specific district request: ${p.location}`);
+        console.log(`[Scoring] Property ${p.id} matches specific district: ${p.location}`);
+      } else if (matchesParentDistrict) {
+        score += 25; // Good bonus for matching parent district
+        matchedSpecificDistrict = true;
+        matchReasons.push(`in ${p.location.split(',')[0]}`);
+        console.log(`[Scoring] Property ${p.id} matches parent district: ${p.location}`);
       } else {
-        // Property is NOT in any of the user's requested districts
-        // Still include but with lower score as alternative
-        score -= 10;
+        // NOT in requested districts - still include as alternative with lower score
+        score -= 5;
         locationMatch = false;
       }
     }
