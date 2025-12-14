@@ -26,14 +26,16 @@ const LOCATION_DATA = {
       },
       nearCenter: {
         names: ['d4', 'district 4', 'quan 4', 'quận 4', 'q4', 'd5', 'district 5', 'quan 5', 'quận 5', 'q5', 
-                'binh thanh', 'bình thạnh', 'phu nhuan', 'phú nhuận', 'd10', 'district 10', 'quan 10', 'quận 10'],
+                'binh thanh', 'bình thạnh', 'phu nhuan', 'phú nhuận', 'd10', 'district 10', 'quan 10', 'quận 10',
+                'da kao', 'đa kao', 'dakao'],
         description: 'Close to center, good value, mix of local and expat communities',
         avgPrice: { min: 10000000, max: 25000000 }
       },
       suburban: {
         names: ['d7', 'district 7', 'quan 7', 'quận 7', 'q7', 'd2', 'district 2', 'quan 2', 'quận 2', 'q2',
                 'thu duc', 'thủ đức', 'tan binh', 'tân bình', 'go vap', 'gò vấp', 'd9', 'district 9', 'quan 9', 'quận 9',
-                'binh tan', 'bình tân', 'tan phu', 'tân phú', 'd12', 'district 12', 'quan 12', 'quận 12'],
+                'binh tan', 'bình tân', 'tan phu', 'tân phú', 'd12', 'district 12', 'quan 12', 'quận 12',
+                'thao dien', 'thảo điền', 'an phu', 'an phú', 'thu thiem', 'thủ thiêm'],
         description: 'Modern developments, more space, family-friendly, requires transportation',
         avgPrice: { min: 7000000, max: 18000000 }
       }
@@ -173,6 +175,36 @@ interface AccumulatedContext {
   specificDistricts: string[];
 }
 
+// Extract specific districts/areas mentioned by user
+function extractSpecificDistricts(text: string): string[] {
+  const lowerText = text.toLowerCase();
+  const districts: string[] = [];
+  
+  // HCM specific areas
+  const hcmAreas = [
+    { names: ['d1', 'district 1', 'quan 1', 'quận 1', 'q1'], canonical: 'district 1' },
+    { names: ['d2', 'district 2', 'quan 2', 'quận 2', 'q2'], canonical: 'district 2' },
+    { names: ['d3', 'district 3', 'quan 3', 'quận 3', 'q3'], canonical: 'district 3' },
+    { names: ['d4', 'district 4', 'quan 4', 'quận 4', 'q4'], canonical: 'district 4' },
+    { names: ['d7', 'district 7', 'quan 7', 'quận 7', 'q7'], canonical: 'district 7' },
+    { names: ['binh thanh', 'bình thạnh'], canonical: 'binh thanh' },
+    { names: ['phu nhuan', 'phú nhuận'], canonical: 'phu nhuan' },
+    { names: ['thao dien', 'thảo điền'], canonical: 'thao dien' },
+    { names: ['da kao', 'đa kao', 'dakao'], canonical: 'da kao' },
+    { names: ['an phu', 'an phú'], canonical: 'an phu' },
+    { names: ['thu thiem', 'thủ thiêm'], canonical: 'thu thiem' },
+    { names: ['thu duc', 'thủ đức'], canonical: 'thu duc' },
+  ];
+  
+  for (const area of hcmAreas) {
+    if (area.names.some(n => lowerText.includes(n))) {
+      districts.push(area.canonical);
+    }
+  }
+  
+  return districts;
+}
+
 function buildAccumulatedContext(chatHistory: Array<{role: string, content: string}>, currentMessage: string): AccumulatedContext {
   const context: AccumulatedContext = {
     city: null,
@@ -217,6 +249,12 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     const styles = extractStyles(text);
     for (const s of styles) {
       if (!context.styles.includes(s)) context.styles.push(s);
+    }
+    
+    // Extract specific districts (accumulate)
+    const specificDistricts = extractSpecificDistricts(text);
+    for (const d of specificDistricts) {
+      if (!context.specificDistricts.includes(d)) context.specificDistricts.push(d);
     }
   }
   
@@ -296,11 +334,41 @@ function filterAndScoreProperties(
       score -= 30; // Penalty for over budget
     }
     
-    // Location tier match - RELAXED: don't heavily penalize suburban when center requested
-    const locationTier = context.city ? getLocationTier(p.location, context.city) : 'unknown';
+    // Specific district match (HIGHEST PRIORITY when user mentions specific areas)
     let locationMatch = true;
+    let matchedSpecificDistrict = false;
     
-    if (context.wantsCenter) {
+    if (context.specificDistricts.length > 0) {
+      // Check if property location matches any of the user's requested districts
+      const matchesRequestedDistrict = context.specificDistricts.some(district => {
+        // Match variations: "district 2", "d2", "thao dien", etc.
+        if (district === 'district 1' && (locLower.includes('district 1') || locLower.includes('d1') || locLower.includes('quan 1'))) return true;
+        if (district === 'district 2' && (locLower.includes('district 2') || locLower.includes('d2') || locLower.includes('quan 2'))) return true;
+        if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
+        if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
+        if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
+        if (district === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
+        if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
+        return locLower.includes(district);
+      });
+      
+      if (matchesRequestedDistrict) {
+        score += 35; // Strong bonus for matching specific district
+        matchedSpecificDistrict = true;
+        matchReasons.push(`in requested area: ${p.location.split(',')[0]}`);
+        console.log(`[Scoring] Property ${p.id} matches specific district request: ${p.location}`);
+      } else {
+        // Property is NOT in any of the user's requested districts
+        // Still include but with lower score as alternative
+        score -= 10;
+        locationMatch = false;
+      }
+    }
+    
+    // Location tier match - only apply if no specific districts were requested
+    const locationTier = context.city ? getLocationTier(p.location, context.city) : 'unknown';
+    
+    if (!matchedSpecificDistrict && context.wantsCenter) {
       if (locationTier === 'center') {
         score += 30;
         matchReasons.push('in city center');
