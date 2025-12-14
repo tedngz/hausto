@@ -539,7 +539,10 @@ interface PropertyWithScore {
   styleMatchCount: number;
   locationTier: string;
   matchReasons: string[];
+  // Whether this property is an exact sub-area match (e.g., Thao Dien when user asked for Thao Dien)
+  isExactSubAreaMatch?: boolean;
 }
+
 
 function filterAndScoreProperties(
   properties: any[], 
@@ -648,15 +651,18 @@ function filterAndScoreProperties(
         !['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)
       );
       
+      let isExactSubAreaMatch = false;
+      
       const matchesExactSubArea = requestedSubAreas.length > 0 && requestedSubAreas.some(subArea => {
-        if (subArea === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
-        if (subArea === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
-        if (subArea === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
-        if (subArea === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
-        if (subArea === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
-        return locLower.includes(subArea);
+        if (subArea === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return (isExactSubAreaMatch = true);
+        if (subArea === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return (isExactSubAreaMatch = true);
+        if (subArea === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return (isExactSubAreaMatch = true);
+        if (subArea === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return (isExactSubAreaMatch = true);
+        if (subArea === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return (isExactSubAreaMatch = true);
+        if (locLower.includes(subArea)) return (isExactSubAreaMatch = true);
+        return false;
       });
-
+ 
       if (matchesExactSubArea) {
         score += 50; // HIGHEST bonus for exact sub-area match (Thao Dien when asked for Thao Dien)
         matchedSpecificDistrict = true;
@@ -731,7 +737,7 @@ function filterAndScoreProperties(
       matchReasons.push(`${context.styles.filter(s => lowerStyles.some((ls: string) => ls.includes(s))).join(', ')} style`);
     }
     
-    // Cap score at 100
+    // Cap score at 100 for display, but keep exact sub-area first via separate flag
     score = Math.min(100, Math.max(0, score));
     
     scored.push({
@@ -755,12 +761,17 @@ function filterAndScoreProperties(
       amenityMatchCount,
       styleMatchCount,
       locationTier,
-      matchReasons
+      matchReasons,
+      isExactSubAreaMatch,
     });
   }
   
-  // Sort by score descending
-  return scored.sort((a, b) => b.matchScore - a.matchScore);
+  // Sort by priority: exact sub-area matches first, then by score
+  return scored.sort((a, b) => {
+    if (a.isExactSubAreaMatch && !b.isExactSubAreaMatch) return -1;
+    if (!a.isExactSubAreaMatch && b.isExactSubAreaMatch) return 1;
+    return b.matchScore - a.matchScore;
+  });
 }
 
 // ========== POST-PROCESSING VALIDATION ==========
