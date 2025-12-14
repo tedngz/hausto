@@ -1098,17 +1098,23 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 
 🧠 CRITICAL INSTRUCTIONS:
 
-1. **ALWAYS SHOW AVAILABLE PROPERTIES**: If there are properties listed above, you MUST include them in your response JSON. Never say "I found properties" without showing them.
+1. **COMPARE PREVIOUS RESULTS FIRST**: When user asks about a feature (e.g., "which one has sofa?", "do any of them have balcony?"):
+   - FIRST check the previously suggested properties from the chat history for that feature
+   - Report which of the PREVIOUS results have that feature: "Looking at the properties I suggested earlier: [Property Name] has a sofa listed in amenities, but [Other Property] does not."
+   - If NONE of the previous results have it, say so clearly: "None of the properties I showed you earlier have a sofa listed. Let me find some that do..."
+   - ONLY THEN suggest new properties with that feature
 
-2. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
+2. **ALWAYS SHOW AVAILABLE PROPERTIES**: If there are properties listed above, you MUST include them in your response JSON. Never say "I found properties" without showing them.
 
-3. **BE TRANSPARENT ABOUT LOCATION**:
+3. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
+
+4. **BE TRANSPARENT ABOUT LOCATION**:
    - If user wanted CENTER but only SUBURBAN available, explain: "I couldn't find center apartments under your budget, but here are great options in [area] which is a modern suburb with good value..."
    - Never pretend suburban is center
 
-4. **RESPECT PRICE CONSTRAINTS**: Never suggest over-budget properties as matches. If including one, clearly mark it as "slightly over budget".
+5. **RESPECT PRICE CONSTRAINTS**: Never suggest over-budget properties as matches. If including one, clearly mark it as "slightly over budget".
 
-5. **NATURAL MATCH REASONS**: Write conversationally.
+6. **NATURAL MATCH REASONS**: Write conversationally.
    - GOOD: "This cozy 13M/month apartment in Nam Tu Liem has the balcony you wanted. While not in the center, it's in a modern development area with good facilities."
    - BAD: "Property matches criteria."
 
@@ -1137,9 +1143,9 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
   "totalMatches": 3
 }
 
-7. **FOR CONVERSATIONAL QUERIES**: Only respond without JSON if user is NOT searching for properties (asking about neighborhoods, prices, advice, etc.)
+8. **FOR CONVERSATIONAL QUERIES**: Only respond without JSON if user is NOT searching for properties (asking about neighborhoods, prices, advice, etc.)
 
-8. **LOCATION KNOWLEDGE**:
+9. **LOCATION KNOWLEDGE**:
    - HCMC Center: District 1, 3 (premium, walkable, expensive ~15-40M)
    - HCMC Near-Center: District 4, 5, Binh Thanh, Phu Nhuan (~10-25M)
    - HCMC Suburban: District 7, 2, Thu Duc (~7-18M, modern, spacious)
