@@ -643,15 +643,34 @@ function filterAndScoreProperties(
         return locLower.includes(parent);
       });
       
-      if (matchesExactArea) {
-        score += 40; // Highest bonus for exact match
+      // Check if property is an EXACT match to user's requested sub-area (e.g., "Thao Dien" when user asked for Thao Dien)
+      const requestedSubAreas = context.specificDistricts.filter(d => 
+        !['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)
+      );
+      
+      const matchesExactSubArea = requestedSubAreas.length > 0 && requestedSubAreas.some(subArea => {
+        if (subArea === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
+        if (subArea === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
+        if (subArea === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
+        if (subArea === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
+        if (subArea === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
+        return locLower.includes(subArea);
+      });
+
+      if (matchesExactSubArea) {
+        score += 50; // HIGHEST bonus for exact sub-area match (Thao Dien when asked for Thao Dien)
+        matchedSpecificDistrict = true;
+        matchReasons.push(`exactly in ${p.location.split(',')[0]}`);
+        console.log(`[Scoring] Property ${p.id} EXACT sub-area match: ${p.location}`);
+      } else if (matchesExactArea) {
+        score += 40; // High bonus for exact district match
         matchedSpecificDistrict = true;
         matchReasons.push(`in ${p.location.split(',')[0]}`);
         console.log(`[Scoring] Property ${p.id} exact area match: ${p.location}`);
       } else if (matchesParentDistrict) {
-        score += 30; // Good bonus for parent district
+        score += 25; // Lower bonus for parent district (D2 when asked for Thao Dien)
         matchedSpecificDistrict = true;
-        matchReasons.push(`in ${p.location.split(',')[0]}`);
+        matchReasons.push(`in nearby ${p.location.split(',')[0]}`);
         console.log(`[Scoring] Property ${p.id} parent district match: ${p.location}`);
       } else {
         // NOT in requested districts - lower priority but still include
@@ -1106,6 +1125,10 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 
 2. **ALWAYS SHOW AVAILABLE PROPERTIES**: If there are properties listed above, you MUST include them in your response JSON. Never say "I found properties" without showing them.
 
+3. **DETAILED SUMMARIES REQUIRED**: Your summary must explain the search in detail. Instead of just "I found 5 properties", write something like:
+   - "I searched for cozy apartments in Thao Dien under your 15M budget. I found 3 properties directly in Thao Dien and 2 more in nearby District 2 areas. Properties are sorted with Thao Dien listings first."
+   - Explain WHAT you searched for, WHERE you searched, HOW MANY match exactly vs nearby areas
+
 3. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
 
 4. **BE TRANSPARENT ABOUT LOCATION**:
@@ -1139,7 +1162,7 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
       "sourceUrl": null
     }
   ],
-  "summary": "I found X properties in [area]. [Explain if not exact match to their request]",
+  "summary": "Detailed explanation: e.g., 'I searched for cozy apartments in Thao Dien area under 15M VND. I found X properties matching your criteria - Y are directly in Thao Dien, and Z are in nearby District 2 areas. Here are my top recommendations sorted by how closely they match your needs:'",
   "totalMatches": 3
 }
 
