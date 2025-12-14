@@ -14,6 +14,112 @@ const redis = new Redis({
 });
 
 // ========== LOCATION KNOWLEDGE BASE ==========
+// Sub-districts and wards for each main district
+const HCM_SUBDISTRICTS: Record<string, string[]> = {
+  'district 1': ['da kao', 'đa kao', 'dakao', 'ben nghe', 'bến nghé', 'ben thanh', 'bến thành', 
+                 'nguyen thai binh', 'nguyễn thái bình', 'pham ngu lao', 'phạm ngũ lão', 
+                 'co giang', 'cô giang', 'cau ong lanh', 'cầu ông lãnh', 'nguyen cu trinh', 'nguyễn cư trinh',
+                 'tan dinh', 'tân định', 'cau kho', 'cầu kho'],
+  'district 2': ['thao dien', 'thảo điền', 'an phu', 'an phú', 'thu thiem', 'thủ thiêm',
+                 'cat lai', 'cát lái', 'thanh my loi', 'thạnh mỹ lợi', 'binh an', 'bình an',
+                 'binh khanh', 'bình khánh', 'binh trung dong', 'bình trưng đông', 
+                 'binh trung tay', 'bình trưng tây', 'an khanh', 'an khánh', 'an loi dong', 'an lợi đông'],
+  'district 3': ['vo thi sau', 'võ thị sáu', 'phuong 1', 'phuong 2', 'phuong 3', 'phuong 4', 'phuong 5',
+                 'phuong 6', 'phuong 7', 'phuong 8', 'phuong 9', 'phuong 10', 'phuong 11', 'phuong 12', 'phuong 13', 'phuong 14'],
+  'district 4': ['phuong 1', 'phuong 2', 'phuong 3', 'phuong 4', 'phuong 5', 'phuong 6', 
+                 'phuong 8', 'phuong 9', 'phuong 10', 'phuong 12', 'phuong 13', 'phuong 14', 'phuong 15', 'phuong 16', 'phuong 18'],
+  'district 7': ['phu my hung', 'phú mỹ hưng', 'tan phu', 'tân phú', 'tan phong', 'tân phong',
+                 'tan hung', 'tân hưng', 'tan kieng', 'tân kiểng', 'tan quy', 'tân quy',
+                 'phu thuan', 'phú thuận', 'tan thuan dong', 'tân thuận đông', 'tan thuan tay', 'tân thuận tây',
+                 'binh thuan', 'bình thuận', 'phu my', 'phú mỹ'],
+  'binh thanh': ['thanh da', 'thanh đa', 'binh quoi', 'bình quới', 'phuong 22', 'phuong 24', 'phuong 25', 
+                  'phuong 26', 'phuong 27', 'phuong 28', 'hang xanh', 'hàng xanh', 'van thanh', 'văn thánh',
+                  'phuong 1', 'phuong 2', 'phuong 3', 'phuong 5', 'phuong 6', 'phuong 7', 'phuong 11', 'phuong 12', 
+                  'phuong 13', 'phuong 14', 'phuong 15', 'phuong 17', 'phuong 19', 'phuong 21'],
+  'phu nhuan': ['phuong 1', 'phuong 2', 'phuong 3', 'phuong 4', 'phuong 5', 'phuong 7', 'phuong 8', 
+                'phuong 9', 'phuong 10', 'phuong 11', 'phuong 13', 'phuong 15', 'phuong 17'],
+  'thu duc': ['hiep binh chanh', 'hiệp bình chánh', 'hiep binh phuoc', 'hiệp bình phước',
+              'linh dong', 'linh đông', 'linh tay', 'linh tây', 'linh chieu', 'linh chiểu',
+              'linh trung', 'linh xuong', 'tam binh', 'tam bình', 'tam phu', 'tam phú',
+              'truong tho', 'trường thọ', 'binh chieu', 'bình chiểu', 'binh tho', 'bình thọ'],
+  'tan binh': ['phuong 1', 'phuong 2', 'phuong 3', 'phuong 4', 'phuong 5', 'phuong 6', 'phuong 7', 
+               'phuong 8', 'phuong 9', 'phuong 10', 'phuong 11', 'phuong 12', 'phuong 13', 'phuong 14', 'phuong 15'],
+  'go vap': ['phuong 1', 'phuong 3', 'phuong 4', 'phuong 5', 'phuong 6', 'phuong 7', 'phuong 8', 
+             'phuong 9', 'phuong 10', 'phuong 11', 'phuong 12', 'phuong 13', 'phuong 14', 'phuong 15', 'phuong 16', 'phuong 17'],
+};
+
+const HANOI_SUBDISTRICTS: Record<string, string[]> = {
+  'ba dinh': ['cong vi', 'cống vị', 'dien bien', 'điện biên', 'doi can', 'đội cấn', 'giang vo', 'giảng võ',
+              'kim ma', 'kim mã', 'lieu giai', 'liễu giai', 'ngoc ha', 'ngọc hà', 'ngoc khanh', 'ngọc khánh',
+              'nguyen trung truc', 'nguyễn trung trực', 'phuc xa', 'phúc xá', 'quan thanh', 'quán thánh',
+              'thanh cong', 'thành công', 'truc bach', 'trúc bạch', 'vinh phuc', 'vĩnh phúc'],
+  'hoan kiem': ['hang bac', 'hàng bạc', 'hang bo', 'hàng bồ', 'hang bong', 'hàng bông', 'hang buom', 'hàng buồm',
+                'hang dao', 'hàng đào', 'hang gai', 'hàng gai', 'hang ma', 'hàng mã', 'hang trong', 'hàng trống',
+                'cua dong', 'cửa đông', 'cua nam', 'cửa nam', 'dong xuan', 'đồng xuân', 'ly thai to', 'lý thái tổ',
+                'phan chu trinh', 'phan chu trinh', 'trang tien', 'tràng tiền', 'tran hung dao', 'trần hưng đạo'],
+  'dong da': ['cat linh', 'cát linh', 'hang bot', 'hàng bột', 'kim lien', 'kim liên', 'kham thien', 'khâm thiên',
+              'lang ha', 'láng hạ', 'lang thuong', 'láng thượng', 'nam dong', 'nam đồng', 'o cho dua', 'ô chợ dừa',
+              'phuong lien', 'phương liên', 'phuong mai', 'phương mai', 'quang trung', 'quang trung',
+              'quoc tu giam', 'quốc tử giám', 'tho quan', 'thổ quan', 'trung liet', 'trung liệt', 
+              'trung phung', 'trung phụng', 'trung tu', 'trung tự', 'van chuong', 'văn chương', 'van mieu', 'văn miếu'],
+  'cau giay': ['dich vong', 'dịch vọng', 'dich vong hau', 'dịch vọng hậu', 'mai dich', 'mai dịch',
+               'nghia do', 'nghĩa đô', 'nghia tan', 'nghĩa tân', 'quan hoa', 'quan hoa', 
+               'trung hoa', 'trung hòa', 'yen hoa', 'yên hòa'],
+  'tay ho': ['buoi', 'bưởi', 'nhat tan', 'nhật tân', 'phu thuong', 'phú thượng', 'quang an', 'quảng an',
+             'thuy khue', 'thụy khuê', 'tu lien', 'tứ liên', 'xuan la', 'xuân la', 'yen phu', 'yên phụ'],
+  'hai ba trung': ['bach dang', 'bạch đằng', 'bach khoa', 'bách khoa', 'bui thi xuan', 'bùi thị xuân',
+                   'cau den', 'cầu dền', 'dong mac', 'đống mác', 'dong nhan', 'đồng nhân', 'dong tam', 'đồng tâm',
+                   'le dai hanh', 'lê đại hành', 'minh khai', 'minh khai', 'nguyen du', 'nguyễn du',
+                   'pho hue', 'phố huế', 'thanh luong', 'thanh lương', 'thanh nhan', 'thanh nhàn',
+                   'truong dinh', 'trương định', 'vinh tuy', 'vĩnh tuy'],
+};
+
+const DANANG_SUBDISTRICTS: Record<string, string[]> = {
+  'hai chau': ['hai chau 1', 'hải châu 1', 'hai chau 2', 'hải châu 2', 'hoa cuong bac', 'hòa cường bắc',
+               'hoa cuong nam', 'hòa cường nam', 'hoa thuan dong', 'hòa thuận đông', 'hoa thuan tay', 'hòa thuận tây',
+               'nam duong', 'nam dương', 'phuoc ninh', 'phước ninh', 'thanh binh', 'thạch thang', 'thạch thang',
+               'thuan phuoc', 'thuận phước', 'binh hien', 'bình hiên', 'binh thuan', 'bình thuận'],
+  'thanh khe': ['an khe', 'an khê', 'chinh gian', 'chính gián', 'hoa khe', 'hòa khê',
+                'tam thuan', 'tâm thuan', 'tan chinh', 'tân chính', 'thac gian', 'thạc gián',
+                'vinh trung', 'vĩnh trung', 'xuan ha', 'xuân hà'],
+  'son tra': ['an hai bac', 'an hải bắc', 'an hai dong', 'an hải đông', 'an hai tay', 'an hải tây',
+              'man thai', 'mân thái', 'nai hien dong', 'nại hiên đông', 'phuoc my', 'phước mỹ',
+              'tho quang', 'thọ quang'],
+  'ngu hanh son': ['hoa hai', 'hòa hải', 'hoa quy', 'hòa quý', 'khue my', 'khuê mỹ',
+                   'my an', 'mỹ an', 'bac my an', 'bắc mỹ an'],
+  'lien chieu': ['hoa hiep bac', 'hòa hiệp bắc', 'hoa hiep nam', 'hòa hiệp nam', 
+                 'hoa khanh bac', 'hòa khánh bắc', 'hoa khanh nam', 'hòa khánh nam',
+                 'hoa minh', 'hòa minh'],
+  'cam le': ['hoa an', 'hòa an', 'hoa phat', 'hòa phát', 'hoa tho dong', 'hòa thọ đông',
+             'hoa tho tay', 'hòa thọ tây', 'hoa xuan', 'hòa xuân', 'khue trung', 'khuê trung'],
+};
+
+// Famous roads/streets
+const HCM_ROADS: Record<string, string> = {
+  'nguyen hue': 'district 1', 'nguyễn huệ': 'district 1',
+  'le loi': 'district 1', 'lê lợi': 'district 1',
+  'dong khoi': 'district 1', 'đồng khởi': 'district 1',
+  'hai ba trung': 'district 1', 'hai bà trưng': 'district 1',
+  'le duan': 'district 1', 'lê duẩn': 'district 1',
+  'nguyen thi minh khai': 'district 1', 'nguyễn thị minh khai': 'district 1',
+  'nam ky khoi nghia': 'district 1', 'nam kỳ khởi nghĩa': 'district 1',
+  'pasteur': 'district 1',
+  'vo van tan': 'district 3', 'võ văn tấn': 'district 3',
+  'le van sy': 'district 3', 'lê văn sỹ': 'district 3',
+  'nguyen dinh chieu': 'district 3', 'nguyễn đình chiểu': 'district 3',
+  'cach mang thang 8': 'district 3', 'cách mạng tháng 8': 'district 3',
+  'xuan thuy': 'district 2', 'xuân thủy': 'district 2',
+  'nguyen van huong': 'district 2', 'nguyễn văn hương': 'district 2',
+  'quoc huong': 'district 2', 'quốc hương': 'district 2',
+  'phan van dang': 'binh thanh', 'phan văn đáng': 'binh thanh',
+  'dien bien phu': 'binh thanh', 'điện biên phủ': 'binh thanh',
+  'bui vien': 'district 1', 'bùi viện': 'district 1',
+  'de tham': 'district 1', 'đề thám': 'district 1',
+  'pham ngu lao': 'district 1', 'phạm ngũ lão': 'district 1',
+  'nguyen luong bang': 'district 7', 'nguyễn lương bằng': 'district 7',
+  'le van luong': 'district 7', 'lê văn lương': 'district 7',
+};
+
 const LOCATION_DATA = {
   hcm: {
     name: 'Ho Chi Minh City',
@@ -26,16 +132,14 @@ const LOCATION_DATA = {
       },
       nearCenter: {
         names: ['d4', 'district 4', 'quan 4', 'quận 4', 'q4', 'd5', 'district 5', 'quan 5', 'quận 5', 'q5', 
-                'binh thanh', 'bình thạnh', 'phu nhuan', 'phú nhuận', 'd10', 'district 10', 'quan 10', 'quận 10',
-                'da kao', 'đa kao', 'dakao'],
+                'binh thanh', 'bình thạnh', 'phu nhuan', 'phú nhuận', 'd10', 'district 10', 'quan 10', 'quận 10'],
         description: 'Close to center, good value, mix of local and expat communities',
         avgPrice: { min: 10000000, max: 25000000 }
       },
       suburban: {
         names: ['d7', 'district 7', 'quan 7', 'quận 7', 'q7', 'd2', 'district 2', 'quan 2', 'quận 2', 'q2',
                 'thu duc', 'thủ đức', 'tan binh', 'tân bình', 'go vap', 'gò vấp', 'd9', 'district 9', 'quan 9', 'quận 9',
-                'binh tan', 'bình tân', 'tan phu', 'tân phú', 'd12', 'district 12', 'quan 12', 'quận 12',
-                'thao dien', 'thảo điền', 'an phu', 'an phú', 'thu thiem', 'thủ thiêm'],
+                'binh tan', 'bình tân', 'tan phu', 'tân phú', 'd12', 'district 12', 'quan 12', 'quận 12'],
         description: 'Modern developments, more space, family-friendly, requires transportation',
         avgPrice: { min: 7000000, max: 18000000 }
       }
@@ -65,11 +169,67 @@ const LOCATION_DATA = {
         avgPrice: { min: 6000000, max: 15000000 }
       }
     }
+  },
+  danang: {
+    name: 'Da Nang',
+    aliases: ['da nang', 'đà nẵng', 'danang'],
+    districts: {
+      center: {
+        names: ['hai chau', 'hải châu'],
+        description: 'Central Da Nang, commercial hub',
+        avgPrice: { min: 8000000, max: 20000000 }
+      },
+      nearCenter: {
+        names: ['thanh khe', 'thanh khê', 'son tra', 'sơn trà'],
+        description: 'Beach areas, tourist district',
+        avgPrice: { min: 6000000, max: 15000000 }
+      },
+      suburban: {
+        names: ['ngu hanh son', 'ngũ hành sơn', 'lien chieu', 'liên chiểu', 'cam le', 'cẩm lệ'],
+        description: 'Residential areas, My Khe beach area',
+        avgPrice: { min: 5000000, max: 12000000 }
+      }
+    }
   }
 };
 
+// Helper: Find parent district from sub-district or road
+function findParentDistrict(text: string): { district: string, city: 'hcm' | 'hanoi' | 'danang' } | null {
+  const lowerText = text.toLowerCase();
+  
+  // Check HCM sub-districts
+  for (const [district, wards] of Object.entries(HCM_SUBDISTRICTS)) {
+    if (wards.some(w => lowerText.includes(w))) {
+      return { district, city: 'hcm' };
+    }
+  }
+  
+  // Check HCM roads
+  for (const [road, district] of Object.entries(HCM_ROADS)) {
+    if (lowerText.includes(road)) {
+      return { district, city: 'hcm' };
+    }
+  }
+  
+  // Check Hanoi sub-districts
+  for (const [district, wards] of Object.entries(HANOI_SUBDISTRICTS)) {
+    if (wards.some(w => lowerText.includes(w))) {
+      return { district, city: 'hanoi' };
+    }
+  }
+  
+  // Check Da Nang sub-districts
+  for (const [district, wards] of Object.entries(DANANG_SUBDISTRICTS)) {
+    if (wards.some(w => lowerText.includes(w))) {
+      return { district, city: 'danang' };
+    }
+  }
+  
+  return null;
+}
+
 // ========== ENHANCED DETECTION FUNCTIONS ==========
-function detectCity(text: string): 'hcm' | 'hanoi' | null {
+function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   const lowerText = text.toLowerCase();
   
   // Check HCMC aliases and districts
@@ -77,11 +237,30 @@ function detectCity(text: string): 'hcm' | 'hanoi' | null {
   for (const tier of Object.values(LOCATION_DATA.hcm.districts)) {
     if (tier.names.some(d => lowerText.includes(d))) return 'hcm';
   }
+  // Check HCM sub-districts and roads
+  for (const wards of Object.values(HCM_SUBDISTRICTS)) {
+    if (wards.some(w => lowerText.includes(w))) return 'hcm';
+  }
+  for (const road of Object.keys(HCM_ROADS)) {
+    if (lowerText.includes(road)) return 'hcm';
+  }
   
   // Check Hanoi aliases and districts
   if (LOCATION_DATA.hanoi.aliases.some(a => lowerText.includes(a))) return 'hanoi';
   for (const tier of Object.values(LOCATION_DATA.hanoi.districts)) {
     if (tier.names.some(d => lowerText.includes(d))) return 'hanoi';
+  }
+  for (const wards of Object.values(HANOI_SUBDISTRICTS)) {
+    if (wards.some(w => lowerText.includes(w))) return 'hanoi';
+  }
+  
+  // Check Da Nang aliases and districts
+  if (LOCATION_DATA.danang.aliases.some(a => lowerText.includes(a))) return 'danang';
+  for (const tier of Object.values(LOCATION_DATA.danang.districts)) {
+    if (tier.names.some(d => lowerText.includes(d))) return 'danang';
+  }
+  for (const wards of Object.values(DANANG_SUBDISTRICTS)) {
+    if (wards.some(w => lowerText.includes(w))) return 'danang';
   }
   
   return null;
@@ -165,7 +344,7 @@ function extractStyles(text: string): string[] {
 
 // ========== ACCUMULATED CONTEXT TYPE ==========
 interface AccumulatedContext {
-  city: 'hcm' | 'hanoi' | null;
+  city: 'hcm' | 'hanoi' | 'danang' | null;
   wantsCenter: boolean;
   locationTier: 'center' | 'near-center' | 'suburban' | null;
   maxPrice: number | null;
@@ -175,30 +354,100 @@ interface AccumulatedContext {
   specificDistricts: string[];
 }
 
-// Extract specific districts/areas mentioned by user
+// Extract specific districts/areas mentioned by user (including sub-districts and roads)
 function extractSpecificDistricts(text: string): string[] {
   const lowerText = text.toLowerCase();
   const districts: string[] = [];
   
-  // HCM specific areas
-  const hcmAreas = [
+  // HCM main districts
+  const hcmMainDistricts = [
     { names: ['d1', 'district 1', 'quan 1', 'quận 1', 'q1'], canonical: 'district 1' },
     { names: ['d2', 'district 2', 'quan 2', 'quận 2', 'q2'], canonical: 'district 2' },
     { names: ['d3', 'district 3', 'quan 3', 'quận 3', 'q3'], canonical: 'district 3' },
     { names: ['d4', 'district 4', 'quan 4', 'quận 4', 'q4'], canonical: 'district 4' },
+    { names: ['d5', 'district 5', 'quan 5', 'quận 5', 'q5'], canonical: 'district 5' },
     { names: ['d7', 'district 7', 'quan 7', 'quận 7', 'q7'], canonical: 'district 7' },
+    { names: ['d10', 'district 10', 'quan 10', 'quận 10', 'q10'], canonical: 'district 10' },
     { names: ['binh thanh', 'bình thạnh'], canonical: 'binh thanh' },
     { names: ['phu nhuan', 'phú nhuận'], canonical: 'phu nhuan' },
-    { names: ['thao dien', 'thảo điền'], canonical: 'thao dien' },
-    { names: ['da kao', 'đa kao', 'dakao'], canonical: 'da kao' },
-    { names: ['an phu', 'an phú'], canonical: 'an phu' },
-    { names: ['thu thiem', 'thủ thiêm'], canonical: 'thu thiem' },
+    { names: ['tan binh', 'tân bình'], canonical: 'tan binh' },
+    { names: ['go vap', 'gò vấp'], canonical: 'go vap' },
     { names: ['thu duc', 'thủ đức'], canonical: 'thu duc' },
   ];
   
-  for (const area of hcmAreas) {
+  // HCM sub-areas (wards) - with their parent district
+  const hcmSubAreas = [
+    // D1 wards
+    { names: ['da kao', 'đa kao', 'dakao'], canonical: 'da kao', parent: 'district 1' },
+    { names: ['ben nghe', 'bến nghé'], canonical: 'ben nghe', parent: 'district 1' },
+    { names: ['ben thanh', 'bến thành'], canonical: 'ben thanh', parent: 'district 1' },
+    { names: ['nguyen thai binh', 'nguyễn thái bình'], canonical: 'nguyen thai binh', parent: 'district 1' },
+    { names: ['pham ngu lao', 'phạm ngũ lão'], canonical: 'pham ngu lao', parent: 'district 1' },
+    { names: ['tan dinh', 'tân định'], canonical: 'tan dinh', parent: 'district 1' },
+    // D2 wards
+    { names: ['thao dien', 'thảo điền'], canonical: 'thao dien', parent: 'district 2' },
+    { names: ['an phu', 'an phú'], canonical: 'an phu', parent: 'district 2' },
+    { names: ['thu thiem', 'thủ thiêm'], canonical: 'thu thiem', parent: 'district 2' },
+    { names: ['cat lai', 'cát lái'], canonical: 'cat lai', parent: 'district 2' },
+    { names: ['thanh my loi', 'thạnh mỹ lợi'], canonical: 'thanh my loi', parent: 'district 2' },
+    { names: ['binh an', 'bình an'], canonical: 'binh an', parent: 'district 2' },
+    // D7 wards
+    { names: ['phu my hung', 'phú mỹ hưng'], canonical: 'phu my hung', parent: 'district 7' },
+    { names: ['tan phong', 'tân phong'], canonical: 'tan phong', parent: 'district 7' },
+    { names: ['tan phu', 'tân phú'], canonical: 'tan phu d7', parent: 'district 7' },
+  ];
+  
+  // Hanoi main districts
+  const hanoiMainDistricts = [
+    { names: ['ba dinh', 'ba đình'], canonical: 'ba dinh' },
+    { names: ['hoan kiem', 'hoàn kiếm'], canonical: 'hoan kiem' },
+    { names: ['dong da', 'đống đa'], canonical: 'dong da' },
+    { names: ['cau giay', 'cầu giấy'], canonical: 'cau giay' },
+    { names: ['tay ho', 'tây hồ'], canonical: 'tay ho' },
+    { names: ['hai ba trung', 'hai bà trưng'], canonical: 'hai ba trung' },
+    { names: ['thanh xuan', 'thanh xuân'], canonical: 'thanh xuan' },
+    { names: ['long bien', 'long biên'], canonical: 'long bien' },
+  ];
+  
+  // Da Nang main districts
+  const danangMainDistricts = [
+    { names: ['hai chau', 'hải châu'], canonical: 'hai chau' },
+    { names: ['thanh khe', 'thanh khê'], canonical: 'thanh khe' },
+    { names: ['son tra', 'sơn trà'], canonical: 'son tra' },
+    { names: ['ngu hanh son', 'ngũ hành sơn'], canonical: 'ngu hanh son' },
+    { names: ['lien chieu', 'liên chiểu'], canonical: 'lien chieu' },
+    { names: ['cam le', 'cẩm lệ'], canonical: 'cam le' },
+    { names: ['my khe', 'mỹ khê'], canonical: 'my khe' },
+  ];
+  
+  // Check main districts first
+  for (const area of [...hcmMainDistricts, ...hanoiMainDistricts, ...danangMainDistricts]) {
     if (area.names.some(n => lowerText.includes(n))) {
-      districts.push(area.canonical);
+      if (!districts.includes(area.canonical)) {
+        districts.push(area.canonical);
+      }
+    }
+  }
+  
+  // Check sub-areas and add both the sub-area AND its parent district
+  for (const area of hcmSubAreas) {
+    if (area.names.some(n => lowerText.includes(n))) {
+      if (!districts.includes(area.canonical)) {
+        districts.push(area.canonical);
+      }
+      // Also add parent district for broader matching
+      if (!districts.includes(area.parent)) {
+        districts.push(area.parent);
+      }
+    }
+  }
+  
+  // Check for road names and add their districts
+  for (const [road, district] of Object.entries(HCM_ROADS)) {
+    if (lowerText.includes(road)) {
+      if (!districts.includes(district)) {
+        districts.push(district);
+      }
     }
   }
   
@@ -339,48 +588,73 @@ function filterAndScoreProperties(
     let matchedSpecificDistrict = false;
     
     if (context.specificDistricts.length > 0) {
-      // D2 sub-areas: Thao Dien, An Phu, etc. should also match "District 2" properties
-      const d2Areas = ['thao dien', 'an phu', 'thu thiem', 'cat lai', 'thanh my loi'];
-      const d1Areas = ['da kao', 'ben nghe', 'ben thanh', 'nguyen thai binh'];
+      // Sub-areas mapped to parent districts
+      const districtSubAreas: Record<string, string[]> = {
+        'district 1': ['da kao', 'ben nghe', 'ben thanh', 'nguyen thai binh', 'pham ngu lao', 'tan dinh', 'cau kho', 'co giang'],
+        'district 2': ['thao dien', 'an phu', 'thu thiem', 'cat lai', 'thanh my loi', 'binh an', 'binh khanh', 'an khanh'],
+        'district 3': ['vo thi sau'],
+        'district 7': ['phu my hung', 'tan phong', 'tan phu d7', 'tan hung', 'tan kieng'],
+        'binh thanh': ['thanh da', 'binh quoi', 'hang xanh', 'van thanh'],
+      };
       
-      // If user mentions D2 sub-area, also consider generic D2 properties
-      const wantsD2 = context.specificDistricts.some(d => 
-        d === 'district 2' || d2Areas.includes(d)
-      );
-      const wantsD1 = context.specificDistricts.some(d => 
-        d === 'district 1' || d1Areas.includes(d)
-      );
+      // Determine which parent districts user wants based on sub-areas mentioned
+      const wantedParentDistricts = new Set<string>();
+      for (const [parent, subAreas] of Object.entries(districtSubAreas)) {
+        if (context.specificDistricts.includes(parent)) {
+          wantedParentDistricts.add(parent);
+        }
+        for (const sub of subAreas) {
+          if (context.specificDistricts.includes(sub)) {
+            wantedParentDistricts.add(parent);
+          }
+        }
+      }
+      // Also add directly mentioned main districts
+      for (const d of context.specificDistricts) {
+        if (['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)) {
+          wantedParentDistricts.add(d);
+        }
+      }
       
-      // Check if property matches any requested area OR its parent district
-      const matchesRequestedDistrict = context.specificDistricts.some(district => {
-        // Match variations
-        if (district === 'district 1' && (locLower.includes('district 1') || locLower.includes('d1') || locLower.includes('quan 1'))) return true;
-        if (district === 'district 2' && (locLower.includes('district 2') || locLower.includes('d2') || locLower.includes('quan 2'))) return true;
+      // Check if property matches any requested specific area (exact match)
+      const matchesExactArea = context.specificDistricts.some(district => {
+        if (district === 'district 1' && (locLower.includes('district 1') || locLower.includes('d1,') || locLower.includes('quan 1'))) return true;
+        if (district === 'district 2' && (locLower.includes('district 2') || locLower.includes('d2,') || locLower.includes('quan 2'))) return true;
+        if (district === 'district 3' && (locLower.includes('district 3') || locLower.includes('d3,') || locLower.includes('quan 3'))) return true;
+        if (district === 'district 7' && (locLower.includes('district 7') || locLower.includes('d7,') || locLower.includes('quan 7'))) return true;
         if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
         if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
         if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
         if (district === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
         if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
+        if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
+        if (district === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
         return locLower.includes(district);
       });
       
-      // Also match if user wants D2 sub-area and property is in D2
-      const matchesParentDistrict = 
-        (wantsD2 && (locLower.includes('district 2') || locLower.includes('d2') || locLower.includes('quan 2'))) ||
-        (wantsD1 && (locLower.includes('district 1') || locLower.includes('d1') || locLower.includes('quan 1')));
+      // Check if property is in a parent district that user wants
+      const matchesParentDistrict = Array.from(wantedParentDistricts).some(parent => {
+        if (parent === 'district 1' && (locLower.includes('district 1') || locLower.includes('quan 1') || /\bd1\b/.test(locLower))) return true;
+        if (parent === 'district 2' && (locLower.includes('district 2') || locLower.includes('quan 2') || /\bd2\b/.test(locLower))) return true;
+        if (parent === 'district 3' && (locLower.includes('district 3') || locLower.includes('quan 3') || /\bd3\b/.test(locLower))) return true;
+        if (parent === 'district 7' && (locLower.includes('district 7') || locLower.includes('quan 7') || /\bd7\b/.test(locLower))) return true;
+        if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
+        if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
+        return locLower.includes(parent);
+      });
       
-      if (matchesRequestedDistrict) {
-        score += 35; // Strong bonus for exact match
-        matchedSpecificDistrict = true;
-        matchReasons.push(`in requested area: ${p.location.split(',')[0]}`);
-        console.log(`[Scoring] Property ${p.id} matches specific district: ${p.location}`);
-      } else if (matchesParentDistrict) {
-        score += 25; // Good bonus for matching parent district
+      if (matchesExactArea) {
+        score += 40; // Highest bonus for exact match
         matchedSpecificDistrict = true;
         matchReasons.push(`in ${p.location.split(',')[0]}`);
-        console.log(`[Scoring] Property ${p.id} matches parent district: ${p.location}`);
+        console.log(`[Scoring] Property ${p.id} exact area match: ${p.location}`);
+      } else if (matchesParentDistrict) {
+        score += 30; // Good bonus for parent district
+        matchedSpecificDistrict = true;
+        matchReasons.push(`in ${p.location.split(',')[0]}`);
+        console.log(`[Scoring] Property ${p.id} parent district match: ${p.location}`);
       } else {
-        // NOT in requested districts - still include as alternative with lower score
+        // NOT in requested districts - lower priority but still include
         score -= 5;
         locationMatch = false;
       }
