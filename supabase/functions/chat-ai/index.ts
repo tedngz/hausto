@@ -515,6 +515,43 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
   return context;
 }
 
+// Detect if user is asking to compare/filter previous results (not a new search)
+function detectComparisonQuery(message: string): boolean {
+  const comparisonPatterns = [
+    // Preference statements about previous results
+    /i prefer/i,
+    /i would prefer/i,
+    /i'd prefer/i,
+    /i like/i,
+    /i want/i,
+    /with (a )?sofa/i,
+    /with (a )?balcony/i,
+    /with (a )?pool/i,
+    /with (a )?gym/i,
+    // Questions about previous results
+    /which (one|ones?|of these|of them)/i,
+    /do (any|these|they)/i,
+    /does (it|any|this)/i,
+    /is there (any|one)/i,
+    /are there any/i,
+    /have (a |the )?(sofa|balcony|pool|gym|parking)/i,
+    /has (a |the )?(sofa|balcony|pool|gym|parking)/i,
+    // Comparison requests
+    /what about/i,
+    /how about/i,
+    /compare/i,
+    /between these/i,
+    /among these/i,
+    // Filtering requests
+    /filter/i,
+    /only show/i,
+    /only the ones/i,
+    /just the ones/i,
+  ];
+  
+  return comparisonPatterns.some(p => p.test(message));
+}
+
 // ========== PROPERTY FILTERING & SCORING ==========
 interface PropertyWithScore {
   id: string;
@@ -980,13 +1017,16 @@ serve(async (req) => {
 
     // Collect properties that were already suggested in this conversation so we can surface fresh options
     let previouslySuggestedIds = new Set<string>();
+    let previouslySuggestedProperties: any[] = [];
     if (canPersist && user?.id) {
       try {
         const { data: pastSearches } = await supabase
           .from('ai_searches')
           .select('id')
           .eq('conversation_id', conversationId)
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(3); // Get last 3 searches for context
 
         const searchIds = (pastSearches || []).map((s: any) => s.id);
 
@@ -997,11 +1037,20 @@ serve(async (req) => {
             .in('search_id', searchIds);
 
           previouslySuggestedIds = new Set((pastResults || []).map((r: any) => r.property_id));
+          
+          // Get full property details for previously suggested properties
+          if (previouslySuggestedIds.size > 0) {
+            previouslySuggestedProperties = properties.filter((p: any) => previouslySuggestedIds.has(p.id));
+            console.log(`[Context] Found ${previouslySuggestedProperties.length} previously suggested properties`);
+          }
         }
       } catch (historyError) {
         console.error('[Search History] Error loading previous results:', historyError);
       }
     }
+    
+    // Detect if user is asking to compare/filter previous results
+    const isComparisonQuery = detectComparisonQuery(message.toLowerCase());
 
     // ========== REALTOR MODE ==========
     if (userType === 'realtor') {
@@ -1062,10 +1111,20 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     // Build accumulated context from conversation history
     const accContext = buildAccumulatedContext(chatHistory, message);
     console.log('[Context] Accumulated preferences:', JSON.stringify(accContext));
+    console.log('[Context] Is comparison query:', isComparisonQuery, '| Previous properties:', previouslySuggestedProperties.length);
 
-    // Filter and score properties based on accumulated context
-    // Prefer showing properties that have NOT been suggested before in this conversation
+    // For comparison queries, we need to check previous properties first
+    // Score the previously suggested properties to see which match the new criteria
+    const scoredPreviousProperties = isComparisonQuery && previouslySuggestedProperties.length > 0
+      ? filterAndScoreProperties(previouslySuggestedProperties, accContext)
+      : [];
+    
+    console.log(`[Comparison] Scored ${scoredPreviousProperties.length} previous properties`);
+
+    // Filter and score ALL properties based on accumulated context
+    // For comparison queries, we DON'T exclude previous properties - we want to include them
     const basePropertySet = (() => {
+      if (isComparisonQuery) return properties; // Include all for comparison
       if (previouslySuggestedIds.size === 0) return properties;
       const fresh = properties.filter((p: any) => !previouslySuggestedIds.has(p.id));
       return fresh.length > 0 ? fresh : properties; // if we run out of new ones, allow reuse
@@ -1104,12 +1163,30 @@ When analyzing property images, ONLY use tags from the standard list above.`;
       }
     }
 
+    // Build previous properties section for comparison queries
+    const previousPropertiesSection = isComparisonQuery && scoredPreviousProperties.length > 0
+      ? `
+🔍 PREVIOUSLY SUGGESTED PROPERTIES (user is asking about these - CHECK THESE FIRST!):
+${scoredPreviousProperties.map((p, i) => `
+[PREV-${i+1}] ${p.title}
+   ID: ${p.id}
+   Location: ${p.location}
+   Price: ${(p.price/1000000).toFixed(1)}M VND/month
+   Amenities: ${p.amenities.join(', ') || 'None listed'}
+   Styles: ${p.styles.join(', ') || 'Not specified'}
+   Has requested features: ${accContext.amenities.length > 0 ? accContext.amenities.map(a => `${a}: ${p.amenities.some(pa => pa.toLowerCase().includes(a.toLowerCase())) ? '✓ YES' : '✗ NO'}`).join(', ') : 'N/A'}
+`).join('\n')}
+
+⚠️ THIS IS A COMPARISON/FILTER QUERY - The user is asking about the properties they've already seen!
+`
+      : '';
+
     const systemPrompt = `You are Hausto AI, a friendly and intelligent rental property assistant in Vietnam. You help renters find their perfect home.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
 ${locationNote}
-
+${previousPropertiesSection}
 📊 AVAILABLE PROPERTIES (${topProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${topProperties.length > 0 ? topProperties.map((p, i) => `
 [${i+1}] ${p.matchReasons.some(r => r.includes('exactly')) ? '⭐ EXACT MATCH' : '📍 NEARBY'} ${p.title}
@@ -1127,11 +1204,21 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 
 🧠 CRITICAL INSTRUCTIONS:
 
-1. **COMPARE PREVIOUS RESULTS FIRST**: When user asks about a feature (e.g., "which one has sofa?", "do any of them have balcony?"):
+1. **COMPARE PREVIOUS RESULTS FIRST** (HIGHEST PRIORITY for comparison queries):
+   ${isComparisonQuery ? `
+   ⚠️ THIS IS A COMPARISON QUERY - Follow these steps EXACTLY:
+   a) Look at the "PREVIOUSLY SUGGESTED PROPERTIES" section above
+   b) Check which of those properties have the feature the user is asking about
+   c) Start your response by reporting on those specific properties: "Looking at the properties I showed you earlier..."
+   d) If the Thao Dien property has a sofa, say "Yes, the Chic Urban Retreat in Thao Dien has a sofa!"
+   e) If NONE of the previous properties have it, say "None of the properties I showed you have that. Let me find some that do..."
+   f) ONLY THEN show new properties that have the requested feature
+   
+   DO NOT just run a new search and ignore the previous properties!
+   ` : `When user asks about a feature (e.g., "which one has sofa?", "do any of them have balcony?"):
    - FIRST check the previously suggested properties from the chat history for that feature
-   - Report which of the PREVIOUS results have that feature: "Looking at the properties I suggested earlier: [Property Name] has a sofa listed in amenities, but [Other Property] does not."
-   - If NONE of the previous results have it, say so clearly: "None of the properties I showed you earlier have a sofa listed. Let me find some that do..."
-   - ONLY THEN suggest new properties with that feature
+   - Report which of the PREVIOUS results have that feature
+   - ONLY THEN suggest new properties with that feature`}
 
 2. **PRESERVE PROPERTY ORDER - CRITICAL**: The properties are listed above in PRIORITY ORDER (highest match score first). When user asks for a specific area like "Thao Dien":
    - Properties DIRECTLY in Thao Dien MUST appear FIRST in your results
