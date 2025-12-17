@@ -1211,13 +1211,9 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     }
 
     // Filter and score ALL properties based on accumulated context
-    // For comparison queries, we DON'T exclude previous properties - we want to include them
-    const basePropertySet = (() => {
-      if (isComparisonQuery) return properties; // Include all for comparison
-      if (previouslySuggestedIds.size === 0) return properties;
-      const fresh = properties.filter((p: any) => !previouslySuggestedIds.has(p.id));
-      return fresh.length > 0 ? fresh : properties; // if we run out of new ones, allow reuse
-    })();
+    // Always include all matching properties - don't filter out previously suggested ones
+    // Users want to see all relevant results, even if some were shown before
+    const basePropertySet = properties;
 
     const scoredProperties = filterAndScoreProperties(basePropertySet, accContext);
     console.log(`[Filtering] ${scoredProperties.length} properties after filtering (from ${properties.length})`);
