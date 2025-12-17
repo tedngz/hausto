@@ -321,6 +321,7 @@ function extractAmenities(text: string): string[] {
     'security': ['security', 'bảo vệ', 'bao ve', 'an ninh'],
     'garden': ['garden', 'vườn', 'vuon', 'sân vườn', 'san vuon'],
     'sofa': ['sofa', 'ghế sofa', 'ghe sofa', 'couch'],
+    'tv': ['tv', 'tivi', 'ti vi', 'television', 'smart tv'],
     'washing machine': ['washing machine', 'máy giặt', 'may giat', 'laundry'],
     'air conditioning': ['air conditioning', 'ac', 'điều hòa', 'dieu hoa', 'máy lạnh', 'may lanh'],
     'kitchen': ['kitchen', 'bếp', 'bep', 'nhà bếp', 'nha bep'],
