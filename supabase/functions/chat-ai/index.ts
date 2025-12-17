@@ -523,23 +523,23 @@ function detectComparisonQuery(message: string): boolean {
     /i prefer/i,
     /i would prefer/i,
     /i'd prefer/i,
-    /i like/i,
-    /i want/i,
-    /with (a )?sofa/i,
-    /with (a )?balcony/i,
-    /with (a )?pool/i,
-    /with (a )?gym/i,
-    // Questions about previous results
-    /which (one|ones?|of these|of them)/i,
-    /do (any|these|they)/i,
-    /does (it|any|this)/i,
-    /is there (any|one)/i,
-    /are there any/i,
-    /have (a |the )?(sofa|balcony|pool|gym|parking)/i,
-    /has (a |the )?(sofa|balcony|pool|gym|parking)/i,
+    /i like the/i, // "i like the first one" but not "i like modern style"
+    /i want the/i, // "i want the one with" but not "i want a new apartment"
+    // With specific amenities (comparison context)
+    /with (a )?(sofa|balcony|pool|gym|tv|tivi|kitchen|parking|washing)/i,
+    // Questions about previous results - HIGHEST PRIORITY
+    /which (one|ones?|of these|of them|has|have)/i,
+    /do (any|these|they) (have|has)/i,
+    /does (it|any|this|that) (have|has)/i,
+    /is there (any|one) (with|that has)/i,
+    /are there any (with|that have)/i,
+    // Checking for specific amenities in previous results
+    /have (a |the )?(sofa|balcony|pool|gym|parking|tv|tivi|kitchen|washing|air con)/i,
+    /has (a |the )?(sofa|balcony|pool|gym|parking|tv|tivi|kitchen|washing|air con)/i,
+    /(any|which).*(tv|tivi|sofa|balcony|pool|gym|parking)/i,
     // Comparison requests
     /what about/i,
-    /how about/i,
+    /how about the/i,
     /compare/i,
     /between these/i,
     /among these/i,
@@ -548,6 +548,12 @@ function detectComparisonQuery(message: string): boolean {
     /only show/i,
     /only the ones/i,
     /just the ones/i,
+    /narrow/i,
+    /narrow down/i,
+    // Vietnamese patterns
+    /cái nào/i,
+    /căn nào/i,
+    /phòng nào/i,
   ];
   
   return comparisonPatterns.some(p => p.test(message));
@@ -1121,6 +1127,88 @@ When analyzing property images, ONLY use tags from the standard list above.`;
       : [];
     
     console.log(`[Comparison] Scored ${scoredPreviousProperties.length} previous properties`);
+
+    // ========== STRICT COMPARISON MODE ==========
+    // If this is a comparison query and we have previous properties, return direct comparison without AI call
+    if (isComparisonQuery && previouslySuggestedProperties.length > 0) {
+      console.log('[Comparison] STRICT MODE: Evaluating previous properties without AI call');
+      
+      // Check which previous properties match the new criteria (e.g., have TV, sofa, etc.)
+      const matchingPrevious = scoredPreviousProperties.filter(p => {
+        // Check if property has all required amenities from current context
+        if (accContext.amenities.length > 0) {
+          const propAmenities = (p.amenities || []).map(a => a.toLowerCase());
+          return accContext.amenities.every(reqAmenity => 
+            propAmenities.some(pa => pa.includes(reqAmenity.toLowerCase()))
+          );
+        }
+        return p.matchScore >= 50; // Default: return properties with decent match
+      });
+
+      console.log(`[Comparison] Found ${matchingPrevious.length} matching from ${previouslySuggestedProperties.length} previous properties`);
+
+      // Build comparison response
+      let comparisonSummary = '';
+      let comparisonResults: any[] = [];
+
+      if (matchingPrevious.length > 0) {
+        // Some previous properties match the new criteria
+        comparisonSummary = `Looking at the ${previouslySuggestedProperties.length} properties I showed you earlier: ${matchingPrevious.length} ${matchingPrevious.length === 1 ? 'has' : 'have'} ${accContext.amenities.length > 0 ? accContext.amenities.join(', ') : 'your requirements'}.`;
+        comparisonResults = matchingPrevious.map(p => ({
+          id: p.id,
+          title: p.title,
+          location: p.location,
+          price: p.price,
+          size: p.size,
+          vibe: p.vibe,
+          description: p.description,
+          highlights: p.highlights,
+          images: p.images,
+          matchScore: p.matchScore,
+          matchReason: `This property has ${accContext.amenities.filter(a => 
+            (p.amenities || []).some(pa => pa.toLowerCase().includes(a.toLowerCase()))
+          ).join(', ') || 'features you asked about'}`,
+          realtor_id: p.realtor_id,
+          isExternal: false,
+          source: null,
+          sourceUrl: null
+        }));
+      } else {
+        // None of the previous properties match - inform user
+        comparisonSummary = `I checked the ${previouslySuggestedProperties.length} properties I showed you earlier, but none of them have ${accContext.amenities.join(', ') || 'that feature'}. Let me search for properties that do...`;
+        // Fall through to normal search below by NOT returning here
+        // This allows the code to continue to the AI search section
+      }
+
+      // Only return comparison response if we found matches (don't save to ai_searches)
+      if (matchingPrevious.length > 0) {
+        const comparisonResponse = {
+          results: comparisonResults,
+          summary: comparisonSummary,
+          totalMatches: comparisonResults.length,
+          isComparisonResponse: true // Flag for frontend
+        };
+
+        const responseContent = JSON.stringify(comparisonResponse);
+
+        // Save only the assistant message, NOT ai_searches
+        if (canPersist) {
+          await supabase.from('chat_messages').insert({
+            conversation_id: conversationId,
+            role: 'assistant',
+            content: responseContent
+          });
+        }
+
+        console.log('[Comparison] Returning direct comparison response (no AI call, no ai_searches save)');
+        return new Response(JSON.stringify({ response: responseContent }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+      // If no matches, continue to normal search flow below
+      console.log('[Comparison] No matches in previous properties, continuing to new search');
+    }
 
     // Filter and score ALL properties based on accumulated context
     // For comparison queries, we DON'T exclude previous properties - we want to include them
