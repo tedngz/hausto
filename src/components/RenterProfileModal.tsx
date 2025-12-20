@@ -13,7 +13,10 @@ import {
   Home,
   Palette,
   Activity,
-  DollarSign
+  DollarSign,
+  Calendar,
+  Ruler,
+  FileText
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
@@ -191,147 +194,175 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
               </CardHeader>
             </Card>
 
-            {/* Profile Information - Limited for privacy */}
+            {/* Profile Information - Show bio if available */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Profile Information</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-500" />
+                  About
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-                    <User className="w-8 h-8 text-blue-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{profile?.name || 'Anonymous User'}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    For privacy protection, contact details are only shared during direct communication.
+                {profile?.bio ? (
+                  <p className="text-muted-foreground">{profile.bio}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    This renter hasn't added a bio yet.
                   </p>
-                </div>
+                )}
               </CardContent>
             </Card>
 
             {/* Preferences */}
-            {preferences && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Heart className="w-5 h-5 text-red-500" />
-                    Housing Preferences
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Style Preferences */}
-                  {preferences.styles?.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Home className="w-4 h-4 text-blue-500" />
-                        <span className="font-medium text-sm">Style</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {preferences.styles.map((style: string) => (
-                          <Badge key={style} variant="secondary" className="bg-blue-50 text-blue-700">
-                            {styleLabels[style] || style}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Color Preferences */}
-                  {preferences.colors?.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Palette className="w-4 h-4 text-purple-500" />
-                        <span className="font-medium text-sm">Colors</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {preferences.colors.map((color: string) => (
-                          <Badge key={color} variant="secondary" className="bg-purple-50 text-purple-700">
-                            {colorLabels[color] || color}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Activity Preferences */}
-                  {preferences.activities?.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Activity className="w-4 h-4 text-green-500" />
-                        <span className="font-medium text-sm">Activities</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {preferences.activities.map((activity: string) => (
-                          <Badge key={activity} variant="secondary" className="bg-green-50 text-green-700">
-                            {activityLabels[activity] || activity}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Budget Range */}
-                  {preferences.priceRange && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <DollarSign className="w-4 h-4 text-orange-500" />
-                        <span className="font-medium text-sm">Budget Range</span>
-                      </div>
-                      <div className="bg-orange-50 p-3 rounded-lg">
-                        <div className="flex justify-between text-sm text-orange-700">
-                          <span>{formatPrice(preferences.priceRange[0])}</span>
-                          <span>-</span>
-                          <span>{formatPrice(preferences.priceRange[1])}</span>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Heart className="w-5 h-5 text-red-500" />
+                  Housing Preferences
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {preferencesLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full"></div>
+                  </div>
+                ) : preferences ? (
+                  <>
+                    {/* Style Preferences */}
+                    {preferences.styles?.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Home className="w-4 h-4 text-blue-500" />
+                          <span className="font-medium text-sm">Style Preferences</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {preferences.styles.map((style: string) => (
+                            <Badge key={style} variant="secondary" className="bg-blue-50 text-blue-700">
+                              {styleLabels[style] || style}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Location Preferences */}
-                  {preferences.location?.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <MapPin className="w-4 h-4 text-red-500" />
-                        <span className="font-medium text-sm">Preferred Areas</span>
+                    {/* Color Preferences */}
+                    {preferences.colors?.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Palette className="w-4 h-4 text-purple-500" />
+                          <span className="font-medium text-sm">Color Preferences</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {preferences.colors.map((color: string) => (
+                            <Badge key={color} variant="secondary" className="bg-purple-50 text-purple-700">
+                              {colorLabels[color] || color}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {preferences.location.map((location: string) => (
-                          <Badge key={location} variant="secondary" className="bg-red-50 text-red-700">
-                            {location}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Size Preference */}
-                  {preferences.size && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Home className="w-4 h-4 text-teal-500" />
-                        <span className="font-medium text-sm">Property Size</span>
+                    {/* Activity Preferences */}
+                    {preferences.activities?.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Activity className="w-4 h-4 text-green-500" />
+                          <span className="font-medium text-sm">Home Activities</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {preferences.activities.map((activity: string) => (
+                            <Badge key={activity} variant="secondary" className="bg-green-50 text-green-700">
+                              {activityLabels[activity] || activity}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                      <Badge variant="secondary" className="bg-teal-50 text-teal-700">
-                        {sizeLabels[preferences.size] || preferences.size}
-                      </Badge>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Move-in Date */}
-                  {preferences.moveInDate && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Activity className="w-4 h-4 text-indigo-500" />
-                        <span className="font-medium text-sm">Move-in Timeline</span>
+                    {/* Budget Range */}
+                    {preferences.priceRange && preferences.priceRange[1] > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <DollarSign className="w-4 h-4 text-orange-500" />
+                          <span className="font-medium text-sm">Budget Range</span>
+                        </div>
+                        <div className="bg-orange-50 p-3 rounded-lg">
+                          <div className="flex justify-between text-sm text-orange-700">
+                            <span>{formatPrice(preferences.priceRange[0])}</span>
+                            <span>-</span>
+                            <span>{formatPrice(preferences.priceRange[1])}</span>
+                          </div>
+                        </div>
                       </div>
-                      <Badge variant="secondary" className="bg-indigo-50 text-indigo-700">
-                        {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
-                      </Badge>
+                    )}
+
+                    {/* Location Preferences */}
+                    {preferences.location?.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <MapPin className="w-4 h-4 text-red-500" />
+                          <span className="font-medium text-sm">Preferred Areas</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {preferences.location.map((location: string) => (
+                            <Badge key={location} variant="secondary" className="bg-red-50 text-red-700">
+                              {location}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Size Preference */}
+                    {preferences.size && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Ruler className="w-4 h-4 text-teal-500" />
+                          <span className="font-medium text-sm">Property Size</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-teal-50 text-teal-700">
+                          {sizeLabels[preferences.size] || preferences.size}
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Move-in Date */}
+                    {preferences.moveInDate && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Calendar className="w-4 h-4 text-indigo-500" />
+                          <span className="font-medium text-sm">Move-in Timeline</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-indigo-50 text-indigo-700">
+                          {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Show message if no specific preferences are set */}
+                    {(!preferences.styles?.length && !preferences.colors?.length && 
+                      !preferences.activities?.length && !preferences.location?.length && 
+                      !preferences.size && !preferences.moveInDate) && (
+                      <p className="text-sm text-muted-foreground italic text-center py-4">
+                        This renter hasn't set specific preferences yet.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                      <Heart className="w-6 h-6 text-gray-400" />
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                    <p className="text-sm text-muted-foreground">
+                      This renter hasn't completed their preferences quiz yet.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Preferences will appear here once they complete the onboarding quiz.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
       </DialogContent>
