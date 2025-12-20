@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square, Sparkles } from 'lucide-react';
+import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square, Sparkles, Power } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +52,9 @@ export const RealtorDashboard = ({
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<Set<string>>(new Set());
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [isReanalyzeDialogOpen, setIsReanalyzeDialogOpen] = useState(false);
+  const [isReactivateDialogOpen, setIsReactivateDialogOpen] = useState(false);
   const [reanalyzeCount, setReanalyzeCount] = useState(0);
+  const [isReactivating, setIsReactivating] = useState(false);
   const [propertyProgress, setPropertyProgress] = useState<Array<{
     id: string;
     title: string;
@@ -345,6 +347,70 @@ export const RealtorDashboard = ({
   const clearSelection = () => {
     setSelectedPropertyIds(new Set());
   };
+
+  const handleReactivateAll = () => {
+    const inactiveProperties = selectedPropertyIds.size > 0 
+      ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active)
+      : realtorProperties.filter(p => !p.is_active);
+
+    if (inactiveProperties.length === 0) {
+      toast({
+        title: "No inactive properties",
+        description: selectedPropertyIds.size > 0 
+          ? "All selected properties are already active."
+          : "All your properties are already active.",
+      });
+      return;
+    }
+
+    setIsReactivateDialogOpen(true);
+  };
+
+  const confirmReactivateAll = async () => {
+    setIsReactivateDialogOpen(false);
+    setIsReactivating(true);
+
+    const propertiesToReactivate = selectedPropertyIds.size > 0 
+      ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active)
+      : realtorProperties.filter(p => !p.is_active);
+
+    try {
+      const now = new Date().toISOString();
+      
+      const { error } = await supabase
+        .from('properties')
+        .update({ 
+          is_active: true, 
+          last_activated_at: now,
+          updated_at: now 
+        })
+        .in('id', propertiesToReactivate.map(p => p.id));
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      setSelectedPropertyIds(new Set());
+
+      toast({
+        title: "Properties reactivated",
+        description: `Successfully reactivated ${propertiesToReactivate.length} ${propertiesToReactivate.length === 1 ? 'property' : 'properties'}.`,
+      });
+    } catch (error) {
+      console.error('Reactivate all error:', error);
+      toast({
+        title: "Reactivation failed",
+        description: error instanceof Error ? error.message : "Failed to reactivate properties",
+        variant: "destructive"
+      });
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
+  const inactiveCount = selectedPropertyIds.size > 0 
+    ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active).length
+    : realtorProperties.filter(p => !p.is_active).length;
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-16">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
         {/* Stats */}
@@ -389,65 +455,89 @@ export const RealtorDashboard = ({
         {/* My Properties */}
         <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
           <div className="p-4 md:p-6 border-b border-slate-200">
-            <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-              <div>
-                <h2 className="text-lg md:text-xl font-semibold text-slate-900">My Properties</h2>
-                <p className="text-slate-600 text-sm">
-                  Manage your listed properties • 
-                  {realtorProperties.filter(p => !p.property_source_provider_name).length} Direct • 
-                  {realtorProperties.filter(p => p.property_source_provider_name).length} Partner
-                </p>
+            <div className="flex flex-col space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <h2 className="text-lg md:text-xl font-semibold text-slate-900">My Properties</h2>
+                  <p className="text-slate-600 text-sm">
+                    Manage your listed properties • 
+                    {realtorProperties.filter(p => !p.property_source_provider_name).length} Direct • 
+                    {realtorProperties.filter(p => p.property_source_provider_name).length} Partner
+                  </p>
+                </div>
+                
+                {/* Primary Actions */}
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => setIsUploadModalOpen(true)} className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700" size={isMobile ? "sm" : "default"}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    {isMobile ? "Add" : "Add Property"}
+                  </Button>
+                  <Button onClick={() => setIsBulkUploadModalOpen(true)} variant="outline" className="border-green-200 text-green-700 hover:bg-green-50" size={isMobile ? "sm" : "default"}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    {isMobile ? "Bulk" : "Bulk Upload"}
+                  </Button>
+                </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={() => setIsUploadModalOpen(true)} className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700" size={isMobile ? "sm" : "default"}>
-                  <Upload className="w-4 h-4 mr-2" />
-                  {isMobile ? "Add" : "Add Property"}
-                </Button>
-                <Button onClick={() => setIsBulkUploadModalOpen(true)} variant="outline" className="border-green-200 text-green-700 hover:bg-green-50" size={isMobile ? "sm" : "default"}>
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  {isMobile ? "Bulk" : "Bulk Upload"}
-                </Button>
-                <Button 
-                  onClick={handleBatchReanalyze}
-                  disabled={isReanalyzing || !realtorProperties.length}
-                  variant="outline" 
-                  className="border-primary/20 hover:bg-primary/5" 
-                  size={isMobile ? "sm" : "default"}
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${isReanalyzing ? 'animate-spin' : ''}`} />
-                  {selectedPropertyIds.size > 0 
-                    ? `Re-analyze (${selectedPropertyIds.size})`
-                    : isMobile ? "Re-analyze" : "Re-analyze All"}
-                </Button>
-              </div>
-            </div>
-            {realtorProperties.length > 0 && (
-              <div className="flex items-center gap-2 px-4 md:px-6 pb-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={selectedPropertyIds.size === realtorProperties.length ? clearSelection : selectAllProperties}
-                  className="text-xs"
-                >
-                  {selectedPropertyIds.size === realtorProperties.length ? (
-                    <>
-                      <CheckSquare className="w-4 h-4 mr-1" />
-                      Clear Selection
-                    </>
-                  ) : (
-                    <>
-                      <Square className="w-4 h-4 mr-1" />
-                      Select All ({realtorProperties.length})
-                    </>
+
+              {/* Selection Toolbar */}
+              {realtorProperties.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={selectedPropertyIds.size === realtorProperties.length ? clearSelection : selectAllProperties}
+                    className="text-xs"
+                  >
+                    {selectedPropertyIds.size === realtorProperties.length ? (
+                      <>
+                        <CheckSquare className="w-4 h-4 mr-1" />
+                        Clear All
+                      </>
+                    ) : (
+                      <>
+                        <Square className="w-4 h-4 mr-1" />
+                        Select All ({realtorProperties.length})
+                      </>
+                    )}
+                  </Button>
+                  
+                  {selectedPropertyIds.size > 0 && (
+                    <span className="text-xs text-muted-foreground px-2 border-l border-slate-200">
+                      {selectedPropertyIds.size} selected
+                    </span>
                   )}
-                </Button>
-                {selectedPropertyIds.size > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {selectedPropertyIds.size} selected
-                  </span>
-                )}
-              </div>
-            )}
+                  
+                  <div className="flex-1" />
+                  
+                  {/* Batch Actions */}
+                  <Button 
+                    onClick={handleReactivateAll}
+                    disabled={isReactivating || inactiveCount === 0}
+                    variant="outline" 
+                    className="border-blue-200 text-blue-700 hover:bg-blue-50" 
+                    size="sm"
+                  >
+                    <Power className={`w-4 h-4 mr-1.5 ${isReactivating ? 'animate-pulse' : ''}`} />
+                    {selectedPropertyIds.size > 0 
+                      ? `Reactivate (${inactiveCount})`
+                      : isMobile ? "Reactivate" : `Reactivate All (${inactiveCount})`}
+                  </Button>
+                  
+                  <Button 
+                    onClick={handleBatchReanalyze}
+                    disabled={isReanalyzing || !realtorProperties.length}
+                    variant="outline" 
+                    className="border-primary/20 hover:bg-primary/5" 
+                    size="sm"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-1.5 ${isReanalyzing ? 'animate-spin' : ''}`} />
+                    {selectedPropertyIds.size > 0 
+                      ? `Re-analyze (${selectedPropertyIds.size})`
+                      : isMobile ? "Re-analyze" : "Re-analyze All"}
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
           <div className="p-4 md:p-6">
             {isLoading ? <div className="text-center py-8">
@@ -598,6 +688,35 @@ export const RealtorDashboard = ({
             <AlertDialogCancel>Not Now</AlertDialogCancel>
             <AlertDialogAction onClick={confirmBatchReanalyze}>
               Let's Go!
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isReactivateDialogOpen} onOpenChange={setIsReactivateDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <Power className="h-6 w-6 text-blue-600" />
+              </div>
+              <AlertDialogTitle className="text-xl">
+                Reactivate Properties?
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-base pt-2">
+              {selectedPropertyIds.size > 0 
+                ? `This will reactivate ${inactiveCount} selected inactive ${inactiveCount === 1 ? 'property' : 'properties'} and reset their 10-day active period.`
+                : `This will reactivate all ${inactiveCount} inactive ${inactiveCount === 1 ? 'property' : 'properties'} and reset their 10-day active period.`
+              }
+              <br /><br />
+              Reactivated properties will become visible to renters again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReactivateAll} className="bg-blue-600 hover:bg-blue-700">
+              Reactivate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
