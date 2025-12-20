@@ -103,16 +103,34 @@ serve(async (req) => {
         }
       }
     } else if (subscriberData?.subscribed && subscriberData?.subscription_end) {
-      // User has cancelled but still has premium until end date
-      logStep("No PayPal subscription ID but user still has premium status", { 
-        subscription_end: subscriberData.subscription_end 
-      });
-      subscriptionStatus = {
-        subscribed: subscriberData.subscribed,
-        subscription_tier: subscriberData.subscription_tier || "free",
+      // User has cancelled but may still have premium until end date - CHECK IF EXPIRED
+      const subscriptionEndDate = new Date(subscriberData.subscription_end);
+      const now = new Date();
+      const isStillActive = subscriptionEndDate > now;
+      
+      logStep("Checking subscription expiration", { 
         subscription_end: subscriberData.subscription_end,
-        paypal_subscription_id: null,
-      };
+        now: now.toISOString(),
+        isStillActive
+      });
+      
+      if (isStillActive) {
+        subscriptionStatus = {
+          subscribed: true,
+          subscription_tier: "premium",
+          subscription_end: subscriberData.subscription_end,
+          paypal_subscription_id: null,
+        };
+      } else {
+        // Subscription has expired - mark as free
+        logStep("Subscription has expired, marking as free");
+        subscriptionStatus = {
+          subscribed: false,
+          subscription_tier: "free",
+          subscription_end: subscriberData.subscription_end,
+          paypal_subscription_id: null,
+        };
+      }
     } else {
       logStep("No PayPal subscription ID found");
     }
