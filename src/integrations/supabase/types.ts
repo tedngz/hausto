@@ -772,6 +772,51 @@ export type Database = {
         }
         Relationships: []
       }
+      user_preferences: {
+        Row: {
+          activities: string[] | null
+          colors: string[] | null
+          created_at: string
+          id: string
+          location: string[] | null
+          move_in_date: string | null
+          price_range_max: number | null
+          price_range_min: number | null
+          size: string | null
+          styles: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activities?: string[] | null
+          colors?: string[] | null
+          created_at?: string
+          id?: string
+          location?: string[] | null
+          move_in_date?: string | null
+          price_range_max?: number | null
+          price_range_min?: number | null
+          size?: string | null
+          styles?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activities?: string[] | null
+          colors?: string[] | null
+          created_at?: string
+          id?: string
+          location?: string[] | null
+          move_in_date?: string | null
+          price_range_max?: number | null
+          price_range_min?: number | null
+          size?: string | null
+          styles?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -868,6 +913,19 @@ export type Database = {
           id: string
           location: string
           name: string
+        }[]
+      }
+      get_renter_preferences_for_realtor: {
+        Args: { renter_id: string }
+        Returns: {
+          activities: string[]
+          colors: string[]
+          location: string[]
+          move_in_date: string
+          price_range_max: number
+          price_range_min: number
+          size: string
+          styles: string[]
         }[]
       }
       get_renter_profile_for_realtor: {
