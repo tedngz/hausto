@@ -9,6 +9,8 @@ import { CityDistrictSelector } from '@/components/CityDistrictSelector';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { Heart, Sparkles, Home, MapPin, Calendar, DollarSign, Ruler } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface OnboardingQuizProps {
   onComplete: (preferences: UserPreferences) => void;
@@ -18,6 +20,7 @@ interface OnboardingQuizProps {
 export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   // All hooks must be called before any conditional logic or early returns
   const { canPerformAction, updateUsage, getRemainingActions, subscriptionStatus } = useUsageTracking();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showContent, setShowContent] = useState(true);
@@ -105,6 +108,34 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       location: preferences.location as string[],
       moveInDate: preferences.moveInDate as string
     };
+
+    // Save preferences to database if user is logged in
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from('user_preferences')
+          .upsert({
+            user_id: user.id,
+            styles: finalPreferences.styles,
+            colors: finalPreferences.colors,
+            activities: finalPreferences.activities,
+            price_range_min: finalPreferences.priceRange[0],
+            price_range_max: finalPreferences.priceRange[1],
+            size: finalPreferences.size,
+            location: finalPreferences.location,
+            move_in_date: finalPreferences.moveInDate,
+            updated_at: new Date().toISOString()
+          }, { 
+            onConflict: 'user_id' 
+          });
+
+        if (error) {
+          console.error('Error saving preferences to database:', error);
+        }
+      } catch (err) {
+        console.error('Failed to save preferences:', err);
+      }
+    }
 
     // Track quiz completion
     await updateUsage('quiz');

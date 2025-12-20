@@ -53,13 +53,32 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
     enabled: !!userId && isOpen,
   });
 
-  // Fetch user preferences
+  // Fetch user preferences from database using secure RPC function
   const { data: preferences, isLoading: preferencesLoading } = useQuery({
-    queryKey: ['renter-preferences', userId],
+    queryKey: ['renter-preferences-for-realtor', userId],
     queryFn: async () => {
-      // Get preferences from localStorage since that's where they're stored
-      const stored = localStorage.getItem(`userPreferences_${userId}`);
-      return stored ? JSON.parse(stored) : null;
+      const { data, error } = await supabase
+        .rpc('get_renter_preferences_for_realtor', { renter_id: userId });
+
+      if (error) {
+        console.error('Error fetching renter preferences:', error);
+        return null;
+      }
+      
+      // Transform the data to match the expected format
+      if (data && data.length > 0) {
+        const pref = data[0];
+        return {
+          styles: pref.styles || [],
+          colors: pref.colors || [],
+          activities: pref.activities || [],
+          priceRange: [pref.price_range_min, pref.price_range_max] as [number, number],
+          size: pref.size || '',
+          location: pref.location || [],
+          moveInDate: pref.move_in_date || ''
+        };
+      }
+      return null;
     },
     enabled: !!userId && isOpen,
   });
@@ -81,29 +100,54 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
   });
 
   const styleLabels: { [key: string]: string } = {
-    'modern': 'Modern',
-    'traditional': 'Traditional',
-    'minimalist': 'Minimalist',
-    'bohemian': 'Bohemian',
-    'industrial': 'Industrial',
-    'scandinavian': 'Scandinavian'
+    'Modern': 'Modern',
+    'Cozy': 'Cozy',
+    'Industrial': 'Industrial',
+    'Bohemian': 'Bohemian',
+    'Scandinavian': 'Scandinavian',
+    'Minimalist': 'Minimalist',
+    'Contemporary': 'Contemporary',
+    'Traditional': 'Traditional',
+    'Rustic': 'Rustic',
+    'Luxury': 'Luxury',
+    'Urban': 'Urban',
+    'Vintage': 'Vintage'
   };
 
   const colorLabels: { [key: string]: string } = {
-    'warm': 'Warm tones',
-    'cool': 'Cool tones', 
-    'neutral': 'Neutral colors',
-    'bold': 'Bold colors'
+    'Neutral': 'Neutral tones',
+    'Warm': 'Warm tones', 
+    'Cool': 'Cool tones',
+    'Bright': 'Bright & airy',
+    'Dark': 'Dark & moody',
+    'Colorful': 'Colorful',
+    'Natural': 'Natural tones',
+    'White': 'Pure white',
+    'Earth': 'Earthy tones',
+    'Bold': 'Bold colors'
   };
 
   const activityLabels: { [key: string]: string } = {
-    'working': 'Working from home',
-    'entertaining': 'Entertaining guests',
-    'relaxing': 'Relaxing & unwinding',
-    'cooking': 'Cooking & dining',
-    'exercising': 'Exercising',
-    'reading': 'Reading',
-    'creating': 'Creative activities'
+    'Working': 'Working from home',
+    'Reading': 'Reading',
+    'Relaxing': 'Relaxing & unwinding',
+    'Entertaining': 'Entertaining guests',
+    'Cooking': 'Cooking & dining',
+    'Exercising': 'Exercising'
+  };
+
+  const sizeLabels: { [key: string]: string } = {
+    'studio': 'Studio',
+    '1br': '1 Bedroom',
+    '2br': '2 Bedrooms',
+    '3br+': '3+ Bedrooms'
+  };
+
+  const moveInLabels: { [key: string]: string } = {
+    'asap': 'ASAP',
+    '1month': 'Within 1 month',
+    '3months': 'Within 3 months',
+    '6months': '6+ months'
   };
 
   if (!isOpen) return null;
@@ -257,6 +301,32 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
                           </Badge>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Size Preference */}
+                  {preferences.size && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Home className="w-4 h-4 text-teal-500" />
+                        <span className="font-medium text-sm">Property Size</span>
+                      </div>
+                      <Badge variant="secondary" className="bg-teal-50 text-teal-700">
+                        {sizeLabels[preferences.size] || preferences.size}
+                      </Badge>
+                    </div>
+                  )}
+
+                  {/* Move-in Date */}
+                  {preferences.moveInDate && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Activity className="w-4 h-4 text-indigo-500" />
+                        <span className="font-medium text-sm">Move-in Timeline</span>
+                      </div>
+                      <Badge variant="secondary" className="bg-indigo-50 text-indigo-700">
+                        {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
+                      </Badge>
                     </div>
                   )}
                 </CardContent>
