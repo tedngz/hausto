@@ -108,6 +108,22 @@ const PreferencesCard = ({
     'reading': 'Reading',
     'creating': 'Creative activities'
   };
+  const sizeLabels: {
+    [key: string]: string;
+  } = {
+    'studio': 'Studio',
+    '1br': '1 Bedroom',
+    '2br': '2 Bedrooms',
+    '3br+': '3+ Bedrooms'
+  };
+  const moveInLabels: {
+    [key: string]: string;
+  } = {
+    'asap': 'ASAP',
+    '1month': 'Within 1 month',
+    '3months': 'Within 3 months',
+    '6months': '6+ months'
+  };
   return <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
@@ -181,6 +197,30 @@ const PreferencesCard = ({
                   {location}
                 </Badge>)}
             </div>
+          </div>}
+
+        {/* Size Preference */}
+        {preferences.size && <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Home className="w-4 h-4 text-teal-500" />
+              <span className="font-medium text-sm">Property Size</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(Array.isArray(preferences.size) ? preferences.size : [preferences.size]).map((size: string) => <Badge key={size} variant="secondary" className="bg-teal-50 text-teal-700">
+                  {sizeLabels[size] || size}
+                </Badge>)}
+            </div>
+          </div>}
+
+        {/* Move-in Timeline */}
+        {preferences.moveInDate && <div>
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="w-4 h-4 text-indigo-500" />
+              <span className="font-medium text-sm">Move-in Timeline</span>
+            </div>
+            <Badge variant="secondary" className="bg-indigo-50 text-indigo-700">
+              {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
+            </Badge>
           </div>}
       </CardContent>
     </Card>;
