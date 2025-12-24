@@ -34,6 +34,9 @@ interface RenterProfile {
   id: string;
   name: string;
   bio: string;
+  avatar_url: string | null;
+  email: string;
+  phone: string;
 }
 
 export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileModalProps) => {
@@ -173,6 +176,9 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
               <CardHeader className="pb-4">
                 <div className="flex items-center space-x-4">
                   <Avatar className="w-16 h-16">
+                    {profile?.avatar_url ? (
+                      <AvatarImage src={profile.avatar_url} alt={profile.name} />
+                    ) : null}
                     <AvatarFallback className="bg-green-100 text-green-600">
                       <User className="w-8 h-8" />
                     </AvatarFallback>
@@ -191,6 +197,30 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
                     )}
                   </div>
                 </div>
+                
+                {/* Contact Information */}
+                {(profile?.email || profile?.phone) && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex flex-wrap gap-4">
+                      {profile?.email && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Mail className="w-4 h-4 text-blue-500" />
+                          <a href={`mailto:${profile.email}`} className="hover:text-blue-600 hover:underline">
+                            {profile.email}
+                          </a>
+                        </div>
+                      )}
+                      {profile?.phone && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Phone className="w-4 h-4 text-green-500" />
+                          <a href={`tel:${profile.phone}`} className="hover:text-green-600 hover:underline">
+                            {profile.phone}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardHeader>
             </Card>
 

@@ -931,9 +931,12 @@ export type Database = {
       get_renter_profile_for_realtor: {
         Args: { renter_id: string }
         Returns: {
+          avatar_url: string
           bio: string
+          email: string
           id: string
           name: string
+          phone: string
         }[]
       }
       get_user_subscription_status: {
