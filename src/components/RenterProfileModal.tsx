@@ -350,9 +350,13 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
                           <Ruler className="w-4 h-4 text-teal-500" />
                           <span className="font-medium text-sm">Property Size</span>
                         </div>
-                        <Badge variant="secondary" className="bg-teal-50 text-teal-700">
-                          {sizeLabels[preferences.size] || preferences.size}
-                        </Badge>
+                        <div className="flex flex-wrap gap-2">
+                          {(Array.isArray(preferences.size) ? preferences.size : [preferences.size]).map((size: string) => (
+                            <Badge key={size} variant="secondary" className="bg-teal-50 text-teal-700">
+                              {sizeLabels[size] || size}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     )}
 
