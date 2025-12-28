@@ -33,15 +33,15 @@ export const LandingPage = () => {
       {/* Glowing Orbs Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         {/* Primary orb - top right */}
-        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-primary/20 blur-[120px] animate-pulse" />
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-primary/20 blur-[120px] animate-float-slow" />
         {/* Secondary orb - bottom left */}
-        <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full bg-primary/15 blur-[150px]" style={{ animationDelay: '1s' }} />
+        <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full bg-primary/15 blur-[150px] animate-float-medium" style={{ animationDelay: '-5s' }} />
         {/* Accent orb - center */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-secondary/30 blur-[100px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-secondary/30 blur-[100px] animate-float-slow" style={{ animationDelay: '-10s' }} />
         {/* Small accent orb - top left */}
-        <div className="absolute top-20 left-1/4 w-[200px] h-[200px] rounded-full bg-primary/10 blur-[80px] animate-pulse" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-20 left-1/4 w-[200px] h-[200px] rounded-full bg-primary/10 blur-[80px] animate-float-fast" style={{ animationDelay: '-3s' }} />
         {/* Small accent orb - bottom right */}
-        <div className="absolute bottom-40 right-1/4 w-[250px] h-[250px] rounded-full bg-accent/20 blur-[90px]" />
+        <div className="absolute bottom-40 right-1/4 w-[250px] h-[250px] rounded-full bg-accent/20 blur-[90px] animate-float-medium" style={{ animationDelay: '-8s' }} />
       </div>
 
       {/* Content wrapper with relative positioning */}
