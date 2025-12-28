@@ -451,10 +451,10 @@ export const Profile = ({
           </CardHeader>
         </Card>
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6 items-stretch">
           {/* Profile Information */}
-          <div className="lg:col-span-2">
-            <Card>
+          <div className="lg:col-span-2 flex">
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>Profile Information</CardTitle>
               </CardHeader>
@@ -548,8 +548,8 @@ export const Profile = ({
           </div>
 
           {/* Stats Sidebar */}
-          <div>
-            <Card>
+          <div className="flex">
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle className="text-lg">Activity Stats</CardTitle>
               </CardHeader>
