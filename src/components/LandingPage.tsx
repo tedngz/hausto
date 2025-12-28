@@ -29,7 +29,23 @@ export const LandingPage = () => {
       });
     }
   };
-  return <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background">
+  return <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Glowing Orbs Background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        {/* Primary orb - top right */}
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-primary/20 blur-[120px] animate-pulse" />
+        {/* Secondary orb - bottom left */}
+        <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full bg-primary/15 blur-[150px]" style={{ animationDelay: '1s' }} />
+        {/* Accent orb - center */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-secondary/30 blur-[100px]" />
+        {/* Small accent orb - top left */}
+        <div className="absolute top-20 left-1/4 w-[200px] h-[200px] rounded-full bg-primary/10 blur-[80px] animate-pulse" style={{ animationDelay: '2s' }} />
+        {/* Small accent orb - bottom right */}
+        <div className="absolute bottom-40 right-1/4 w-[250px] h-[250px] rounded-full bg-accent/20 blur-[90px]" />
+      </div>
+
+      {/* Content wrapper with relative positioning */}
+      <div className="relative z-10">
       {/* Header */}
       <header className="container mx-auto px-4 py-4 md:py-6">
         <nav className="flex items-center justify-between">
@@ -165,5 +181,6 @@ export const LandingPage = () => {
           <p className="text-center text-muted-foreground mt-2">© 2025 Hausto. All rights reserved.</p>
         </div>
       </footer>
+      </div>
     </div>;
 };
