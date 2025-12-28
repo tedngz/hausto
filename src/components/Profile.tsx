@@ -548,7 +548,7 @@ export const Profile = ({
           </div>
 
           {/* Stats Sidebar */}
-          <div className="space-y-6">
+          <div>
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Activity Stats</CardTitle>
@@ -584,10 +584,15 @@ export const Profile = ({
                 </div>
               </CardContent>
             </Card>
-
-            {userType === 'renter' && <PreferencesCard userId={user?.id} />}
           </div>
         </div>
+
+        {/* Preferences Card - Full width below */}
+        {userType === 'renter' && (
+          <div className="mt-6">
+            <PreferencesCard userId={user?.id} />
+          </div>
+        )}
       </div>
     </div>;
 };
