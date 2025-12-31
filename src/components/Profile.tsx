@@ -131,97 +131,99 @@ const PreferencesCard = ({
           Your Preferences
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Style Preferences */}
-        {preferences.styles?.length > 0 && <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Home className="w-4 h-4 text-blue-500" />
-              <span className="font-medium text-sm">Style</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {preferences.styles.map((style: string) => <Badge key={style} variant="secondary" className="bg-blue-50 text-blue-700">
-                  {styleLabels[style] || style}
-                </Badge>)}
-            </div>
-          </div>}
-
-        {/* Color Preferences */}
-        {preferences.colors?.length > 0 && <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Palette className="w-4 h-4 text-purple-500" />
-              <span className="font-medium text-sm">Colors</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {preferences.colors.map((color: string) => <Badge key={color} variant="secondary" className="bg-purple-50 text-purple-700">
-                  {colorLabels[color] || color}
-                </Badge>)}
-            </div>
-          </div>}
-
-        {/* Activity Preferences */}
-        {preferences.activities?.length > 0 && <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Activity className="w-4 h-4 text-green-500" />
-              <span className="font-medium text-sm">Activities</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {preferences.activities.map((activity: string) => <Badge key={activity} variant="secondary" className="bg-green-50 text-green-700">
-                  {activityLabels[activity] || activity}
-                </Badge>)}
-            </div>
-          </div>}
-
-        {/* Budget Range */}
-        {preferences.priceRange && <div>
-            <div className="flex items-center gap-2 mb-3">
-              <DollarSign className="w-4 h-4 text-orange-500" />
-              <span className="font-medium text-sm">Budget Range</span>
-            </div>
-            <div className="bg-orange-50 p-3 rounded-lg">
-              <div className="flex justify-between text-sm text-orange-700 mb-2">
-                <span>{formatPrice(preferences.priceRange[0])}</span>
-                <span>{formatPrice(preferences.priceRange[1])}</span>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Style Preferences */}
+          {preferences.styles?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Home className="w-4 h-4 text-blue-500" />
+                <span className="font-medium text-sm">Style</span>
               </div>
-              <Progress value={75} className="h-2 bg-orange-100" />
-            </div>
-          </div>}
+              <div className="flex flex-wrap gap-1.5">
+                {preferences.styles.map((style: string) => <Badge key={style} variant="secondary" className="bg-blue-50 text-blue-700 text-xs">
+                    {styleLabels[style] || style}
+                  </Badge>)}
+              </div>
+            </div>}
 
-        {/* Location Preferences */}
-        {preferences.location?.length > 0 && <div>
-            <div className="flex items-center gap-2 mb-3">
-              <MapPin className="w-4 h-4 text-red-500" />
-              <span className="font-medium text-sm">Preferred Areas</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {preferences.location.map((location: string) => <Badge key={location} variant="secondary" className="bg-red-50 text-red-700">
-                  {location}
-                </Badge>)}
-            </div>
-          </div>}
+          {/* Color Preferences */}
+          {preferences.colors?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Palette className="w-4 h-4 text-purple-500" />
+                <span className="font-medium text-sm">Colors</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {preferences.colors.map((color: string) => <Badge key={color} variant="secondary" className="bg-purple-50 text-purple-700 text-xs">
+                    {colorLabels[color] || color}
+                  </Badge>)}
+              </div>
+            </div>}
 
-        {/* Size Preference */}
-        {preferences.size && <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Home className="w-4 h-4 text-teal-500" />
-              <span className="font-medium text-sm">Property Size</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(Array.isArray(preferences.size) ? preferences.size : [preferences.size]).map((size: string) => <Badge key={size} variant="secondary" className="bg-teal-50 text-teal-700">
-                  {sizeLabels[size] || size}
-                </Badge>)}
-            </div>
-          </div>}
+          {/* Activity Preferences */}
+          {preferences.activities?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-4 h-4 text-green-500" />
+                <span className="font-medium text-sm">Activities</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {preferences.activities.map((activity: string) => <Badge key={activity} variant="secondary" className="bg-green-50 text-green-700 text-xs">
+                    {activityLabels[activity] || activity}
+                  </Badge>)}
+              </div>
+            </div>}
 
-        {/* Move-in Timeline */}
-        {preferences.moveInDate && <div>
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="w-4 h-4 text-indigo-500" />
-              <span className="font-medium text-sm">Move-in Timeline</span>
-            </div>
-            <Badge variant="secondary" className="bg-indigo-50 text-indigo-700">
-              {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
-            </Badge>
-          </div>}
+          {/* Budget Range */}
+          {preferences.priceRange && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="w-4 h-4 text-orange-500" />
+                <span className="font-medium text-sm">Budget Range</span>
+              </div>
+              <div className="bg-orange-50 p-2 rounded-lg">
+                <div className="flex justify-between text-xs text-orange-700 mb-1">
+                  <span>{formatPrice(preferences.priceRange[0])}</span>
+                  <span>{formatPrice(preferences.priceRange[1])}</span>
+                </div>
+                <Progress value={75} className="h-1.5 bg-orange-100" />
+              </div>
+            </div>}
+
+          {/* Location Preferences */}
+          {preferences.location?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin className="w-4 h-4 text-red-500" />
+                <span className="font-medium text-sm">Preferred Areas</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {preferences.location.map((location: string) => <Badge key={location} variant="secondary" className="bg-red-50 text-red-700 text-xs">
+                    {location}
+                  </Badge>)}
+              </div>
+            </div>}
+
+          {/* Size Preference */}
+          {preferences.size && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Home className="w-4 h-4 text-teal-500" />
+                <span className="font-medium text-sm">Property Size</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(Array.isArray(preferences.size) ? preferences.size : [preferences.size]).map((size: string) => <Badge key={size} variant="secondary" className="bg-teal-50 text-teal-700 text-xs">
+                    {sizeLabels[size] || size}
+                  </Badge>)}
+              </div>
+            </div>}
+
+          {/* Move-in Timeline */}
+          {preferences.moveInDate && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-indigo-500" />
+                <span className="font-medium text-sm">Move-in Timeline</span>
+              </div>
+              <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 text-xs">
+                {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
+              </Badge>
+            </div>}
+        </div>
       </CardContent>
     </Card>;
 };
