@@ -38,10 +38,10 @@ const AnimatedBackground = () => {
       
       {/* Dot grid overlay */}
       <div 
-        className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]"
+        className="absolute inset-0 opacity-[0.12] dark:opacity-[0.15]"
         style={{
-          backgroundImage: 'radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)',
-          backgroundSize: '24px 24px'
+          backgroundImage: 'radial-gradient(circle, hsl(var(--foreground)) 1.5px, transparent 1.5px)',
+          backgroundSize: '28px 28px'
         }}
       />
     </div>
