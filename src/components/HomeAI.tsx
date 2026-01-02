@@ -484,7 +484,7 @@ export const HomeAI = ({
       </div>
 
       {/* Chat History Dropdown */}
-      {showHistory && user && <Card className="mb-6 border-border">
+      {showHistory && user && <Card className="mb-6 mt-8 border-border">
           <CardContent className="p-4">
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {conversations.map(conversation => <div key={conversation.id} onClick={() => switchToConversation(conversation.id)} className={`p-3 rounded-lg cursor-pointer transition-colors ${conversation.id === currentConversationId ? 'bg-primary/10 border border-primary/20' : 'hover:bg-secondary/50'}`}>
