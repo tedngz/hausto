@@ -471,7 +471,7 @@ export const HomeAI = ({
       <div className="text-center mb-6 relative">
         
         {/* History and New Chat buttons - positioned to avoid text overlap */}
-        {user && <div className="absolute -top-5 right-0 flex gap-2 z-10 py-0 px-[2px] mx-px my-0">
+        {user && <div className="absolute top-2 right-2 flex gap-2 z-10">
             <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
               <History className="h-4 w-4" />
             </Button>
