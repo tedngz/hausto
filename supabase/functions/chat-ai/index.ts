@@ -755,16 +755,23 @@ function filterAndScoreProperties(
     // Amenity match
     const lowerAmenities = amenities.map((a: string) => a.toLowerCase());
     let amenityMatchCount = 0;
+    const matchedAmenities: string[] = [];
+    const missingAmenities: string[] = [];
     for (const reqAmenity of context.amenities) {
       if (lowerAmenities.some((a: string) => a.includes(reqAmenity) || reqAmenity.includes(a))) {
         amenityMatchCount++;
+        matchedAmenities.push(reqAmenity);
         score += 10;
+      } else {
+        missingAmenities.push(reqAmenity);
       }
     }
     if (context.amenities.length > 0 && amenityMatchCount === context.amenities.length) {
-      matchReasons.push(`has ${context.amenities.join(', ')}`);
-    } else if (amenityMatchCount > 0) {
-      matchReasons.push(`has ${amenityMatchCount}/${context.amenities.length} requested amenities`);
+      matchReasons.push(`has ${matchedAmenities.join(', ')}`);
+    } else if (matchedAmenities.length > 0 && missingAmenities.length > 0) {
+      matchReasons.push(`has ${matchedAmenities.join(', ')} but no ${missingAmenities.join(', ')}`);
+    } else if (missingAmenities.length > 0 && matchedAmenities.length === 0) {
+      matchReasons.push(`no ${missingAmenities.join(', ')}`);
     }
     
     // Style match
