@@ -4,6 +4,8 @@ import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSqu
 import { useNavigate } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
+import AnimatedBackground from "@/components/AnimatedBackground";
+
 export const LandingPage = () => {
   const navigate = useNavigate();
   const {
@@ -29,7 +31,8 @@ export const LandingPage = () => {
       });
     }
   };
-  return <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background">
+  return <div className="min-h-screen relative">
+      <AnimatedBackground />
       {/* Header */}
       <header className="container mx-auto px-4 py-4 md:py-6">
         <nav className="flex items-center justify-between">
