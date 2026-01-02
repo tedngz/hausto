@@ -466,7 +466,7 @@ export const HomeAI = ({
     setShowPropertyModal(true);
   };
   return <div className="w-full max-w-4xl mx-auto mt-4 px-1">
-      <div className="p-3 md:p-6 shadow-xl bg-transparent rounded-md">
+      <div className="p-3 md:p-6 shadow-xl bg-background/95 backdrop-blur-sm rounded-xl border border-border/50">
       {/* Header */}
       <div className="text-center mb-6 relative">
         
