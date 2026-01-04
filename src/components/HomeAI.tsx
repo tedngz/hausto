@@ -471,7 +471,7 @@ export const HomeAI = ({
       <div className="text-center mb-6 relative">
         
         {/* History and New Chat buttons - positioned to avoid text overlap */}
-        {user && <div className="absolute -top-8 right-2 flex gap-2 z-10">
+        {user && <div className="absolute top-2 right-2 flex gap-2 z-10">
             <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
               <History className="h-4 w-4" />
             </Button>
@@ -509,7 +509,7 @@ export const HomeAI = ({
         </Card>}
 
       {/* Chat Messages for Signed In Users */}
-      {user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+      {user && <div className="space-y-4 mb-6 mt-10 max-h-96 overflow-y-auto">
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-fade-in">
