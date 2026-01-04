@@ -471,7 +471,7 @@ export const HomeAI = ({
       <div className="text-center mb-6 relative">
         
         {/* History and New Chat buttons - positioned to avoid text overlap */}
-        {user && <div className="absolute top-2 right-2 flex gap-2 z-10">
+        {user && <div className="absolute top-1 right-2 flex gap-2 z-10">
             <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
               <History className="h-4 w-4" />
             </Button>
@@ -526,10 +526,10 @@ export const HomeAI = ({
             let displayContent = message.content;
             try {
               let jsonContent = message.content;
-              
+
               // First try to parse - might be wrapped in { response: ... }
               const parsed = JSON.parse(message.content);
-              
+
               // Check if it's wrapped in a response object
               if (parsed.response && typeof parsed.response === 'string') {
                 jsonContent = parsed.response;
