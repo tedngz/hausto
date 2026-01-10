@@ -110,13 +110,31 @@ export const RealtorDashboard = ({
       isActive: !property.is_active
     });
   };
-  const getDaysRemaining = (lastActivated?: string) => {
-    if (!lastActivated) return 0;
+  const getTimeRemaining = (lastActivated?: string): { value: number; unit: 'days' | 'hours' | 'minutes'; expired: boolean } => {
+    if (!lastActivated) return { value: 0, unit: 'days', expired: true };
     const activatedDate = new Date(lastActivated);
     const now = new Date();
-    const diffTime = 10 * 24 * 60 * 60 * 1000 - (now.getTime() - activatedDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return Math.max(0, diffDays);
+    const diffMs = 10 * 24 * 60 * 60 * 1000 - (now.getTime() - activatedDate.getTime());
+    
+    if (diffMs <= 0) return { value: 0, unit: 'days', expired: true };
+    
+    const diffHours = diffMs / (1000 * 60 * 60);
+    const diffDays = diffHours / 24;
+    
+    if (diffDays >= 1) {
+      return { value: Math.ceil(diffDays), unit: 'days', expired: false };
+    } else if (diffHours >= 1) {
+      return { value: Math.ceil(diffHours), unit: 'hours', expired: false };
+    } else {
+      const diffMinutes = diffMs / (1000 * 60);
+      return { value: Math.max(1, Math.ceil(diffMinutes)), unit: 'minutes', expired: false };
+    }
+  };
+  
+  const formatTimeRemaining = (lastActivated?: string): string => {
+    const { value, unit, expired } = getTimeRemaining(lastActivated);
+    if (expired) return 'Expired';
+    return `${value} ${unit} remaining`;
   };
 
   const handleBatchReanalyze = async () => {
@@ -600,8 +618,8 @@ export const RealtorDashboard = ({
                           </Label>
                           <Switch id={`active-${property.id}`} checked={property.is_active} onCheckedChange={() => handleToggleActive(property)} disabled={isToggling} />
                         </div>
-                        {property.is_active && <div className="text-xs text-slate-500">
-                            {getDaysRemaining(property.last_activated_at)} days remaining
+                        {property.is_active && <div className={`text-xs ${getTimeRemaining(property.last_activated_at).expired ? 'text-red-500' : getTimeRemaining(property.last_activated_at).value <= 1 && getTimeRemaining(property.last_activated_at).unit !== 'days' ? 'text-orange-500' : 'text-slate-500'}`}>
+                            {formatTimeRemaining(property.last_activated_at)}
                           </div>}
                       </div>
                       <div className="flex flex-wrap gap-1">

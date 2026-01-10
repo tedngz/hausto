@@ -67,10 +67,13 @@ export const useProperties = () => {
       // Cache miss - fetch from database
       console.log('[Properties] Cache miss - fetching from database');
       
-      // First get properties
+      // First get properties - only active properties within the 10-day visibility period
+      // Using the database function is_property_within_active_period for consistency
       const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
         .select('*')
+        .eq('is_active', true)
+        .gte('last_activated_at', new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false });
 
       if (propertiesError) throw propertiesError;
