@@ -145,6 +145,50 @@ export const useProperties = () => {
     };
   }, [queryClient, user?.id]);
 
+  // Helper function to check if property is expired (past 10-day period)
+  const isPropertyExpired = (lastActivatedAt: string): boolean => {
+    const activatedDate = new Date(lastActivatedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - activatedDate.getTime();
+    const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
+    return diffMs >= tenDaysMs;
+  };
+
+  // Lazy deactivation: automatically deactivate expired properties
+  const deactivateExpiredProperties = async (properties: Property[]) => {
+    const expiredActiveProperties = properties.filter(
+      p => p.is_active && isPropertyExpired(p.last_activated_at)
+    );
+    
+    if (expiredActiveProperties.length > 0) {
+      console.log(`[Properties] Lazy deactivation: ${expiredActiveProperties.length} expired properties`);
+      
+      // Deactivate each expired property (fire and forget)
+      for (const property of expiredActiveProperties) {
+        supabase
+          .from('properties')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq('id', property.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error(`[Properties] Failed to deactivate property ${property.id}:`, error);
+            } else {
+              console.log(`[Properties] Deactivated expired property: ${property.id}`);
+            }
+          });
+      }
+      
+      // Return properties with corrected is_active status
+      return properties.map(p => 
+        expiredActiveProperties.some(exp => exp.id === p.id)
+          ? { ...p, is_active: false }
+          : p
+      );
+    }
+    
+    return properties;
+  };
+
   // Fetch realtor's own properties with profile data
   const { data: realtorProperties = [] } = useQuery({
     queryKey: ['realtor-properties', user?.id],
@@ -172,7 +216,7 @@ export const useProperties = () => {
       if (profileError) throw profileError;
       
       // Transform data to match Apartment interface
-      return propertiesData.map(property => ({
+      const transformedProperties = propertiesData.map(property => ({
         ...property,
         realtor: {
           id: property.realtor_id,
@@ -182,6 +226,11 @@ export const useProperties = () => {
           avatar: profileData?.avatar_url || ''
         }
       }));
+
+      // Lazy deactivation: auto-deactivate expired properties
+      const correctedProperties = await deactivateExpiredProperties(transformedProperties);
+      
+      return correctedProperties;
     },
     enabled: !!user?.id,
   });
