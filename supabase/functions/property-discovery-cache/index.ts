@@ -1,4 +1,4 @@
-import { Redis } from 'https://esm.sh/@upstash/redis@latest';
+import { Redis } from 'https://esm.sh/@upstash/redis@1.28.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const CACHE_TTL = 60 * 5; // 5 minutes for property listings
+const CACHE_KEY = 'properties:all'; // Single fixed key for simplicity
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -20,13 +21,14 @@ Deno.serve(async (req) => {
       token: Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!,
     });
 
-    const { action, cacheKey, properties, propertyId } = await req.json();
+    const { action, cacheKey, properties } = await req.json();
+    const key = cacheKey || CACHE_KEY;
 
-    console.log(`[Property Discovery Cache] Action: ${action}, Key: ${cacheKey || 'N/A'}`);
+    console.log(`[Property Discovery Cache] Action: ${action}, Key: ${key}`);
 
     if (action === 'get') {
       // Get cached property list
-      const cachedProperties = await redis.get(cacheKey);
+      const cachedProperties = await redis.get(key);
       
       if (cachedProperties) {
         console.log('[Property Discovery Cache] Cache hit');
@@ -42,8 +44,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'set') {
-      // Cache property list
-      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(properties));
+      // Cache property list - limit size to prevent CPU issues
+      const propsToCache = Array.isArray(properties) ? properties.slice(0, 200) : properties;
+      await redis.setex(key, CACHE_TTL, JSON.stringify(propsToCache));
       console.log('[Property Discovery Cache] Cached properties');
       
       return new Response(JSON.stringify({ success: true }), {
@@ -52,28 +55,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'invalidate') {
-      // Invalidate all property caches
-      // Use scan to find all keys matching the pattern
-      const pattern = propertyId ? `properties:*:${propertyId}` : 'properties:*';
-      let cursor = 0;
-      let deletedCount = 0;
-
-      do {
-        const [newCursor, keys] = await redis.scan(cursor, {
-          match: pattern,
-          count: 100,
-        });
-        cursor = newCursor as number;
-
-        if (keys && keys.length > 0) {
-          await redis.del(...keys);
-          deletedCount += keys.length;
-        }
-      } while (cursor !== 0);
-
-      console.log(`[Property Discovery Cache] Invalidated ${deletedCount} cached property lists`);
+      // Simple invalidation - just delete the main cache key
+      // Avoid expensive SCAN operations that cause CPU timeouts
+      await redis.del(CACHE_KEY);
+      console.log('[Property Discovery Cache] Invalidated main cache');
       
-      return new Response(JSON.stringify({ success: true, deletedCount }), {
+      return new Response(JSON.stringify({ success: true, deletedCount: 1 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
