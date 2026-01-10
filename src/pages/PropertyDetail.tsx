@@ -25,12 +25,13 @@ const PropertyDetail = () => {
       if (!id) return;
 
       try {
-        // Fetch property
+        // Fetch property - must be active and within the 10-day visibility period
         const { data: property, error: propertyError } = await supabase
           .from('properties')
           .select('*')
           .eq('id', id)
           .eq('is_active', true)
+          .gte('last_activated_at', new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString())
           .maybeSingle();
 
         if (propertyError) throw propertyError;
