@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.expire-subscriptions]
 verify_jwt = false
+
+[functions.batch-geocode-properties]
+verify_jwt = false
