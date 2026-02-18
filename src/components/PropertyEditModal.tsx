@@ -9,6 +9,7 @@ import { X, Upload, MapPin, Wand2, Eye, Sparkles, Loader2 } from 'lucide-react';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { useProperties, Property } from '@/hooks/useProperties';
+import { MapLocationPicker } from '@/components/MapLocationPicker';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencySelector } from '@/components/CurrencySelector';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -48,6 +49,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [newAmenity, setNewAmenity] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [aiDetectedVibes, setAiDetectedVibes] = useState<string[]>([]);
+  const [pinLatitude, setPinLatitude] = useState<number | null>(null);
+  const [pinLongitude, setPinLongitude] = useState<number | null>(null);
 
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
@@ -188,6 +191,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       
       setCurrentVibeAnalysis(property.vibe_analysis);
       setExistingImages(property.images || []);
+      setPinLatitude((property as any).latitude ?? null);
+      setPinLongitude((property as any).longitude ?? null);
 
       // Amenities: show AI-detected + saved; select saved if present otherwise AI
       const savedAmenities: string[] = (property as any).amenities || [];
@@ -775,6 +780,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       propertySourceLink: sourceLink,
       propertySourceProviderName: sourceProviderName,
       propertySourceProviderPhone: sourceProviderPhone,
+      latitude: pinLatitude,
+      longitude: pinLongitude,
     });
 
     // Reset form
@@ -893,6 +900,12 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               />
             </div>
           </div>
+
+          <MapLocationPicker
+            latitude={pinLatitude}
+            longitude={pinLongitude}
+            onLocationChange={(lat, lng) => { setPinLatitude(lat); setPinLongitude(lng); }}
+          />
 
           <div>
             <Label htmlFor="sourceLink">Property Source Link (Optional)</Label>

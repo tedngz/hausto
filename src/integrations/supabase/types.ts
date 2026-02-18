@@ -290,8 +290,10 @@ export type Database = {
           images: string[] | null
           is_active: boolean | null
           last_verified_at: string | null
+          latitude: number | null
           location: string
           location_normalized: string | null
+          longitude: number | null
           price: number | null
           price_display: string | null
           size: string | null
@@ -317,8 +319,10 @@ export type Database = {
           images?: string[] | null
           is_active?: boolean | null
           last_verified_at?: string | null
+          latitude?: number | null
           location: string
           location_normalized?: string | null
+          longitude?: number | null
           price?: number | null
           price_display?: string | null
           size?: string | null
@@ -344,8 +348,10 @@ export type Database = {
           images?: string[] | null
           is_active?: boolean | null
           last_verified_at?: string | null
+          latitude?: number | null
           location?: string
           location_normalized?: string | null
+          longitude?: number | null
           price?: number | null
           price_display?: string | null
           size?: string | null
@@ -558,7 +564,9 @@ export type Database = {
           images: string[] | null
           is_active: boolean
           last_activated_at: string
+          latitude: number | null
           location: string
+          longitude: number | null
           price: number
           property_source_link: string | null
           property_source_provider_name: string | null
@@ -579,7 +587,9 @@ export type Database = {
           images?: string[] | null
           is_active?: boolean
           last_activated_at?: string
+          latitude?: number | null
           location: string
+          longitude?: number | null
           price: number
           property_source_link?: string | null
           property_source_provider_name?: string | null
@@ -600,7 +610,9 @@ export type Database = {
           images?: string[] | null
           is_active?: boolean
           last_activated_at?: string
+          latitude?: number | null
           location?: string
+          longitude?: number | null
           price?: number
           property_source_link?: string | null
           property_source_provider_name?: string | null

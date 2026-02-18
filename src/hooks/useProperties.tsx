@@ -24,6 +24,8 @@ export interface Property {
   updated_at: string;
   is_active: boolean;
   last_activated_at: string;
+  latitude: number | null;
+  longitude: number | null;
   realtor?: {
     id: string;
     name: string;
@@ -283,6 +285,8 @@ export const useProperties = () => {
       propertySourceLink?: string;
       propertySourceProviderName?: string;
       propertySourceProviderPhone?: string;
+      latitude?: number | null;
+      longitude?: number | null;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -347,6 +351,8 @@ export const useProperties = () => {
           property_source_link: propertyData.propertySourceLink,
           property_source_provider_name: propertyData.propertySourceProviderName,
           property_source_provider_phone: propertyData.propertySourceProviderPhone,
+          latitude: propertyData.latitude ?? null,
+          longitude: propertyData.longitude ?? null,
         })
         .select()
         .single();
@@ -410,6 +416,8 @@ export const useProperties = () => {
       propertySourceLink?: string;
       propertySourceProviderName?: string;
       propertySourceProviderPhone?: string;
+      latitude?: number | null;
+      longitude?: number | null;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -452,6 +460,8 @@ export const useProperties = () => {
         property_source_link: propertyData.propertySourceLink,
         property_source_provider_name: propertyData.propertySourceProviderName,
         property_source_provider_phone: propertyData.propertySourceProviderPhone,
+        latitude: propertyData.latitude ?? null,
+        longitude: propertyData.longitude ?? null,
         updated_at: new Date().toISOString(),
       };
 

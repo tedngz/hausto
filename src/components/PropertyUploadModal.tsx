@@ -12,6 +12,7 @@ import { CurrencySelector } from '@/components/CurrencySelector';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
+import { MapLocationPicker } from '@/components/MapLocationPicker';
 import { PropertyHighlightEditor } from '@/components/PropertyHighlightEditor';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
 import { processImageFiles } from '@/utils/imageConverter';
@@ -48,6 +49,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [detectedAmenities, setDetectedAmenities] = useState<string[]>([]);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [newAmenity, setNewAmenity] = useState('');
+  const [pinLatitude, setPinLatitude] = useState<number | null>(null);
+  const [pinLongitude, setPinLongitude] = useState<number | null>(null);
 
   const { createProperty, isCreating } = useProperties();
   const { toast } = useToast();
@@ -411,6 +414,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       propertySourceLink: sourceLink,
       propertySourceProviderName: sourceProviderName,
       propertySourceProviderPhone: sourceProviderPhone,
+      latitude: pinLatitude,
+      longitude: pinLongitude,
     });
 
     // Reset form
@@ -432,6 +437,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     setDetectedAmenities([]);
     setSelectedAmenities([]);
     setNewAmenity('');
+    setPinLatitude(null);
+    setPinLongitude(null);
     setHasGenerated(false);
     setShowHighlightEditor(false);
     onClose();
@@ -609,6 +616,13 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                   </div>
                 )}
               </div>
+            </div>
+            <div className="md:col-span-2">
+              <MapLocationPicker
+                latitude={pinLatitude}
+                longitude={pinLongitude}
+                onLocationChange={(lat, lng) => { setPinLatitude(lat); setPinLongitude(lng); }}
+              />
             </div>
             <div>
               <Label htmlFor="size">Size (m²) *</Label>
@@ -1003,6 +1017,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             updated_at: new Date().toISOString(),
             is_active: true,
             last_activated_at: new Date().toISOString(),
+            latitude: null,
+            longitude: null,
           }}
         />
 
@@ -1040,6 +1056,8 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             updated_at: new Date().toISOString(),
             is_active: true,
             last_activated_at: new Date().toISOString(),
+            latitude: null,
+            longitude: null,
           }}
           onHighlightsUpdate={handleHighlightsUpdate}
         />

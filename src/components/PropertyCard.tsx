@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink, Share2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { MapViewModal } from '@/components/MapViewModal';
 import { Apartment, UserPreferences } from '@/types';
 import { VibeScore } from '@/components/VibeScore';
 import { VibeScoreBar } from '@/components/VibeScoreBar';
@@ -49,6 +50,7 @@ export const PropertyCard = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(externalImageIndex || 0);
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isMapOpen, setIsMapOpen] = useState(false);
   const {
     formatPrice
   } = useCurrency();
@@ -141,7 +143,16 @@ export const PropertyCard = ({
         <div className="flex flex-col text-sm mb-3 gap-2">
           <div className="flex items-center text-gray-600">
             <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-            <span className="line-clamp-1">{apartment.location}</span>
+            {(apartment as any).latitude && (apartment as any).longitude ? (
+              <button
+                className="line-clamp-1 text-left hover:text-primary hover:underline transition-colors cursor-pointer"
+                onClick={() => setIsMapOpen(true)}
+              >
+                {apartment.location}
+              </button>
+            ) : (
+              <span className="line-clamp-1">{apartment.location}</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge className="bg-primary text-primary-foreground font-semibold">
@@ -259,5 +270,17 @@ export const PropertyCard = ({
 
       {/* Full-size image modal */}
       <PropertyImageModal apartment={apartment} isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} initialImageIndex={currentImageIndex} />
+
+      {/* Map modal */}
+      {(apartment as any).latitude && (apartment as any).longitude && (
+        <MapViewModal
+          isOpen={isMapOpen}
+          onClose={() => setIsMapOpen(false)}
+          latitude={(apartment as any).latitude}
+          longitude={(apartment as any).longitude}
+          title={apartment.title}
+          location={apartment.location}
+        />
+      )}
     </Card>;
 };
