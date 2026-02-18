@@ -33,6 +33,8 @@ export type Apartment = {
   property_source_provider_phone?: string;
   created_at?: string;
   last_activated_at?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type Match = {
