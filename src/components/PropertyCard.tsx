@@ -15,6 +15,7 @@ import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
+import { geocodeLocation } from '@/utils/geocoding';
 interface PropertyCardProps {
   apartment: Apartment;
   userPreferences?: UserPreferences;
@@ -71,26 +72,7 @@ export const PropertyCard = ({
     // On-demand geocode
     setIsGeocoding(true);
     try {
-      const encoded = encodeURIComponent(apartment.location);
-      let coords: { lat: number; lng: number } | null = null;
-      // Try multiple query strategies for best precision
-      const queries = [
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=1&addressdetails=1`,
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1&addressdetails=1`,
-      ];
-      for (const query of queries) {
-        try {
-          const res = await fetch(query);
-          if (!res.ok) continue;
-          const data = await res.json();
-          if (data && data.length > 0) {
-            coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
+      const coords = await geocodeLocation(apartment.location);
       if (coords) {
         setGeocodedCoords(coords);
         setIsMapOpen(true);

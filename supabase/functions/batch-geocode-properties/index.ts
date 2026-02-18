@@ -6,21 +6,88 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-async function geocodeAddress(address: string): Promise<{ lat: number; lon: number } | null> {
-  try {
-    const encoded = encodeURIComponent(address);
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=1`,
-      { headers: { "User-Agent": "Hausto-App/1.0" } }
-    );
-    const data = await res.json();
-    if (data && data.length > 0) {
-      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+// Vietnamese district aliases for precise geocoding
+const DISTRICT_ALIASES: Record<string, string> = {
+  'd1': 'Quận 1, Hồ Chí Minh', 'd2': 'Quận 2, Thủ Đức, Hồ Chí Minh',
+  'd3': 'Quận 3, Hồ Chí Minh', 'd4': 'Quận 4, Hồ Chí Minh',
+  'd5': 'Quận 5, Hồ Chí Minh', 'd6': 'Quận 6, Hồ Chí Minh',
+  'd7': 'Quận 7, Hồ Chí Minh', 'd8': 'Quận 8, Hồ Chí Minh',
+  'd9': 'Quận 9, Thủ Đức, Hồ Chí Minh', 'd10': 'Quận 10, Hồ Chí Minh',
+  'd11': 'Quận 11, Hồ Chí Minh', 'd12': 'Quận 12, Hồ Chí Minh',
+  'district 1': 'Quận 1, Hồ Chí Minh', 'district 2': 'Quận 2, Thủ Đức, Hồ Chí Minh',
+  'district 3': 'Quận 3, Hồ Chí Minh', 'district 4': 'Quận 4, Hồ Chí Minh',
+  'district 5': 'Quận 5, Hồ Chí Minh', 'district 6': 'Quận 6, Hồ Chí Minh',
+  'district 7': 'Quận 7, Hồ Chí Minh', 'district 8': 'Quận 8, Hồ Chí Minh',
+  'district 9': 'Quận 9, Thủ Đức, Hồ Chí Minh', 'district 10': 'Quận 10, Hồ Chí Minh',
+  'district 11': 'Quận 11, Hồ Chí Minh', 'district 12': 'Quận 12, Hồ Chí Minh',
+  'binh thanh': 'Quận Bình Thạnh, Hồ Chí Minh',
+  'phu nhuan': 'Quận Phú Nhuận, Hồ Chí Minh',
+  'tan binh': 'Quận Tân Bình, Hồ Chí Minh',
+  'tan phu': 'Quận Tân Phú, Hồ Chí Minh',
+  'go vap': 'Quận Gò Vấp, Hồ Chí Minh',
+  'thu duc': 'Thành phố Thủ Đức, Hồ Chí Minh',
+  'binh tan': 'Quận Bình Tân, Hồ Chí Minh',
+  'ba dinh': 'Quận Ba Đình, Hà Nội',
+  'hoan kiem': 'Quận Hoàn Kiếm, Hà Nội',
+  'dong da': 'Quận Đống Đa, Hà Nội',
+  'cau giay': 'Quận Cầu Giấy, Hà Nội',
+  'hai ba trung': 'Quận Hai Bà Trưng, Hà Nội',
+  'tay ho': 'Quận Tây Hồ, Hà Nội',
+  'hai chau': 'Quận Hải Châu, Đà Nẵng',
+  'son tra': 'Quận Sơn Trà, Đà Nẵng',
+};
+
+function resolveLocationQuery(location: string): string[] {
+  const lower = location.toLowerCase().trim();
+  const parts = lower.split(',').map(p => p.trim());
+  const queries: string[] = [];
+
+  for (const part of parts) {
+    if (DISTRICT_ALIASES[part]) {
+      queries.push(DISTRICT_ALIASES[part]);
+      break;
     }
-    return null;
-  } catch {
-    return null;
   }
+
+  const districtMatch = lower.match(/district\s*(\d+)/i) || lower.match(/\bd(\d+)\b/i);
+  if (districtMatch && !queries.length) {
+    const num = districtMatch[1];
+    const cityPart = lower.includes('hanoi') || lower.includes('ha noi')
+      ? 'Hà Nội' : lower.includes('da nang') ? 'Đà Nẵng' : 'Hồ Chí Minh';
+    queries.push(`Quận ${num}, ${cityPart}`);
+  }
+
+  queries.push(location);
+  return queries;
+}
+
+async function geocodeAddress(location: string): Promise<{ lat: number; lon: number } | null> {
+  const queryStrings = resolveLocationQuery(location);
+
+  for (const q of queryStrings) {
+    const encoded = encodeURIComponent(q);
+    for (const url of [
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=3&addressdetails=1`,
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=3&addressdetails=1`,
+    ]) {
+      try {
+        const res = await fetch(url, { headers: { "User-Agent": "Hausto-App/1.0" } });
+        const data = await res.json();
+        if (data && data.length > 0) {
+          // Prefer boundary/administrative results
+          const best = data.find((r: any) =>
+            r.class === 'boundary' || (r.class === 'place' && r.type === 'suburb')
+          ) || data.find((r: any) =>
+            r.addresstype === 'suburb' || r.addresstype === 'city_district'
+          ) || data[0];
+          return { lat: parseFloat(best.lat), lon: parseFloat(best.lon) };
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -33,19 +100,25 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Get properties without coordinates
+    // Parse offset from request body
+    let offset = 0;
+    try {
+      const body = await req.json();
+      offset = body?.offset || 0;
+    } catch { /* no body is fine */ }
+
+    // Get properties in smaller batches to avoid timeout
     const { data: properties, error } = await supabase
       .from("properties")
       .select("id, location")
-      .or("latitude.is.null,longitude.is.null")
-      .limit(50);
+      .order("created_at", { ascending: true })
+      .range(offset, offset + 19);
 
     if (error) throw error;
 
     const results: { id: string; status: string; lat?: number; lon?: number }[] = [];
 
     for (const prop of properties || []) {
-      // Rate limit: Nominatim allows 1 req/sec
       await new Promise((r) => setTimeout(r, 1100));
 
       const coords = await geocodeAddress(prop.location);
@@ -70,8 +143,7 @@ Deno.serve(async (req) => {
     const { data: extProps } = await supabase
       .from("external_properties")
       .select("id, location")
-      .or("latitude.is.null,longitude.is.null")
-      .limit(50);
+      .limit(20);
 
     for (const prop of extProps || []) {
       await new Promise((r) => setTimeout(r, 1100));
