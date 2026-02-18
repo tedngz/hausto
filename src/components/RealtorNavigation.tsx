@@ -4,8 +4,6 @@ import { Building, MessageSquare, User, Plus, ArrowLeftRight, LogOut, MoreVertic
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { LanguageSelector } from '@/components/LanguageSelector';
-import { useLanguage } from '@/contexts/LanguageContext';
 
 interface RealtorNavigationProps {
   currentView: 'dashboard' | 'profile';
@@ -26,7 +24,6 @@ export const RealtorNavigation = ({
 }: RealtorNavigationProps) => {
   const { signOut } = useAuth();
   const navigate = useNavigate();
-  const { t } = useLanguage();
 
   const handleSignOut = async () => {
     await signOut();
@@ -61,7 +58,7 @@ export const RealtorNavigation = ({
                 className={`text-xs px-2 py-1.5 h-8 ${currentView === 'dashboard' ? 'bg-primary text-primary-foreground' : ''}`}
               >
                 <Building className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">{t('nav.dashboard')}</span>
+                <span className="hidden xs:inline text-xs">Dashboard</span>
               </Button>
             </div>
           </div>
@@ -74,32 +71,28 @@ export const RealtorNavigation = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 bg-white border shadow-lg z-50">
-                <div className="px-2 py-1">
-                  <LanguageSelector />
-                </div>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setCurrentView('profile')}>
                   <User className="w-4 h-4 mr-2" />
-                  {t('nav.profile')}
+                  Profile
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {onAddProperty && (
                   <>
                     <DropdownMenuItem onClick={onAddProperty}>
                       <Plus className="w-4 h-4 mr-2" />
-                      {t('nav.addProperty')}
+                      Add Property
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
                 )}
                 <DropdownMenuItem onClick={onSwitchUserType}>
                   <ArrowLeftRight className="w-4 h-4 mr-2" />
-                  {t('nav.switchToRenter')}
+                  Switch to Renter
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>
                   <LogOut className="w-4 h-4 mr-2" />
-                  {t('nav.signOut')}
+                  Sign Out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

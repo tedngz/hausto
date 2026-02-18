@@ -4,9 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Heart, MessageSquare, User, Users, Sparkles, Search } from 'lucide-react';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { UserMenu } from '@/components/UserMenu';
-import { LanguageSelector } from '@/components/LanguageSelector';
 import { useNavigate } from 'react-router-dom';
-import { useLanguage } from '@/contexts/LanguageContext';
 
 interface NavigationProps {
   currentView: 'swipe' | 'matches' | 'profile' | 'ai-chat';
@@ -28,7 +26,6 @@ export const Navigation = ({
   onRestartOnboarding
 }: NavigationProps) => {
   const navigate = useNavigate();
-  const { t } = useLanguage();
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
       <div className="max-w-4xl mx-auto px-3 md:px-4 py-2 md:py-3">
@@ -58,7 +55,7 @@ export const Navigation = ({
                 className={`text-xs px-2 py-1.5 h-8 ${currentView === 'ai-chat' ? 'bg-primary text-primary-foreground' : ''}`}
               >
                 <Sparkles className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">{t('nav.discoveryAI')}</span>
+                <span className="hidden xs:inline text-xs">Discovery AI</span>
               </Button>
               
               <Button
@@ -68,7 +65,7 @@ export const Navigation = ({
                 className={`text-xs px-2 py-1.5 h-8 ${currentView === 'swipe' ? 'bg-primary text-primary-foreground' : ''}`}
               >
                 <Search className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">{t('nav.discover')}</span>
+                <span className="hidden xs:inline text-xs">Discover</span>
               </Button>
               
               <Button
@@ -78,7 +75,7 @@ export const Navigation = ({
                 className={`relative text-xs px-2 py-1.5 h-8 ${currentView === 'matches' ? 'bg-primary text-primary-foreground' : ''}`}
               >
                 <Heart className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">{t('nav.matches')}</span>
+                <span className="hidden xs:inline text-xs">Matches</span>
                 {matchCount > 0 && (
                   <Badge className="ml-1 bg-primary text-primary-foreground text-xs h-4 min-w-4 flex items-center justify-center rounded-full">
                     {matchCount}

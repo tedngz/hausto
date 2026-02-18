@@ -20,13 +20,11 @@ import { UsageMeter } from '@/components/UsageMeter';
 import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { Loader2 } from 'lucide-react';
 import { UserPreferences, Apartment, Match } from '@/types';
-import { useLanguage } from '@/contexts/LanguageContext';
 const Discover = () => {
   const {
     user,
     loading
   } = useAuth();
-  const { t } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
@@ -199,7 +197,7 @@ const Discover = () => {
   return <CurrencyProvider>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-5">
         {currentView === 'ai-chat' && userType && <div className="text-center py-0">
-            <h1 className="text-2xl font-bold mt-20 mb-2 text-center text-inherit">{t('discover.describeHome')}</h1>
+            <h1 className="text-2xl font-bold mt-20 mb-2 text-center text-inherit">Describe Your Dream Home</h1>
           </div>}
         
         {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation

@@ -5,16 +5,16 @@ import { useNavigate } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
 import AnimatedBackground from "@/components/AnimatedBackground";
-import { LanguageSelector } from "@/components/LanguageSelector";
-import { useLanguage } from "@/contexts/LanguageContext";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
-  const { t } = useLanguage();
-
+  const {
+    user,
+    signOut
+  } = useAuth();
   const handleSignOut = async () => {
     await signOut();
+    // Force reload to reset any app state
     window.location.reload();
   };
   const handleGetStarted = () => {
@@ -24,10 +24,13 @@ export const LandingPage = () => {
     if (user) {
       navigate('/discover');
     } else {
-      navigate('/auth', { state: { returnTo: '/discover' } });
+      navigate('/auth', {
+        state: {
+          returnTo: '/discover'
+        }
+      });
     }
   };
-
   return <div className="min-h-screen relative">
       <AnimatedBackground />
       {/* Header */}
@@ -38,20 +41,19 @@ export const LandingPage = () => {
             <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
           </div>
           <div className="flex items-center gap-2 md:gap-4">
-            <LanguageSelector />
             {user ? <>
                 <span className="hidden sm:block text-xs md:text-sm text-muted-foreground truncate max-w-32 md:max-w-none">
-                  {t('landing.welcomeBack')}, {user.user_metadata?.name || user.email?.split('@')[0]}!
+                  Welcome back, {user.user_metadata?.name || user.email?.split('@')[0]}!
                 </span>
                 <Button onClick={handleDiscover} variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground text-xs md:text-sm px-3 md:px-4">
-                  {t('landing.discover')}
+                  Discover
                 </Button>
                 <Button onClick={handleSignOut} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground p-2 md:px-3">
                   <LogOut className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">{t('nav.signOut')}</span>
+                  <span className="hidden md:inline">Sign Out</span>
                 </Button>
               </> : <Button onClick={() => navigate('/auth')} variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground text-xs md:text-sm px-3 md:px-4">
-                {t('landing.signIn')}
+                Sign In
               </Button>}
           </div>
         </nav>
@@ -61,12 +63,12 @@ export const LandingPage = () => {
       <section className="container mx-auto px-4 py-8 md:py-12 min-h-[calc(100vh-8rem)] flex items-center">
         <div className="text-center max-w-4xl mx-auto w-full">
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4 md:mb-6 leading-tight">
-            <span className="text-primary">{t('landing.vibeCheck')}</span>
-            <span className="block">{t('landing.yourNextHome')}</span>
+            <span className="text-primary">Vibe Check</span>
+            <span className="block">Your Next Home</span>
           </h1>
           
           <p className="text-muted-foreground mb-6 md:mb-8 max-w-2xl mx-auto leading-relaxed text-base md:text-lg">
-            {user ? t('landing.descriptionLoggedIn') : t('landing.descriptionLoggedOut')}
+            {user ? "Find your perfect rental with AI-powered matching." : "Discover your dream rental with AI-powered matching and personalized recommendations."}
           </p>
           
           <div className="mb-4">
@@ -78,7 +80,8 @@ export const LandingPage = () => {
       {/* Features Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-foreground mb-4 font-bold text-3xl">{t('landing.elevateExperience')}</h2>
+          <h2 className="text-foreground mb-4 font-bold text-3xl">Elevate Your Home Hunting Experience</h2>
+          
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
@@ -87,8 +90,8 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
                 <Heart className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">{t('landing.vibeMatch')}</h3>
-              <p className="text-muted-foreground leading-relaxed">{t('landing.vibeMatchDesc')}</p>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Vibe Match</h3>
+              <p className="text-muted-foreground leading-relaxed">Our algorithm learns your preferences and finds properties that truly match your lifestyle and needs.</p>
             </CardContent>
           </Card>
 
@@ -97,8 +100,8 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
                 <Search className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">{t('landing.smartSearch')}</h3>
-              <p className="text-muted-foreground leading-relaxed">{t('landing.smartSearchDesc')}</p>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Smart Search</h3>
+              <p className="text-muted-foreground leading-relaxed">Ask AI and swipe through curated properties with detailed insights and vibe scores to find your perfect match.</p>
             </CardContent>
           </Card>
 
@@ -107,8 +110,8 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
                 <MessageSquare className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">{t('landing.unifiedListings')}</h3>
-              <p className="text-muted-foreground leading-relaxed">{t('landing.unifiedListingsDesc')}</p>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Unified Listings</h3>
+              <p className="text-muted-foreground leading-relaxed">Access curated property listings from multiple sources, all in one convenient place.</p>
             </CardContent>
           </Card>
         </div>
@@ -120,15 +123,15 @@ export const LandingPage = () => {
           <div className="grid md:grid-cols-3 gap-8 text-center">
             <div>
               <div className="text-4xl font-bold text-primary mb-2">1K+</div>
-              <div className="text-muted-foreground">{t('landing.propertiesListed')}</div>
+              <div className="text-muted-foreground">Properties Listed</div>
             </div>
             <div>
               <div className="text-4xl font-bold text-primary mb-2">5K+</div>
-              <div className="text-muted-foreground">{t('landing.happyMatches')}</div>
+              <div className="text-muted-foreground">Happy Matches</div>
             </div>
             <div>
               <div className="text-4xl font-bold text-primary mb-2">98%</div>
-              <div className="text-muted-foreground">{t('landing.satisfactionRate')}</div>
+              <div className="text-muted-foreground">Satisfaction Rate</div>
             </div>
           </div>
         </div>
@@ -139,13 +142,17 @@ export const LandingPage = () => {
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-card border border-border rounded-2xl p-12">
             <Building2 className="h-16 w-16 text-primary mx-auto mb-6" />
-            <h2 className="font-bold text-foreground mb-6 text-3xl">{t('landing.readyToFind')}</h2>
-            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">{t('landing.readyToFindDesc')}</p>
+            <h2 className="font-bold text-foreground mb-6 text-3xl">
+              Ready to Find Your Dream Home?
+            </h2>
+            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">
+              Join thousands of renters who have found their perfect match. Start your journey today.
+            </p>
             <div className="flex justify-center">
-              <Button onClick={user ? handleDiscover : handleGetStarted} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto">
-                {user ? t('landing.startBrowsing') : t('landing.startMatchingNow')}
-                <ArrowRight className="ml-2 h-6 w-6" />
-              </Button>
+            <Button onClick={user ? handleDiscover : handleGetStarted} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto">
+              {user ? "Start Browsing" : "Start Matching Now"}
+              <ArrowRight className="ml-2 h-6 w-6" />
+            </Button>
             </div>
           </div>
         </div>
@@ -158,7 +165,7 @@ export const LandingPage = () => {
             <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="h-6 w-6" />
             <span className="text-lg font-semibold text-foreground">Hausto</span>
           </div>
-          <p className="text-center text-muted-foreground mt-2">{t('landing.allRightsReserved')}</p>
+          <p className="text-center text-muted-foreground mt-2">© 2025 Hausto. All rights reserved.</p>
         </div>
       </footer>
     </div>;

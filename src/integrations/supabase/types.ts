@@ -649,48 +649,6 @@ export type Database = {
           },
         ]
       }
-      property_translations: {
-        Row: {
-          created_at: string
-          description_translated: string | null
-          highlights_translated: string[] | null
-          id: string
-          location_translated: string | null
-          property_id: string
-          property_type: string
-          target_language: string
-          title_translated: string | null
-          updated_at: string
-          vibe_translated: string | null
-        }
-        Insert: {
-          created_at?: string
-          description_translated?: string | null
-          highlights_translated?: string[] | null
-          id?: string
-          location_translated?: string | null
-          property_id: string
-          property_type?: string
-          target_language?: string
-          title_translated?: string | null
-          updated_at?: string
-          vibe_translated?: string | null
-        }
-        Update: {
-          created_at?: string
-          description_translated?: string | null
-          highlights_translated?: string[] | null
-          id?: string
-          location_translated?: string | null
-          property_id?: string
-          property_type?: string
-          target_language?: string
-          title_translated?: string | null
-          updated_at?: string
-          vibe_translated?: string | null
-        }
-        Relationships: []
-      }
       security_audit_log: {
         Row: {
           action: string
