@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink, Share2 } from 'lucide-react';
+import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink, Share2, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Apartment, UserPreferences } from '@/types';
 import { VibeScore } from '@/components/VibeScore';
@@ -14,6 +14,8 @@ import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
+import { usePropertyTranslation } from '@/hooks/usePropertyTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
 interface PropertyCardProps {
   apartment: Apartment;
   userPreferences?: UserPreferences;
@@ -49,9 +51,9 @@ export const PropertyCard = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(externalImageIndex || 0);
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  const {
-    formatPrice
-  } = useCurrency();
+  const { formatPrice } = useCurrency();
+  const { t } = useLanguage();
+  const { getTitle, getDescription, getLocation, isTranslating } = usePropertyTranslation(apartment);
 
   // Update internal image index when external index changes (for SwipeInterface)
   useEffect(() => {
@@ -127,25 +129,32 @@ export const PropertyCard = ({
       
       <div className="p-4 sm:p-6">
         <div className="mb-2">
+          {/* Translation loading indicator */}
+          {isTranslating && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Translating...</span>
+            </div>
+          )}
           {/* Mobile: Title above vibe score */}
           <div className="block sm:hidden mb-3">
-            <h2 className={`text-xl font-semibold text-gray-900 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
+            <h2 className={`text-xl font-semibold text-gray-900 ${showFullTitle ? '' : 'line-clamp-2'}`}>{getTitle()}</h2>
           </div>
           
           <div className="flex items-start justify-between mb-2">
             {/* Desktop: Title */}
-            <h2 className={`hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
+            <h2 className={`hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{getTitle()}</h2>
           </div>
         </div>
         
         <div className="flex flex-col text-sm mb-3 gap-2">
           <div className="flex items-center text-gray-600">
             <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-            <span className="line-clamp-1">{apartment.location}</span>
+            <span className="line-clamp-1">{getLocation()}</span>
           </div>
           <div className="flex items-center gap-2">
             <Badge className="bg-primary text-primary-foreground font-semibold">
-              {formatPrice(apartment.price)}/mo
+              {formatPrice(apartment.price)}{t('property.perMonth')}
             </Badge>
             {apartment.size && <Badge variant="outline" className="text-xs">
                 {apartment.size}
@@ -158,17 +167,17 @@ export const PropertyCard = ({
             <PropertyAmenities amenities={apartment.amenities} compact />
           </div>}
 
-        {apartment.description && <div className="mb-4">
+        {getDescription() && <div className="mb-4">
             <div className={`text-gray-700 text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
-              {apartment.description}
+              {getDescription()}
             </div>
-            {apartment.description && apartment.description.length > 150 && <Button variant="ghost" size="sm" className="p-0 h-auto text-orange-600 hover:text-orange-700 mt-1" onClick={() => setExpandedDescription(!expandedDescription)}>
+            {getDescription() && getDescription().length > 150 && <Button variant="ghost" size="sm" className="p-0 h-auto text-orange-600 hover:text-orange-700 mt-1" onClick={() => setExpandedDescription(!expandedDescription)}>
                 {expandedDescription ? <>
                     <ChevronUp className="w-3 h-3 mr-1" />
-                    Read less
+                    {t('property.readLess')}
                   </> : <>
                     <ChevronDown className="w-3 h-3 mr-1" />
-                    Read more
+                    {t('property.readMore')}
                   </>}
               </Button>}
           </div>}
@@ -177,7 +186,7 @@ export const PropertyCard = ({
         {apartment.images && apartment.images.length > 1 && (
           <div className="mb-4 space-y-3">
             <div className="flex items-center gap-1.5 mb-2">
-              <p className="text-xs font-semibold text-foreground">More Photos</p>
+              <p className="text-xs font-semibold text-foreground">{t('property.morePhotos')}</p>
             </div>
             <div className="space-y-3">
               {apartment.images.slice(1).map((image, sliceIndex) => {
@@ -234,9 +243,9 @@ export const PropertyCard = ({
                 </div>
                 {apartment.property_source_provider_name && <div className="text-xs text-muted-foreground mt-0.5">
                     {isOwnProperty ? <>
-                        Provider: {apartment.property_source_provider_name}
+                        {t('property.provider')}: {apartment.property_source_provider_name}
                         {apartment.property_source_provider_phone && <span className="ml-1">• {apartment.property_source_provider_phone}</span>}
-                      </> : `Listed on behalf of ${apartment.property_source_provider_name}`}
+                      </> : `${t('property.listedOnBehalf')} ${apartment.property_source_provider_name}`}
                   </div>}
               </div>
             </div>
@@ -251,7 +260,7 @@ export const PropertyCard = ({
                   </a>;
           })()}
               {showContactButton && onContact && <Button size="sm" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-md" onClick={onContact}>
-                  Contact
+                  {t('property.contact')}
                 </Button>}
             </div>
           </div>}
