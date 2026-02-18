@@ -72,12 +72,13 @@ export const PropertyCard = ({
     setIsGeocoding(true);
     try {
       const encoded = encodeURIComponent(apartment.location);
-      // Try with Vietnam country code first, then without
       let coords: { lat: number; lng: number } | null = null;
-      for (const query of [
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=1`,
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`
-      ]) {
+      // Try multiple query strategies for best precision
+      const queries = [
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=1&addressdetails=1`,
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1&addressdetails=1`,
+      ];
+      for (const query of queries) {
         try {
           const res = await fetch(query);
           if (!res.ok) continue;
