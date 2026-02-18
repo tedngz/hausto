@@ -28,7 +28,7 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
   useEffect(() => {
     if (!isOpen || !mapRef.current) return;
 
-    // Small delay to ensure DOM is ready
+    // Longer delay to ensure Dialog animation completes and DOM is fully rendered
     const timer = setTimeout(() => {
       if (!mapRef.current) return;
 
@@ -50,9 +50,11 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
         .bindPopup(`<strong>${title}</strong><br/>${location}`)
         .openPopup();
 
-      // Force resize after render
+      // Force resize multiple times to handle Dialog animation
       setTimeout(() => map.invalidateSize(), 100);
-    }, 100);
+      setTimeout(() => map.invalidateSize(), 300);
+      setTimeout(() => map.invalidateSize(), 500);
+    }, 300);
 
     return () => {
       clearTimeout(timer);
