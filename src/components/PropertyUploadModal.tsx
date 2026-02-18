@@ -622,6 +622,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                 latitude={pinLatitude}
                 longitude={pinLongitude}
                 onLocationChange={(lat, lng) => { setPinLatitude(lat); setPinLongitude(lng); }}
+                locationText={location}
               />
             </div>
             <div>

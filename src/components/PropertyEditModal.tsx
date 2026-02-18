@@ -905,6 +905,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             latitude={pinLatitude}
             longitude={pinLongitude}
             onLocationChange={(lat, lng) => { setPinLatitude(lat); setPinLongitude(lng); }}
+            locationText={location}
           />
 
           <div>
