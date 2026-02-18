@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink, Share2 } from 'lucide-react';
+import { MapPin, User, ChevronDown, ChevronUp, Sparkles, ExternalLink, Share2, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { MapViewModal } from '@/components/MapViewModal';
 import { Apartment, UserPreferences } from '@/types';
@@ -51,6 +51,45 @@ export const PropertyCard = ({
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
+  const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+
+  const hasCoords = !!(apartment.latitude && apartment.longitude);
+  const mapLat = hasCoords ? apartment.latitude! : geocodedCoords?.lat ?? 0;
+  const mapLng = hasCoords ? apartment.longitude! : geocodedCoords?.lng ?? 0;
+  const canShowMap = hasCoords || !!geocodedCoords;
+
+  const handleLocationClick = useCallback(async () => {
+    if (hasCoords) {
+      setIsMapOpen(true);
+      return;
+    }
+    if (geocodedCoords) {
+      setIsMapOpen(true);
+      return;
+    }
+    // On-demand geocode
+    setIsGeocoding(true);
+    try {
+      const encoded = encodeURIComponent(apartment.location);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=1`,
+        { headers: { 'User-Agent': 'Hausto-App/1.0' } }
+      );
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        setGeocodedCoords(coords);
+        setIsMapOpen(true);
+      } else {
+        toast({ title: "Location not found", description: "Could not find this address on the map.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Geocoding failed", description: "Could not look up the location.", variant: "destructive" });
+    } finally {
+      setIsGeocoding(false);
+    }
+  }, [hasCoords, geocodedCoords, apartment.location]);
   const {
     formatPrice
   } = useCurrency();
@@ -141,18 +180,16 @@ export const PropertyCard = ({
         </div>
         
         <div className="flex flex-col text-sm mb-3 gap-2">
-          <div className="flex items-center text-gray-600">
+          <div className="flex items-center text-muted-foreground">
             <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-            {(apartment as any).latitude && (apartment as any).longitude ? (
-              <button
-                className="line-clamp-1 text-left hover:text-primary hover:underline transition-colors cursor-pointer"
-                onClick={() => setIsMapOpen(true)}
-              >
-                {apartment.location}
-              </button>
-            ) : (
-              <span className="line-clamp-1">{apartment.location}</span>
-            )}
+            <button
+              className="line-clamp-1 text-left hover:text-primary hover:underline transition-colors cursor-pointer flex items-center gap-1"
+              onClick={handleLocationClick}
+              disabled={isGeocoding}
+            >
+              {apartment.location}
+              {isGeocoding && <Loader2 className="w-3 h-3 animate-spin" />}
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <Badge className="bg-primary text-primary-foreground font-semibold">
@@ -272,12 +309,12 @@ export const PropertyCard = ({
       <PropertyImageModal apartment={apartment} isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} initialImageIndex={currentImageIndex} />
 
       {/* Map modal */}
-      {(apartment as any).latitude && (apartment as any).longitude && (
+      {canShowMap && (
         <MapViewModal
           isOpen={isMapOpen}
           onClose={() => setIsMapOpen(false)}
-          latitude={(apartment as any).latitude}
-          longitude={(apartment as any).longitude}
+          latitude={mapLat}
+          longitude={mapLng}
           title={apartment.title}
           location={apartment.location}
         />
