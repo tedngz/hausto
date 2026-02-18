@@ -72,13 +72,25 @@ export const PropertyCard = ({
     setIsGeocoding(true);
     try {
       const encoded = encodeURIComponent(apartment.location);
-      const res = await fetch(
+      // Try with Vietnam country code first, then without
+      let coords: { lat: number; lng: number } | null = null;
+      for (const query of [
         `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=1`,
-        { headers: { 'User-Agent': 'Hausto-App/1.0' } }
-      );
-      const data = await res.json();
-      if (data && data.length > 0) {
-        const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`
+      ]) {
+        try {
+          const res = await fetch(query);
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data && data.length > 0) {
+            coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+      if (coords) {
         setGeocodedCoords(coords);
         setIsMapOpen(true);
       } else {
