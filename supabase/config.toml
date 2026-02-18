@@ -56,3 +56,9 @@ verify_jwt = false
 
 [functions.expire-subscriptions]
 verify_jwt = false
+
+[functions.translate-property]
+verify_jwt = true
+
+[functions.property-discovery-cache]
+verify_jwt = true

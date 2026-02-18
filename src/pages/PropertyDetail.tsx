@@ -10,11 +10,13 @@ import { ArrowLeft, Loader2, LogIn } from 'lucide-react';
 import { Apartment } from '@/types';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { Card, CardContent } from '@/components/ui/card';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const PropertyDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [apartment, setApartment] = useState<Apartment | null>(null);
   const [loading, setLoading] = useState(true);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -99,11 +101,11 @@ const PropertyDetail = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50 flex flex-col items-center justify-center p-4">
         <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-gray-900">Property Not Found</h1>
-          <p className="text-gray-600">This property may have been removed or is no longer available.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('discover.propertyNotFound')}</h1>
+          <p className="text-gray-600">{t('discover.propertyNotFoundDesc')}</p>
           <Button onClick={() => navigate('/')}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Home
+            {t('discover.backToHome')}
           </Button>
         </div>
       </div>
@@ -120,7 +122,7 @@ const PropertyDetail = () => {
             className="mb-6"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
+            {t('discover.back')}
           </Button>
 
           <PropertyCard
@@ -139,14 +141,14 @@ const PropertyDetail = () => {
               <CardContent className="pt-6">
                 <div className="text-center space-y-4">
                   <p className="text-muted-foreground">
-                    Sign in to connect with the property owner and schedule a viewing.
+                    {t('discover.signInToContactDesc')}
                   </p>
                   <Button 
                     onClick={() => navigate('/auth')}
                     className="w-full"
                   >
                     <LogIn className="w-4 h-4 mr-2" />
-                    Sign In to Contact
+                    {t('discover.signInToContact')}
                   </Button>
                 </div>
               </CardContent>
