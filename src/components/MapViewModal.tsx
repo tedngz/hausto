@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MapPin, Info } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 
 const DISTRICT_DESCRIPTIONS: Record<string, string> = {
   'quận 1': 'Business hub with luxury shopping, fine dining, and vibrant nightlife',
@@ -175,14 +175,10 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
         <DialogHeader className="p-4 pb-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <MapPin className="w-5 h-5 text-primary" />
-            {title}
+            {location}
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">{location}</p>
           {locationDesc && (
-            <div className="flex items-start gap-2 pt-1">
-              <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground leading-relaxed">{locationDesc}</p>
-            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">{locationDesc}</p>
           )}
         </DialogHeader>
         <div
