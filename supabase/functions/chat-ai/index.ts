@@ -989,12 +989,18 @@ serve(async (req) => {
 
     const { message, conversationId, userType, userPreferences, propertyImages } = parsedBody;
     
+    // Process uploaded images for style detection
+    const validImages: string[] = Array.isArray(propertyImages) 
+      ? propertyImages.filter((img: string) => typeof img === 'string' && img.startsWith('data:image/'))
+      : [];
+    
     console.log('Request data:', { 
       messageLength: message?.length, 
       conversationId, 
       userType, 
       hasPreferences: !!userPreferences,
-      hasPropertyImages: !!propertyImages,
+      hasPropertyImages: validImages.length > 0,
+      imageCount: validImages.length,
       isAnonymous
     });
 
@@ -1152,6 +1158,84 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     
     // Build accumulated context from conversation history
     const accContext = buildAccumulatedContext(chatHistory, message);
+    
+    // ========== IMAGE STYLE DETECTION ==========
+    // If user uploaded reference images, analyze them to detect styles/vibes
+    let imageAnalysisResult: { styles: string[], colors: string[], description: string } | null = null;
+    
+    if (validImages.length > 0) {
+      console.log(`[Image Analysis] Analyzing ${validImages.length} uploaded images for style detection`);
+      
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      if (LOVABLE_API_KEY) {
+        try {
+          const imageContentParts: any[] = validImages.map((img: string) => ({
+            type: 'image_url',
+            image_url: { url: img }
+          }));
+          
+          const imageAnalysisResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash',
+              messages: [
+                { 
+                  role: 'system', 
+                  content: `You are a property style analyzer. Analyze the uploaded interior/exterior images and identify the design styles, colors, and vibe. 
+                  
+RESPOND IN EXACTLY THIS JSON FORMAT (no markdown, no extra text):
+{"styles":["Modern","Minimalist"],"colors":["Neutral","White"],"description":"Brief 1-sentence description of the overall aesthetic"}
+
+Use ONLY these style options: Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage
+Use ONLY these color options: Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold
+Pick 1-3 styles and 1-2 colors that best match.` 
+                },
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: 'Analyze these reference images and detect the interior design style, color palette, and overall vibe.' },
+                    ...imageContentParts
+                  ]
+                }
+              ],
+              max_tokens: 300,
+            }),
+          });
+
+          if (imageAnalysisResponse.ok) {
+            const analysisData = await imageAnalysisResponse.json();
+            let analysisContent = analysisData.choices?.[0]?.message?.content || '';
+            analysisContent = normalizeAiResponse(analysisContent);
+            
+            try {
+              imageAnalysisResult = JSON.parse(analysisContent);
+              console.log('[Image Analysis] Detected styles:', imageAnalysisResult?.styles, 'colors:', imageAnalysisResult?.colors);
+              
+              // Merge detected styles into accumulated context
+              if (imageAnalysisResult?.styles) {
+                for (const style of imageAnalysisResult.styles) {
+                  const lowerStyle = style.toLowerCase();
+                  if (!accContext.styles.includes(lowerStyle)) {
+                    accContext.styles.push(lowerStyle);
+                  }
+                }
+              }
+            } catch (parseErr) {
+              console.error('[Image Analysis] Failed to parse analysis result:', analysisContent);
+            }
+          } else {
+            console.error('[Image Analysis] API call failed:', imageAnalysisResponse.status);
+          }
+        } catch (imgError) {
+          console.error('[Image Analysis] Error analyzing images:', imgError);
+        }
+      }
+    }
+    
     console.log('[Context] Accumulated preferences:', JSON.stringify(accContext));
     console.log('[Context] Is comparison query:', isComparisonQuery, '| Previous properties:', previouslySuggestedProperties.length);
 
@@ -1269,6 +1353,9 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
+    if (imageAnalysisResult) {
+      constraintsSummary.push(`🖼️ Image analysis detected: styles=[${imageAnalysisResult.styles.join(', ')}], colors=[${imageAnalysisResult.colors.join(', ')}] - "${imageAnalysisResult.description}"`);
+    }
 
     // Check if we have center matches when user wants center
     const hasCenterMatches = accContext.wantsCenter && topProperties.some(p => p.locationTier === 'center');
@@ -1409,11 +1496,18 @@ Maximum ${maxResults} properties in results.`;
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-    // Build messages with history
+    // Build messages with history - include images as multimodal content if present
+    const userMessageContent: any = validImages.length > 0
+      ? [
+          { type: 'text', text: message + (imageAnalysisResult ? `\n\n[User uploaded reference images showing ${imageAnalysisResult.styles.join(', ')} style with ${imageAnalysisResult.colors.join(', ')} colors. Find properties matching this aesthetic.]` : '') },
+          ...validImages.map((img: string) => ({ type: 'image_url', image_url: { url: img } }))
+        ]
+      : message;
+
     const messagesWithHistory = [
       { role: 'system', content: systemPrompt },
       ...chatHistory.slice(-10).map(msg => ({ role: msg.role, content: msg.content })),
-      { role: 'user', content: message }
+      { role: 'user', content: userMessageContent }
     ];
 
     console.log('[AI] Calling Lovable AI Gateway with google/gemini-2.5-flash');
