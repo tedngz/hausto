@@ -537,7 +537,7 @@ export const SwipeInterface = ({
 
   // Show loading state
   if (isLoading) {
-    return <div className="pt-4 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
+    return <div className="pt-4 px-4 min-h-screen">
         <div className="max-w-md mx-auto text-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">Finding properties for you...</p>
@@ -552,7 +552,7 @@ export const SwipeInterface = ({
       message,
       suggestion
     } = getNoMatchMessage();
-    return <div className="pt-4 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
+    return <div className="pt-4 px-4 min-h-screen">
         <Card className="max-w-md mx-auto p-8 text-center">
           <h3 className="text-xl font-semibold mb-4">{title}</h3>
           <p className="text-muted-foreground mb-4">{message}</p>
@@ -581,7 +581,7 @@ export const SwipeInterface = ({
 
   // Show setup message only if no preferences AND no apartments to show
   if (!userPreferences && apartments.length === 0) {
-    return <div className="pt-4 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
+    return <div className="pt-4 px-4 min-h-screen">
         <Card className="max-w-md mx-auto p-8 text-center">
           <h3 className="text-xl font-semibold mb-4">Setup Required</h3>
           <p className="text-muted-foreground mb-4">Your preferences need to be set up to find matching properties.</p>
@@ -617,7 +617,7 @@ export const SwipeInterface = ({
       ...currentApartment,
       _currentImageIndex: currentImageIndex
     };
-    return <div className="pt-4 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
+    return <div className="pt-4 px-4 min-h-screen">
         <div className="max-w-md mx-auto pb-8">
           <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md" />
 
@@ -662,7 +662,7 @@ export const SwipeInterface = ({
     ...currentApartment,
     _currentImageIndex: currentImageIndex
   };
-  return <div className="pt-4 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
+  return <div className="pt-4 px-4 min-h-screen">
       <div className="max-w-md mx-auto pb-8">
           <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md" />
 
