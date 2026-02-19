@@ -415,7 +415,7 @@ export const Profile = ({
         <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
       </div>;
   }
-  return <div className="container mx-auto p-6 max-w-4xl pt-20">
+  return <div className="container mx-auto p-6 max-w-4xl pt-4">
       <div className="grid gap-6">
         {/* Header */}
         <Card>
