@@ -195,7 +195,7 @@ const Discover = () => {
     return null;
   }
   return <CurrencyProvider>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-5">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-5" style={{ scrollbarGutter: 'stable' }}>
         {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-8">
             <h2 className="text-2xl font-bold mt-8 mb-8 text-center text-inherit">Describe Your Dream Home</h2>
           </div>}
