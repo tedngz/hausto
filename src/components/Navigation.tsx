@@ -52,32 +52,29 @@ export const Navigation = ({
                 variant={currentView === 'ai-chat' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setCurrentView('ai-chat')}
-                className={`text-xs px-2 py-1.5 h-8 ${currentView === 'ai-chat' ? 'bg-primary text-primary-foreground' : ''}`}
+                className={`px-3 py-2 h-10 w-10 ${currentView === 'ai-chat' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Sparkles className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">Discovery AI</span>
+                <Sparkles className="w-5 h-5" />
               </Button>
               
               <Button
                 variant={currentView === 'swipe' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setCurrentView('swipe')}
-                className={`text-xs px-2 py-1.5 h-8 ${currentView === 'swipe' ? 'bg-primary text-primary-foreground' : ''}`}
+                className={`px-3 py-2 h-10 w-10 ${currentView === 'swipe' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Search className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">Discover</span>
+                <Search className="w-5 h-5" />
               </Button>
               
               <Button
                 variant={currentView === 'matches' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setCurrentView('matches')}
-                className={`relative text-xs px-2 py-1.5 h-8 ${currentView === 'matches' ? 'bg-primary text-primary-foreground' : ''}`}
+                className={`relative px-3 py-2 h-10 w-10 ${currentView === 'matches' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Heart className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden xs:inline text-xs">Matches</span>
+                <Heart className="w-5 h-5" />
                 {matchCount > 0 && (
-                  <Badge className="ml-1 bg-primary text-primary-foreground text-xs h-4 min-w-4 flex items-center justify-center rounded-full">
+                  <Badge className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs h-4 min-w-4 flex items-center justify-center rounded-full">
                     {matchCount}
                   </Badge>
                 )}
