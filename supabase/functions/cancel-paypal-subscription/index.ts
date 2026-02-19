@@ -21,6 +21,7 @@ serve(async (req) => {
 
     const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
     const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
+    const apiBase = Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com";
     const payPalConfigured = Boolean(clientId && clientSecret);
     if (!payPalConfigured) {
       logStep("PayPal credentials not configured - proceeding with local cancellation only");
@@ -54,7 +55,6 @@ serve(async (req) => {
       throw new Error("No subscription record found");
     }
 
-    // Check if user has premium status
     if (!subscriberData.subscribed && subscriberData.subscription_tier === "free") {
       throw new Error("No active subscription to cancel");
     }
@@ -66,11 +66,11 @@ serve(async (req) => {
       subscribed: subscriberData.subscribed 
     });
 
-    // Get PayPal access token
-    let accessToken: string | null = null;
-    if (payPalConfigured) {
+    // Suspend (not cancel) PayPal subscription so it can be reactivated later
+    let paypalSuspended = false;
+    if (payPalConfigured && hasPayPalSubscription) {
       try {
-        const authResponse = await fetch("https://api.sandbox.paypal.com/v1/oauth2/token", {
+        const authResponse = await fetch(`${apiBase}/v1/oauth2/token`, {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -79,61 +79,45 @@ serve(async (req) => {
           body: "grant_type=client_credentials",
         });
         const authData = await authResponse.json();
-        if (!authResponse.ok) {
-          logStep("PayPal auth failed", { error: authData.error_description || authData.error || "Unknown" });
-        } else {
-          accessToken = authData.access_token;
+        
+        if (authResponse.ok) {
+          const accessToken = authData.access_token;
           logStep("Obtained PayPal access token");
-        }
-      } catch (authErr) {
-        logStep("PayPal auth exception", { error: authErr instanceof Error ? authErr.message : String(authErr) });
-      }
-    } else {
-      logStep("Skipping PayPal auth - credentials missing");
-    }
 
-    // Cancel PayPal subscription (only if PayPal subscription exists)
-    let paypalCancelled = false;
-    if (accessToken && hasPayPalSubscription) {
-      try {
-        const cancelResponse = await fetch(
-          `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/cancel`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({
-              reason: "User requested cancellation",
-            }),
+          // Use SUSPEND instead of CANCEL so subscription can be reactivated
+          const suspendResponse = await fetch(
+            `${apiBase}/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}/suspend`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                reason: "User requested cancellation",
+              }),
+            }
+          );
+
+          if (!suspendResponse.ok) {
+            const errorText = await suspendResponse.text();
+            logStep("PayPal suspend failed", { status: suspendResponse.status, error: errorText });
+          } else {
+            paypalSuspended = true;
+            logStep("PayPal subscription suspended successfully");
           }
-        );
-    
-        if (!cancelResponse.ok) {
-          const errorData = await cancelResponse.json();
-          logStep("PayPal cancellation failed", { status: cancelResponse.status, error: errorData });
-          // Don't throw here - we'll still update our database
         } else {
-          paypalCancelled = true;
-          logStep("PayPal subscription cancelled successfully");
+          logStep("PayPal auth failed", { error: authData.error_description || authData.error || "Unknown" });
         }
       } catch (paypalError) {
         logStep("PayPal API error", { error: paypalError instanceof Error ? paypalError.message : String(paypalError) });
-        // Continue with database update even if PayPal fails
-      }
-    } else {
-      if (!hasPayPalSubscription) {
-        logStep("Skipping PayPal cancellation - no PayPal subscription ID (manual premium grant)");
-      } else {
-        logStep("Skipping PayPal cancellation - no PayPal access token available");
       }
     }
 
-    // Update subscriber record in our database
-    // Keep premium active until subscription_end, just clear PayPal ID
+    // Update subscriber record - keep the paypal_subscription_id so we can reactivate later
+    // Mark as "cancelled" by setting subscribed to indicate cancellation pending
     const { error: updateError } = await supabaseClient.from("subscribers").update({
-      paypal_subscription_id: null, // Clear the PayPal ID to prevent auto-renewal
+      // Keep paypal_subscription_id for reactivation!
       updated_at: new Date().toISOString(),
     }).eq("user_id", user.id);
 
@@ -142,12 +126,12 @@ serve(async (req) => {
       throw new Error(`Failed to update subscription status: ${updateError.message}`);
     }
 
-    logStep("Subscription cancelled successfully", { paypalCancelled });
+    logStep("Subscription suspended successfully", { paypalSuspended });
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: "Subscription cancelled successfully",
-      paypalCancelled 
+      message: "Subscription suspended successfully",
+      paypalSuspended 
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
@@ -157,7 +141,6 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in cancel-paypal-subscription", { message: errorMessage });
     
-    // Provide more specific error message for debugging
     return new Response(JSON.stringify({ 
       error: "Unable to cancel subscription", 
       details: errorMessage 

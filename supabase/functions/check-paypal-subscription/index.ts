@@ -76,6 +76,7 @@ serve(async (req) => {
       subscription_tier: null as string | null,
       subscription_end: null as string | null,
       paypal_subscription_id: null as string | null,
+      is_suspended: false,
     };
 
     if (subscriberData?.paypal_subscription_id) {
@@ -102,6 +103,16 @@ serve(async (req) => {
             subscription_tier: "premium",
             subscription_end: subscription.billing_info?.next_billing_time || null,
             paypal_subscription_id: subscriberData.paypal_subscription_id,
+            is_suspended: false,
+          };
+        } else if (subscription.status === "SUSPENDED") {
+          // Suspended = user cancelled but can reactivate without re-entering payment
+          subscriptionStatus = {
+            subscribed: true,
+            subscription_tier: "premium",
+            subscription_end: subscriberData.subscription_end || null,
+            paypal_subscription_id: subscriberData.paypal_subscription_id,
+            is_suspended: true,
           };
         }
       }
@@ -123,6 +134,7 @@ serve(async (req) => {
           subscription_tier: "premium",
           subscription_end: subscriberData.subscription_end,
           paypal_subscription_id: null,
+          is_suspended: false,
         };
       } else {
         // Subscription has expired - mark as free
@@ -132,6 +144,7 @@ serve(async (req) => {
           subscription_tier: "free",
           subscription_end: subscriberData.subscription_end,
           paypal_subscription_id: null,
+          is_suspended: false,
         };
       }
     } else {

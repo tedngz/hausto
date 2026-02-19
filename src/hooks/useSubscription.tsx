@@ -10,6 +10,7 @@ export const useSubscription = () => {
     subscription_tier: 'free',
     subscription_end: null as string | null,
     paypal_subscription_id: null as string | null,
+    is_suspended: false,
     loading: true,
   });
 
@@ -46,6 +47,7 @@ export const useSubscription = () => {
             subscription_tier: dbData.subscription_tier || 'free',
             subscription_end: dbData.subscription_end || null,
             paypal_subscription_id: dbData.paypal_subscription_id || null,
+            is_suspended: false,
             loading: false,
           });
           return;
@@ -58,6 +60,7 @@ export const useSubscription = () => {
         subscription_tier: data?.subscription_tier || 'free',
         subscription_end: data?.subscription_end || null,
         paypal_subscription_id: data?.paypal_subscription_id || null,
+        is_suspended: data?.is_suspended === true,
         loading: false,
       });
     } catch (error) {
@@ -83,6 +86,29 @@ export const useSubscription = () => {
       console.error('Error creating subscription:', error);
       toast.error('Failed to create subscription');
       return null;
+    }
+  };
+
+  const reactivateSubscription = async () => {
+    if (!user) return false;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('reactivate-paypal-subscription', {
+        headers: {
+          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Subscription reactivated successfully!');
+      await checkSubscription();
+      return true;
+    } catch (error) {
+      console.error('Error reactivating subscription:', error);
+      toast.error('Failed to reactivate subscription. Please try creating a new one.');
+      return false;
     }
   };
 
@@ -119,5 +145,6 @@ export const useSubscription = () => {
     checkSubscription,
     createSubscription,
     cancelSubscription,
+    reactivateSubscription,
   };
 };
