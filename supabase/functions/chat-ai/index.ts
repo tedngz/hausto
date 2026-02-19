@@ -758,6 +758,15 @@ function filterAndScoreProperties(
     const titleLower = (p.title || '').toLowerCase();
     const highlightsLower = (p.highlights || []).map((h: string) => h.toLowerCase()).join(' ');
     const allPropertyText = `${descLower} ${titleLower} ${highlightsLower} ${lowerAmenities.join(' ')}`;
+    
+    // Furniture keywords for inferring "furnished" status
+    const FURNITURE_KEYWORDS = [
+      'bed', 'sofa', 'couch', 'wardrobe', 'desk', 'table', 'dresser',
+      'bookshelf', 'cabinet', 'chair', 'mattress', 'nightstand',
+      'bedside table', 'dining table', 'coffee table', 'tv stand',
+      'shelving', 'armchair', 'bar stool', 'barstools'
+    ];
+    
     let amenityMatchCount = 0;
     const matchedAmenities: string[] = [];
     const missingAmenities: string[] = [];
@@ -765,7 +774,19 @@ function filterAndScoreProperties(
       // Check amenities array first, then fall back to description/title/highlights
       const inAmenities = lowerAmenities.some((a: string) => a.includes(reqAmenity) || reqAmenity.includes(a));
       const inText = allPropertyText.includes(reqAmenity);
-      if (inAmenities || inText) {
+      
+      // Special handling for "furnished": infer from furniture amenities
+      let furnishedInferred = false;
+      if (reqAmenity === 'furnished' && !inAmenities && !inText) {
+        const furnitureCount = lowerAmenities.filter((a: string) => 
+          FURNITURE_KEYWORDS.some(kw => a.includes(kw))
+        ).length;
+        if (furnitureCount >= 2) {
+          furnishedInferred = true;
+        }
+      }
+      
+      if (inAmenities || inText || furnishedInferred) {
         amenityMatchCount++;
         matchedAmenities.push(reqAmenity);
         score += 10;
@@ -1345,7 +1366,7 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    - BAD: "in city center. has balcony. modern style" (don't use dots between points)
    - BAD: "Property matches criteria."
    
-   **AMENITY ACCURACY**: Check the property's full amenities list, description, title, AND highlights before saying a property does or doesn't have something. For example, if "Furnished" or "Fully Furnished" appears anywhere in the amenities, highlights, or description, report it as furnished.
+   **AMENITY ACCURACY**: Check the property's full amenities list, description, title, AND highlights before saying a property does or doesn't have something. A property is considered furnished if "Furnished" or "Fully Furnished" appears anywhere in the amenities, highlights, or description, OR if the property has multiple furniture items (e.g., Bed, Sofa, Wardrobe, Desk, Table, Chair) in its amenities list. Never say a property is "not furnished" when it clearly has furniture amenities listed.
 
 9. **JSON RESPONSE FORMAT** (REQUIRED for any property search):
 {
