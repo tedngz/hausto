@@ -1438,7 +1438,7 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 4. **DETAILED SUMMARIES REQUIRED**: Your summary must explain the search in detail. Instead of just "I found 5 properties", write something like:
    - "I searched for modern apartments in Thao Dien under your 15M budget. I found 3 properties directly in Thao Dien and 2 more in nearby District 2 areas. Properties are sorted with Thao Dien listings first."
    - Explain WHAT you searched for, WHERE you searched, HOW MANY match exactly vs nearby areas
-   - WHEN USER UPLOADS REFERENCE IMAGES: You MUST explicitly mention the detected style from the image in your summary. For example: "From your reference image, I detected a Modern, Minimalist style with Neutral, White tones. I searched for apartments matching this aesthetic..." Do NOT use markdown bold (**) in your responses - keep everything plain text. This helps the user understand how their image was interpreted and how it influenced the results.
+   - WHEN USER UPLOADS REFERENCE IMAGES: Start your summary with the image analysis FIRST, then describe what you searched. Keep it simple and concise. For example: "I detected a Modern, Minimalist style with Neutral, White tones from your image. Here are X matching apartments in [area] under [budget]." Do NOT use markdown bold (**). Do NOT repeat or rephrase the same information multiple times. Keep the response short and direct.
 
 5. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
 
@@ -1628,17 +1628,14 @@ Maximum ${maxResults} properties in results.`;
       // Generate a summary based on context
       let summary = '';
       if (imageAnalysisResult) {
-        summary += `From your reference image, I detected a ${imageAnalysisResult.styles.join(', ')} style with ${imageAnalysisResult.colors.join(', ')} tones. `;
+        summary += `I detected a ${imageAnalysisResult.styles.join(', ')} style with ${imageAnalysisResult.colors.join(', ')} tones from your image. `;
       }
-      summary += `I found ${fallbackResults.length} properties`;
+      summary += `Here are ${fallbackResults.length} matching apartments`;
       if (accContext.city) {
         summary += ` in ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`;
       }
       if (accContext.maxPrice) {
         summary += ` under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`;
-      }
-      if (imageAnalysisResult) {
-        summary += ` matching the ${imageAnalysisResult.styles.join(', ').toLowerCase()} aesthetic from your image`;
       }
       if (accContext.wantsCenter && !topProperties.some(p => p.locationTier === 'center')) {
         summary += `. Note: No center properties matched your criteria, showing nearby alternatives`;
