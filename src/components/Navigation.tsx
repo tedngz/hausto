@@ -29,8 +29,8 @@ export const Navigation = ({
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
       <div className="max-w-4xl mx-auto px-3 md:px-4 py-2 md:py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center min-w-0">
+        <div className="flex items-center justify-between relative">
+          <div className="flex items-center min-w-0 z-10">
             <div 
               className="flex items-center justify-center space-x-1.5 md:space-x-2 cursor-pointer"
               onClick={() => navigate('/')}
@@ -46,7 +46,7 @@ export const Navigation = ({
             </div>
           </div>
           
-          <div className="flex items-center justify-center flex-1 px-2 md:px-4">
+          <div className="absolute inset-0 flex items-center justify-center">
             <div className="flex items-center space-x-1">
               <Button
                 variant={currentView === 'ai-chat' ? 'default' : 'ghost'}
@@ -85,7 +85,7 @@ export const Navigation = ({
             </div>
           </div>
 
-          <div className="flex items-center min-w-0">
+          <div className="flex items-center min-w-0 z-10">
             <UserMenu 
               userType={userType}
               onSwitchUserType={onSwitchUserType}
