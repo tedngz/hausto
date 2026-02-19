@@ -619,7 +619,7 @@ export const SwipeInterface = ({
     };
     return <div className="pt-4 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
         <div className="max-w-md mx-auto pb-8">
-          <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md" />
+          <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md bg-transparent shadow-none border-none backdrop-blur-none" />
 
           {/* Quiz recommendation card */}
           <Card className="mb-6 p-6 text-center bg-gradient-to-r from-orange-50 to-yellow-50 border-orange-200">
@@ -664,7 +664,7 @@ export const SwipeInterface = ({
   };
   return <div className="pt-4 px-4 min-h-screen bg-gradient-to-br from-background via-background to-secondary/20">
       <div className="max-w-md mx-auto pb-8">
-          <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md" />
+          <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md bg-transparent shadow-none border-none backdrop-blur-none" />
 
         {/* Action buttons */}
         <div className="flex justify-center space-x-4 mb-8">
