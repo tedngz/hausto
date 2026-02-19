@@ -94,9 +94,15 @@ export const SubscriptionStatus = ({
             {hasActiveSubscription ? <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
                 <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                 {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button> : isCancelled && <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs font-normal">
-                  Subscription Cancelled
-                </Badge>}
+              </Button> : isCancelled && <div className="space-y-2">
+                  <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs font-normal">
+                    Subscription Cancelled
+                  </Badge>
+                  <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+                    <Crown className="h-3.5 w-3.5 mr-1.5" />
+                    Reactivate Subscription
+                  </Button>
+                </div>}
           </div> : <div className="space-y-2.5">
             <p className="text-xs text-muted-foreground">
               Upgrade to unlock unlimited access
