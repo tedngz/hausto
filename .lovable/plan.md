@@ -1,32 +1,65 @@
 
 
-# Infer "Furnished" Status from Furniture Amenities
+# Icon Animations for Landing Page Features
 
-## Problem
-The AI incorrectly reports properties as "not furnished" even when their amenities list contains furniture items like "Bed," "Sofa," "Wardrobe," "Bookshelf," etc. Currently the check only looks for the literal word "furnished."
+## Overview
+Add three distinct animations to the feature section icons: a heartbeat pulse for the Heart icon, a gentle floating bob for the Search icon, and a radiating pulse ring behind the MessageSquare icon.
 
-## Solution
-Add a furniture-keyword inference step in the amenity matching logic of `supabase/functions/chat-ai/index.ts`. When a user asks for "furnished," the system will check not just for the word "furnished" but also for the presence of furniture-related amenities.
+## Animations
 
-## Changes
+### 1. Heart - Heartbeat
+A rhythmic scale pulse mimicking a heartbeat (quick double-beat, then pause).
 
-### `supabase/functions/chat-ai/index.ts`
+### 2. Search - Gentle Bob
+A slow up-and-down floating motion (translateY oscillation).
 
-1. **Add a furniture keywords list** near the amenity matching section (~line 752):
-   ```
-   const FURNITURE_KEYWORDS = [
-     'bed', 'sofa', 'couch', 'wardrobe', 'desk', 'table', 'dresser',
-     'bookshelf', 'cabinet', 'chair', 'mattress', 'nightstand',
-     'bedside table', 'dining table', 'coffee table', 'tv stand',
-     'shelving', 'armchair', 'bar stool', 'barstools'
-   ];
-   ```
+### 3. MessageSquare - Pulse Ring
+A radiating ring that expands outward from behind the icon and fades, using a pseudo-element on the wrapper div.
 
-2. **Update the amenity matching logic** for the "furnished" amenity specifically: when the requested amenity is "furnished," also check if the property has 2+ furniture-related items in its amenities list. If so, treat it as a match (furnished).
+## Technical Details
 
-3. **Update the system prompt** (~line 1348): Expand the AMENITY ACCURACY instruction to say:
-   - "A property is considered furnished if 'Furnished' appears in amenities/description/highlights, OR if the property has multiple furniture items (e.g., Bed, Sofa, Wardrobe, Desk) in its amenities."
+### `src/index.css` - Add 3 new keyframes + classes
 
-## Why 2+ furniture items?
-A single item like "Bed" in a studio might be minimal. But 2+ furniture items (e.g., Bed + Wardrobe, or Sofa + Desk) strongly indicate a furnished unit. This avoids false positives from properties that only have built-in fixtures.
+```css
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.15); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.25); }
+  56% { transform: scale(1); }
+}
+
+@keyframes gentle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.animate-heartbeat { animation: heartbeat 1.8s ease-in-out infinite; }
+.animate-gentle-bob { animation: gentle-bob 3s ease-in-out infinite; }
+
+.pulse-ring-wrapper {
+  position: relative;
+}
+.pulse-ring-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--primary));
+  animation: pulse-ring 2.5s ease-out infinite;
+}
+```
+
+### `src/components/LandingPage.tsx` - Apply classes to icons
+
+- Heart icon: add `animate-heartbeat` class
+- Search icon: add `animate-gentle-bob` class
+- MessageSquare wrapper div: add `pulse-ring-wrapper` class alongside existing classes
+
+No new dependencies required.
 
