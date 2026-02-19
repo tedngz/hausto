@@ -131,9 +131,9 @@ export const MatchesView = ({
         <p className="text-gray-600 mb-6">Start swiping to find your perfect place!</p>
       </div>;
   }
-  return <div className="container mx-auto px-4 py-8">
+  return <div className="container mx-auto px-4 pt-4 pb-8">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold mt-8 mb-2 text-center text-inherit">Your Matches</h2>
+        <h2 className="text-2xl font-bold mt-4 mb-2 text-center text-inherit">Your Matches</h2>
         <p className="text-center text-muted-foreground text-sm">
           {allApartments.length} properties matched
         </p>
