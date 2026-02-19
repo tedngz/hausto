@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -26,68 +26,53 @@ serve(async (req) => {
     if (userError || !user?.email) throw new Error("Not authenticated");
 
     const { subscription_id } = await req.json();
-    
+
     const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
     const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
     const apiBase = Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com";
 
-    if (!clientId || !clientSecret) throw new Error("PayPal credentials not configured");
-
-    // Get PayPal access token
-    const authResponse = await fetch(`${apiBase}/v1/oauth2/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-      },
-      body: "grant_type=client_credentials",
-    });
-    const authData = await authResponse.json();
-    if (!authResponse.ok) throw new Error("PayPal auth failed");
-
-    // Verify subscription with PayPal
-    let subscriptionActive = false;
     let nextBillingTime: string | null = null;
-    let verifiedSubscriptionId = subscription_id;
 
-    if (subscription_id) {
-      const subResponse = await fetch(`${apiBase}/v1/billing/subscriptions/${subscription_id}`, {
+    if (clientId && clientSecret && subscription_id) {
+      const authResp = await fetch(`${apiBase}/v1/oauth2/token`, {
+        method: "POST",
         headers: {
-          "Authorization": `Bearer ${authData.access_token}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
         },
+        body: "grant_type=client_credentials",
       });
 
-      if (subResponse.ok) {
-        const subData = await subResponse.json();
-        if (subData.status === "ACTIVE" || subData.status === "APPROVED") {
-          subscriptionActive = true;
+      if (authResp.ok) {
+        const { access_token } = await authResp.json();
+        const subResp = await fetch(`${apiBase}/v1/billing/subscriptions/${subscription_id}`, {
+          headers: { "Authorization": `Bearer ${access_token}`, "Content-Type": "application/json" },
+        });
+        if (subResp.ok) {
+          const subData = await subResp.json();
           nextBillingTime = subData.billing_info?.next_billing_time || null;
         }
       }
     }
 
-    // Even if we can't verify immediately (PayPal can be delayed), activate based on redirect
     const { error: upsertError } = await supabaseClient.from("subscribers").upsert({
       user_id: user.id,
       email: user.email,
-      paypal_subscription_id: verifiedSubscriptionId || null,
+      paypal_subscription_id: subscription_id || null,
       subscribed: true,
       subscription_tier: "premium",
       subscription_end: nextBillingTime || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'email' });
 
-    if (upsertError) throw new Error(`Database error: ${upsertError.message}`);
+    if (upsertError) throw new Error(upsertError.message);
 
-    console.log(`[ACTIVATE-PAYPAL] Subscription activated for user ${user.id}`);
-
-    return new Response(JSON.stringify({ success: true, subscribed: true }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[ACTIVATE-PAYPAL] Error: ${msg}`);
+    console.error("[ACTIVATE-PAYPAL]", msg);
     return new Response(JSON.stringify({ error: msg }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
