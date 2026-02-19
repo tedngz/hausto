@@ -195,15 +195,7 @@ const Discover = () => {
     return null;
   }
   return <CurrencyProvider>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-5" style={{ scrollbarGutter: 'stable' }}>
-        {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-8">
-            <h2 className="text-2xl font-bold mt-8 mb-8 text-center text-inherit">Describe Your Dream Home</h2>
-          </div>}
-        
-        {currentView === 'swipe' && userType && <div className="container mx-auto px-4 pt-8">
-            <h2 className="text-2xl font-bold mt-8 mb-4 text-center text-inherit">Vibe & Find Your Home</h2>
-          </div>}
-        
+      <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
         {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation
           currentView={currentView}
           setCurrentView={view => {
@@ -223,37 +215,46 @@ const Discover = () => {
         />}
 
         {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatches.length} onSwitchUserType={switchUserType} onOpenAIChat={() => setIsAIChatOpen(true)} onAddProperty={() => setIsUploadModalOpen(true)} />}
-        
-        {!userType && <UserTypeSelector onSelect={handleUserTypeSelect} />}
-        
-        {userType === 'renter' && currentView === 'onboarding' && <OnboardingQuiz onComplete={handleOnboardingComplete} onSkip={() => setCurrentView('ai-chat')} />}
-        
-        {userType === 'renter' && currentView === 'swipe' && <SwipeInterface userPreferences={userPreferences} onMatch={handleMatch} userProfile={{
-        name: user.user_metadata?.name || '',
-        email: user.email || '',
-        phone: user.user_metadata?.phone || ''
-      }} onRestartOnboarding={handleRestartOnboarding} />}
-        
-        {userType === 'renter' && currentView === 'matches' && <MatchesView userPreferences={userPreferences} userProfile={{
-        name: user.user_metadata?.name || '',
-        email: user.email || '',
-        phone: user.user_metadata?.phone || ''
-      }} />}
 
-        {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="space-y-6">
-              <Profile userType={userType} />
-              <div className="max-w-4xl mx-auto px-4 pb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <UsageMeter />
-                  <SubscriptionStatus onUpgrade={() => setIsSubscriptionModalOpen(true)} showHistory={true} />
+        <div className="h-full overflow-y-auto pt-14">
+          {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-8">
+              <h2 className="text-2xl font-bold mt-8 mb-8 text-center text-inherit">Describe Your Dream Home</h2>
+            </div>}
+          
+          {currentView === 'swipe' && userType && <div className="container mx-auto px-4 pt-8">
+              <h2 className="text-2xl font-bold mt-8 mb-4 text-center text-inherit">Vibe & Find Your Home</h2>
+            </div>}
+        
+          {!userType && <UserTypeSelector onSelect={handleUserTypeSelect} />}
+          
+          {userType === 'renter' && currentView === 'onboarding' && <OnboardingQuiz onComplete={handleOnboardingComplete} onSkip={() => setCurrentView('ai-chat')} />}
+          
+          {userType === 'renter' && currentView === 'swipe' && <SwipeInterface userPreferences={userPreferences} onMatch={handleMatch} userProfile={{
+          name: user.user_metadata?.name || '',
+          email: user.email || '',
+          phone: user.user_metadata?.phone || ''
+        }} onRestartOnboarding={handleRestartOnboarding} />}
+          
+          {userType === 'renter' && currentView === 'matches' && <MatchesView userPreferences={userPreferences} userProfile={{
+          name: user.user_metadata?.name || '',
+          email: user.email || '',
+          phone: user.user_metadata?.phone || ''
+        }} />}
+
+          {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="space-y-6">
+                <Profile userType={userType} />
+                <div className="max-w-4xl mx-auto px-4 pb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <UsageMeter />
+                    <SubscriptionStatus onUpgrade={() => setIsSubscriptionModalOpen(true)} showHistory={true} />
+                  </div>
                 </div>
-              </div>
-            </div>)}
+              </div>)}
 
-        {currentView === 'ai-chat' && userType && <HomeAI />}
+          {currentView === 'ai-chat' && userType && <HomeAI />}
 
-
-        {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
+          {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
+        </div>
 
         {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
 
