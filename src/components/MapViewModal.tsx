@@ -1,103 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MapPin } from 'lucide-react';
-
-const DISTRICT_DESCRIPTIONS: Record<string, string> = {
-  'quận 1': 'Business hub with luxury shopping, fine dining, and vibrant nightlife',
-  'district 1': 'Business hub with luxury shopping, fine dining, and vibrant nightlife',
-  'd1': 'Business hub with luxury shopping, fine dining, and vibrant nightlife',
-  'quận 2': 'Modern expat area with international schools and riverside living',
-  'district 2': 'Modern expat area with international schools and riverside living',
-  'd2': 'Modern expat area with international schools and riverside living',
-  'quận 3': 'Local culture mix with cafes, street food, and affordable living',
-  'district 3': 'Local culture mix with cafes, street food, and affordable living',
-  'd3': 'Local culture mix with cafes, street food, and affordable living',
-  'quận 4': 'Authentic local life with traditional markets and riverside views',
-  'district 4': 'Authentic local life with traditional markets and riverside views',
-  'd4': 'Authentic local life with traditional markets and riverside views',
-  'quận 5': 'Chinatown district with rich heritage, temples, and bustling markets',
-  'district 5': 'Chinatown district with rich heritage, temples, and bustling markets',
-  'd5': 'Chinatown district with rich heritage, temples, and bustling markets',
-  'quận 6': 'Traditional neighborhood with local markets and authentic cuisine',
-  'district 6': 'Traditional neighborhood with local markets and authentic cuisine',
-  'd6': 'Traditional neighborhood with local markets and authentic cuisine',
-  'quận 7': 'Planned urban area popular with expats, near Phú Mỹ Hưng new town',
-  'district 7': 'Planned urban area popular with expats, near Phú Mỹ Hưng new town',
-  'd7': 'Planned urban area popular with expats, near Phú Mỹ Hưng new town',
-  'quận 8': 'Riverside district with local charm and growing development',
-  'district 8': 'Riverside district with local charm and growing development',
-  'd8': 'Riverside district with local charm and growing development',
-  'quận 9': 'Hi-tech park area with green spaces and modern developments',
-  'district 9': 'Hi-tech park area with green spaces and modern developments',
-  'd9': 'Hi-tech park area with green spaces and modern developments',
-  'quận 10': 'Central district with diverse food scene and local markets',
-  'district 10': 'Central district with diverse food scene and local markets',
-  'd10': 'Central district with diverse food scene and local markets',
-  'quận 11': 'Residential area with traditional markets and local eateries',
-  'district 11': 'Residential area with traditional markets and local eateries',
-  'd11': 'Residential area with traditional markets and local eateries',
-  'quận 12': 'Suburban feel with parks, affordable housing, and growing infrastructure',
-  'district 12': 'Suburban feel with parks, affordable housing, and growing infrastructure',
-  'd12': 'Suburban feel with parks, affordable housing, and growing infrastructure',
-  'bình thạnh': 'Trendy neighborhood with cafes, co-working spaces, and young professionals',
-  'binh thanh': 'Trendy neighborhood with cafes, co-working spaces, and young professionals',
-  'phú nhuận': 'Central residential area with great food streets and local charm',
-  'phu nhuan': 'Central residential area with great food streets and local charm',
-  'tân bình': 'Near the airport with diverse dining and bustling commercial streets',
-  'tan binh': 'Near the airport with diverse dining and bustling commercial streets',
-  'tân phú': 'Family-friendly area with parks, schools, and growing amenities',
-  'tan phu': 'Family-friendly area with parks, schools, and growing amenities',
-  'gò vấp': 'Lively residential district with markets and affordable living',
-  'go vap': 'Lively residential district with markets and affordable living',
-  'thủ đức': 'University town with tech parks, nature, and modern developments',
-  'thu duc': 'University town with tech parks, nature, and modern developments',
-  'bình tân': 'Industrial-residential mix with affordable options and local markets',
-  'binh tan': 'Industrial-residential mix with affordable options and local markets',
-  'nhà bè': 'Quiet suburban area with riverside charm south of the city',
-  'nha be': 'Quiet suburban area with riverside charm south of the city',
-  'thảo điền': 'Upscale expat enclave with trendy cafes, boutiques, and riverside villas',
-  'thao dien': 'Upscale expat enclave with trendy cafes, boutiques, and riverside villas',
-  'an phú': 'Modern residential area in Thu Duc with international schools and amenities',
-  'an phu': 'Modern residential area in Thu Duc with international schools and amenities',
-  'hồ chí minh': 'Vietnam\'s largest city — a dynamic metropolis of culture, commerce, and cuisine',
-  'ho chi minh': 'Vietnam\'s largest city — a dynamic metropolis of culture, commerce, and cuisine',
-  // Hanoi
-  'ba đình': 'Political center with historic sites, embassies, and tree-lined streets',
-  'ba dinh': 'Political center with historic sites, embassies, and tree-lined streets',
-  'hoàn kiếm': 'Old Quarter charm with Hoan Kiem Lake, heritage, and vibrant street life',
-  'hoan kiem': 'Old Quarter charm with Hoan Kiem Lake, heritage, and vibrant street life',
-  'đống đa': 'Cultural district with universities, temples, and local neighborhoods',
-  'dong da': 'Cultural district with universities, temples, and local neighborhoods',
-  'cầu giấy': 'Modern urban center with tech companies and young professionals',
-  'cau giay': 'Modern urban center with tech companies and young professionals',
-  'tây hồ': 'Lakeside expat hub with international restaurants and peaceful living',
-  'tay ho': 'Lakeside expat hub with international restaurants and peaceful living',
-  'hai bà trưng': 'Vibrant central district with local markets, street food, and French colonial charm',
-  'hai ba trung': 'Vibrant central district with local markets, street food, and French colonial charm',
-  'hoàng mai': 'Emerging residential area with affordable housing and growing infrastructure',
-  'hoang mai': 'Emerging residential area with affordable housing and growing infrastructure',
-  'thanh xuân': 'Bustling urban district with universities, shopping, and convenient transit',
-  'thanh xuan': 'Bustling urban district with universities, shopping, and convenient transit',
-  'bắc từ liêm': 'Modern northern district with new urban areas and green spaces',
-  'bac tu liem': 'Modern northern district with new urban areas and green spaces',
-  'nam từ liêm': 'Business district with modern high-rises and convention centers',
-  'nam tu liem': 'Business district with modern high-rises and convention centers',
-  'gia lâm': 'Suburban district east of Hanoi with traditional villages and riverside charm',
-  'gia lam': 'Suburban district east of Hanoi with traditional villages and riverside charm',
-  'long biên': 'Expanding district across the Red River with parks and new developments',
-  'long bien': 'Expanding district across the Red River with parks and new developments',
-  // Da Nang
-  'hải châu': 'Downtown Da Nang with Han River views and urban conveniences',
-  'hai chau': 'Downtown Da Nang with Han River views and urban conveniences',
-  'sơn trà': 'Beachside living near My Khe Beach and Son Tra Peninsula',
-  'son tra': 'Beachside living near My Khe Beach and Son Tra Peninsula',
-  'ngũ hành sơn': 'Coastal area near Marble Mountains with resort-style living',
-  'ngu hanh son': 'Coastal area near Marble Mountains with resort-style living',
-};
+import { LOCATION_DESCRIPTIONS } from '@/data/locationDescriptions';
 
 function getLocationDescription(location: string): string | null {
   const lower = location.toLowerCase();
-  for (const [key, desc] of Object.entries(DISTRICT_DESCRIPTIONS)) {
+  for (const [key, desc] of Object.entries(LOCATION_DESCRIPTIONS)) {
     if (lower.includes(key)) return desc;
   }
   return null;
@@ -122,8 +30,6 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
       setMapReady(false);
       return;
     }
-
-    // Delay to let the dialog animate open
     const readyTimer = setTimeout(() => setMapReady(true), 350);
     return () => clearTimeout(readyTimer);
   }, [isOpen]);
@@ -139,7 +45,6 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
 
       if (cancelled || !mapRef.current) return;
 
-      // Fix default marker icon
       delete (L.Icon.Default.prototype as any)._getIconUrl;
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -147,7 +52,6 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
         shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
       });
 
-      // Clean up previous instance
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -166,7 +70,6 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
 
       L.marker([latitude, longitude]).addTo(map);
 
-      // Force multiple invalidateSize calls to handle dialog animation
       for (const delay of [0, 100, 250, 500, 1000]) {
         setTimeout(() => {
           if (!cancelled && mapInstanceRef.current) {
