@@ -191,6 +191,40 @@ All colors MUST be HSL.
   will-change: transform, opacity;
 }
 
+/* Icon animations */
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.15); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.25); }
+  56% { transform: scale(1); }
+}
+
+@keyframes gentle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.animate-heartbeat { animation: heartbeat 1.8s ease-in-out infinite; }
+.animate-gentle-bob { animation: gentle-bob 3s ease-in-out infinite; }
+
+.pulse-ring-wrapper {
+  position: relative;
+}
+.pulse-ring-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--primary));
+  animation: pulse-ring 2.5s ease-out infinite;
+}
+
 /* Text utilities */
 @layer utilities {
   .line-clamp-1 {

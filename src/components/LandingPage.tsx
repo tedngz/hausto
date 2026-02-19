@@ -88,7 +88,7 @@ export const LandingPage = () => {
           <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
             <CardContent className="p-8 text-center">
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
-                <Heart className="h-8 w-8 text-primary" />
+                <Heart className="h-8 w-8 text-primary animate-heartbeat" />
               </div>
               <h3 className="text-2xl font-semibold text-foreground mb-4">Vibe Match</h3>
               <p className="text-muted-foreground leading-relaxed">Our algorithm learns your preferences and finds properties that truly match your lifestyle and needs.</p>
@@ -98,7 +98,7 @@ export const LandingPage = () => {
           <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
             <CardContent className="p-8 text-center">
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
-                <Search className="h-8 w-8 text-primary" />
+                <Search className="h-8 w-8 text-primary animate-gentle-bob" />
               </div>
               <h3 className="text-2xl font-semibold text-foreground mb-4">Smart Search</h3>
               <p className="text-muted-foreground leading-relaxed">Ask AI and swipe through curated properties with detailed insights and vibe scores to find your perfect match.</p>
@@ -107,7 +107,7 @@ export const LandingPage = () => {
 
           <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
             <CardContent className="p-8 text-center">
-              <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
+              <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors pulse-ring-wrapper">
                 <MessageSquare className="h-8 w-8 text-primary" />
               </div>
               <h3 className="text-2xl font-semibold text-foreground mb-4">Unified Listings</h3>
