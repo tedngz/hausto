@@ -55,7 +55,8 @@ export const SwipeInterface = ({
   } = useMatches();
   const {
     canPerformAction,
-    updatePropertyView
+    updatePropertyView,
+    loading: usageLoading
   } = useUsageTracking();
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
@@ -122,8 +123,8 @@ export const SwipeInterface = ({
         realPropertiesCount: realProperties?.length || 0,
         isLoading
       });
-      if (isLoading) {
-        console.log('Still loading properties...');
+      if (isLoading || usageLoading) {
+        console.log('Still loading properties or usage data...');
         return;
       }
 
@@ -312,7 +313,7 @@ export const SwipeInterface = ({
       }
     };
     loadPropertiesWithRealtors();
-  }, [userPreferences, realProperties, renterMatches, declinedPropertyIds, isLoading, user?.id]);
+  }, [userPreferences, realProperties, renterMatches, declinedPropertyIds, isLoading, usageLoading, user?.id]);
 
   // Track property views when apartment changes (unique views only)
   useEffect(() => {
@@ -545,7 +546,7 @@ export const SwipeInterface = ({
   };
 
   // Show loading state
-  if (isLoading) {
+  if (isLoading || usageLoading) {
     return <div className="pt-4 px-4 min-h-screen">
         <div className="max-w-md mx-auto text-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
