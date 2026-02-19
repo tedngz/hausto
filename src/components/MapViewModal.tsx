@@ -144,10 +144,7 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(map);
 
-      L.marker([latitude, longitude])
-        .addTo(map)
-        .bindPopup(`<strong>${title}</strong><br/>${location}`)
-        .openPopup();
+      L.marker([latitude, longitude]).addTo(map);
 
       // Force multiple invalidateSize calls to handle dialog animation
       for (const delay of [0, 100, 250, 500, 1000]) {
@@ -175,24 +172,24 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden" style={{ zIndex: 60 }}>
-        <DialogHeader className="p-4 pb-2">
+        <DialogHeader className="p-4 pb-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <MapPin className="w-5 h-5 text-primary" />
             {title}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">{location}</p>
+          {locationDesc && (
+            <div className="flex items-start gap-2 pt-1">
+              <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-muted-foreground leading-relaxed">{locationDesc}</p>
+            </div>
+          )}
         </DialogHeader>
         <div
           ref={mapRef}
           className="w-full"
           style={{ height: '350px', minHeight: '350px', position: 'relative', zIndex: 1 }}
         />
-        {locationDesc && (
-          <div className="px-4 py-3 border-t border-border bg-muted/30 flex items-start gap-2">
-            <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-muted-foreground leading-relaxed">{locationDesc}</p>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );
