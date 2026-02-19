@@ -241,7 +241,7 @@ const Discover = () => {
           phone: user.user_metadata?.phone || ''
         }} />}
 
-          {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="space-y-6 pt-4">
+          {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="space-y-6">
                 <Profile userType={userType} />
                 <div className="max-w-4xl mx-auto px-4 pb-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
