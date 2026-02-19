@@ -69,7 +69,7 @@ serve(async (req) => {
 
     const accessToken = authData.access_token;
     const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/$/, '') || '';
-    const returnUrl = `${origin}/subscription-success?subscription_id={SUBSCRIPTION_ID}`;
+    const returnUrl = `${origin}/subscription-success`;
     const cancelUrl = `${origin}/subscription-cancel`;
 
     // Create PayPal subscription
