@@ -11,6 +11,8 @@ import Auth from "./pages/Auth";
 import PropertyDetail from "./pages/PropertyDetail";
 import NotFound from "./pages/NotFound";
 import AdminTools from "./pages/AdminTools";
+import SubscriptionSuccess from "./pages/SubscriptionSuccess";
+import SubscriptionCancel from "./pages/SubscriptionCancel";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +29,8 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/property/:id" element={<PropertyDetail />} />
             <Route path="/admin-tools" element={<AdminTools />} />
+            <Route path="/subscription-success" element={<SubscriptionSuccess />} />
+            <Route path="/subscription-cancel" element={<SubscriptionCancel />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
