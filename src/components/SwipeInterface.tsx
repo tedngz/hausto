@@ -449,6 +449,15 @@ export const SwipeInterface = ({
       setNoMatchReason('view-limit-reached');
       return;
     }
+
+    // Scroll back to top so user sees the new listing from the beginning
+    const scrollContainer = document.querySelector('.h-full.overflow-y-auto');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     if (currentApartmentIndex < apartments.length - 1) {
       const newIndex = currentApartmentIndex + 1;
       setCurrentApartmentIndex(newIndex);
