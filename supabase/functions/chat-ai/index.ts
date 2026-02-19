@@ -752,13 +752,20 @@ function filterAndScoreProperties(
       }
     }
     
-    // Amenity match
+    // Amenity match - check amenities array, description, highlights, and title
     const lowerAmenities = amenities.map((a: string) => a.toLowerCase());
+    const descLower = (p.description || '').toLowerCase();
+    const titleLower = (p.title || '').toLowerCase();
+    const highlightsLower = (p.highlights || []).map((h: string) => h.toLowerCase()).join(' ');
+    const allPropertyText = `${descLower} ${titleLower} ${highlightsLower} ${lowerAmenities.join(' ')}`;
     let amenityMatchCount = 0;
     const matchedAmenities: string[] = [];
     const missingAmenities: string[] = [];
     for (const reqAmenity of context.amenities) {
-      if (lowerAmenities.some((a: string) => a.includes(reqAmenity) || reqAmenity.includes(a))) {
+      // Check amenities array first, then fall back to description/title/highlights
+      const inAmenities = lowerAmenities.some((a: string) => a.includes(reqAmenity) || reqAmenity.includes(a));
+      const inText = allPropertyText.includes(reqAmenity);
+      if (inAmenities || inText) {
         amenityMatchCount++;
         matchedAmenities.push(reqAmenity);
         score += 10;
@@ -1332,9 +1339,13 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 
 7. **RESPECT PRICE CONSTRAINTS**: Never suggest over-budget properties as matches. If including one, clearly mark it as "slightly over budget".
 
-8. **NATURAL MATCH REASONS**: Write conversationally.
-   - GOOD: "This cozy 13M/month apartment in Nam Tu Liem has the balcony you wanted. While not in the center, it's in a modern development area with good facilities."
+8. **NATURAL MATCH REASONS**: Write conversationally. Use commas (not periods/dots) to separate points within a matchReason.
+   - GOOD: "in city center, has balcony and furnished, modern style"
+   - GOOD: "This cozy 13M/month apartment in Nam Tu Liem has the balcony you wanted, while not in the center it's in a modern development area"
+   - BAD: "in city center. has balcony. modern style" (don't use dots between points)
    - BAD: "Property matches criteria."
+   
+   **AMENITY ACCURACY**: Check the property's full amenities list, description, title, AND highlights before saying a property does or doesn't have something. For example, if "Furnished" or "Fully Furnished" appears anywhere in the amenities, highlights, or description, report it as furnished.
 
 9. **JSON RESPONSE FORMAT** (REQUIRED for any property search):
 {
@@ -1490,7 +1501,7 @@ Maximum ${maxResults} properties in results.`;
         images: p.images,
         matchScore: p.matchScore,
         matchReason: p.matchReasons.length > 0 
-          ? p.matchReasons.join('. ') 
+          ? p.matchReasons.join(', ') 
           : `Great ${p.styles[0] || 'modern'} apartment in ${p.location.split(',')[0]} at ${(p.price/1000000).toFixed(1)}M VND/month`,
         realtor_id: p.realtor_id,
         isExternal: false,
