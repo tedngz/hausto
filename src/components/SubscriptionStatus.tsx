@@ -19,19 +19,33 @@ export const SubscriptionStatus = ({
     subscription_tier,
     subscription_end,
     paypal_subscription_id,
+    is_suspended,
     loading,
     checkSubscription,
-    cancelSubscription
+    cancelSubscription,
+    reactivateSubscription
   } = useSubscription();
   const [cancelling, setCancelling] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   // Premium status based on tier and subscription status
   const isPremium = subscription_tier === 'premium' && subscribed;
   
-  // Active subscription has PayPal ID, cancelled subscription doesn't but still has premium benefits
-  const hasActiveSubscription = isPremium && !!paypal_subscription_id;
+  // Active subscription is ACTIVE on PayPal, suspended means user cancelled but can reactivate
+  const hasActiveSubscription = isPremium && !!paypal_subscription_id && !is_suspended;
+  const isSuspended = isPremium && is_suspended && !!paypal_subscription_id;
   const isCancelled = isPremium && !paypal_subscription_id;
+
+  const handleReactivate = async () => {
+    setReactivating(true);
+    const success = await reactivateSubscription();
+    setReactivating(false);
+    if (!success) {
+      // Fallback to creating new subscription
+      onUpgrade?.();
+    }
+  };
   const handleRefresh = async () => {
     setRefreshing(true);
     await checkSubscription();
@@ -74,7 +88,7 @@ export const SubscriptionStatus = ({
         {isPremium && subscription_end && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
             <Calendar className="h-3 w-3" />
             <span>
-              {isCancelled ? 'Cancelled · Effective until' : 'Next billing date:'} {new Date(subscription_end).toLocaleDateString()}
+              {(isCancelled || isSuspended) ? 'Cancelled · Effective until' : 'Next billing date:'} {new Date(subscription_end).toLocaleDateString()}
             </span>
           </div>}
       </CardHeader>
@@ -94,7 +108,12 @@ export const SubscriptionStatus = ({
             {hasActiveSubscription ? <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
                 <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                 {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button> : isCancelled && <div className="space-y-2">
+              </Button> : isSuspended ? <div className="space-y-2">
+                  <Button onClick={handleReactivate} disabled={reactivating} className="w-full h-9 text-sm" size="sm">
+                    <Crown className="h-3.5 w-3.5 mr-1.5" />
+                    {reactivating ? 'Reactivating...' : 'Reactivate Subscription'}
+                  </Button>
+                </div> : isCancelled && <div className="space-y-2">
                   <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
                     <Crown className="h-3.5 w-3.5 mr-1.5" />
                     Reactivate Subscription
