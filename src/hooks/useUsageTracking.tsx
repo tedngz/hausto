@@ -387,6 +387,12 @@ export const useUsageTracking = () => {
   };
 
   const canPerformAction = useCallback((type: 'view' | 'match' | 'quiz' | 'ai-search'): boolean => {
+    // Don't block actions while subscription status is still loading
+    if (loading) {
+      console.log('[Usage Tracking] Still loading subscription status - allowing action');
+      return true;
+    }
+
     console.log(`[Usage Tracking] Checking if can perform ${type}:`, {
       subscribed: subscriptionStatus.subscribed,
       tier: subscriptionStatus.subscription_tier,
@@ -418,7 +424,7 @@ export const useUsageTracking = () => {
       default:
         return false;
     }
-  }, [subscriptionStatus, todayUsage, weeklyMatches]);
+  }, [subscriptionStatus, todayUsage, weeklyMatches, loading]);
 
   const getRemainingActions = (type: 'view' | 'match' | 'quiz' | 'ai-search'): number => {
     if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
