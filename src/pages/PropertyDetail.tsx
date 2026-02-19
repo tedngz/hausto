@@ -59,8 +59,11 @@ const PropertyDetail = () => {
           vibe: property.vibe || '',
           description: property.description || '',
           highlights: property.highlights || [],
+          amenities: property.amenities || [],
           vibe_analysis: property.vibe_analysis,
           property_source_link: property.property_source_link,
+          property_source_provider_name: property.property_source_provider_name,
+          property_source_provider_phone: property.property_source_provider_phone,
           realtor: realtor ? {
             id: realtor.id,
             name: realtor.name || 'Property Owner',
