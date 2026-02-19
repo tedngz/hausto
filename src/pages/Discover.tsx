@@ -201,7 +201,7 @@ const Discover = () => {
           </div>}
         
         {currentView === 'swipe' && userType && <div className="container mx-auto px-4 pt-8">
-            <h2 className="text-2xl font-bold mt-8 mb-16 text-center text-inherit">Vibe & Find Your Home</h2>
+            <h2 className="text-2xl font-bold mt-8 mb-4 text-center text-inherit">Vibe & Find Your Home</h2>
           </div>}
         
         {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation
