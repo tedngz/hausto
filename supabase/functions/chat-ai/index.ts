@@ -1438,7 +1438,7 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 4. **DETAILED SUMMARIES REQUIRED**: Your summary must explain the search in detail. Instead of just "I found 5 properties", write something like:
    - "I searched for modern apartments in Thao Dien under your 15M budget. I found 3 properties directly in Thao Dien and 2 more in nearby District 2 areas. Properties are sorted with Thao Dien listings first."
    - Explain WHAT you searched for, WHERE you searched, HOW MANY match exactly vs nearby areas
-   - **WHEN USER UPLOADS REFERENCE IMAGES**: You MUST explicitly mention the detected style from the image in your summary. For example: "From your reference image, I detected a **Modern, Minimalist** style with **Neutral, White** tones. I searched for apartments matching this aesthetic..." This helps the user understand how their image was interpreted and how it influenced the results.
+   - WHEN USER UPLOADS REFERENCE IMAGES: You MUST explicitly mention the detected style from the image in your summary. For example: "From your reference image, I detected a Modern, Minimalist style with Neutral, White tones. I searched for apartments matching this aesthetic..." Do NOT use markdown bold (**) in your responses - keep everything plain text. This helps the user understand how their image was interpreted and how it influenced the results.
 
 5. **HANDLE "SHOW ME" REQUESTS**: When user says "show me" or similar, immediately return the properties in JSON format. Don't ask more questions.
 
@@ -1628,7 +1628,7 @@ Maximum ${maxResults} properties in results.`;
       // Generate a summary based on context
       let summary = '';
       if (imageAnalysisResult) {
-        summary += `From your reference image, I detected a **${imageAnalysisResult.styles.join(', ')}** style with **${imageAnalysisResult.colors.join(', ')}** tones. `;
+        summary += `From your reference image, I detected a ${imageAnalysisResult.styles.join(', ')} style with ${imageAnalysisResult.colors.join(', ')} tones. `;
       }
       summary += `I found ${fallbackResults.length} properties`;
       if (accContext.city) {
