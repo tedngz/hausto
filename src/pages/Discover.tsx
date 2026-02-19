@@ -196,12 +196,12 @@ const Discover = () => {
   }
   return <CurrencyProvider>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-5">
-        {currentView === 'ai-chat' && userType && <div className="text-center py-0">
-            <h1 className="text-2xl font-bold mt-8 mb-2 text-center text-inherit">Describe Your Dream Home</h1>
+        {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 py-8">
+            <h2 className="text-2xl font-bold mt-8 mb-2 text-center text-inherit">Describe Your Dream Home</h2>
           </div>}
         
-        {currentView === 'swipe' && userType && <div className="text-center py-0">
-            <h1 className="text-2xl font-bold mt-8 mb-2 text-center text-inherit">Vibe & Find Your Home</h1>
+        {currentView === 'swipe' && userType && <div className="container mx-auto px-4 py-8">
+            <h2 className="text-2xl font-bold mt-8 mb-2 text-center text-inherit">Vibe & Find Your Home</h2>
           </div>}
         
         {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation
