@@ -43,8 +43,11 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
+    const apiBase = Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com";
+    logStep("Using PayPal API base", { apiBase });
+
     // Get PayPal access token
-    const authResponse = await fetch("https://api.sandbox.paypal.com/v1/oauth2/token", {
+    const authResponse = await fetch(`${apiBase}/v1/oauth2/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -80,7 +83,7 @@ serve(async (req) => {
       
       // Check subscription status with PayPal
       const subscriptionResponse = await fetch(
-        `https://api.sandbox.paypal.com/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}`,
+        `${apiBase}/v1/billing/subscriptions/${subscriberData.paypal_subscription_id}`,
         {
           headers: {
             "Authorization": `Bearer ${accessToken}`,
@@ -155,7 +158,7 @@ serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR in check-paypal-subscription", { message: "Error occurred" });
+    logStep("ERROR in check-paypal-subscription", { message: errorMessage });
     
     // Don't expose internal error details to prevent information leakage
     return new Response(JSON.stringify({ 
