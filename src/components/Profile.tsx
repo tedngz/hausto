@@ -414,140 +414,128 @@ export const Profile = ({
         <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
       </div>;
   }
-  return <div className="container mx-auto p-6 max-w-5xl pt-4">
-      <div className="grid gap-6">
-        <div className="grid lg:grid-cols-2 gap-6 items-start">
-          {/* Profile Information (with avatar merged in) */}
-          <div className="flex">
-            <Card className="w-full">
-              <CardHeader className="pb-2">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="relative group">
-                      <Avatar className="w-14 h-14">
-                        <AvatarImage src={profile?.avatar_url} />
-                        <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
-                          <User className={`w-7 h-7 ${userType === 'realtor' ? 'text-blue-600' : 'text-green-600'}`} />
-                        </AvatarFallback>
-                      </Avatar>
-                      <label htmlFor="avatar-upload" className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                        <Camera className="w-4 h-4 text-white" />
-                        <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} disabled={uploading} className="hidden" />
-                      </label>
-                      {uploading && <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
-                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                        </div>}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <CardTitle className="text-lg md:text-xl font-semibold text-foreground truncate">
-                        {profile?.name || user?.email || 'User Profile'}
-                      </CardTitle>
-                    </div>
-                  </div>
-                  <Button onClick={() => setIsEditing(!isEditing)} variant={isEditing ? "ghost" : "outline"} className={`w-full sm:w-auto text-sm ${isEditing ? "text-red-600 hover:text-red-700" : ""}`} size="sm">
-                    {isEditing ? <X className="w-4 h-4 mr-2" /> : <Edit3 className="w-4 h-4 mr-2" />}
-                    {isEditing ? 'Cancel' : 'Edit Profile'}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {isEditing ? <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="name">Full Name</Label>
-                        <Input id="name" value={editForm.name} onChange={e => setEditForm(prev => ({
-                      ...prev,
-                      name: e.target.value
-                    }))} placeholder="Enter your full name" />
-                      </div>
-                      <div>
-                        <Label htmlFor="phone">Phone Number</Label>
-                        <Input id="phone" value={editForm.phone} onChange={e => setEditForm(prev => ({
-                      ...prev,
-                      phone: e.target.value
-                    }))} placeholder="Enter your phone number" />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="location">Location</Label>
-                      <Input id="location" value={editForm.location} onChange={e => setEditForm(prev => ({
-                    ...prev,
-                    location: e.target.value
-                  }))} placeholder="Enter your location" />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="bio">Bio</Label>
-                      <Textarea id="bio" value={editForm.bio} onChange={e => setEditForm(prev => ({
-                    ...prev,
-                    bio: e.target.value
-                  }))} placeholder={userType === 'realtor' ? "Tell potential renters about yourself and your properties..." : "Tell property owners about yourself and what you're looking for..."} rows={4} />
-                    </div>
-                    
-                    <div className="flex space-x-2 pt-4">
-                      <Button onClick={handleSave} disabled={updateProfileMutation.isPending} className="flex-1">
-                        <Save className="w-4 h-4 mr-2" />
-                        {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
-                      </Button>
-                      <Button variant="outline" onClick={handleCancel} className="flex-1">
-                        Cancel
-                      </Button>
-                    </div>
-                  </div> : <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="flex items-center space-x-3">
-                        <Mail className="w-4 h-4 text-gray-500" />
-                        <div>
-                          <p className="text-sm text-gray-500">Email</p>
-                          <p className="font-medium">{profile?.email || user?.email || 'Not provided'}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-3">
-                        <Phone className="w-4 h-4 text-gray-500" />
-                        <div>
-                          <p className="text-sm text-gray-500">Phone</p>
-                          <p className="font-medium">{profile?.phone || 'Not provided'}</p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                     {profile?.location && <div className="flex items-center space-x-3">
-                         <MapPin className="w-4 h-4 text-gray-500" />
-                         <div>
-                           <p className="text-sm text-gray-500">Location</p>
-                           <p className="font-medium">{profile.location}</p>
-                         </div>
-                       </div>}
-                     
-                     {profile?.bio && <div>
-                         <p className="text-sm text-gray-500 mb-2">About Me</p>
-                         <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
-                       </div>}
-                     
-                     {!profile?.phone && !profile?.location && !profile?.bio && <div className="text-center py-8 text-gray-500">
-                         <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                         <p>Complete your profile to help others connect with you!</p>
-                         <Button variant="outline" className="mt-4" onClick={() => setIsEditing(true)}>
-                           <Edit3 className="w-4 h-4 mr-2" />
-                           Edit Profile
-                         </Button>
-                       </div>}
+  return <div className="space-y-4">
+      {/* Profile Information (with avatar merged in) */}
+      <Card className="w-full">
+        <CardHeader className="pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="relative group">
+                <Avatar className="w-14 h-14">
+                  <AvatarImage src={profile?.avatar_url} />
+                  <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
+                    <User className={`w-7 h-7 ${userType === 'realtor' ? 'text-blue-600' : 'text-green-600'}`} />
+                  </AvatarFallback>
+                </Avatar>
+                <label htmlFor="avatar-upload" className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                  <Camera className="w-4 h-4 text-white" />
+                  <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} disabled={uploading} className="hidden" />
+                </label>
+                {uploading && <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
                   </div>}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Preferences Card - side by side with profile info */}
-          {userType === 'renter' && (
-            <div className="flex">
-              <div className="w-full">
-                <PreferencesCard userId={user?.id} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-lg md:text-xl font-semibold text-foreground truncate">
+                  {profile?.name || user?.email || 'User Profile'}
+                </CardTitle>
               </div>
             </div>
-          )}
-        </div>
-      </div>
+            <Button onClick={() => setIsEditing(!isEditing)} variant={isEditing ? "ghost" : "outline"} className={`w-full sm:w-auto text-sm ${isEditing ? "text-red-600 hover:text-red-700" : ""}`} size="sm">
+              {isEditing ? <X className="w-4 h-4 mr-2" /> : <Edit3 className="w-4 h-4 mr-2" />}
+              {isEditing ? 'Cancel' : 'Edit Profile'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isEditing ? <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input id="name" value={editForm.name} onChange={e => setEditForm(prev => ({
+                    ...prev,
+                    name: e.target.value
+                  }))} placeholder="Enter your full name" />
+                </div>
+                <div>
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input id="phone" value={editForm.phone} onChange={e => setEditForm(prev => ({
+                    ...prev,
+                    phone: e.target.value
+                  }))} placeholder="Enter your phone number" />
+                </div>
+              </div>
+              
+              <div>
+                <Label htmlFor="location">Location</Label>
+                <Input id="location" value={editForm.location} onChange={e => setEditForm(prev => ({
+                  ...prev,
+                  location: e.target.value
+                }))} placeholder="Enter your location" />
+              </div>
+              
+              <div>
+                <Label htmlFor="bio">Bio</Label>
+                <Textarea id="bio" value={editForm.bio} onChange={e => setEditForm(prev => ({
+                  ...prev,
+                  bio: e.target.value
+                }))} placeholder={userType === 'realtor' ? "Tell potential renters about yourself and your properties..." : "Tell property owners about yourself and what you're looking for..."} rows={4} />
+              </div>
+              
+              <div className="flex space-x-2 pt-4">
+                <Button onClick={handleSave} disabled={updateProfileMutation.isPending} className="flex-1">
+                  <Save className="w-4 h-4 mr-2" />
+                  {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
+                <Button variant="outline" onClick={handleCancel} className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </div> : <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center space-x-3">
+                  <Mail className="w-4 h-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm text-gray-500">Email</p>
+                    <p className="font-medium">{profile?.email || user?.email || 'Not provided'}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <Phone className="w-4 h-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm text-gray-500">Phone</p>
+                    <p className="font-medium">{profile?.phone || 'Not provided'}</p>
+                  </div>
+                </div>
+              </div>
+              
+              {profile?.location && <div className="flex items-center space-x-3">
+                <MapPin className="w-4 h-4 text-gray-500" />
+                <div>
+                  <p className="text-sm text-gray-500">Location</p>
+                  <p className="font-medium">{profile.location}</p>
+                </div>
+              </div>}
+              
+              {profile?.bio && <div>
+                <p className="text-sm text-gray-500 mb-2">About Me</p>
+                <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
+              </div>}
+              
+              {!profile?.phone && !profile?.location && !profile?.bio && <div className="text-center py-8 text-gray-500">
+                <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Complete your profile to help others connect with you!</p>
+                <Button variant="outline" className="mt-4" onClick={() => setIsEditing(true)}>
+                  <Edit3 className="w-4 h-4 mr-2" />
+                  Edit Profile
+                </Button>
+              </div>}
+            </div>}
+        </CardContent>
+      </Card>
+
+      {/* Preferences Card - stacked below profile info */}
+      {userType === 'renter' && <PreferencesCard userId={user?.id} />}
     </div>;
 };
