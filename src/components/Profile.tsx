@@ -492,31 +492,31 @@ export const Profile = ({
                 </Button>
               </div>
             </div> : <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="flex items-center space-x-3">
                   <Mail className="w-4 h-4 text-gray-500" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium">{profile?.email || user?.email || 'Not provided'}</p>
+                    <p className="font-medium truncate">{profile?.email || user?.email || 'Not provided'}</p>
                   </div>
                 </div>
                 
                 <div className="flex items-center space-x-3">
                   <Phone className="w-4 h-4 text-gray-500" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm text-gray-500">Phone</p>
-                    <p className="font-medium">{profile?.phone || 'Not provided'}</p>
+                    <p className="font-medium truncate">{profile?.phone || 'Not provided'}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <MapPin className="w-4 h-4 text-gray-500" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-500">Location</p>
+                    <p className="font-medium truncate">{profile?.location || 'Not provided'}</p>
                   </div>
                 </div>
               </div>
-              
-              {profile?.location && <div className="flex items-center space-x-3">
-                <MapPin className="w-4 h-4 text-gray-500" />
-                <div>
-                  <p className="text-sm text-gray-500">Location</p>
-                  <p className="font-medium">{profile.location}</p>
-                </div>
-              </div>}
               
               {profile?.bio && <div>
                 <p className="text-sm text-gray-500 mb-2">About Me</p>
