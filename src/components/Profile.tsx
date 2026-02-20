@@ -123,18 +123,18 @@ const PreferencesCard = ({
     '3months': 'Within 3 months',
     '6months': '6+ months'
   };
-  return <Card className="flex flex-col flex-1">
+  return <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <Heart className="w-5 h-5 text-red-500" />
           Your Preferences
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col">
-        <div className="grid grid-cols-2 gap-4 flex-1">
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Style Preferences */}
-          {preferences.styles?.length > 0 && <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+          {preferences.styles?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
                 <Home className="w-4 h-4 text-blue-500" />
                 <span className="font-medium text-sm">Style</span>
               </div>
@@ -146,8 +146,8 @@ const PreferencesCard = ({
             </div>}
 
           {/* Color Preferences */}
-          {preferences.colors?.length > 0 && <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+          {preferences.colors?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
                 <Palette className="w-4 h-4 text-purple-500" />
                 <span className="font-medium text-sm">Colors</span>
               </div>
@@ -159,12 +159,12 @@ const PreferencesCard = ({
             </div>}
 
           {/* Activity Preferences */}
-          {preferences.activities?.length > 0 && <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+          {preferences.activities?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-4 h-4 text-green-500" />
                 <span className="font-medium text-sm">Activities</span>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {preferences.activities.map((activity: string) => <Badge key={activity} variant="secondary" className="bg-green-50 text-green-700 text-xs">
                     {activityLabels[activity] || activity}
                   </Badge>)}
@@ -172,36 +172,36 @@ const PreferencesCard = ({
             </div>}
 
           {/* Budget Range */}
-          {preferences.priceRange && <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+          {preferences.priceRange && <div>
+              <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="w-4 h-4 text-orange-500" />
                 <span className="font-medium text-sm">Budget Range</span>
               </div>
-              <div className="bg-orange-50 p-3 rounded-lg flex-1">
-                <div className="flex justify-between text-xs text-orange-700 mb-2">
+              <div className="bg-orange-50 p-2 rounded-lg">
+                <div className="flex justify-between text-xs text-orange-700 mb-1">
                   <span>{formatPrice(preferences.priceRange[0])}</span>
                   <span>{formatPrice(preferences.priceRange[1])}</span>
                 </div>
-                <Progress value={75} className="h-2 bg-orange-100" />
+                <Progress value={75} className="h-1.5 bg-orange-100" />
               </div>
             </div>}
 
-          {/* Location Preferences — full width, expanded */}
-          {preferences.location?.length > 0 && <div className="col-span-2 flex flex-col gap-2 flex-1">
-              <div className="flex items-center gap-2">
+          {/* Location Preferences */}
+          {preferences.location?.length > 0 && <div>
+              <div className="flex items-center gap-2 mb-2">
                 <MapPin className="w-4 h-4 text-red-500" />
                 <span className="font-medium text-sm">Preferred Areas</span>
               </div>
-              <div className="flex flex-wrap gap-2 p-3 bg-red-50/50 rounded-lg flex-1">
-                {preferences.location.map((location: string) => <Badge key={location} variant="secondary" className="bg-red-100 text-red-700 text-sm px-3 py-1">
+              <div className="flex flex-wrap gap-1.5">
+                {preferences.location.map((location: string) => <Badge key={location} variant="secondary" className="bg-red-50 text-red-700 text-xs">
                     {location}
                   </Badge>)}
               </div>
             </div>}
 
           {/* Size Preference */}
-          {preferences.size && <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+          {preferences.size && <div>
+              <div className="flex items-center gap-2 mb-2">
                 <Home className="w-4 h-4 text-teal-500" />
                 <span className="font-medium text-sm">Property Size</span>
               </div>
@@ -213,12 +213,12 @@ const PreferencesCard = ({
             </div>}
 
           {/* Move-in Timeline */}
-          {preferences.moveInDate && <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+          {preferences.moveInDate && <div>
+              <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-indigo-500" />
                 <span className="font-medium text-sm">Move-in Timeline</span>
               </div>
-              <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 text-xs w-fit">
+              <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 text-xs">
                 {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
               </Badge>
             </div>}
@@ -414,9 +414,9 @@ export const Profile = ({
         <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
       </div>;
   }
-  return <div className="flex flex-col gap-6 h-full">
-      {/* Profile Information — stretches to match Subscription card height */}
-      <Card className="w-full flex flex-col flex-1">
+  return <div className="flex flex-col gap-4 h-full">
+      {/* Profile Information (with avatar merged in) */}
+      <Card className="w-full flex-1">
         <CardHeader className="pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center space-x-3">
@@ -447,7 +447,7 @@ export const Profile = ({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col space-y-4">
+        <CardContent className="space-y-4">
           {isEditing ? <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>

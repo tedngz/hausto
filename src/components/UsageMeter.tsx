@@ -63,7 +63,7 @@ export const UsageMeter = () => {
   ];
 
   return (
-    <Card className="flex flex-col flex-1">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-lg">
           Usage Overview

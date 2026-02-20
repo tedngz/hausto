@@ -242,17 +242,14 @@ const Discover = () => {
         }} />}
 
           {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="container mx-auto px-4 py-6 max-w-6xl">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{gridAutoRows: '1fr'}}>
-                  {/* Left column: Profile card (row 1) + Preferences card (row 2) */}
-                  <div className="lg:col-span-2 lg:row-span-2 flex flex-col gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                  {/* Left column (wider): Profile info + Preferences */}
+                  <div className="lg:col-span-2 flex flex-col gap-6">
                     <Profile userType={userType} />
                   </div>
-                  {/* Right column row 1: Subscription card — same height as Profile card */}
-                  <div className="flex flex-col">
+                  {/* Right column (narrower): Subscription + Usage */}
+                  <div className="lg:col-span-1 flex flex-col gap-6">
                     <SubscriptionStatus onUpgrade={() => setIsSubscriptionModalOpen(true)} showHistory={true} />
-                  </div>
-                  {/* Right column row 2: Usage card — same height as Preferences card */}
-                  <div className="flex flex-col">
                     <UsageMeter />
                   </div>
                 </div>
