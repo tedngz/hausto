@@ -72,7 +72,7 @@ export const SubscriptionStatus = ({
       </Card>;
   }
   return <>
-    <Card>
+    <Card className="flex flex-col flex-1">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2 text-lg">
