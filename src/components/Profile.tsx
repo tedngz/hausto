@@ -194,7 +194,7 @@ const PreferencesCard = ({
               </div>
             </div>}
 
-          <div className="flex flex-row gap-4 flex-wrap">
+          <div className="grid grid-cols-2 gap-4">
             {preferences.size && <div>
                 <div className="flex items-center gap-2 mb-2">
                   <Home className="w-4 h-4 text-teal-500" />
