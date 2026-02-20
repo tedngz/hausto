@@ -177,13 +177,9 @@ const PreferencesCard = ({
                 <DollarSign className="w-4 h-4 text-orange-500" />
                 <span className="font-medium text-sm">Budget Range</span>
               </div>
-              <div className="bg-orange-50 p-2 rounded-lg">
-                <div className="flex justify-between text-xs text-orange-700 mb-1">
-                  <span>{formatPrice(preferences.priceRange[0])}</span>
-                  <span>{formatPrice(preferences.priceRange[1])}</span>
-                </div>
-                <Progress value={75} className="h-1.5 bg-orange-100" />
-              </div>
+              <Badge variant="secondary" className="bg-orange-50 text-orange-700 text-xs">
+                {formatPrice(preferences.priceRange[0])} – {formatPrice(preferences.priceRange[1])}
+              </Badge>
             </div>}
 
           {/* Location Preferences */}
