@@ -414,7 +414,7 @@ export const Profile = ({
         <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
       </div>;
   }
-  return <div className="space-y-4">
+  return <div className="flex flex-col gap-4 h-full">
       {/* Profile Information (with avatar merged in) */}
       <Card className="w-full">
         <CardHeader className="pb-2">

@@ -241,12 +241,14 @@ const Discover = () => {
           phone: user.user_metadata?.phone || ''
         }} />}
 
-          {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="container mx-auto px-4 py-6 max-w-5xl">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                  {/* Left column: Profile info + Preferences */}
-                  <Profile userType={userType} />
-                  {/* Right column: Subscription + Usage */}
-                  <div className="space-y-4">
+          {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="container mx-auto px-4 py-6 max-w-6xl">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+                  {/* Left column (wider): Profile info + Preferences */}
+                  <div className="lg:col-span-3 flex flex-col gap-6">
+                    <Profile userType={userType} />
+                  </div>
+                  {/* Right column (narrower): Subscription + Usage */}
+                  <div className="lg:col-span-2 flex flex-col gap-6">
                     <SubscriptionStatus onUpgrade={() => setIsSubscriptionModalOpen(true)} showHistory={true} />
                     <UsageMeter />
                   </div>
