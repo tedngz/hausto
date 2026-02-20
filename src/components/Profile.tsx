@@ -492,18 +492,18 @@ export const Profile = ({
                 </Button>
               </div>
             </div> : <div className="space-y-4">
-              <div className="grid grid-cols-3 divide-x divide-border">
-                <div className="flex items-center gap-2 px-4 first:pl-0">
+              <div className="flex flex-col md:flex-row md:divide-x md:divide-border gap-3 md:gap-0">
+                <div className="flex items-center gap-2 md:pr-4 min-w-0">
                   <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <p className="font-medium text-sm break-all">{profile?.email || user?.email || '—'}</p>
+                  <p className="font-medium text-sm truncate">{profile?.email || user?.email || '—'}</p>
                 </div>
                 
-                <div className="flex items-center gap-2 px-4">
+                <div className="flex items-center gap-2 md:px-4 min-w-0">
                   <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
                   <p className="font-medium text-sm">{profile?.phone || '—'}</p>
                 </div>
 
-                <div className="flex items-center gap-2 px-4">
+                <div className="flex items-center gap-2 md:pl-4 min-w-0">
                   <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
                   <p className="font-medium text-sm">{profile?.location || '—'}</p>
                 </div>
