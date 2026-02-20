@@ -411,36 +411,36 @@ export const Profile = ({
       {/* Profile Information (with avatar merged in) */}
       <Card className="w-full relative">
         <CardHeader className="pb-2">
-          <div className="flex items-center space-x-3">
-            <div className="relative group">
-              <Avatar className="w-14 h-14">
-                <AvatarImage src={profile?.avatar_url} />
-                <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
-                  <User className={`w-7 h-7 ${userType === 'realtor' ? 'text-blue-600' : 'text-green-600'}`} />
-                </AvatarFallback>
-              </Avatar>
-              <label htmlFor="avatar-upload" className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                <Camera className="w-4 h-4 text-white" />
-                <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} disabled={uploading} className="hidden" />
-              </label>
-              {uploading && <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                </div>}
-            </div>
-            <div className="min-w-0 flex-1">
-              <CardTitle className="text-lg md:text-xl font-semibold text-foreground truncate">
+          <CardTitle className="flex items-center justify-between text-base">
+            <div className="flex items-center space-x-3 min-w-0 flex-1">
+              <div className="relative group shrink-0">
+                <Avatar className="w-14 h-14">
+                  <AvatarImage src={profile?.avatar_url} />
+                  <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
+                    <User className={`w-7 h-7 ${userType === 'realtor' ? 'text-blue-600' : 'text-green-600'}`} />
+                  </AvatarFallback>
+                </Avatar>
+                <label htmlFor="avatar-upload" className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                  <Camera className="w-4 h-4 text-white" />
+                  <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} disabled={uploading} className="hidden" />
+                </label>
+                {uploading && <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  </div>}
+              </div>
+              <span className="text-lg md:text-xl font-semibold text-foreground truncate">
                 {profile?.name || user?.email || 'User Profile'}
-              </CardTitle>
+              </span>
             </div>
-          </div>
-          <Button
-            onClick={() => setIsEditing(!isEditing)}
-            variant="ghost"
-            size="icon"
-            className={`absolute top-3 right-3 h-8 w-8 ${isEditing ? "text-destructive hover:text-destructive" : "text-muted-foreground"}`}
-          >
-            {isEditing ? <X className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
-          </Button>
+            <Button
+              onClick={() => setIsEditing(!isEditing)}
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 shrink-0 ${isEditing ? "text-destructive hover:text-destructive" : "text-muted-foreground"}`}
+            >
+              {isEditing ? <X className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
+            </Button>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {isEditing ? <div className="space-y-4">
