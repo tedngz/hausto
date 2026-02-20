@@ -180,9 +180,9 @@ const PreferencesCard = ({
             </div>}
         </div>
 
-        {/* Row 2: Preferred Areas (col 1) | Property Size + Move-in Timeline (col 2) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {preferences.location?.length > 0 && <div>
+        {/* Row 2: Preferred Areas (cols 1-2) | Property Size (col 3) | Move-in Timeline (col 4) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {preferences.location?.length > 0 && <div className="lg:col-span-2">
               <div className="flex items-center gap-2 mb-2">
                 <MapPin className="w-4 h-4 text-red-500" />
                 <span className="font-medium text-sm">Preferred Areas</span>
@@ -194,29 +194,27 @@ const PreferencesCard = ({
               </div>
             </div>}
 
-          <div className="grid grid-cols-2 gap-4">
-            {preferences.size && <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Home className="w-4 h-4 text-teal-500" />
-                  <span className="font-medium text-sm">Property Size</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(Array.isArray(preferences.size) ? preferences.size : [preferences.size]).map((size: string) => <Badge key={size} variant="secondary" className="bg-teal-50 text-teal-700 text-xs">
-                      {sizeLabels[size] || size}
-                    </Badge>)}
-                </div>
-              </div>}
+          {preferences.size && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Home className="w-4 h-4 text-teal-500" />
+                <span className="font-medium text-sm">Property Size</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(Array.isArray(preferences.size) ? preferences.size : [preferences.size]).map((size: string) => <Badge key={size} variant="secondary" className="bg-teal-50 text-teal-700 text-xs">
+                    {sizeLabels[size] || size}
+                  </Badge>)}
+              </div>
+            </div>}
 
-            {preferences.moveInDate && <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="w-4 h-4 text-indigo-500" />
-                  <span className="font-medium text-sm">Move-in Timeline</span>
-                </div>
-                <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 text-xs">
-                  {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
-                </Badge>
-              </div>}
-          </div>
+          {preferences.moveInDate && <div>
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-indigo-500" />
+                <span className="font-medium text-sm">Move-in Timeline</span>
+              </div>
+              <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 text-xs">
+                {moveInLabels[preferences.moveInDate] || preferences.moveInDate}
+              </Badge>
+            </div>}
         </div>
       </CardContent>
     </Card>;
