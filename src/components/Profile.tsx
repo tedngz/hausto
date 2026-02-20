@@ -5,9 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import { User, Mail, Phone, MapPin, Edit3, Save, X, Building, Heart, MessageCircle, TrendingUp, Home, Palette, Activity, DollarSign, Upload, Camera } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit3, Save, X, Heart, TrendingUp, Home, Palette, Activity, DollarSign, Camera } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -415,50 +414,41 @@ export const Profile = ({
         <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
       </div>;
   }
-  return <div className="container mx-auto p-6 max-w-4xl pt-4">
+  return <div className="container mx-auto p-6 max-w-5xl pt-4">
       <div className="grid gap-6">
-        {/* Header */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center space-x-3 md:space-x-4">
-                <div className="relative group">
-                  <Avatar className="w-14 h-14 md:w-16 md:h-16">
-                    <AvatarImage src={profile?.avatar_url} />
-                    <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
-                      <User className={`w-7 h-7 md:w-8 md:h-8 ${userType === 'realtor' ? 'text-blue-600' : 'text-green-600'}`} />
-                    </AvatarFallback>
-                  </Avatar>
-                  <label htmlFor="avatar-upload" className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                    <Camera className="w-4 h-4 md:w-5 md:h-5 text-white" />
-                    <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} disabled={uploading} className="hidden" />
-                  </label>
-                  {uploading && <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
-                      <div className="animate-spin w-4 h-4 md:w-5 md:h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                    </div>}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <CardTitle className="text-lg md:text-xl lg:text-2xl font-semibold text-foreground truncate">
-                    {profile?.name || user?.email || 'User Profile'}
-                  </CardTitle>
-                  
-                </div>
-              </div>
-              <Button onClick={() => setIsEditing(!isEditing)} variant={isEditing ? "ghost" : "outline"} className={`w-full sm:w-auto text-sm ${isEditing ? "text-red-600 hover:text-red-700" : ""}`} size="sm">
-                {isEditing ? <X className="w-4 h-4 mr-2" /> : <Edit3 className="w-4 h-4 mr-2" />}
-                <span className="hidden xs:inline">{isEditing ? 'Cancel' : 'Edit Profile'}</span>
-                <span className="xs:hidden">{isEditing ? 'Cancel' : 'Edit'}</span>
-              </Button>
-            </div>
-          </CardHeader>
-        </Card>
-
-        <div className="grid lg:grid-cols-3 gap-6 items-stretch">
-          {/* Profile Information */}
-          <div className="lg:col-span-2 flex">
+        <div className="grid lg:grid-cols-2 gap-6 items-start">
+          {/* Profile Information (with avatar merged in) */}
+          <div className="flex">
             <Card className="w-full">
-              <CardHeader>
-                <CardTitle>Profile Information</CardTitle>
+              <CardHeader className="pb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="relative group">
+                      <Avatar className="w-14 h-14">
+                        <AvatarImage src={profile?.avatar_url} />
+                        <AvatarFallback className={userType === 'realtor' ? 'bg-blue-100' : 'bg-green-100'}>
+                          <User className={`w-7 h-7 ${userType === 'realtor' ? 'text-blue-600' : 'text-green-600'}`} />
+                        </AvatarFallback>
+                      </Avatar>
+                      <label htmlFor="avatar-upload" className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                        <Camera className="w-4 h-4 text-white" />
+                        <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} disabled={uploading} className="hidden" />
+                      </label>
+                      {uploading && <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full">
+                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                        </div>}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="text-lg md:text-xl font-semibold text-foreground truncate">
+                        {profile?.name || user?.email || 'User Profile'}
+                      </CardTitle>
+                    </div>
+                  </div>
+                  <Button onClick={() => setIsEditing(!isEditing)} variant={isEditing ? "ghost" : "outline"} className={`w-full sm:w-auto text-sm ${isEditing ? "text-red-600 hover:text-red-700" : ""}`} size="sm">
+                    {isEditing ? <X className="w-4 h-4 mr-2" /> : <Edit3 className="w-4 h-4 mr-2" />}
+                    {isEditing ? 'Cancel' : 'Edit Profile'}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {isEditing ? <div className="space-y-4">
@@ -549,52 +539,15 @@ export const Profile = ({
             </Card>
           </div>
 
-          {/* Stats Sidebar */}
-          <div className="flex">
-            <Card className="w-full">
-              <CardHeader>
-                <CardTitle className="text-lg">Activity Stats</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {userType === 'realtor' ? <>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Building className="w-4 h-4 text-blue-500" />
-                        <span className="text-sm">Properties</span>
-                      </div>
-                      <Badge variant="outline">{stats?.properties || 0}</Badge>
-                    </div>
-                    <Separator />
-                  </> : null}
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Heart className="w-4 h-4 text-red-500" />
-                    <span className="text-sm">Matches</span>
-                  </div>
-                  <Badge variant="outline">{stats?.matches || 0}</Badge>
-                </div>
-                
-                <Separator />
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <MessageCircle className="w-4 h-4 text-green-500" />
-                    <span className="text-sm">Messages</span>
-                  </div>
-                  <Badge variant="outline">Active</Badge>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Preferences Card - side by side with profile info */}
+          {userType === 'renter' && (
+            <div className="flex">
+              <div className="w-full">
+                <PreferencesCard userId={user?.id} />
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* Preferences Card - Full width below */}
-        {userType === 'renter' && (
-          <div className="mt-6">
-            <PreferencesCard userId={user?.id} />
-          </div>
-        )}
       </div>
     </div>;
 };
