@@ -416,7 +416,7 @@ export const Profile = ({
   }
   return <div className="flex flex-col gap-4 h-full">
       {/* Profile Information (with avatar merged in) */}
-      <Card className="w-full">
+      <Card className="w-full flex-1">
         <CardHeader className="pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center space-x-3">
