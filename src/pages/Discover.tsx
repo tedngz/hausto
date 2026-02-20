@@ -242,7 +242,7 @@ const Discover = () => {
         }} />}
 
           {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="container mx-auto px-4 py-6 max-w-6xl">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                   {/* Left column (wider): Profile info + Preferences */}
                   <div className="lg:col-span-2 flex flex-col gap-6">
                     <Profile userType={userType} />
