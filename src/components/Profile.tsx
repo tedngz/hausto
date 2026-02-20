@@ -416,7 +416,7 @@ export const Profile = ({
   }
   return <div className="flex flex-col gap-6 h-full">
       {/* Profile Information (with avatar merged in) */}
-      <Card className="w-full flex-1">
+      <Card className="w-full">
         <CardHeader className="pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center space-x-3">
@@ -492,29 +492,20 @@ export const Profile = ({
                 </Button>
               </div>
             </div> : <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex items-start space-x-3">
-                  <Mail className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium break-all">{profile?.email || user?.email || 'Not provided'}</p>
-                  </div>
+              <div className="grid grid-cols-3 divide-x divide-border">
+                <div className="flex items-center gap-2 px-4 first:pl-0">
+                  <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <p className="font-medium text-sm break-all">{profile?.email || user?.email || '—'}</p>
                 </div>
                 
-                <div className="flex items-start space-x-3">
-                  <Phone className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-500">Phone</p>
-                    <p className="font-medium">{profile?.phone || 'Not provided'}</p>
-                  </div>
+                <div className="flex items-center gap-2 px-4">
+                  <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <p className="font-medium text-sm">{profile?.phone || '—'}</p>
                 </div>
 
-                <div className="flex items-start space-x-3">
-                  <MapPin className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-500">Location</p>
-                    <p className="font-medium">{profile?.location || 'Not provided'}</p>
-                  </div>
+                <div className="flex items-center gap-2 px-4">
+                  <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <p className="font-medium text-sm">{profile?.location || '—'}</p>
                 </div>
               </div>
               
