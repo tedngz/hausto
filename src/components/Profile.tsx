@@ -414,7 +414,7 @@ export const Profile = ({
         <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
       </div>;
   }
-  return <div className="flex flex-col gap-4 h-full">
+  return <div className="flex flex-col gap-6 h-full">
       {/* Profile Information (with avatar merged in) */}
       <Card className="w-full flex-1">
         <CardHeader className="pb-2">
@@ -492,28 +492,28 @@ export const Profile = ({
                 </Button>
               </div>
             </div> : <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-center space-x-3">
-                  <Mail className="w-4 h-4 text-gray-500" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="flex items-start space-x-3">
+                  <Mail className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium truncate">{profile?.email || user?.email || 'Not provided'}</p>
+                    <p className="font-medium break-all">{profile?.email || user?.email || 'Not provided'}</p>
                   </div>
                 </div>
                 
-                <div className="flex items-center space-x-3">
-                  <Phone className="w-4 h-4 text-gray-500" />
+                <div className="flex items-start space-x-3">
+                  <Phone className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm text-gray-500">Phone</p>
-                    <p className="font-medium truncate">{profile?.phone || 'Not provided'}</p>
+                    <p className="font-medium">{profile?.phone || 'Not provided'}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                  <MapPin className="w-4 h-4 text-gray-500" />
+                <div className="flex items-start space-x-3">
+                  <MapPin className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm text-gray-500">Location</p>
-                    <p className="font-medium truncate">{profile?.location || 'Not provided'}</p>
+                    <p className="font-medium">{profile?.location || 'Not provided'}</p>
                   </div>
                 </div>
               </div>
