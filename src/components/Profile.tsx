@@ -411,7 +411,7 @@ export const Profile = ({
       {/* Profile Information (with avatar merged in) */}
       <Card className="w-full relative">
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center justify-between text-base">
+          <CardTitle className="flex items-start justify-between text-base">
             <div className="flex items-center space-x-3 min-w-0 flex-1">
               <div className="relative group shrink-0">
                 <Avatar className="w-14 h-14">
@@ -436,7 +436,7 @@ export const Profile = ({
               onClick={() => setIsEditing(!isEditing)}
               variant="ghost"
               size="sm"
-              className={`h-8 w-8 p-0 shrink-0 ${isEditing ? "text-destructive hover:text-destructive" : "text-muted-foreground"}`}
+              className={`h-8 w-8 p-0 shrink-0 self-start ${isEditing ? "text-destructive hover:text-destructive" : "text-muted-foreground"}`}
             >
               {isEditing ? <X className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
             </Button>
