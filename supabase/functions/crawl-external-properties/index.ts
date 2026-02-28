@@ -348,6 +348,7 @@ serve(async (req) => {
                   price: property.price || 0,
                   price_display: property.priceDisplay || `${property.price?.toLocaleString()} VND`,
                   size: property.size || null,
+                  rooms: property.rooms || null,
                   description: property.description || null,
                   highlights: property.highlights || [],
                   amenities: property.amenities || [],

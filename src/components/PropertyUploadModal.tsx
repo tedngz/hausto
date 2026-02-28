@@ -32,6 +32,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
   const [sourceProviderPhone, setSourceProviderPhone] = useState('');
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('');
+  const [rooms, setRooms] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
@@ -416,6 +417,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
       propertySourceProviderPhone: sourceProviderPhone,
       latitude: pinLatitude,
       longitude: pinLongitude,
+      rooms: rooms || undefined,
     });
 
     // Reset form
@@ -426,6 +428,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
     setSourceProviderPhone('');
     setPrice('');
     setSize('');
+    setRooms('');
     setDescription('');
     setSelectedStyles([]);
     setSelectedColors([]);
@@ -633,6 +636,15 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
                 placeholder="e.g., 75"
+              />
+            </div>
+            <div>
+              <Label htmlFor="rooms">Rooms (Optional)</Label>
+              <Input 
+                id="rooms"
+                value={rooms}
+                onChange={(e) => setRooms(e.target.value)}
+                placeholder="e.g., 2 BR / 1 BA"
               />
             </div>
           </div>
@@ -1020,6 +1032,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             last_activated_at: new Date().toISOString(),
             latitude: null,
             longitude: null,
+            rooms: rooms || null,
           }}
         />
 
@@ -1059,6 +1072,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
             last_activated_at: new Date().toISOString(),
             latitude: null,
             longitude: null,
+            rooms: rooms || null,
           }}
           onHighlightsUpdate={handleHighlightsUpdate}
         />

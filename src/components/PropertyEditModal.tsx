@@ -33,6 +33,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const [sourceProviderPhone, setSourceProviderPhone] = useState('');
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('');
+  const [rooms, setRooms] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
@@ -94,6 +95,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       setSourceProviderPhone((property as any).property_source_provider_phone || '');
       setPrice(convertPrice(property.price).toString());
       setSize(property.size?.replace('m²', '') || '');
+      setRooms(property.rooms || '');
       
       // Extract styles, colors, activities from vibe_analysis or highlights
       const analysis = property.vibe_analysis || {};
@@ -782,6 +784,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       propertySourceProviderPhone: sourceProviderPhone,
       latitude: pinLatitude,
       longitude: pinLongitude,
+      rooms: rooms || undefined,
     });
 
     // Reset form
@@ -890,13 +893,22 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               </div>
             </div>
             <div>
-              <Label htmlFor="size">Size (m²) *</Label>
+              <Label htmlFor="edit-size">Size (m²) *</Label>
               <Input 
-                id="size"
+                id="edit-size"
                 type="number"
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
                 placeholder="e.g., 75"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-rooms">Rooms (Optional)</Label>
+              <Input 
+                id="edit-rooms"
+                value={rooms}
+                onChange={(e) => setRooms(e.target.value)}
+                placeholder="e.g., 2 BR / 1 BA"
               />
             </div>
           </div>

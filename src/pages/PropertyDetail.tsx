@@ -64,6 +64,7 @@ const PropertyDetail = () => {
           property_source_link: property.property_source_link,
           property_source_provider_name: property.property_source_provider_name,
           property_source_provider_phone: property.property_source_provider_phone,
+          rooms: (property as any).rooms || null,
           realtor: realtor ? {
             id: realtor.id,
             name: realtor.name || 'Property Owner',
