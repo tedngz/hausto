@@ -77,7 +77,9 @@ interface ListingLink {
 }
 
 // ─── URL Building ────────────────────────────────────────────────
-function buildSearchUrl(params: SearchParams): string {
+const PAGES_TO_SCRAPE = 3; // Scrape pages 1-3 of search results
+
+function buildSearchUrl(params: SearchParams, page: number = 1): string {
   const { marketplace, query, location } = params;
   
   const normalizedLocation = location?.toLowerCase()
@@ -93,14 +95,24 @@ function buildSearchUrl(params: SearchParams): string {
   const airbnbCity = isHanoi ? 'Hanoi--Vietnam' : 'Ho-Chi-Minh-City--Vietnam';
   
   switch (marketplace) {
-    case 'batdongsan':
+    case 'batdongsan': {
+      let baseUrl: string;
       if (normalizedLocation.includes('quan-')) {
-        return `https://batdongsan.com.vn/cho-thue-phong-tro-${normalizedLocation}-${citySlug}`;
+        baseUrl = `https://batdongsan.com.vn/cho-thue-phong-tro-${normalizedLocation}-${citySlug}`;
+      } else if (normalizedLocation) {
+        baseUrl = `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}?keyword=${encodeURIComponent(location || query)}`;
+      } else {
+        baseUrl = `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}`;
       }
-      if (normalizedLocation) {
-        return `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}?keyword=${encodeURIComponent(location || query)}`;
+      // batdongsan uses /p{page} suffix for pagination
+      if (page > 1) {
+        const separator = baseUrl.includes('?') ? '&' : '';
+        return baseUrl.includes('?')
+          ? `${baseUrl}&page=${page}`
+          : `${baseUrl}/p${page}`;
       }
-      return `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}`;
+      return baseUrl;
+    }
       
     case 'nhatot': {
       const districtMappings: Record<string, string> = {
@@ -144,16 +156,25 @@ function buildSearchUrl(params: SearchParams): string {
         }
       }
       
-      if (nhatotDistrictSlug) return `https://www.nhatot.com/thue-phong-tro-${nhatotDistrictSlug}-${nhatotCity}`;
-      if (location) return `https://www.nhatot.com/thue-phong-tro-${nhatotCity}?q=${encodeURIComponent(location)}`;
-      return `https://www.nhatot.com/thue-phong-tro-${nhatotCity}`;
+      if (nhatotDistrictSlug) {
+        const base = `https://www.nhatot.com/thue-phong-tro-${nhatotDistrictSlug}-${nhatotCity}`;
+        return page > 1 ? `${base}?page=${page}` : base;
+      }
+      if (location) {
+        const base = `https://www.nhatot.com/thue-phong-tro-${nhatotCity}?q=${encodeURIComponent(location)}`;
+        return page > 1 ? `${base}&page=${page}` : base;
+      }
+      const base = `https://www.nhatot.com/thue-phong-tro-${nhatotCity}`;
+      return page > 1 ? `${base}?page=${page}` : base;
     }
       
     case 'airbnb': {
       const checkIn = new Date();
       const checkOut = new Date();
       checkOut.setMonth(checkOut.getMonth() + 1);
-      return `https://www.airbnb.com/s/${airbnbCity}/homes?tab_id=home_tab&refinement_paths%5B%5D=%2Fhomes&flexible_trip_lengths%5B%5D=one_month&monthly_start_date=${checkIn.toISOString().split('T')[0]}&monthly_length=1&query=${encodeURIComponent(query || 'apartment')}`;
+      const baseAirbnb = `https://www.airbnb.com/s/${airbnbCity}/homes?tab_id=home_tab&refinement_paths%5B%5D=%2Fhomes&flexible_trip_lengths%5B%5D=one_month&monthly_start_date=${checkIn.toISOString().split('T')[0]}&monthly_length=1&query=${encodeURIComponent(query || 'apartment')}`;
+      // Airbnb uses items_offset for pagination (18 items per page)
+      return page > 1 ? `${baseAirbnb}&items_offset=${(page - 1) * 18}` : baseAirbnb;
     }
       
     default:
@@ -561,45 +582,76 @@ serve(async (req) => {
       });
     }
 
-    // ── Phase 1: Scrape search results page ──
-    const searchUrl = buildSearchUrl({ marketplace, query, location });
-    console.log(`[Phase 1] Scraping search page: ${searchUrl}`);
+    // ── Phase 1: Scrape search results pages (pages 1-3) ──
+    const allLinks: string[] = [];
+    let allMarkdown = '';
+    let allHtml = '';
+    let firstPageSuccess = false;
 
-    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: searchUrl,
-        formats: ['markdown', 'links', 'html'],
-        onlyMainContent: false,
-        waitFor: 4000,
-      }),
-    });
+    for (let page = 1; page <= PAGES_TO_SCRAPE; page++) {
+      const searchUrl = buildSearchUrl({ marketplace, query, location }, page);
+      console.log(`[Phase 1] Scraping search page ${page}/${PAGES_TO_SCRAPE}: ${searchUrl}`);
 
-    if (!firecrawlResponse.ok) {
-      const errorText = await firecrawlResponse.text();
-      console.error(`[Phase 1] Firecrawl error: ${firecrawlResponse.status}`, errorText);
-      return new Response(JSON.stringify({ success: false, properties: [], error: `Marketplace unavailable: ${marketplace}` }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      try {
+        const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: searchUrl,
+            formats: ['markdown', 'links', 'html'],
+            onlyMainContent: false,
+            waitFor: 4000,
+          }),
+        });
+
+        if (!firecrawlResponse.ok) {
+          console.error(`[Phase 1] Page ${page} scrape failed: ${firecrawlResponse.status}`);
+          if (page === 1) {
+            return new Response(JSON.stringify({ success: false, properties: [], error: `Marketplace unavailable: ${marketplace}` }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          break; // Stop paginating if a later page fails
+        }
+
+        const scrapedData = await firecrawlResponse.json();
+        if (!scrapedData.success || !scrapedData.data?.markdown) {
+          if (page === 1) {
+            return new Response(JSON.stringify({ success: true, properties: [], message: 'No listings found' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.log(`[Phase 1] Page ${page} returned no content, stopping pagination`);
+          break;
+        }
+
+        firstPageSuccess = true;
+        allLinks.push(...(scrapedData.data.links || []));
+        allMarkdown += `\n--- PAGE ${page} ---\n` + scrapedData.data.markdown;
+        if (page === 1) allHtml = scrapedData.data.html || '';
+
+        console.log(`[Phase 1] Page ${page}: ${scrapedData.data.markdown.length} chars, ${(scrapedData.data.links || []).length} links`);
+
+        // Small delay between page scrapes
+        if (page < PAGES_TO_SCRAPE) {
+          await new Promise(r => setTimeout(r, 800));
+        }
+      } catch (e) {
+        console.error(`[Phase 1] Error scraping page ${page}:`, e);
+        if (page === 1) throw e;
+        break;
+      }
     }
 
-    const scrapedData = await firecrawlResponse.json();
-    if (!scrapedData.success || !scrapedData.data?.markdown) {
-      return new Response(JSON.stringify({ success: true, properties: [], message: 'No listings found' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log(`[Phase 1] Search page scraped: ${scrapedData.data.markdown.length} chars, ${(scrapedData.data.links || []).length} links`);
+    console.log(`[Phase 1] Total from all pages: ${allLinks.length} links`);
 
     // ── Phase 2: Extract listing URLs and scrape detail pages ──
     const listingLinks = await extractListingUrls(
-      scrapedData.data.markdown,
-      scrapedData.data.links || [],
+      allMarkdown,
+      allLinks,
       marketplace
     );
 
@@ -653,9 +705,9 @@ serve(async (req) => {
     if (properties.length < 2) {
       console.log(`[Fallback] Only ${properties.length} from detail pages, falling back to search page extraction`);
       
-      const searchImages = extractImagesFromHtml(scrapedData.data.html || '');
+      const searchImages = extractImagesFromHtml(allHtml);
       const fallbackProperties = await extractPropertiesFromSearchPage(
-        scrapedData.data.markdown,
+        allMarkdown,
         marketplace,
         query,
         searchImages
@@ -693,8 +745,9 @@ serve(async (req) => {
       success: true, 
       properties: filteredProperties,
       source: marketplace,
-      searchUrl,
-      crawlMethod: 'detail-page',
+      searchUrl: buildSearchUrl({ marketplace, query, location }, 1),
+      crawlMethod: 'detail-page-paginated',
+      pagesScraped: PAGES_TO_SCRAPE,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
