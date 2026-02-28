@@ -903,13 +903,22 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
               />
             </div>
             <div>
-              <Label htmlFor="edit-rooms">Rooms (Optional)</Label>
-              <Input 
+              <Label htmlFor="edit-rooms">Apartment Type (Optional)</Label>
+              <select
                 id="edit-rooms"
                 value={rooms}
                 onChange={(e) => setRooms(e.target.value)}
-                placeholder="e.g., 2 BR / 1 BA"
-              />
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Select type...</option>
+                <option value="Studio">Studio</option>
+                <option value="1 Bedroom">1 Bedroom</option>
+                <option value="2 Bedrooms">2 Bedrooms</option>
+                <option value="3 Bedrooms">3 Bedrooms</option>
+                <option value="4+ Bedrooms">4+ Bedrooms</option>
+                <option value="Penthouse">Penthouse</option>
+                <option value="Shared Room">Shared Room</option>
+              </select>
             </div>
           </div>
 
