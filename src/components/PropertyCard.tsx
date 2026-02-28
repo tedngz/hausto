@@ -186,10 +186,13 @@ export const PropertyCard = ({
               {isGeocoding && <Loader2 className="w-3 h-3 animate-spin" />}
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge className="bg-primary text-primary-foreground font-semibold">
               {formatPrice(apartment.price)}/mo
             </Badge>
+            {apartment.rooms && <Badge variant="outline" className="text-xs">
+                {apartment.rooms}
+              </Badge>}
             {apartment.size && <Badge variant="outline" className="text-xs">
                 {apartment.size}
               </Badge>}

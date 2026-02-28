@@ -12,6 +12,7 @@ export interface Property {
   location: string;
   price: number;
   size: string | null;
+  rooms: string | null;
   vibe: string | null;
   highlights: string[] | null;
   images: string[] | null;
@@ -287,6 +288,7 @@ export const useProperties = () => {
       propertySourceProviderPhone?: string;
       latitude?: number | null;
       longitude?: number | null;
+      rooms?: string;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -353,6 +355,7 @@ export const useProperties = () => {
           property_source_provider_phone: propertyData.propertySourceProviderPhone,
           latitude: propertyData.latitude ?? null,
           longitude: propertyData.longitude ?? null,
+          rooms: propertyData.rooms || null,
         })
         .select()
         .single();
@@ -418,6 +421,7 @@ export const useProperties = () => {
       propertySourceProviderPhone?: string;
       latitude?: number | null;
       longitude?: number | null;
+      rooms?: string;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
@@ -462,6 +466,7 @@ export const useProperties = () => {
         property_source_provider_phone: propertyData.propertySourceProviderPhone,
         latitude: propertyData.latitude ?? null,
         longitude: propertyData.longitude ?? null,
+        rooms: propertyData.rooms || null,
         updated_at: new Date().toISOString(),
       };
 

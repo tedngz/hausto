@@ -35,7 +35,8 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
     vibe_analysis: property.vibe_analysis,
     property_source_link: property.property_source_link,
     property_source_provider_name: property.property_source_provider_name,
-    property_source_provider_phone: property.property_source_provider_phone
+    property_source_provider_phone: property.property_source_provider_phone,
+    rooms: property.rooms,
   };
 
   return (

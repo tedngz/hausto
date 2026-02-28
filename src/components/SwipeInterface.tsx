@@ -106,6 +106,7 @@ export const SwipeInterface = ({
         avatar: realtorProfile?.avatar_url || ''
       },
       vibe_analysis: property.vibe_analysis,
+      rooms: property.rooms,
       // Preserve metadata for discovery algorithm
       created_at: property.created_at,
       last_activated_at: property.last_activated_at

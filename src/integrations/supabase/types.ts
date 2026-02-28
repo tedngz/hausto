@@ -296,6 +296,7 @@ export type Database = {
           longitude: number | null
           price: number | null
           price_display: string | null
+          rooms: string | null
           size: string | null
           source: string
           source_url: string
@@ -325,6 +326,7 @@ export type Database = {
           longitude?: number | null
           price?: number | null
           price_display?: string | null
+          rooms?: string | null
           size?: string | null
           source: string
           source_url: string
@@ -354,6 +356,7 @@ export type Database = {
           longitude?: number | null
           price?: number | null
           price_display?: string | null
+          rooms?: string | null
           size?: string | null
           source?: string
           source_url?: string
@@ -572,6 +575,7 @@ export type Database = {
           property_source_provider_name: string | null
           property_source_provider_phone: string | null
           realtor_id: string
+          rooms: string | null
           size: string | null
           title: string
           updated_at: string
@@ -595,6 +599,7 @@ export type Database = {
           property_source_provider_name?: string | null
           property_source_provider_phone?: string | null
           realtor_id: string
+          rooms?: string | null
           size?: string | null
           title: string
           updated_at?: string
@@ -618,6 +623,7 @@ export type Database = {
           property_source_provider_name?: string | null
           property_source_provider_phone?: string | null
           realtor_id?: string
+          rooms?: string | null
           size?: string | null
           title?: string
           updated_at?: string
