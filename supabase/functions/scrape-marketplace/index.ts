@@ -366,7 +366,7 @@ CRITICAL INSTRUCTIONS:
 6. Extract ALL amenities mentioned
 7. Extract contact info (name, phone) if available
 8. Extract exact address/location
-9. Extract number of bedrooms/bathrooms (rooms) if mentioned - format as "X BR / Y BA"
+9. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 
 VIBE ANALYSIS:
 - style: One of [Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage]
@@ -381,7 +381,7 @@ RESPOND WITH VALID JSON ONLY:
   "price": 5000000,
   "priceDisplay": "5 triệu/tháng",
   "size": "25m²",
-  "rooms": "2 BR / 1 BA",
+  "rooms": "Studio",
   "images": ["url1", "url2", ...],
   "description": "Detailed English description...",
   "highlights": ["highlight1", "highlight2", ...],
@@ -495,7 +495,7 @@ For EACH property:
 - price: Numeric VND
 - priceDisplay: Original price text
 - size: m² if available
-- rooms: Number of bedrooms/bathrooms, format as "X BR / Y BA"
+- rooms: Apartment type, one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 - images: 3-5 image URLs from above
 - description: 100-200 word English description
 - highlights: 4-5 English lifestyle highlights
