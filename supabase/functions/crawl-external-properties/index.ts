@@ -23,6 +23,7 @@ interface CrawlRequest {
   city?: 'ho_chi_minh' | 'hanoi';
   forceRefresh?: boolean;
   storeInDatabase?: boolean;
+  runVibeAnalysis?: boolean;
 }
 
 interface CrawlResult {
@@ -30,6 +31,7 @@ interface CrawlResult {
   marketplace: string;
   propertiesFound: number;
   propertiesStored: number;
+  vibeAnalyzed: number;
   skipped: boolean;
   error?: string;
 }
@@ -88,6 +90,136 @@ async function generatePropertyEmbedding(property: any): Promise<number[] | null
     return null;
   }
 }
+// Analyze property images using OpenAI Vision (same approach as analyze-vibe edge function)
+async function analyzePropertyImagesVibe(images: string[]): Promise<{
+  vibe: string;
+  vibe_analysis: Record<string, any>;
+  highlights: string[];
+  amenities: string[];
+} | null> {
+  if (!OPENAI_API_KEY || !images || images.length === 0) return null;
+  
+  try {
+    // Use up to 3 images to keep costs down
+    const imagesToAnalyze = images.filter(img => img?.startsWith('http')).slice(0, 3);
+    if (imagesToAnalyze.length === 0) return null;
+    
+    console.log(`[vibe-analysis] Analyzing ${imagesToAnalyze.length} images...`);
+    
+    // Build image content array for vision API
+    const imageContent = [];
+    for (const imageUrl of imagesToAnalyze) {
+      try {
+        const imgResponse = await fetch(imageUrl);
+        if (!imgResponse.ok) continue;
+        
+        const contentType = imgResponse.headers.get('content-type') || '';
+        const imageBuffer = await imgResponse.arrayBuffer();
+        const imageBytes = new Uint8Array(imageBuffer);
+        
+        // Skip very large images (>5MB)
+        if (imageBytes.length > 5 * 1024 * 1024) continue;
+        
+        let base64String = '';
+        const chunk = 8192;
+        for (let i = 0; i < imageBytes.length; i += chunk) {
+          const chunkBytes = imageBytes.subarray(i, Math.min(i + chunk, imageBytes.length));
+          base64String += String.fromCharCode.apply(null, Array.from(chunkBytes));
+        }
+        const base64 = btoa(base64String);
+        
+        let mimeType = 'image/jpeg';
+        if (contentType.includes('png')) mimeType = 'image/png';
+        else if (contentType.includes('webp')) mimeType = 'image/webp';
+        
+        imageContent.push({
+          type: 'image_url',
+          image_url: { url: `data:${mimeType};base64,${base64}`, detail: 'low' }
+        });
+      } catch (e) {
+        console.error(`[vibe-analysis] Failed to fetch image:`, e);
+      }
+    }
+    
+    if (imageContent.length === 0) return null;
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze these rental property images. Return a JSON object with:
+
+1. Vibe scores (1-10): modern, cozy, luxurious, minimalist, spacious, natural_light, urban, elegant
+2. style: One of [Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage]
+3. colors: Array from [Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold]
+4. activities: Array from [Working, Reading, Relaxing, Entertaining, Cooking, Exercising]
+5. highlights: Array of 4-5 lifestyle highlights IN ENGLISH (e.g., "Bright workspace with city views")
+6. amenities: Array of ALL visible amenities IN ENGLISH (e.g., "Air Conditioning", "Washing Machine", "Balcony")
+
+Return ONLY valid JSON:
+{
+  "vibe_scores": {"modern": 8, "cozy": 6, "luxurious": 5, "minimalist": 7, "spacious": 6, "natural_light": 8, "urban": 7, "elegant": 6},
+  "style": "Modern",
+  "colors": ["Neutral", "White"],
+  "activities": ["Working", "Relaxing"],
+  "highlights": ["highlight1", "highlight2", "highlight3", "highlight4"],
+  "amenities": ["Air Conditioning", "WiFi", "Balcony"]
+}`
+            },
+            ...imageContent,
+          ]
+        }],
+        max_tokens: 800,
+        temperature: 0.3,
+      }),
+    });
+    
+    if (!response.ok) {
+      console.error('[vibe-analysis] OpenAI error:', await response.text());
+      return null;
+    }
+    
+    const data = await response.json();
+    let content = data.choices?.[0]?.message?.content || '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    
+    const parsed = JSON.parse(jsonMatch[0]);
+    const vibeScores = parsed.vibe_scores || {};
+    
+    // Determine primary vibe from highest scores
+    const primaryVibe = Object.entries(vibeScores)
+      .sort(([,a], [,b]) => (b as number) - (a as number))
+      .slice(0, 2)
+      .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1))
+      .join(', ');
+    
+    return {
+      vibe: primaryVibe || parsed.style || 'Modern',
+      vibe_analysis: {
+        style: parsed.style,
+        colors: parsed.colors || [],
+        activities: parsed.activities || [],
+        amenities: parsed.amenities || [],
+        vibe_scores: vibeScores,
+      },
+      highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
+      amenities: Array.isArray(parsed.amenities) ? parsed.amenities : [],
+    };
+  } catch (error) {
+    console.error('[vibe-analysis] Error:', error);
+    return null;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -101,10 +233,11 @@ serve(async (req) => {
     const body: CrawlRequest = await req.json();
     const { 
       locations = [], 
-      marketplaces = ['batdongsan', 'nhatot'], // Now includes nhatot by default
+      marketplaces = ['batdongsan', 'nhatot'],
       city = 'ho_chi_minh',
       forceRefresh = false,
-      storeInDatabase = true 
+      storeInDatabase = true,
+      runVibeAnalysis = true,
     } = body;
     
     console.log(`[crawl-external-properties] Starting crawl:`, { locations, marketplaces, city, forceRefresh, storeInDatabase });
@@ -124,6 +257,7 @@ serve(async (req) => {
           marketplace,
           propertiesFound: 0,
           propertiesStored: 0,
+          vibeAnalyzed: 0,
           skipped: false,
         };
         
@@ -239,6 +373,40 @@ serve(async (req) => {
                   console.error(`[crawl-external-properties] Upsert error:`, upsertError);
                 } else {
                   crawlResult.propertiesStored++;
+                  
+                  // Run image-based vibe analysis if enabled and property has images
+                  if (runVibeAnalysis && propertyData.images && propertyData.images.length > 0) {
+                    try {
+                      console.log(`[crawl-external-properties] Running vibe analysis on ${propertyData.images.length} images for "${propertyData.title}"`);
+                      const vibeResult = await analyzePropertyImagesVibe(propertyData.images);
+                      
+                      if (vibeResult) {
+                        // Update the stored property with image-based vibe analysis
+                        const { error: updateError } = await supabase
+                          .from('external_properties')
+                          .update({
+                            vibe: vibeResult.vibe,
+                            vibe_analysis: vibeResult.vibe_analysis,
+                            highlights: vibeResult.highlights.length > 0 ? vibeResult.highlights : propertyData.highlights,
+                            amenities: vibeResult.amenities.length > 0 ? vibeResult.amenities : propertyData.amenities,
+                          })
+                          .eq('source', propertyData.source)
+                          .eq('external_id', propertyData.external_id);
+                        
+                        if (updateError) {
+                          console.error(`[crawl-external-properties] Vibe update error:`, updateError);
+                        } else {
+                          crawlResult.vibeAnalyzed++;
+                          console.log(`[crawl-external-properties] Vibe analysis complete: "${vibeResult.vibe}" for "${propertyData.title}"`);
+                        }
+                      }
+                    } catch (vibeError) {
+                      console.error(`[crawl-external-properties] Vibe analysis failed for "${propertyData.title}":`, vibeError);
+                    }
+                    
+                    // Small delay between vibe analyses to avoid rate limits
+                    await new Promise(r => setTimeout(r, 500));
+                  }
                 }
               } catch (storeError) {
                 console.error(`[crawl-external-properties] Error storing property:`, storeError);
@@ -261,6 +429,7 @@ serve(async (req) => {
     
     const totalFound = results.reduce((sum, r) => sum + r.propertiesFound, 0);
     const totalStored = results.reduce((sum, r) => sum + r.propertiesStored, 0);
+    const totalVibeAnalyzed = results.reduce((sum, r) => sum + r.vibeAnalyzed, 0);
     const totalSkipped = results.filter(r => r.skipped).length;
     const totalErrors = results.filter(r => r.error).length;
     
@@ -269,6 +438,7 @@ serve(async (req) => {
     console.log(`[crawl-external-properties] Completed in ${duration}ms:`, {
       totalFound,
       totalStored,
+      totalVibeAnalyzed,
       totalSkipped,
       totalErrors,
     });
@@ -281,6 +451,7 @@ serve(async (req) => {
         marketplacesProcessed: marketplaces.length,
         totalFound,
         totalStored,
+        totalVibeAnalyzed,
         totalSkipped,
         totalErrors,
       },
