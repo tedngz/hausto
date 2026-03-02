@@ -327,7 +327,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               marketplace,
-              query: 'apartment',
+              query: 'căn hộ chung cư cho thuê',
               location,
               includeVibeAnalysis: true,
               maxResults: maxListingsPerLocation,

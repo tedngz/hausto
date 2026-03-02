@@ -19,6 +19,7 @@ import { VibeScore } from '@/components/VibeScore';
 import { toast } from 'sonner';
 import { sampleProperties } from '@/data/sampleProperties';
 import { useAuth } from '@/hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
 interface SwipeInterfaceProps {
   userPreferences: UserPreferences | null;
   onMatch: (apartment: Apartment) => void;
@@ -59,6 +60,53 @@ export const SwipeInterface = ({
     loading: usageLoading
   } = useUsageTracking();
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+
+  // Fetch external (crawled) properties
+  const { data: externalProperties = [] } = useQuery({
+    queryKey: ['external-properties-swipe'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('*')
+        .eq('is_active', true)
+        .order('crawled_at', { ascending: false })
+        .limit(100);
+      if (error) {
+        console.error('Error fetching external properties:', error);
+        return [];
+      }
+      return data || [];
+    },
+  });
+
+  // Transform external property to Apartment type
+  const transformExternalToApartment = (ext: any): Apartment => ({
+    id: `ext-${ext.id}`,
+    images: ext.images || [],
+    title: ext.title,
+    location: ext.location,
+    price: Number(ext.price) || 0,
+    size: ext.size || '',
+    vibe: ext.vibe || '',
+    description: ext.description || '',
+    highlights: ext.highlights || [],
+    amenities: ext.amenities || [],
+    realtor: {
+      id: `ext-${ext.source}`,
+      name: ext.contact_name || ext.source === 'batdongsan' ? 'Batdongsan.com.vn' : ext.source === 'nhatot' ? 'Nhà Tốt' : 'External Listing',
+      phone: ext.contact_phone || '',
+      email: '',
+      avatar: '',
+    },
+    vibe_analysis: ext.vibe_analysis,
+    rooms: ext.rooms,
+    property_source_link: ext.source_url,
+    property_source_provider_name: ext.contact_name || undefined,
+    property_source_provider_phone: ext.contact_phone || undefined,
+    latitude: ext.latitude,
+    longitude: ext.longitude,
+    created_at: ext.created_at,
+  });
 
   // Check if user has ever taken the quiz before
   const hasEverTakenQuiz = user ? !!localStorage.getItem(`userPreferences_${user.id}`) : false;
@@ -157,25 +205,32 @@ export const SwipeInterface = ({
       // Transform real properties with realtor info
       const transformedRealProperties = (realProperties || []).map(p => transformPropertyToApartment(p, realtorProfiles));
 
+      // Transform external (crawled) properties
+      const transformedExternalProperties = (externalProperties || []).map(transformExternalToApartment);
+
+      // Combine both sources
+      const allTransformedProperties = [...transformedRealProperties, ...transformedExternalProperties];
+
       // Filter out already matched and declined properties
       const matchedPropertyIds = new Set(renterMatches?.map(match => match.property_id) || []);
       const declinedPropertyIdSet = new Set(declinedPropertyIds);
-      const availableProperties = transformedRealProperties.filter(property => !matchedPropertyIds.has(property.id) && !declinedPropertyIdSet.has(property.id));
+      const availableProperties = allTransformedProperties.filter(property => !matchedPropertyIds.has(property.id) && !declinedPropertyIdSet.has(property.id));
       console.log('Real properties available:', transformedRealProperties.length);
+      console.log('External properties available:', transformedExternalProperties.length);
       console.log('Already matched properties:', matchedPropertyIds.size);
       console.log('Declined properties:', declinedPropertyIds.length);
       console.log('Available properties:', availableProperties.length);
 
-      // If no real properties available at all, show error
-      if (transformedRealProperties.length === 0) {
-        console.log('No real properties available');
+      // If no properties available at all (real + external), show error
+      if (allTransformedProperties.length === 0) {
+        console.log('No properties available (real or external)');
         setNoMatchReason('no-properties');
         setApartments([]);
         return;
       }
 
       // If all properties are already matched or declined, show appropriate message  
-      if (availableProperties.length === 0 && transformedRealProperties.length > 0) {
+      if (availableProperties.length === 0 && allTransformedProperties.length > 0) {
         console.log('All properties already matched or declined');
         setNoMatchReason('no-more-available');
         setApartments([]);
@@ -314,7 +369,7 @@ export const SwipeInterface = ({
       }
     };
     loadPropertiesWithRealtors();
-  }, [userPreferences, realProperties, renterMatches, declinedPropertyIds, isLoading, usageLoading, user?.id]);
+  }, [userPreferences, realProperties, externalProperties, renterMatches, declinedPropertyIds, isLoading, usageLoading, user?.id]);
 
   // Track property views when apartment changes (unique views only)
   useEffect(() => {
@@ -395,12 +450,16 @@ export const SwipeInterface = ({
       onMatch(currentApartment);
 
       // Create match using useMatches hook (this will handle usage tracking)
+      const isExternal = currentApartment.id.startsWith('ext-');
       const realProperty = realProperties?.find(p => p.id === currentApartment.id);
       if (realProperty) {
         await createMatch(currentApartment.id, realProperty.realtor_id);
         console.log('Match created successfully');
+      } else if (isExternal && currentApartment.property_source_link) {
+        // For external properties, open the source listing
+        window.open(currentApartment.property_source_link, '_blank');
+        toast.success('Opening listing on the marketplace!');
       } else {
-        // For sample properties, just show success message
         toast.success('Match created! Check your matches to connect with the realtor.');
       }
       moveToNext();
@@ -425,8 +484,9 @@ export const SwipeInterface = ({
     const currentApartment = apartments[currentApartmentIndex];
     console.log('Disliking apartment:', currentApartment?.title);
     try {
-      // Store declined property in database
-      if (user?.id && currentApartment) {
+      // Store declined property in database (only for real properties, not external)
+      const isExternal = currentApartment?.id.startsWith('ext-');
+      if (user?.id && currentApartment && !isExternal) {
         const {
           error
         } = await supabase.from('declined_properties').insert({
@@ -436,9 +496,11 @@ export const SwipeInterface = ({
         if (error && !error.message.includes('duplicate key')) {
           console.error('Error storing declined property:', error);
         } else {
-          // Update local state
           setDeclinedPropertyIds(prev => [...prev, currentApartment.id]);
         }
+      } else if (currentApartment) {
+        // For external, just track locally
+        setDeclinedPropertyIds(prev => [...prev, currentApartment.id]);
       }
     } catch (error) {
       console.error('Error handling dislike:', error);
