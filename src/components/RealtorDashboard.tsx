@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square, Sparkles, Power, Globe, ExternalLink } from 'lucide-react';
+import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square, Sparkles, Power, Globe, ExternalLink, X } from 'lucide-react';
+import { Apartment } from '@/types';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +46,7 @@ export const RealtorDashboard = ({
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewCrawledApartment, setPreviewCrawledApartment] = useState<Apartment | null>(null);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -108,17 +110,30 @@ export const RealtorDashboard = ({
       const { data, error } = await supabase
         .from('external_properties')
         .select('*')
-        .eq('is_active', true)
         .order('crawled_at', { ascending: false })
-        .limit(100);
+        .limit(200);
       if (error) throw error;
       return data || [];
     },
     enabled: isAdmin,
   });
 
+  const handleToggleCrawledListing = async (id: string, currentActive: boolean) => {
+    const { error } = await supabase
+      .from('external_properties')
+      .update({ is_active: !currentActive, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['external-properties-swipe'] });
+      toast({ title: !currentActive ? 'Listing activated' : 'Listing deactivated' });
+    }
+  };
+
   const handleDeleteCrawledListing = async (id: string) => {
-    if (!window.confirm('Deactivate this crawled listing?')) return;
+    if (!window.confirm('Permanently deactivate this crawled listing?')) return;
     const { error } = await supabase
       .from('external_properties')
       .update({ is_active: false })
@@ -127,8 +142,39 @@ export const RealtorDashboard = ({
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
       queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['external-properties-swipe'] });
       toast({ title: 'Listing deactivated' });
     }
+  };
+
+  const handlePreviewCrawled = (listing: any) => {
+    const apartment: Apartment = {
+      id: listing.id,
+      images: listing.images || [],
+      title: listing.title,
+      location: listing.location,
+      price: Number(listing.price) || 0,
+      size: listing.size || '',
+      vibe: listing.vibe || '',
+      description: listing.description || '',
+      highlights: listing.highlights || [],
+      amenities: listing.amenities || [],
+      realtor: {
+        id: `ext-${listing.source}`,
+        name: listing.contact_name || listing.source,
+        phone: listing.contact_phone || '',
+        email: '',
+        avatar: '',
+      },
+      vibe_analysis: listing.vibe_analysis,
+      rooms: listing.rooms,
+      property_source_link: listing.source_url,
+      property_source_provider_name: listing.contact_name || undefined,
+      property_source_provider_phone: listing.contact_phone || undefined,
+      latitude: listing.latitude,
+      longitude: listing.longitude,
+    };
+    setPreviewCrawledApartment(apartment);
   };
   const unreadMatches = realtorMatches.filter(match => new Date(match.created_at).getTime() > Date.now() - 86400000);
   const handleEdit = (property: Property) => {
@@ -703,7 +749,7 @@ export const RealtorDashboard = ({
                     Crawled External Listings
                   </h2>
                   <p className="text-slate-600 text-sm">
-                    {crawledListings.length} active crawled listings from external marketplaces
+                    {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} total crawled listings
                   </p>
                 </div>
                 <Button
@@ -727,7 +773,7 @@ export const RealtorDashboard = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {crawledListings.map((listing: any) => (
-                    <Card key={listing.id} className="overflow-hidden border border-slate-200 hover:shadow-lg transition-shadow">
+                    <Card key={listing.id} className={`overflow-hidden border transition-shadow ${listing.is_active ? 'border-slate-200 hover:shadow-lg' : 'border-slate-200 opacity-60'}`}>
                       {listing.images && listing.images.length > 0 && (
                         <div className="relative">
                           <img src={listing.images[0]} alt={listing.title} className="w-full h-32 md:h-48 object-cover" />
@@ -764,7 +810,29 @@ export const RealtorDashboard = ({
                           Crawled: {new Date(listing.crawled_at).toLocaleDateString()}
                           {listing.contact_name && <span> • {listing.contact_name}</span>}
                         </div>
+                        {/* Active toggle */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`crawled-active-${listing.id}`} className="text-xs text-slate-600 cursor-pointer">
+                              {listing.is_active ? 'Active' : 'Inactive'}
+                            </Label>
+                            <Switch 
+                              id={`crawled-active-${listing.id}`} 
+                              checked={listing.is_active} 
+                              onCheckedChange={() => handleToggleCrawledListing(listing.id, listing.is_active)} 
+                            />
+                          </div>
+                        </div>
                         <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs flex-1"
+                            onClick={() => handlePreviewCrawled(listing)}
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            Preview
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
@@ -781,7 +849,7 @@ export const RealtorDashboard = ({
                             onClick={() => handleDeleteCrawledListing(listing.id)}
                           >
                             <Trash2 className="w-3 h-3 mr-1" />
-                            Deactivate
+                            Delete
                           </Button>
                         </div>
                       </div>
@@ -811,6 +879,33 @@ export const RealtorDashboard = ({
       setIsPreviewModalOpen(false);
       setSelectedProperty(null);
     }} property={selectedProperty} />
+
+      {/* Crawled listing preview modal */}
+      {previewCrawledApartment && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Crawled Listing Preview</h2>
+                <p className="text-sm text-gray-600">How this external listing appears to renters</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setPreviewCrawledApartment(null)} aria-label="Close preview">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-4">
+              <PropertyCard
+                apartment={previewCrawledApartment}
+                showFullTitle={true}
+                showFullDescription={true}
+                showAllHighlights={true}
+                showContactButton={false}
+                className="max-w-md mx-auto"
+              />
+            </div>
+          </Card>
+        </div>
+      )}
 
       <HaustoChat isOpen={isChatModalOpen} onClose={() => {
       setIsChatModalOpen(false);
