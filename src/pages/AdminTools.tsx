@@ -218,259 +218,10 @@ const AdminTools = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6">Admin Tools</h1>
-      
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            Vector DB - Batch Generate Embeddings
-          </CardTitle>
-          <CardDescription>
-            Generate embeddings for all existing properties in the database. This enables semantic search for properties uploaded before vector DB integration.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button 
-            onClick={handleBatchGenerate} 
-            disabled={isGenerating}
-            size="lg"
-            className="w-full"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating Embeddings...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate All Property Embeddings
-              </>
-            )}
-          </Button>
+    <div className="container mx-auto p-6 max-w-4xl space-y-6">
+      <h1 className="text-3xl font-bold">Admin Tools</h1>
 
-          {results && (
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <p className="font-semibold">Results:</p>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Total Properties</p>
-                  <p className="text-2xl font-bold">{results.total}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Processed</p>
-                  <p className="text-2xl font-bold text-green-600">{results.processed}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Errors</p>
-                  <p className="text-2xl font-bold text-destructive">{results.errors}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="text-sm text-muted-foreground space-y-1">
-            <p><strong>Note:</strong> This operation processes properties in batches of 10 with 1-second delays to respect rate limits.</p>
-            <p><strong>Cost:</strong> Approximately $0.02 per 1000 properties (OpenAI embeddings).</p>
-            <p><strong>Duration:</strong> ~10 seconds per 100 properties.</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5" />
-            Verify Embeddings in Redis
-          </CardTitle>
-          <CardDescription>
-            Check Redis to verify that all properties have embeddings stored and view coverage statistics.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button 
-            onClick={handleVerify} 
-            disabled={isVerifying}
-            size="lg"
-            variant="outline"
-            className="w-full"
-          >
-            {isVerifying ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Verify Redis Embeddings
-              </>
-            )}
-          </Button>
-
-          {verificationResults && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold">Coverage Status:</p>
-                  <Badge 
-                    variant={verificationResults.coveragePercent === 100 ? "default" : "destructive"}
-                    className="text-lg px-3 py-1"
-                  >
-                    {verificationResults.coveragePercent}%
-                  </Badge>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t">
-                  <div>
-                    <p className="text-muted-foreground">Total Properties</p>
-                    <p className="text-2xl font-bold">{verificationResults.totalProperties}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Embeddings Found</p>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <p className="text-2xl font-bold text-green-600">{verificationResults.embeddingsFound}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Missing</p>
-                    <div className="flex items-center gap-2">
-                      {verificationResults.totalMissing > 0 && <XCircle className="h-4 w-4 text-destructive" />}
-                      <p className="text-2xl font-bold text-destructive">{verificationResults.totalMissing}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {verificationResults.sampleEmbeddings.length > 0 && (
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <p className="font-semibold text-sm">Sample Embeddings:</p>
-                  {verificationResults.sampleEmbeddings.map((sample, idx) => (
-                    <div key={idx} className="text-xs space-y-1 p-2 bg-background rounded">
-                      <p className="font-mono text-muted-foreground">{sample.propertyId}</p>
-                      <p className="font-semibold truncate">{sample.title}</p>
-                      <div className="flex gap-2 text-muted-foreground">
-                        <span>Dimensions: {sample.dimensions}</span>
-                        <span>•</span>
-                        <span>Metadata: {sample.hasMetadata ? '✓' : '✗'}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {verificationResults.totalMissing > 0 && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm">
-                  <p className="font-semibold text-destructive mb-1">Missing Embeddings Detected</p>
-                  <p className="text-muted-foreground">
-                    Run the batch generation again to generate embeddings for {verificationResults.totalMissing} properties.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Test Vector Search
-          </CardTitle>
-          <CardDescription>
-            Test semantic property search with natural language queries to verify vector DB is working correctly.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="testQuery">Natural Language Query</Label>
-            <Textarea
-              id="testQuery"
-              value={testQuery}
-              onChange={(e) => setTestQuery(e.target.value)}
-              placeholder="Describe what you're looking for..."
-              rows={3}
-            />
-          </div>
-          
-          <Button 
-            onClick={handleTestVectorSearch} 
-            disabled={isTesting || !testQuery.trim()}
-            size="lg"
-            className="w-full"
-          >
-            {isTesting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Searching...
-              </>
-            ) : (
-              <>
-                <Search className="mr-2 h-4 w-4" />
-                Test Vector Search
-              </>
-            )}
-          </Button>
-
-          {testResults && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold">Search Results:</p>
-                  <Badge>{testResults.results?.length || 0} matches</Badge>
-                </div>
-                
-                {testResults.cached && (
-                  <p className="text-xs text-muted-foreground mb-2">⚡ Cached result</p>
-                )}
-              </div>
-
-              {testResults.results && testResults.results.length > 0 && (
-                <div className="space-y-2">
-                  {testResults.results.slice(0, 5).map((result: any, idx: number) => (
-                    <div key={idx} className="p-3 bg-background rounded border space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold truncate">{result.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">{result.location}</p>
-                        </div>
-                        <Badge variant="outline" className="shrink-0">
-                          {(result.similarity * 100).toFixed(1)}%
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        ${result.price?.toLocaleString()}
-                        {result.styles && ` • ${result.styles.slice(0, 2).join(', ')}`}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {testResults.processingTime && (
-                <p className="text-xs text-muted-foreground text-center">
-                  Processed in {testResults.processingTime}ms
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
-            <p><strong>Try queries like:</strong></p>
-            <ul className="list-disc list-inside space-y-0.5 text-xs">
-              <li>"Bright apartment with modern kitchen"</li>
-              <li>"Cozy space perfect for remote work"</li>
-              <li>"Luxury penthouse with city views"</li>
-              <li>"Industrial loft with high ceilings"</li>
-            </ul>
-          </div>
-        </CardContent>
-      </Card>
-
+      {/* Crawl External Listings - moved to top */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -601,6 +352,259 @@ const AdminTools = () => {
           <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
             <p><strong>Note:</strong> Crawling uses Firecrawl + GPT-4o-mini for scraping and extraction. Each location/marketplace combo takes ~30-60s.</p>
             <p><strong>Cache:</strong> Results are cached for 6 hours unless force refresh is enabled.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Vector DB - Batch Generate Embeddings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            Vector DB - Batch Generate Embeddings
+          </CardTitle>
+          <CardDescription>
+            Generate embeddings for all existing properties in the database. This enables semantic search for properties uploaded before vector DB integration.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button 
+            onClick={handleBatchGenerate} 
+            disabled={isGenerating}
+            size="lg"
+            className="w-full"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating Embeddings...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate All Property Embeddings
+              </>
+            )}
+          </Button>
+
+          {results && (
+            <div className="p-4 bg-muted rounded-lg space-y-2">
+              <p className="font-semibold">Results:</p>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Total Properties</p>
+                  <p className="text-2xl font-bold">{results.total}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Processed</p>
+                  <p className="text-2xl font-bold text-green-600">{results.processed}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Errors</p>
+                  <p className="text-2xl font-bold text-destructive">{results.errors}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p><strong>Note:</strong> This operation processes properties in batches of 10 with 1-second delays to respect rate limits.</p>
+            <p><strong>Cost:</strong> Approximately $0.02 per 1000 properties (OpenAI embeddings).</p>
+            <p><strong>Duration:</strong> ~10 seconds per 100 properties.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Verify Embeddings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5" />
+            Verify Embeddings in Redis
+          </CardTitle>
+          <CardDescription>
+            Check Redis to verify that all properties have embeddings stored and view coverage statistics.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button 
+            onClick={handleVerify} 
+            disabled={isVerifying}
+            size="lg"
+            variant="outline"
+            className="w-full"
+          >
+            {isVerifying ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Verifying...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Verify Redis Embeddings
+              </>
+            )}
+          </Button>
+
+          {verificationResults && (
+            <div className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold">Coverage Status:</p>
+                  <Badge 
+                    variant={verificationResults.coveragePercent === 100 ? "default" : "destructive"}
+                    className="text-lg px-3 py-1"
+                  >
+                    {verificationResults.coveragePercent}%
+                  </Badge>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t">
+                  <div>
+                    <p className="text-muted-foreground">Total Properties</p>
+                    <p className="text-2xl font-bold">{verificationResults.totalProperties}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Embeddings Found</p>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <p className="text-2xl font-bold text-green-600">{verificationResults.embeddingsFound}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Missing</p>
+                    <div className="flex items-center gap-2">
+                      {verificationResults.totalMissing > 0 && <XCircle className="h-4 w-4 text-destructive" />}
+                      <p className="text-2xl font-bold text-destructive">{verificationResults.totalMissing}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {verificationResults.sampleEmbeddings.length > 0 && (
+                <div className="p-4 bg-muted rounded-lg space-y-2">
+                  <p className="font-semibold text-sm">Sample Embeddings:</p>
+                  {verificationResults.sampleEmbeddings.map((sample, idx) => (
+                    <div key={idx} className="text-xs space-y-1 p-2 bg-background rounded">
+                      <p className="font-mono text-muted-foreground">{sample.propertyId}</p>
+                      <p className="font-semibold truncate">{sample.title}</p>
+                      <div className="flex gap-2 text-muted-foreground">
+                        <span>Dimensions: {sample.dimensions}</span>
+                        <span>•</span>
+                        <span>Metadata: {sample.hasMetadata ? '✓' : '✗'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {verificationResults.totalMissing > 0 && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm">
+                  <p className="font-semibold text-destructive mb-1">Missing Embeddings Detected</p>
+                  <p className="text-muted-foreground">
+                    Run the batch generation again to generate embeddings for {verificationResults.totalMissing} properties.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Test Vector Search */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Test Vector Search
+          </CardTitle>
+          <CardDescription>
+            Test semantic property search with natural language queries to verify vector DB is working correctly.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="testQuery">Natural Language Query</Label>
+            <Textarea
+              id="testQuery"
+              value={testQuery}
+              onChange={(e) => setTestQuery(e.target.value)}
+              placeholder="Describe what you're looking for..."
+              rows={3}
+            />
+          </div>
+          
+          <Button 
+            onClick={handleTestVectorSearch} 
+            disabled={isTesting || !testQuery.trim()}
+            size="lg"
+            className="w-full"
+          >
+            {isTesting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Searching...
+              </>
+            ) : (
+              <>
+                <Search className="mr-2 h-4 w-4" />
+                Test Vector Search
+              </>
+            )}
+          </Button>
+
+          {testResults && (
+            <div className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold">Search Results:</p>
+                  <Badge>{testResults.results?.length || 0} matches</Badge>
+                </div>
+                
+                {testResults.cached && (
+                  <p className="text-xs text-muted-foreground mb-2">⚡ Cached result</p>
+                )}
+              </div>
+
+              {testResults.results && testResults.results.length > 0 && (
+                <div className="space-y-2">
+                  {testResults.results.slice(0, 5).map((result: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-background rounded border space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold truncate">{result.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{result.location}</p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0">
+                          {(result.similarity * 100).toFixed(1)}%
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        ${result.price?.toLocaleString()}
+                        {result.styles && ` • ${result.styles.slice(0, 2).join(', ')}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {testResults.processingTime && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Processed in {testResults.processingTime}ms
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
+            <p><strong>Try queries like:</strong></p>
+            <ul className="list-disc list-inside space-y-0.5 text-xs">
+              <li>"Bright apartment with modern kitchen"</li>
+              <li>"Cozy space perfect for remote work"</li>
+              <li>"Luxury penthouse with city views"</li>
+              <li>"Industrial loft with high ceilings"</li>
+            </ul>
           </div>
         </CardContent>
       </Card>
