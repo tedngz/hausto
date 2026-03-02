@@ -253,7 +253,7 @@ serve(async (req) => {
   const results: CrawlResult[] = [];
   
   try {
-    const body: CrawlRequest = await req.json();
+  const body: CrawlRequest = await req.json();
     const { 
       locations = [], 
       marketplaces = ['batdongsan', 'nhatot'],
@@ -271,11 +271,14 @@ serve(async (req) => {
     // Use provided locations or default popular locations for the city
     const locationsToScrape = locations.length > 0 ? locations : POPULAR_LOCATIONS[city] || POPULAR_LOCATIONS.ho_chi_minh;
     
-    console.log(`[crawl-external-properties] Will crawl ${locationsToScrape.length} locations for ${marketplaces.length} marketplaces`);
+    // IMPORTANT: Only process the FIRST location + marketplace combo to stay within compute limits.
+    // The client should call this function repeatedly for each location.
+    const location = locationsToScrape[0];
+    const remainingLocations = locationsToScrape.slice(1);
     
-    // Process each location x marketplace combination
-    for (const location of locationsToScrape) {
-      for (const marketplace of marketplaces) {
+    console.log(`[crawl-external-properties] Processing location: ${location}, ${remainingLocations.length} remaining`);
+    
+    for (const marketplace of marketplaces) {
         const crawlResult: CrawlResult = {
           location,
           marketplace,
@@ -510,10 +513,9 @@ serve(async (req) => {
           results.push(crawlResult);
         }
         
-        // Small delay between requests to avoid rate limiting
+        // Small delay between marketplace requests
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    }
     
     const totalFound = results.reduce((sum, r) => sum + r.propertiesFound, 0);
     const totalStored = results.reduce((sum, r) => sum + r.propertiesStored, 0);
@@ -534,7 +536,8 @@ serve(async (req) => {
       success: true,
       summary: {
         duration: `${duration}ms`,
-        locationsProcessed: locationsToScrape.length,
+        locationProcessed: location,
+        remainingLocations,
         marketplacesProcessed: marketplaces.length,
         totalFound,
         totalStored,
