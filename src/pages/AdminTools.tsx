@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Sparkles, CheckCircle2, XCircle, Search } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 const AdminTools = () => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -27,6 +28,14 @@ const AdminTools = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [testQuery, setTestQuery] = useState("Modern cozy apartment with natural light and workspace");
   const [testResults, setTestResults] = useState<any>(null);
+
+  // Crawl state
+  const [isCrawling, setIsCrawling] = useState(false);
+  const [crawlCity, setCrawlCity] = useState<'ho_chi_minh' | 'hanoi'>('ho_chi_minh');
+  const [crawlMarketplaces, setCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
+  const [crawlForceRefresh, setCrawlForceRefresh] = useState(false);
+  const [crawlRunVibe, setCrawlRunVibe] = useState(true);
+  const [crawlResults, setCrawlResults] = useState<any>(null);
 
   const handleBatchGenerate = async () => {
     setIsGenerating(true);
@@ -121,6 +130,48 @@ const AdminTools = () => {
       });
     } finally {
       setIsTesting(false);
+    }
+  };
+  const handleCrawlListings = async () => {
+    setIsCrawling(true);
+    setCrawlResults(null);
+
+    try {
+      const selectedMarketplaces = Object.entries(crawlMarketplaces)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+
+      if (selectedMarketplaces.length === 0) {
+        toast.error("Select at least one marketplace");
+        setIsCrawling(false);
+        return;
+      }
+
+      toast.info("Starting listing crawl...", {
+        description: `City: ${crawlCity}, Marketplaces: ${selectedMarketplaces.join(', ')}`
+      });
+
+      const { data, error } = await supabase.functions.invoke('crawl-external-properties', {
+        body: {
+          city: crawlCity,
+          marketplaces: selectedMarketplaces,
+          forceRefresh: crawlForceRefresh,
+          storeInDatabase: true,
+          runVibeAnalysis: crawlRunVibe,
+        }
+      });
+
+      if (error) throw error;
+
+      setCrawlResults(data);
+      toast.success("Crawl complete!", {
+        description: `Found: ${data.totalFound}, Stored: ${data.totalStored}, Vibe Analyzed: ${data.totalVibeAnalyzed}`
+      });
+    } catch (error: any) {
+      console.error('Crawl error:', error);
+      toast.error("Crawl failed", { description: error.message });
+    } finally {
+      setIsCrawling(false);
     }
   };
 
@@ -374,6 +425,139 @@ const AdminTools = () => {
               <li>"Luxury penthouse with city views"</li>
               <li>"Industrial loft with high ceilings"</li>
             </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5" />
+            Crawl External Listings
+          </CardTitle>
+          <CardDescription>
+            Crawl marketplace listings from batdongsan.com.vn and nhatot.vn, store them in the database with vibe analysis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>City</Label>
+              <select
+                value={crawlCity}
+                onChange={(e) => setCrawlCity(e.target.value as 'ho_chi_minh' | 'hanoi')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="ho_chi_minh">Ho Chi Minh City</option>
+                <option value="hanoi">Hanoi</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>Marketplaces</Label>
+              <div className="flex flex-col gap-2 pt-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={crawlMarketplaces.batdongsan}
+                    onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, batdongsan: e.target.checked }))}
+                    className="rounded"
+                  />
+                  batdongsan.com.vn
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={crawlMarketplaces.nhatot}
+                    onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, nhatot: e.target.checked }))}
+                    className="rounded"
+                  />
+                  nhatot.vn
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Switch checked={crawlForceRefresh} onCheckedChange={setCrawlForceRefresh} id="force-refresh" />
+              <Label htmlFor="force-refresh" className="text-sm">Force refresh (skip cache)</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={crawlRunVibe} onCheckedChange={setCrawlRunVibe} id="run-vibe" />
+              <Label htmlFor="run-vibe" className="text-sm">Run vibe analysis</Label>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleCrawlListings}
+            disabled={isCrawling}
+            size="lg"
+            className="w-full"
+          >
+            {isCrawling ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Crawling Listings...
+              </>
+            ) : (
+              <>
+                <Globe className="mr-2 h-4 w-4" />
+                Start Crawl
+              </>
+            )}
+          </Button>
+
+          {crawlResults && (
+            <div className="p-4 bg-muted rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">Crawl Results</p>
+                <Badge>{crawlResults.duration}</Badge>
+              </div>
+              <div className="grid grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Found</p>
+                  <p className="text-2xl font-bold">{crawlResults.totalFound}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Stored</p>
+                  <p className="text-2xl font-bold text-green-600">{crawlResults.totalStored}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Vibe Analyzed</p>
+                  <p className="text-2xl font-bold">{crawlResults.totalVibeAnalyzed}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Skipped</p>
+                  <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalSkipped}</p>
+                </div>
+              </div>
+
+              {crawlResults.results && crawlResults.results.length > 0 && (
+                <div className="space-y-1 pt-2 border-t">
+                  <p className="text-xs font-semibold text-muted-foreground">Details:</p>
+                  {crawlResults.results.map((r: any, idx: number) => (
+                    <div key={idx} className="text-xs flex items-center justify-between p-1.5 bg-background rounded">
+                      <span>{r.location} / {r.marketplace}</span>
+                      <div className="flex gap-2">
+                        {r.skipped ? (
+                          <Badge variant="secondary" className="text-xs">Skipped</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            {r.propertiesFound} found, {r.propertiesStored} stored
+                          </Badge>
+                        )}
+                        {r.error && <Badge variant="destructive" className="text-xs">Error</Badge>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="text-sm text-muted-foreground space-y-1 pt-2 border-t">
+            <p><strong>Note:</strong> Crawling uses Firecrawl + GPT-4o-mini for scraping and extraction. Each location/marketplace combo takes ~30-60s.</p>
+            <p><strong>Cache:</strong> Results are cached for 6 hours unless force refresh is enabled.</p>
           </div>
         </CardContent>
       </Card>
