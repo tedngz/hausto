@@ -3,13 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 const AdminTools = () => {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [results, setResults] = useState<{
@@ -37,6 +43,42 @@ const AdminTools = () => {
   const [crawlRunVibe, setCrawlRunVibe] = useState(true);
   const [crawlResults, setCrawlResults] = useState<any>(null);
 
+  // Check admin role from user_roles table (must be before any early returns)
+  const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
+    queryKey: ['is-admin', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Show loading while checking auth/role
+  if (authLoading || isCheckingRole) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Block access if not authenticated or not admin
+  if (!user || !isAdmin) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl flex flex-col items-center justify-center min-h-[60vh] text-center gap-4">
+        <ShieldAlert className="h-16 w-16 text-destructive" />
+        <h1 className="text-2xl font-bold">Access Denied</h1>
+        <p className="text-muted-foreground">You don't have permission to access Admin Tools.</p>
+        <Button onClick={() => navigate('/')} variant="outline">Go Home</Button>
+      </div>
+    );
+  }
   const handleBatchGenerate = async () => {
     setIsGenerating(true);
     setResults(null);
