@@ -69,6 +69,7 @@ interface SearchParams {
   maxPrice?: number;
   propertyType?: string;
   includeVibeAnalysis?: boolean;
+  maxResults?: number;
 }
 
 interface ListingLink {
@@ -187,7 +188,8 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
 async function extractListingUrls(
   markdown: string,
   links: string[],
-  marketplace: string
+  marketplace: string,
+  maxResultsCap: number = MAX_DETAIL_PAGES
 ): Promise<ListingLink[]> {
   console.log(`[Phase 1] Extracting listing URLs from ${marketplace} search page (${links.length} links found)`);
   
@@ -255,7 +257,7 @@ async function extractListingUrls(
     }
   }
   
-  return unique.slice(0, MAX_DETAIL_PAGES);
+  return unique.slice(0, maxResultsCap);
 }
 
 // ─── Phase 2: Scrape individual listing detail pages ─────────────
@@ -571,9 +573,13 @@ serve(async (req) => {
 
   try {
     const body = await req.json() as SearchParams;
-    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true } = body;
+    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults } = body;
     
-    console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location }));
+    // Use maxResults param or default
+    const effectiveMaxResults = Math.min(Math.max(maxResults || MAX_DETAIL_PAGES, 1), 30);
+    const effectivePagesToScrape = effectiveMaxResults <= 5 ? 1 : effectiveMaxResults <= 10 ? 2 : PAGES_TO_SCRAPE;
+    
+    console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
     if (!FIRECRAWL_API_KEY) throw new Error('FIRECRAWL_API_KEY not configured');
     if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
@@ -594,9 +600,9 @@ serve(async (req) => {
     let allHtml = '';
     let firstPageSuccess = false;
 
-    for (let page = 1; page <= PAGES_TO_SCRAPE; page++) {
+    for (let page = 1; page <= effectivePagesToScrape; page++) {
       const searchUrl = buildSearchUrl({ marketplace, query, location }, page);
-      console.log(`[Phase 1] Scraping search page ${page}/${PAGES_TO_SCRAPE}: ${searchUrl}`);
+      console.log(`[Phase 1] Scraping search page ${page}/${effectivePagesToScrape}: ${searchUrl}`);
 
       try {
         const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
@@ -642,7 +648,7 @@ serve(async (req) => {
         console.log(`[Phase 1] Page ${page}: ${scrapedData.data.markdown.length} chars, ${(scrapedData.data.links || []).length} links`);
 
         // Small delay between page scrapes
-        if (page < PAGES_TO_SCRAPE) {
+        if (page < effectivePagesToScrape) {
           await new Promise(r => setTimeout(r, 800));
         }
       } catch (e) {
@@ -658,7 +664,8 @@ serve(async (req) => {
     const listingLinks = await extractListingUrls(
       allMarkdown,
       allLinks,
-      marketplace
+      marketplace,
+      effectiveMaxResults
     );
 
     let properties: ExternalProperty[] = [];
@@ -722,7 +729,7 @@ serve(async (req) => {
       // Merge: prefer detail-scraped properties, add fallback ones that aren't duplicates
       const existingUrls = new Set(properties.map(p => p.sourceUrl));
       for (const fp of fallbackProperties) {
-        if (!existingUrls.has(fp.sourceUrl) && properties.length < MAX_DETAIL_PAGES) {
+        if (!existingUrls.has(fp.sourceUrl) && properties.length < effectiveMaxResults) {
           properties.push(fp);
         }
       }
@@ -753,7 +760,7 @@ serve(async (req) => {
       source: marketplace,
       searchUrl: buildSearchUrl({ marketplace, query, location }, 1),
       crawlMethod: 'detail-page-paginated',
-      pagesScraped: PAGES_TO_SCRAPE,
+      pagesScraped: effectivePagesToScrape,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
