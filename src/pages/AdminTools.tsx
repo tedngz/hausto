@@ -44,6 +44,7 @@ const AdminTools = () => {
   const [crawlRunVibe, setCrawlRunVibe] = useState(true);
   const [crawlResults, setCrawlResults] = useState<any>(null);
   const [crawlMaxListings, setCrawlMaxListings] = useState(10);
+  const [crawlProgress, setCrawlProgress] = useState<{ current: number; total: number; location: string } | null>(null);
 
   // Check admin role from user_roles table (must be before any early returns)
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
@@ -179,6 +180,7 @@ const AdminTools = () => {
   const handleCrawlListings = async () => {
     setIsCrawling(true);
     setCrawlResults(null);
+    setCrawlProgress(null);
 
     try {
       const selectedMarketplaces = Object.entries(crawlMarketplaces)
@@ -195,28 +197,67 @@ const AdminTools = () => {
         description: `City: ${crawlCity}, Marketplaces: ${selectedMarketplaces.join(', ')}`
       });
 
-      const { data, error } = await supabase.functions.invoke('crawl-external-properties', {
-        body: {
-          city: crawlCity,
-          marketplaces: selectedMarketplaces,
-          forceRefresh: crawlForceRefresh,
-          storeInDatabase: true,
-          runVibeAnalysis: crawlRunVibe,
-          maxListingsPerLocation: crawlMaxListings,
+      // Aggregate results across all location calls
+      const allResults: any[] = [];
+      let totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
+      let remainingLocations: string[] | undefined = undefined;
+      let locationIndex = 0;
+      let totalLocations = 0;
+
+      // First call with no specific locations (let the server use defaults for the city)
+      let locationsToSend: string[] = [];
+
+      do {
+        const { data, error } = await supabase.functions.invoke('crawl-external-properties', {
+          body: {
+            city: crawlCity,
+            locations: locationsToSend,
+            marketplaces: selectedMarketplaces,
+            forceRefresh: crawlForceRefresh,
+            storeInDatabase: true,
+            runVibeAnalysis: crawlRunVibe,
+            maxListingsPerLocation: crawlMaxListings,
+          }
+        });
+
+        if (error) throw error;
+
+        const summary = data?.summary || {};
+        remainingLocations = summary.remainingLocations || [];
+        
+        if (totalLocations === 0) {
+          totalLocations = 1 + remainingLocations.length;
         }
-      });
+        locationIndex++;
 
-      if (error) throw error;
+        setCrawlProgress({ current: locationIndex, total: totalLocations, location: summary.locationProcessed || '?' });
 
-      setCrawlResults({ ...(data?.summary || {}), results: data?.results || [] });
+        // Accumulate
+        if (data?.results) allResults.push(...data.results);
+        totals.totalFound += summary.totalFound || 0;
+        totals.totalNew += summary.totalNew || 0;
+        totals.totalUpdated += summary.totalUpdated || 0;
+        totals.totalDuplicatesSkipped += summary.totalDuplicatesSkipped || 0;
+        totals.totalVibeAnalyzed += summary.totalVibeAnalyzed || 0;
+        totals.totalSkipped += summary.totalSkipped || 0;
+        totals.totalErrors += summary.totalErrors || 0;
+        totals.totalStored += summary.totalStored || 0;
+
+        // Next iteration: send remaining locations so the server picks the first one
+        locationsToSend = remainingLocations;
+      } while (remainingLocations && remainingLocations.length > 0);
+
+      setCrawlResults({ ...totals, results: allResults });
+      setCrawlProgress(null);
       toast.success("Crawl complete!", {
-        description: `New: ${data?.summary?.totalNew || 0}, Updated: ${data?.summary?.totalUpdated || 0}, Duplicates skipped: ${data?.summary?.totalDuplicatesSkipped || 0}`
+        description: `New: ${totals.totalNew}, Updated: ${totals.totalUpdated}, Duplicates skipped: ${totals.totalDuplicatesSkipped}`
       });
     } catch (error: any) {
       console.error('Crawl error:', error);
       toast.error("Crawl failed", { description: error.message });
     } finally {
       setIsCrawling(false);
+      setCrawlProgress(null);
     }
   };
 
@@ -310,7 +351,10 @@ const AdminTools = () => {
             {isCrawling ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Crawling Listings...
+                {crawlProgress 
+                  ? `Crawling ${crawlProgress.location} (${crawlProgress.current}/${crawlProgress.total})...`
+                  : 'Starting Crawl...'
+                }
               </>
             ) : (
               <>
