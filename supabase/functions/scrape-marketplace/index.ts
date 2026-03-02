@@ -100,11 +100,11 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
     case 'batdongsan': {
       let baseUrl: string;
       if (normalizedLocation.includes('quan-')) {
-        baseUrl = `https://batdongsan.com.vn/cho-thue-phong-tro-${normalizedLocation}-${citySlug}`;
+        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${normalizedLocation}-${citySlug}`;
       } else if (normalizedLocation) {
-        baseUrl = `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}?keyword=${encodeURIComponent(location || query)}`;
+        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${citySlug}?keyword=${encodeURIComponent(location || query)}`;
       } else {
-        baseUrl = `https://batdongsan.com.vn/cho-thue-phong-tro-${citySlug}`;
+        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${citySlug}`;
       }
       // batdongsan uses /p{page} suffix for pagination
       if (page > 1) {
@@ -159,14 +159,14 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
       }
       
       if (nhatotDistrictSlug) {
-        const base = `https://www.nhatot.com/thue-phong-tro-${nhatotDistrictSlug}-${nhatotCity}`;
+        const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotDistrictSlug}-${nhatotCity}`;
         return page > 1 ? `${base}?page=${page}` : base;
       }
       if (location) {
-        const base = `https://www.nhatot.com/thue-phong-tro-${nhatotCity}?q=${encodeURIComponent(location)}`;
+        const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotCity}?q=${encodeURIComponent(location)}`;
         return page > 1 ? `${base}&page=${page}` : base;
       }
-      const base = `https://www.nhatot.com/thue-phong-tro-${nhatotCity}`;
+      const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotCity}`;
       return page > 1 ? `${base}?page=${page}` : base;
     }
       
@@ -195,7 +195,7 @@ async function extractListingUrls(
   
   // Filter links to property detail pages based on marketplace URL patterns
   const listingPatterns: Record<string, RegExp> = {
-    batdongsan: /batdongsan\.com\.vn\/(cho-thue|ban)-(can-ho|phong-tro|nha|chung-cu)[^?#]*-pr\d+/i,
+    batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
     nhatot: /nhatot\.com\/.*\d{10,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
   };
