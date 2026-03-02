@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square, Sparkles, Power } from 'lucide-react';
+import { Plus, MessageSquare, User, MapPin, Upload, Edit, Trash2, Eye, FileSpreadsheet, RefreshCw, CheckSquare, Square, Sparkles, Power, Globe, ExternalLink } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,7 @@ import { HaustoChat } from '@/components/HaustoChat';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { BatchReanalyzeProgressModal } from '@/components/BatchReanalyzeProgressModal';
 import { useProperties, Property } from '@/hooks/useProperties';
+import { useAuth } from '@/hooks/useAuth';
 import { useMatches, PropertyMatch } from '@/hooks/useMatches';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/hooks/use-toast';
@@ -29,7 +30,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 interface RealtorDashboardProps {
   onSwitchUserType: () => void;
   onViewProfile?: () => void;
@@ -62,6 +63,7 @@ export const RealtorDashboard = ({
     error?: string;
   }>>([]);
   const [currentAnalyzingIndex, setCurrentAnalyzingIndex] = useState(0);
+  const { user } = useAuth();
   const {
     realtorProperties,
     isLoading,
@@ -82,6 +84,52 @@ export const RealtorDashboard = ({
     toast
   } = useToast();
   const isMobile = useIsMobile();
+
+  // Check if current user is admin
+  const { data: isAdmin = false } = useQuery({
+    queryKey: ['is-admin', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch crawled external listings for admin
+  const { data: crawledListings = [], isLoading: isLoadingCrawled } = useQuery({
+    queryKey: ['crawled-listings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('*')
+        .eq('is_active', true)
+        .order('crawled_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
+
+  const handleDeleteCrawledListing = async (id: string) => {
+    if (!window.confirm('Deactivate this crawled listing?')) return;
+    const { error } = await supabase
+      .from('external_properties')
+      .update({ is_active: false })
+      .eq('id', id);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+      toast({ title: 'Listing deactivated' });
+    }
+  };
   const unreadMatches = realtorMatches.filter(match => new Date(match.created_at).getTime() > Date.now() - 86400000);
   const handleEdit = (property: Property) => {
     setSelectedProperty(property);
@@ -644,6 +692,106 @@ export const RealtorDashboard = ({
 
         {/* Interested Renters */}
         
+        {/* Crawled External Listings (Admin Only) */}
+        {isAdmin && (
+          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
+            <div className="p-4 md:p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2">
+                    <Globe className="w-5 h-5" />
+                    Crawled External Listings
+                  </h2>
+                  <p className="text-slate-600 text-sm">
+                    {crawledListings.length} active crawled listings from external marketplaces
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ['crawled-listings'] })}
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+            <div className="p-4 md:p-6">
+              {isLoadingCrawled ? (
+                <p className="text-center py-8 text-slate-600">Loading crawled listings...</p>
+              ) : crawledListings.length === 0 ? (
+                <div className="text-center py-8">
+                  <Globe className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                  <p className="text-slate-600">No crawled listings yet. Run a crawl from Admin Tools.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {crawledListings.map((listing: any) => (
+                    <Card key={listing.id} className="overflow-hidden border border-slate-200 hover:shadow-lg transition-shadow">
+                      {listing.images && listing.images.length > 0 && (
+                        <div className="relative">
+                          <img src={listing.images[0]} alt={listing.title} className="w-full h-32 md:h-48 object-cover" />
+                          <div className="absolute top-2 right-2">
+                            <Badge className="bg-white/90 text-slate-800 font-semibold text-xs">
+                              {listing.price_display || `${listing.price?.toLocaleString()} VND`}
+                            </Badge>
+                          </div>
+                          <div className="absolute top-2 left-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {listing.source}
+                            </Badge>
+                          </div>
+                        </div>
+                      )}
+                      <div className="p-3 md:p-4">
+                        <h3 className="font-semibold text-slate-900 line-clamp-2 text-sm md:text-base mb-1">{listing.title}</h3>
+                        <div className="flex items-center text-xs md:text-sm text-slate-600 mb-2">
+                          <MapPin className="w-3 h-3 mr-1" />
+                          <span className="line-clamp-1">{listing.location}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {listing.rooms && (
+                            <Badge variant="outline" className="text-xs">{listing.rooms}</Badge>
+                          )}
+                          {listing.vibe && (
+                            <Badge variant="secondary" className="text-xs">{listing.vibe}</Badge>
+                          )}
+                          {listing.city && (
+                            <Badge variant="outline" className="text-xs">{listing.city}</Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mb-3">
+                          Crawled: {new Date(listing.crawled_at).toLocaleDateString()}
+                          {listing.contact_name && <span> • {listing.contact_name}</span>}
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs flex-1"
+                            onClick={() => window.open(listing.source_url, '_blank')}
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            Source
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 flex-1"
+                            onClick={() => handleDeleteCrawledListing(listing.id)}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Deactivate
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
 
       <PropertyUploadModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} />
