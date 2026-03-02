@@ -12,9 +12,10 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
 // Popular locations to crawl periodically
-const POPULAR_LOCATIONS = {
+const POPULAR_LOCATIONS: Record<string, string[]> = {
   ho_chi_minh: ['D1', 'D2', 'D3', 'D4', 'D5', 'D7', 'D10', 'Binh Thanh', 'Phu Nhuan', 'Tan Binh', 'Go Vap', 'Thu Duc'],
   hanoi: ['Ba Dinh', 'Hoan Kiem', 'Dong Da', 'Cau Giay', 'Hai Ba Trung'],
+  da_nang: ['Hai Chau', 'Thanh Khe', 'Son Tra', 'Ngu Hanh Son', 'Lien Chieu', 'Cam Le'],
 };
 
 interface CrawlRequest {

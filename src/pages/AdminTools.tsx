@@ -31,7 +31,7 @@ const AdminTools = () => {
 
   // Crawl state
   const [isCrawling, setIsCrawling] = useState(false);
-  const [crawlCity, setCrawlCity] = useState<'ho_chi_minh' | 'hanoi'>('ho_chi_minh');
+  const [crawlCity, setCrawlCity] = useState<'ho_chi_minh' | 'hanoi' | 'da_nang'>('ho_chi_minh');
   const [crawlMarketplaces, setCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
   const [crawlForceRefresh, setCrawlForceRefresh] = useState(false);
   const [crawlRunVibe, setCrawlRunVibe] = useState(true);
@@ -445,11 +445,12 @@ const AdminTools = () => {
               <Label>City</Label>
               <select
                 value={crawlCity}
-                onChange={(e) => setCrawlCity(e.target.value as 'ho_chi_minh' | 'hanoi')}
+                onChange={(e) => setCrawlCity(e.target.value as 'ho_chi_minh' | 'hanoi' | 'da_nang')}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="ho_chi_minh">Ho Chi Minh City</option>
                 <option value="hanoi">Hanoi</option>
+                <option value="da_nang">Da Nang</option>
               </select>
             </div>
             <div className="space-y-2">
