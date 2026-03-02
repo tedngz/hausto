@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { Slider } from "@/components/ui/slider";
 import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +43,7 @@ const AdminTools = () => {
   const [crawlForceRefresh, setCrawlForceRefresh] = useState(false);
   const [crawlRunVibe, setCrawlRunVibe] = useState(true);
   const [crawlResults, setCrawlResults] = useState<any>(null);
+  const [crawlMaxListings, setCrawlMaxListings] = useState(10);
 
   // Check admin role from user_roles table (must be before any early returns)
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
@@ -200,14 +202,15 @@ const AdminTools = () => {
           forceRefresh: crawlForceRefresh,
           storeInDatabase: true,
           runVibeAnalysis: crawlRunVibe,
+          maxListingsPerLocation: crawlMaxListings,
         }
       });
 
       if (error) throw error;
 
-      setCrawlResults(data);
+      setCrawlResults({ ...(data?.summary || {}), results: data?.results || [] });
       toast.success("Crawl complete!", {
-        description: `Found: ${data.totalFound}, Stored: ${data.totalStored}, Vibe Analyzed: ${data.totalVibeAnalyzed}`
+        description: `New: ${data?.summary?.totalNew || 0}, Updated: ${data?.summary?.totalUpdated || 0}, Duplicates skipped: ${data?.summary?.totalDuplicatesSkipped || 0}`
       });
     } catch (error: any) {
       console.error('Crawl error:', error);
@@ -282,6 +285,22 @@ const AdminTools = () => {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Max listings per location</Label>
+              <span className="text-sm font-bold text-primary">{crawlMaxListings}</span>
+            </div>
+            <Slider
+              value={[crawlMaxListings]}
+              onValueChange={(v) => setCrawlMaxListings(v[0])}
+              min={1}
+              max={20}
+              step={1}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">Controls how many individual listing pages are scraped per location/marketplace combo.</p>
+          </div>
+
           <Button
             onClick={handleCrawlListings}
             disabled={isCrawling}
@@ -307,21 +326,31 @@ const AdminTools = () => {
                 <p className="font-semibold">Crawl Results</p>
                 <Badge>{crawlResults.duration}</Badge>
               </div>
-              <div className="grid grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Found</p>
                   <p className="text-2xl font-bold">{crawlResults.totalFound}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Stored</p>
-                  <p className="text-2xl font-bold text-green-600">{crawlResults.totalStored}</p>
+                  <p className="text-muted-foreground">New</p>
+                  <p className="text-2xl font-bold text-primary">{crawlResults.totalNew || 0}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Updated</p>
+                  <p className="text-2xl font-bold text-accent-foreground">{crawlResults.totalUpdated || 0}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Duplicates Skipped</p>
+                  <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalDuplicatesSkipped || 0}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Vibe Analyzed</p>
                   <p className="text-2xl font-bold">{crawlResults.totalVibeAnalyzed}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Skipped</p>
+                  <p className="text-muted-foreground">Cache Skipped</p>
                   <p className="text-2xl font-bold text-muted-foreground">{crawlResults.totalSkipped}</p>
                 </div>
               </div>

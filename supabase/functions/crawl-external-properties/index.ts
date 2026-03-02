@@ -25,6 +25,7 @@ interface CrawlRequest {
   forceRefresh?: boolean;
   storeInDatabase?: boolean;
   runVibeAnalysis?: boolean;
+  maxListingsPerLocation?: number;
 }
 
 interface CrawlResult {
@@ -32,6 +33,9 @@ interface CrawlResult {
   marketplace: string;
   propertiesFound: number;
   propertiesStored: number;
+  newListings: number;
+  updatedListings: number;
+  duplicatesSkipped: number;
   vibeAnalyzed: number;
   skipped: boolean;
   error?: string;
@@ -43,6 +47,24 @@ function normalizeLocation(location: string): string {
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Normalize source URL for dedup: lowercase, strip trailing slash, remove tracking params
+function normalizeSourceUrl(url: string): string {
+  try {
+    const u = new URL(url.toLowerCase().trim());
+    // Remove common tracking parameters
+    const paramsToRemove = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref', 'source'];
+    paramsToRemove.forEach(p => u.searchParams.delete(p));
+    // Sort remaining params for consistency
+    u.searchParams.sort();
+    // Remove trailing slash
+    let normalized = u.toString().replace(/\/+$/, '');
+    return normalized;
+  } catch {
+    // If URL parsing fails, do basic normalization
+    return url.toLowerCase().trim().replace(/\/+$/, '');
+  }
 }
 
 // Detect city from location string
@@ -239,9 +261,10 @@ serve(async (req) => {
       forceRefresh = false,
       storeInDatabase = true,
       runVibeAnalysis = true,
+      maxListingsPerLocation = 10,
     } = body;
     
-    console.log(`[crawl-external-properties] Starting crawl:`, { locations, marketplaces, city, forceRefresh, storeInDatabase });
+    console.log(`[crawl-external-properties] Starting crawl:`, { locations, marketplaces, city, forceRefresh, storeInDatabase, maxListingsPerLocation });
     
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
@@ -258,6 +281,9 @@ serve(async (req) => {
           marketplace,
           propertiesFound: 0,
           propertiesStored: 0,
+          newListings: 0,
+          updatedListings: 0,
+          duplicatesSkipped: 0,
           vibeAnalyzed: 0,
           skipped: false,
         };
@@ -301,6 +327,7 @@ serve(async (req) => {
               query: 'apartment',
               location,
               includeVibeAnalysis: true,
+              maxResults: maxListingsPerLocation,
             }),
             signal: controller.signal,
           });
@@ -332,16 +359,74 @@ serve(async (req) => {
               try {
                 const locationNormalized = normalizeLocation(property.location || location);
                 const detectedCity = detectCity(property.location || location);
+                const rawSourceUrl = property.sourceUrl || `https://${marketplace}.com.vn`;
+                const normalizedUrl = normalizeSourceUrl(rawSourceUrl);
                 
-                // Create unique external_id from source URL or generate one
+                // Create deterministic external_id from normalized URL
                 const externalId = property.sourceUrl 
-                  ? btoa(property.sourceUrl).substring(0, 100)
+                  ? btoa(normalizedUrl).substring(0, 100)
                   : `${marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
                 
+                // Check if this property already exists by normalized source_url
+                const { data: existingByUrl } = await supabase
+                  .from('external_properties')
+                  .select('id, external_id, source_url')
+                  .eq('source', marketplace)
+                  .eq('source_url', normalizedUrl)
+                  .maybeSingle();
+                
+                // Also check by external_id for backward compat
+                const { data: existingById } = !existingByUrl ? await supabase
+                  .from('external_properties')
+                  .select('id, external_id, source_url')
+                  .eq('source', marketplace)
+                  .eq('external_id', externalId)
+                  .maybeSingle() : { data: existingByUrl };
+                
+                const existingRecord = existingByUrl || existingById;
+                
+                if (existingRecord) {
+                  // Property already exists — update it
+                  const { error: updateError } = await supabase
+                    .from('external_properties')
+                    .update({
+                      title: property.title || 'Rental Property',
+                      location: property.location || location,
+                      location_normalized: locationNormalized,
+                      city: detectedCity,
+                      price: property.price || 0,
+                      price_display: property.priceDisplay || `${property.price?.toLocaleString()} VND`,
+                      size: property.size || null,
+                      rooms: property.rooms || null,
+                      description: property.description || null,
+                      highlights: property.highlights || [],
+                      amenities: property.amenities || [],
+                      images: property.images || [],
+                      contact_name: property.sourceProviderName || null,
+                      contact_phone: property.sourceProviderPhone || null,
+                      vibe: property.vibe || null,
+                      vibe_analysis: property.vibe_analysis || {},
+                      crawled_at: new Date().toISOString(),
+                      expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+                      is_active: true,
+                    })
+                    .eq('id', existingRecord.id);
+                  
+                  if (updateError) {
+                    console.error(`[crawl-external-properties] Update error:`, updateError);
+                  } else {
+                    crawlResult.updatedListings++;
+                    crawlResult.propertiesStored++;
+                    console.log(`[crawl-external-properties] Updated existing: "${property.title}"`);
+                  }
+                  continue; // Skip vibe re-analysis for existing listings
+                }
+                
+                // New listing — insert
                 const propertyData = {
                   external_id: externalId,
                   source: marketplace,
-                  source_url: property.sourceUrl || `https://${marketplace}.com.vn`,
+                  source_url: normalizedUrl,
                   title: property.title || 'Rental Property',
                   location: property.location || location,
                   location_normalized: locationNormalized,
@@ -363,28 +448,30 @@ serve(async (req) => {
                   is_active: true,
                 };
                 
-                // Upsert to handle duplicates
-                const { error: upsertError } = await supabase
+                const { error: insertError } = await supabase
                   .from('external_properties')
-                  .upsert(propertyData, {
-                    onConflict: 'source,external_id',
-                    ignoreDuplicates: false,
-                  });
+                  .insert(propertyData);
                 
-                if (upsertError) {
-                  console.error(`[crawl-external-properties] Upsert error:`, upsertError);
+                if (insertError) {
+                  // Could be a race condition duplicate
+                  if (insertError.code === '23505') {
+                    crawlResult.duplicatesSkipped++;
+                    console.log(`[crawl-external-properties] Duplicate skipped: "${propertyData.title}"`);
+                  } else {
+                    console.error(`[crawl-external-properties] Insert error:`, insertError);
+                  }
                 } else {
+                  crawlResult.newListings++;
                   crawlResult.propertiesStored++;
                   
-                  // Run image-based vibe analysis if enabled and property has images
+                  // Run image-based vibe analysis only for NEW listings
                   if (runVibeAnalysis && propertyData.images && propertyData.images.length > 0) {
                     try {
                       console.log(`[crawl-external-properties] Running vibe analysis on ${propertyData.images.length} images for "${propertyData.title}"`);
                       const vibeResult = await analyzePropertyImagesVibe(propertyData.images);
                       
                       if (vibeResult) {
-                        // Update the stored property with image-based vibe analysis
-                        const { error: updateError } = await supabase
+                        const { error: vibeUpdateError } = await supabase
                           .from('external_properties')
                           .update({
                             vibe: vibeResult.vibe,
@@ -395,8 +482,8 @@ serve(async (req) => {
                           .eq('source', propertyData.source)
                           .eq('external_id', propertyData.external_id);
                         
-                        if (updateError) {
-                          console.error(`[crawl-external-properties] Vibe update error:`, updateError);
+                        if (vibeUpdateError) {
+                          console.error(`[crawl-external-properties] Vibe update error:`, vibeUpdateError);
                         } else {
                           crawlResult.vibeAnalyzed++;
                           console.log(`[crawl-external-properties] Vibe analysis complete: "${vibeResult.vibe}" for "${propertyData.title}"`);
@@ -406,7 +493,6 @@ serve(async (req) => {
                       console.error(`[crawl-external-properties] Vibe analysis failed for "${propertyData.title}":`, vibeError);
                     }
                     
-                    // Small delay between vibe analyses to avoid rate limits
                     await new Promise(r => setTimeout(r, 500));
                   }
                 }
@@ -431,6 +517,9 @@ serve(async (req) => {
     
     const totalFound = results.reduce((sum, r) => sum + r.propertiesFound, 0);
     const totalStored = results.reduce((sum, r) => sum + r.propertiesStored, 0);
+    const totalNew = results.reduce((sum, r) => sum + r.newListings, 0);
+    const totalUpdated = results.reduce((sum, r) => sum + r.updatedListings, 0);
+    const totalDuplicatesSkipped = results.reduce((sum, r) => sum + r.duplicatesSkipped, 0);
     const totalVibeAnalyzed = results.reduce((sum, r) => sum + r.vibeAnalyzed, 0);
     const totalSkipped = results.filter(r => r.skipped).length;
     const totalErrors = results.filter(r => r.error).length;
@@ -438,11 +527,7 @@ serve(async (req) => {
     const duration = Date.now() - startTime;
     
     console.log(`[crawl-external-properties] Completed in ${duration}ms:`, {
-      totalFound,
-      totalStored,
-      totalVibeAnalyzed,
-      totalSkipped,
-      totalErrors,
+      totalFound, totalStored, totalNew, totalUpdated, totalDuplicatesSkipped, totalVibeAnalyzed, totalSkipped, totalErrors,
     });
     
     return new Response(JSON.stringify({
@@ -453,6 +538,9 @@ serve(async (req) => {
         marketplacesProcessed: marketplaces.length,
         totalFound,
         totalStored,
+        totalNew,
+        totalUpdated,
+        totalDuplicatesSkipped,
         totalVibeAnalyzed,
         totalSkipped,
         totalErrors,
