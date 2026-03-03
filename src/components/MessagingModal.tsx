@@ -1,5 +1,6 @@
 
 import { useState } from 'react';
+import { translateLocationToEnglish } from '@/utils/locationTranslation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -96,7 +97,7 @@ export const MessagingModal = ({ matches, selectedMatch, onClose }: MessagingMod
                             </button>
                          <div className="flex items-center mt-1">
                            <MapPin className="w-3 h-3 text-gray-400 mr-1" />
-                           <span className="text-xs text-gray-500">{match.apartment.location}</span>
+                           <span className="text-xs text-gray-500">{translateLocationToEnglish(match.apartment.location)}</span>
                          </div>
                        </div>
                      </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { translateLocationToEnglish } from '@/utils/locationTranslation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -629,7 +630,7 @@ export const HomeAI = ({
                                           </h5>
                                           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                                             <MapPin className="h-4 w-4 flex-shrink-0" />
-                                            <span className="line-clamp-1">{property.location}</span>
+                                            <span className="line-clamp-1">{translateLocationToEnglish(property.location)}</span>
                                           </div>
                                         </div>
                                         
@@ -802,7 +803,7 @@ export const HomeAI = ({
                                 <h5 className="font-semibold text-foreground line-clamp-1 text-base sm:text-base text-left">{property.title}</h5>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                                   <MapPin className="h-4 w-4 flex-shrink-0" />
-                                  <span className="line-clamp-1">{property.location}</span>
+                                  <span className="line-clamp-1">{translateLocationToEnglish(property.location)}</span>
                                 </div>
                               </div>
                               

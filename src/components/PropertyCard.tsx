@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { geocodeLocation } from '@/utils/geocoding';
+import { translateLocationToEnglish } from '@/utils/locationTranslation';
 interface PropertyCardProps {
   apartment: Apartment;
   userPreferences?: UserPreferences;
@@ -88,6 +89,7 @@ export const PropertyCard = ({
   const {
     formatPrice
   } = useCurrency();
+  const displayLocation = useMemo(() => translateLocationToEnglish(apartment.location), [apartment.location]);
 
   // Update internal image index when external index changes (for SwipeInterface)
   useEffect(() => {
@@ -182,7 +184,7 @@ export const PropertyCard = ({
               onClick={handleLocationClick}
               disabled={isGeocoding}
             >
-              {apartment.location}
+              {displayLocation}
               {isGeocoding && <Loader2 className="w-3 h-3 animate-spin" />}
             </button>
           </div>
