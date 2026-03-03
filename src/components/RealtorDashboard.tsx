@@ -803,7 +803,7 @@ export const RealtorDashboard = ({
                           <img src={listing.images[0]} alt={listing.title} className="w-full h-32 md:h-48 object-cover" />
                           <div className="absolute top-2 right-2">
                             <Badge className="bg-white/90 text-slate-800 font-semibold text-xs">
-                              {listing.price_display || `${listing.price?.toLocaleString()} VND`}
+                              {listing.price ? formatPrice(listing.price) : 'Price N/A'}/mo
                             </Badge>
                           </div>
                           <div className="absolute top-2 left-2">
