@@ -315,6 +315,25 @@ serve(async (req) => {
   const results: CrawlResult[] = [];
   
   try {
+  // Authenticate the caller
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  const supabaseAuth = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const token = authHeader.replace('Bearer ', '');
+  const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+  if (claimsError || !claimsData?.claims?.sub) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  console.log(`[crawl-external-properties] Authenticated user: ${claimsData.claims.sub}`);
+
   const body: CrawlRequest = await req.json();
     const { 
       locations = [], 
