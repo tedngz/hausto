@@ -123,15 +123,17 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
   if (!OPENAI_API_KEY || !images || images.length === 0) return null;
   
   try {
-    // Use up to 3 images to keep costs down
-    const imagesToAnalyze = images.filter(img => img?.startsWith('http')).slice(0, 3);
+    // Use up to 5 images for per-image highlights
+    const imagesToAnalyze = images.filter(img => img?.startsWith('http')).slice(0, 5);
     if (imagesToAnalyze.length === 0) return null;
     
-    console.log(`[vibe-analysis] Analyzing ${imagesToAnalyze.length} images...`);
+    console.log(`[vibe-analysis] Analyzing ${imagesToAnalyze.length} images with per-image highlights...`);
     
     // Build image content array for vision API
     const imageContent = [];
-    for (const imageUrl of imagesToAnalyze) {
+    const validImageIndexes: number[] = [];
+    for (let imgIdx = 0; imgIdx < imagesToAnalyze.length; imgIdx++) {
+      const imageUrl = imagesToAnalyze[imgIdx];
       try {
         const imgResponse = await fetch(imageUrl);
         if (!imgResponse.ok) continue;
@@ -159,6 +161,7 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
           type: 'image_url',
           image_url: { url: `data:${mimeType};base64,${base64}`, detail: 'low' }
         });
+        validImageIndexes.push(imgIdx);
       } catch (e) {
         console.error(`[vibe-analysis] Failed to fetch image:`, e);
       }
@@ -179,14 +182,19 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
           content: [
             {
               type: 'text',
-              text: `Analyze these rental property images. Return a JSON object with:
+              text: `Analyze these ${imageContent.length} rental property images. For EACH image, provide a unique lifestyle highlight.
 
-1. Vibe scores (1-10): modern, cozy, luxurious, minimalist, spacious, natural_light, urban, elegant
+Return a JSON object with:
+
+1. vibe_scores (1-10): modern, cozy, luxurious, minimalist, spacious, natural_light, urban, elegant
 2. style: One of [Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage]
 3. colors: Array from [Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold]
 4. activities: Array from [Working, Reading, Relaxing, Entertaining, Cooking, Exercising]
-5. highlights: Array of 4-5 lifestyle highlights IN ENGLISH (e.g., "Bright workspace with city views")
-6. amenities: Array of ALL visible amenities IN ENGLISH (e.g., "Air Conditioning", "Washing Machine", "Balcony")
+5. image_analyses: Array with one entry PER IMAGE (in order), each containing:
+   - image_index: the 0-based index of the image
+   - image_highlight: A short lifestyle highlight specific to THIS image (e.g., "Sun-drenched living room with panoramic city views", "Sleek modern kitchen with marble countertops")
+   - suggested_amenities: Array of amenities visible in THIS specific image
+6. amenities: Array of ALL visible amenities across all images IN ENGLISH
 
 Return ONLY valid JSON:
 {
@@ -194,14 +202,17 @@ Return ONLY valid JSON:
   "style": "Modern",
   "colors": ["Neutral", "White"],
   "activities": ["Working", "Relaxing"],
-  "highlights": ["highlight1", "highlight2", "highlight3", "highlight4"],
+  "image_analyses": [
+    {"image_index": 0, "image_highlight": "Bright open-plan living area with floor-to-ceiling windows", "suggested_amenities": ["Air Conditioning", "Balcony"]},
+    {"image_index": 1, "image_highlight": "Fully equipped modern kitchen with breakfast bar", "suggested_amenities": ["Dishwasher", "Microwave"]}
+  ],
   "amenities": ["Air Conditioning", "WiFi", "Balcony"]
 }`
             },
             ...imageContent,
           ]
         }],
-        max_tokens: 800,
+        max_tokens: 1200,
         temperature: 0.3,
       }),
     });
@@ -226,6 +237,19 @@ Return ONLY valid JSON:
       .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1))
       .join(', ');
     
+    // Map image_analyses indexes back to original image array indexes
+    const imageAnalyses = Array.isArray(parsed.image_analyses) 
+      ? parsed.image_analyses.map((ia: any, idx: number) => ({
+          ...ia,
+          image_index: validImageIndexes[idx] ?? idx,
+        }))
+      : [];
+    
+    // Extract per-image highlights as the main highlights array
+    const perImageHighlights = imageAnalyses
+      .map((ia: any) => ia.image_highlight)
+      .filter((h: any) => h && typeof h === 'string');
+    
     return {
       vibe: primaryVibe || parsed.style || 'Modern',
       vibe_analysis: {
@@ -234,8 +258,9 @@ Return ONLY valid JSON:
         activities: parsed.activities || [],
         amenities: parsed.amenities || [],
         vibe_scores: vibeScores,
+        image_analyses: imageAnalyses,
       },
-      highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
+      highlights: perImageHighlights.length > 0 ? perImageHighlights : [],
       amenities: Array.isArray(parsed.amenities) ? parsed.amenities : [],
     };
   } catch (error) {
