@@ -189,6 +189,20 @@ function resolveLocationQuery(location: string): string[] {
     queries.push(`Quận ${num}, ${cityPart}`);
   }
 
+  // 4. For full addresses, build a cleaned Vietnamese query
+  let cleaned = location;
+  cleaned = cleaned.replace(/\bHo Chi Minh City\b/gi, 'Hồ Chí Minh');
+  cleaned = cleaned.replace(/\bHo Chi Minh\b/gi, 'Hồ Chí Minh');
+  cleaned = cleaned.replace(/\bDa Nang City\b/gi, 'Đà Nẵng');
+  cleaned = cleaned.replace(/\bDa Nang\b/gi, 'Đà Nẵng');
+  cleaned = cleaned.replace(/\bHanoi\b/gi, 'Hà Nội');
+  cleaned = cleaned.replace(/\bDistrict\s*(\d+)/gi, 'Quận $1');
+  cleaned = cleaned.replace(/\bWard\b/gi, 'Phường');
+  cleaned = cleaned.replace(/\bStreet\b/gi, '');
+  if (cleaned !== location) {
+    queries.push(cleaned);
+  }
+
   // Always include the original as fallback
   queries.push(location);
 

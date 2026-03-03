@@ -82,6 +82,43 @@ function detectCity(location: string): string {
   return 'other';
 }
 
+// Inline geocoding for crawled properties using Nominatim
+async function geocodeLocation(location: string): Promise<{ lat: number; lon: number } | null> {
+  let cleaned = location;
+  cleaned = cleaned.replace(/\bHo Chi Minh City\b/gi, 'Hồ Chí Minh');
+  cleaned = cleaned.replace(/\bHo Chi Minh\b/gi, 'Hồ Chí Minh');
+  cleaned = cleaned.replace(/\bDa Nang City\b/gi, 'Đà Nẵng');
+  cleaned = cleaned.replace(/\bDa Nang\b/gi, 'Đà Nẵng');
+  cleaned = cleaned.replace(/\bHanoi\b/gi, 'Hà Nội');
+  cleaned = cleaned.replace(/\bDistrict\s*(\d+)/gi, 'Quận $1');
+  cleaned = cleaned.replace(/\bWard\b/gi, 'Phường');
+  cleaned = cleaned.replace(/\bStreet\b/gi, '');
+
+  const queries = cleaned !== location ? [cleaned, location] : [location];
+
+  for (const q of queries) {
+    try {
+      const encoded = encodeURIComponent(q);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=vn&limit=3&addressdetails=1`,
+        { headers: { "User-Agent": "Hausto-App/1.0" } }
+      );
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const best = data.find((r: any) =>
+          r.class === 'boundary' || (r.class === 'place' && r.type === 'suburb')
+        ) || data.find((r: any) =>
+          r.addresstype === 'suburb' || r.addresstype === 'city_district'
+        ) || data[0];
+        return { lat: parseFloat(best.lat), lon: parseFloat(best.lon) };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 // Generate embedding for property (for future vector search)
 async function generatePropertyEmbedding(property: any): Promise<number[] | null> {
   if (!OPENAI_API_KEY) return null;
@@ -389,6 +426,20 @@ serve(async (req) => {
                 const detectedCity = detectCity(property.location || location);
                 const rawSourceUrl = property.sourceUrl || `https://${marketplace}.com.vn`;
                 const normalizedUrl = normalizeSourceUrl(rawSourceUrl);
+
+                // Geocode the property location (with rate limiting)
+                let geoLat: number | null = null;
+                let geoLon: number | null = null;
+                try {
+                  await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit
+                  const coords = await geocodeLocation(property.location || location);
+                  if (coords) {
+                    geoLat = coords.lat;
+                    geoLon = coords.lon;
+                  }
+                } catch (geoErr) {
+                  console.error(`[crawl-external-properties] Geocoding failed for "${property.location}":`, geoErr);
+                }
                 
                 // Create deterministic external_id from normalized URL
                 const externalId = property.sourceUrl 
@@ -435,8 +486,9 @@ serve(async (req) => {
                       vibe: property.vibe || null,
                       vibe_analysis: property.vibe_analysis || {},
                       crawled_at: new Date().toISOString(),
-expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+                      expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                       is_active: true,
+                      ...(geoLat !== null && geoLon !== null ? { latitude: geoLat, longitude: geoLon } : {}),
                     })
                     .eq('id', existingRecord.id);
                   
@@ -474,6 +526,7 @@ expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                   crawled_at: new Date().toISOString(),
                   expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                   is_active: true,
+                  ...(geoLat !== null && geoLon !== null ? { latitude: geoLat, longitude: geoLon } : {}),
                 };
                 
                 const { error: insertError } = await supabase
