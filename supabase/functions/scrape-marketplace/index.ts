@@ -92,9 +92,10 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
     || '';
   
   const isHanoi = /(ha noi|hanoi|ba dinh|hoan kiem|dong da|cau giay|hai ba trung)/i.test(location || '');
-  const citySlug = isHanoi ? 'ha-noi' : 'tp-hcm';
-  const nhatotCity = isHanoi ? 'ha-noi' : 'ho-chi-minh';
-  const airbnbCity = isHanoi ? 'Hanoi--Vietnam' : 'Ho-Chi-Minh-City--Vietnam';
+  const isDaNang = /(da nang|đà nẵng|hai chau|thanh khe|son tra|ngu hanh son|lien chieu|cam le)/i.test(location || '');
+  const citySlug = isHanoi ? 'ha-noi' : isDaNang ? 'da-nang' : 'tp-hcm';
+  const nhatotCity = isHanoi ? 'ha-noi' : isDaNang ? 'da-nang' : 'tp-ho-chi-minh';
+  const airbnbCity = isHanoi ? 'Hanoi--Vietnam' : isDaNang ? 'Da-Nang--Vietnam' : 'Ho-Chi-Minh-City--Vietnam';
   
   switch (marketplace) {
     case 'batdongsan': {
@@ -140,6 +141,13 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
         'dong da': 'quan-dong-da', 'dongda': 'quan-dong-da',
         'cau giay': 'quan-cau-giay', 'caugiay': 'quan-cau-giay',
         'hai ba trung': 'quan-hai-ba-trung', 'haibatrung': 'quan-hai-ba-trung',
+        // Da Nang districts
+        'hai chau': 'quan-hai-chau', 'haichau': 'quan-hai-chau',
+        'thanh khe': 'quan-thanh-khe', 'thanhkhe': 'quan-thanh-khe',
+        'son tra': 'quan-son-tra', 'sontra': 'quan-son-tra',
+        'ngu hanh son': 'quan-ngu-hanh-son', 'nguhanhson': 'quan-ngu-hanh-son',
+        'lien chieu': 'quan-lien-chieu', 'lienchieu': 'quan-lien-chieu',
+        'cam le': 'quan-cam-le', 'camle': 'quan-cam-le',
       };
       
       const locationLower = (location || '').toLowerCase().trim();
@@ -196,7 +204,7 @@ async function extractListingUrls(
   // Filter links to property detail pages based on marketplace URL patterns
   const listingPatterns: Record<string, RegExp> = {
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
-    nhatot: /nhatot\.com\/.*\d{10,}\.htm/i,
+    nhatot: /nhatot\.com\/.*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
   };
   
