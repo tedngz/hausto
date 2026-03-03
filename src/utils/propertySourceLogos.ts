@@ -4,7 +4,7 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
   if (url.includes('airbnb')) {
     return {
       name: 'Airbnb',
-      logo: 'https://upload.wikimedia.org/wikipedia/commons/6/69/Airbnb_Logo_Bélo.svg'
+      logo: '/logos/airbnb-logo.svg'
     };
   }
   
