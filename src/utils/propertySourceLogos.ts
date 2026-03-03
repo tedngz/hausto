@@ -39,7 +39,7 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
   if (url.includes('batdongsan') || url === 'batdongsan') {
     return {
       name: 'Batdongsan.com.vn',
-      logo: '/logos/batdongsan-logo.png'
+      logo: '/logos/batdongsan-logo.svg'
     };
   }
   
