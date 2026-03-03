@@ -46,7 +46,7 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
   if (url.includes('nhatot') || url === 'nhatot') {
     return {
       name: 'Nhà Tốt',
-      logo: 'https://static.chotot.com/storage/marketplace/logo-nhatot.svg'
+      logo: '/logos/nhatot-logo.png'
     };
   }
   
