@@ -133,17 +133,24 @@ export const RealtorDashboard = ({
   };
 
   const handleDeleteCrawledListing = async (id: string) => {
-    if (!window.confirm('Permanently deactivate this crawled listing?')) return;
+    if (!window.confirm('Permanently delete this crawled listing?')) return;
+    
+    // Optimistically remove from cache immediately
+    queryClient.setQueryData(['crawled-listings'], (old: any[] | undefined) => 
+      old ? old.filter((item: any) => item.id !== id) : []
+    );
+    
     const { error } = await supabase
       .from('external_properties')
-      .update({ is_active: false })
+      .delete()
       .eq('id', id);
     if (error) {
+      // Revert on error
+      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
-      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
       queryClient.invalidateQueries({ queryKey: ['external-properties-swipe'] });
-      toast({ title: 'Listing deactivated' });
+      toast({ title: 'Listing deleted' });
     }
   };
 
