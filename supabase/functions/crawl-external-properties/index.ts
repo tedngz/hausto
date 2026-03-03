@@ -435,7 +435,7 @@ serve(async (req) => {
                       vibe: property.vibe || null,
                       vibe_analysis: property.vibe_analysis || {},
                       crawled_at: new Date().toISOString(),
-                      expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                       is_active: true,
                     })
                     .eq('id', existingRecord.id);
@@ -472,7 +472,7 @@ serve(async (req) => {
                   vibe: property.vibe || null,
                   vibe_analysis: property.vibe_analysis || {},
                   crawled_at: new Date().toISOString(),
-                  expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+                  expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                   is_active: true,
                 };
                 

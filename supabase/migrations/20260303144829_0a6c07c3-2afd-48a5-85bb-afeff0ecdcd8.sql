@@ -1,0 +1,1 @@
+ALTER TABLE public.external_properties ALTER COLUMN expires_at SET DEFAULT (now() + interval '10 days');
