@@ -33,17 +33,22 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const formatPrice = (priceInVND: number) => {
     const convertedPrice = convertPrice(priceInVND);
-    const symbol = currencySymbols[currency];
     
     if (currency === 'VND') {
-      // Format VND in millions for readability
-      if (convertedPrice >= 1000000) {
-        return `${(convertedPrice / 1000000).toFixed(1)}M ${symbol}`;
+      // Format VND in millions for readability (English)
+      if (convertedPrice >= 1000000000) {
+        const billions = convertedPrice / 1000000000;
+        return `${billions % 1 === 0 ? billions.toFixed(0) : billions.toFixed(1)}B VND`;
+      } else if (convertedPrice >= 1000000) {
+        const millions = convertedPrice / 1000000;
+        return `${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(1)}M VND`;
+      } else if (convertedPrice >= 1000) {
+        return `${(convertedPrice / 1000).toFixed(0)}K VND`;
       } else {
-        return `${convertedPrice.toLocaleString()} ${symbol}`;
+        return `${convertedPrice.toLocaleString()} VND`;
       }
     } else {
-      return `${symbol}${convertedPrice.toLocaleString()}`;
+      return `$${convertedPrice.toLocaleString()}`;
     }
   };
 
