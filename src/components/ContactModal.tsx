@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Apartment } from '@/types';
+import { translateLocationToEnglish } from '@/utils/locationTranslation';
 import { UserProfile } from '@/components/LoginModal';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,7 +24,7 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
     name: userProfile?.name || '',
     email: userProfile?.email || '',
     phone: userProfile?.phone || '',
-    message: `Hi ${apartment.realtor.name}, I'm interested in viewing "${apartment.title}" in ${apartment.location}. Could we schedule a viewing?`
+    message: `Hi ${apartment.realtor.name}, I'm interested in viewing "${apartment.title}" in ${translateLocationToEnglish(apartment.location)}. Could we schedule a viewing?`
   });
   const { toast } = useToast();
 
@@ -201,7 +202,7 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
             />
             <div>
               <h4 className="font-semibold">{apartment.title}</h4>
-              <p className="text-sm text-gray-600">{apartment.location}</p>
+              <p className="text-sm text-gray-600">{translateLocationToEnglish(apartment.location)}</p>
               <p className="text-sm font-medium text-green-600">${apartment.price}/mo</p>
             </div>
           </div>
