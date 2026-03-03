@@ -238,6 +238,23 @@ export const RealtorDashboard = ({
     return `${value} ${unit} remaining`;
   };
 
+  const getCrawledTimeRemaining = (expiresAt?: string): { value: number; unit: 'days' | 'hours' | 'minutes'; expired: boolean } => {
+    if (!expiresAt) return { value: 0, unit: 'days', expired: true };
+    const diffMs = new Date(expiresAt).getTime() - Date.now();
+    if (diffMs <= 0) return { value: 0, unit: 'days', expired: true };
+    const diffHours = diffMs / (1000 * 60 * 60);
+    const diffDays = diffHours / 24;
+    if (diffDays >= 1) return { value: Math.ceil(diffDays), unit: 'days', expired: false };
+    if (diffHours >= 1) return { value: Math.ceil(diffHours), unit: 'hours', expired: false };
+    return { value: Math.max(1, Math.ceil(diffMs / (1000 * 60))), unit: 'minutes', expired: false };
+  };
+
+  const formatCrawledTimeRemaining = (expiresAt?: string): string => {
+    const { value, unit, expired } = getCrawledTimeRemaining(expiresAt);
+    if (expired) return 'Expired';
+    return `${value} ${unit} remaining`;
+  };
+
   const handleBatchReanalyze = async () => {
     const propertiesToAnalyze = selectedPropertyIds.size > 0 
       ? realtorProperties.filter(p => selectedPropertyIds.has(p.id))
@@ -829,6 +846,11 @@ export const RealtorDashboard = ({
                               onCheckedChange={() => handleToggleCrawledListing(listing.id, listing.is_active)} 
                             />
                           </div>
+                          {listing.is_active && (
+                            <div className={`text-xs ${getCrawledTimeRemaining(listing.expires_at).expired ? 'text-red-500' : getCrawledTimeRemaining(listing.expires_at).value <= 1 && getCrawledTimeRemaining(listing.expires_at).unit !== 'days' ? 'text-orange-500' : 'text-slate-500'}`}>
+                              {formatCrawledTimeRemaining(listing.expires_at)}
+                            </div>
+                          )}
                         </div>
                         <div className="flex gap-1">
                           <Button
