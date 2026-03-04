@@ -929,19 +929,30 @@ serve(async (req) => {
     let user = null;
     let isAnonymous = false;
 
-    if (authHeader && !authHeader.includes(supabaseAnonKey)) {
-      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      });
-      
+    if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
-      const { data: userData, error: authError } = await userSupabase.auth.getUser(token);
       
-      if (!authError && userData.user) {
-        user = userData.user;
-        console.log('Authenticated user:', user.id);
+      // Skip if the token is just the anon/publishable key (not a user JWT)
+      const isAnonKey = token === supabaseAnonKey || 
+                        token === Deno.env.get('SUPABASE_PUBLISHABLE_KEY');
+      
+      if (!isAnonKey && token.length > 100) {
+        // Looks like a real user JWT - try to validate it
+        const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { autoRefreshToken: false, persistSession: false }
+        });
+        
+        const { data: userData, error: authError } = await userSupabase.auth.getUser(token);
+        
+        if (!authError && userData.user) {
+          user = userData.user;
+          console.log('Authenticated user:', user.id);
+        } else {
+          console.log('Invalid token, treating as anonymous user. Error:', authError?.message);
+          isAnonymous = true;
+        }
       } else {
-        console.log('Invalid token, treating as anonymous user');
+        console.log('Anon key detected, treating as anonymous user');
         isAnonymous = true;
       }
     } else {
