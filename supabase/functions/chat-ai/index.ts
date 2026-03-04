@@ -937,18 +937,14 @@ serve(async (req) => {
                         token === Deno.env.get('SUPABASE_PUBLISHABLE_KEY');
       
       if (!isAnonKey && token.length > 100) {
-        // Looks like a real user JWT - try to validate it using getClaims
-        const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-          global: { headers: { Authorization: `Bearer ${token}` } }
-        });
+        // Use the service role client to validate the user JWT
+        const { data: userData, error: authError } = await supabase.auth.getUser(token);
         
-        const { data: claimsData, error: claimsError } = await userSupabase.auth.getClaims(token);
-        
-        if (!claimsError && claimsData?.claims?.sub) {
-          user = { id: claimsData.claims.sub, email: claimsData.claims.email };
+        if (!authError && userData.user) {
+          user = { id: userData.user.id, email: userData.user.email };
           console.log('Authenticated user:', user.id);
         } else {
-          console.log('Invalid token, treating as anonymous user. Error:', claimsError?.message);
+          console.log('Invalid token, treating as anonymous user. Error:', authError?.message);
           isAnonymous = true;
         }
       } else {
