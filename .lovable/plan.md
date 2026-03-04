@@ -1,55 +1,35 @@
 
 
-## Plan: Prevent Duplicate Crawled Listings and Add Listing Count Control
+## Problem
 
-### Problem Analysis
+The `chat-ai` edge function fails to authenticate logged-in users. The log shows: `"Invalid token, treating as anonymous user. Error: Auth session missing!"`. This happens because `getClaims()` is not a valid method on the Supabase JS client.
 
-**Duplicates**: The current system has two dedup mechanisms, but both have gaps:
-1. A 6-hour cache check skips re-crawling recent data, but after 6 hours the same listings get re-crawled
-2. An upsert on `(source, external_id)` should prevent DB duplicates, but `external_id` is generated from `btoa(sourceUrl)` -- if the scraper returns a slightly different URL (query params, trailing slash), a duplicate row gets created
+The user has already used 2/2 anonymous searches, so every request gets rate-limited even though they're logged in.
 
-**Listing count**: Currently hardcoded to `MAX_DETAIL_PAGES = 10` in the scraper. The admin has no way to control how many listings get crawled per location/marketplace.
+## Root Cause
 
----
+`supabase.auth.getClaims(token)` does not exist in the Supabase JS SDK. The previous attempt to use `getUser(token)` also failed because it was called on an anon-key client without proper context.
 
-### Changes
+## Fix
 
-#### 1. Stronger Dedup in the Crawl Function
-- Before storing each property, query `external_properties` for existing rows matching the same `source` and `source_url` (exact match on cleaned URL)
-- Normalize source URLs before comparison (strip trailing slashes, sort query params, remove tracking parameters)
-- Add a `newListings` counter to the crawl results so the admin can see how many were genuinely new vs. updated
+**In `supabase/functions/chat-ai/index.ts`** (lines 939-953): Replace the `getClaims` approach with `supabase.auth.getUser(token)` called on the **service role** client, which can validate any user's JWT without needing an active session:
 
-#### 2. Admin-Controlled Max Listings Per Location
-- Add a `maxListingsPerLocation` parameter to `crawl-external-properties` (default: 10)
-- Pass it through to `scrape-marketplace` as a new `maxResults` parameter
-- `scrape-marketplace` will use this to override the hardcoded `MAX_DETAIL_PAGES`
+```typescript
+if (!isAnonKey && token.length > 100) {
+  // Use the service role client to validate the user JWT
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  
+  if (!authError && userData.user) {
+    user = { id: userData.user.id, email: userData.user.email };
+    console.log('Authenticated user:', user.id);
+  } else {
+    console.log('Invalid token, treating as anonymous user. Error:', authError?.message);
+    isAnonymous = true;
+  }
+}
+```
 
-#### 3. Admin Tools UI Updates
-- Add a slider (or number input) for "Max listings per location" (range: 1-20, default: 10)
-- Add a "New vs Updated" breakdown in the crawl results summary
-- Display dedup stats (skipped duplicates count)
+The key insight: the `supabase` client (line 925) is already initialized with the **service role key**, which has the authority to validate any user token via `auth.getUser(token)`. Previous attempts used an anon-key client, which lacks this capability.
 
----
-
-### Technical Details
-
-**Files to modify:**
-
-1. **`supabase/functions/crawl-external-properties/index.ts`**
-   - Accept `maxListingsPerLocation` in `CrawlRequest`
-   - Pass it to `scrape-marketplace` as `maxResults`
-   - Add URL normalization helper: strip trailing `/`, remove UTM params, lowercase
-   - Before upserting, check if a row with the same normalized `source_url` already exists -- if so, update instead of creating a new external_id
-   - Track `newListings` vs `updatedListings` in `CrawlResult`
-
-2. **`supabase/functions/scrape-marketplace/index.ts`**
-   - Accept `maxResults` in `SearchParams` (defaults to current `MAX_DETAIL_PAGES = 10`)
-   - Use it to cap `extractListingUrls` output and the fallback extraction
-   - Adjust `PAGES_TO_SCRAPE` dynamically: if `maxResults <= 5`, only scrape 1-2 pages
-
-3. **`src/pages/AdminTools.tsx`**
-   - Add `crawlMaxListings` state (number, default 10)
-   - Render a Slider component (1-20) with label showing current value
-   - Pass `maxListingsPerLocation` in the function invoke body
-   - Update results display to show new/updated/duplicate breakdown
+This is a single-line change in the edge function, followed by redeployment.
 
