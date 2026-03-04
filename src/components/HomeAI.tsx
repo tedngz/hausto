@@ -225,13 +225,8 @@ export const HomeAI = ({
   };
   const handleLikeProperty = async (propertyId: string, realtorId?: string) => {
     if (!user) {
-      // Store query for after login
       localStorage.setItem('pendingSearchQuery', query);
-      navigate('/auth', {
-        state: {
-          returnTo: '/'
-        }
-      });
+      navigate('/auth', { state: { returnTo: '/' } });
       return;
     }
     try {
@@ -240,17 +235,37 @@ export const HomeAI = ({
       // Find the actual realtor ID from the search results
       const property = allResults.find(p => p.id === propertyId);
       const actualRealtorId = property?.realtor_id || realtorId;
+
+      // Check if this is an external property (realtor_id starts with "ext-")
+      const isExternal = actualRealtorId?.startsWith('ext-');
+
+      if (isExternal) {
+        // External properties can't be matched via property_matches (FK constraint).
+        const { data: internalProp } = await supabase
+          .from('properties')
+          .select('realtor_id')
+          .eq('id', propertyId)
+          .maybeSingle();
+
+        if (internalProp?.realtor_id) {
+          await createMatch(propertyId, internalProp.realtor_id);
+        } else {
+          toast({
+            title: "External property saved!",
+            description: "This is an external listing. Visit the source link to contact the owner directly.",
+          });
+        }
+        return;
+      }
+
       if (!actualRealtorId) {
-        // Fallback: try to get realtor_id from database
-        const {
-          data: propertyData
-        } = await supabase.from('properties').select('realtor_id').eq('id', propertyId).single();
+        const { data: propertyData } = await supabase
+          .from('properties')
+          .select('realtor_id')
+          .eq('id', propertyId)
+          .single();
         if (propertyData?.realtor_id) {
           await createMatch(propertyId, propertyData.realtor_id);
-          toast({
-            title: "Property liked!",
-            description: "Added to your matches"
-          });
         } else {
           toast({
             title: "Error",
@@ -260,23 +275,18 @@ export const HomeAI = ({
         }
       } else {
         await createMatch(propertyId, actualRealtorId);
-        toast({
-          title: "Property liked!",
-          description: "Added to your matches"
+      }
+    } catch (error: any) {
+      console.error('Error liking property:', error);
+      // Don't revert if it's ALREADY_MATCHED - keep it visually liked
+      if (error?.message !== 'ALREADY_MATCHED') {
+        setLikedProperties(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(propertyId);
+          return newSet;
         });
       }
-    } catch (error) {
-      console.error('Error liking property:', error);
-      setLikedProperties(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(propertyId);
-        return newSet;
-      });
-      toast({
-        title: "Error",
-        description: "Failed to like property",
-        variant: "destructive"
-      });
+      // Toast is already handled by useMatches onError
     }
   };
   const handleSearch = async (searchQuery?: string) => {
