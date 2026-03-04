@@ -70,35 +70,46 @@ export const useProperties = () => {
       // Cache miss - fetch from database
       console.log('[Properties] Cache miss - fetching from database');
       
-      // First get properties - only active properties within the 10-day visibility period
-      // Using the database function is_property_within_active_period for consistency
-      const { data: propertiesData, error: propertiesError } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('is_active', true)
-        .gte('last_activated_at', new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString())
-        .order('created_at', { ascending: false });
+      // Fetch internal and external properties in parallel
+      const [internalResult, externalResult] = await Promise.all([
+        supabase
+          .from('properties')
+          .select('*')
+          .eq('is_active', true)
+          .gte('last_activated_at', new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('external_properties')
+          .select('*')
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false }),
+      ]);
 
-      if (propertiesError) throw propertiesError;
+      if (internalResult.error) throw internalResult.error;
       
-      if (!propertiesData?.length) return [];
+      const propertiesData = internalResult.data || [];
+      const externalData = externalResult.data || [];
 
-      // Get all unique realtor IDs
+      if (!propertiesData.length && !externalData.length) return [];
+
+      // Get all unique realtor IDs from internal properties
       const realtorIds = [...new Set(propertiesData.map(p => p.realtor_id))];
       
       // Get realtor profiles
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, name, email, phone, avatar_url')
-        .in('id', realtorIds);
+      let profilesMap = new Map<string, any>();
+      if (realtorIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, name, email, phone, avatar_url')
+          .in('id', realtorIds);
 
-      if (profilesError) throw profilesError;
+        if (profilesError) throw profilesError;
+        profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+      }
       
-      // Create a map of profiles for quick lookup
-      const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
-      
-      // Transform data to match Apartment interface
-      const transformedProperties = propertiesData.map(property => {
+      // Transform internal properties
+      const transformedInternal = propertiesData.map(property => {
         const profile = profilesMap.get(property.realtor_id);
         return {
           ...property,
@@ -111,6 +122,44 @@ export const useProperties = () => {
           }
         };
       });
+
+      // Transform external properties to match the same interface
+      const transformedExternal = externalData.map(ext => ({
+        id: ext.id,
+        realtor_id: `ext-${ext.source}`,
+        title: ext.title,
+        description: ext.description,
+        location: ext.location,
+        price: Number(ext.price) || 0,
+        size: ext.size,
+        rooms: ext.rooms,
+        vibe: ext.vibe,
+        highlights: ext.highlights || [],
+        images: ext.images || [],
+        vibe_analysis: ext.vibe_analysis,
+        property_source_link: ext.source_url,
+        property_source_provider_name: ext.contact_name,
+        property_source_provider_phone: ext.contact_phone,
+        amenities: ext.amenities || [],
+        created_at: ext.created_at || ext.crawled_at || new Date().toISOString(),
+        updated_at: ext.updated_at || new Date().toISOString(),
+        is_active: ext.is_active ?? true,
+        last_activated_at: ext.crawled_at || ext.created_at || new Date().toISOString(),
+        latitude: ext.latitude,
+        longitude: ext.longitude,
+        _isExternal: true,
+        _source: ext.source,
+        _sourceUrl: ext.source_url,
+        realtor: {
+          id: `ext-${ext.source}`,
+          name: ext.contact_name || ext.source || 'External Listing',
+          email: '',
+          phone: ext.contact_phone || '',
+          avatar: ''
+        }
+      }));
+
+      const transformedProperties = [...transformedInternal, ...transformedExternal];
 
       // Cache the result (fire and forget)
       supabase.functions
