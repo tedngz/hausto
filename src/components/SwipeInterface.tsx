@@ -454,7 +454,8 @@ export const SwipeInterface = ({
       if (isExternal) {
         // Extract real UUID from ext-prefixed id
         const realId = currentApartment.id.replace(/^ext-/, '');
-        await createMatch(realId, currentApartment.realtor.id, 'external');
+        // Use current user's ID as placeholder realtor_id for external properties
+        await createMatch(realId, user?.id || '', 'external');
         console.log('External match created successfully');
       } else {
         const realProperty = realProperties?.find(p => p.id === currentApartment.id);
