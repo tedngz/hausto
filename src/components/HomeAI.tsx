@@ -240,8 +240,9 @@ export const HomeAI = ({
       const isExternal = actualRealtorId?.startsWith('ext-');
 
       if (isExternal) {
-        // Use the actual external property UUID (not the ext- prefixed one)
-        await createMatch(propertyId, actualRealtorId, 'external');
+        // For external properties, use current user's ID as placeholder realtor_id
+        // since there's no real realtor in the system for external listings
+        await createMatch(propertyId, user.id, 'external');
         return;
       }
 
