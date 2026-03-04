@@ -240,21 +240,8 @@ export const HomeAI = ({
       const isExternal = actualRealtorId?.startsWith('ext-');
 
       if (isExternal) {
-        // External properties can't be matched via property_matches (FK constraint).
-        const { data: internalProp } = await supabase
-          .from('properties')
-          .select('realtor_id')
-          .eq('id', propertyId)
-          .maybeSingle();
-
-        if (internalProp?.realtor_id) {
-          await createMatch(propertyId, internalProp.realtor_id);
-        } else {
-          toast({
-            title: "External property saved!",
-            description: "This is an external listing. Visit the source link to contact the owner directly.",
-          });
-        }
+        // Use the actual external property UUID (not the ext- prefixed one)
+        await createMatch(propertyId, actualRealtorId, 'external');
         return;
       }
 

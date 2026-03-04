@@ -451,16 +451,19 @@ export const SwipeInterface = ({
 
       // Create match using useMatches hook (this will handle usage tracking)
       const isExternal = currentApartment.id.startsWith('ext-');
-      const realProperty = realProperties?.find(p => p.id === currentApartment.id);
-      if (realProperty) {
-        await createMatch(currentApartment.id, realProperty.realtor_id);
-        console.log('Match created successfully');
-      } else if (isExternal && currentApartment.property_source_link) {
-        // For external properties, open the source listing
-        window.open(currentApartment.property_source_link, '_blank');
-        toast.success('Opening listing on the marketplace!');
+      if (isExternal) {
+        // Extract real UUID from ext-prefixed id
+        const realId = currentApartment.id.replace(/^ext-/, '');
+        await createMatch(realId, currentApartment.realtor.id, 'external');
+        console.log('External match created successfully');
       } else {
-        toast.success('Match created! Check your matches to connect with the realtor.');
+        const realProperty = realProperties?.find(p => p.id === currentApartment.id);
+        if (realProperty) {
+          await createMatch(currentApartment.id, realProperty.realtor_id);
+          console.log('Match created successfully');
+        } else {
+          toast.success('Match created! Check your matches to connect with the realtor.');
+        }
       }
       moveToNext();
     } catch (error) {
