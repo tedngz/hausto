@@ -282,7 +282,7 @@ export const useMatches = () => {
   };
 
   const createMatch = (propertyId: string, realtorId: string) => {
-    createMatchMutation.mutate({ propertyId, realtorId });
+    return createMatchMutation.mutateAsync({ propertyId, realtorId });
   };
 
   return {
