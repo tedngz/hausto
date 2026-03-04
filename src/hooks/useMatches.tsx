@@ -10,6 +10,7 @@ export interface PropertyMatch {
   renter_id: string;
   property_id: string;
   realtor_id: string;
+  property_type: string;
   created_at: string;
   updated_at: string;
   renter_name?: string;
@@ -29,7 +30,59 @@ export interface PropertyMatch {
     realtor_id?: string;
     vibe_analysis?: any;
     amenities?: string[];
+    property_source_link?: string;
+    property_source_provider_name?: string;
+    property_source_provider_phone?: string;
+    source_url?: string;
+    contact_name?: string;
+    contact_phone?: string;
   };
+}
+
+// Helper to enrich matches with property data from both tables
+async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
+  if (!matches || matches.length === 0) return matches;
+
+  const internalIds = matches.filter(m => m.property_type !== 'external').map(m => m.property_id);
+  const externalIds = matches.filter(m => m.property_type === 'external').map(m => m.property_id);
+
+  const [internalResult, externalResult] = await Promise.all([
+    internalIds.length > 0
+      ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, property_source_link, property_source_provider_name, property_source_provider_phone, amenities').in('id', internalIds)
+      : Promise.resolve({ data: [] }),
+    externalIds.length > 0
+      ? supabase.from('external_properties').select('id, title, location, price, vibe, images, description, highlights, size, vibe_analysis, amenities, source_url, contact_name, contact_phone, source').in('id', externalIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const propertyMap = new Map<string, any>();
+  (internalResult.data || []).forEach(p => propertyMap.set(p.id, { ...p, _type: 'internal' }));
+  (externalResult.data || []).forEach(p => propertyMap.set(p.id, {
+    id: p.id,
+    title: p.title,
+    location: p.location,
+    price: Number(p.price) || 0,
+    vibe: p.vibe,
+    images: p.images,
+    description: p.description,
+    highlights: p.highlights,
+    size: p.size,
+    vibe_analysis: p.vibe_analysis,
+    amenities: p.amenities,
+    property_source_link: p.source_url,
+    property_source_provider_name: p.contact_name,
+    property_source_provider_phone: p.contact_phone,
+    realtor_id: `ext-${p.source}`,
+    source_url: p.source_url,
+    contact_name: p.contact_name,
+    contact_phone: p.contact_phone,
+    _type: 'external',
+  }));
+
+  return matches.map(match => ({
+    ...match,
+    properties: propertyMap.get(match.property_id) || null,
+  }));
 }
 
 export const useMatches = () => {
@@ -46,59 +99,31 @@ export const useMatches = () => {
       
       const { data: matches, error } = await supabase
         .from('property_matches')
-        .select(`
-          *,
-          properties:property_id (
-            id,
-            title,
-            location,
-            price,
-            vibe,
-            images,
-            description,
-            highlights,
-            size,
-            realtor_id,
-            vibe_analysis,
-            property_source_link,
-            property_source_provider_name,
-            property_source_provider_phone,
-            amenities
-          )
-        `)
+        .select('*')
         .eq('realtor_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
+      const enriched = await enrichMatchesWithProperties(matches || []);
+
       // Get renter names for all matches
-      if (matches && matches.length > 0) {
-        const renterIds = matches.map(match => match.renter_id);
-        console.log('Realtor matches - renter IDs:', renterIds);
-        
-        const { data: profiles, error: profilesError } = await supabase
+      if (enriched.length > 0) {
+        const renterIds = enriched.map(match => match.renter_id);
+        const { data: profiles } = await supabase
           .rpc('get_matched_public_profiles', { user_ids: renterIds });
 
-        console.log('Realtor matches - fetched profiles:', profiles);
-        if (profilesError) {
-          console.error('Error fetching renter profiles:', profilesError);
-        }
-
-        // Map names and avatars to matches
-        const matchesWithNames = matches.map(match => {
-          const profile = profiles?.find(p => p.id === match.renter_id);
+        return enriched.map(match => {
+          const profile = profiles?.find((p: any) => p.id === match.renter_id);
           return {
             ...match,
             renter_name: profile?.name || 'Anonymous Renter',
             renter_avatar: profile?.avatar_url
           };
-        });
-
-        console.log('Realtor matches with names:', matchesWithNames);
-        return matchesWithNames as PropertyMatch[];
+        }) as PropertyMatch[];
       }
 
-      return matches as PropertyMatch[];
+      return enriched as PropertyMatch[];
     },
     enabled: !!user?.id,
   });
@@ -111,59 +136,46 @@ export const useMatches = () => {
       
       const { data: matches, error } = await supabase
         .from('property_matches')
-        .select(`
-          *,
-          properties:property_id (
-            id,
-            title,
-            location,
-            price,
-            vibe,
-            images,
-            description,
-            highlights,
-            size,
-            realtor_id,
-            vibe_analysis,
-            property_source_link,
-            property_source_provider_name,
-            property_source_provider_phone,
-            amenities
-          )
-        `)
+        .select('*')
         .eq('renter_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Get realtor names for all matches
-      if (matches && matches.length > 0) {
-        const realtorIds = matches.map(match => match.realtor_id).filter(Boolean);
-        console.log('Renter matches - realtor IDs:', realtorIds);
-        
-        const { data: profiles, error: profilesError } = await supabase
-          .rpc('get_matched_public_profiles', { user_ids: realtorIds });
+      const enriched = await enrichMatchesWithProperties(matches || []);
 
-        console.log('Renter matches - fetched profiles:', profiles);
-        if (profilesError) {
-          console.error('Error fetching realtor profiles:', profilesError);
+      // Get realtor names for internal matches
+      if (enriched.length > 0) {
+        const realtorIds = enriched
+          .filter(m => m.property_type !== 'external')
+          .map(match => match.realtor_id)
+          .filter(Boolean);
+
+        let profiles: any[] = [];
+        if (realtorIds.length > 0) {
+          const { data } = await supabase
+            .rpc('get_matched_public_profiles', { user_ids: realtorIds });
+          profiles = data || [];
         }
 
-        // Map names and avatars to matches
-        const matchesWithNames = matches.map(match => {
-          const profile = profiles?.find(p => p.id === match.realtor_id);
+        return enriched.map(match => {
+          if (match.property_type === 'external') {
+            return {
+              ...match,
+              realtor_name: match.properties?.contact_name || 'External Listing',
+              realtor_avatar: undefined,
+            };
+          }
+          const profile = profiles.find((p: any) => p.id === match.realtor_id);
           return {
             ...match,
             realtor_name: profile?.name || 'Property Owner',
             realtor_avatar: profile?.avatar_url
           };
-        });
-
-        console.log('Renter matches with names:', matchesWithNames);
-        return matchesWithNames as PropertyMatch[];
+        }) as PropertyMatch[];
       }
 
-      return matches as PropertyMatch[];
+      return enriched as PropertyMatch[];
     },
     enabled: !!user?.id,
   });
@@ -196,7 +208,7 @@ export const useMatches = () => {
 
   // Create match mutation
   const createMatchMutation = useMutation({
-    mutationFn: async ({ propertyId, realtorId }: { propertyId: string; realtorId: string }) => {
+    mutationFn: async ({ propertyId, realtorId, propertyType = 'internal' }: { propertyId: string; realtorId: string; propertyType?: string }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
       // Check if user can create more matches BEFORE proceeding
@@ -222,28 +234,28 @@ export const useMatches = () => {
           renter_id: user.id,
           property_id: propertyId,
           realtor_id: realtorId,
-        });
+          property_type: propertyType,
+        } as any);
       if (error) throw error;
 
-      // Ensure a conversation exists for this renter/realtor pair so it shows up in Hausto Chat
-      const { error: convError } = await supabase
-        .from('match_conversations')
-        .upsert(
-          {
-            renter_id: user.id,
-            realtor_id: realtorId,
-            is_active: true,
-            last_message_at: new Date().toISOString(),
-          },
-          { onConflict: 'renter_id,realtor_id' }
-        );
-      if (convError) {
-        // Non-fatal: log but don't block match creation UX
-        console.error('Failed to upsert match_conversations:', convError);
+      // For internal properties, ensure a conversation exists
+      if (propertyType === 'internal') {
+        const { error: convError } = await supabase
+          .from('match_conversations')
+          .upsert(
+            {
+              renter_id: user.id,
+              realtor_id: realtorId,
+              is_active: true,
+              last_message_at: new Date().toISOString(),
+            },
+            { onConflict: 'renter_id,realtor_id' }
+          );
+        if (convError) {
+          console.error('Failed to upsert match_conversations:', convError);
+        }
       }
       
-      // Update usage tracking for matches (includes AI chat matches)
-      // Count match as both a match AND a view in a single update to avoid race conditions
       await updateUsage('match-with-view');
     },
     onSuccess: () => {
@@ -251,7 +263,7 @@ export const useMatches = () => {
       queryClient.invalidateQueries({ queryKey: ['match-conversations'] });
       toast({
         title: "Property liked!",
-        description: "Property has been added to your matches and chat.",
+        description: "Property has been added to your matches.",
       });
     },
     onError: (error: any) => {
@@ -281,8 +293,8 @@ export const useMatches = () => {
     removeMatchMutation.mutate(matchId);
   };
 
-  const createMatch = (propertyId: string, realtorId: string) => {
-    return createMatchMutation.mutateAsync({ propertyId, realtorId });
+  const createMatch = (propertyId: string, realtorId: string, propertyType: string = 'internal') => {
+    return createMatchMutation.mutateAsync({ propertyId, realtorId, propertyType });
   };
 
   return {

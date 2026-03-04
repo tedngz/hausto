@@ -637,6 +637,7 @@ export type Database = {
           created_at: string
           id: string
           property_id: string
+          property_type: string
           realtor_id: string
           renter_id: string
           updated_at: string
@@ -645,6 +646,7 @@ export type Database = {
           created_at?: string
           id?: string
           property_id: string
+          property_type?: string
           realtor_id: string
           renter_id: string
           updated_at?: string
@@ -653,19 +655,12 @@ export type Database = {
           created_at?: string
           id?: string
           property_id?: string
+          property_type?: string
           realtor_id?: string
           renter_id?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "property_matches_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       property_translations: {
         Row: {

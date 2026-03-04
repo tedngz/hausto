@@ -54,6 +54,9 @@ export const MatchesView = ({
         parsedVA = null;
       }
     }
+
+    const isExternal = match.property_type === 'external';
+    
     return {
       id: match.properties.id,
       images: match.properties.images || [],
@@ -66,15 +69,17 @@ export const MatchesView = ({
       highlights: match.properties.highlights || [],
       amenities: match.properties.amenities || [],
       vibe_analysis: parsedVA,
-      property_source_link: match.properties.property_source_link,
-      property_source_provider_name: match.properties.property_source_provider_name,
-      property_source_provider_phone: match.properties.property_source_provider_phone,
+      property_source_link: match.properties.property_source_link || match.properties.source_url,
+      property_source_provider_name: match.properties.property_source_provider_name || match.properties.contact_name,
+      property_source_provider_phone: match.properties.property_source_provider_phone || match.properties.contact_phone,
       realtor: {
-        id: match.properties.realtor_id || '',
-        name: match.realtor_name || 'Property Owner',
-        phone: '+1-234-567-8900',
-        email: 'contact@realtor.com',
-        avatar: match.realtor_avatar || ''
+        id: match.properties.realtor_id || match.realtor_id || '',
+        name: isExternal
+          ? (match.properties.contact_name || 'External Listing')
+          : (match.realtor_name || 'Property Owner'),
+        phone: isExternal ? (match.properties.contact_phone || '') : '+1-234-567-8900',
+        email: isExternal ? '' : 'contact@realtor.com',
+        avatar: isExternal ? '' : (match.realtor_avatar || '')
       },
       matchId: match.id
     };
@@ -86,6 +91,12 @@ export const MatchesView = ({
   const handleContactRealtor = async (apartment: Apartment) => {
     if (!user?.id) {
       setSelectedApartment(apartment);
+      return;
+    }
+
+    // For external properties, open the source link
+    if (apartment.property_source_link && apartment.realtor.id.startsWith('ext-')) {
+      window.open(apartment.property_source_link, '_blank');
       return;
     }
 
@@ -107,12 +118,10 @@ export const MatchesView = ({
     const conversationId = await getOrCreateConversation(user.id, apartment.realtor.id);
     
     if (conversationId) {
-      // Set the current conversation and open chat
       setCurrentConversationId(conversationId);
       setSelectedConversationId(conversationId);
       setIsChatOpen(true);
     } else {
-      // Fallback to contact modal if conversation creation fails
       setSelectedApartment(apartment);
     }
   };
