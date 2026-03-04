@@ -82,36 +82,60 @@ export const useAISearches = (conversationId?: string) => {
     // Get the property IDs
     const propertyIds = searchResults.map(result => result.property_id);
 
-    // Fetch full property data
-    const { data: properties, error: propertiesError } = await supabase
-      .from('properties')
-      .select('*')
-      .in('id', propertyIds);
+    // Fetch from both internal and external properties in parallel
+    const [internalResult, externalResult] = await Promise.all([
+      supabase.from('properties').select('*').in('id', propertyIds),
+      supabase.from('external_properties').select('*').in('id', propertyIds),
+    ]);
 
-    if (propertiesError || !properties) {
-      console.error('Error fetching properties:', propertiesError);
-      return [];
+    const internalProperties = internalResult.data || [];
+    const externalProperties = externalResult.data || [];
+
+    // Build a combined map
+    const propertyMap = new Map<string, any>();
+    for (const p of internalProperties) {
+      propertyMap.set(p.id, { ...p, _isExternal: false });
+    }
+    for (const ext of externalProperties) {
+      propertyMap.set(ext.id, {
+        id: ext.id,
+        title: ext.title,
+        location: ext.location,
+        price: Number(ext.price) || 0,
+        size: ext.size || '',
+        vibe: ext.vibe || '',
+        description: ext.description || '',
+        highlights: ext.highlights || [],
+        images: ext.images || [],
+        realtor_id: `ext-${ext.source}`,
+        vibe_analysis: ext.vibe_analysis,
+        _isExternal: true,
+      });
     }
 
     // Combine property data with match scores and reasons
-    return properties.map(property => {
-      const searchResult = searchResults.find(r => r.property_id === property.id);
-      return {
-        id: property.id,
-        title: property.title,
-        location: property.location,
-        price: property.price,
-        size: property.size || '',
-        vibe: property.vibe || '',
-        description: property.description || '',
-        highlights: property.highlights || [],
-        images: property.images || [],
-        matchScore: searchResult?.match_score || 0,
-        matchReason: searchResult?.match_reason || '',
-        realtor_id: property.realtor_id,
-        vibe_analysis: property.vibe_analysis
-      };
-    });
+    return propertyIds
+      .map(pid => {
+        const property = propertyMap.get(pid);
+        if (!property) return null;
+        const searchResult = searchResults.find(r => r.property_id === pid);
+        return {
+          id: property.id,
+          title: property.title,
+          location: property.location,
+          price: property.price,
+          size: property.size || '',
+          vibe: property.vibe || '',
+          description: property.description || '',
+          highlights: property.highlights || [],
+          images: property.images || [],
+          matchScore: searchResult?.match_score || 0,
+          matchReason: searchResult?.match_reason || '',
+          realtor_id: property.realtor_id,
+          vibe_analysis: property.vibe_analysis
+        };
+      })
+      .filter(Boolean) as PropertyMatch[];
   };
 
   return {
