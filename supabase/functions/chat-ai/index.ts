@@ -937,14 +937,36 @@ serve(async (req) => {
                         token === Deno.env.get('SUPABASE_PUBLISHABLE_KEY');
       
       if (!isAnonKey && token.length > 100) {
-        // Use the service role client to validate the user JWT
-        const { data: userData, error: authError } = await supabase.auth.getUser(token);
-        
-        if (!authError && userData.user) {
-          user = { id: userData.user.id, email: userData.user.email };
-          console.log('Authenticated user:', user.id);
-        } else {
-          console.log('Invalid token, treating as anonymous user. Error:', authError?.message);
+        // Decode the JWT payload directly - no server call needed
+        // The token is already validated by Supabase's API gateway
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            // Decode base64url payload
+            const payloadBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const payloadJson = atob(payloadBase64);
+            const payload = JSON.parse(payloadJson);
+            
+            if (payload.sub) {
+              // Check token expiration
+              const now = Math.floor(Date.now() / 1000);
+              if (payload.exp && payload.exp > now) {
+                user = { id: payload.sub, email: payload.email || null };
+                console.log('Authenticated user from JWT:', user.id);
+              } else {
+                console.log('Token expired, treating as anonymous');
+                isAnonymous = true;
+              }
+            } else {
+              console.log('No sub in token payload, treating as anonymous');
+              isAnonymous = true;
+            }
+          } else {
+            console.log('Invalid JWT format, treating as anonymous');
+            isAnonymous = true;
+          }
+        } catch (decodeError) {
+          console.log('Failed to decode JWT, treating as anonymous. Error:', decodeError?.message);
           isAnonymous = true;
         }
       } else {
