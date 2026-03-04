@@ -266,7 +266,7 @@ function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   return null;
 }
 
-function getLocationTier(location: string, city: 'hcm' | 'hanoi'): 'center' | 'near-center' | 'suburban' | 'unknown' {
+function getLocationTier(location: string, city: 'hcm' | 'hanoi' | 'danang'): 'center' | 'near-center' | 'suburban' | 'unknown' {
   const locLower = location.toLowerCase();
   const cityData = LOCATION_DATA[city];
   
@@ -605,13 +605,19 @@ function filterAndScoreProperties(
     
     // ========== HARD FILTERS (Eliminate non-matching) ==========
     
-    // 1. City filter (STRICT)
+    // 1. City filter (STRICT) - exclude properties from ALL other cities
     if (context.city) {
-      const otherCityData = context.city === 'hcm' ? LOCATION_DATA.hanoi : LOCATION_DATA.hcm;
-      const isOtherCity = otherCityData.aliases.some(a => locLower.includes(a)) ||
-        Object.values(otherCityData.districts).some(tier => 
-          tier.names.some(d => locLower.includes(d))
-        );
+      const otherCities = Object.entries(LOCATION_DATA).filter(([key]) => key !== context.city);
+      let isOtherCity = false;
+      for (const [, cityData] of otherCities) {
+        if (cityData.aliases.some(a => locLower.includes(a)) ||
+          Object.values(cityData.districts).some(tier => 
+            tier.names.some(d => locLower.includes(d))
+          )) {
+          isOtherCity = true;
+          break;
+        }
+      }
       if (isOtherCity) continue; // Skip properties from wrong city
     }
     
