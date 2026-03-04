@@ -255,7 +255,8 @@ export const SwipeInterface = ({
           if (userPreferences.location?.length) {
             const propertyLocationNorm = apartment.location.toLowerCase().trim();
             const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
-            const propertyCityRaw = propertyParts.length > 1 ? propertyParts[propertyParts.length - 1] : propertyParts[0];
+            // Use last part as city (works for both "District, City" and "Street, Ward, District, City")
+            const propertyCityRaw = propertyParts[propertyParts.length - 1];
             const normalizeCity = (value: string) => {
               const v = value.toLowerCase();
               if (v.includes('ho chi minh') || v.includes('hcm') || v.includes('hồ chí minh')) return 'hcm';
@@ -263,22 +264,36 @@ export const SwipeInterface = ({
               if (v.includes('da nang') || v.includes('danang') || v.includes('đà nẵng')) return 'danang';
               return v.trim();
             };
+            const normalizeDistrict = (value: string) => {
+              return value.toLowerCase()
+                .replace(/district\s*/i, '')
+                .replace(/quận\s*/i, '')
+                .replace(/huyện\s*/i, '')
+                .trim();
+            };
             const propertyCity = normalizeCity(propertyCityRaw);
             locationMatch = userPreferences.location.some(preferredLoc => {
               const preferredLocNorm = preferredLoc.toLowerCase().trim();
               const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
-              const preferredCityRaw = preferredParts.length > 1 ? preferredParts[preferredParts.length - 1] : preferredParts[0];
+              const preferredCityRaw = preferredParts[preferredParts.length - 1];
               const preferredCity = normalizeCity(preferredCityRaw);
 
-              // If user specified a district (has comma separator), require exact district + city match
+              // Cities must match first
+              if (preferredCity !== propertyCity) return false;
+
+              // If user specified a district (has comma separator), check if property contains that district
               if (preferredParts.length > 1) {
-                const preferredDistrict = preferredParts[0];
-                const propertyDistrict = propertyParts[0];
-                return preferredCity === propertyCity && preferredDistrict === propertyDistrict;
+                const preferredDistrict = normalizeDistrict(preferredParts[0]);
+                // Check ALL parts of the property location for the district match
+                // This handles external properties with full addresses like "Street, Ward, District, City"
+                return propertyParts.some(part => {
+                  const normalizedPart = normalizeDistrict(part);
+                  return normalizedPart === preferredDistrict || normalizedPart.includes(preferredDistrict) || preferredDistrict.includes(normalizedPart);
+                });
               }
 
               // If only city specified, any property in same normalized city is allowed
-              return preferredCity === propertyCity;
+              return true;
             });
           } else {
             locationMatch = true; // No location preference means accept all
