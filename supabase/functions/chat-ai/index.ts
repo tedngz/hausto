@@ -585,6 +585,10 @@ interface PropertyWithScore {
   matchReasons: string[];
   // Whether this property is an exact sub-area match (e.g., Thao Dien when user asked for Thao Dien)
   isExactSubAreaMatch?: boolean;
+  // External property flags
+  isExternal?: boolean;
+  source?: string;
+  sourceUrl?: string;
 }
 
 
@@ -841,6 +845,9 @@ function filterAndScoreProperties(
       locationTier,
       matchReasons,
       isExactSubAreaMatch,
+      isExternal: !!p._isExternal,
+      source: p._source || null,
+      sourceUrl: p._sourceUrl || null,
     });
   }
   
@@ -880,6 +887,9 @@ function validateAndFixAIResults(
       images: actualProperty.images, // Use actual images
       realtor_id: actualProperty.realtor_id,
       matchScore: actualProperty.matchScore, // Use our calculated score
+      isExternal: !!actualProperty.isExternal,
+      source: actualProperty.source || null,
+      sourceUrl: actualProperty.sourceUrl || null,
     };
     
     // Verify price constraint
@@ -1011,23 +1021,59 @@ serve(async (req) => {
       );
     }
 
-    // Fetch active properties
+    // Fetch active internal properties
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
     
-    const { data: propertiesData, error: propertiesError } = await supabase
-      .from('properties')
-      .select('*')
-      .eq('is_active', true)
-      .gte('last_activated_at', tenDaysAgo.toISOString());
+    const [internalResult, externalResult] = await Promise.all([
+      supabase
+        .from('properties')
+        .select('*')
+        .eq('is_active', true)
+        .gte('last_activated_at', tenDaysAgo.toISOString()),
+      supabase
+        .from('external_properties')
+        .select('*')
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .limit(200)
+    ]);
 
-    if (propertiesError) {
-      console.error('Error fetching properties:', propertiesError);
-      throw propertiesError;
+    if (internalResult.error) {
+      console.error('Error fetching internal properties:', internalResult.error);
+      throw internalResult.error;
     }
     
-    const properties = propertiesData || [];
-    console.log(`Found ${properties.length} active properties`);
+    // Transform external properties to match internal property shape
+    const externalProperties = (externalResult.data || []).map((ext: any) => ({
+      id: ext.id, // Use real UUID so ai_search_results FK works
+      title: ext.title,
+      location: ext.location,
+      price: Number(ext.price) || 0,
+      size: ext.size || null,
+      vibe: ext.vibe || null,
+      description: ext.description || null,
+      highlights: ext.highlights || [],
+      amenities: ext.amenities || [],
+      images: ext.images || [],
+      realtor_id: `ext-${ext.source}`, // Synthetic realtor ID for external
+      vibe_analysis: ext.vibe_analysis || {},
+      created_at: ext.created_at,
+      last_activated_at: ext.crawled_at,
+      is_active: true,
+      rooms: ext.rooms || null,
+      property_source_link: ext.source_url,
+      property_source_provider_name: ext.contact_name || null,
+      property_source_provider_phone: ext.contact_phone || null,
+      latitude: ext.latitude,
+      longitude: ext.longitude,
+      _isExternal: true, // Internal flag for later use
+      _source: ext.source,
+      _sourceUrl: ext.source_url,
+    }));
+    
+    const properties = [...(internalResult.data || []), ...externalProperties];
+    console.log(`Found ${internalResult.data?.length || 0} internal + ${externalProperties.length} external = ${properties.length} total properties`);
 
     // Helper functions
     const isValidUUID = (v: string | null | undefined) =>
@@ -1620,9 +1666,9 @@ Maximum ${maxResults} properties in results.`;
           ? p.matchReasons.join(', ') 
           : `Great ${p.styles[0] || 'modern'} apartment in ${p.location.split(',')[0]} at ${(p.price/1000000).toFixed(1)}M VND/month`,
         realtor_id: p.realtor_id,
-        isExternal: false,
-        source: null,
-        sourceUrl: null
+        isExternal: !!p.isExternal,
+        source: p.source || null,
+        sourceUrl: p.sourceUrl || null
       }));
       
       // Generate a summary based on context
