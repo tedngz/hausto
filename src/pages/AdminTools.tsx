@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -45,8 +45,92 @@ const AdminTools = () => {
   const [crawlResults, setCrawlResults] = useState<any>(null);
   const [crawlMaxListings, setCrawlMaxListings] = useState(10);
   const [crawlProgress, setCrawlProgress] = useState<{ current: number; total: number; location: string } | null>(null);
+  const [isManualCrawlTriggering, setIsManualCrawlTriggering] = useState(false);
 
-  // Check admin role from user_roles table (must be before any early returns)
+  // Fetch recent crawl activity from external_properties
+  const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
+    queryKey: ['crawl-activity'],
+    queryFn: async () => {
+      // Get the 50 most recently crawled properties grouped by approximate crawl time
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('id, city, source, location_normalized, crawled_at, title, price, is_active')
+        .order('crawled_at', { ascending: false })
+        .limit(200);
+      
+      if (error) throw error;
+      if (!data || data.length === 0) return [];
+
+      // Group by crawl runs (properties crawled within 5 minutes of each other)
+      const runs: Array<{
+        timestamp: string;
+        city: string;
+        source: string;
+        location: string;
+        count: number;
+        listings: Array<{ title: string; price: number }>;
+      }> = [];
+
+      let currentRun: typeof runs[0] | null = null;
+
+      for (const prop of data) {
+        const crawlTime = new Date(prop.crawled_at!).getTime();
+        
+        if (
+          !currentRun ||
+          Math.abs(crawlTime - new Date(currentRun.timestamp).getTime()) > 5 * 60 * 1000 ||
+          currentRun.source !== prop.source ||
+          currentRun.city !== prop.city
+        ) {
+          currentRun = {
+            timestamp: prop.crawled_at!,
+            city: prop.city || 'unknown',
+            source: prop.source || 'unknown',
+            location: prop.location_normalized || 'unknown',
+            count: 0,
+            listings: [],
+          };
+          runs.push(currentRun);
+        }
+        
+        currentRun.count++;
+        if (currentRun.listings.length < 3) {
+          currentRun.listings.push({ title: prop.title || 'Unknown', price: prop.price || 0 });
+        }
+      }
+
+      return runs.slice(0, 10);
+    },
+    refetchInterval: 60000, // Refresh every minute
+  });
+
+  // Fetch crawl coverage stats
+  const { data: crawlStats } = useQuery({
+    queryKey: ['crawl-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('city, source, is_active')
+        .eq('is_active', true);
+      
+      if (error) throw error;
+      
+      const stats = {
+        total: data?.length || 0,
+        byCitySource: {} as Record<string, number>,
+      };
+
+      for (const prop of data || []) {
+        const key = `${prop.city}/${prop.source}`;
+        stats.byCitySource[key] = (stats.byCitySource[key] || 0) + 1;
+      }
+
+      return stats;
+    },
+    refetchInterval: 60000,
+  });
+
+
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
     queryKey: ['is-admin', user?.id],
     queryFn: async () => {
