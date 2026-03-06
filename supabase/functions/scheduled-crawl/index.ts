@@ -244,16 +244,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Skip if last crawl was less than 4 hours ago
+    // Skip if last crawl was within the configured frequency
     if (bestTarget.lastCrawl) {
-      const hoursSinceLastCrawl = (Date.now() - new Date(bestTarget.lastCrawl).getTime()) / (1000 * 60 * 60);
-      if (hoursSinceLastCrawl < 4) {
-        console.log(`[scheduled-crawl] All locations crawled within 4 hours. Skipping.`);
+      const minsSinceLastCrawl = (Date.now() - new Date(bestTarget.lastCrawl).getTime()) / (1000 * 60);
+      if (minsSinceLastCrawl < config.frequencyMinutes) {
+        console.log(`[scheduled-crawl] All locations crawled within ${config.frequencyMinutes}min. Skipping.`);
         return new Response(JSON.stringify({ 
           success: true, 
-          message: 'All locations recently crawled',
+          message: `All locations recently crawled (within ${config.frequencyMinutes}min)`,
           nextTarget: bestTarget,
-          hoursSinceLastCrawl: Math.round(hoursSinceLastCrawl * 10) / 10,
+          minutesSinceLastCrawl: Math.round(minsSinceLastCrawl),
+          config,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
