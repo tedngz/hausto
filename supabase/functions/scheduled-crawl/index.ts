@@ -8,6 +8,46 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL')!;
+const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!;
+
+const CONFIG_KEY = 'crawl:config';
+
+interface CrawlConfig {
+  paused: boolean;
+  frequencyMinutes: number; // cooldown between crawls for the same location
+  maxListingsPerRun: number;
+}
+
+const DEFAULT_CONFIG: CrawlConfig = {
+  paused: false,
+  frequencyMinutes: 240, // 4 hours between re-crawling same location
+  maxListingsPerRun: 10,
+};
+
+// Redis helpers
+async function redisGet(key: string): Promise<any> {
+  try {
+    const res = await fetch(`${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    });
+    const data = await res.json();
+    return data.result ? JSON.parse(data.result) : null;
+  } catch { return null; }
+}
+
+async function redisSet(key: string, value: any): Promise<void> {
+  try {
+    await fetch(`${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    });
+  } catch (e) { console.error('Redis set error:', e); }
+}
+
+async function getConfig(): Promise<CrawlConfig> {
+  const stored = await redisGet(CONFIG_KEY);
+  return stored ? { ...DEFAULT_CONFIG, ...stored } : DEFAULT_CONFIG;
+}
 
 // All locations to crawl, organized by city
 const CRAWL_LOCATIONS: { city: string; location: string }[] = [
