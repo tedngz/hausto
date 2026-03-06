@@ -51,25 +51,75 @@ async function getConfig(): Promise<CrawlConfig> {
 
 // All locations to crawl, organized by city
 const CRAWL_LOCATIONS: { city: string; location: string }[] = [
-  // Ho Chi Minh City - major districts
-  { city: 'ho_chi_minh', location: 'D1' },
-  { city: 'ho_chi_minh', location: 'D2' },
-  { city: 'ho_chi_minh', location: 'D3' },
-  { city: 'ho_chi_minh', location: 'D7' },
-  { city: 'ho_chi_minh', location: 'Binh Thanh' },
-  { city: 'ho_chi_minh', location: 'Phu Nhuan' },
-  { city: 'ho_chi_minh', location: 'Tan Binh' },
-  { city: 'ho_chi_minh', location: 'Thu Duc' },
-  // Hanoi
-  { city: 'hanoi', location: 'Ba Dinh' },
-  { city: 'hanoi', location: 'Hoan Kiem' },
-  { city: 'hanoi', location: 'Dong Da' },
-  { city: 'hanoi', location: 'Cau Giay' },
-  { city: 'hanoi', location: 'Hai Ba Trung' },
-  // Da Nang
-  { city: 'da_nang', location: 'Hai Chau' },
-  { city: 'da_nang', location: 'Son Tra' },
-  { city: 'da_nang', location: 'Ngu Hanh Son' },
+  // ===== Ho Chi Minh City - All 22 districts =====
+  // Urban districts (Quận)
+  { city: 'ho_chi_minh', location: 'Quận 1' },
+  { city: 'ho_chi_minh', location: 'Quận 3' },
+  { city: 'ho_chi_minh', location: 'Quận 4' },
+  { city: 'ho_chi_minh', location: 'Quận 5' },
+  { city: 'ho_chi_minh', location: 'Quận 6' },
+  { city: 'ho_chi_minh', location: 'Quận 7' },
+  { city: 'ho_chi_minh', location: 'Quận 8' },
+  { city: 'ho_chi_minh', location: 'Quận 10' },
+  { city: 'ho_chi_minh', location: 'Quận 11' },
+  { city: 'ho_chi_minh', location: 'Quận 12' },
+  { city: 'ho_chi_minh', location: 'Bình Thạnh' },
+  { city: 'ho_chi_minh', location: 'Phú Nhuận' },
+  { city: 'ho_chi_minh', location: 'Tân Bình' },
+  { city: 'ho_chi_minh', location: 'Tân Phú' },
+  { city: 'ho_chi_minh', location: 'Gò Vấp' },
+  { city: 'ho_chi_minh', location: 'Bình Tân' },
+  { city: 'ho_chi_minh', location: 'Thủ Đức' }, // TP Thủ Đức (merged D2, D9, Thủ Đức)
+  // Suburban districts (Huyện)
+  { city: 'ho_chi_minh', location: 'Nhà Bè' },
+  { city: 'ho_chi_minh', location: 'Bình Chánh' },
+  { city: 'ho_chi_minh', location: 'Hóc Môn' },
+  { city: 'ho_chi_minh', location: 'Củ Chi' },
+  { city: 'ho_chi_minh', location: 'Cần Giờ' },
+
+  // ===== Hanoi - All 30 districts =====
+  // Urban districts (Quận)
+  { city: 'hanoi', location: 'Ba Đình' },
+  { city: 'hanoi', location: 'Hoàn Kiếm' },
+  { city: 'hanoi', location: 'Đống Đa' },
+  { city: 'hanoi', location: 'Cầu Giấy' },
+  { city: 'hanoi', location: 'Hai Bà Trưng' },
+  { city: 'hanoi', location: 'Tây Hồ' },
+  { city: 'hanoi', location: 'Long Biên' },
+  { city: 'hanoi', location: 'Thanh Xuân' },
+  { city: 'hanoi', location: 'Hoàng Mai' },
+  { city: 'hanoi', location: 'Bắc Từ Liêm' },
+  { city: 'hanoi', location: 'Nam Từ Liêm' },
+  { city: 'hanoi', location: 'Hà Đông' },
+  // Suburban districts/towns (Huyện/Thị xã)
+  { city: 'hanoi', location: 'Gia Lâm' },
+  { city: 'hanoi', location: 'Đông Anh' },
+  { city: 'hanoi', location: 'Sóc Sơn' },
+  { city: 'hanoi', location: 'Thanh Trì' },
+  { city: 'hanoi', location: 'Hoài Đức' },
+  { city: 'hanoi', location: 'Thanh Oai' },
+  { city: 'hanoi', location: 'Thường Tín' },
+  { city: 'hanoi', location: 'Mê Linh' },
+  { city: 'hanoi', location: 'Chương Mỹ' },
+  { city: 'hanoi', location: 'Đan Phượng' },
+  { city: 'hanoi', location: 'Phúc Thọ' },
+  { city: 'hanoi', location: 'Quốc Oai' },
+  { city: 'hanoi', location: 'Thạch Thất' },
+  { city: 'hanoi', location: 'Ba Vì' },
+  { city: 'hanoi', location: 'Sơn Tây' },
+  { city: 'hanoi', location: 'Phú Xuyên' },
+  { city: 'hanoi', location: 'Ứng Hòa' },
+  { city: 'hanoi', location: 'Mỹ Đức' },
+
+  // ===== Da Nang - All 8 districts =====
+  { city: 'da_nang', location: 'Hải Châu' },
+  { city: 'da_nang', location: 'Thanh Khê' },
+  { city: 'da_nang', location: 'Sơn Trà' },
+  { city: 'da_nang', location: 'Ngũ Hành Sơn' },
+  { city: 'da_nang', location: 'Liên Chiểu' },
+  { city: 'da_nang', location: 'Cẩm Lệ' },
+  { city: 'da_nang', location: 'Hòa Vang' },
+  { city: 'da_nang', location: 'Hoàng Sa' },
 ];
 
 const MARKETPLACES = ['batdongsan', 'nhatot'] as const;
