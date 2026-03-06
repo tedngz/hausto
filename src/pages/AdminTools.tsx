@@ -702,19 +702,19 @@ const AdminTools = () => {
           </div>
 
           <div className="text-sm space-y-2 border-t pt-3">
-            <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> Coverage</p>
-            <div className="grid grid-cols-3 gap-2 text-xs">
+            <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> Coverage (60 districts)</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
               <div>
-                <p className="font-medium text-muted-foreground mb-1">HCM (8 districts)</p>
-                <p>D1, D2, D3, D7, Bình Thạnh, Phú Nhuận, Tân Bình, Thủ Đức</p>
+                <p className="font-medium text-muted-foreground mb-1">HCM (22 districts)</p>
+                <p>Q1, Q3, Q4, Q5, Q6, Q7, Q8, Q10, Q11, Q12, Bình Thạnh, Phú Nhuận, Tân Bình, Tân Phú, Gò Vấp, Bình Tân, Thủ Đức, Nhà Bè, Bình Chánh, Hóc Môn, Củ Chi, Cần Giờ</p>
               </div>
               <div>
-                <p className="font-medium text-muted-foreground mb-1">Hanoi (5 districts)</p>
-                <p>Ba Đình, Hoàn Kiếm, Đống Đa, Cầu Giấy, Hai Bà Trưng</p>
+                <p className="font-medium text-muted-foreground mb-1">Hanoi (30 districts)</p>
+                <p>Ba Đình, Hoàn Kiếm, Đống Đa, Cầu Giấy, Hai Bà Trưng, Tây Hồ, Long Biên, Thanh Xuân, Hoàng Mai, Bắc Từ Liêm, Nam Từ Liêm, Hà Đông, Gia Lâm, Đông Anh, Sóc Sơn, Thanh Trì, Hoài Đức, Thanh Oai, Thường Tín, Mê Linh, Chương Mỹ, Đan Phượng, Phúc Thọ, Quốc Oai, Thạch Thất, Ba Vì, Sơn Tây, Phú Xuyên, Ứng Hòa, Mỹ Đức</p>
               </div>
               <div>
-                <p className="font-medium text-muted-foreground mb-1">Da Nang (3 districts)</p>
-                <p>Hải Châu, Sơn Trà, Ngũ Hành Sơn</p>
+                <p className="font-medium text-muted-foreground mb-1">Da Nang (8 districts)</p>
+                <p>Hải Châu, Thanh Khê, Sơn Trà, Ngũ Hành Sơn, Liên Chiểu, Cẩm Lệ, Hòa Vang, Hoàng Sa</p>
               </div>
             </div>
           </div>
