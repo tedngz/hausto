@@ -740,22 +740,101 @@ const AdminTools = () => {
             </div>
           </div>
 
-          <div className="text-sm space-y-2 border-t pt-3">
-            <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> Coverage (60 districts)</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div>
-                <p className="font-medium text-muted-foreground mb-1">HCM (22 districts)</p>
-                <p>Q1, Q3, Q4, Q5, Q6, Q7, Q8, Q10, Q11, Q12, Bình Thạnh, Phú Nhuận, Tân Bình, Tân Phú, Gò Vấp, Bình Tân, Thủ Đức, Nhà Bè, Bình Chánh, Hóc Môn, Củ Chi, Cần Giờ</p>
-              </div>
-              <div>
-                <p className="font-medium text-muted-foreground mb-1">Hanoi (30 districts)</p>
-                <p>Ba Đình, Hoàn Kiếm, Đống Đa, Cầu Giấy, Hai Bà Trưng, Tây Hồ, Long Biên, Thanh Xuân, Hoàng Mai, Bắc Từ Liêm, Nam Từ Liêm, Hà Đông, Gia Lâm, Đông Anh, Sóc Sơn, Thanh Trì, Hoài Đức, Thanh Oai, Thường Tín, Mê Linh, Chương Mỹ, Đan Phượng, Phúc Thọ, Quốc Oai, Thạch Thất, Ba Vì, Sơn Tây, Phú Xuyên, Ứng Hòa, Mỹ Đức</p>
-              </div>
-              <div>
-                <p className="font-medium text-muted-foreground mb-1">Da Nang (8 districts)</p>
-                <p>Hải Châu, Thanh Khê, Sơn Trà, Ngũ Hành Sơn, Liên Chiểu, Cẩm Lệ, Hòa Vang, Hoàng Sa</p>
-              </div>
-            </div>
+          {/* Dynamic Coverage Tracker */}
+          <div className="text-sm space-y-3 border-t pt-3">
+            <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> District Coverage Tracker</p>
+            {(() => {
+              const ALL_DISTRICTS: Record<string, { label: string; districts: string[] }> = {
+                ho_chi_minh: {
+                  label: 'Ho Chi Minh City',
+                  districts: ['quận 1','quận 3','quận 4','quận 5','quận 6','quận 7','quận 8','quận 10','quận 11','quận 12','bình thạnh','phú nhuận','tân bình','tân phú','gò vấp','bình tân','thủ đức','nhà bè','bình chánh','hóc môn','củ chi','cần giờ'],
+                },
+                hanoi: {
+                  label: 'Hanoi',
+                  districts: ['ba đình','hoàn kiếm','đống đa','cầu giấy','hai bà trưng','tây hồ','long biên','thanh xuân','hoàng mai','bắc từ liêm','nam từ liêm','hà đông','gia lâm','đông anh','sóc sơn','thanh trì','hoài đức','thanh oai','thường tín','mê linh','chương mỹ','đan phượng','phúc thọ','quốc oai','thạch thất','ba vì','sơn tây','phú xuyên','ứng hòa','mỹ đức'],
+                },
+                da_nang: {
+                  label: 'Da Nang',
+                  districts: ['hải châu','thanh khê','sơn trà','ngũ hành sơn','liên chiểu','cẩm lệ','hòa vang','hoàng sa'],
+                },
+              };
+
+              const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
+              const totalDistricts = Object.values(ALL_DISTRICTS).reduce((sum, c) => sum + c.districts.length, 0);
+              let totalCrawled = 0;
+
+              return (
+                <div className="space-y-4">
+                  {Object.entries(ALL_DISTRICTS).map(([cityKey, cityData]) => {
+                    const crawledCount = cityData.districts.filter(d => {
+                      const norm = normalize(d);
+                      if (!districtCoverage) return false;
+                      for (const [key] of districtCoverage) {
+                        if (key === norm || key.includes(norm) || norm.includes(key)) return true;
+                      }
+                      return false;
+                    }).length;
+                    totalCrawled += crawledCount;
+                    const pct = Math.round((crawledCount / cityData.districts.length) * 100);
+
+                    return (
+                      <div key={cityKey} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-xs">{cityData.label} ({crawledCount}/{cityData.districts.length})</p>
+                          <Badge variant={pct === 100 ? 'default' : pct > 0 ? 'secondary' : 'outline'} className="text-xs">
+                            {pct}%
+                          </Badge>
+                        </div>
+                        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {cityData.districts.map(district => {
+                            const norm = normalize(district);
+                            let info: { lastCrawled: string; sources: Set<string>; count: number } | null = null;
+                            if (districtCoverage) {
+                              for (const [key, val] of districtCoverage) {
+                                if (key === norm || key.includes(norm) || norm.includes(key)) {
+                                  info = val;
+                                  break;
+                                }
+                              }
+                            }
+                            const isCrawled = !!info;
+                            const displayName = district.replace(/^quận /, 'Q');
+                            return (
+                              <span
+                                key={district}
+                                title={isCrawled
+                                  ? `Last crawled: ${getTimeAgo(info!.lastCrawled)} · ${info!.count} listings · Sources: ${Array.from(info!.sources).join(', ')}`
+                                  : 'Not yet crawled'}
+                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                  isCrawled
+                                    ? 'bg-primary/10 text-primary border-primary/20'
+                                    : 'bg-muted text-muted-foreground border-border'
+                                }`}
+                              >
+                                {isCrawled ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5 opacity-40" />}
+                                {displayName}
+                                {isCrawled && <span className="opacity-60">({getTimeAgo(info!.lastCrawled)})</span>}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center justify-between pt-1 border-t text-xs text-muted-foreground">
+                    <span>Total: {totalCrawled}/{totalDistricts} districts crawled</span>
+                    <span>{Math.round((totalCrawled / totalDistricts) * 100)}% coverage</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="text-sm text-muted-foreground space-y-1 border-t pt-3">
