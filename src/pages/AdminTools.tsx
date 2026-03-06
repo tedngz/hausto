@@ -724,7 +724,7 @@ const AdminTools = () => {
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
               <p className="text-xs text-muted-foreground">Locations</p>
-              <p className="text-sm font-bold">17 districts</p>
+              <p className="text-sm font-bold">60 districts</p>
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
               <p className="text-xs text-muted-foreground">Marketplaces</p>
