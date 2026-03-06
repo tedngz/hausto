@@ -268,17 +268,18 @@ Deno.serve(async (req) => {
     console.log(`[scheduled-crawl] Starting crawl (frequency: ${config.frequencyMinutes}min, max: ${config.maxListingsPerRun}/run)`);
 
     // Step 1: Find the location that was crawled least recently
+    // Use updated_at to track when a location was last crawled (updated on both insert and update)
     const { data: recentCrawls } = await supabase
       .from('external_properties')
-      .select('city, location_normalized, source, crawled_at')
-      .order('crawled_at', { ascending: false });
+      .select('city, location_normalized, source, updated_at')
+      .order('updated_at', { ascending: false });
 
     const lastCrawlMap = new Map<string, string>();
     if (recentCrawls) {
       for (const row of recentCrawls) {
         const key = `${row.location_normalized}|${row.source}`;
         if (!lastCrawlMap.has(key)) {
-          lastCrawlMap.set(key, row.crawled_at);
+          lastCrawlMap.set(key, row.updated_at);
         }
       }
     }
