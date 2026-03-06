@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw, Pause, Play, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -57,8 +57,69 @@ const AdminTools = () => {
   const [crawlMaxListings, setCrawlMaxListings] = useState(10);
   const [crawlProgress, setCrawlProgress] = useState<{ current: number; total: number; location: string } | null>(null);
   const [isManualCrawlTriggering, setIsManualCrawlTriggering] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
-  // Fetch recent crawl activity from external_properties
+  // Fetch crawl schedule config from Redis via scheduled-crawl function
+  const { data: crawlConfig, refetch: refetchConfig } = useQuery({
+    queryKey: ['crawl-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('scheduled-crawl', {
+        body: { action: 'get-config' },
+      });
+      if (error) throw error;
+      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number } | null;
+    },
+  });
+
+  const [localFrequency, setLocalFrequency] = useState<number | null>(null);
+  const [localMaxListings, setLocalMaxListings] = useState<number | null>(null);
+
+  // Sync local state when config loads
+  const effectiveFrequency = localFrequency ?? crawlConfig?.frequencyMinutes ?? 240;
+  const effectiveMaxListings = localMaxListings ?? crawlConfig?.maxListingsPerRun ?? 10;
+  const isPaused = crawlConfig?.paused ?? false;
+
+  const handleTogglePause = useCallback(async () => {
+    setIsSavingConfig(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scheduled-crawl', {
+        body: { action: 'set-config', paused: !isPaused },
+      });
+      if (error) throw error;
+      toast.success(data?.config?.paused ? 'Auto-crawl paused' : 'Auto-crawl resumed');
+      refetchConfig();
+    } catch (err: any) {
+      toast.error('Failed to update config', { description: err.message });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  }, [isPaused, refetchConfig]);
+
+  const handleSaveConfig = useCallback(async () => {
+    setIsSavingConfig(true);
+    try {
+      const { error } = await supabase.functions.invoke('scheduled-crawl', {
+        body: {
+          action: 'set-config',
+          frequencyMinutes: effectiveFrequency,
+          maxListingsPerRun: effectiveMaxListings,
+        },
+      });
+      if (error) throw error;
+      toast.success('Crawl settings saved');
+      setLocalFrequency(null);
+      setLocalMaxListings(null);
+      refetchConfig();
+    } catch (err: any) {
+      toast.error('Failed to save settings', { description: err.message });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  }, [effectiveFrequency, effectiveMaxListings, refetchConfig]);
+
+  const hasUnsavedChanges = (localFrequency !== null && localFrequency !== crawlConfig?.frequencyMinutes) ||
+    (localMaxListings !== null && localMaxListings !== crawlConfig?.maxListingsPerRun);
+
   const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
     queryKey: ['crawl-activity'],
     queryFn: async () => {
@@ -525,20 +586,101 @@ const AdminTools = () => {
       </Card>
 
       {/* Auto-Crawl Schedule Status */}
-      <Card>
+      <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Auto-Crawl Schedule
-          </CardTitle>
-          <CardDescription>
-            Automated crawling runs every 30 minutes, rotating through 17 locations × 2 marketplaces. Each run picks the least-recently-crawled location. Fake listings are filtered by price range, missing images, and sale keywords.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Auto-Crawl Schedule
+                {isPaused && <Badge variant="destructive" className="text-xs">Paused</Badge>}
+                {!isPaused && <Badge variant="default" className="text-xs bg-emerald-600">Active</Badge>}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Cron runs every 30 min. The function checks config and crawls the least-recently-crawled location.
+              </CardDescription>
+            </div>
+            <Button
+              variant={isPaused ? 'default' : 'destructive'}
+              size="sm"
+              onClick={handleTogglePause}
+              disabled={isSavingConfig}
+              className="shrink-0"
+            >
+              {isSavingConfig ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isPaused ? (
+                <><Play className="h-4 w-4 mr-1" /> Resume</>
+              ) : (
+                <><Pause className="h-4 w-4 mr-1" /> Pause</>
+              )}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Crawl Settings */}
+          <div className="border rounded-lg p-3 space-y-3">
+            <p className="text-sm font-semibold flex items-center gap-1">
+              <Settings2 className="h-4 w-4" /> Crawl Settings
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Re-crawl cooldown</Label>
+                  <span className="text-xs font-bold text-primary">
+                    {effectiveFrequency >= 60 
+                      ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
+                      : `${effectiveFrequency}min`}
+                  </span>
+                </div>
+                <Slider
+                  value={[effectiveFrequency]}
+                  onValueChange={(v) => setLocalFrequency(v[0])}
+                  min={30}
+                  max={720}
+                  step={30}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  How long before the same location can be re-crawled
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Max listings per run</Label>
+                  <span className="text-xs font-bold text-primary">{effectiveMaxListings}</span>
+                </div>
+                <Slider
+                  value={[effectiveMaxListings]}
+                  onValueChange={(v) => setLocalMaxListings(v[0])}
+                  min={1}
+                  max={20}
+                  step={1}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum listings scraped per location per run
+                </p>
+              </div>
+            </div>
+            {hasUnsavedChanges && (
+              <div className="flex justify-end pt-1">
+                <Button
+                  size="sm"
+                  onClick={handleSaveConfig}
+                  disabled={isSavingConfig}
+                  className="h-7 text-xs"
+                >
+                  {isSavingConfig ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Save Settings
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Schedule</p>
+              <p className="text-xs text-muted-foreground">Cron Interval</p>
               <p className="text-sm font-bold">Every 30 min</p>
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
@@ -550,8 +692,12 @@ const AdminTools = () => {
               <p className="text-sm font-bold">batdongsan + nhatot</p>
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Est. Daily New</p>
-              <p className="text-sm font-bold">~50-100 listings</p>
+              <p className="text-xs text-muted-foreground">Cooldown</p>
+              <p className="text-sm font-bold">
+                {effectiveFrequency >= 60 
+                  ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
+                  : `${effectiveFrequency}min`}
+              </p>
             </div>
           </div>
 

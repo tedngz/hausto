@@ -8,6 +8,46 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL')!;
+const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!;
+
+const CONFIG_KEY = 'crawl:config';
+
+interface CrawlConfig {
+  paused: boolean;
+  frequencyMinutes: number; // cooldown between crawls for the same location
+  maxListingsPerRun: number;
+}
+
+const DEFAULT_CONFIG: CrawlConfig = {
+  paused: false,
+  frequencyMinutes: 240, // 4 hours between re-crawling same location
+  maxListingsPerRun: 10,
+};
+
+// Redis helpers
+async function redisGet(key: string): Promise<any> {
+  try {
+    const res = await fetch(`${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    });
+    const data = await res.json();
+    return data.result ? JSON.parse(data.result) : null;
+  } catch { return null; }
+}
+
+async function redisSet(key: string, value: any): Promise<void> {
+  try {
+    await fetch(`${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    });
+  } catch (e) { console.error('Redis set error:', e); }
+}
+
+async function getConfig(): Promise<CrawlConfig> {
+  const stored = await redisGet(CONFIG_KEY);
+  return stored ? { ...DEFAULT_CONFIG, ...stored } : DEFAULT_CONFIG;
+}
 
 // All locations to crawl, organized by city
 const CRAWL_LOCATIONS: { city: string; location: string }[] = [
@@ -114,16 +154,53 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    console.log('[scheduled-crawl] Starting automated crawl cycle');
+    const body = await req.json().catch(() => ({}));
+
+    // Handle config management actions
+    if (body.action === 'get-config') {
+      const config = await getConfig();
+      return new Response(JSON.stringify({ success: true, config }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (body.action === 'set-config') {
+      const currentConfig = await getConfig();
+      const newConfig: CrawlConfig = {
+        paused: body.paused !== undefined ? body.paused : currentConfig.paused,
+        frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(1440, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
+        maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(20, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
+      };
+      await redisSet(CONFIG_KEY, newConfig);
+      console.log('[scheduled-crawl] Config updated:', JSON.stringify(newConfig));
+      return new Response(JSON.stringify({ success: true, config: newConfig }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Normal crawl execution
+    const config = await getConfig();
+
+    // Check if paused
+    if (config.paused) {
+      console.log('[scheduled-crawl] Crawling is paused. Skipping.');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Crawling is paused',
+        config,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`[scheduled-crawl] Starting crawl (frequency: ${config.frequencyMinutes}min, max: ${config.maxListingsPerRun}/run)`);
 
     // Step 1: Find the location that was crawled least recently
-    // Query the most recent crawl timestamp for each location+marketplace combo
     const { data: recentCrawls } = await supabase
       .from('external_properties')
       .select('city, location_normalized, source, crawled_at')
       .order('crawled_at', { ascending: false });
 
-    // Build a map of last crawl time per location+marketplace
     const lastCrawlMap = new Map<string, string>();
     if (recentCrawls) {
       for (const row of recentCrawls) {
@@ -167,16 +244,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Skip if last crawl was less than 4 hours ago
+    // Skip if last crawl was within the configured frequency
     if (bestTarget.lastCrawl) {
-      const hoursSinceLastCrawl = (Date.now() - new Date(bestTarget.lastCrawl).getTime()) / (1000 * 60 * 60);
-      if (hoursSinceLastCrawl < 4) {
-        console.log(`[scheduled-crawl] All locations crawled within 4 hours. Skipping.`);
+      const minsSinceLastCrawl = (Date.now() - new Date(bestTarget.lastCrawl).getTime()) / (1000 * 60);
+      if (minsSinceLastCrawl < config.frequencyMinutes) {
+        console.log(`[scheduled-crawl] All locations crawled within ${config.frequencyMinutes}min. Skipping.`);
         return new Response(JSON.stringify({ 
           success: true, 
-          message: 'All locations recently crawled',
+          message: `All locations recently crawled (within ${config.frequencyMinutes}min)`,
           nextTarget: bestTarget,
-          hoursSinceLastCrawl: Math.round(hoursSinceLastCrawl * 10) / 10,
+          minutesSinceLastCrawl: Math.round(minsSinceLastCrawl),
+          config,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -200,7 +278,7 @@ Deno.serve(async (req) => {
         query: 'căn hộ chung cư cho thuê',
         location: bestTarget.location,
         includeVibeAnalysis: true,
-        maxResults: 10,
+        maxResults: config.maxListingsPerRun,
       }),
       signal: controller.signal,
     });
