@@ -347,7 +347,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         marketplace: bestTarget.marketplace,
-        query: 'căn hộ chung cư cho thuê',
+        query: 'cho thuê căn hộ chung cư nhà ở',
         location: bestTarget.location,
         includeVibeAnalysis: true,
         maxResults: config.maxListingsPerRun,
