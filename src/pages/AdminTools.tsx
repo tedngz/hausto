@@ -484,6 +484,7 @@ const AdminTools = () => {
             <p><strong>Freshness:</strong> Skips locations crawled within the last 4 hours. Listings expire after 10 days.</p>
           </div>
         </CardContent>
+      </Card>
 
       {/* Vector DB - Batch Generate Embeddings */}
       <Card>
