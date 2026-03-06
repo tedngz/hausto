@@ -184,6 +184,7 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
   }
   
   return { suspicious: false };
+}
 
 // Normalize source URL for dedup
 function normalizeSourceUrl(url: string): string {
