@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
 
     // Step 2: Call scrape-marketplace to get listings
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 150000); // 150s timeout - scraping takes ~2 min
 
     const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
       method: 'POST',
