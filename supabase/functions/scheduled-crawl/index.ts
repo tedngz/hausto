@@ -215,6 +215,8 @@ function detectCity(location: string): string {
 }
 
 Deno.serve(async (req) => {
+  console.log(`[scheduled-crawl] Request received: ${req.method} at ${new Date().toISOString()}`);
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -224,6 +226,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    console.log(`[scheduled-crawl] Body:`, JSON.stringify(body));
 
     // Handle config management actions
     if (body.action === 'get-config') {
