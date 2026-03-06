@@ -150,6 +150,9 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
     return { suspicious: true, reason: 'No images' };
   }
   
+  // Combine title + description for keyword checks
+  const text = `${(property.title || '').toLowerCase()} ${(property.description || '').toLowerCase()}`;
+
   // Sale keywords - filter out buy/sell listings
   const saleKeywords = [
     'bán gấp', 'bán nhanh', 'cần bán', 'sang nhượng', 'for sale', 'mua bán',
