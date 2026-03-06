@@ -202,6 +202,45 @@ const AdminTools = () => {
     refetchInterval: 60000,
   });
 
+  // Fetch per-district crawl coverage
+  const { data: districtCoverage } = useQuery({
+    queryKey: ['district-coverage'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('location_normalized, city, source, crawled_at')
+        .order('crawled_at', { ascending: false });
+      
+      if (error) throw error;
+
+      // Build a map of location_normalized -> latest crawl info
+      const coverageMap = new Map<string, { city: string; lastCrawled: string; sources: Set<string>; count: number }>();
+      
+      for (const row of data || []) {
+        const key = row.location_normalized || '';
+        if (!key) continue;
+        const existing = coverageMap.get(key);
+        if (!existing) {
+          coverageMap.set(key, {
+            city: row.city || 'other',
+            lastCrawled: row.crawled_at || '',
+            sources: new Set([row.source]),
+            count: 1,
+          });
+        } else {
+          existing.sources.add(row.source);
+          existing.count++;
+          if (row.crawled_at && row.crawled_at > existing.lastCrawled) {
+            existing.lastCrawled = row.crawled_at;
+          }
+        }
+      }
+
+      return coverageMap;
+    },
+    refetchInterval: 60000,
+  });
+
 
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
     queryKey: ['is-admin', user?.id],
