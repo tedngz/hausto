@@ -441,7 +441,7 @@ Deno.serve(async (req) => {
           description: property.description || null,
           highlights: property.highlights || [],
           amenities: property.amenities || [],
-          images: property.images || [],
+          images: (property.images || []).slice(0, 5),
           contact_name: property.sourceProviderName || null,
           contact_phone: property.sourceProviderPhone || null,
           vibe: property.vibe || null,
