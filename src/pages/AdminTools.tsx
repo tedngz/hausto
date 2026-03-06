@@ -57,8 +57,69 @@ const AdminTools = () => {
   const [crawlMaxListings, setCrawlMaxListings] = useState(10);
   const [crawlProgress, setCrawlProgress] = useState<{ current: number; total: number; location: string } | null>(null);
   const [isManualCrawlTriggering, setIsManualCrawlTriggering] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
-  // Fetch recent crawl activity from external_properties
+  // Fetch crawl schedule config from Redis via scheduled-crawl function
+  const { data: crawlConfig, refetch: refetchConfig } = useQuery({
+    queryKey: ['crawl-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('scheduled-crawl', {
+        body: { action: 'get-config' },
+      });
+      if (error) throw error;
+      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number } | null;
+    },
+  });
+
+  const [localFrequency, setLocalFrequency] = useState<number | null>(null);
+  const [localMaxListings, setLocalMaxListings] = useState<number | null>(null);
+
+  // Sync local state when config loads
+  const effectiveFrequency = localFrequency ?? crawlConfig?.frequencyMinutes ?? 240;
+  const effectiveMaxListings = localMaxListings ?? crawlConfig?.maxListingsPerRun ?? 10;
+  const isPaused = crawlConfig?.paused ?? false;
+
+  const handleTogglePause = useCallback(async () => {
+    setIsSavingConfig(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scheduled-crawl', {
+        body: { action: 'set-config', paused: !isPaused },
+      });
+      if (error) throw error;
+      toast.success(data?.config?.paused ? 'Auto-crawl paused' : 'Auto-crawl resumed');
+      refetchConfig();
+    } catch (err: any) {
+      toast.error('Failed to update config', { description: err.message });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  }, [isPaused, refetchConfig]);
+
+  const handleSaveConfig = useCallback(async () => {
+    setIsSavingConfig(true);
+    try {
+      const { error } = await supabase.functions.invoke('scheduled-crawl', {
+        body: {
+          action: 'set-config',
+          frequencyMinutes: effectiveFrequency,
+          maxListingsPerRun: effectiveMaxListings,
+        },
+      });
+      if (error) throw error;
+      toast.success('Crawl settings saved');
+      setLocalFrequency(null);
+      setLocalMaxListings(null);
+      refetchConfig();
+    } catch (err: any) {
+      toast.error('Failed to save settings', { description: err.message });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  }, [effectiveFrequency, effectiveMaxListings, refetchConfig]);
+
+  const hasUnsavedChanges = (localFrequency !== null && localFrequency !== crawlConfig?.frequencyMinutes) ||
+    (localMaxListings !== null && localMaxListings !== crawlConfig?.maxListingsPerRun);
+
   const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
     queryKey: ['crawl-activity'],
     queryFn: async () => {
