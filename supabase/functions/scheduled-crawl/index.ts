@@ -150,12 +150,31 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
     return { suspicious: true, reason: 'No images' };
   }
   
-  // Spam keywords in title/description
-  const spamKeywords = ['bán gấp', 'bán nhanh', 'cần bán', 'sang nhượng', 'for sale', 'mua bán'];
-  const text = `${property.title || ''} ${property.description || ''}`.toLowerCase();
-  for (const keyword of spamKeywords) {
+  // Sale keywords - filter out buy/sell listings
+  const saleKeywords = [
+    'bán gấp', 'bán nhanh', 'cần bán', 'sang nhượng', 'for sale', 'mua bán',
+    'bán căn', 'bán lô', 'bán đất', 'chuyển nhượng', 'bán chung cư', 'giá bán',
+    'bán nhà', 'bán biệt thự', 'bán villa', 'mua ngay',
+  ];
+  for (const keyword of saleKeywords) {
     if (text.includes(keyword)) {
       return { suspicious: true, reason: `Contains sale keyword: "${keyword}"` };
+    }
+  }
+
+  // Non-residential / industrial / commercial keywords
+  const nonResidentialKeywords = [
+    'văn phòng cho thuê', 'office for rent', 'mặt bằng', 'cửa hàng', 'shop',
+    'kho xưởng', 'nhà xưởng', 'xưởng sản xuất', 'kho bãi', 'warehouse',
+    'factory', 'industrial', 'công nghiệp', 'thương mại', 'commercial',
+    'kinh doanh', 'showroom', 'coworking', 'co-working',
+    'đất nền', 'đất thổ cư', 'đất nông nghiệp', 'farmland', 'land for',
+    'khách sạn', 'hotel', 'resort', 'motel', 'nhà nghỉ',
+    'căn hộ dịch vụ bán', 'penthouse bán',
+  ];
+  for (const keyword of nonResidentialKeywords) {
+    if (text.includes(keyword)) {
+      return { suspicious: true, reason: `Non-residential listing: "${keyword}"` };
     }
   }
   
