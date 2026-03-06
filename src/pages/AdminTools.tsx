@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,17 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+
+function getTimeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 const AdminTools = () => {
   const { user, loading: authLoading } = useAuth();
@@ -45,8 +56,92 @@ const AdminTools = () => {
   const [crawlResults, setCrawlResults] = useState<any>(null);
   const [crawlMaxListings, setCrawlMaxListings] = useState(10);
   const [crawlProgress, setCrawlProgress] = useState<{ current: number; total: number; location: string } | null>(null);
+  const [isManualCrawlTriggering, setIsManualCrawlTriggering] = useState(false);
 
-  // Check admin role from user_roles table (must be before any early returns)
+  // Fetch recent crawl activity from external_properties
+  const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
+    queryKey: ['crawl-activity'],
+    queryFn: async () => {
+      // Get the 50 most recently crawled properties grouped by approximate crawl time
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('id, city, source, location_normalized, crawled_at, title, price, is_active')
+        .order('crawled_at', { ascending: false })
+        .limit(200);
+      
+      if (error) throw error;
+      if (!data || data.length === 0) return [];
+
+      // Group by crawl runs (properties crawled within 5 minutes of each other)
+      const runs: Array<{
+        timestamp: string;
+        city: string;
+        source: string;
+        location: string;
+        count: number;
+        listings: Array<{ title: string; price: number }>;
+      }> = [];
+
+      let currentRun: typeof runs[0] | null = null;
+
+      for (const prop of data) {
+        const crawlTime = new Date(prop.crawled_at!).getTime();
+        
+        if (
+          !currentRun ||
+          Math.abs(crawlTime - new Date(currentRun.timestamp).getTime()) > 5 * 60 * 1000 ||
+          currentRun.source !== prop.source ||
+          currentRun.city !== prop.city
+        ) {
+          currentRun = {
+            timestamp: prop.crawled_at!,
+            city: prop.city || 'unknown',
+            source: prop.source || 'unknown',
+            location: prop.location_normalized || 'unknown',
+            count: 0,
+            listings: [],
+          };
+          runs.push(currentRun);
+        }
+        
+        currentRun.count++;
+        if (currentRun.listings.length < 3) {
+          currentRun.listings.push({ title: prop.title || 'Unknown', price: prop.price || 0 });
+        }
+      }
+
+      return runs.slice(0, 10);
+    },
+    refetchInterval: 60000, // Refresh every minute
+  });
+
+  // Fetch crawl coverage stats
+  const { data: crawlStats } = useQuery({
+    queryKey: ['crawl-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('city, source, is_active')
+        .eq('is_active', true);
+      
+      if (error) throw error;
+      
+      const stats = {
+        total: data?.length || 0,
+        byCitySource: {} as Record<string, number>,
+      };
+
+      for (const prop of data || []) {
+        const key = `${prop.city}/${prop.source}`;
+        stats.byCitySource[key] = (stats.byCitySource[key] || 0) + 1;
+      }
+
+      return stats;
+    },
+    refetchInterval: 60000,
+  });
+
+
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
     queryKey: ['is-admin', user?.id],
     queryFn: async () => {
@@ -482,6 +577,97 @@ const AdminTools = () => {
             <p><strong>Deduplication:</strong> URL normalization + database check prevents duplicate entries.</p>
             <p><strong>Fake filter:</strong> Listings with price &lt;2M or &gt;200M VND, no images, sale keywords, or invalid phone numbers are automatically rejected.</p>
             <p><strong>Freshness:</strong> Skips locations crawled within the last 4 hours. Listings expire after 10 days.</p>
+          </div>
+
+          {/* Active Listings Stats */}
+          {crawlStats && (
+            <div className="border-t pt-3 space-y-2">
+              <p className="text-sm font-semibold flex items-center gap-1">
+                <Activity className="h-4 w-4" /> Active Listings: {crawlStats.total}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(crawlStats.byCitySource).map(([key, count]) => {
+                  const [city, source] = key.split('/');
+                  const cityLabel = city === 'ho_chi_minh' ? 'HCM' : city === 'hanoi' ? 'Hanoi' : city === 'da_nang' ? 'Da Nang' : city;
+                  return (
+                    <Badge key={key} variant="outline" className="text-xs">
+                      {cityLabel} / {source}: {count}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Crawl Activity Log */}
+          <div className="border-t pt-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold flex items-center gap-1">
+                <Clock className="h-4 w-4" /> Recent Crawl Runs
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => refetchCrawlActivity()}
+                  className="h-7 text-xs"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={isManualCrawlTriggering}
+                  onClick={async () => {
+                    setIsManualCrawlTriggering(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: {} });
+                      if (error) throw error;
+                      toast.success('Auto-crawl triggered', {
+                        description: data?.summary 
+                          ? `${data.summary.target?.location}/${data.summary.target?.marketplace}: ${data.summary.newListings || 0} new, ${data.summary.filteredOut || 0} filtered`
+                          : data?.message || 'Completed'
+                      });
+                      refetchCrawlActivity();
+                    } catch (err: any) {
+                      toast.error('Failed to trigger crawl', { description: err.message });
+                    } finally {
+                      setIsManualCrawlTriggering(false);
+                    }
+                  }}
+                  className="h-7 text-xs"
+                >
+                  {isManualCrawlTriggering ? (
+                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running...</>
+                  ) : (
+                    <>Trigger Now</>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {crawlActivity && crawlActivity.length > 0 ? (
+              <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                {crawlActivity.map((run, idx) => {
+                  const timeAgo = getTimeAgo(run.timestamp);
+                  const cityLabel = run.city === 'ho_chi_minh' ? 'HCM' : run.city === 'hanoi' ? 'Hanoi' : run.city === 'da_nang' ? 'Da Nang' : run.city;
+                  return (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded text-xs gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
+                        <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
+                        <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
+                        <span className="truncate text-muted-foreground">{run.location}</span>
+                      </div>
+                      <Badge className="text-xs shrink-0">{run.count} listings</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No crawl runs recorded yet. Cron job runs every 30 minutes.</p>
+            )}
           </div>
         </CardContent>
       </Card>
