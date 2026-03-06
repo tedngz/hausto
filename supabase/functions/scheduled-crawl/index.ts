@@ -215,6 +215,8 @@ function detectCity(location: string): string {
 }
 
 Deno.serve(async (req) => {
+  console.log(`[scheduled-crawl] Request received: ${req.method} at ${new Date().toISOString()}`);
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -224,6 +226,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    console.log(`[scheduled-crawl] Body:`, JSON.stringify(body));
 
     // Handle config management actions
     if (body.action === 'get-config') {
@@ -265,17 +268,18 @@ Deno.serve(async (req) => {
     console.log(`[scheduled-crawl] Starting crawl (frequency: ${config.frequencyMinutes}min, max: ${config.maxListingsPerRun}/run)`);
 
     // Step 1: Find the location that was crawled least recently
+    // Use updated_at to track when a location was last crawled (updated on both insert and update)
     const { data: recentCrawls } = await supabase
       .from('external_properties')
-      .select('city, location_normalized, source, crawled_at')
-      .order('crawled_at', { ascending: false });
+      .select('city, location_normalized, source, updated_at')
+      .order('updated_at', { ascending: false });
 
     const lastCrawlMap = new Map<string, string>();
     if (recentCrawls) {
       for (const row of recentCrawls) {
         const key = `${row.location_normalized}|${row.source}`;
         if (!lastCrawlMap.has(key)) {
-          lastCrawlMap.set(key, row.crawled_at);
+          lastCrawlMap.set(key, row.updated_at);
         }
       }
     }
@@ -429,6 +433,7 @@ Deno.serve(async (req) => {
 
         const existing = existingByUrl || existingById;
 
+        const now = new Date().toISOString();
         const propertyData = {
           title: property.title || 'Rental Property',
           location: property.location || bestTarget.location,
@@ -446,21 +451,25 @@ Deno.serve(async (req) => {
           contact_phone: property.sourceProviderPhone || null,
           vibe: property.vibe || null,
           vibe_analysis: property.vibe_analysis || {},
-          crawled_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
           is_active: true,
         };
 
         if (existing) {
+          // On update: only refresh verification time and expiry, preserve original crawled_at
           await supabase
             .from('external_properties')
-            .update(propertyData)
+            .update({
+              ...propertyData,
+              last_verified_at: now,
+              updated_at: now,
+              expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+            })
             .eq('id', existing.id);
           updatedListings++;
         } else {
           const { error: insertError } = await supabase
             .from('external_properties')
-            .insert({ ...propertyData, external_id: externalId, source: bestTarget.marketplace, source_url: normalizedUrl });
+            .insert({ ...propertyData, external_id: externalId, source: bestTarget.marketplace, source_url: normalizedUrl, crawled_at: now, expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString() });
 
           if (insertError) {
             if (insertError.code === '23505') {
