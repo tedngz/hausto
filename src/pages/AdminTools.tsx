@@ -586,20 +586,101 @@ const AdminTools = () => {
       </Card>
 
       {/* Auto-Crawl Schedule Status */}
-      <Card>
+      <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Auto-Crawl Schedule
-          </CardTitle>
-          <CardDescription>
-            Automated crawling runs every 30 minutes, rotating through 17 locations × 2 marketplaces. Each run picks the least-recently-crawled location. Fake listings are filtered by price range, missing images, and sale keywords.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Auto-Crawl Schedule
+                {isPaused && <Badge variant="destructive" className="text-xs">Paused</Badge>}
+                {!isPaused && <Badge variant="default" className="text-xs bg-emerald-600">Active</Badge>}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Cron runs every 30 min. The function checks config and crawls the least-recently-crawled location.
+              </CardDescription>
+            </div>
+            <Button
+              variant={isPaused ? 'default' : 'destructive'}
+              size="sm"
+              onClick={handleTogglePause}
+              disabled={isSavingConfig}
+              className="shrink-0"
+            >
+              {isSavingConfig ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isPaused ? (
+                <><Play className="h-4 w-4 mr-1" /> Resume</>
+              ) : (
+                <><Pause className="h-4 w-4 mr-1" /> Pause</>
+              )}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Crawl Settings */}
+          <div className="border rounded-lg p-3 space-y-3">
+            <p className="text-sm font-semibold flex items-center gap-1">
+              <Settings2 className="h-4 w-4" /> Crawl Settings
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Re-crawl cooldown</Label>
+                  <span className="text-xs font-bold text-primary">
+                    {effectiveFrequency >= 60 
+                      ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
+                      : `${effectiveFrequency}min`}
+                  </span>
+                </div>
+                <Slider
+                  value={[effectiveFrequency]}
+                  onValueChange={(v) => setLocalFrequency(v[0])}
+                  min={30}
+                  max={720}
+                  step={30}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  How long before the same location can be re-crawled
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Max listings per run</Label>
+                  <span className="text-xs font-bold text-primary">{effectiveMaxListings}</span>
+                </div>
+                <Slider
+                  value={[effectiveMaxListings]}
+                  onValueChange={(v) => setLocalMaxListings(v[0])}
+                  min={1}
+                  max={20}
+                  step={1}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum listings scraped per location per run
+                </p>
+              </div>
+            </div>
+            {hasUnsavedChanges && (
+              <div className="flex justify-end pt-1">
+                <Button
+                  size="sm"
+                  onClick={handleSaveConfig}
+                  disabled={isSavingConfig}
+                  className="h-7 text-xs"
+                >
+                  {isSavingConfig ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Save Settings
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Schedule</p>
+              <p className="text-xs text-muted-foreground">Cron Interval</p>
               <p className="text-sm font-bold">Every 30 min</p>
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
@@ -611,8 +692,12 @@ const AdminTools = () => {
               <p className="text-sm font-bold">batdongsan + nhatot</p>
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
-              <p className="text-xs text-muted-foreground">Est. Daily New</p>
-              <p className="text-sm font-bold">~50-100 listings</p>
+              <p className="text-xs text-muted-foreground">Cooldown</p>
+              <p className="text-sm font-bold">
+                {effectiveFrequency >= 60 
+                  ? `${Math.round(effectiveFrequency / 60 * 10) / 10}h` 
+                  : `${effectiveFrequency}min`}
+              </p>
             </div>
           </div>
 
