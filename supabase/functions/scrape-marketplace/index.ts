@@ -591,17 +591,26 @@ serve(async (req) => {
     }
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    
+    // Allow service role key for internal scheduled calls
+    const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (!isServiceRole) {
+      const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
       });
+      const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims?.sub) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      console.log(`[scrape-marketplace] Authenticated user: ${claimsData.claims.sub}`);
+    } else {
+      console.log(`[scrape-marketplace] Authenticated via service role (scheduled crawl)`);
     }
-    console.log(`[scrape-marketplace] Authenticated user: ${claimsData.claims.sub}`);
 
     const body = await req.json() as SearchParams;
     const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults } = body;
