@@ -471,15 +471,90 @@ Deno.serve(async (req) => {
           } else {
             newListings++;
 
-            // Run vibe analysis for new listings with images
+            // Run per-image vibe analysis with highlights for new listings
             if (OPENAI_API_KEY && propertyData.images && propertyData.images.length > 0) {
               try {
-                // Lightweight vibe scoring via the scrape data (already included from scrape-marketplace)
-                if (property.vibe_analysis && Object.keys(property.vibe_analysis).length > 0) {
-                  vibeAnalyzed++;
+                const imagesToAnalyze = propertyData.images.slice(0, 5); // Limit to 5 images to stay within time/cost
+                console.log(`[scheduled-crawl] Running image highlight analysis for "${propertyData.title}" (${imagesToAnalyze.length} images)`);
+                
+                const analyzeResponse = await fetch(`${SUPABASE_URL}/functions/v1/analyze-vibe`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  },
+                  body: JSON.stringify({
+                    imageUrls: imagesToAnalyze,
+                    generateContent: true,
+                    propertyInfo: {
+                      title: propertyData.title,
+                      location: propertyData.location,
+                      price: propertyData.price,
+                      size: propertyData.size,
+                      rooms: propertyData.rooms,
+                    },
+                  }),
+                });
+
+                if (analyzeResponse.ok) {
+                  const analyzeData = await analyzeResponse.json();
+                  if (analyzeData.analyses && analyzeData.analyses.length > 0) {
+                    // Merge per-image highlights into vibe_analysis
+                    const updatedVibeAnalysis = {
+                      ...propertyData.vibe_analysis,
+                      per_image: analyzeData.analyses.map((a: any) => ({
+                        image_highlight: a.image_highlight || '',
+                        detailed_analysis: a.detailed_analysis || '',
+                        amenities: a.amenities || [],
+                        suggested_activities: a.suggested_activities || [],
+                        suggested_amenities: a.suggested_amenities || [],
+                        vibe_scores: {
+                          modern: a.modern, cozy: a.cozy, luxurious: a.luxurious,
+                          minimalist: a.minimalist, spacious: a.spacious,
+                          natural_light: a.natural_light, urban: a.urban, elegant: a.elegant,
+                        },
+                      })),
+                    };
+
+                    // Collect all image highlights as property-level highlights
+                    const imageHighlights = analyzeData.analyses
+                      .map((a: any) => a.image_highlight)
+                      .filter((h: string) => h && h.length > 0);
+
+                    // Collect all amenities from image analysis
+                    const allAmenities = new Set<string>(propertyData.amenities || []);
+                    for (const a of analyzeData.analyses) {
+                      if (a.amenities) a.amenities.forEach((am: string) => allAmenities.add(am));
+                      if (a.suggested_amenities) a.suggested_amenities.forEach((am: string) => allAmenities.add(am));
+                    }
+
+                    // Update the property with enriched data
+                    const { data: insertedProp } = await supabase
+                      .from('external_properties')
+                      .select('id')
+                      .eq('external_id', externalId)
+                      .eq('source', bestTarget.marketplace)
+                      .maybeSingle();
+
+                    if (insertedProp) {
+                      await supabase
+                        .from('external_properties')
+                        .update({
+                          vibe_analysis: updatedVibeAnalysis,
+                          highlights: [...(propertyData.highlights || []), ...imageHighlights],
+                          amenities: Array.from(allAmenities),
+                        })
+                        .eq('id', insertedProp.id);
+                    }
+
+                    vibeAnalyzed++;
+                    console.log(`[scheduled-crawl] Image highlights generated: ${imageHighlights.length} highlights for "${propertyData.title}"`);
+                  }
+                } else {
+                  console.error(`[scheduled-crawl] analyze-vibe failed: ${analyzeResponse.status}`);
                 }
               } catch (e) {
-                console.error('[scheduled-crawl] Vibe update error:', e);
+                console.error('[scheduled-crawl] Vibe analysis error:', e);
               }
             }
           }
