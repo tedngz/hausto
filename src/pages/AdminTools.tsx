@@ -429,6 +429,62 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
+      {/* Auto-Crawl Schedule Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Auto-Crawl Schedule
+          </CardTitle>
+          <CardDescription>
+            Automated crawling runs every 30 minutes, rotating through 17 locations × 2 marketplaces. Each run picks the least-recently-crawled location. Fake listings are filtered by price range, missing images, and sale keywords.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 bg-muted rounded-lg text-center">
+              <p className="text-xs text-muted-foreground">Schedule</p>
+              <p className="text-sm font-bold">Every 30 min</p>
+            </div>
+            <div className="p-3 bg-muted rounded-lg text-center">
+              <p className="text-xs text-muted-foreground">Locations</p>
+              <p className="text-sm font-bold">17 districts</p>
+            </div>
+            <div className="p-3 bg-muted rounded-lg text-center">
+              <p className="text-xs text-muted-foreground">Marketplaces</p>
+              <p className="text-sm font-bold">batdongsan + nhatot</p>
+            </div>
+            <div className="p-3 bg-muted rounded-lg text-center">
+              <p className="text-xs text-muted-foreground">Est. Daily New</p>
+              <p className="text-sm font-bold">~50-100 listings</p>
+            </div>
+          </div>
+
+          <div className="text-sm space-y-2 border-t pt-3">
+            <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> Coverage</p>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <p className="font-medium text-muted-foreground mb-1">HCM (8 districts)</p>
+                <p>D1, D2, D3, D7, Bình Thạnh, Phú Nhuận, Tân Bình, Thủ Đức</p>
+              </div>
+              <div>
+                <p className="font-medium text-muted-foreground mb-1">Hanoi (5 districts)</p>
+                <p>Ba Đình, Hoàn Kiếm, Đống Đa, Cầu Giấy, Hai Bà Trưng</p>
+              </div>
+              <div>
+                <p className="font-medium text-muted-foreground mb-1">Da Nang (3 districts)</p>
+                <p>Hải Châu, Sơn Trà, Ngũ Hành Sơn</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-sm text-muted-foreground space-y-1 border-t pt-3">
+            <p><strong>Deduplication:</strong> URL normalization + database check prevents duplicate entries.</p>
+            <p><strong>Fake filter:</strong> Listings with price &lt;2M or &gt;200M VND, no images, sale keywords, or invalid phone numbers are automatically rejected.</p>
+            <p><strong>Freshness:</strong> Skips locations crawled within the last 4 hours. Listings expire after 10 days.</p>
+          </div>
+        </CardContent>
+
       {/* Vector DB - Batch Generate Embeddings */}
       <Card>
         <CardHeader>
