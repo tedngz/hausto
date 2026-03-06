@@ -154,17 +154,46 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    console.log('[scheduled-crawl] Starting automated crawl cycle');
+    const body = await req.json().catch(() => ({}));
 
-    // Step 1: Find the location that was crawled least recently
-    // Query the most recent crawl timestamp for each location+marketplace combo
-    const { data: recentCrawls } = await supabase
-      .from('external_properties')
-      .select('city, location_normalized, source, crawled_at')
-      .order('crawled_at', { ascending: false });
+    // Handle config management actions
+    if (body.action === 'get-config') {
+      const config = await getConfig();
+      return new Response(JSON.stringify({ success: true, config }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    // Build a map of last crawl time per location+marketplace
-    const lastCrawlMap = new Map<string, string>();
+    if (body.action === 'set-config') {
+      const currentConfig = await getConfig();
+      const newConfig: CrawlConfig = {
+        paused: body.paused !== undefined ? body.paused : currentConfig.paused,
+        frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(1440, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
+        maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(20, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
+      };
+      await redisSet(CONFIG_KEY, newConfig);
+      console.log('[scheduled-crawl] Config updated:', JSON.stringify(newConfig));
+      return new Response(JSON.stringify({ success: true, config: newConfig }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Normal crawl execution
+    const config = await getConfig();
+
+    // Check if paused
+    if (config.paused) {
+      console.log('[scheduled-crawl] Crawling is paused. Skipping.');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Crawling is paused',
+        config,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`[scheduled-crawl] Starting crawl (frequency: ${config.frequencyMinutes}min, max: ${config.maxListingsPerRun}/run)`);
     if (recentCrawls) {
       for (const row of recentCrawls) {
         const key = `${row.location_normalized}|${row.source}`;
