@@ -465,7 +465,7 @@ Deno.serve(async (req) => {
         } else {
           const { error: insertError } = await supabase
             .from('external_properties')
-            .insert({ ...propertyData, external_id: externalId, source: bestTarget.marketplace, source_url: normalizedUrl });
+            .insert({ ...propertyData, external_id: externalId, source: bestTarget.marketplace, source_url: normalizedUrl, crawled_at: now, expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString() });
 
           if (insertError) {
             if (insertError.code === '23505') {
