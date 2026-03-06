@@ -429,6 +429,7 @@ Deno.serve(async (req) => {
 
         const existing = existingByUrl || existingById;
 
+        const now = new Date().toISOString();
         const propertyData = {
           title: property.title || 'Rental Property',
           location: property.location || bestTarget.location,
@@ -446,15 +447,19 @@ Deno.serve(async (req) => {
           contact_phone: property.sourceProviderPhone || null,
           vibe: property.vibe || null,
           vibe_analysis: property.vibe_analysis || {},
-          crawled_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
           is_active: true,
         };
 
         if (existing) {
+          // On update: only refresh verification time and expiry, preserve original crawled_at
           await supabase
             .from('external_properties')
-            .update(propertyData)
+            .update({
+              ...propertyData,
+              last_verified_at: now,
+              updated_at: now,
+              expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+            })
             .eq('id', existing.id);
           updatedListings++;
         } else {
