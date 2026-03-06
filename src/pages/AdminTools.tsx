@@ -567,6 +567,97 @@ const AdminTools = () => {
             <p><strong>Fake filter:</strong> Listings with price &lt;2M or &gt;200M VND, no images, sale keywords, or invalid phone numbers are automatically rejected.</p>
             <p><strong>Freshness:</strong> Skips locations crawled within the last 4 hours. Listings expire after 10 days.</p>
           </div>
+
+          {/* Active Listings Stats */}
+          {crawlStats && (
+            <div className="border-t pt-3 space-y-2">
+              <p className="text-sm font-semibold flex items-center gap-1">
+                <Activity className="h-4 w-4" /> Active Listings: {crawlStats.total}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(crawlStats.byCitySource).map(([key, count]) => {
+                  const [city, source] = key.split('/');
+                  const cityLabel = city === 'ho_chi_minh' ? 'HCM' : city === 'hanoi' ? 'Hanoi' : city === 'da_nang' ? 'Da Nang' : city;
+                  return (
+                    <Badge key={key} variant="outline" className="text-xs">
+                      {cityLabel} / {source}: {count}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Crawl Activity Log */}
+          <div className="border-t pt-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold flex items-center gap-1">
+                <Clock className="h-4 w-4" /> Recent Crawl Runs
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => refetchCrawlActivity()}
+                  className="h-7 text-xs"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={isManualCrawlTriggering}
+                  onClick={async () => {
+                    setIsManualCrawlTriggering(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: {} });
+                      if (error) throw error;
+                      toast.success('Auto-crawl triggered', {
+                        description: data?.summary 
+                          ? `${data.summary.target?.location}/${data.summary.target?.marketplace}: ${data.summary.newListings || 0} new, ${data.summary.filteredOut || 0} filtered`
+                          : data?.message || 'Completed'
+                      });
+                      refetchCrawlActivity();
+                    } catch (err: any) {
+                      toast.error('Failed to trigger crawl', { description: err.message });
+                    } finally {
+                      setIsManualCrawlTriggering(false);
+                    }
+                  }}
+                  className="h-7 text-xs"
+                >
+                  {isManualCrawlTriggering ? (
+                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running...</>
+                  ) : (
+                    <>Trigger Now</>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {crawlActivity && crawlActivity.length > 0 ? (
+              <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                {crawlActivity.map((run, idx) => {
+                  const timeAgo = getTimeAgo(run.timestamp);
+                  const cityLabel = run.city === 'ho_chi_minh' ? 'HCM' : run.city === 'hanoi' ? 'Hanoi' : run.city === 'da_nang' ? 'Da Nang' : run.city;
+                  return (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded text-xs gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
+                        <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
+                        <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
+                        <span className="truncate text-muted-foreground">{run.location}</span>
+                      </div>
+                      <Badge className="text-xs shrink-0">{run.count} listings</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No crawl runs recorded yet. Cron job runs every 30 minutes.</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
