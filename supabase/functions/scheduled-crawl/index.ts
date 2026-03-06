@@ -166,13 +166,15 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
   }
 
   // Non-residential / industrial / commercial keywords
+  // Note: Only use multi-word or specific terms to avoid false positives (e.g. "shop" alone matches "shopping")
   const nonResidentialKeywords = [
-    'văn phòng cho thuê', 'office for rent', 'mặt bằng', 'cửa hàng', 'shop',
+    'văn phòng cho thuê', 'office for rent', 'mặt bằng kinh doanh', 'mặt bằng cho thuê',
+    'cửa hàng cho thuê', 'shop for rent', 'cho thuê shop',
     'kho xưởng', 'nhà xưởng', 'xưởng sản xuất', 'kho bãi', 'warehouse',
-    'factory', 'industrial', 'công nghiệp', 'thương mại', 'commercial',
-    'kinh doanh', 'showroom', 'coworking', 'co-working',
-    'đất nền', 'đất thổ cư', 'đất nông nghiệp', 'farmland', 'land for',
-    'khách sạn', 'hotel', 'resort', 'motel', 'nhà nghỉ',
+    'factory', 'industrial', 'công nghiệp', 'thương mại', 'commercial property',
+    'kinh doanh mặt bằng', 'showroom', 'coworking', 'co-working',
+    'đất nền', 'đất thổ cư', 'đất nông nghiệp', 'farmland', 'land for sale',
+    'khách sạn', 'hotel for', 'resort for', 'motel', 'nhà nghỉ cho thuê',
     'căn hộ dịch vụ bán', 'penthouse bán',
   ];
   for (const keyword of nonResidentialKeywords) {
@@ -181,16 +183,7 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
     }
   }
   
-  // Duplicate phone number patterns (common in spam)
-  if (property.sourceProviderPhone) {
-    const phone = property.sourceProviderPhone.replace(/\D/g, '');
-    if (phone.length < 9) {
-      return { suspicious: true, reason: 'Invalid phone number' };
-    }
-  }
-  
   return { suspicious: false };
-}
 
 // Normalize source URL for dedup
 function normalizeSourceUrl(url: string): string {
