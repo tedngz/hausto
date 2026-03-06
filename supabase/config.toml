@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.reactivate-paypal-subscription]
 verify_jwt = true
+
+[functions.scheduled-crawl]
+verify_jwt = false
