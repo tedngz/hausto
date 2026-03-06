@@ -278,7 +278,7 @@ Deno.serve(async (req) => {
         query: 'căn hộ chung cư cho thuê',
         location: bestTarget.location,
         includeVibeAnalysis: true,
-        maxResults: 10,
+        maxResults: config.maxListingsPerRun,
       }),
       signal: controller.signal,
     });
