@@ -60,6 +60,11 @@ const AdminTools = () => {
   const [isManualCrawlTriggering, setIsManualCrawlTriggering] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
+  // State for expanded crawl run
+  const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
+  const [expandedRunProperties, setExpandedRunProperties] = useState<any[]>([]);
+  const [isLoadingRunProperties, setIsLoadingRunProperties] = useState(false);
+
   // Fetch crawl schedule config from Redis via scheduled-crawl function
   const { data: crawlConfig, refetch: refetchConfig } = useQuery({
     queryKey: ['crawl-config'],
