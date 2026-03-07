@@ -540,7 +540,7 @@ const AdminTools = () => {
 
             if (analyzeError) throw analyzeError;
 
-            const analyses = analyzeData?.analyses || analyzeData?.vibe_analysis?.image_analyses || [];
+            const analyses = analyzeData?.analysis?.image_analyses || analyzeData?.analyses || [];
             if (analyses.length === 0) throw new Error('No analyses returned');
 
             const imageAnalyses = analyses.map((a: any, idx: number) => ({
