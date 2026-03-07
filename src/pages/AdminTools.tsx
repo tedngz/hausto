@@ -522,59 +522,60 @@ const AdminTools = () => {
       let fixed = 0;
       let errors = 0;
 
-      // Process in batches of 3 to avoid overloading
-      for (let i = 0; i < needsReanalysis.length; i += 3) {
-        const batch = needsReanalysis.slice(i, i + 3);
-        const promises = batch.map(async (prop: any) => {
-          try {
-            const imagesToAnalyze = (prop.images || []).slice(0, 5);
-            if (imagesToAnalyze.length === 0) return;
+      // Process one at a time to avoid rate limits
+      for (let i = 0; i < needsReanalysis.length; i++) {
+        const prop = needsReanalysis[i];
+        try {
+          const imagesToAnalyze = (prop.images || []).slice(0, 5);
+          if (imagesToAnalyze.length === 0) continue;
 
-            const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('analyze-vibe', {
-              body: {
-                imageUrls: imagesToAnalyze,
-                generateContent: true,
-                propertyInfo: { title: prop.title },
-              },
-            });
+          const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('analyze-vibe', {
+            body: {
+              imageUrls: imagesToAnalyze,
+              generateContent: true,
+              propertyInfo: { title: prop.title },
+            },
+          });
 
-            if (analyzeError) throw analyzeError;
+          if (analyzeError) throw analyzeError;
 
-            const analyses = analyzeData?.analyses || analyzeData?.vibe_analysis?.image_analyses || [];
-            if (analyses.length === 0) throw new Error('No analyses returned');
+          const analyses = analyzeData?.analysis?.image_analyses || analyzeData?.analyses || [];
+          if (analyses.length === 0) throw new Error('No analyses returned');
 
-            const imageAnalyses = analyses.map((a: any, idx: number) => ({
-              image_index: idx,
-              image_highlight: a.image_highlight || a.highlight || 'Premium living space feature',
-              suggested_amenities: a.suggested_amenities || a.amenities || [],
-            }));
+          const imageAnalyses = analyses.map((a: any, idx: number) => ({
+            image_index: idx,
+            image_highlight: a.image_highlight || a.highlight || 'Premium living space feature',
+            suggested_amenities: a.suggested_amenities || a.amenities || [],
+          }));
 
-            const updatedVibe = {
-              ...(prop.vibe_analysis || {}),
-              image_analyses: imageAnalyses,
-            };
-            // Remove legacy per_image key
-            delete updatedVibe.per_image;
+          const existingVibe = (prop.vibe_analysis && typeof prop.vibe_analysis === 'object') ? prop.vibe_analysis as Record<string, any> : {};
+          const updatedVibe: Record<string, any> = {
+            ...existingVibe,
+            image_analyses: imageAnalyses,
+          };
+          delete updatedVibe.per_image;
 
-            const positionalHighlights = imageAnalyses.map((ia: any) => ia.image_highlight);
+          const positionalHighlights = imageAnalyses.map((ia: any) => ia.image_highlight);
 
-            const { error: updateError } = await supabase
-              .from('external_properties')
-              .update({
-                vibe_analysis: updatedVibe,
-                highlights: positionalHighlights,
-              })
-              .eq('id', prop.id);
+          const { error: updateError } = await supabase
+            .from('external_properties')
+            .update({
+              vibe_analysis: updatedVibe,
+              highlights: positionalHighlights,
+            })
+            .eq('id', prop.id);
 
-            if (updateError) throw updateError;
-            fixed++;
-          } catch (e) {
-            console.error(`[backfill] Error for ${prop.id}:`, e);
-            errors++;
-          }
-        });
+          if (updateError) throw updateError;
+          fixed++;
+        } catch (e) {
+          console.error(`[backfill] Error for ${prop.id}:`, e);
+          errors++;
+        }
 
-        await Promise.all(promises);
+        // Wait 3 seconds between properties to avoid OpenAI rate limits
+        if (i < needsReanalysis.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
       }
 
       setBatchReanalyzeResults({ total, fixed, errors });
