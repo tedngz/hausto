@@ -557,9 +557,9 @@ Deno.serve(async (req) => {
             .eq('id', existing.id);
           updatedListings++;
 
-          // Run vibe analysis if this property doesn't have per_image data yet
+          // Run vibe analysis if this property doesn't have image_analyses data yet
           const existingVibe = existing.vibe_analysis as any;
-          if (!existingVibe?.per_image || existingVibe.per_image.length === 0) {
+          if (!existingVibe?.image_analyses || existingVibe.image_analyses.length === 0) {
             const success = await runVibeAnalysis(supabase, existing.id, { ...propertyData, vibe_analysis: existingVibe });
             if (success) vibeAnalyzed++;
           }
