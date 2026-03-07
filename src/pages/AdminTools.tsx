@@ -953,7 +953,230 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
-      {/* Vector DB - Batch Generate Embeddings */}
+      {/* Crawled Property Previews */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            Recent Crawled Properties
+          </CardTitle>
+          <CardDescription>
+            Quick preview of recently crawled external listings. Click to see full details.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentCrawledProperties && recentCrawledProperties.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {recentCrawledProperties.map((prop) => {
+                const vibeAnalysis = prop.vibe_analysis as any;
+                const hasPerImage = vibeAnalysis?.per_image && vibeAnalysis.per_image.length > 0;
+                const imageCount = (prop.images || []).length;
+                const highlightCount = (prop.highlights || []).length;
+                const cityLabel = prop.city === 'ho_chi_minh' ? 'HCM' : prop.city === 'hanoi' ? 'Hanoi' : prop.city === 'da_nang' ? 'Da Nang' : prop.city;
+
+                return (
+                  <div
+                    key={prop.id}
+                    className="border rounded-lg overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group"
+                    onClick={() => setPreviewProperty(prop)}
+                  >
+                    {/* Image strip */}
+                    <div className="flex h-20 bg-muted">
+                      {(prop.images || []).slice(0, 3).map((img: string, i: number) => (
+                        <div key={i} className="flex-1 relative overflow-hidden">
+                          <img
+                            src={img}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            loading="lazy"
+                          />
+                        </div>
+                      ))}
+                      {imageCount === 0 && (
+                        <div className="flex-1 flex items-center justify-center">
+                          <ImageIcon className="h-6 w-6 text-muted-foreground/40" />
+                        </div>
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="p-2.5 space-y-1.5">
+                      <p className="text-xs font-semibold line-clamp-1">{prop.title}</p>
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <MapPin className="h-2.5 w-2.5" />
+                        <span className="truncate">{prop.location}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-primary">
+                          {prop.price ? `${(prop.price / 1_000_000).toFixed(1)}M VND` : 'N/A'}
+                        </span>
+                        <div className="flex gap-1">
+                          <Badge variant="outline" className="text-[9px] px-1 py-0">{prop.source}</Badge>
+                          <Badge variant="outline" className="text-[9px] px-1 py-0">{cityLabel}</Badge>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant={hasPerImage ? 'default' : 'destructive'} className="text-[9px] px-1 py-0">
+                          {hasPerImage ? `✓ ${vibeAnalysis.per_image.length} vibe` : '✗ No vibe'}
+                        </Badge>
+                        <Badge variant={highlightCount > 0 ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
+                          {highlightCount} highlights
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0">
+                          {imageCount} imgs
+                        </Badge>
+                        {prop.vibe && (
+                          <Badge variant="secondary" className="text-[9px] px-1 py-0">{prop.vibe}</Badge>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{getTimeAgo(prop.crawled_at!)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No crawled properties found.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Property Preview Dialog */}
+      <Dialog open={!!previewProperty} onOpenChange={(open) => !open && setPreviewProperty(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {previewProperty && (() => {
+            const vibeAnalysis = previewProperty.vibe_analysis as any;
+            const perImage = vibeAnalysis?.per_image || [];
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-lg">{previewProperty.title}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  {/* Images with highlights */}
+                  <div className="space-y-3">
+                    {(previewProperty.images || []).map((img: string, i: number) => {
+                      const imgAnalysis = perImage[i];
+                      return (
+                        <div key={i} className="space-y-1">
+                          <img
+                            src={img}
+                            alt={`Image ${i + 1}`}
+                            className="w-full rounded-lg object-cover max-h-64"
+                          />
+                          {imgAnalysis?.image_highlight && (
+                            <p className="text-xs text-primary font-medium px-1">
+                              ✨ {imgAnalysis.image_highlight}
+                            </p>
+                          )}
+                          {imgAnalysis?.vibe_scores && (
+                            <div className="flex flex-wrap gap-1 px-1">
+                              {Object.entries(imgAnalysis.vibe_scores)
+                                .filter(([, v]) => (v as number) >= 6)
+                                .sort(([, a], [, b]) => (b as number) - (a as number))
+                                .slice(0, 4)
+                                .map(([key, val]) => (
+                                  <Badge key={key} variant="outline" className="text-[9px] px-1 py-0">
+                                    {key}: {val as number}/10
+                                  </Badge>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Property info */}
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Location</p>
+                      <p className="font-medium">{previewProperty.location}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Price</p>
+                      <p className="font-medium">{previewProperty.price ? `${(previewProperty.price / 1_000_000).toFixed(1)}M VND` : 'N/A'}</p>
+                    </div>
+                    {previewProperty.size && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Size</p>
+                        <p className="font-medium">{previewProperty.size}</p>
+                      </div>
+                    )}
+                    {previewProperty.rooms && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Rooms</p>
+                        <p className="font-medium">{previewProperty.rooms}</p>
+                      </div>
+                    )}
+                    {previewProperty.contact_name && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Contact</p>
+                        <p className="font-medium">{previewProperty.contact_name} {previewProperty.contact_phone && `· ${previewProperty.contact_phone}`}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-muted-foreground text-xs">Source</p>
+                      <p className="font-medium">{previewProperty.source}</p>
+                    </div>
+                  </div>
+
+                  {/* Highlights */}
+                  {previewProperty.highlights && previewProperty.highlights.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Highlights</p>
+                      <div className="flex flex-wrap gap-1">
+                        {previewProperty.highlights.map((h: string, i: number) => (
+                          <Badge key={i} variant="secondary" className="text-xs">{h}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Amenities */}
+                  {previewProperty.amenities && previewProperty.amenities.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Amenities</p>
+                      <div className="flex flex-wrap gap-1">
+                        {previewProperty.amenities.map((a: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs">{a}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Vibe Analysis Summary */}
+                  {vibeAnalysis && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Vibe Analysis</p>
+                      <div className="p-2 bg-muted rounded text-xs space-y-1">
+                        {vibeAnalysis.styles && <p><span className="font-medium">Styles:</span> {vibeAnalysis.styles.join(', ')}</p>}
+                        {vibeAnalysis.colors && <p><span className="font-medium">Colors:</span> {vibeAnalysis.colors.join(', ')}</p>}
+                        {vibeAnalysis.activities && <p><span className="font-medium">Activities:</span> {vibeAnalysis.activities.join(', ')}</p>}
+                        <p><span className="font-medium">Per-image analyses:</span> {perImage.length}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Source link */}
+                  {previewProperty.source_url && (
+                    <a
+                      href={previewProperty.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View original listing
+                    </a>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
