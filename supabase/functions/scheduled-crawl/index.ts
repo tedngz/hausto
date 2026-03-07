@@ -281,9 +281,22 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
       activities: analyzeData.analyses[0]?.suggested_activities || [],
     };
 
-    const imageHighlights = analyzeData.analyses
-      .map((a: any) => a.image_highlight)
-      .filter((h: string) => h && h.length > 0);
+    // Build positional highlights: one per image, aligned by index
+    const imagesToAnalyze = propertyData.images.slice(0, 5);
+    const positionalHighlights: string[] = new Array(imagesToAnalyze.length).fill('');
+    
+    analyzeData.analyses.forEach((a: any, idx: number) => {
+      if (a.image_highlight && typeof a.image_highlight === 'string' && a.image_highlight.trim()) {
+        positionalHighlights[idx] = a.image_highlight.trim();
+      }
+    });
+    
+    // Fill gaps with fallback
+    for (let i = 0; i < positionalHighlights.length; i++) {
+      if (!positionalHighlights[i]) {
+        positionalHighlights[i] = 'Premium living space feature';
+      }
+    }
 
     const allAmenities = new Set<string>(propertyData.amenities || []);
     for (const a of analyzeData.analyses) {
@@ -291,15 +304,11 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
       if (a.suggested_amenities) a.suggested_amenities.forEach((am: string) => allAmenities.add(am));
     }
 
-    // Merge highlights (keep existing, add new image highlights)
-    const existingHighlights = propertyData.highlights || [];
-    const mergedHighlights = [...new Set([...existingHighlights, ...imageHighlights])];
-
     await supabase
       .from('external_properties')
       .update({
         vibe_analysis: updatedVibeAnalysis,
-        highlights: mergedHighlights,
+        highlights: positionalHighlights,
         amenities: Array.from(allAmenities),
       })
       .eq('id', propertyId);
