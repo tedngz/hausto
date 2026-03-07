@@ -427,9 +427,9 @@ Deno.serve(async (req) => {
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
 
-    // Step 2: Call scrape-marketplace
+    // Step 2: Call scrape-marketplace (pages: 1 to stay within Edge Function timeout)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 150000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
       method: 'POST',
@@ -441,8 +441,9 @@ Deno.serve(async (req) => {
         marketplace: bestTarget.marketplace,
         query: 'cho thuê căn hộ chung cư nhà ở',
         location: bestTarget.location,
-        includeVibeAnalysis: true,
+        includeVibeAnalysis: false,
         maxResults: config.maxListingsPerRun,
+        pages: 1,
       }),
       signal: controller.signal,
     });
