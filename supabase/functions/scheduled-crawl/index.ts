@@ -427,9 +427,9 @@ Deno.serve(async (req) => {
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
 
-    // Step 2: Call scrape-marketplace
+    // Step 2: Call scrape-marketplace (pages: 1 to stay within Edge Function timeout)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 150000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
       method: 'POST',
@@ -441,8 +441,9 @@ Deno.serve(async (req) => {
         marketplace: bestTarget.marketplace,
         query: 'cho thuê căn hộ chung cư nhà ở',
         location: bestTarget.location,
-        includeVibeAnalysis: true,
+        includeVibeAnalysis: false,
         maxResults: config.maxListingsPerRun,
+        pages: 1,
       }),
       signal: controller.signal,
     });
@@ -557,12 +558,8 @@ Deno.serve(async (req) => {
             .eq('id', existing.id);
           updatedListings++;
 
-          // Run vibe analysis if this property doesn't have image_analyses data yet
-          const existingVibe = existing.vibe_analysis as any;
-          if (!existingVibe?.image_analyses || existingVibe.image_analyses.length === 0) {
-            const success = await runVibeAnalysis(supabase, existing.id, { ...propertyData, vibe_analysis: existingVibe });
-            if (success) vibeAnalyzed++;
-          }
+          // Skip inline vibe analysis during cron to avoid timeout
+          // Use the "Backfill Image Highlights" admin tool instead
         } else {
           const { data: inserted, error: insertError } = await supabase
             .from('external_properties')
@@ -585,9 +582,8 @@ Deno.serve(async (req) => {
             }
           } else if (inserted) {
             newListings++;
-            // Run vibe analysis for new listings
-            const success = await runVibeAnalysis(supabase, inserted.id, propertyData);
-            if (success) vibeAnalyzed++;
+            // Skip inline vibe analysis during cron to avoid timeout
+            // Use the "Backfill Image Highlights" admin tool instead
           }
         }
       } catch (storeError) {
