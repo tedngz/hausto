@@ -243,22 +243,29 @@ const AdminTools = () => {
     refetchInterval: 60000,
   });
 
-  // Fetch recent crawled properties for preview
   const [previewProperty, setPreviewProperty] = useState<any>(null);
-  const { data: recentCrawledProperties } = useQuery({
-    queryKey: ['recent-crawled-properties'],
-    queryFn: async () => {
+
+  const handleExpandRun = async (idx: number, propertyIds: string[]) => {
+    if (expandedRunIdx === idx) {
+      setExpandedRunIdx(null);
+      setExpandedRunProperties([]);
+      return;
+    }
+    setExpandedRunIdx(idx);
+    setIsLoadingRunProperties(true);
+    try {
       const { data, error } = await supabase
         .from('external_properties')
         .select('id, title, location, price, images, vibe, vibe_analysis, highlights, amenities, source, source_url, city, crawled_at, is_active, size, rooms, contact_name, contact_phone')
-        .eq('is_active', true)
-        .order('crawled_at', { ascending: false })
-        .limit(20);
+        .in('id', propertyIds);
       if (error) throw error;
-      return data || [];
-    },
-    refetchInterval: 60000,
-  });
+      setExpandedRunProperties(data || []);
+    } catch {
+      setExpandedRunProperties([]);
+    } finally {
+      setIsLoadingRunProperties(false);
+    }
+  };
 
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
     queryKey: ['is-admin', user?.id],
