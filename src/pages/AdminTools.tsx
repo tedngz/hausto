@@ -941,15 +941,73 @@ const AdminTools = () => {
                 {crawlActivity.map((run, idx) => {
                   const timeAgo = getTimeAgo(run.timestamp);
                   const cityLabel = run.city === 'ho_chi_minh' ? 'HCM' : run.city === 'hanoi' ? 'Hanoi' : run.city === 'da_nang' ? 'Da Nang' : run.city;
+                  const isExpanded = expandedRunIdx === idx;
                   return (
-                    <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded text-xs gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
-                        <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
-                        <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
-                        <span className="truncate text-muted-foreground">{run.location}</span>
+                    <div key={idx} className="space-y-1.5">
+                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded text-xs gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
+                          <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
+                          <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
+                          <span className="truncate text-muted-foreground">{run.location}</span>
+                        </div>
+                        <Badge
+                          className="text-xs shrink-0 cursor-pointer hover:bg-primary/80 transition-colors"
+                          onClick={() => handleExpandRun(idx, run.propertyIds)}
+                        >
+                          {run.count} listings {isExpanded ? '▲' : '▼'}
+                        </Badge>
                       </div>
-                      <Badge className="text-xs shrink-0">{run.count} listings</Badge>
+                      {isExpanded && (
+                        <div className="ml-4 border-l-2 border-primary/20 pl-3 space-y-1.5">
+                          {isLoadingRunProperties ? (
+                            <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Loading properties...
+                            </div>
+                          ) : expandedRunProperties.length > 0 ? (
+                            expandedRunProperties.map((prop) => {
+                              const vibeAnalysis = prop.vibe_analysis as any;
+                              const hasPerImage = vibeAnalysis?.per_image && vibeAnalysis.per_image.length > 0;
+                              const imageCount = (prop.images || []).length;
+                              return (
+                                <div
+                                  key={prop.id}
+                                  className="flex items-center gap-2 p-1.5 bg-background rounded border cursor-pointer hover:border-primary/50 transition-colors text-xs"
+                                  onClick={() => setPreviewProperty(prop)}
+                                >
+                                  {imageCount > 0 ? (
+                                    <img
+                                      src={prop.images[0]}
+                                      alt=""
+                                      className="h-10 w-14 rounded object-cover shrink-0"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="h-10 w-14 rounded bg-muted flex items-center justify-center shrink-0">
+                                      <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium truncate">{prop.title}</p>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-primary font-bold">
+                                        {prop.price ? `${(prop.price / 1_000_000).toFixed(1)}M` : 'N/A'}
+                                      </span>
+                                      <Badge variant={hasPerImage ? 'default' : 'destructive'} className="text-[8px] px-1 py-0 h-3.5">
+                                        {hasPerImage ? '✓ vibe' : '✗ vibe'}
+                                      </Badge>
+                                      <span className="text-muted-foreground truncate">{prop.location}</span>
+                                    </div>
+                                  </div>
+                                  <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic py-1">No properties found.</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
