@@ -282,7 +282,6 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
     };
 
     // Build positional highlights: one per image, aligned by index
-    const imagesToAnalyze = propertyData.images.slice(0, 5);
     const positionalHighlights: string[] = new Array(imagesToAnalyze.length).fill('');
     
     analyzeData.analyses.forEach((a: any, idx: number) => {
