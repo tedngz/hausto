@@ -282,13 +282,27 @@ Return ONLY valid JSON:
         }))
       : [];
     
-    // Extract per-image highlights as the main highlights array
-    const perImageHighlights = imageAnalyses
-      .map((ia: any) => ia.image_highlight)
-      .filter((h: any) => h && typeof h === 'string');
+    // Build positional highlights array: one highlight per image (up to 5)
+    const totalImages = imagesToAnalyze.length;
+    const perImageHighlights: string[] = new Array(totalImages).fill('');
+    
+    for (const ia of imageAnalyses) {
+      const idx = ia.image_index;
+      if (idx >= 0 && idx < totalImages && ia.image_highlight && typeof ia.image_highlight === 'string') {
+        perImageHighlights[idx] = ia.image_highlight;
+      }
+    }
+    
+    // Fill any gaps with a generic highlight based on vibe
+    const fallbackLabel = primaryVibe || parsed.style || 'Modern';
+    for (let i = 0; i < perImageHighlights.length; i++) {
+      if (!perImageHighlights[i]) {
+        perImageHighlights[i] = `${fallbackLabel} living space feature`;
+      }
+    }
     
     return {
-      vibe: primaryVibe || parsed.style || 'Modern',
+      vibe: fallbackLabel,
       vibe_analysis: {
         style: parsed.style,
         colors: parsed.colors || [],
@@ -297,7 +311,7 @@ Return ONLY valid JSON:
         vibe_scores: vibeScores,
         image_analyses: imageAnalyses,
       },
-      highlights: perImageHighlights.length > 0 ? perImageHighlights : [],
+      highlights: perImageHighlights,
       amenities: Array.isArray(parsed.amenities) ? parsed.amenities : [],
     };
   } catch (error) {
