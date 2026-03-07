@@ -60,6 +60,11 @@ const AdminTools = () => {
   const [isManualCrawlTriggering, setIsManualCrawlTriggering] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
+  // State for expanded crawl run
+  const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
+  const [expandedRunProperties, setExpandedRunProperties] = useState<any[]>([]);
+  const [isLoadingRunProperties, setIsLoadingRunProperties] = useState(false);
+
   // Fetch crawl schedule config from Redis via scheduled-crawl function
   const { data: crawlConfig, refetch: refetchConfig } = useQuery({
     queryKey: ['crawl-config'],
@@ -124,7 +129,6 @@ const AdminTools = () => {
   const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
     queryKey: ['crawl-activity'],
     queryFn: async () => {
-      // Get the 50 most recently crawled properties grouped by approximate crawl time
       const { data, error } = await supabase
         .from('external_properties')
         .select('id, city, source, location_normalized, crawled_at, title, price, is_active')
@@ -134,14 +138,13 @@ const AdminTools = () => {
       if (error) throw error;
       if (!data || data.length === 0) return [];
 
-      // Group by crawl runs (properties crawled within 5 minutes of each other)
       const runs: Array<{
         timestamp: string;
         city: string;
         source: string;
         location: string;
         count: number;
-        listings: Array<{ title: string; price: number }>;
+        propertyIds: string[];
       }> = [];
 
       let currentRun: typeof runs[0] | null = null;
@@ -161,20 +164,18 @@ const AdminTools = () => {
             source: prop.source || 'unknown',
             location: prop.location_normalized || 'unknown',
             count: 0,
-            listings: [],
+            propertyIds: [],
           };
           runs.push(currentRun);
         }
         
         currentRun.count++;
-        if (currentRun.listings.length < 3) {
-          currentRun.listings.push({ title: prop.title || 'Unknown', price: prop.price || 0 });
-        }
+        currentRun.propertyIds.push(prop.id);
       }
 
       return runs.slice(0, 10);
     },
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 60000,
   });
 
   // Fetch crawl coverage stats
@@ -242,22 +243,29 @@ const AdminTools = () => {
     refetchInterval: 60000,
   });
 
-  // Fetch recent crawled properties for preview
   const [previewProperty, setPreviewProperty] = useState<any>(null);
-  const { data: recentCrawledProperties } = useQuery({
-    queryKey: ['recent-crawled-properties'],
-    queryFn: async () => {
+
+  const handleExpandRun = async (idx: number, propertyIds: string[]) => {
+    if (expandedRunIdx === idx) {
+      setExpandedRunIdx(null);
+      setExpandedRunProperties([]);
+      return;
+    }
+    setExpandedRunIdx(idx);
+    setIsLoadingRunProperties(true);
+    try {
       const { data, error } = await supabase
         .from('external_properties')
         .select('id, title, location, price, images, vibe, vibe_analysis, highlights, amenities, source, source_url, city, crawled_at, is_active, size, rooms, contact_name, contact_phone')
-        .eq('is_active', true)
-        .order('crawled_at', { ascending: false })
-        .limit(20);
+        .in('id', propertyIds);
       if (error) throw error;
-      return data || [];
-    },
-    refetchInterval: 60000,
-  });
+      setExpandedRunProperties(data || []);
+    } catch {
+      setExpandedRunProperties([]);
+    } finally {
+      setIsLoadingRunProperties(false);
+    }
+  };
 
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
     queryKey: ['is-admin', user?.id],
@@ -933,15 +941,73 @@ const AdminTools = () => {
                 {crawlActivity.map((run, idx) => {
                   const timeAgo = getTimeAgo(run.timestamp);
                   const cityLabel = run.city === 'ho_chi_minh' ? 'HCM' : run.city === 'hanoi' ? 'Hanoi' : run.city === 'da_nang' ? 'Da Nang' : run.city;
+                  const isExpanded = expandedRunIdx === idx;
                   return (
-                    <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded text-xs gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
-                        <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
-                        <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
-                        <span className="truncate text-muted-foreground">{run.location}</span>
+                    <div key={idx} className="space-y-1.5">
+                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded text-xs gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
+                          <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
+                          <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
+                          <span className="truncate text-muted-foreground">{run.location}</span>
+                        </div>
+                        <Badge
+                          className="text-xs shrink-0 cursor-pointer hover:bg-primary/80 transition-colors"
+                          onClick={() => handleExpandRun(idx, run.propertyIds)}
+                        >
+                          {run.count} listings {isExpanded ? '▲' : '▼'}
+                        </Badge>
                       </div>
-                      <Badge className="text-xs shrink-0">{run.count} listings</Badge>
+                      {isExpanded && (
+                        <div className="ml-4 border-l-2 border-primary/20 pl-3 space-y-1.5">
+                          {isLoadingRunProperties ? (
+                            <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Loading properties...
+                            </div>
+                          ) : expandedRunProperties.length > 0 ? (
+                            expandedRunProperties.map((prop) => {
+                              const vibeAnalysis = prop.vibe_analysis as any;
+                              const hasPerImage = vibeAnalysis?.per_image && vibeAnalysis.per_image.length > 0;
+                              const imageCount = (prop.images || []).length;
+                              return (
+                                <div
+                                  key={prop.id}
+                                  className="flex items-center gap-2 p-1.5 bg-background rounded border cursor-pointer hover:border-primary/50 transition-colors text-xs"
+                                  onClick={() => setPreviewProperty(prop)}
+                                >
+                                  {imageCount > 0 ? (
+                                    <img
+                                      src={prop.images[0]}
+                                      alt=""
+                                      className="h-10 w-14 rounded object-cover shrink-0"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="h-10 w-14 rounded bg-muted flex items-center justify-center shrink-0">
+                                      <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium truncate">{prop.title}</p>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-primary font-bold">
+                                        {prop.price ? `${(prop.price / 1_000_000).toFixed(1)}M` : 'N/A'}
+                                      </span>
+                                      <Badge variant={hasPerImage ? 'default' : 'destructive'} className="text-[8px] px-1 py-0 h-3.5">
+                                        {hasPerImage ? '✓ vibe' : '✗ vibe'}
+                                      </Badge>
+                                      <span className="text-muted-foreground truncate">{prop.location}</span>
+                                    </div>
+                                  </div>
+                                  <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic py-1">No properties found.</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -953,92 +1019,7 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
-      {/* Crawled Property Previews */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Eye className="h-5 w-5" />
-            Recent Crawled Properties
-          </CardTitle>
-          <CardDescription>
-            Quick preview of recently crawled external listings. Click to see full details.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentCrawledProperties && recentCrawledProperties.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {recentCrawledProperties.map((prop) => {
-                const vibeAnalysis = prop.vibe_analysis as any;
-                const hasPerImage = vibeAnalysis?.per_image && vibeAnalysis.per_image.length > 0;
-                const imageCount = (prop.images || []).length;
-                const highlightCount = (prop.highlights || []).length;
-                const cityLabel = prop.city === 'ho_chi_minh' ? 'HCM' : prop.city === 'hanoi' ? 'Hanoi' : prop.city === 'da_nang' ? 'Da Nang' : prop.city;
 
-                return (
-                  <div
-                    key={prop.id}
-                    className="border rounded-lg overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group"
-                    onClick={() => setPreviewProperty(prop)}
-                  >
-                    {/* Image strip */}
-                    <div className="flex h-20 bg-muted">
-                      {(prop.images || []).slice(0, 3).map((img: string, i: number) => (
-                        <div key={i} className="flex-1 relative overflow-hidden">
-                          <img
-                            src={img}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            loading="lazy"
-                          />
-                        </div>
-                      ))}
-                      {imageCount === 0 && (
-                        <div className="flex-1 flex items-center justify-center">
-                          <ImageIcon className="h-6 w-6 text-muted-foreground/40" />
-                        </div>
-                      )}
-                    </div>
-                    {/* Info */}
-                    <div className="p-2.5 space-y-1.5">
-                      <p className="text-xs font-semibold line-clamp-1">{prop.title}</p>
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <MapPin className="h-2.5 w-2.5" />
-                        <span className="truncate">{prop.location}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-primary">
-                          {prop.price ? `${(prop.price / 1_000_000).toFixed(1)}M VND` : 'N/A'}
-                        </span>
-                        <div className="flex gap-1">
-                          <Badge variant="outline" className="text-[9px] px-1 py-0">{prop.source}</Badge>
-                          <Badge variant="outline" className="text-[9px] px-1 py-0">{cityLabel}</Badge>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant={hasPerImage ? 'default' : 'destructive'} className="text-[9px] px-1 py-0">
-                          {hasPerImage ? `✓ ${vibeAnalysis.per_image.length} vibe` : '✗ No vibe'}
-                        </Badge>
-                        <Badge variant={highlightCount > 0 ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
-                          {highlightCount} highlights
-                        </Badge>
-                        <Badge variant="outline" className="text-[9px] px-1 py-0">
-                          {imageCount} imgs
-                        </Badge>
-                        {prop.vibe && (
-                          <Badge variant="secondary" className="text-[9px] px-1 py-0">{prop.vibe}</Badge>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{getTimeAgo(prop.crawled_at!)}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">No crawled properties found.</p>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Property Preview Dialog */}
       <Dialog open={!!previewProperty} onOpenChange={(open) => !open && setPreviewProperty(null)}>
