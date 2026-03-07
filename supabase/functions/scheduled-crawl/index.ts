@@ -15,13 +15,13 @@ const CONFIG_KEY = 'crawl:config';
 
 interface CrawlConfig {
   paused: boolean;
-  frequencyMinutes: number; // cooldown between crawls for the same location
+  frequencyMinutes: number;
   maxListingsPerRun: number;
 }
 
 const DEFAULT_CONFIG: CrawlConfig = {
   paused: false,
-  frequencyMinutes: 240, // 4 hours between re-crawling same location
+  frequencyMinutes: 240,
   maxListingsPerRun: 10,
 };
 
@@ -36,9 +36,12 @@ async function redisGet(key: string): Promise<any> {
   } catch { return null; }
 }
 
-async function redisSet(key: string, value: any): Promise<void> {
+async function redisSet(key: string, value: any, exSeconds?: number): Promise<void> {
   try {
-    await fetch(`${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}`, {
+    const url = exSeconds
+      ? `${UPSTASH_REDIS_REST_URL}/setex/${encodeURIComponent(key)}/${exSeconds}/${encodeURIComponent(JSON.stringify(value))}`
+      : `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}`;
+    await fetch(url, {
       headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
     });
   } catch (e) { console.error('Redis set error:', e); }
@@ -49,10 +52,25 @@ async function getConfig(): Promise<CrawlConfig> {
   return stored ? { ...DEFAULT_CONFIG, ...stored } : DEFAULT_CONFIG;
 }
 
-// All locations to crawl, organized by city
+// Track last crawl time per location+marketplace in Redis
+function crawlTrackKey(location: string, marketplace: string): string {
+  const normalized = location.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  return `crawl:track:${normalized}:${marketplace}`;
+}
+
+async function getLastCrawlTime(location: string, marketplace: string): Promise<number | null> {
+  const val = await redisGet(crawlTrackKey(location, marketplace));
+  return val ? Number(val) : null;
+}
+
+async function setLastCrawlTime(location: string, marketplace: string): Promise<void> {
+  // Store timestamp, expire after 48h (cleanup old entries)
+  await redisSet(crawlTrackKey(location, marketplace), Date.now(), 48 * 60 * 60);
+}
+
+// All locations to crawl
 const CRAWL_LOCATIONS: { city: string; location: string }[] = [
-  // ===== Ho Chi Minh City - All 22 districts =====
-  // Urban districts (Quận)
+  // ===== Ho Chi Minh City =====
   { city: 'ho_chi_minh', location: 'Quận 1' },
   { city: 'ho_chi_minh', location: 'Quận 3' },
   { city: 'ho_chi_minh', location: 'Quận 4' },
@@ -69,16 +87,13 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'ho_chi_minh', location: 'Tân Phú' },
   { city: 'ho_chi_minh', location: 'Gò Vấp' },
   { city: 'ho_chi_minh', location: 'Bình Tân' },
-  { city: 'ho_chi_minh', location: 'Thủ Đức' }, // TP Thủ Đức (merged D2, D9, Thủ Đức)
-  // Suburban districts (Huyện)
+  { city: 'ho_chi_minh', location: 'Thủ Đức' },
   { city: 'ho_chi_minh', location: 'Nhà Bè' },
   { city: 'ho_chi_minh', location: 'Bình Chánh' },
   { city: 'ho_chi_minh', location: 'Hóc Môn' },
   { city: 'ho_chi_minh', location: 'Củ Chi' },
   { city: 'ho_chi_minh', location: 'Cần Giờ' },
-
-  // ===== Hanoi - All 30 districts =====
-  // Urban districts (Quận)
+  // ===== Hanoi =====
   { city: 'hanoi', location: 'Ba Đình' },
   { city: 'hanoi', location: 'Hoàn Kiếm' },
   { city: 'hanoi', location: 'Đống Đa' },
@@ -91,7 +106,6 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'hanoi', location: 'Bắc Từ Liêm' },
   { city: 'hanoi', location: 'Nam Từ Liêm' },
   { city: 'hanoi', location: 'Hà Đông' },
-  // Suburban districts/towns (Huyện/Thị xã)
   { city: 'hanoi', location: 'Gia Lâm' },
   { city: 'hanoi', location: 'Đông Anh' },
   { city: 'hanoi', location: 'Sóc Sơn' },
@@ -110,8 +124,7 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'hanoi', location: 'Phú Xuyên' },
   { city: 'hanoi', location: 'Ứng Hòa' },
   { city: 'hanoi', location: 'Mỹ Đức' },
-
-  // ===== Da Nang - All 8 districts =====
+  // ===== Da Nang =====
   { city: 'da_nang', location: 'Hải Châu' },
   { city: 'da_nang', location: 'Thanh Khê' },
   { city: 'da_nang', location: 'Sơn Trà' },
@@ -124,49 +137,31 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
 
 const MARKETPLACES = ['batdongsan', 'nhatot'] as const;
 
-// Minimum price thresholds to filter fake/spam listings (in VND)
-const MIN_PRICE_VND = 2_000_000; // 2M VND - anything below is likely fake
-const MAX_PRICE_VND = 200_000_000; // 200M VND - anything above for rent is suspicious
+const MIN_PRICE_VND = 2_000_000;
+const MAX_PRICE_VND = 200_000_000;
 
-// Fake listing detection heuristics
 function isSuspiciousListing(property: any): { suspicious: boolean; reason?: string } {
-  // No title or very short title
   if (!property.title || property.title.length < 5) {
     return { suspicious: true, reason: 'Title too short or missing' };
   }
-  
-  // Price too low (likely bait)
   if (property.price && property.price > 0 && property.price < MIN_PRICE_VND) {
     return { suspicious: true, reason: `Price too low: ${property.price} VND` };
   }
-  
-  // Price unreasonably high for rental
   if (property.price && property.price > MAX_PRICE_VND) {
     return { suspicious: true, reason: `Price too high for rental: ${property.price} VND` };
   }
-  
-  // No images at all
   if (!property.images || property.images.length === 0) {
     return { suspicious: true, reason: 'No images' };
   }
-  
-  // Combine title + description for keyword checks
   const text = `${(property.title || '').toLowerCase()} ${(property.description || '').toLowerCase()}`;
-
-  // Sale keywords - filter out buy/sell listings
   const saleKeywords = [
     'bán gấp', 'bán nhanh', 'cần bán', 'sang nhượng', 'for sale', 'mua bán',
     'bán căn', 'bán lô', 'bán đất', 'chuyển nhượng', 'bán chung cư', 'giá bán',
     'bán nhà', 'bán biệt thự', 'bán villa', 'mua ngay',
   ];
   for (const keyword of saleKeywords) {
-    if (text.includes(keyword)) {
-      return { suspicious: true, reason: `Contains sale keyword: "${keyword}"` };
-    }
+    if (text.includes(keyword)) return { suspicious: true, reason: `Sale keyword: "${keyword}"` };
   }
-
-  // Non-residential / industrial / commercial keywords
-  // Note: Only use multi-word or specific terms to avoid false positives (e.g. "shop" alone matches "shopping")
   const nonResidentialKeywords = [
     'văn phòng cho thuê', 'office for rent', 'mặt bằng kinh doanh', 'mặt bằng cho thuê',
     'cửa hàng cho thuê', 'shop for rent', 'cho thuê shop',
@@ -178,15 +173,11 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
     'căn hộ dịch vụ bán', 'penthouse bán',
   ];
   for (const keyword of nonResidentialKeywords) {
-    if (text.includes(keyword)) {
-      return { suspicious: true, reason: `Non-residential listing: "${keyword}"` };
-    }
+    if (text.includes(keyword)) return { suspicious: true, reason: `Non-residential: "${keyword}"` };
   }
-  
   return { suspicious: false };
 }
 
-// Normalize source URL for dedup
 function normalizeSourceUrl(url: string): string {
   try {
     const u = new URL(url.toLowerCase().trim());
@@ -205,18 +196,102 @@ function normalizeLocation(location: string): string {
 
 function detectCity(location: string): string {
   const lower = location.toLowerCase();
-  // HCM - include all district names with diacritics
   if (/(ho chi minh|hcm|saigon|sài gòn|thủ đức|thu duc|quận [0-9]|quan [0-9]|district [0-9]|d[0-9]|bình thạnh|binh thanh|phú nhuận|phu nhuan|tân bình|tan binh|gò vấp|go vap|tân phú|tan phu|bình tân|binh tan|bình chánh|binh chanh|nhà bè|nha be|hóc môn|hoc mon|củ chi|cu chi|cần giờ|can gio)/i.test(lower)) return 'ho_chi_minh';
-  // Hanoi - include all district names with diacritics
   if (/(hà nội|ha noi|hanoi|ba đình|ba dinh|hoàn kiếm|hoan kiem|đống đa|dong da|cầu giấy|cau giay|hai bà trưng|hai ba trung|tây hồ|tay ho|long biên|long bien|thanh xuân|thanh xuan|hoàng mai|hoang mai|bắc từ liêm|nam từ liêm|hà đông|ha dong|gia lâm|gia lam|đông anh|dong anh|sóc sơn|soc son|thanh trì|thanh tri|hoài đức|hoai duc|mê linh|me linh|sơn tây|son tay)/i.test(lower)) return 'hanoi';
-  // Da Nang - include all district names
   if (/(đà nẵng|da nang|hải châu|hai chau|thanh khê|thanh khe|sơn trà|son tra|ngũ hành sơn|ngu hanh son|liên chiểu|lien chieu|cẩm lệ|cam le|hòa vang|hoa vang)/i.test(lower)) return 'da_nang';
   return 'other';
 }
 
+// Run vibe analysis for a property and update it
+async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: any): Promise<boolean> {
+  if (!OPENAI_API_KEY || !propertyData.images || propertyData.images.length === 0) return false;
+
+  try {
+    const imagesToAnalyze = propertyData.images.slice(0, 5);
+    console.log(`[scheduled-crawl] Running vibe analysis for "${propertyData.title}" (${imagesToAnalyze.length} images)`);
+
+    const analyzeResponse = await fetch(`${SUPABASE_URL}/functions/v1/analyze-vibe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        imageUrls: imagesToAnalyze,
+        generateContent: true,
+        propertyInfo: {
+          title: propertyData.title,
+          location: propertyData.location,
+          price: propertyData.price,
+          size: propertyData.size,
+          rooms: propertyData.rooms,
+        },
+      }),
+    });
+
+    if (!analyzeResponse.ok) {
+      console.error(`[scheduled-crawl] analyze-vibe failed: ${analyzeResponse.status}`);
+      await analyzeResponse.text(); // consume body
+      return false;
+    }
+
+    const analyzeData = await analyzeResponse.json();
+    if (!analyzeData.analyses || analyzeData.analyses.length === 0) return false;
+
+    const updatedVibeAnalysis = {
+      ...(propertyData.vibe_analysis || {}),
+      per_image: analyzeData.analyses.map((a: any) => ({
+        image_highlight: a.image_highlight || '',
+        detailed_analysis: a.detailed_analysis || '',
+        amenities: a.amenities || [],
+        suggested_activities: a.suggested_activities || [],
+        suggested_amenities: a.suggested_amenities || [],
+        vibe_scores: {
+          modern: a.modern, cozy: a.cozy, luxurious: a.luxurious,
+          minimalist: a.minimalist, spacious: a.spacious,
+          natural_light: a.natural_light, urban: a.urban, elegant: a.elegant,
+        },
+      })),
+      // Store aggregated vibe scores from first image as top-level scores
+      styles: analyzeData.analyses[0]?.styles || [],
+      colors: analyzeData.analyses[0]?.colors || [],
+      activities: analyzeData.analyses[0]?.suggested_activities || [],
+    };
+
+    const imageHighlights = analyzeData.analyses
+      .map((a: any) => a.image_highlight)
+      .filter((h: string) => h && h.length > 0);
+
+    const allAmenities = new Set<string>(propertyData.amenities || []);
+    for (const a of analyzeData.analyses) {
+      if (a.amenities) a.amenities.forEach((am: string) => allAmenities.add(am));
+      if (a.suggested_amenities) a.suggested_amenities.forEach((am: string) => allAmenities.add(am));
+    }
+
+    // Merge highlights (keep existing, add new image highlights)
+    const existingHighlights = propertyData.highlights || [];
+    const mergedHighlights = [...new Set([...existingHighlights, ...imageHighlights])];
+
+    await supabase
+      .from('external_properties')
+      .update({
+        vibe_analysis: updatedVibeAnalysis,
+        highlights: mergedHighlights,
+        amenities: Array.from(allAmenities),
+      })
+      .eq('id', propertyId);
+
+    console.log(`[scheduled-crawl] Vibe analysis done: ${imageHighlights.length} highlights for "${propertyData.title}"`);
+    return true;
+  } catch (e) {
+    console.error('[scheduled-crawl] Vibe analysis error:', e);
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   console.log(`[scheduled-crawl] Request received: ${req.method} at ${new Date().toISOString()}`);
-  
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -253,61 +328,41 @@ Deno.serve(async (req) => {
     // Normal crawl execution
     const config = await getConfig();
 
-    // Check if paused
     if (config.paused) {
       console.log('[scheduled-crawl] Crawling is paused. Skipping.');
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'Crawling is paused',
-        config,
-      }), {
+      return new Response(JSON.stringify({ success: true, message: 'Crawling is paused', config }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     console.log(`[scheduled-crawl] Starting crawl (frequency: ${config.frequencyMinutes}min, max: ${config.maxListingsPerRun}/run)`);
 
-    // Step 1: Find the location that was crawled least recently
-    // Use updated_at to track when a location was last crawled (updated on both insert and update)
-    const { data: recentCrawls } = await supabase
-      .from('external_properties')
-      .select('city, location_normalized, source, updated_at')
-      .order('updated_at', { ascending: false });
+    // Step 1: Find the best location to crawl using Redis-tracked crawl times
+    let bestTarget: { city: string; location: string; marketplace: string; lastCrawl: number | null } | null = null;
+    let oldestCrawlTime = Infinity;
 
-    const lastCrawlMap = new Map<string, string>();
-    if (recentCrawls) {
-      for (const row of recentCrawls) {
-        const key = `${row.location_normalized}|${row.source}`;
-        if (!lastCrawlMap.has(key)) {
-          lastCrawlMap.set(key, row.updated_at);
-        }
-      }
-    }
-
-    // Find the location+marketplace combo that needs crawling most
-    // Prioritize: never crawled > oldest crawled > recently crawled
-    let bestTarget: { city: string; location: string; marketplace: string; lastCrawl: string | null } | null = null;
-    let oldestCrawl: number = Infinity;
-
+    // Check all location+marketplace combos in parallel batches
+    const checks: Promise<{ loc: typeof CRAWL_LOCATIONS[0]; mp: string; lastCrawl: number | null }>[] = [];
     for (const loc of CRAWL_LOCATIONS) {
       for (const mp of MARKETPLACES) {
-        const key = `${normalizeLocation(loc.location)}|${mp}`;
-        const lastCrawl = lastCrawlMap.get(key);
-        
-        if (!lastCrawl) {
-          // Never crawled - highest priority
-          bestTarget = { city: loc.city, location: loc.location, marketplace: mp, lastCrawl: null };
-          oldestCrawl = 0;
-          break;
-        }
-        
-        const crawlTime = new Date(lastCrawl).getTime();
-        if (crawlTime < oldestCrawl) {
-          oldestCrawl = crawlTime;
-          bestTarget = { city: loc.city, location: loc.location, marketplace: mp, lastCrawl };
-        }
+        checks.push(
+          getLastCrawlTime(loc.location, mp).then(lastCrawl => ({ loc, mp, lastCrawl }))
+        );
       }
-      if (bestTarget && !bestTarget.lastCrawl) break; // Found never-crawled, stop
+    }
+    const results = await Promise.all(checks);
+
+    for (const { loc, mp, lastCrawl } of results) {
+      if (lastCrawl === null) {
+        // Never crawled - highest priority
+        if (bestTarget === null || bestTarget.lastCrawl !== null) {
+          bestTarget = { city: loc.city, location: loc.location, marketplace: mp, lastCrawl: null };
+          oldestCrawlTime = 0;
+        }
+      } else if (bestTarget === null || (bestTarget.lastCrawl !== null && lastCrawl < oldestCrawlTime)) {
+        oldestCrawlTime = lastCrawl;
+        bestTarget = { city: loc.city, location: loc.location, marketplace: mp, lastCrawl };
+      }
     }
 
     if (!bestTarget) {
@@ -318,15 +373,14 @@ Deno.serve(async (req) => {
     }
 
     // Skip if last crawl was within the configured frequency
-    if (bestTarget.lastCrawl) {
-      const minsSinceLastCrawl = (Date.now() - new Date(bestTarget.lastCrawl).getTime()) / (1000 * 60);
+    if (bestTarget.lastCrawl !== null) {
+      const minsSinceLastCrawl = (Date.now() - bestTarget.lastCrawl) / (1000 * 60);
       if (minsSinceLastCrawl < config.frequencyMinutes) {
         console.log(`[scheduled-crawl] All locations crawled within ${config.frequencyMinutes}min. Skipping.`);
-        return new Response(JSON.stringify({ 
-          success: true, 
+        return new Response(JSON.stringify({
+          success: true,
           message: `All locations recently crawled (within ${config.frequencyMinutes}min)`,
-          nextTarget: bestTarget,
-          minutesSinceLastCrawl: Math.round(minsSinceLastCrawl),
+          nextTarget: { ...bestTarget, minutesSinceLastCrawl: Math.round(minsSinceLastCrawl) },
           config,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -334,11 +388,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[scheduled-crawl] Target: ${bestTarget.location} on ${bestTarget.marketplace} (last crawl: ${bestTarget.lastCrawl || 'never'})`);
+    console.log(`[scheduled-crawl] Target: ${bestTarget.location} on ${bestTarget.marketplace} (last crawl: ${bestTarget.lastCrawl ? new Date(bestTarget.lastCrawl).toISOString() : 'never'})`);
 
-    // Step 2: Call scrape-marketplace to get listings
+    // Mark this location+marketplace as crawled NOW (even before scraping starts)
+    await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
+
+    // Step 2: Call scrape-marketplace
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 150000); // 150s timeout - scraping takes ~2 min
+    const timeoutId = setTimeout(() => controller.abort(), 150000);
 
     const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
       method: 'POST',
@@ -361,8 +418,8 @@ Deno.serve(async (req) => {
     if (!scrapeResponse.ok) {
       const errorText = await scrapeResponse.text();
       console.error(`[scheduled-crawl] Scrape failed:`, errorText);
-      return new Response(JSON.stringify({ 
-        success: false, 
+      return new Response(JSON.stringify({
+        success: false,
         error: `Scrape failed: ${scrapeResponse.status}`,
         target: bestTarget,
       }), {
@@ -375,8 +432,8 @@ Deno.serve(async (req) => {
 
     if (!scrapeData.success || !scrapeData.properties?.length) {
       console.log(`[scheduled-crawl] No properties found for ${bestTarget.location}/${bestTarget.marketplace}`);
-      return new Response(JSON.stringify({ 
-        success: true, 
+      return new Response(JSON.stringify({
+        success: true,
         message: 'No properties found',
         target: bestTarget,
       }), {
@@ -384,7 +441,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Step 3: Filter out suspicious/fake listings
+    // Step 3: Filter suspicious listings
     const validProperties: any[] = [];
     const filteredOut: { title: string; reason: string }[] = [];
 
@@ -392,7 +449,6 @@ Deno.serve(async (req) => {
       const check = isSuspiciousListing(property);
       if (check.suspicious) {
         filteredOut.push({ title: property.title || 'Unknown', reason: check.reason! });
-        console.log(`[scheduled-crawl] Filtered suspicious: "${property.title}" - ${check.reason}`);
       } else {
         validProperties.push(property);
       }
@@ -400,7 +456,7 @@ Deno.serve(async (req) => {
 
     console.log(`[scheduled-crawl] ${validProperties.length} valid / ${filteredOut.length} filtered from ${scrapeData.properties.length} total`);
 
-    // Step 4: Store valid properties with deduplication
+    // Step 4: Store valid properties with deduplication + run vibe analysis
     let newListings = 0;
     let updatedListings = 0;
     let duplicatesSkipped = 0;
@@ -416,17 +472,17 @@ Deno.serve(async (req) => {
           ? btoa(normalizedUrl).substring(0, 100)
           : `${bestTarget.marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-        // Check for existing by normalized URL
+        // Check for existing
         const { data: existingByUrl } = await supabase
           .from('external_properties')
-          .select('id')
+          .select('id, vibe_analysis')
           .eq('source', bestTarget.marketplace)
           .eq('source_url', normalizedUrl)
           .maybeSingle();
 
         const { data: existingById } = !existingByUrl ? await supabase
           .from('external_properties')
-          .select('id')
+          .select('id, vibe_analysis')
           .eq('source', bestTarget.marketplace)
           .eq('external_id', externalId)
           .maybeSingle() : { data: existingByUrl };
@@ -455,7 +511,7 @@ Deno.serve(async (req) => {
         };
 
         if (existing) {
-          // On update: only refresh verification time and expiry, preserve original crawled_at
+          // Update: refresh verification time and expiry, preserve original crawled_at
           await supabase
             .from('external_properties')
             .update({
@@ -466,10 +522,26 @@ Deno.serve(async (req) => {
             })
             .eq('id', existing.id);
           updatedListings++;
+
+          // Run vibe analysis if this property doesn't have per_image data yet
+          const existingVibe = existing.vibe_analysis as any;
+          if (!existingVibe?.per_image || existingVibe.per_image.length === 0) {
+            const success = await runVibeAnalysis(supabase, existing.id, { ...propertyData, vibe_analysis: existingVibe });
+            if (success) vibeAnalyzed++;
+          }
         } else {
-          const { error: insertError } = await supabase
+          const { data: inserted, error: insertError } = await supabase
             .from('external_properties')
-            .insert({ ...propertyData, external_id: externalId, source: bestTarget.marketplace, source_url: normalizedUrl, crawled_at: now, expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString() });
+            .insert({
+              ...propertyData,
+              external_id: externalId,
+              source: bestTarget.marketplace,
+              source_url: normalizedUrl,
+              crawled_at: now,
+              expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+            })
+            .select('id')
+            .maybeSingle();
 
           if (insertError) {
             if (insertError.code === '23505') {
@@ -477,95 +549,11 @@ Deno.serve(async (req) => {
             } else {
               console.error('[scheduled-crawl] Insert error:', insertError);
             }
-          } else {
+          } else if (inserted) {
             newListings++;
-
-            // Run per-image vibe analysis with highlights for new listings
-            if (OPENAI_API_KEY && propertyData.images && propertyData.images.length > 0) {
-              try {
-                const imagesToAnalyze = propertyData.images.slice(0, 5); // Limit to 5 images to stay within time/cost
-                console.log(`[scheduled-crawl] Running image highlight analysis for "${propertyData.title}" (${imagesToAnalyze.length} images)`);
-                
-                const analyzeResponse = await fetch(`${SUPABASE_URL}/functions/v1/analyze-vibe`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                  },
-                  body: JSON.stringify({
-                    imageUrls: imagesToAnalyze,
-                    generateContent: true,
-                    propertyInfo: {
-                      title: propertyData.title,
-                      location: propertyData.location,
-                      price: propertyData.price,
-                      size: propertyData.size,
-                      rooms: propertyData.rooms,
-                    },
-                  }),
-                });
-
-                if (analyzeResponse.ok) {
-                  const analyzeData = await analyzeResponse.json();
-                  if (analyzeData.analyses && analyzeData.analyses.length > 0) {
-                    // Merge per-image highlights into vibe_analysis
-                    const updatedVibeAnalysis = {
-                      ...propertyData.vibe_analysis,
-                      per_image: analyzeData.analyses.map((a: any) => ({
-                        image_highlight: a.image_highlight || '',
-                        detailed_analysis: a.detailed_analysis || '',
-                        amenities: a.amenities || [],
-                        suggested_activities: a.suggested_activities || [],
-                        suggested_amenities: a.suggested_amenities || [],
-                        vibe_scores: {
-                          modern: a.modern, cozy: a.cozy, luxurious: a.luxurious,
-                          minimalist: a.minimalist, spacious: a.spacious,
-                          natural_light: a.natural_light, urban: a.urban, elegant: a.elegant,
-                        },
-                      })),
-                    };
-
-                    // Collect all image highlights as property-level highlights
-                    const imageHighlights = analyzeData.analyses
-                      .map((a: any) => a.image_highlight)
-                      .filter((h: string) => h && h.length > 0);
-
-                    // Collect all amenities from image analysis
-                    const allAmenities = new Set<string>(propertyData.amenities || []);
-                    for (const a of analyzeData.analyses) {
-                      if (a.amenities) a.amenities.forEach((am: string) => allAmenities.add(am));
-                      if (a.suggested_amenities) a.suggested_amenities.forEach((am: string) => allAmenities.add(am));
-                    }
-
-                    // Update the property with enriched data
-                    const { data: insertedProp } = await supabase
-                      .from('external_properties')
-                      .select('id')
-                      .eq('external_id', externalId)
-                      .eq('source', bestTarget.marketplace)
-                      .maybeSingle();
-
-                    if (insertedProp) {
-                      await supabase
-                        .from('external_properties')
-                        .update({
-                          vibe_analysis: updatedVibeAnalysis,
-                          highlights: [...(propertyData.highlights || []), ...imageHighlights],
-                          amenities: Array.from(allAmenities),
-                        })
-                        .eq('id', insertedProp.id);
-                    }
-
-                    vibeAnalyzed++;
-                    console.log(`[scheduled-crawl] Image highlights generated: ${imageHighlights.length} highlights for "${propertyData.title}"`);
-                  }
-                } else {
-                  console.error(`[scheduled-crawl] analyze-vibe failed: ${analyzeResponse.status}`);
-                }
-              } catch (e) {
-                console.error('[scheduled-crawl] Vibe analysis error:', e);
-              }
-            }
+            // Run vibe analysis for new listings
+            const success = await runVibeAnalysis(supabase, inserted.id, propertyData);
+            if (success) vibeAnalyzed++;
           }
         }
       } catch (storeError) {
@@ -589,9 +577,6 @@ Deno.serve(async (req) => {
     };
 
     console.log('[scheduled-crawl] Completed:', JSON.stringify(summary));
-
-    // Step 5: Log the crawl run for monitoring
-    // We reuse external_properties timestamps for tracking, no separate table needed
 
     return new Response(JSON.stringify({ success: true, summary }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
