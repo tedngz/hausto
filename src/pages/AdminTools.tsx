@@ -483,6 +483,110 @@ const AdminTools = () => {
     }
   };
 
+  const handleBatchReanalyzeImageHighlights = async () => {
+    setIsBatchReanalyzing(true);
+    setBatchReanalyzeResults(null);
+
+    try {
+      toast.info("Finding properties with missing image_analyses...");
+
+      // Fetch external properties that need re-analysis (have images but no image_analyses)
+      const { data: properties, error: fetchError } = await supabase
+        .from('external_properties')
+        .select('id, title, images, vibe_analysis')
+        .eq('is_active', true)
+        .not('images', 'eq', '{}')
+        .limit(500);
+
+      if (fetchError) throw fetchError;
+
+      // Filter to those with per_image but no image_analyses, or no vibe_analysis at all
+      const needsReanalysis = (properties || []).filter((p: any) => {
+        const va = p.vibe_analysis;
+        if (!va || typeof va !== 'object') return true;
+        if (va.per_image && (!va.image_analyses || va.image_analyses.length === 0)) return true;
+        if (!va.image_analyses || va.image_analyses.length === 0) return true;
+        return false;
+      });
+
+      const total = needsReanalysis.length;
+      if (total === 0) {
+        toast.success("All properties already have image_analyses!");
+        setBatchReanalyzeResults({ total: 0, fixed: 0, errors: 0 });
+        setIsBatchReanalyzing(false);
+        return;
+      }
+
+      toast.info(`Found ${total} properties to re-analyze. Processing...`);
+
+      let fixed = 0;
+      let errors = 0;
+
+      // Process in batches of 3 to avoid overloading
+      for (let i = 0; i < needsReanalysis.length; i += 3) {
+        const batch = needsReanalysis.slice(i, i + 3);
+        const promises = batch.map(async (prop: any) => {
+          try {
+            const imagesToAnalyze = (prop.images || []).slice(0, 5);
+            if (imagesToAnalyze.length === 0) return;
+
+            const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('analyze-vibe', {
+              body: {
+                imageUrls: imagesToAnalyze,
+                generateContent: true,
+                propertyInfo: { title: prop.title },
+              },
+            });
+
+            if (analyzeError) throw analyzeError;
+
+            const analyses = analyzeData?.analyses || analyzeData?.vibe_analysis?.image_analyses || [];
+            if (analyses.length === 0) throw new Error('No analyses returned');
+
+            const imageAnalyses = analyses.map((a: any, idx: number) => ({
+              image_index: idx,
+              image_highlight: a.image_highlight || a.highlight || 'Premium living space feature',
+              suggested_amenities: a.suggested_amenities || a.amenities || [],
+            }));
+
+            const updatedVibe = {
+              ...(prop.vibe_analysis || {}),
+              image_analyses: imageAnalyses,
+            };
+            // Remove legacy per_image key
+            delete updatedVibe.per_image;
+
+            const positionalHighlights = imageAnalyses.map((ia: any) => ia.image_highlight);
+
+            const { error: updateError } = await supabase
+              .from('external_properties')
+              .update({
+                vibe_analysis: updatedVibe,
+                highlights: positionalHighlights,
+              })
+              .eq('id', prop.id);
+
+            if (updateError) throw updateError;
+            fixed++;
+          } catch (e) {
+            console.error(`[backfill] Error for ${prop.id}:`, e);
+            errors++;
+          }
+        });
+
+        await Promise.all(promises);
+      }
+
+      setBatchReanalyzeResults({ total, fixed, errors });
+      toast.success(`Backfill complete! Fixed ${fixed}/${total} properties.`);
+    } catch (error: any) {
+      console.error('Batch re-analyze error:', error);
+      toast.error("Backfill failed", { description: error.message });
+    } finally {
+      setIsBatchReanalyzing(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 max-w-4xl space-y-6">
       <h1 className="text-3xl font-bold">Admin Tools</h1>
