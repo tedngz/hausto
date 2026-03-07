@@ -129,7 +129,6 @@ const AdminTools = () => {
   const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
     queryKey: ['crawl-activity'],
     queryFn: async () => {
-      // Get the 50 most recently crawled properties grouped by approximate crawl time
       const { data, error } = await supabase
         .from('external_properties')
         .select('id, city, source, location_normalized, crawled_at, title, price, is_active')
@@ -139,14 +138,13 @@ const AdminTools = () => {
       if (error) throw error;
       if (!data || data.length === 0) return [];
 
-      // Group by crawl runs (properties crawled within 5 minutes of each other)
       const runs: Array<{
         timestamp: string;
         city: string;
         source: string;
         location: string;
         count: number;
-        listings: Array<{ title: string; price: number }>;
+        propertyIds: string[];
       }> = [];
 
       let currentRun: typeof runs[0] | null = null;
@@ -166,20 +164,18 @@ const AdminTools = () => {
             source: prop.source || 'unknown',
             location: prop.location_normalized || 'unknown',
             count: 0,
-            listings: [],
+            propertyIds: [],
           };
           runs.push(currentRun);
         }
         
         currentRun.count++;
-        if (currentRun.listings.length < 3) {
-          currentRun.listings.push({ title: prop.title || 'Unknown', price: prop.price || 0 });
-        }
+        currentRun.propertyIds.push(prop.id);
       }
 
       return runs.slice(0, 10);
     },
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 60000,
   });
 
   // Fetch crawl coverage stats
