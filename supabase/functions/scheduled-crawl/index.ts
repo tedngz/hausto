@@ -261,21 +261,24 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
     const analyzeData = await analyzeResponse.json();
     if (!analyzeData.analyses || analyzeData.analyses.length === 0) return false;
 
+    // Build image_analyses array with proper image_index for UI compatibility
+    const imageAnalyses = analyzeData.analyses.map((a: any, idx: number) => ({
+      image_index: idx,
+      image_highlight: a.image_highlight || '',
+      detailed_analysis: a.detailed_analysis || '',
+      amenities: a.amenities || [],
+      suggested_activities: a.suggested_activities || [],
+      suggested_amenities: a.suggested_amenities || [],
+      vibe_scores: {
+        modern: a.modern, cozy: a.cozy, luxurious: a.luxurious,
+        minimalist: a.minimalist, spacious: a.spacious,
+        natural_light: a.natural_light, urban: a.urban, elegant: a.elegant,
+      },
+    }));
+
     const updatedVibeAnalysis = {
       ...(propertyData.vibe_analysis || {}),
-      per_image: analyzeData.analyses.map((a: any) => ({
-        image_highlight: a.image_highlight || '',
-        detailed_analysis: a.detailed_analysis || '',
-        amenities: a.amenities || [],
-        suggested_activities: a.suggested_activities || [],
-        suggested_amenities: a.suggested_amenities || [],
-        vibe_scores: {
-          modern: a.modern, cozy: a.cozy, luxurious: a.luxurious,
-          minimalist: a.minimalist, spacious: a.spacious,
-          natural_light: a.natural_light, urban: a.urban, elegant: a.elegant,
-        },
-      })),
-      // Store aggregated vibe scores from first image as top-level scores
+      image_analyses: imageAnalyses,
       styles: analyzeData.analyses[0]?.styles || [],
       colors: analyzeData.analyses[0]?.colors || [],
       activities: analyzeData.analyses[0]?.suggested_activities || [],
@@ -312,7 +315,7 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
       })
       .eq('id', propertyId);
 
-    console.log(`[scheduled-crawl] Vibe analysis done: ${imageHighlights.length} highlights for "${propertyData.title}"`);
+    console.log(`[scheduled-crawl] Vibe analysis done: ${positionalHighlights.length} image highlights for "${propertyData.title}"`);
     return true;
   } catch (e) {
     console.error('[scheduled-crawl] Vibe analysis error:', e);
@@ -554,9 +557,9 @@ Deno.serve(async (req) => {
             .eq('id', existing.id);
           updatedListings++;
 
-          // Run vibe analysis if this property doesn't have per_image data yet
+          // Run vibe analysis if this property doesn't have image_analyses data yet
           const existingVibe = existing.vibe_analysis as any;
-          if (!existingVibe?.per_image || existingVibe.per_image.length === 0) {
+          if (!existingVibe?.image_analyses || existingVibe.image_analyses.length === 0) {
             const success = await runVibeAnalysis(supabase, existing.id, { ...propertyData, vibe_analysis: existingVibe });
             if (success) vibeAnalyzed++;
           }
