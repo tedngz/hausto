@@ -82,8 +82,13 @@ async function getLastCrawlTime(location: string, marketplace: string): Promise<
 }
 
 async function setLastCrawlTime(location: string, marketplace: string): Promise<void> {
-  // Store timestamp, expire after 48h (cleanup old entries)
-  await redisSet(crawlTrackKey(location, marketplace), Date.now(), 48 * 60 * 60);
+  const key = crawlTrackKey(location, marketplace);
+  const timestamp = Date.now();
+  console.log(`[scheduled-crawl] Setting crawl time: key=${key}, value=${timestamp}`);
+  await redisSet(key, timestamp, 48 * 60 * 60);
+  // Verify the write
+  const readBack = await redisGet(key);
+  console.log(`[scheduled-crawl] Verified crawl time: key=${key}, readBack=${readBack}`);
 }
 
 // All locations to crawl
