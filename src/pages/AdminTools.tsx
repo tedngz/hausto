@@ -651,7 +651,63 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
-      {/* Auto-Crawl Schedule Status */}
+      {/* Batch Re-analyze Image Highlights */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            Backfill Image Highlights
+          </CardTitle>
+          <CardDescription>
+            Re-analyze external properties that have legacy <code>per_image</code> data but missing <code>image_analyses</code> in vibe_analysis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button
+            onClick={handleBatchReanalyzeImageHighlights}
+            disabled={isBatchReanalyzing}
+            size="lg"
+            className="w-full"
+          >
+            {isBatchReanalyzing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Re-analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Backfill Image Highlights
+              </>
+            )}
+          </Button>
+
+          {batchReanalyzeResults && (
+            <div className="p-4 bg-muted rounded-lg space-y-2">
+              <p className="font-semibold">Backfill Results</p>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Found</p>
+                  <p className="text-2xl font-bold">{batchReanalyzeResults.total}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Fixed</p>
+                  <p className="text-2xl font-bold text-primary">{batchReanalyzeResults.fixed}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Errors</p>
+                  <p className="text-2xl font-bold text-destructive">{batchReanalyzeResults.errors}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Finds properties with old <code>per_image</code> format or missing <code>image_analyses</code>, then calls analyze-vibe to generate proper per-image highlights.
+          </p>
+        </CardContent>
+      </Card>
+
       <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
