@@ -558,12 +558,8 @@ Deno.serve(async (req) => {
             .eq('id', existing.id);
           updatedListings++;
 
-          // Run vibe analysis if this property doesn't have image_analyses data yet
-          const existingVibe = existing.vibe_analysis as any;
-          if (!existingVibe?.image_analyses || existingVibe.image_analyses.length === 0) {
-            const success = await runVibeAnalysis(supabase, existing.id, { ...propertyData, vibe_analysis: existingVibe });
-            if (success) vibeAnalyzed++;
-          }
+          // Skip inline vibe analysis during cron to avoid timeout
+          // Use the "Backfill Image Highlights" admin tool instead
         } else {
           const { data: inserted, error: insertError } = await supabase
             .from('external_properties')
