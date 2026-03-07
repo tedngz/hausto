@@ -28,23 +28,41 @@ const DEFAULT_CONFIG: CrawlConfig = {
 // Redis helpers
 async function redisGet(key: string): Promise<any> {
   try {
-    const res = await fetch(`${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    const res = await fetch(`${UPSTASH_REDIS_REST_URL}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(["GET", key]),
     });
     const data = await res.json();
-    return data.result ? JSON.parse(data.result) : null;
-  } catch { return null; }
+    if (data.result === null || data.result === undefined) return null;
+    try { return JSON.parse(data.result); } catch { return data.result; }
+  } catch (e) {
+    console.error('[Redis GET error]', key, e);
+    return null;
+  }
 }
 
 async function redisSet(key: string, value: any, exSeconds?: number): Promise<void> {
   try {
-    const url = exSeconds
-      ? `${UPSTASH_REDIS_REST_URL}/setex/${encodeURIComponent(key)}/${exSeconds}/${encodeURIComponent(JSON.stringify(value))}`
-      : `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}`;
-    await fetch(url, {
-      headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    const cmd = exSeconds
+      ? ["SETEX", key, String(exSeconds), JSON.stringify(value)]
+      : ["SET", key, JSON.stringify(value)];
+    const res = await fetch(`${UPSTASH_REDIS_REST_URL}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(cmd),
     });
-  } catch (e) { console.error('Redis set error:', e); }
+    const data = await res.json();
+    if (data.error) {
+      console.error('[Redis SET error]', key, data.error);
+    }
+  } catch (e) { console.error('[Redis SET error]', key, e); }
 }
 
 async function getConfig(): Promise<CrawlConfig> {
