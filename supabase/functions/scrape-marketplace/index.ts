@@ -612,12 +612,12 @@ serve(async (req) => {
       console.log(`[scrape-marketplace] Authenticated via service role (scheduled crawl)`);
     }
 
-    const body = await req.json() as SearchParams;
-    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults } = body;
+    const body = await req.json() as SearchParams & { pages?: number };
+    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults, pages: explicitPages } = body;
     
     // Use maxResults param or default
     const effectiveMaxResults = Math.min(Math.max(maxResults || MAX_DETAIL_PAGES, 1), 30);
-    const effectivePagesToScrape = effectiveMaxResults <= 5 ? 1 : effectiveMaxResults <= 10 ? 2 : PAGES_TO_SCRAPE;
+    const effectivePagesToScrape = explicitPages ? Math.min(Math.max(explicitPages, 1), PAGES_TO_SCRAPE) : (effectiveMaxResults <= 5 ? 1 : effectiveMaxResults <= 10 ? 2 : PAGES_TO_SCRAPE);
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
