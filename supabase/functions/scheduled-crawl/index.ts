@@ -582,9 +582,8 @@ Deno.serve(async (req) => {
             }
           } else if (inserted) {
             newListings++;
-            // Run vibe analysis for new listings
-            const success = await runVibeAnalysis(supabase, inserted.id, propertyData);
-            if (success) vibeAnalyzed++;
+            // Skip inline vibe analysis during cron to avoid timeout
+            // Use the "Backfill Image Highlights" admin tool instead
           }
         }
       } catch (storeError) {
