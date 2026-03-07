@@ -548,8 +548,9 @@ const AdminTools = () => {
             suggested_amenities: a.suggested_amenities || a.amenities || [],
           }));
 
-          const updatedVibe = {
-            ...(prop.vibe_analysis || {}),
+          const existingVibe = (prop.vibe_analysis && typeof prop.vibe_analysis === 'object') ? prop.vibe_analysis as Record<string, any> : {};
+          const updatedVibe: Record<string, any> = {
+            ...existingVibe,
             image_analyses: imageAnalyses,
           };
           delete updatedVibe.per_image;
