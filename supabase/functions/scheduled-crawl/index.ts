@@ -582,8 +582,7 @@ Deno.serve(async (req) => {
             }
           } else if (inserted) {
             newListings++;
-            // Skip inline vibe analysis during cron to avoid timeout
-            // Use the "Backfill Image Highlights" admin tool instead
+            newlyInsertedIds.push(inserted.id);
           }
         }
       } catch (storeError) {
