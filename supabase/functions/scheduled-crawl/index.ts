@@ -591,6 +591,37 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Step 5: Auto-trigger vibe analysis for newly inserted properties (fire-and-forget to avoid timeout)
+    if (newlyInsertedIds.length > 0 && OPENAI_API_KEY) {
+      const remainingTime = 150000 - (Date.now() - startTime); // Edge Function 150s limit
+      if (remainingTime > 30000) { // Only if >30s remaining
+        console.log(`[scheduled-crawl] Running vibe analysis for ${newlyInsertedIds.length} new properties (${Math.round(remainingTime/1000)}s remaining)`);
+        for (const id of newlyInsertedIds) {
+          const elapsed = Date.now() - startTime;
+          if (elapsed > 120000) { // Stop if >120s elapsed to leave buffer
+            console.log(`[scheduled-crawl] Stopping vibe analysis early - ${Math.round(elapsed/1000)}s elapsed`);
+            break;
+          }
+          try {
+            const { data: prop } = await supabase
+              .from('external_properties')
+              .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis')
+              .eq('id', id)
+              .maybeSingle();
+            if (prop) {
+              const success = await runVibeAnalysis(supabase, prop.id, prop);
+              if (success) vibeAnalyzed++;
+            }
+          } catch (e) {
+            console.error(`[scheduled-crawl] Vibe analysis error for ${id}:`, e);
+          }
+        }
+        console.log(`[scheduled-crawl] Vibe analysis complete: ${vibeAnalyzed}/${newlyInsertedIds.length} analyzed`);
+      } else {
+        console.log(`[scheduled-crawl] Skipping vibe analysis - only ${Math.round(remainingTime/1000)}s remaining`);
+      }
+    }
+
     const duration = Date.now() - startTime;
 
     const summary = {
