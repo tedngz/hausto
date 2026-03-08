@@ -269,6 +269,77 @@ async function extractListingUrls(
   return unique.slice(0, maxResultsCap);
 }
 
+// ─── Direct HTTP Fetch (replaces Firecrawl) ─────────────────────
+async function directFetch(url: string): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    },
+    signal: controller.signal,
+    redirect: 'follow',
+  });
+  
+  clearTimeout(timeoutId);
+  
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} fetching ${url}`);
+  }
+  
+  return await response.text();
+}
+
+function extractLinksFromHtml(html: string, baseUrl: string): string[] {
+  const links: string[] = [];
+  const regex = /<a[^>]+href=["']([^"'#]+)["'][^>]*>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    let href = match[1];
+    if (href.startsWith('/')) {
+      try {
+        const base = new URL(baseUrl);
+        href = `${base.protocol}//${base.host}${href}`;
+      } catch { continue; }
+    }
+    if (href.startsWith('http')) {
+      links.push(href);
+    }
+  }
+  return [...new Set(links)];
+}
+
+function htmlToBasicMarkdown(html: string): string {
+  let text = html;
+  // Remove script/style blocks
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  // Convert headers
+  text = text.replace(/<h([1-6])[^>]*>(.*?)<\/h\1>/gi, (_, level, content) => `${'#'.repeat(parseInt(level))} ${content}\n`);
+  // Convert links
+  text = text.replace(/<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+  // Convert line breaks and paragraphs
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<\/p>/gi, '\n\n');
+  text = text.replace(/<\/div>/gi, '\n');
+  text = text.replace(/<\/li>/gi, '\n');
+  text = text.replace(/<li[^>]*>/gi, '- ');
+  // Strip remaining tags
+  text = text.replace(/<[^>]+>/g, ' ');
+  // Decode common entities
+  text = text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
+  // Clean up whitespace
+  text = text.replace(/[ \t]+/g, ' ');
+  text = text.replace(/\n{3,}/g, '\n\n');
+  return text.trim();
+}
+
 // ─── Phase 2: Scrape individual listing detail pages ─────────────
 async function scrapeDetailPage(url: string): Promise<{
   markdown: string;
@@ -276,43 +347,15 @@ async function scrapeDetailPage(url: string): Promise<{
   links: string[];
 } | null> {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DETAIL_SCRAPE_TIMEOUT);
+    const html = await directFetch(url);
     
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url,
-        formats: ['markdown', 'html'],
-        onlyMainContent: true,
-        waitFor: 3000,
-      }),
-      signal: controller.signal,
-    });
+    const images = extractImagesFromHtml(html);
+    const links = extractLinksFromHtml(html, url);
+    const markdown = htmlToBasicMarkdown(html);
     
-    clearTimeout(timeoutId);
+    if (!markdown || markdown.length < 100) return null;
     
-    if (!response.ok) {
-      console.error(`[Phase 2] Failed to scrape ${url}: ${response.status}`);
-      return null;
-    }
-    
-    const data = await response.json();
-    if (!data.success || !data.data?.markdown) return null;
-    
-    // Extract images from the detail page HTML
-    const htmlContent = data.data.html || '';
-    const images = extractImagesFromHtml(htmlContent);
-    
-    return {
-      markdown: data.data.markdown,
-      images,
-      links: data.data.links || [],
-    };
+    return { markdown, images, links };
   } catch (e) {
     console.error(`[Phase 2] Error scraping ${url}:`, e);
     return null;
