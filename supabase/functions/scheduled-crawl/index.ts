@@ -496,6 +496,7 @@ Deno.serve(async (req) => {
     let updatedListings = 0;
     let duplicatesSkipped = 0;
     let vibeAnalyzed = 0;
+    const newlyInsertedIds: string[] = [];
 
     for (const property of validProperties) {
       try {
