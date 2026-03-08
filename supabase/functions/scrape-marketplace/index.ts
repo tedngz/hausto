@@ -643,13 +643,13 @@ serve(async (req) => {
       const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { headers: { Authorization: authHeader } },
       });
-      const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
-      if (claimsError || !claimsData?.claims?.sub) {
+      const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token);
+      if (authError || !userData?.user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      console.log(`[scrape-marketplace] Authenticated user: ${claimsData.claims.sub}`);
+      console.log(`[scrape-marketplace] Authenticated user: ${userData.user.id}`);
     } else {
       console.log(`[scrape-marketplace] Authenticated via service role (scheduled crawl)`);
     }
