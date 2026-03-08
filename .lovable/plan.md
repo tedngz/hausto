@@ -1,42 +1,35 @@
 
 
-## Plan: Replace Firecrawl with Direct HTTP Fetch + HTML Parsing
+## Problem
 
-### Problem
-The automated crawl system depends on Firecrawl API credits. When credits run out (402 error), no new listings are scraped. This is a recurring blocker.
+The `chat-ai` edge function fails to authenticate logged-in users. The log shows: `"Invalid token, treating as anonymous user. Error: Auth session missing!"`. This happens because `getClaims()` is not a valid method on the Supabase JS client.
 
-### Approach
-Replace all Firecrawl API calls in `scrape-marketplace/index.ts` with direct `fetch()` requests. The two Firecrawl touchpoints are:
-1. **Search page scraping** (Phase 1, line 648) -- fetches search result pages from batdongsan/nhatot
-2. **Detail page scraping** (Phase 2, `scrapeDetailPage` at line 283) -- fetches individual listing pages
+The user has already used 2/2 anonymous searches, so every request gets rate-limited even though they're logged in.
 
-### Changes
+## Root Cause
 
-**`supabase/functions/scrape-marketplace/index.ts`**:
+`supabase.auth.getClaims(token)` does not exist in the Supabase JS SDK. The previous attempt to use `getUser(token)` also failed because it was called on an anon-key client without proper context.
 
-1. **New `directFetch()` helper** -- Makes HTTP GET requests with browser-like headers (User-Agent, Accept-Language) to avoid basic bot detection. Returns raw HTML.
+## Fix
 
-2. **New `extractLinksFromHtml()` helper** -- Parses `<a href="...">` tags from raw HTML using regex to replace Firecrawl's `links` format output.
+**In `supabase/functions/chat-ai/index.ts`** (lines 939-953): Replace the `getClaims` approach with `supabase.auth.getUser(token)` called on the **service role** client, which can validate any user's JWT without needing an active session:
 
-3. **New `htmlToBasicMarkdown()` helper** -- Strips HTML tags to produce plain text content (used as input to the existing OpenAI extraction prompts). Keeps text structure readable enough for GPT-4o-mini.
+```typescript
+if (!isAnonKey && token.length > 100) {
+  // Use the service role client to validate the user JWT
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  
+  if (!authError && userData.user) {
+    user = { id: userData.user.id, email: userData.user.email };
+    console.log('Authenticated user:', user.id);
+  } else {
+    console.log('Invalid token, treating as anonymous user. Error:', authError?.message);
+    isAnonymous = true;
+  }
+}
+```
 
-4. **Replace Phase 1 Firecrawl call** (lines 648-660) -- Use `directFetch(searchUrl)` instead of `fetch('https://api.firecrawl.dev/v1/scrape', ...)`. Parse HTML to extract links and text content.
+The key insight: the `supabase` client (line 925) is already initialized with the **service role key**, which has the authority to validate any user token via `auth.getUser(token)`. Previous attempts used an anon-key client, which lacks this capability.
 
-5. **Replace `scrapeDetailPage` Firecrawl call** (lines 283-296) -- Use `directFetch(url)` instead. Extract images via existing `extractImagesFromHtml()` and text via `htmlToBasicMarkdown()`.
-
-6. **Remove `FIRECRAWL_API_KEY` dependency** -- No longer imported or checked. The function works with zero external API costs (aside from OpenAI which is still needed for data extraction/translation).
-
-### What stays the same
-- All OpenAI-based extraction logic (Phase 3, fallback extraction)
-- URL building logic for batdongsan/nhatot
-- Image extraction from HTML (already regex-based)
-- `scheduled-crawl/index.ts` -- no changes needed, it just calls `scrape-marketplace`
-- Deduplication, filtering, caching logic
-
-### Risk & Mitigation
-- **Anti-bot blocking**: Batdongsan/Nhatot may block direct requests. Mitigated with realistic browser headers and reasonable request spacing. If blocked, the function gracefully returns empty results (same as current Firecrawl failure behavior).
-- **No JavaScript rendering**: These sites are server-rendered, so static HTML fetch should capture listings. If dynamic content is missed, the AI fallback extraction from search pages provides a safety net.
-
-### Deployment
-Redeploy `scrape-marketplace` edge function. No database changes needed.
+This is a single-line change in the edge function, followed by redeployment.
 
