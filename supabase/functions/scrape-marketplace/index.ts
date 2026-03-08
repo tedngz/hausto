@@ -687,32 +687,12 @@ serve(async (req) => {
       console.log(`[Phase 1] Scraping search page ${page}/${effectivePagesToScrape}: ${searchUrl}`);
 
       try {
-        const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: searchUrl,
-            formats: ['markdown', 'links', 'html'],
-            onlyMainContent: false,
-            waitFor: 4000,
-          }),
-        });
-
-        if (!firecrawlResponse.ok) {
-          console.error(`[Phase 1] Page ${page} scrape failed: ${firecrawlResponse.status}`);
-          if (page === 1) {
-            return new Response(JSON.stringify({ success: false, properties: [], error: `Marketplace unavailable: ${marketplace}` }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          break; // Stop paginating if a later page fails
-        }
-
-        const scrapedData = await firecrawlResponse.json();
-        if (!scrapedData.success || !scrapedData.data?.markdown) {
+        const html = await directFetch(searchUrl);
+        
+        const pageLinks = extractLinksFromHtml(html, searchUrl);
+        const pageMarkdown = htmlToBasicMarkdown(html);
+        
+        if (!pageMarkdown || pageMarkdown.length < 100) {
           if (page === 1) {
             return new Response(JSON.stringify({ success: true, properties: [], message: 'No listings found' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -723,11 +703,11 @@ serve(async (req) => {
         }
 
         firstPageSuccess = true;
-        allLinks.push(...(scrapedData.data.links || []));
-        allMarkdown += `\n--- PAGE ${page} ---\n` + scrapedData.data.markdown;
-        if (page === 1) allHtml = scrapedData.data.html || '';
+        allLinks.push(...pageLinks);
+        allMarkdown += `\n--- PAGE ${page} ---\n` + pageMarkdown;
+        if (page === 1) allHtml = html;
 
-        console.log(`[Phase 1] Page ${page}: ${scrapedData.data.markdown.length} chars, ${(scrapedData.data.links || []).length} links`);
+        console.log(`[Phase 1] Page ${page}: ${pageMarkdown.length} chars, ${pageLinks.length} links`);
 
         // Small delay between page scrapes
         if (page < effectivePagesToScrape) {
@@ -735,7 +715,11 @@ serve(async (req) => {
         }
       } catch (e) {
         console.error(`[Phase 1] Error scraping page ${page}:`, e);
-        if (page === 1) throw e;
+        if (page === 1) {
+          return new Response(JSON.stringify({ success: false, properties: [], error: `Marketplace unavailable: ${marketplace}` }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
         break;
       }
     }
