@@ -663,7 +663,7 @@ serve(async (req) => {
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
-    if (!FIRECRAWL_API_KEY) throw new Error('FIRECRAWL_API_KEY not configured');
+    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
     if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
 
     // Check cache
