@@ -342,7 +342,7 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
     // Build positional highlights: one per image, aligned by index
     const positionalHighlights: string[] = new Array(imagesToAnalyze.length).fill('');
     
-    analyzeData.analyses.forEach((a: any, idx: number) => {
+    imageAnalysesRaw.forEach((a: any, idx: number) => {
       if (a.image_highlight && typeof a.image_highlight === 'string' && a.image_highlight.trim()) {
         positionalHighlights[idx] = a.image_highlight.trim();
       }
@@ -356,7 +356,7 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
     }
 
     const allAmenities = new Set<string>(propertyData.amenities || []);
-    for (const a of analyzeData.analyses) {
+    for (const a of imageAnalysesRaw) {
       if (a.amenities) a.amenities.forEach((am: string) => allAmenities.add(am));
       if (a.suggested_amenities) a.suggested_amenities.forEach((am: string) => allAmenities.add(am));
     }
