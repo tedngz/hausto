@@ -259,10 +259,16 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
     }
 
     const analyzeData = await analyzeResponse.json();
-    if (!analyzeData.analyses || analyzeData.analyses.length === 0) return false;
+    // analyze-vibe returns { analysis: { image_analyses: [...], modern, cozy, ... } }
+    const analysisResult = analyzeData.analysis;
+    const imageAnalysesRaw = analysisResult?.image_analyses || [];
+    if (!imageAnalysesRaw || imageAnalysesRaw.length === 0) {
+      console.error('[scheduled-crawl] No image analyses returned from analyze-vibe');
+      return false;
+    }
 
     // Build image_analyses array with proper image_index for UI compatibility
-    const imageAnalyses = analyzeData.analyses.map((a: any, idx: number) => ({
+    const imageAnalyses = imageAnalysesRaw.map((a: any, idx: number) => ({
       image_index: idx,
       image_highlight: a.image_highlight || '',
       detailed_analysis: a.detailed_analysis || '',
@@ -270,18 +276,67 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
       suggested_activities: a.suggested_activities || [],
       suggested_amenities: a.suggested_amenities || [],
       vibe_scores: {
-        modern: a.modern, cozy: a.cozy, luxurious: a.luxurious,
-        minimalist: a.minimalist, spacious: a.spacious,
-        natural_light: a.natural_light, urban: a.urban, elegant: a.elegant,
+        modern: a.modern || 5, cozy: a.cozy || 5, luxurious: a.luxurious || 5,
+        minimalist: a.minimalist || 5, spacious: a.spacious || 5,
+        natural_light: a.natural_light || 5, urban: a.urban || 5, elegant: a.elegant || 5,
       },
     }));
+
+    // Derive styles from aggregated vibe scores
+    const vibeScoreMap: Record<string, number> = {
+      'Modern': analysisResult.modern || 5,
+      'Cozy': analysisResult.cozy || 5,
+      'Luxurious': analysisResult.luxurious || 5,
+      'Minimalist': analysisResult.minimalist || 5,
+      'Spacious': analysisResult.spacious || 5,
+      'Elegant': analysisResult.elegant || 5,
+      'Urban': analysisResult.urban || 5,
+      'Rustic': analysisResult.rustic || 5,
+    };
+    const derivedStyles = Object.entries(vibeScoreMap)
+      .filter(([_, score]) => score >= 6)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([style]) => style);
+    if (derivedStyles.length === 0) derivedStyles.push('Contemporary');
+
+    // Derive colors from vibe scores
+    const derivedColors: string[] = [];
+    if ((analysisResult.cozy || 0) >= 6 || (analysisResult.rustic || 0) >= 6) derivedColors.push('Warm');
+    if ((analysisResult.minimalist || 0) >= 6) derivedColors.push('Neutral');
+    if ((analysisResult.modern || 0) >= 6) derivedColors.push('Cool');
+    if ((analysisResult.colorful || 0) >= 6) derivedColors.push('Bold');
+    if ((analysisResult.natural_light || 0) >= 7) derivedColors.push('Bright');
+    if ((analysisResult.elegant || 0) >= 6) derivedColors.push('Refined');
+    if (derivedColors.length === 0) derivedColors.push('Neutral', 'Warm');
+
+    // Collect activities from all image analyses
+    const allActivities = new Set<string>();
+    for (const a of imageAnalysesRaw) {
+      if (a.suggested_activities) {
+        a.suggested_activities.forEach((act: string) => allActivities.add(act));
+      }
+    }
+    const derivedActivities = Array.from(allActivities).slice(0, 5);
+    if (derivedActivities.length === 0) derivedActivities.push('Relaxing', 'Living');
 
     const updatedVibeAnalysis = {
       ...(propertyData.vibe_analysis || {}),
       image_analyses: imageAnalyses,
-      styles: analyzeData.analyses[0]?.styles || [],
-      colors: analyzeData.analyses[0]?.colors || [],
-      activities: analyzeData.analyses[0]?.suggested_activities || [],
+      styles: derivedStyles,
+      colors: derivedColors,
+      activities: derivedActivities,
+      // Store aggregated vibe scores at top level for scoring
+      modern: analysisResult.modern || 5,
+      cozy: analysisResult.cozy || 5,
+      luxurious: analysisResult.luxurious || 5,
+      minimalist: analysisResult.minimalist || 5,
+      spacious: analysisResult.spacious || 5,
+      natural_light: analysisResult.natural_light || 5,
+      urban: analysisResult.urban || 5,
+      elegant: analysisResult.elegant || 5,
+      rustic: analysisResult.rustic || 5,
+      colorful: analysisResult.colorful || 5,
     };
 
     // Build positional highlights: one per image, aligned by index
