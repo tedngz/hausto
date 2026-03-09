@@ -414,7 +414,63 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Normal crawl execution
+    // Handle bulk vibe backfill action
+    if (body.action === 'backfill-vibe') {
+      console.log('[scheduled-crawl] Starting bulk vibe backfill for external properties');
+      
+      const { data: needsVibe } = await supabase
+        .from('external_properties')
+        .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis, highlights')
+        .eq('is_active', true)
+        .not('images', 'eq', '{}')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (!needsVibe || needsVibe.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: 'No properties to backfill', analyzed: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const toBackfill = needsVibe.filter((p: any) => {
+        if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
+        if (!p.vibe_analysis?.colors || p.vibe_analysis.colors.length === 0) return true;
+        if (!p.vibe_analysis?.activities || p.vibe_analysis.activities.length === 0) return true;
+        if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
+        if (!p.highlights || p.highlights.length === 0) return true;
+        const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space');
+        if (allGeneric) return true;
+        return false;
+      });
+
+      console.log(`[scheduled-crawl] Found ${toBackfill.length}/${needsVibe.length} properties needing vibe backfill`);
+
+      let analyzed = 0;
+      const results: any[] = [];
+      for (const prop of toBackfill) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed > 140000) {
+          console.log(`[scheduled-crawl] Stopping backfill - ${Math.round(elapsed/1000)}s elapsed`);
+          break;
+        }
+        try {
+          const success = await runVibeAnalysis(supabase, prop.id, prop);
+          if (success) analyzed++;
+          results.push({ id: prop.id, title: prop.title, success });
+          await new Promise(r => setTimeout(r, 2000));
+        } catch (e) {
+          console.error(`[scheduled-crawl] Backfill error for ${prop.id}:`, e);
+          results.push({ id: prop.id, title: prop.title, success: false, error: String(e) });
+        }
+      }
+
+      console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed}/${toBackfill.length}`);
+      return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, results, duration: `${Date.now() - startTime}ms` }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+
     const config = await getConfig();
 
     if (config.paused) {
@@ -693,6 +749,10 @@ Deno.serve(async (req) => {
               if (!p.highlights || p.highlights.length === 0) return true;
               // No image_analyses in vibe_analysis
               if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
+              // Missing styles/colors/activities (the main issue)
+              if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
+              if (!p.vibe_analysis?.colors || p.vibe_analysis.colors.length === 0) return true;
+              if (!p.vibe_analysis?.activities || p.vibe_analysis.activities.length === 0) return true;
               // All highlights are generic fallback
               const allGeneric = p.highlights.every((h: string) => 
                 !h || h === 'Premium living space feature' || h === 'Quality living space'
