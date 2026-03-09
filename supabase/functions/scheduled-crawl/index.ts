@@ -693,6 +693,10 @@ Deno.serve(async (req) => {
               if (!p.highlights || p.highlights.length === 0) return true;
               // No image_analyses in vibe_analysis
               if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
+              // Missing styles/colors/activities (the main issue)
+              if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
+              if (!p.vibe_analysis?.colors || p.vibe_analysis.colors.length === 0) return true;
+              if (!p.vibe_analysis?.activities || p.vibe_analysis.activities.length === 0) return true;
               // All highlights are generic fallback
               const allGeneric = p.highlights.every((h: string) => 
                 !h || h === 'Premium living space feature' || h === 'Quality living space'
