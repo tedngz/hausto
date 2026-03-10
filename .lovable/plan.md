@@ -1,35 +1,45 @@
 
 
-## Problem
+## Plan: Integrate QStash into scheduled-crawl
 
-The `chat-ai` edge function fails to authenticate logged-in users. The log shows: `"Invalid token, treating as anonymous user. Error: Auth session missing!"`. This happens because `getClaims()` is not a valid method on the Supabase JS client.
+### Prerequisites — 3 new secrets needed
 
-The user has already used 2/2 anonymous searches, so every request gets rate-limited even though they're logged in.
+The project doesn't have QStash secrets yet. We need:
+- `QSTASH_TOKEN` — for publishing follow-up messages (self-chaining)
+- `QSTASH_CURRENT_SIGNING_KEY` — for verifying incoming QStash requests
+- `QSTASH_NEXT_SIGNING_KEY` — for key rotation verification
 
-## Root Cause
+All three are found in the Upstash QStash console (same account as the existing Redis). I'll prompt you to add them before deploying.
 
-`supabase.auth.getClaims(token)` does not exist in the Supabase JS SDK. The previous attempt to use `getUser(token)` also failed because it was called on an anon-key client without proper context.
+### Changes to `supabase/functions/scheduled-crawl/index.ts`
 
-## Fix
+**1. Add QStash signature verification (top of handler)**
+- Read `upstash-signature` header
+- If present, verify using HMAC-SHA256 against the signing keys (inline, no external library needed for Deno)
+- If verification fails, return 401
+- If no signature header, fall back to existing authorization (service role key in Authorization header or pg_cron calls)
 
-**In `supabase/functions/chat-ai/index.ts`** (lines 939-953): Replace the `getClaims` approach with `supabase.auth.getUser(token)` called on the **service role** client, which can validate any user's JWT without needing an active session:
+**2. Self-chaining for `backfill-vibe` action**
+- After processing a batch, if there are remaining properties and time is running out (>130s elapsed), publish a follow-up message to QStash targeting the same endpoint with `{ action: "backfill-vibe", continuation: true }`
+- Uses `QSTASH_TOKEN` with QStash REST API (simple fetch, no library needed)
+- Adds a 5-second delay to the follow-up to avoid hammering
 
-```typescript
-if (!isAnonKey && token.length > 100) {
-  // Use the service role client to validate the user JWT
-  const { data: userData, error: authError } = await supabase.auth.getUser(token);
-  
-  if (!authError && userData.user) {
-    user = { id: userData.user.id, email: userData.user.email };
-    console.log('Authenticated user:', user.id);
-  } else {
-    console.log('Invalid token, treating as anonymous user. Error:', authError?.message);
-    isAnonymous = true;
-  }
-}
-```
+**3. Self-chaining for regular crawl post-processing**
+- After the main crawl completes, if there are still properties needing vibe backfill and time ran out, chain a `backfill-vibe` follow-up via QStash
 
-The key insight: the `supabase` client (line 925) is already initialized with the **service role key**, which has the authority to validate any user token via `auth.getUser(token)`. Previous attempts used an anon-key client, which lacks this capability.
+**4. No changes to config.toml** — `verify_jwt: false` stays since we handle auth manually
 
-This is a single-line change in the edge function, followed by redeployment.
+### Implementation approach — no external libraries
+
+Instead of importing `@upstash/qstash`, I'll use:
+- **Verification**: Deno's built-in `crypto.subtle` for HMAC-SHA256 signature verification (the QStash signature is a JWT signed with the signing key)
+- **Publishing**: Simple `fetch` POST to `https://qstash.upstash.io/v2/publish/` with the QStash token as Bearer auth
+
+This avoids any esm.sh import issues in the Edge Function runtime.
+
+### What stays the same
+- All crawl logic, Redis tracking, scraping, vibe analysis unchanged
+- pg_cron can remain as a backup trigger (it'll still work alongside QStash)
+- Admin Tools manual triggers continue working
+- The function remains callable from any authorized source
 
