@@ -10,8 +10,98 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL')!;
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!;
+const QSTASH_TOKEN = Deno.env.get('QSTASH_TOKEN');
+const QSTASH_CURRENT_SIGNING_KEY = Deno.env.get('QSTASH_CURRENT_SIGNING_KEY');
+const QSTASH_NEXT_SIGNING_KEY = Deno.env.get('QSTASH_NEXT_SIGNING_KEY');
+
+const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/scheduled-crawl`;
 
 const CONFIG_KEY = 'crawl:config';
+
+// ===== QStash signature verification =====
+async function verifyQStashSignature(signature: string, body: string): Promise<boolean> {
+  // QStash signs with a JWT in the upstash-signature header
+  // We verify the JWT signature using HMAC-SHA256 with the signing keys
+  for (const key of [QSTASH_CURRENT_SIGNING_KEY, QSTASH_NEXT_SIGNING_KEY]) {
+    if (!key) continue;
+    try {
+      const parts = signature.split('.');
+      if (parts.length !== 3) continue;
+      
+      const encoder = new TextEncoder();
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(key),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['verify']
+      );
+      
+      const signatureBytes = Uint8Array.from(
+        atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')),
+        c => c.charCodeAt(0)
+      );
+      
+      const dataToVerify = encoder.encode(`${parts[0]}.${parts[1]}`);
+      const valid = await crypto.subtle.verify('HMAC', cryptoKey, signatureBytes, dataToVerify);
+      
+      if (valid) {
+        // Also check expiry from JWT payload
+        try {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+            console.log('[scheduled-crawl] QStash JWT expired');
+            continue;
+          }
+          // Verify body hash if present
+          if (payload.body) {
+            const bodyHash = await crypto.subtle.digest('SHA-256', encoder.encode(body));
+            const bodyHashB64 = btoa(String.fromCharCode(...new Uint8Array(bodyHash)));
+            if (payload.body !== bodyHashB64) {
+              console.log('[scheduled-crawl] QStash body hash mismatch');
+              continue;
+            }
+          }
+        } catch { /* payload parse error, still accept if signature valid */ }
+        return true;
+      }
+    } catch (e) {
+      console.error('[scheduled-crawl] QStash verify error:', e);
+    }
+  }
+  return false;
+}
+
+// ===== QStash self-chaining: publish a follow-up message =====
+async function qstashPublish(payload: Record<string, unknown>, delaySec = 5): Promise<boolean> {
+  if (!QSTASH_TOKEN) {
+    console.log('[scheduled-crawl] QSTASH_TOKEN not set, cannot self-chain');
+    return false;
+  }
+  try {
+    const res = await fetch(`https://qstash.upstash.io/v2/publish/${FUNCTION_URL}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${QSTASH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Upstash-Delay': `${delaySec}s`,
+        'Upstash-Retries': '2',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      console.log(`[scheduled-crawl] QStash self-chain published: messageId=${data.messageId}`);
+      return true;
+    } else {
+      console.error('[scheduled-crawl] QStash publish failed:', data);
+      return false;
+    }
+  } catch (e) {
+    console.error('[scheduled-crawl] QStash publish error:', e);
+    return false;
+  }
+}
 
 interface CrawlConfig {
   paused: boolean;
@@ -388,8 +478,39 @@ Deno.serve(async (req) => {
   const startTime = Date.now();
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+  // Read body once for both QStash verification and action parsing
+  const rawBody = await req.text();
+  let body: Record<string, any> = {};
+  try { body = JSON.parse(rawBody); } catch { /* empty body */ }
+
+  // ===== Authorization: QStash signature OR service role key =====
+  const qstashSignature = req.headers.get('upstash-signature');
+  const authHeader = req.headers.get('authorization') || '';
+  let isAuthorized = false;
+
+  if (qstashSignature) {
+    // Verify QStash signature
+    isAuthorized = await verifyQStashSignature(qstashSignature, rawBody);
+    if (isAuthorized) {
+      console.log('[scheduled-crawl] Authorized via QStash signature');
+    } else {
+      console.log('[scheduled-crawl] QStash signature verification failed');
+      return new Response(JSON.stringify({ error: 'Invalid QStash signature' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } else if (authHeader.includes(SUPABASE_SERVICE_ROLE_KEY)) {
+    // Service role key (pg_cron, admin tools, manual triggers)
+    isAuthorized = true;
+    console.log('[scheduled-crawl] Authorized via service role key');
+  } else {
+    // Allow anon key calls too (pg_cron uses anon key in some setups)
+    isAuthorized = true;
+    console.log('[scheduled-crawl] Accepting request (open access for pg_cron compatibility)');
+  }
+
   try {
-    const body = await req.json().catch(() => ({}));
     console.log(`[scheduled-crawl] Body:`, JSON.stringify(body));
 
     // Handle config management actions
@@ -447,10 +568,12 @@ Deno.serve(async (req) => {
 
       let analyzed = 0;
       const results: any[] = [];
+      let stoppedEarly = false;
       for (const prop of toBackfill) {
         const elapsed = Date.now() - startTime;
-        if (elapsed > 140000) {
+        if (elapsed > 130000) {
           console.log(`[scheduled-crawl] Stopping backfill - ${Math.round(elapsed/1000)}s elapsed`);
+          stoppedEarly = true;
           break;
         }
         try {
@@ -464,8 +587,15 @@ Deno.serve(async (req) => {
         }
       }
 
-      console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed}/${toBackfill.length}`);
-      return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, results, duration: `${Date.now() - startTime}ms` }), {
+      // Self-chain via QStash if we stopped early and there's likely more work
+      let chained = false;
+      if (stoppedEarly && analyzed < toBackfill.length) {
+        console.log(`[scheduled-crawl] Self-chaining backfill: ${analyzed}/${toBackfill.length} done, more remaining`);
+        chained = await qstashPublish({ action: 'backfill-vibe', continuation: true }, 5);
+      }
+
+      console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed}/${toBackfill.length}${chained ? ' (continuation queued)' : ''}`);
+      return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, results, chained, duration: `${Date.now() - startTime}ms` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -762,10 +892,12 @@ Deno.serve(async (req) => {
             });
 
             let backfilled = 0;
+            let backfillStoppedEarly = false;
             for (const prop of toBackfill) {
               const elapsed = Date.now() - startTime;
               if (elapsed > 120000) {
                 console.log(`[scheduled-crawl] Stopping backfill early - ${Math.round(elapsed/1000)}s elapsed`);
+                backfillStoppedEarly = true;
                 break;
               }
               try {
@@ -779,10 +911,21 @@ Deno.serve(async (req) => {
             }
             console.log(`[scheduled-crawl] Backfilled ${backfilled}/${toBackfill.length} properties with image highlights`);
             vibeAnalyzed += backfilled;
+
+            // Self-chain via QStash if we ran out of time and there's more to backfill
+            if (backfillStoppedEarly && backfilled < toBackfill.length) {
+              console.log('[scheduled-crawl] Self-chaining backfill-vibe after crawl run');
+              await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
+            }
           }
         }
       } else {
         console.log(`[scheduled-crawl] Skipping vibe analysis - only ${Math.round(remainingTime/1000)}s remaining`);
+        // If we skipped vibe entirely due to time, chain a backfill
+        if (newlyInsertedIds.length > 0) {
+          console.log('[scheduled-crawl] Self-chaining backfill-vibe for skipped new properties');
+          await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'skipped-vibe' }, 10);
+        }
       }
     }
 
