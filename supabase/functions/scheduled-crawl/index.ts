@@ -10,8 +10,98 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL')!;
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!;
+const QSTASH_TOKEN = Deno.env.get('QSTASH_TOKEN');
+const QSTASH_CURRENT_SIGNING_KEY = Deno.env.get('QSTASH_CURRENT_SIGNING_KEY');
+const QSTASH_NEXT_SIGNING_KEY = Deno.env.get('QSTASH_NEXT_SIGNING_KEY');
+
+const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/scheduled-crawl`;
 
 const CONFIG_KEY = 'crawl:config';
+
+// ===== QStash signature verification =====
+async function verifyQStashSignature(signature: string, body: string): Promise<boolean> {
+  // QStash signs with a JWT in the upstash-signature header
+  // We verify the JWT signature using HMAC-SHA256 with the signing keys
+  for (const key of [QSTASH_CURRENT_SIGNING_KEY, QSTASH_NEXT_SIGNING_KEY]) {
+    if (!key) continue;
+    try {
+      const parts = signature.split('.');
+      if (parts.length !== 3) continue;
+      
+      const encoder = new TextEncoder();
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(key),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['verify']
+      );
+      
+      const signatureBytes = Uint8Array.from(
+        atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')),
+        c => c.charCodeAt(0)
+      );
+      
+      const dataToVerify = encoder.encode(`${parts[0]}.${parts[1]}`);
+      const valid = await crypto.subtle.verify('HMAC', cryptoKey, signatureBytes, dataToVerify);
+      
+      if (valid) {
+        // Also check expiry from JWT payload
+        try {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+            console.log('[scheduled-crawl] QStash JWT expired');
+            continue;
+          }
+          // Verify body hash if present
+          if (payload.body) {
+            const bodyHash = await crypto.subtle.digest('SHA-256', encoder.encode(body));
+            const bodyHashB64 = btoa(String.fromCharCode(...new Uint8Array(bodyHash)));
+            if (payload.body !== bodyHashB64) {
+              console.log('[scheduled-crawl] QStash body hash mismatch');
+              continue;
+            }
+          }
+        } catch { /* payload parse error, still accept if signature valid */ }
+        return true;
+      }
+    } catch (e) {
+      console.error('[scheduled-crawl] QStash verify error:', e);
+    }
+  }
+  return false;
+}
+
+// ===== QStash self-chaining: publish a follow-up message =====
+async function qstashPublish(payload: Record<string, unknown>, delaySec = 5): Promise<boolean> {
+  if (!QSTASH_TOKEN) {
+    console.log('[scheduled-crawl] QSTASH_TOKEN not set, cannot self-chain');
+    return false;
+  }
+  try {
+    const res = await fetch(`https://qstash.upstash.io/v2/publish/${FUNCTION_URL}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${QSTASH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Upstash-Delay': `${delaySec}s`,
+        'Upstash-Retries': '2',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      console.log(`[scheduled-crawl] QStash self-chain published: messageId=${data.messageId}`);
+      return true;
+    } else {
+      console.error('[scheduled-crawl] QStash publish failed:', data);
+      return false;
+    }
+  } catch (e) {
+    console.error('[scheduled-crawl] QStash publish error:', e);
+    return false;
+  }
+}
 
 interface CrawlConfig {
   paused: boolean;
