@@ -568,10 +568,12 @@ Deno.serve(async (req) => {
 
       let analyzed = 0;
       const results: any[] = [];
+      let stoppedEarly = false;
       for (const prop of toBackfill) {
         const elapsed = Date.now() - startTime;
-        if (elapsed > 140000) {
+        if (elapsed > 130000) {
           console.log(`[scheduled-crawl] Stopping backfill - ${Math.round(elapsed/1000)}s elapsed`);
+          stoppedEarly = true;
           break;
         }
         try {
@@ -585,8 +587,15 @@ Deno.serve(async (req) => {
         }
       }
 
-      console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed}/${toBackfill.length}`);
-      return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, results, duration: `${Date.now() - startTime}ms` }), {
+      // Self-chain via QStash if we stopped early and there's likely more work
+      let chained = false;
+      if (stoppedEarly && analyzed < toBackfill.length) {
+        console.log(`[scheduled-crawl] Self-chaining backfill: ${analyzed}/${toBackfill.length} done, more remaining`);
+        chained = await qstashPublish({ action: 'backfill-vibe', continuation: true }, 5);
+      }
+
+      console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed}/${toBackfill.length}${chained ? ' (continuation queued)' : ''}`);
+      return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, results, chained, duration: `${Date.now() - startTime}ms` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
