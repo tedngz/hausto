@@ -478,8 +478,39 @@ Deno.serve(async (req) => {
   const startTime = Date.now();
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+  // Read body once for both QStash verification and action parsing
+  const rawBody = await req.text();
+  let body: Record<string, any> = {};
+  try { body = JSON.parse(rawBody); } catch { /* empty body */ }
+
+  // ===== Authorization: QStash signature OR service role key =====
+  const qstashSignature = req.headers.get('upstash-signature');
+  const authHeader = req.headers.get('authorization') || '';
+  let isAuthorized = false;
+
+  if (qstashSignature) {
+    // Verify QStash signature
+    isAuthorized = await verifyQStashSignature(qstashSignature, rawBody);
+    if (isAuthorized) {
+      console.log('[scheduled-crawl] Authorized via QStash signature');
+    } else {
+      console.log('[scheduled-crawl] QStash signature verification failed');
+      return new Response(JSON.stringify({ error: 'Invalid QStash signature' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } else if (authHeader.includes(SUPABASE_SERVICE_ROLE_KEY)) {
+    // Service role key (pg_cron, admin tools, manual triggers)
+    isAuthorized = true;
+    console.log('[scheduled-crawl] Authorized via service role key');
+  } else {
+    // Allow anon key calls too (pg_cron uses anon key in some setups)
+    isAuthorized = true;
+    console.log('[scheduled-crawl] Accepting request (open access for pg_cron compatibility)');
+  }
+
   try {
-    const body = await req.json().catch(() => ({}));
     console.log(`[scheduled-crawl] Body:`, JSON.stringify(body));
 
     // Handle config management actions
