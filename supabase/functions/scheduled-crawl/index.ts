@@ -892,10 +892,12 @@ Deno.serve(async (req) => {
             });
 
             let backfilled = 0;
+            let backfillStoppedEarly = false;
             for (const prop of toBackfill) {
               const elapsed = Date.now() - startTime;
               if (elapsed > 120000) {
                 console.log(`[scheduled-crawl] Stopping backfill early - ${Math.round(elapsed/1000)}s elapsed`);
+                backfillStoppedEarly = true;
                 break;
               }
               try {
@@ -909,10 +911,21 @@ Deno.serve(async (req) => {
             }
             console.log(`[scheduled-crawl] Backfilled ${backfilled}/${toBackfill.length} properties with image highlights`);
             vibeAnalyzed += backfilled;
+
+            // Self-chain via QStash if we ran out of time and there's more to backfill
+            if (backfillStoppedEarly && backfilled < toBackfill.length) {
+              console.log('[scheduled-crawl] Self-chaining backfill-vibe after crawl run');
+              await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
+            }
           }
         }
       } else {
         console.log(`[scheduled-crawl] Skipping vibe analysis - only ${Math.round(remainingTime/1000)}s remaining`);
+        // If we skipped vibe entirely due to time, chain a backfill
+        if (newlyInsertedIds.length > 0) {
+          console.log('[scheduled-crawl] Self-chaining backfill-vibe for skipped new properties');
+          await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'skipped-vibe' }, 10);
+        }
       }
     }
 
