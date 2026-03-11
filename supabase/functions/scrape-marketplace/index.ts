@@ -382,11 +382,23 @@ async function scrapeDetailPage(url: string): Promise<{
   links: string[];
 } | null> {
   try {
-    const html = await directFetch(url);
+    let html = '';
+    let images: string[] = [];
+    let links: string[] = [];
+    let markdown = '';
     
-    const images = extractImagesFromHtml(html);
-    const links = extractLinksFromHtml(html, url);
-    const markdown = htmlToBasicMarkdown(html);
+    if (FIRECRAWL_API_KEY) {
+      const result = await firecrawlFetch(url);
+      html = result.html;
+      links = result.links;
+      markdown = result.markdown;
+      images = extractImagesFromHtml(html);
+    } else {
+      html = await directFetch(url);
+      images = extractImagesFromHtml(html);
+      links = extractLinksFromHtml(html, url);
+      markdown = htmlToBasicMarkdown(html);
+    }
     
     if (!markdown || markdown.length < 100) return null;
     
