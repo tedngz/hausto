@@ -269,7 +269,42 @@ async function extractListingUrls(
   return unique.slice(0, maxResultsCap);
 }
 
-// ─── Direct HTTP Fetch (replaces Firecrawl) ─────────────────────
+// ─── Firecrawl-based Fetch (bypasses anti-bot protection) ───────
+const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+
+async function firecrawlFetch(url: string): Promise<{ html: string; markdown: string; links: string[] }> {
+  if (!FIRECRAWL_API_KEY) {
+    throw new Error('FIRECRAWL_API_KEY not configured');
+  }
+  
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url,
+      formats: ['html', 'markdown', 'links'],
+      waitFor: 3000,
+      location: { country: 'VN', languages: ['vi'] },
+    }),
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(`Firecrawl error ${response.status}: ${data?.error || 'Unknown error'} for ${url}`);
+  }
+  
+  const html = data?.data?.html || data?.html || '';
+  const markdown = data?.data?.markdown || data?.markdown || '';
+  const links = data?.data?.links || data?.links || [];
+  
+  return { html, markdown, links };
+}
+
+// Legacy directFetch as fallback (may get 403)
 async function directFetch(url: string): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -347,11 +382,23 @@ async function scrapeDetailPage(url: string): Promise<{
   links: string[];
 } | null> {
   try {
-    const html = await directFetch(url);
+    let html = '';
+    let images: string[] = [];
+    let links: string[] = [];
+    let markdown = '';
     
-    const images = extractImagesFromHtml(html);
-    const links = extractLinksFromHtml(html, url);
-    const markdown = htmlToBasicMarkdown(html);
+    if (FIRECRAWL_API_KEY) {
+      const result = await firecrawlFetch(url);
+      html = result.html;
+      links = result.links;
+      markdown = result.markdown;
+      images = extractImagesFromHtml(html);
+    } else {
+      html = await directFetch(url);
+      images = extractImagesFromHtml(html);
+      links = extractLinksFromHtml(html, url);
+      markdown = htmlToBasicMarkdown(html);
+    }
     
     if (!markdown || markdown.length < 100) return null;
     
@@ -687,10 +734,21 @@ serve(async (req) => {
       console.log(`[Phase 1] Scraping search page ${page}/${effectivePagesToScrape}: ${searchUrl}`);
 
       try {
-        const html = await directFetch(searchUrl);
+        // Use Firecrawl for anti-bot bypass, fall back to directFetch
+        let html = '';
+        let pageLinks: string[] = [];
+        let pageMarkdown = '';
         
-        const pageLinks = extractLinksFromHtml(html, searchUrl);
-        const pageMarkdown = htmlToBasicMarkdown(html);
+        if (FIRECRAWL_API_KEY) {
+          const result = await firecrawlFetch(searchUrl);
+          html = result.html;
+          pageLinks = result.links;
+          pageMarkdown = result.markdown;
+        } else {
+          html = await directFetch(searchUrl);
+          pageLinks = extractLinksFromHtml(html, searchUrl);
+          pageMarkdown = htmlToBasicMarkdown(html);
+        }
         
         if (!pageMarkdown || pageMarkdown.length < 100) {
           if (page === 1) {
