@@ -722,10 +722,21 @@ serve(async (req) => {
       console.log(`[Phase 1] Scraping search page ${page}/${effectivePagesToScrape}: ${searchUrl}`);
 
       try {
-        const html = await directFetch(searchUrl);
+        // Use Firecrawl for anti-bot bypass, fall back to directFetch
+        let html = '';
+        let pageLinks: string[] = [];
+        let pageMarkdown = '';
         
-        const pageLinks = extractLinksFromHtml(html, searchUrl);
-        const pageMarkdown = htmlToBasicMarkdown(html);
+        if (FIRECRAWL_API_KEY) {
+          const result = await firecrawlFetch(searchUrl);
+          html = result.html;
+          pageLinks = result.links;
+          pageMarkdown = result.markdown;
+        } else {
+          html = await directFetch(searchUrl);
+          pageLinks = extractLinksFromHtml(html, searchUrl);
+          pageMarkdown = htmlToBasicMarkdown(html);
+        }
         
         if (!pageMarkdown || pageMarkdown.length < 100) {
           if (page === 1) {
