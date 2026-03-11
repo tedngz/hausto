@@ -269,7 +269,42 @@ async function extractListingUrls(
   return unique.slice(0, maxResultsCap);
 }
 
-// ─── Direct HTTP Fetch (replaces Firecrawl) ─────────────────────
+// ─── Firecrawl-based Fetch (bypasses anti-bot protection) ───────
+const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+
+async function firecrawlFetch(url: string): Promise<{ html: string; markdown: string; links: string[] }> {
+  if (!FIRECRAWL_API_KEY) {
+    throw new Error('FIRECRAWL_API_KEY not configured');
+  }
+  
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url,
+      formats: ['html', 'markdown', 'links'],
+      waitFor: 3000,
+      location: { country: 'VN', languages: ['vi'] },
+    }),
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(`Firecrawl error ${response.status}: ${data?.error || 'Unknown error'} for ${url}`);
+  }
+  
+  const html = data?.data?.html || data?.html || '';
+  const markdown = data?.data?.markdown || data?.markdown || '';
+  const links = data?.data?.links || data?.links || [];
+  
+  return { html, markdown, links };
+}
+
+// Legacy directFetch as fallback (may get 403)
 async function directFetch(url: string): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
