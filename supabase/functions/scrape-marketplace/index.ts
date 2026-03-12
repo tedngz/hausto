@@ -11,10 +11,183 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const CACHE_TTL = 60 * 60 * 2; // 2 hours
 const MAX_DETAIL_PAGES = 10; // Max individual listings to scrape
 const DETAIL_SCRAPE_TIMEOUT = 15000; // 15s per detail page
+
+// ─── Direct Save Helpers (for scheduled crawl mode) ─────────────
+const MIN_PRICE_VND = 2_000_000;
+const MAX_PRICE_VND = 200_000_000;
+
+function isSuspiciousListing(property: any): { suspicious: boolean; reason?: string } {
+  if (!property.title || property.title.length < 5) {
+    return { suspicious: true, reason: 'Title too short or missing' };
+  }
+  if (property.price && property.price > 0 && property.price < MIN_PRICE_VND) {
+    return { suspicious: true, reason: `Price too low: ${property.price} VND` };
+  }
+  if (property.price && property.price > MAX_PRICE_VND) {
+    return { suspicious: true, reason: `Price too high for rental: ${property.price} VND` };
+  }
+  if (!property.images || property.images.length === 0) {
+    return { suspicious: true, reason: 'No images' };
+  }
+  const text = `${(property.title || '').toLowerCase()} ${(property.description || '').toLowerCase()}`;
+  const saleKeywords = [
+    'bán gấp', 'bán nhanh', 'cần bán', 'sang nhượng', 'for sale', 'mua bán',
+    'bán căn', 'bán lô', 'bán đất', 'chuyển nhượng', 'bán chung cư', 'giá bán',
+    'bán nhà', 'bán biệt thự', 'bán villa', 'mua ngay',
+  ];
+  for (const keyword of saleKeywords) {
+    if (text.includes(keyword)) return { suspicious: true, reason: `Sale keyword: "${keyword}"` };
+  }
+  const nonResidentialKeywords = [
+    'văn phòng cho thuê', 'office for rent', 'mặt bằng kinh doanh', 'mặt bằng cho thuê',
+    'cửa hàng cho thuê', 'shop for rent', 'cho thuê shop',
+    'kho xưởng', 'nhà xưởng', 'xưởng sản xuất', 'kho bãi', 'warehouse',
+    'factory', 'industrial', 'công nghiệp', 'thương mại', 'commercial property',
+    'kinh doanh mặt bằng', 'showroom', 'coworking', 'co-working',
+    'đất nền', 'đất thổ cư', 'đất nông nghiệp', 'farmland', 'land for sale',
+    'khách sạn', 'hotel for', 'resort for', 'motel', 'nhà nghỉ cho thuê',
+    'căn hộ dịch vụ bán', 'penthouse bán',
+  ];
+  for (const keyword of nonResidentialKeywords) {
+    if (text.includes(keyword)) return { suspicious: true, reason: `Non-residential: "${keyword}"` };
+  }
+  return { suspicious: false };
+}
+
+function normalizeSourceUrl(url: string): string {
+  try {
+    const u = new URL(url.toLowerCase().trim());
+    const paramsToRemove = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref', 'source'];
+    paramsToRemove.forEach(p => u.searchParams.delete(p));
+    u.searchParams.sort();
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    return url.toLowerCase().trim().replace(/\/+$/, '');
+  }
+}
+
+function normalizeLocationText(location: string): string {
+  return location.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function detectCity(location: string): string {
+  const lower = location.toLowerCase();
+  if (/(ho chi minh|hcm|saigon|sài gòn|thủ đức|thu duc|quận [0-9]|quan [0-9]|district [0-9]|d[0-9]|bình thạnh|binh thanh|phú nhuận|phu nhuan|tân bình|tan binh|gò vấp|go vap|tân phú|tan phu|bình tân|binh tan|bình chánh|binh chanh|nhà bè|nha be|hóc môn|hoc mon|củ chi|cu chi|cần giờ|can gio)/i.test(lower)) return 'ho_chi_minh';
+  if (/(hà nội|ha noi|hanoi|ba đình|ba dinh|hoàn kiếm|hoan kiem|đống đa|dong da|cầu giấy|cau giay|hai bà trưng|hai ba trung|tây hồ|tay ho|long biên|long bien|thanh xuân|thanh xuan|hoàng mai|hoang mai|bắc từ liêm|nam từ liêm|hà đông|ha dong|gia lâm|gia lam|đông anh|dong anh|sóc sơn|soc son|thanh trì|thanh tri|hoài đức|hoai duc|mê linh|me linh|sơn tây|son tay)/i.test(lower)) return 'hanoi';
+  if (/(đà nẵng|da nang|hải châu|hai chau|thanh khê|thanh khe|sơn trà|son tra|ngũ hành sơn|ngu hanh son|liên chiểu|lien chieu|cẩm lệ|cam le|hòa vang|hoa vang)/i.test(lower)) return 'da_nang';
+  return 'other';
+}
+
+async function savePropertiesToDB(
+  properties: ExternalProperty[],
+  marketplace: string,
+  fallbackLocation: string,
+): Promise<{ newListings: number; updatedListings: number; duplicatesSkipped: number; filtered: number }> {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  let newListings = 0, updatedListings = 0, duplicatesSkipped = 0, filtered = 0;
+
+  for (const property of properties) {
+    try {
+      const check = isSuspiciousListing(property);
+      if (check.suspicious) {
+        filtered++;
+        console.log(`[directSave] Filtered: ${property.title?.substring(0, 40)} - ${check.reason}`);
+        continue;
+      }
+
+      const locationNormalized = normalizeLocationText(property.location || fallbackLocation);
+      const detectedCity = detectCity(property.location || fallbackLocation);
+      const rawSourceUrl = property.sourceUrl || `https://${marketplace}.com.vn`;
+      const normalizedUrl = normalizeSourceUrl(rawSourceUrl);
+      const externalId = property.sourceUrl
+        ? btoa(normalizedUrl).substring(0, 100)
+        : `${marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      // Check for existing
+      const { data: existingByUrl } = await supabase
+        .from('external_properties')
+        .select('id, vibe_analysis')
+        .eq('source', marketplace)
+        .eq('source_url', normalizedUrl)
+        .maybeSingle();
+
+      const { data: existingById } = !existingByUrl ? await supabase
+        .from('external_properties')
+        .select('id, vibe_analysis')
+        .eq('source', marketplace)
+        .eq('external_id', externalId)
+        .maybeSingle() : { data: existingByUrl };
+
+      const existing = existingByUrl || existingById;
+      const now = new Date().toISOString();
+
+      const propertyData = {
+        title: property.title || 'Rental Property',
+        location: property.location || fallbackLocation,
+        location_normalized: locationNormalized,
+        city: detectedCity,
+        price: property.price || 0,
+        price_display: property.priceDisplay || `${property.price?.toLocaleString()} VND`,
+        size: property.size || null,
+        rooms: property.rooms || null,
+        description: property.description || null,
+        highlights: property.highlights || [],
+        amenities: property.amenities || [],
+        images: (property.images || []).slice(0, 5),
+        contact_name: property.sourceProviderName || null,
+        contact_phone: property.sourceProviderPhone || null,
+        vibe: property.vibe || null,
+        vibe_analysis: property.vibe_analysis || {},
+        is_active: true,
+      };
+
+      if (existing) {
+        await supabase
+          .from('external_properties')
+          .update({
+            ...propertyData,
+            last_verified_at: now,
+            updated_at: now,
+            expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .eq('id', existing.id);
+        updatedListings++;
+      } else {
+        const { error: insertError } = await supabase
+          .from('external_properties')
+          .insert({
+            ...propertyData,
+            external_id: externalId,
+            source: marketplace,
+            source_url: normalizedUrl,
+            crawled_at: now,
+            expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+          });
+
+        if (insertError) {
+          if (insertError.code === '23505') {
+            duplicatesSkipped++;
+          } else {
+            console.error('[directSave] Insert error:', insertError);
+          }
+        } else {
+          newListings++;
+          console.log(`[directSave] New listing saved: ${property.title?.substring(0, 50)}`);
+        }
+      }
+    } catch (e) {
+      console.error('[directSave] Error:', e);
+    }
+  }
+
+  return { newListings, updatedListings, duplicatesSkipped, filtered };
+}
 
 // ─── Redis Helpers ───────────────────────────────────────────────
 async function redisGet(key: string): Promise<any> {
