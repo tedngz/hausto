@@ -669,27 +669,41 @@ Deno.serve(async (req) => {
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
 
     // Step 2: Call scrape-marketplace (pages: 1 to stay within Edge Function timeout)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    // Use 140s timeout to allow Firecrawl's JS rendering + proxy latency
+    let scrapeResponse: Response;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 140000);
 
-    const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-      body: JSON.stringify({
-        marketplace: bestTarget.marketplace,
-        query: 'cho thuê căn hộ chung cư nhà ở',
-        location: bestTarget.location,
-        includeVibeAnalysis: false,
-        maxResults: config.maxListingsPerRun,
-        pages: 1,
-      }),
-      signal: controller.signal,
-    });
+      scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          marketplace: bestTarget.marketplace,
+          query: 'cho thuê căn hộ chung cư nhà ở',
+          location: bestTarget.location,
+          includeVibeAnalysis: false,
+          maxResults: config.maxListingsPerRun,
+          pages: 1,
+        }),
+        signal: controller.signal,
+      });
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
+    } catch (abortErr) {
+      console.warn(`[scheduled-crawl] Scrape timed out for ${bestTarget.location}/${bestTarget.marketplace}, will retry next cycle`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Scrape timed out (Firecrawl latency)',
+        target: bestTarget,
+      }), {
+        status: 504,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!scrapeResponse.ok) {
       const errorText = await scrapeResponse.text();
