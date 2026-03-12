@@ -668,14 +668,15 @@ Deno.serve(async (req) => {
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
 
-    // Step 2: Call scrape-marketplace (pages: 1 to stay within Edge Function timeout)
-    // Use 140s timeout to allow Firecrawl's JS rendering + proxy latency
-    let scrapeResponse: Response;
+    // Step 2: Call scrape-marketplace with directSave mode
+    // scrape-marketplace saves properties directly to DB, so even if this call times out,
+    // properties already saved are not lost.
+    let scrapeResult: any = null;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 140000);
 
-      scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
+      const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -685,260 +686,74 @@ Deno.serve(async (req) => {
           marketplace: bestTarget.marketplace,
           query: 'cho thuê căn hộ chung cư nhà ở',
           location: bestTarget.location,
+          crawlLocation: bestTarget.location,
           includeVibeAnalysis: false,
           maxResults: config.maxListingsPerRun,
           pages: 1,
+          directSave: true,
         }),
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
+
+      if (scrapeResponse.ok) {
+        scrapeResult = await scrapeResponse.json();
+        console.log(`[scheduled-crawl] Scrape+save completed:`, JSON.stringify(scrapeResult));
+      } else {
+        const errorText = await scrapeResponse.text();
+        console.error(`[scheduled-crawl] Scrape failed: ${scrapeResponse.status}`, errorText);
+      }
     } catch (abortErr) {
-      console.warn(`[scheduled-crawl] Scrape timed out for ${bestTarget.location}/${bestTarget.marketplace}, will retry next cycle`);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Scrape timed out (Firecrawl latency)',
-        target: bestTarget,
-      }), {
-        status: 504,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // Even on timeout, scrape-marketplace may have already saved some properties via directSave
+      console.warn(`[scheduled-crawl] Scrape call timed out for ${bestTarget.location}/${bestTarget.marketplace}, but directSave may have persisted partial results`);
     }
 
-    if (!scrapeResponse.ok) {
-      const errorText = await scrapeResponse.text();
-      console.error(`[scheduled-crawl] Scrape failed:`, errorText);
-      return new Response(JSON.stringify({
-        success: false,
-        error: `Scrape failed: ${scrapeResponse.status}`,
-        target: bestTarget,
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const scrapeData = await scrapeResponse.json();
-
-    if (!scrapeData.success || !scrapeData.properties?.length) {
-      console.log(`[scheduled-crawl] No properties found for ${bestTarget.location}/${bestTarget.marketplace}`);
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'No properties found',
-        target: bestTarget,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Step 3: Filter suspicious listings
-    const validProperties: any[] = [];
-    const filteredOut: { title: string; reason: string }[] = [];
-
-    for (const property of scrapeData.properties) {
-      const check = isSuspiciousListing(property);
-      if (check.suspicious) {
-        filteredOut.push({ title: property.title || 'Unknown', reason: check.reason! });
-      } else {
-        validProperties.push(property);
-      }
-    }
-
-    console.log(`[scheduled-crawl] ${validProperties.length} valid / ${filteredOut.length} filtered from ${scrapeData.properties.length} total`);
-
-    // Step 4: Store valid properties with deduplication + run vibe analysis
-    let newListings = 0;
-    let updatedListings = 0;
-    let duplicatesSkipped = 0;
+    const newListings = scrapeResult?.newListings || 0;
+    const updatedListings = scrapeResult?.updatedListings || 0;
+    const duplicatesSkipped = scrapeResult?.duplicatesSkipped || 0;
+    const filtered = scrapeResult?.filtered || 0;
     let vibeAnalyzed = 0;
-    const newlyInsertedIds: string[] = [];
 
-    for (const property of validProperties) {
-      try {
-        const locationNormalized = normalizeLocation(property.location || bestTarget.location);
-        const detectedCity = detectCity(property.location || bestTarget.location);
-        const rawSourceUrl = property.sourceUrl || `https://${bestTarget.marketplace}.com.vn`;
-        const normalizedUrl = normalizeSourceUrl(rawSourceUrl);
-        const externalId = property.sourceUrl
-          ? btoa(normalizedUrl).substring(0, 100)
-          : `${bestTarget.marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-        // Check for existing
-        const { data: existingByUrl } = await supabase
-          .from('external_properties')
-          .select('id, vibe_analysis')
-          .eq('source', bestTarget.marketplace)
-          .eq('source_url', normalizedUrl)
-          .maybeSingle();
-
-        const { data: existingById } = !existingByUrl ? await supabase
-          .from('external_properties')
-          .select('id, vibe_analysis')
-          .eq('source', bestTarget.marketplace)
-          .eq('external_id', externalId)
-          .maybeSingle() : { data: existingByUrl };
-
-        const existing = existingByUrl || existingById;
-
-        const now = new Date().toISOString();
-        const propertyData = {
-          title: property.title || 'Rental Property',
-          location: property.location || bestTarget.location,
-          location_normalized: locationNormalized,
-          city: detectedCity,
-          price: property.price || 0,
-          price_display: property.priceDisplay || `${property.price?.toLocaleString()} VND`,
-          size: property.size || null,
-          rooms: property.rooms || null,
-          description: property.description || null,
-          highlights: property.highlights || [],
-          amenities: property.amenities || [],
-          images: (property.images || []).slice(0, 5),
-          contact_name: property.sourceProviderName || null,
-          contact_phone: property.sourceProviderPhone || null,
-          vibe: property.vibe || null,
-          vibe_analysis: property.vibe_analysis || {},
-          is_active: true,
-        };
-
-        if (existing) {
-          // Update: refresh verification time and expiry, preserve original crawled_at
-          await supabase
-            .from('external_properties')
-            .update({
-              ...propertyData,
-              last_verified_at: now,
-              updated_at: now,
-              expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-            })
-            .eq('id', existing.id);
-          updatedListings++;
-
-          // Skip inline vibe analysis during cron to avoid timeout
-          // Use the "Backfill Image Highlights" admin tool instead
-        } else {
-          const { data: inserted, error: insertError } = await supabase
-            .from('external_properties')
-            .insert({
-              ...propertyData,
-              external_id: externalId,
-              source: bestTarget.marketplace,
-              source_url: normalizedUrl,
-              crawled_at: now,
-              expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-            })
-            .select('id')
-            .maybeSingle();
-
-          if (insertError) {
-            if (insertError.code === '23505') {
-              duplicatesSkipped++;
-            } else {
-              console.error('[scheduled-crawl] Insert error:', insertError);
-            }
-          } else if (inserted) {
-            newListings++;
-            newlyInsertedIds.push(inserted.id);
-          }
-        }
-      } catch (storeError) {
-        console.error('[scheduled-crawl] Store error:', storeError);
-      }
+    // Step 3: Chain vibe backfill via QStash if we got new listings
+    if (newListings > 0) {
+      console.log(`[scheduled-crawl] ${newListings} new listings saved, chaining vibe backfill`);
+      await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
     }
 
-    // Step 5: Auto-trigger vibe analysis for newly inserted properties + backfill missing highlights
-    if (OPENAI_API_KEY) {
-      const remainingTime = 150000 - (Date.now() - startTime); // Edge Function 150s limit
-      if (remainingTime > 30000) { // Only if >30s remaining
-        // 5a: Analyze newly inserted properties first
-        if (newlyInsertedIds.length > 0) {
-          console.log(`[scheduled-crawl] Running vibe analysis for ${newlyInsertedIds.length} new properties (${Math.round(remainingTime/1000)}s remaining)`);
-          for (const id of newlyInsertedIds) {
-            const elapsed = Date.now() - startTime;
-            if (elapsed > 120000) break;
+    // Step 4: If we have time remaining, do inline vibe analysis
+    if (OPENAI_API_KEY && scrapeResult?.success) {
+      const remainingTime = 150000 - (Date.now() - startTime);
+      if (remainingTime > 30000) {
+        // Find recently inserted properties needing vibe analysis
+        const { data: needsVibe } = await supabase
+          .from('external_properties')
+          .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis, highlights')
+          .eq('is_active', true)
+          .not('images', 'eq', '{}')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (needsVibe) {
+          const toAnalyze = needsVibe.filter((p: any) => {
+            if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
+            if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
+            if (!p.highlights || p.highlights.length === 0) return true;
+            const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature');
+            return allGeneric;
+          });
+
+          for (const prop of toAnalyze) {
+            if (Date.now() - startTime > 120000) break;
             try {
-              const { data: prop } = await supabase
-                .from('external_properties')
-                .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis')
-                .eq('id', id)
-                .maybeSingle();
-              if (prop) {
-                const success = await runVibeAnalysis(supabase, prop.id, prop);
-                if (success) vibeAnalyzed++;
-              }
+              const success = await runVibeAnalysis(supabase, prop.id, prop);
+              if (success) vibeAnalyzed++;
+              await new Promise(r => setTimeout(r, 2000));
             } catch (e) {
-              console.error(`[scheduled-crawl] Vibe analysis error for ${id}:`, e);
+              console.error(`[scheduled-crawl] Inline vibe error for ${prop.id}:`, e);
             }
           }
-          console.log(`[scheduled-crawl] Vibe analysis complete: ${vibeAnalyzed}/${newlyInsertedIds.length} new analyzed`);
-        }
-
-        // 5b: Backfill image highlights for existing properties that lack them
-        const backfillRemaining = 120000 - (Date.now() - startTime);
-        if (backfillRemaining > 15000) {
-          console.log(`[scheduled-crawl] Backfilling image highlights (${Math.round(backfillRemaining/1000)}s remaining)`);
-          
-          // Find active properties with missing or generic highlights
-          const { data: needsBackfill } = await supabase
-            .from('external_properties')
-            .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis, highlights')
-            .eq('is_active', true)
-            .not('images', 'eq', '{}')
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-          if (needsBackfill) {
-            const toBackfill = needsBackfill.filter((p: any) => {
-              // No highlights at all
-              if (!p.highlights || p.highlights.length === 0) return true;
-              // No image_analyses in vibe_analysis
-              if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
-              // Missing styles/colors/activities (the main issue)
-              if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
-              if (!p.vibe_analysis?.colors || p.vibe_analysis.colors.length === 0) return true;
-              if (!p.vibe_analysis?.activities || p.vibe_analysis.activities.length === 0) return true;
-              // All highlights are generic fallback
-              const allGeneric = p.highlights.every((h: string) => 
-                !h || h === 'Premium living space feature' || h === 'Quality living space'
-              );
-              if (allGeneric) return true;
-              return false;
-            });
-
-            let backfilled = 0;
-            let backfillStoppedEarly = false;
-            for (const prop of toBackfill) {
-              const elapsed = Date.now() - startTime;
-              if (elapsed > 120000) {
-                console.log(`[scheduled-crawl] Stopping backfill early - ${Math.round(elapsed/1000)}s elapsed`);
-                backfillStoppedEarly = true;
-                break;
-              }
-              try {
-                const success = await runVibeAnalysis(supabase, prop.id, prop);
-                if (success) backfilled++;
-                // Small delay to avoid rate limits
-                await new Promise(r => setTimeout(r, 2000));
-              } catch (e) {
-                console.error(`[scheduled-crawl] Backfill error for ${prop.id}:`, e);
-              }
-            }
-            console.log(`[scheduled-crawl] Backfilled ${backfilled}/${toBackfill.length} properties with image highlights`);
-            vibeAnalyzed += backfilled;
-
-            // Self-chain via QStash if we ran out of time and there's more to backfill
-            if (backfillStoppedEarly && backfilled < toBackfill.length) {
-              console.log('[scheduled-crawl] Self-chaining backfill-vibe after crawl run');
-              await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
-            }
-          }
-        }
-      } else {
-        console.log(`[scheduled-crawl] Skipping vibe analysis - only ${Math.round(remainingTime/1000)}s remaining`);
-        // If we skipped vibe entirely due to time, chain a backfill
-        if (newlyInsertedIds.length > 0) {
-          console.log('[scheduled-crawl] Self-chaining backfill-vibe for skipped new properties');
-          await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'skipped-vibe' }, 10);
+          console.log(`[scheduled-crawl] Inline vibe: ${vibeAnalyzed}/${toAnalyze.length} analyzed`);
         }
       }
     }
@@ -948,14 +763,13 @@ Deno.serve(async (req) => {
     const summary = {
       duration: `${duration}ms`,
       target: bestTarget,
-      totalScraped: scrapeData.properties.length,
-      validAfterFilter: validProperties.length,
-      filteredOut: filteredOut.length,
       newListings,
       updatedListings,
       duplicatesSkipped,
+      filtered,
       vibeAnalyzed,
-      filteredReasons: filteredOut,
+      directSaveMode: true,
+      scrapeCompleted: !!scrapeResult?.success,
     };
 
     console.log('[scheduled-crawl] Completed:', JSON.stringify(summary));
