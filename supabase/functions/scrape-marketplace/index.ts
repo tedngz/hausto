@@ -1044,6 +1044,25 @@ serve(async (req) => {
       });
     }
 
+    // Direct save mode: save properties to DB immediately (used by scheduled-crawl)
+    if (directSave && isServiceRole) {
+      console.log(`[scrape-marketplace] DirectSave mode: saving ${filteredProperties.length} properties to DB`);
+      const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '');
+      console.log(`[scrape-marketplace] DirectSave result:`, JSON.stringify(saveResult));
+
+      return new Response(JSON.stringify({
+        success: true,
+        directSave: true,
+        ...saveResult,
+        totalScraped: filteredProperties.length,
+        source: marketplace,
+        crawlMethod: 'detail-page-paginated-directsave',
+        pagesScraped: effectivePagesToScrape,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Cache results
     if (filteredProperties.length > 0) {
       await redisSet(cacheKey, filteredProperties, CACHE_TTL);
