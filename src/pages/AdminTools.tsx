@@ -881,7 +881,7 @@ const AdminTools = () => {
                   value={[effectiveMaxListings]}
                   onValueChange={(v) => setLocalMaxListings(v[0])}
                   min={1}
-                  max={20}
+                  max={10}
                   step={1}
                   className="w-full"
                 />
