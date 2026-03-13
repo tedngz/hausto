@@ -932,18 +932,18 @@ const AdminTools = () => {
           <div className="text-sm space-y-3 border-t pt-3">
             <p className="font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> District Coverage Tracker</p>
             {(() => {
-              const ALL_DISTRICTS: Record<string, { label: string; districts: string[] }> = {
+               const ALL_DISTRICTS: Record<string, { label: string; districts: string[] }> = {
                 ho_chi_minh: {
                   label: 'Ho Chi Minh City',
-                  districts: ['quận 1','quận 3','quận 4','quận 5','quận 6','quận 7','quận 8','quận 10','quận 11','quận 12','bình thạnh','phú nhuận','tân bình','tân phú','gò vấp','bình tân','thủ đức','nhà bè','bình chánh','hóc môn','củ chi','cần giờ'],
+                  districts: ['quận 1','quận 3','quận 4','quận 7','quận 10','bình thạnh','phú nhuận','tân bình','gò vấp','thủ đức'],
                 },
                 hanoi: {
                   label: 'Hanoi',
-                  districts: ['ba đình','hoàn kiếm','đống đa','cầu giấy','hai bà trưng','tây hồ','long biên','thanh xuân','hoàng mai','bắc từ liêm','nam từ liêm','hà đông','gia lâm','đông anh','sóc sơn','thanh trì','hoài đức','thanh oai','thường tín','mê linh','chương mỹ','đan phượng','phúc thọ','quốc oai','thạch thất','ba vì','sơn tây','phú xuyên','ứng hòa','mỹ đức'],
+                  districts: ['ba đình','hoàn kiếm','đống đa','cầu giấy','hai bà trưng','tây hồ','long biên'],
                 },
                 da_nang: {
                   label: 'Da Nang',
-                  districts: ['hải châu','thanh khê','sơn trà','ngũ hành sơn','liên chiểu','cẩm lệ','hòa vang','hoàng sa'],
+                  districts: ['hải châu','sơn trà','ngũ hành sơn'],
                 },
               };
 
