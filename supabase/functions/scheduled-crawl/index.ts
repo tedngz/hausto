@@ -675,11 +675,10 @@ Deno.serve(async (req) => {
     const filtered = scrapeResult?.filtered || 0;
     let vibeAnalyzed = 0;
 
-    // Step 3: Chain vibe backfill via QStash if we got new listings
-    if (newListings > 0) {
-      console.log(`[scheduled-crawl] ${newListings} new listings saved, chaining vibe backfill`);
-      await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
-    }
+    // Step 3: Always chain vibe backfill via QStash after each crawl
+    // This ensures any properties with missing/generic highlights get processed
+    console.log(`[scheduled-crawl] Chaining vibe backfill (new: ${newListings}, updated: ${updatedListings})`);
+    await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'post-crawl' }, 10);
 
     // Step 4: If we have time remaining, do inline vibe analysis
     if (OPENAI_API_KEY && scrapeResult?.success) {
