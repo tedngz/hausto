@@ -577,11 +577,41 @@ async function directFetch(url: string): Promise<string> {
   return await response.text();
 }
 
-function extractLinksFromHtml(html: string, baseUrl: string): string[] {
+// Strip promoted/sponsored/VIP sections from batdongsan HTML before link extraction
+function stripSponsoredSections(html: string, marketplace: string): string {
+  if (marketplace !== 'batdongsan') return html;
+  
+  // Remove promoted/featured/VIP listing cards — these are cross-district ads
+  // Batdongsan uses classes like: js__card--featured, js__card--vip, re__card-featured,
+  // re__card-vip, js__product-featured, pr-container--featured
+  const sponsoredPatterns = [
+    // Featured/VIP card containers (greedy within each card)
+    /<div[^>]*class="[^"]*(?:js__card--(?:featured|vip)|re__card-(?:featured|vip)|pr-container--(?:featured|vip)|js__product-(?:featured|vip))[^"]*"[^>]*>[\s\S]*?<\/div>\s*(?:<\/div>)*/gi,
+    // Sponsored listing sections with header
+    /<(?:div|section)[^>]*class="[^"]*(?:featured-listing|vip-listing|sponsored-listing|re__srp-featured|js__section-featured)[^"]*"[^>]*>[\s\S]*?<\/(?:div|section)>/gi,
+    // "Tin nổi bật" / "Tin VIP" section headers and their following content blocks
+    /<(?:h[2-4]|div|span)[^>]*>[^<]*(?:Tin nổi bật|Tin VIP|Featured|Nổi bật|Được tài trợ|Sponsored)[^<]*<\/(?:h[2-4]|div|span)>/gi,
+  ];
+  
+  let cleaned = html;
+  for (const pattern of sponsoredPatterns) {
+    const before = cleaned.length;
+    cleaned = cleaned.replace(pattern, '');
+    if (cleaned.length < before) {
+      console.log(`[stripSponsored] Removed ${before - cleaned.length} chars of sponsored content`);
+    }
+  }
+  return cleaned;
+}
+
+function extractLinksFromHtml(html: string, baseUrl: string, marketplace?: string): string[] {
+  // Strip sponsored sections before extracting links
+  const cleanHtml = marketplace ? stripSponsoredSections(html, marketplace) : html;
+  
   const links: string[] = [];
   const regex = /<a[^>]+href=["']([^"'#]+)["'][^>]*>/gi;
   let match;
-  while ((match = regex.exec(html)) !== null) {
+  while ((match = regex.exec(cleanHtml)) !== null) {
     let href = match[1];
     if (href.startsWith('/')) {
       try {
@@ -989,7 +1019,7 @@ serve(async (req) => {
         let useFirecrawl = false;
         try {
           html = await directFetch(searchUrl);
-          pageLinks = extractLinksFromHtml(html, searchUrl);
+          pageLinks = extractLinksFromHtml(html, searchUrl, marketplace);
           pageMarkdown = htmlToBasicMarkdown(html);
           // Check if we got a meaningful page (not a captcha/block page)
           if (pageMarkdown.length < 200 || pageLinks.length < 3) {
