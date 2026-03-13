@@ -1,5 +1,3 @@
-
-
 ## QStash Integration — Completed
 
 The `scheduled-crawl` Edge Function now supports **Upstash QStash** for triggering and self-chaining:
@@ -23,3 +21,16 @@ Create a QStash schedule in the Upstash console:
 - **Content-Type**: `application/json`
 
 Once confirmed working, the `auto-crawl-v2` pg_cron job can be removed.
+
+## Firecrawl Credit Optimization — Completed
+
+### Changes Made
+1. **Trimmed locations from 60 to 20** — center districts only (HCMC: 10, Hanoi: 7, Da Nang: 3)
+2. **Default frequency: 2880min (48h)** — each combo crawled every 2 days
+3. **Default maxListingsPerRun: 5** — down from 10
+4. **directFetch for search pages** — saves 1 Firecrawl credit per crawl by using plain HTTP for Phase 1, falling back to Firecrawl only if blocked
+5. **Admin UI limits updated** — frequency slider max: 4320min (3 days), max listings slider max: 10
+
+### Projected Usage
+- 20 locations × 2 marketplaces = 40 combos
+- 48h frequency → ~20 crawls/day × 5 credits = **~100 credits/day ≈ 3,000/month** ✓
