@@ -1055,18 +1055,81 @@ serve(async (req) => {
     let properties: ExternalProperty[] = [];
 
     if (listingLinks.length > 0) {
-      console.log(`[Phase 2] Scraping ${listingLinks.length} detail pages in parallel (batches of 3)...`);
+      // ── Pre-scrape dedup: check which listings already exist in DB ──
+      const supabaseDedup = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const canonicalIds = listingLinks.map(l => extractListingId(l.url, marketplace)).filter(Boolean) as string[];
+      const normalizedUrls = listingLinks.map(l => normalizeSourceUrl(l.url));
+
+      let existingIds = new Set<string>();
+      let existingUrls = new Set<string>();
+
+      if (canonicalIds.length > 0) {
+        const { data: byId } = await supabaseDedup
+          .from('external_properties')
+          .select('external_id')
+          .eq('source', marketplace)
+          .in('external_id', canonicalIds);
+        if (byId) existingIds = new Set(byId.map(r => r.external_id));
+      }
+      if (normalizedUrls.length > 0) {
+        const { data: byUrl } = await supabaseDedup
+          .from('external_properties')
+          .select('source_url')
+          .eq('source', marketplace)
+          .in('source_url', normalizedUrls);
+        if (byUrl) existingUrls = new Set(byUrl.map(r => r.source_url));
+      }
+
+      // Split into new vs existing
+      const newLinks: ListingLink[] = [];
+      const existingLinks: ListingLink[] = [];
+      for (const link of listingLinks) {
+        const cid = extractListingId(link.url, marketplace);
+        const nurl = normalizeSourceUrl(link.url);
+        if ((cid && existingIds.has(cid)) || existingUrls.has(nurl)) {
+          existingLinks.push(link);
+        } else {
+          newLinks.push(link);
+        }
+      }
+
+      console.log(`[Pre-dedup] ${listingLinks.length} listings: ${newLinks.length} new, ${existingLinks.length} already in DB`);
+
+      // Refresh last_verified_at for existing listings (no Firecrawl credits spent)
+      if (existingLinks.length > 0) {
+        const now = new Date().toISOString();
+        const refreshUrls = existingLinks.map(l => normalizeSourceUrl(l.url));
+        const refreshIds = existingLinks.map(l => extractListingId(l.url, marketplace)).filter(Boolean) as string[];
+        
+        if (refreshIds.length > 0) {
+          await supabaseDedup
+            .from('external_properties')
+            .update({ last_verified_at: now, updated_at: now, expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString() })
+            .eq('source', marketplace)
+            .in('external_id', refreshIds);
+        }
+        if (refreshUrls.length > 0) {
+          await supabaseDedup
+            .from('external_properties')
+            .update({ last_verified_at: now, updated_at: now, expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString() })
+            .eq('source', marketplace)
+            .in('source_url', refreshUrls);
+        }
+        console.log(`[Pre-dedup] Refreshed ${existingLinks.length} existing listings`);
+      }
+
+      // Only scrape detail pages for NEW listings
+      console.log(`[Phase 2] Scraping ${newLinks.length} NEW detail pages (skipped ${existingLinks.length} existing)...`);
       
-      // Scrape detail pages in batches of 3 to avoid rate limits
       const batchSize = 3;
       const detailResults: (ExternalProperty | null)[] = [];
       
-      for (let i = 0; i < listingLinks.length; i += batchSize) {
-        const batch = listingLinks.slice(i, i + batchSize);
+      for (let i = 0; i < newLinks.length; i += batchSize) {
+        const batch = newLinks.slice(i, i + batchSize);
         
         const batchPromises = batch.map(async (listing, batchIdx) => {
           const globalIdx = i + batchIdx;
-          console.log(`[Phase 2] Scraping detail page ${globalIdx + 1}/${listingLinks.length}: ${listing.url}`);
+          console.log(`[Phase 2] Scraping detail page ${globalIdx + 1}/${newLinks.length}: ${listing.url}`);
           
           const detail = await scrapeDetailPage(listing.url);
           if (!detail) {
@@ -1088,13 +1151,29 @@ serve(async (req) => {
         const batchResults = await Promise.all(batchPromises);
         detailResults.push(...batchResults);
         
-        // Small delay between batches
-        if (i + batchSize < listingLinks.length) {
+        if (i + batchSize < newLinks.length) {
           await new Promise(r => setTimeout(r, 500));
         }
       }
       
-      properties = detailResults.filter((p): p is ExternalProperty => p !== null);
+      const rawProperties = detailResults.filter((p): p is ExternalProperty => p !== null);
+
+      // ── Cross-city filtering: reject listings from wrong city ──
+      const targetCity = detectCity(crawlLocation || location || query);
+      if (targetCity !== 'other') {
+        for (const prop of rawProperties) {
+          const propCity = detectCity(prop.location);
+          if (propCity !== 'other' && propCity !== targetCity) {
+            console.log(`[Cross-city] Rejected "${prop.title?.substring(0, 40)}" (${propCity}) - target: ${targetCity}`);
+          } else {
+            properties.push(prop);
+          }
+        }
+        console.log(`[Cross-city] Kept ${properties.length}/${rawProperties.length} properties matching target city ${targetCity}`);
+      } else {
+        properties = rawProperties;
+      }
+
       console.log(`[Phase 3] Successfully extracted ${properties.length} properties from detail pages`);
     }
     
