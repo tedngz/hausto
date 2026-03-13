@@ -111,8 +111,8 @@ interface CrawlConfig {
 
 const DEFAULT_CONFIG: CrawlConfig = {
   paused: false,
-  frequencyMinutes: 240,
-  maxListingsPerRun: 10,
+  frequencyMinutes: 2880,
+  maxListingsPerRun: 5,
 };
 
 // Redis helpers
