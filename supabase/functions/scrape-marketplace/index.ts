@@ -957,20 +957,34 @@ serve(async (req) => {
       console.log(`[Phase 1] Scraping search page ${page}/${effectivePagesToScrape}: ${searchUrl}`);
 
       try {
-        // Use Firecrawl for anti-bot bypass, fall back to directFetch
+        // Try directFetch first for search pages (saves 1 Firecrawl credit per crawl)
+        // Only fall back to Firecrawl if directFetch gets 403/blocked
         let html = '';
         let pageLinks: string[] = [];
         let pageMarkdown = '';
         
-        if (FIRECRAWL_API_KEY) {
+        let useFirecrawl = false;
+        try {
+          html = await directFetch(searchUrl);
+          pageLinks = extractLinksFromHtml(html, searchUrl);
+          pageMarkdown = htmlToBasicMarkdown(html);
+          // Check if we got a meaningful page (not a captcha/block page)
+          if (pageMarkdown.length < 200 || pageLinks.length < 3) {
+            console.log(`[Phase 1] directFetch returned thin content (${pageMarkdown.length} chars, ${pageLinks.length} links), falling back to Firecrawl`);
+            useFirecrawl = true;
+          }
+        } catch (directErr) {
+          console.log(`[Phase 1] directFetch failed: ${directErr}, falling back to Firecrawl`);
+          useFirecrawl = true;
+        }
+        
+        if (useFirecrawl && FIRECRAWL_API_KEY) {
           const result = await firecrawlFetch(searchUrl);
           html = result.html;
           pageLinks = result.links;
           pageMarkdown = result.markdown;
-        } else {
-          html = await directFetch(searchUrl);
-          pageLinks = extractLinksFromHtml(html, searchUrl);
-          pageMarkdown = htmlToBasicMarkdown(html);
+        } else if (useFirecrawl) {
+          console.log(`[Phase 1] No Firecrawl API key, cannot retry`);
         }
         
         if (!pageMarkdown || pageMarkdown.length < 100) {

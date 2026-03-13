@@ -485,8 +485,8 @@ Deno.serve(async (req) => {
       const currentConfig = await getConfig();
       const newConfig: CrawlConfig = {
         paused: body.paused !== undefined ? body.paused : currentConfig.paused,
-        frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(1440, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
-        maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(20, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
+        frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(4320, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
+        maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(10, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
       };
       await redisSet(CONFIG_KEY, newConfig);
       console.log('[scheduled-crawl] Config updated:', JSON.stringify(newConfig));

@@ -662,7 +662,7 @@ const AdminTools = () => {
               value={[crawlMaxListings]}
               onValueChange={(v) => setCrawlMaxListings(v[0])}
               min={1}
-              max={20}
+              max={10}
               step={1}
               className="w-full"
             />
