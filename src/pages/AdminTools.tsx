@@ -864,7 +864,7 @@ const AdminTools = () => {
                   value={[effectiveFrequency]}
                   onValueChange={(v) => setLocalFrequency(v[0])}
                   min={30}
-                  max={720}
+                  max={4320}
                   step={30}
                   className="w-full"
                 />
