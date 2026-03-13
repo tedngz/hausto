@@ -72,6 +72,27 @@ function normalizeSourceUrl(url: string): string {
   }
 }
 
+// Extract canonical listing ID from marketplace URLs
+// batdongsan: "...-pr12345678" → "pr12345678"
+// nhatot: ".../123456.htm" → "nt123456"
+function extractListingId(url: string, marketplace: string): string | null {
+  try {
+    if (marketplace === 'batdongsan') {
+      const match = url.match(/-pr(\d+)/i);
+      if (match) return `pr${match[1]}`;
+    }
+    if (marketplace === 'nhatot') {
+      const match = url.match(/\/(\d{5,})\.htm/i);
+      if (match) return `nt${match[1]}`;
+    }
+    if (marketplace === 'airbnb') {
+      const match = url.match(/\/rooms\/(\d+)/i);
+      if (match) return `ab${match[1]}`;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 function normalizeLocationText(location: string): string {
   return location.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
