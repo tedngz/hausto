@@ -255,35 +255,78 @@ interface ListingLink {
 // ─── URL Building ────────────────────────────────────────────────
 const PAGES_TO_SCRAPE = 3; // Scrape pages 1-3 of search results
 
+function stripDiacritics(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd');
+}
+
 function buildSearchUrl(params: SearchParams, page: number = 1): string {
   const { marketplace, query, location } = params;
   
-  const normalizedLocation = location?.toLowerCase()
+  // Strip diacritics early so all lookups work with ASCII keys
+  const locationAscii = location ? stripDiacritics(location).toLowerCase().trim() : '';
+  
+  const normalizedLocation = locationAscii
     .replace(/district\s*/i, 'quan-')
     .replace(/d(\d+)/i, 'quan-$1')
-    .replace(/\s+/g, '-')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    || '';
+    .replace(/\s+/g, '-');
   
-  const isHanoi = /(ha noi|hanoi|ba dinh|hoan kiem|dong da|cau giay|hai ba trung)/i.test(location || '');
-  const isDaNang = /(da nang|đà nẵng|hai chau|thanh khe|son tra|ngu hanh son|lien chieu|cam le)/i.test(location || '');
+  const isHanoi = /(ha noi|hanoi|ba dinh|hoan kiem|dong da|cau giay|hai ba trung)/i.test(locationAscii);
+  const isDaNang = /(da nang|hai chau|thanh khe|son tra|ngu hanh son|lien chieu|cam le)/i.test(locationAscii);
   const citySlug = isHanoi ? 'ha-noi' : isDaNang ? 'da-nang' : 'tp-hcm';
   const nhatotCity = isHanoi ? 'ha-noi' : isDaNang ? 'da-nang' : 'tp-ho-chi-minh';
   const airbnbCity = isHanoi ? 'Hanoi--Vietnam' : isDaNang ? 'Da-Nang--Vietnam' : 'Ho-Chi-Minh-City--Vietnam';
   
   switch (marketplace) {
     case 'batdongsan': {
+      // Batdongsan district slug mappings (ASCII keys → URL slugs)
+      const bdsDistrictMappings: Record<string, string> = {
+        'quan 1': 'quan-1', 'quan 3': 'quan-3', 'quan 4': 'quan-4',
+        'quan 5': 'quan-5', 'quan 6': 'quan-6', 'quan 7': 'quan-7',
+        'quan 8': 'quan-8', 'quan 10': 'quan-10', 'quan 11': 'quan-11',
+        'quan 12': 'quan-12',
+        'binh thanh': 'quan-binh-thanh', 'phu nhuan': 'quan-phu-nhuan',
+        'tan binh': 'quan-tan-binh', 'tan phu': 'quan-tan-phu',
+        'go vap': 'quan-go-vap', 'binh tan': 'quan-binh-tan',
+        'thu duc': 'thanh-pho-thu-duc', 'nha be': 'huyen-nha-be',
+        'binh chanh': 'huyen-binh-chanh', 'hoc mon': 'huyen-hoc-mon',
+        'cu chi': 'huyen-cu-chi', 'can gio': 'huyen-can-gio',
+        // Hanoi
+        'ba dinh': 'quan-ba-dinh', 'hoan kiem': 'quan-hoan-kiem',
+        'dong da': 'quan-dong-da', 'cau giay': 'quan-cau-giay',
+        'hai ba trung': 'quan-hai-ba-trung', 'tay ho': 'quan-tay-ho',
+        'long bien': 'quan-long-bien', 'thanh xuan': 'quan-thanh-xuan',
+        'hoang mai': 'quan-hoang-mai', 'bac tu liem': 'quan-bac-tu-liem',
+        'nam tu liem': 'quan-nam-tu-liem', 'ha dong': 'quan-ha-dong',
+        'gia lam': 'huyen-gia-lam', 'dong anh': 'huyen-dong-anh',
+        'soc son': 'huyen-soc-son', 'thanh tri': 'huyen-thanh-tri',
+        'hoai duc': 'huyen-hoai-duc', 'thanh oai': 'huyen-thanh-oai',
+        'thuong tin': 'huyen-thuong-tin', 'me linh': 'huyen-me-linh',
+        'chuong my': 'huyen-chuong-my', 'dan phuong': 'huyen-dan-phuong',
+        'phuc tho': 'huyen-phuc-tho', 'quoc oai': 'huyen-quoc-oai',
+        'thach that': 'huyen-thach-that', 'ba vi': 'huyen-ba-vi',
+        'son tay': 'thi-xa-son-tay', 'phu xuyen': 'huyen-phu-xuyen',
+        'ung hoa': 'huyen-ung-hoa', 'my duc': 'huyen-my-duc',
+        // Da Nang
+        'hai chau': 'quan-hai-chau', 'thanh khe': 'quan-thanh-khe',
+        'son tra': 'quan-son-tra', 'ngu hanh son': 'quan-ngu-hanh-son',
+        'lien chieu': 'quan-lien-chieu', 'cam le': 'quan-cam-le',
+        'hoa vang': 'huyen-hoa-vang', 'hoang sa': 'huyen-hoang-sa',
+      };
+
+      let districtSlug = bdsDistrictMappings[locationAscii];
+      if (!districtSlug && normalizedLocation.includes('quan-')) {
+        districtSlug = normalizedLocation;
+      }
+
       let baseUrl: string;
-      if (normalizedLocation.includes('quan-')) {
-        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${normalizedLocation}-${citySlug}`;
-      } else if (normalizedLocation) {
+      if (districtSlug) {
+        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${districtSlug}-${citySlug}`;
+      } else if (locationAscii) {
         baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${citySlug}?keyword=${encodeURIComponent(location || query)}`;
       } else {
         baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${citySlug}`;
       }
-      // batdongsan uses /p{page} suffix for pagination
       if (page > 1) {
-        const separator = baseUrl.includes('?') ? '&' : '';
         return baseUrl.includes('?')
           ? `${baseUrl}&page=${page}`
           : `${baseUrl}/p${page}`;
@@ -305,30 +348,38 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
         'd10': 'quan-10', 'district 10': 'quan-10', 'quan 10': 'quan-10', 'quan-10': 'quan-10',
         'd11': 'quan-11', 'district 11': 'quan-11', 'quan 11': 'quan-11', 'quan-11': 'quan-11',
         'd12': 'quan-12', 'district 12': 'quan-12', 'quan 12': 'quan-12', 'quan-12': 'quan-12',
-        'binh thanh': 'quan-binh-thanh', 'binhthanh': 'quan-binh-thanh', 'quan binh thanh': 'quan-binh-thanh',
-        'phu nhuan': 'quan-phu-nhuan', 'phunhuan': 'quan-phu-nhuan', 'quan phu nhuan': 'quan-phu-nhuan',
-        'tan binh': 'quan-tan-binh', 'tanbinh': 'quan-tan-binh', 'quan tan binh': 'quan-tan-binh',
-        'go vap': 'quan-go-vap', 'govap': 'quan-go-vap', 'quan go vap': 'quan-go-vap',
-        'thu duc': 'thanh-pho-thu-duc', 'thuduc': 'thanh-pho-thu-duc',
-        'ba dinh': 'quan-ba-dinh', 'badinh': 'quan-ba-dinh',
-        'hoan kiem': 'quan-hoan-kiem', 'hoankiem': 'quan-hoan-kiem',
-        'dong da': 'quan-dong-da', 'dongda': 'quan-dong-da',
-        'cau giay': 'quan-cau-giay', 'caugiay': 'quan-cau-giay',
-        'hai ba trung': 'quan-hai-ba-trung', 'haibatrung': 'quan-hai-ba-trung',
-        // Da Nang districts
-        'hai chau': 'quan-hai-chau', 'haichau': 'quan-hai-chau',
-        'thanh khe': 'quan-thanh-khe', 'thanhkhe': 'quan-thanh-khe',
-        'son tra': 'quan-son-tra', 'sontra': 'quan-son-tra',
-        'ngu hanh son': 'quan-ngu-hanh-son', 'nguhanhson': 'quan-ngu-hanh-son',
-        'lien chieu': 'quan-lien-chieu', 'lienchieu': 'quan-lien-chieu',
-        'cam le': 'quan-cam-le', 'camle': 'quan-cam-le',
+        'binh thanh': 'quan-binh-thanh', 'quan binh thanh': 'quan-binh-thanh',
+        'phu nhuan': 'quan-phu-nhuan', 'quan phu nhuan': 'quan-phu-nhuan',
+        'tan binh': 'quan-tan-binh', 'quan tan binh': 'quan-tan-binh',
+        'tan phu': 'quan-tan-phu', 'quan tan phu': 'quan-tan-phu',
+        'go vap': 'quan-go-vap', 'quan go vap': 'quan-go-vap',
+        'binh tan': 'quan-binh-tan', 'quan binh tan': 'quan-binh-tan',
+        'thu duc': 'thanh-pho-thu-duc',
+        'nha be': 'huyen-nha-be', 'binh chanh': 'huyen-binh-chanh',
+        'hoc mon': 'huyen-hoc-mon', 'cu chi': 'huyen-cu-chi', 'can gio': 'huyen-can-gio',
+        // Hanoi
+        'ba dinh': 'quan-ba-dinh', 'hoan kiem': 'quan-hoan-kiem',
+        'dong da': 'quan-dong-da', 'cau giay': 'quan-cau-giay',
+        'hai ba trung': 'quan-hai-ba-trung', 'tay ho': 'quan-tay-ho',
+        'long bien': 'quan-long-bien', 'thanh xuan': 'quan-thanh-xuan',
+        'hoang mai': 'quan-hoang-mai', 'bac tu liem': 'quan-bac-tu-liem',
+        'nam tu liem': 'quan-nam-tu-liem', 'ha dong': 'quan-ha-dong',
+        'gia lam': 'huyen-gia-lam', 'dong anh': 'huyen-dong-anh',
+        'soc son': 'huyen-soc-son', 'thanh tri': 'huyen-thanh-tri',
+        'hoai duc': 'huyen-hoai-duc', 'me linh': 'huyen-me-linh',
+        'son tay': 'thi-xa-son-tay',
+        // Da Nang
+        'hai chau': 'quan-hai-chau', 'thanh khe': 'quan-thanh-khe',
+        'son tra': 'quan-son-tra', 'ngu hanh son': 'quan-ngu-hanh-son',
+        'lien chieu': 'quan-lien-chieu', 'cam le': 'quan-cam-le',
+        'hoa vang': 'huyen-hoa-vang',
       };
       
-      const locationLower = (location || '').toLowerCase().trim();
-      let nhatotDistrictSlug = districtMappings[locationLower];
-      if (!nhatotDistrictSlug) nhatotDistrictSlug = districtMappings[locationLower.replace(/\s+/g, '')];
+      // Use ASCII-normalized location for lookups
+      let nhatotDistrictSlug = districtMappings[locationAscii];
+      if (!nhatotDistrictSlug) nhatotDistrictSlug = districtMappings[locationAscii.replace(/\s+/g, '')];
       if (!nhatotDistrictSlug) {
-        const districtMatch = locationLower.match(/\b(d\d+|district\s*\d+|quan\s*\d+|quan-\d+)\b/i);
+        const districtMatch = locationAscii.match(/\b(d\d+|district\s*\d+|quan\s*\d+|quan-\d+)\b/i);
         if (districtMatch) {
           const m = districtMatch[1].toLowerCase().replace(/\s+/g, '');
           nhatotDistrictSlug = districtMappings[m] || districtMappings[m.replace('district', 'd')];
@@ -336,7 +387,7 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
       }
       if (!nhatotDistrictSlug) {
         for (const [key, slug] of Object.entries(districtMappings)) {
-          if (locationLower.includes(key)) { nhatotDistrictSlug = slug; break; }
+          if (locationAscii.includes(key)) { nhatotDistrictSlug = slug; break; }
         }
       }
       
@@ -357,7 +408,6 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
       const checkOut = new Date();
       checkOut.setMonth(checkOut.getMonth() + 1);
       const baseAirbnb = `https://www.airbnb.com/s/${airbnbCity}/homes?tab_id=home_tab&refinement_paths%5B%5D=%2Fhomes&flexible_trip_lengths%5B%5D=one_month&monthly_start_date=${checkIn.toISOString().split('T')[0]}&monthly_length=1&query=${encodeURIComponent(query || 'apartment')}`;
-      // Airbnb uses items_offset for pagination (18 items per page)
       return page > 1 ? `${baseAirbnb}&items_offset=${(page - 1) * 18}` : baseAirbnb;
     }
       
