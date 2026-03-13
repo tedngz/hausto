@@ -126,9 +126,11 @@ async function savePropertiesToDB(
       const detectedCity = detectCity(property.location || fallbackLocation);
       const rawSourceUrl = property.sourceUrl || `https://${marketplace}.com.vn`;
       const normalizedUrl = normalizeSourceUrl(rawSourceUrl);
-      const externalId = property.sourceUrl
-        ? btoa(normalizedUrl).substring(0, 100)
-        : `${marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const canonicalId = extractListingId(rawSourceUrl, marketplace);
+      const externalId = canonicalId
+        || (property.sourceUrl
+          ? btoa(normalizedUrl).substring(0, 100)
+          : `${marketplace}-${Date.now()}-${Math.random().toString(36).substring(7)}`);
 
       // Check for existing
       const { data: existingByUrl } = await supabase
