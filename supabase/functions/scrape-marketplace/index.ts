@@ -1019,7 +1019,7 @@ serve(async (req) => {
         let useFirecrawl = false;
         try {
           html = await directFetch(searchUrl);
-          pageLinks = extractLinksFromHtml(html, searchUrl);
+          pageLinks = extractLinksFromHtml(html, searchUrl, marketplace);
           pageMarkdown = htmlToBasicMarkdown(html);
           // Check if we got a meaningful page (not a captcha/block page)
           if (pageMarkdown.length < 200 || pageLinks.length < 3) {
