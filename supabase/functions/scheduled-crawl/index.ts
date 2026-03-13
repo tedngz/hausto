@@ -111,8 +111,8 @@ interface CrawlConfig {
 
 const DEFAULT_CONFIG: CrawlConfig = {
   paused: false,
-  frequencyMinutes: 240,
-  maxListingsPerRun: 10,
+  frequencyMinutes: 2880,
+  maxListingsPerRun: 5,
 };
 
 // Redis helpers
@@ -181,32 +181,20 @@ async function setLastCrawlTime(location: string, marketplace: string): Promise<
   console.log(`[scheduled-crawl] Verified crawl time: key=${key}, readBack=${readBack}`);
 }
 
-// All locations to crawl
+// High-value center districts only (20 districts to optimize Firecrawl credits)
 const CRAWL_LOCATIONS: { city: string; location: string }[] = [
-  // ===== Ho Chi Minh City =====
+  // ===== Ho Chi Minh City (10) =====
   { city: 'ho_chi_minh', location: 'Quận 1' },
   { city: 'ho_chi_minh', location: 'Quận 3' },
   { city: 'ho_chi_minh', location: 'Quận 4' },
-  { city: 'ho_chi_minh', location: 'Quận 5' },
-  { city: 'ho_chi_minh', location: 'Quận 6' },
   { city: 'ho_chi_minh', location: 'Quận 7' },
-  { city: 'ho_chi_minh', location: 'Quận 8' },
   { city: 'ho_chi_minh', location: 'Quận 10' },
-  { city: 'ho_chi_minh', location: 'Quận 11' },
-  { city: 'ho_chi_minh', location: 'Quận 12' },
   { city: 'ho_chi_minh', location: 'Bình Thạnh' },
   { city: 'ho_chi_minh', location: 'Phú Nhuận' },
   { city: 'ho_chi_minh', location: 'Tân Bình' },
-  { city: 'ho_chi_minh', location: 'Tân Phú' },
   { city: 'ho_chi_minh', location: 'Gò Vấp' },
-  { city: 'ho_chi_minh', location: 'Bình Tân' },
   { city: 'ho_chi_minh', location: 'Thủ Đức' },
-  { city: 'ho_chi_minh', location: 'Nhà Bè' },
-  { city: 'ho_chi_minh', location: 'Bình Chánh' },
-  { city: 'ho_chi_minh', location: 'Hóc Môn' },
-  { city: 'ho_chi_minh', location: 'Củ Chi' },
-  { city: 'ho_chi_minh', location: 'Cần Giờ' },
-  // ===== Hanoi =====
+  // ===== Hanoi (7) =====
   { city: 'hanoi', location: 'Ba Đình' },
   { city: 'hanoi', location: 'Hoàn Kiếm' },
   { city: 'hanoi', location: 'Đống Đa' },
@@ -214,38 +202,10 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'hanoi', location: 'Hai Bà Trưng' },
   { city: 'hanoi', location: 'Tây Hồ' },
   { city: 'hanoi', location: 'Long Biên' },
-  { city: 'hanoi', location: 'Thanh Xuân' },
-  { city: 'hanoi', location: 'Hoàng Mai' },
-  { city: 'hanoi', location: 'Bắc Từ Liêm' },
-  { city: 'hanoi', location: 'Nam Từ Liêm' },
-  { city: 'hanoi', location: 'Hà Đông' },
-  { city: 'hanoi', location: 'Gia Lâm' },
-  { city: 'hanoi', location: 'Đông Anh' },
-  { city: 'hanoi', location: 'Sóc Sơn' },
-  { city: 'hanoi', location: 'Thanh Trì' },
-  { city: 'hanoi', location: 'Hoài Đức' },
-  { city: 'hanoi', location: 'Thanh Oai' },
-  { city: 'hanoi', location: 'Thường Tín' },
-  { city: 'hanoi', location: 'Mê Linh' },
-  { city: 'hanoi', location: 'Chương Mỹ' },
-  { city: 'hanoi', location: 'Đan Phượng' },
-  { city: 'hanoi', location: 'Phúc Thọ' },
-  { city: 'hanoi', location: 'Quốc Oai' },
-  { city: 'hanoi', location: 'Thạch Thất' },
-  { city: 'hanoi', location: 'Ba Vì' },
-  { city: 'hanoi', location: 'Sơn Tây' },
-  { city: 'hanoi', location: 'Phú Xuyên' },
-  { city: 'hanoi', location: 'Ứng Hòa' },
-  { city: 'hanoi', location: 'Mỹ Đức' },
-  // ===== Da Nang =====
+  // ===== Da Nang (3) =====
   { city: 'da_nang', location: 'Hải Châu' },
-  { city: 'da_nang', location: 'Thanh Khê' },
   { city: 'da_nang', location: 'Sơn Trà' },
   { city: 'da_nang', location: 'Ngũ Hành Sơn' },
-  { city: 'da_nang', location: 'Liên Chiểu' },
-  { city: 'da_nang', location: 'Cẩm Lệ' },
-  { city: 'da_nang', location: 'Hòa Vang' },
-  { city: 'da_nang', location: 'Hoàng Sa' },
 ];
 
 const MARKETPLACES = ['batdongsan', 'nhatot'] as const;
@@ -525,8 +485,8 @@ Deno.serve(async (req) => {
       const currentConfig = await getConfig();
       const newConfig: CrawlConfig = {
         paused: body.paused !== undefined ? body.paused : currentConfig.paused,
-        frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(1440, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
-        maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(20, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
+        frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(4320, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
+        maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(10, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
       };
       await redisSet(CONFIG_KEY, newConfig);
       console.log('[scheduled-crawl] Config updated:', JSON.stringify(newConfig));
