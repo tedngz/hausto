@@ -34,3 +34,32 @@ Once confirmed working, the `auto-crawl-v2` pg_cron job can be removed.
 ### Projected Usage
 - 20 locations × 2 marketplaces = 40 combos
 - 48h frequency → ~20 crawls/day × 5 credits = **~100 credits/day ≈ 3,000/month** ✓
+
+## Duplicate Listing Prevention — Completed
+
+### Root Cause
+1. Cross-district search overlap (promoted/featured listings from other cities)
+2. No pre-scrape dedup — Firecrawl credits spent on listings already in DB
+
+### Changes Made (`scrape-marketplace`)
+
+**A. Canonical Listing ID Extraction**
+- `extractListingId(url, marketplace)` extracts stable IDs:
+  - Batdongsan: `-pr12345678` → `pr12345678`
+  - Nhatot: `/123456.htm` → `nt123456`
+  - Airbnb: `/rooms/12345` → `ab12345`
+- Used as `external_id` in DB instead of fragile `btoa(url)` truncation
+
+**B. Pre-scrape Database Dedup**
+- After Phase 1 URL extraction, batch-queries `external_properties` by `external_id` and `source_url`
+- Existing listings: only refresh `last_verified_at` + `expires_at` (zero Firecrawl credits)
+- New listings only: proceed to Phase 2 detail-page scraping
+
+**C. Cross-city Filtering**
+- After Phase 3 AI extraction, compares `detectCity(property.location)` vs `detectCity(crawlLocation)`
+- Rejects listings where detected city doesn't match target (e.g., Hanoi listing in HCMC search)
+
+### Impact
+- Saves ~2-3 Firecrawl credits per crawl run (skipping known listings)
+- Eliminates duplicate entries from cross-district overlap
+- Prevents cross-city contamination from promoted listings
