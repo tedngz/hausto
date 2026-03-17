@@ -150,14 +150,20 @@ serve(async (req) => {
         .order('created_at', { ascending: false });
 
       if (city) {
-        const cityPatterns: Record<string, string[]> = {
-          'hcmc': ['Ho Chi Minh', 'HCM', 'Saigon', 'HCMC'],
-          'hanoi': ['Ha Noi', 'Hanoi'],
-          'danang': ['Da Nang', 'Đà Nẵng'],
+        // External properties have a dedicated 'city' column — use it for precise filtering
+        const cityDbValues: Record<string, string[]> = {
+          'hcmc': ['ho_chi_minh'],
+          'hanoi': ['hanoi'],
+          'danang': ['da_nang'],
         };
-        const patterns = cityPatterns[city] || [city];
-        const cityFilter = patterns.map(p => `location.ilike.%${p}%`).join(',');
-        externalQuery = externalQuery.or(cityFilter);
+        const dbCities = cityDbValues[city];
+        if (dbCities) {
+          // Use the city column for exact match (set by detect_city during crawl)
+          externalQuery = externalQuery.in('city', dbCities);
+        } else {
+          // Fallback: match after comma for unknown city values
+          externalQuery = externalQuery.ilike('location', `%, ${city}%`);
+        }
       }
 
       if (district) {
