@@ -92,7 +92,8 @@
                         "properties": {
                           "id": { "type": "string", "format": "uuid" },
                           "title": { "type": "string" },
-                          "url": { "type": "string", "format": "uri" },
+                          "url": { "type": "string", "format": "uri", "description": "Hausto property page URL — always use this when sharing with users" },
+                          "source_url": { "type": "string", "format": "uri", "description": "Original marketplace listing URL (reference only)" },
                           "location": { "type": "string" },
                           "price_vnd": { "type": "number", "nullable": true },
                           "price_usd": { "type": "number", "nullable": true },
