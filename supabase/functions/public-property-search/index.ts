@@ -190,7 +190,8 @@ serve(async (req) => {
           results.push({
             id: p.id,
             title: p.title,
-            url: p.source_url,
+            url: `${BASE_URL}/property/${p.id}`,
+            source_url: p.source_url,
             location: p.location,
             price_vnd: Number(p.price) || null,
             price_usd: p.price ? Math.round(Number(p.price) / VND_TO_USD) : null,
