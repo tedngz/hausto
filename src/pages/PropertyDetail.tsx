@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyCard } from '@/components/PropertyCard';
@@ -114,8 +115,39 @@ const PropertyDetail = () => {
     );
   }
 
+  const jsonLd = apartment ? {
+    "@context": "https://schema.org",
+    "@type": "RealEstateListing",
+    "name": apartment.title,
+    "description": apartment.description,
+    "url": `https://hausto.lovable.app/property/${apartment.id}`,
+    "image": apartment.images?.slice(0, 5),
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": apartment.location,
+      "addressCountry": "VN"
+    },
+    ...(apartment.price && {
+      "offers": {
+        "@type": "Offer",
+        "price": apartment.price,
+        "priceCurrency": "VND",
+        "availability": "https://schema.org/InStock"
+      }
+    }),
+    ...(apartment.size && { "floorSize": { "@type": "QuantitativeValue", "value": apartment.size } }),
+  } : null;
+
   return (
     <CurrencyProvider>
+      {jsonLd && (
+        <Helmet>
+          <title>{`${apartment!.title} — Hausto`}</title>
+          <meta name="description" content={apartment!.description?.substring(0, 160) || `${apartment!.title} in ${apartment!.location}`} />
+          <link rel="canonical" href={`https://hausto.lovable.app/property/${apartment!.id}`} />
+          <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
+        </Helmet>
+      )}
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
         <div className="container mx-auto px-4 py-8 max-w-3xl">
           <Button
