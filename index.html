@@ -16,13 +16,16 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <link rel="canonical" href="https://hausto.lovable.app" />
+    <link rel="api" type="application/json" href="/openapi.json" title="Hausto Property Search API" />
+    <link rel="help" type="text/plain" href="/llms.txt" title="AI Agent Instructions" />
+    <link rel="manifest" href="/.well-known/ai-plugin.json" />
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
       "name": "Hausto",
       "url": "https://hausto.lovable.app",
-      "description": "AI-powered property discovery platform for rentals in Vietnam",
+      "description": "AI-powered property discovery platform for rentals in Vietnam. Search apartments in Ho Chi Minh City, Hanoi, and Da Nang with AI vibe matching.",
       "potentialAction": {
         "@type": "SearchAction",
         "target": "https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search?city={city}&style={style}",
@@ -35,6 +38,14 @@
 
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>Hausto — AI-Powered Property Discovery in Vietnam</h1>
+      <p>Find rental apartments in Ho Chi Minh City, Hanoi, and Da Nang with AI vibe matching.</p>
+      <h2>For AI Agents</h2>
+      <p>Use our public API to search listings programmatically (no auth required):</p>
+      <p>GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search?city=hcmc&amp;style=modern&amp;limit=10</p>
+      <p>Full documentation: <a href="/llms.txt">llms.txt</a> | <a href="/openapi.json">OpenAPI Spec</a></p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
