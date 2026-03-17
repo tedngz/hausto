@@ -68,3 +68,9 @@ verify_jwt = true
 
 [functions.scheduled-crawl]
 verify_jwt = false
+
+[functions.public-property-search]
+verify_jwt = false
+
+[functions.sitemap]
+verify_jwt = false
