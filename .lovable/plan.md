@@ -1,3 +1,21 @@
+## Agent-Friendly AI Bot Integration — Completed
+
+### What Was Built
+1. **`public-property-search` Edge Function** — Public read-only API for AI agents (GET, no auth, rate-limited 60/min, paginated, city/district/budget/rooms/style filters, returns both internal + external listings with USD conversion)
+2. **`sitemap` Edge Function** — Dynamic XML sitemap of all active property pages
+3. **`public/llms.txt`** — AI-readable site manifest describing Hausto and its API
+4. **`public/openapi.json`** — OpenAPI 3.0 spec for the public search API
+5. **`public/robots.txt`** — Updated with GPTBot, ClaudeBot, PerplexityBot, ChatGPT-User + sitemap link
+6. **JSON-LD structured data** — Schema.org `RealEstateListing` on property detail pages via react-helmet-async
+7. **Base JSON-LD** — Schema.org `WebSite` with `SearchAction` in index.html
+
+### API Endpoint
+```
+GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search?city=hcmc&min_budget=300&max_budget=800&style=modern&limit=5
+```
+
+---
+
 ## QStash Integration — Completed
 
 The `scheduled-crawl` Edge Function now supports **Upstash QStash** for triggering and self-chaining:
