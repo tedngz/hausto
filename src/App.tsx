@@ -18,6 +18,7 @@ import SubscriptionCancel from "./pages/SubscriptionCancel";
 const queryClient = new QueryClient();
 
 const App = () => (
+  <HelmetProvider>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
