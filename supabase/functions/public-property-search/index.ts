@@ -1,0 +1,226 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.4";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Simple in-memory rate limiter (per-isolate, resets on cold start)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 60; // requests per window
+const RATE_WINDOW_MS = 60_000; // 1 minute
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  // Only GET allowed
+  if (req.method !== 'GET') {
+    return new Response(JSON.stringify({ error: 'Method not allowed. Use GET.' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (isRateLimited(clientIp)) {
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Max 60 requests per minute.' }), {
+      status: 429,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' },
+    });
+  }
+
+  try {
+    const url = new URL(req.url);
+    const params = url.searchParams;
+
+    // Parse query parameters
+    const city = params.get('city')?.toLowerCase() || null;
+    const district = params.get('district')?.toLowerCase() || null;
+    const minBudget = params.get('min_budget') ? Number(params.get('min_budget')) : null;
+    const maxBudget = params.get('max_budget') ? Number(params.get('max_budget')) : null;
+    const rooms = params.get('rooms') || null;
+    const style = params.get('style')?.toLowerCase() || null;
+    const limit = Math.min(Math.max(Number(params.get('limit') || '20'), 1), 50);
+    const offset = Math.max(Number(params.get('offset') || '0'), 0);
+    const source = params.get('source')?.toLowerCase() || null; // 'internal', 'external', or null for both
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const BASE_URL = 'https://hausto.lovable.app';
+    const VND_TO_USD = 24500;
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+
+    const results: any[] = [];
+
+    // --- Fetch internal properties ---
+    if (source !== 'external') {
+      let internalQuery = supabase
+        .from('properties')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, description, created_at')
+        .eq('is_active', true)
+        .gte('last_activated_at', tenDaysAgo)
+        .order('created_at', { ascending: false });
+
+      if (city) {
+        // Map common city aliases
+        const cityPatterns: Record<string, string[]> = {
+          'hcmc': ['Ho Chi Minh', 'HCM', 'Saigon', 'HCMC'],
+          'hanoi': ['Ha Noi', 'Hanoi'],
+          'danang': ['Da Nang', 'Đà Nẵng'],
+        };
+        const patterns = cityPatterns[city] || [city];
+        // Use ilike for flexible matching
+        const cityFilter = patterns.map(p => `location.ilike.%${p}%`).join(',');
+        internalQuery = internalQuery.or(cityFilter);
+      }
+
+      if (district) {
+        internalQuery = internalQuery.ilike('location', `%${district}%`);
+      }
+
+      if (minBudget !== null) {
+        internalQuery = internalQuery.gte('price', minBudget * VND_TO_USD);
+      }
+      if (maxBudget !== null) {
+        internalQuery = internalQuery.lte('price', maxBudget * VND_TO_USD);
+      }
+      if (rooms) {
+        internalQuery = internalQuery.ilike('rooms', `%${rooms}%`);
+      }
+      if (style) {
+        internalQuery = internalQuery.ilike('vibe', `%${style}%`);
+      }
+
+      const { data: internalProps } = await internalQuery.range(0, 999);
+
+      if (internalProps) {
+        for (const p of internalProps) {
+          results.push({
+            id: p.id,
+            title: p.title,
+            url: `${BASE_URL}/property/${p.id}`,
+            location: p.location,
+            price_vnd: Number(p.price),
+            price_usd: Math.round(Number(p.price) / VND_TO_USD),
+            rooms: p.rooms || null,
+            size: p.size || null,
+            vibe: p.vibe || null,
+            images: (p.images || []).slice(0, 3),
+            highlights: p.highlights || [],
+            description: p.description ? p.description.substring(0, 300) : null,
+            source: 'hausto',
+            listed_at: p.created_at,
+          });
+        }
+      }
+    }
+
+    // --- Fetch external properties ---
+    if (source !== 'internal') {
+      let externalQuery = supabase
+        .from('external_properties')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, description, source, source_url, created_at')
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      if (city) {
+        const cityPatterns: Record<string, string[]> = {
+          'hcmc': ['Ho Chi Minh', 'HCM', 'Saigon', 'HCMC'],
+          'hanoi': ['Ha Noi', 'Hanoi'],
+          'danang': ['Da Nang', 'Đà Nẵng'],
+        };
+        const patterns = cityPatterns[city] || [city];
+        const cityFilter = patterns.map(p => `location.ilike.%${p}%`).join(',');
+        externalQuery = externalQuery.or(cityFilter);
+      }
+
+      if (district) {
+        externalQuery = externalQuery.ilike('location', `%${district}%`);
+      }
+
+      if (minBudget !== null) {
+        externalQuery = externalQuery.gte('price', minBudget * VND_TO_USD);
+      }
+      if (maxBudget !== null) {
+        externalQuery = externalQuery.lte('price', maxBudget * VND_TO_USD);
+      }
+      if (rooms) {
+        externalQuery = externalQuery.ilike('rooms', `%${rooms}%`);
+      }
+      if (style) {
+        externalQuery = externalQuery.ilike('vibe', `%${style}%`);
+      }
+
+      const { data: externalProps } = await externalQuery.range(0, 999);
+
+      if (externalProps) {
+        for (const p of externalProps) {
+          results.push({
+            id: p.id,
+            title: p.title,
+            url: p.source_url,
+            location: p.location,
+            price_vnd: Number(p.price) || null,
+            price_usd: p.price ? Math.round(Number(p.price) / VND_TO_USD) : null,
+            rooms: p.rooms || null,
+            size: p.size || null,
+            vibe: p.vibe || null,
+            images: (p.images || []).slice(0, 3),
+            highlights: p.highlights || [],
+            description: p.description ? p.description.substring(0, 300) : null,
+            source: p.source || 'external',
+            listed_at: p.created_at,
+          });
+        }
+      }
+    }
+
+    // Apply pagination
+    const total = results.length;
+    const paginatedResults = results.slice(offset, offset + limit);
+
+    const response = {
+      results: paginatedResults,
+      total,
+      limit,
+      offset,
+      query: { city, district, min_budget: minBudget, max_budget: maxBudget, rooms, style, source },
+      _links: {
+        self: `${supabaseUrl}/functions/v1/public-property-search${url.search}`,
+        docs: `${BASE_URL}/llms.txt`,
+        openapi: `${BASE_URL}/openapi.json`,
+      },
+    };
+
+    return new Response(JSON.stringify(response), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
+  } catch (error) {
+    console.error('[Public Property Search] Error:', error);
+    return new Response(
+      JSON.stringify({ error: 'Internal server error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

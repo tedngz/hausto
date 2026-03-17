@@ -1,0 +1,124 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Hausto Public Property Search API",
+    "description": "Search rental property listings across Vietnam (Ho Chi Minh City, Hanoi, Da Nang). No authentication required.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Hausto",
+      "url": "https://hausto.lovable.app"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/public-property-search": {
+      "get": {
+        "operationId": "searchProperties",
+        "summary": "Search rental properties in Vietnam",
+        "description": "Query active rental listings by city, district, budget range, room count, and vibe style. Returns structured JSON with property details, images, and direct links.",
+        "parameters": [
+          {
+            "name": "city",
+            "in": "query",
+            "description": "City filter. Supported: hcmc (Ho Chi Minh City), hanoi, danang",
+            "schema": { "type": "string", "enum": ["hcmc", "hanoi", "danang"] }
+          },
+          {
+            "name": "district",
+            "in": "query",
+            "description": "District or area name (e.g. quan-1, thao-dien, ba-dinh)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "min_budget",
+            "in": "query",
+            "description": "Minimum monthly rent in USD",
+            "schema": { "type": "number", "minimum": 0 }
+          },
+          {
+            "name": "max_budget",
+            "in": "query",
+            "description": "Maximum monthly rent in USD",
+            "schema": { "type": "number", "minimum": 0 }
+          },
+          {
+            "name": "rooms",
+            "in": "query",
+            "description": "Number of rooms/bedrooms",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "style",
+            "in": "query",
+            "description": "Property vibe/style",
+            "schema": { "type": "string", "enum": ["modern", "vintage", "rustic", "luxury", "urban", "traditional", "contemporary"] }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "description": "Listing source filter",
+            "schema": { "type": "string", "enum": ["internal", "external"] }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Results per page (default 20, max 50)",
+            "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 50 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Pagination offset",
+            "schema": { "type": "integer", "default": 0, "minimum": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string", "format": "uuid" },
+                          "title": { "type": "string" },
+                          "url": { "type": "string", "format": "uri" },
+                          "location": { "type": "string" },
+                          "price_vnd": { "type": "number", "nullable": true },
+                          "price_usd": { "type": "number", "nullable": true },
+                          "rooms": { "type": "string", "nullable": true },
+                          "size": { "type": "string", "nullable": true },
+                          "vibe": { "type": "string", "nullable": true },
+                          "images": { "type": "array", "items": { "type": "string" } },
+                          "highlights": { "type": "array", "items": { "type": "string" } },
+                          "description": { "type": "string", "nullable": true },
+                          "source": { "type": "string" },
+                          "listed_at": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    },
+                    "total": { "type": "integer" },
+                    "limit": { "type": "integer" },
+                    "offset": { "type": "integer" },
+                    "query": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    }
+  }
+}

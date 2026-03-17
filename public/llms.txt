@@ -1,0 +1,81 @@
+# Hausto — AI-Powered Property Discovery in Vietnam
+
+> Hausto helps renters find apartments in Vietnam (Ho Chi Minh City, Hanoi, Da Nang) using AI vibe matching. Think of it as "Tinder for apartments" — swipe to discover properties that match your style.
+
+## What Hausto Offers
+- Curated rental listings across Vietnam's major cities
+- AI-powered "vibe analysis" of each property (modern, vintage, rustic, urban, luxury, etc.)
+- Both internal listings (uploaded by realtors) and aggregated external listings from Vietnamese marketplaces
+
+## Public Property Search API
+
+AI agents can query Hausto's listings directly via our public API:
+
+### Endpoint
+```
+GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search
+```
+
+### Query Parameters
+| Parameter    | Type   | Description                                      | Example          |
+|-------------|--------|--------------------------------------------------|------------------|
+| city        | string | City filter: hcmc, hanoi, danang                 | hcmc             |
+| district    | string | District/area name                               | quan-2           |
+| min_budget  | number | Minimum monthly rent in USD                       | 300              |
+| max_budget  | number | Maximum monthly rent in USD                       | 800              |
+| rooms       | string | Number of rooms                                   | 2                |
+| style       | string | Vibe/style: modern, vintage, rustic, luxury, urban| modern           |
+| source      | string | Listing source: internal, external, or omit for both | internal      |
+| limit       | number | Results per page (1-50, default 20)               | 10               |
+| offset      | number | Pagination offset                                 | 0                |
+
+### Example Request
+```
+GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search?city=hcmc&min_budget=300&max_budget=800&style=modern&limit=5
+```
+
+### Example Response
+```json
+{
+  "results": [
+    {
+      "id": "uuid",
+      "title": "Modern 2BR in Thao Dien",
+      "url": "https://hausto.lovable.app/property/uuid",
+      "location": "Thao Dien, District 2, HCMC",
+      "price_vnd": 15000000,
+      "price_usd": 612,
+      "rooms": "2",
+      "size": "75 sqm",
+      "vibe": "modern",
+      "images": ["https://..."],
+      "highlights": ["rooftop pool", "gym"],
+      "source": "hausto"
+    }
+  ],
+  "total": 42,
+  "limit": 5,
+  "offset": 0
+}
+```
+
+### Rate Limits
+- 60 requests per minute per IP
+- Results are cached for 5 minutes
+
+### Notes
+- All prices are stored in VND; USD conversion uses approximate rate (1 USD = 24,500 VND)
+- Budget parameters are in USD
+- No authentication required
+- Read-only endpoint — no user data is exposed
+- Contact information is never included in API responses
+
+## OpenAPI Specification
+Available at: https://hausto.lovable.app/openapi.json
+
+## Property Pages
+Individual property pages are at: `https://hausto.lovable.app/property/{id}`
+Each page includes Schema.org JSON-LD structured data for machine-readable parsing.
+
+## Sitemap
+Dynamic sitemap at: https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/sitemap
