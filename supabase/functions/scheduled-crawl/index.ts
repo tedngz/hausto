@@ -523,7 +523,14 @@ Deno.serve(async (req) => {
         if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
         if (!p.highlights || p.highlights.length === 0) return true;
         if (p.highlights.every((h: string) => isGenericHighlight(h))) return true;
-        return false;
+
+        const hasUsableSecondaryHighlight = p.vibe_analysis.image_analyses.some((analysis: any) => {
+          const imageIndex = Number(analysis?.image_index);
+          const highlight = analysis?.image_highlight || analysis?.highlight;
+          return Number.isFinite(imageIndex) && imageIndex > 0 && highlight && !isGenericHighlight(highlight);
+        });
+
+        return !hasUsableSecondaryHighlight;
       });
 
       console.log(`[scheduled-crawl] Found ${toBackfill.length}/${needsVibe.length} properties needing vibe backfill`);
