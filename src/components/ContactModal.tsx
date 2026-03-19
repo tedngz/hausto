@@ -21,11 +21,14 @@ interface ContactModalProps {
 
 export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalProps) => {
   const { user } = useAuth();
+  const isExternalListing = apartment.realtor.id === HAUSTO_AGENT_ID;
   const [formData, setFormData] = useState({
     name: userProfile?.name || '',
     email: userProfile?.email || '',
     phone: userProfile?.phone || '',
-    message: `Hi ${apartment.realtor.name}, I'm interested in viewing "${apartment.title}" in ${translateLocationToEnglish(apartment.location)}. Could we schedule a viewing?`
+    message: isExternalListing
+      ? `Hi Hausto Agent, I'm interested in "${apartment.title}" in ${translateLocationToEnglish(apartment.location)}. Could you help me connect with the property owner?`
+      : `Hi ${apartment.realtor.name}, I'm interested in viewing "${apartment.title}" in ${translateLocationToEnglish(apartment.location)}. Could we schedule a viewing?`
   });
   const { toast } = useToast();
 
