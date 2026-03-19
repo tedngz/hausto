@@ -190,9 +190,11 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <span>
-              {apartment.property_source_provider_name 
-                ? `Contact Property Owner - ${apartment.property_source_provider_name}`
-                : 'Contact Realtor'}
+              {isExternalListing
+                ? 'Message Hausto Agent'
+                : apartment.property_source_provider_name 
+                  ? `Contact Property Owner - ${apartment.property_source_provider_name}`
+                  : 'Contact Realtor'}
             </span>
           </DialogTitle>
         </DialogHeader>
