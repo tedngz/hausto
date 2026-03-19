@@ -567,6 +567,18 @@ Deno.serve(async (req) => {
         chained = await qstashPublish({ action: 'backfill-vibe', continuation: true }, 5);
       }
 
+      // Invalidate property discovery cache so fresh data with highlights is served
+      if (analyzed > 0) {
+        try {
+          await supabase.functions.invoke('property-discovery-cache', {
+            body: { action: 'invalidate' },
+          });
+          console.log('[scheduled-crawl] Property discovery cache invalidated after backfill');
+        } catch (e) {
+          console.error('[scheduled-crawl] Failed to invalidate cache:', e);
+        }
+      }
+
       console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed} success, ${failed} failed out of ${toBackfill.length}${chained ? ' (continuation queued)' : ''}`);
       return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, failed, results, chained, duration: `${Date.now() - startTime}ms` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
