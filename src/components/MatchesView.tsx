@@ -74,11 +74,9 @@ export const MatchesView = ({
       property_source_provider_name: match.properties.property_source_provider_name || match.properties.contact_name,
       property_source_provider_phone: match.properties.property_source_provider_phone || match.properties.contact_phone,
       realtor: {
-        id: match.properties.realtor_id || match.realtor_id || '',
-        name: isExternal
-          ? (match.properties.contact_name || 'External Listing')
-          : (match.realtor_name || 'Property Owner'),
-        phone: isExternal ? (match.properties.contact_phone || '') : '+1-234-567-8900',
+        id: isExternal ? HAUSTO_AGENT_ID : (match.properties.realtor_id || match.realtor_id || ''),
+        name: isExternal ? HAUSTO_AGENT_NAME : (match.realtor_name || 'Property Owner'),
+        phone: isExternal ? '' : '+1-234-567-8900',
         email: isExternal ? '' : 'contact@realtor.com',
         avatar: isExternal ? '' : (match.realtor_avatar || '')
       },
