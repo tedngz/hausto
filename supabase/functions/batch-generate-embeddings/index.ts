@@ -14,71 +14,149 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
+    const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
+
+    if (!OPENAI_API_KEY || !UPSTASH_REDIS_REST_URL || !UPSTASH_REDIS_REST_TOKEN) {
+      throw new Error('Required environment variables not configured');
+    }
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     console.log('[Batch Generate] Starting batch embedding generation');
 
-    // Fetch all active properties
-    const { data: properties, error: fetchError } = await supabaseAdmin
+    // Fetch all active internal properties
+    const { data: internalProps, error: intError } = await supabaseAdmin
       .from('properties')
       .select('id, title, description, location, price, vibe_analysis, amenities')
       .eq('is_active', true);
 
-    if (fetchError) {
-      throw fetchError;
-    }
+    if (intError) throw intError;
 
-    if (!properties || properties.length === 0) {
+    // Fetch all active external properties
+    const { data: externalProps, error: extError } = await supabaseAdmin
+      .from('external_properties')
+      .select('id, title, description, location, price, vibe_analysis, amenities')
+      .eq('is_active', true);
+
+    if (extError) throw extError;
+
+    // Normalize both into a unified list
+    const allProperties = [
+      ...(internalProps || []).map(p => ({ ...p, source: 'internal' })),
+      ...(externalProps || []).map(p => ({ ...p, source: 'external' })),
+    ];
+
+    if (allProperties.length === 0) {
       return new Response(
         JSON.stringify({ message: 'No properties to process', processed: 0 }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[Batch Generate] Processing ${properties.length} properties`);
+    console.log(`[Batch Generate] Processing ${allProperties.length} properties (${internalProps?.length || 0} internal, ${externalProps?.length || 0} external)`);
 
     let processed = 0;
     let errors = 0;
 
-    // Process in batches of 10 to avoid rate limits
-    const batchSize = 10;
-    for (let i = 0; i < properties.length; i += batchSize) {
-      const batch = properties.slice(i, i + batchSize);
-      
-      // Process batch in parallel
-      const batchPromises = batch.map(async (property) => {
-        try {
-          const { error } = await supabaseAdmin.functions.invoke('generate-property-embedding', {
-            body: {
-              propertyId: property.id,
-              title: property.title,
-              description: property.description,
-              vibe_analysis: property.vibe_analysis,
-              amenities: property.amenities,
-              location: property.location,
-              price: property.price,
-            }
-          });
+    // Process embeddings directly instead of calling another edge function
+    const batchSize = 20;
+    for (let i = 0; i < allProperties.length; i += batchSize) {
+      const batch = allProperties.slice(i, i + batchSize);
 
-          if (error) {
-            console.error(`[Batch Generate] Error for property ${property.id}:`, error);
-            errors++;
-          } else {
-            processed++;
-            console.log(`[Batch Generate] Processed ${processed}/${properties.length}`);
-          }
-        } catch (err) {
-          console.error(`[Batch Generate] Exception for property ${property.id}:`, err);
-          errors++;
-        }
+      // Build text inputs for the batch
+      const texts = batch.map(property => {
+        const va = property.vibe_analysis as any;
+        const styles = va?.styles?.join(', ') || '';
+        const colors = va?.colors?.join(', ') || '';
+        const activities = va?.activities?.join(', ') || '';
+        const amenitiesList = Array.isArray(property.amenities) ? property.amenities.join(', ') : '';
+
+        return `Property: ${property.title || 'Untitled'}
+Location: ${property.location || 'Unknown'}
+Price: $${property.price || 0}
+Styles: ${styles}
+Colors: ${colors}
+Activities: ${activities}
+Amenities: ${amenitiesList}
+Description: ${property.description || 'No description'}`;
       });
 
-      await Promise.all(batchPromises);
+      try {
+        // Generate embeddings in batch via OpenAI
+        const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: texts,
+            dimensions: 1536,
+          }),
+        });
 
-      // Wait 1 second between batches to respect rate limits
-      if (i + batchSize < properties.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (!embeddingResponse.ok) {
+          const errText = await embeddingResponse.text();
+          console.error(`[Batch Generate] OpenAI error for batch ${i}:`, errText);
+          errors += batch.length;
+          continue;
+        }
+
+        const embeddingData = await embeddingResponse.json();
+        const embeddings = embeddingData.data;
+
+        // Store all embeddings in Redis via pipeline
+        const commands: any[] = [];
+        for (let j = 0; j < batch.length; j++) {
+          const property = batch[j];
+          const embedding = embeddings[j].embedding;
+          const propertyId = property.source === 'external' ? `ext-${property.id}` : property.id;
+          const redisKey = `property:${propertyId}:embedding`;
+          const va = property.vibe_analysis as any;
+
+          const redisValue = {
+            id: propertyId,
+            title: property.title || 'Untitled',
+            price: property.price || 0,
+            location: property.location || 'Unknown',
+            styles: va?.styles || [],
+            colors: va?.colors || [],
+            activities: va?.activities || [],
+            vector: embedding,
+            updated_at: new Date().toISOString(),
+          };
+
+          commands.push(['SET', redisKey, JSON.stringify(redisValue), 'EX', '2592000']);
+        }
+
+        const redisResponse = await fetch(`${UPSTASH_REDIS_REST_URL}/pipeline`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(commands),
+        });
+
+        if (!redisResponse.ok) {
+          const errText = await redisResponse.text();
+          console.error(`[Batch Generate] Redis error for batch ${i}:`, errText);
+          errors += batch.length;
+        } else {
+          processed += batch.length;
+          console.log(`[Batch Generate] Processed ${processed}/${allProperties.length}`);
+        }
+      } catch (err) {
+        console.error(`[Batch Generate] Exception for batch ${i}:`, err);
+        errors += batch.length;
+      }
+
+      // Wait between batches to respect rate limits
+      if (i + batchSize < allProperties.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -89,7 +167,9 @@ serve(async (req) => {
         message: 'Batch processing complete',
         processed,
         errors,
-        total: properties.length,
+        total: allProperties.length,
+        internal: internalProps?.length || 0,
+        external: externalProps?.length || 0,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
