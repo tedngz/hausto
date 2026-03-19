@@ -582,6 +582,7 @@ const AdminTools = () => {
       }
 
       setBatchReanalyzeResults({ total, fixed, errors });
+      setBackfillProgress(null);
       toast.success(`Backfill complete! Fixed ${fixed}/${total} properties.`);
     } catch (error: any) {
       console.error('Batch re-analyze error:', error);
