@@ -79,17 +79,17 @@ export const sortPropertiesForDiscovery = async (
 ): Promise<Apartment[]> => {
   if (properties.length === 0) return [];
 
-  // Try vector search for semantic filtering if preferences exist
-  let filteredProperties = properties;
-  
+  const normalizeDiscoveryId = (id: string) => id.replace(/^ext-/, '');
+  const semanticScores = new Map<string, number>();
+
   if (userPreferences) {
     try {
-      console.log('[Property Discovery] Using vector search for semantic matching');
-      
+      console.log('[Property Discovery] Using vector search for semantic ranking');
+
       const { data, error } = await supabase.functions.invoke('vector-property-search', {
         body: {
           preferences: userPreferences,
-          topK: Math.min(properties.length, 100), // Get more candidates for better results
+          topK: Math.min(properties.length, 100),
           filters: {
             priceMin: userPreferences.priceRange?.[0],
             priceMax: userPreferences.priceRange?.[1],
@@ -100,46 +100,50 @@ export const sortPropertiesForDiscovery = async (
       });
 
       if (!error && data?.results && data.results.length > 0) {
-        // Map vector search results back to property objects
-        const vectorScoredPropertyIds = new Set(data.results.map((r: any) => r.id));
-        filteredProperties = properties.filter(p => vectorScoredPropertyIds.has(p.id));
-        console.log(`[Property Discovery] Vector search filtered to ${filteredProperties.length} properties`);
+        data.results.forEach((result: any) => {
+          if (typeof result?.id === 'string' && typeof result?.similarity === 'number') {
+            semanticScores.set(normalizeDiscoveryId(result.id), result.similarity * 100);
+          }
+        });
+
+        console.log(
+          `[Property Discovery] Vector search scored ${semanticScores.size} properties; keeping non-indexed listings in fallback ranking`
+        );
       } else {
-        console.log('[Property Discovery] Vector search returned no results, using all properties');
+        console.log('[Property Discovery] Vector search returned no results, using traditional scoring');
       }
     } catch (err) {
       console.error('[Property Discovery] Vector search error, falling back to traditional scoring:', err);
-      // Fallback: use all properties
     }
   }
-  
-  // Score each property (now from filtered set)
-  const scoredProperties: ScoredProperty[] = filteredProperties.map(property => {
+
+  const scoredProperties: ScoredProperty[] = properties.map(property => {
     const propertyWithMeta = property as PropertyWithMetadata;
-    
+
     // Calculate individual scores
     const daysSince = calculateDaysSince(propertyWithMeta.created_at || propertyWithMeta.last_activated_at);
     const daysUntilInactive = calculateDaysUntilInactive(propertyWithMeta.last_activated_at);
-    
+
     const recencyScore = calculateRecencyScore(daysSince);
     const urgencyScore = calculateUrgencyScore(daysUntilInactive);
-    
+    const semanticScore = semanticScores.get(normalizeDiscoveryId(property.id)) ?? 0;
+
     // Calculate match score if preferences exist
-    const matchScore = userPreferences 
-      ? calculateVibeScore(property, userPreferences).overall 
-      : 50; // Neutral score if no preferences
-    
+    const matchScore = userPreferences
+      ? calculateVibeScore(property, userPreferences).overall
+      : 50;
+
     // Random factor for excitement and variety (0-100)
     const randomFactor = Math.random() * 100;
-    
-    // Calculate weighted discovery score
-    // Weights: Match quality (40%), Recency (25%), Urgency (20%), Random (15%)
-    const discoveryScore = 
-      (matchScore * 0.40) +
-      (recencyScore * 0.25) +
-      (urgencyScore * 0.20) +
+
+    // Weights: Match quality (34%), Semantic score (16%), Recency (20%), Urgency (15%), Random (15%)
+    const discoveryScore =
+      (matchScore * 0.34) +
+      (semanticScore * 0.16) +
+      (recencyScore * 0.20) +
+      (urgencyScore * 0.15) +
       (randomFactor * 0.15);
-    
+
     return {
       property,
       discoveryScore,
