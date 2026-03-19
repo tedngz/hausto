@@ -792,6 +792,24 @@ const AdminTools = () => {
             )}
           </Button>
 
+          {backfillProgress && (
+            <div className="space-y-3 p-4 bg-muted rounded-lg">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>{backfillProgress.current} of {backfillProgress.total} properties</span>
+                <span>{Math.round((backfillProgress.current / backfillProgress.total) * 100)}%</span>
+              </div>
+              <Progress value={(backfillProgress.current / backfillProgress.total) * 100} className="h-2" />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="truncate">{backfillProgress.currentTitle}</span>
+              </div>
+              <div className="flex gap-4 text-xs">
+                <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-primary" /> {backfillProgress.fixed} fixed</span>
+                <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" /> {backfillProgress.errors} errors</span>
+              </div>
+            </div>
+          )}
+
           {batchReanalyzeResults && (
             <div className="p-4 bg-muted rounded-lg space-y-2">
               <p className="font-semibold">Backfill Results</p>
