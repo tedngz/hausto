@@ -487,6 +487,7 @@ const AdminTools = () => {
   const handleBatchReanalyzeImageHighlights = async () => {
     setIsBatchReanalyzing(true);
     setBatchReanalyzeResults(null);
+    setBackfillProgress(null);
 
     try {
       toast.info("Finding properties with missing image_analyses...");
