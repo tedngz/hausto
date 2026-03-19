@@ -68,9 +68,9 @@ serve(async (req) => {
       // Build text inputs for the batch
       const texts = batch.map(property => {
         const va = property.vibe_analysis as any;
-        const styles = va?.styles?.join(', ') || '';
-        const colors = va?.colors?.join(', ') || '';
-        const activities = va?.activities?.join(', ') || '';
+        const styles = Array.isArray(va?.styles) ? va.styles.join(', ') : '';
+        const colors = Array.isArray(va?.colors) ? va.colors.join(', ') : '';
+        const activities = Array.isArray(va?.activities) ? va.activities.join(', ') : '';
         const amenitiesList = Array.isArray(property.amenities) ? property.amenities.join(', ') : '';
 
         return `Property: ${property.title || 'Untitled'}
