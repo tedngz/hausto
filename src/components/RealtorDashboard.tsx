@@ -926,16 +926,33 @@ export const RealtorDashboard = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {crawledListings.map((listing: any) => (
-                    <Card key={listing.id} className={`overflow-hidden border transition-shadow ${listing.is_active ? 'border-slate-200 hover:shadow-lg' : 'border-slate-200 opacity-60'}`}>
+                    <Card key={listing.id} className={`overflow-hidden border transition-shadow ${selectedPropertyIds.has(`ext-${listing.id}`) ? 'border-primary ring-2 ring-primary/20' : listing.is_active ? 'border-slate-200 hover:shadow-lg' : 'border-slate-200 opacity-60'}`}>
                       {listing.images && listing.images.length > 0 && (
                         <div className="relative">
                           <img src={listing.images[0]} alt={listing.title} className="w-full h-32 md:h-48 object-cover" />
+                          <div className="absolute top-2 left-2">
+                            <Button
+                              size="icon"
+                              variant={selectedPropertyIds.has(`ext-${listing.id}`) ? "default" : "secondary"}
+                              className="h-8 w-8 rounded-md shadow-lg"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePropertySelection(`ext-${listing.id}`);
+                              }}
+                            >
+                              {selectedPropertyIds.has(`ext-${listing.id}`) ? (
+                                <CheckSquare className="w-4 h-4" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </div>
                           <div className="absolute top-2 right-2">
                             <Badge className="bg-white/90 text-slate-800 font-semibold text-xs">
                               {listing.price ? formatPrice(listing.price) : 'Price N/A'}/mo
                             </Badge>
                           </div>
-                          <div className="absolute top-2 left-2">
+                          <div className="absolute top-10 left-2">
                             <Badge variant="secondary" className="text-xs">
                               {listing.source}
                             </Badge>
