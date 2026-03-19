@@ -201,13 +201,6 @@ export const PropertyCard = ({
           </div>
         </div>
 
-        {/* Highlight Tags from AI Analysis */}
-        {apartment.highlights && apartment.highlights.length > 0 && 
-         !apartment.highlights.every(h => h === 'Premium living space feature' || h === 'Quality living space') && (
-          <div className="mb-3 pb-3 border-b border-border">
-            <PropertyHighlightTags apartment={apartment} maxTagsPerCategory={2} showIcons={true} />
-          </div>
-        )}
 
         {/* Amenities Section */}
         {apartment.amenities && apartment.amenities.length > 0 && <div className="mb-3 pb-3 border-b border-border">
