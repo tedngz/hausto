@@ -61,6 +61,7 @@ const AdminTools = () => {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isBatchReanalyzing, setIsBatchReanalyzing] = useState(false);
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
+  const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
 
   // State for expanded crawl run
   const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
