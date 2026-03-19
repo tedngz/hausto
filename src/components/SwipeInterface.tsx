@@ -473,20 +473,21 @@ export const SwipeInterface = ({
 
       // Create match using useMatches hook (this will handle usage tracking)
       const isExternal = currentApartment.id.startsWith('ext-');
-      if (isExternal) {
-        // Extract real UUID from ext-prefixed id
-        const realId = currentApartment.id.replace(/^ext-/, '');
+      const realProperty = !isExternal ? realProperties?.find(p => p.id === currentApartment.id) : null;
+      // Also detect external properties that came through useProperties (raw UUID, no ext- prefix)
+      const isExternalViaProperties = realProperty && (realProperty as any)._isExternal;
+
+      if (isExternal || isExternalViaProperties) {
+        // Extract real UUID from ext-prefixed id, or use as-is for useProperties externals
+        const realId = isExternal ? currentApartment.id.replace(/^ext-/, '') : currentApartment.id;
         // Use Hausto Agent as the realtor for external properties
         await createMatch(realId, HAUSTO_AGENT_ID, 'external');
         console.log('External match created successfully');
+      } else if (realProperty) {
+        await createMatch(currentApartment.id, realProperty.realtor_id);
+        console.log('Match created successfully');
       } else {
-        const realProperty = realProperties?.find(p => p.id === currentApartment.id);
-        if (realProperty) {
-          await createMatch(currentApartment.id, realProperty.realtor_id);
-          console.log('Match created successfully');
-        } else {
-          toast.success('Match created! Check your matches to connect with the realtor.');
-        }
+        toast.success('Match created! Check your matches to connect with the realtor.');
       }
       moveToNext();
     } catch (error) {
