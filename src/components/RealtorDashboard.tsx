@@ -113,7 +113,34 @@ export const RealtorDashboard = ({
         .order('crawled_at', { ascending: false })
         .limit(200);
       if (error) throw error;
-      return data || [];
+      const listings = data || [];
+
+      // Auto-deactivate expired listings that still have is_active = true
+      const now = new Date();
+      const expiredActive = listings.filter(
+        (l: any) => l.is_active && l.expires_at && new Date(l.expires_at) < now
+      );
+      if (expiredActive.length > 0) {
+        console.log(`[CrawledListings] Auto-deactivating ${expiredActive.length} expired listings`);
+        const ids = expiredActive.map((l: any) => l.id);
+        supabase
+          .from('external_properties')
+          .update({ is_active: false, updated_at: now.toISOString() })
+          .in('id', ids)
+          .then(({ error: updateErr }) => {
+            if (updateErr) {
+              console.error('[CrawledListings] Failed to deactivate expired:', updateErr);
+            } else {
+              queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+            }
+          });
+        // Return with corrected status immediately
+        return listings.map((l: any) =>
+          ids.includes(l.id) ? { ...l, is_active: false } : l
+        );
+      }
+
+      return listings;
     },
     enabled: isAdmin,
   });
