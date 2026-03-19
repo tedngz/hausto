@@ -503,8 +503,13 @@ export const RealtorDashboard = ({
     });
   };
 
+  const allSelectableIds = [
+    ...realtorProperties.map(p => p.id),
+    ...(isAdmin ? crawledListings.map((l: any) => `ext-${l.id}`) : []),
+  ];
+
   const selectAllProperties = () => {
-    setSelectedPropertyIds(new Set(realtorProperties.map(p => p.id)));
+    setSelectedPropertyIds(new Set(allSelectableIds));
   };
 
   const clearSelection = () => {
@@ -512,11 +517,17 @@ export const RealtorDashboard = ({
   };
 
   const handleReactivateAll = () => {
-    const inactiveProperties = selectedPropertyIds.size > 0 
+    const internalInactive = selectedPropertyIds.size > 0 
       ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active)
       : realtorProperties.filter(p => !p.is_active);
+    
+    const crawledInactive = isAdmin ? (selectedPropertyIds.size > 0
+      ? crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active)
+      : []) : [];
 
-    if (inactiveProperties.length === 0) {
+    const totalInactive = internalInactive.length + crawledInactive.length;
+
+    if (totalInactive === 0) {
       toast({
         title: "No inactive properties",
         description: selectedPropertyIds.size > 0 
@@ -533,31 +544,63 @@ export const RealtorDashboard = ({
     setIsReactivateDialogOpen(false);
     setIsReactivating(true);
 
-    const propertiesToReactivate = selectedPropertyIds.size > 0 
+    const internalToReactivate = selectedPropertyIds.size > 0 
       ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active)
       : realtorProperties.filter(p => !p.is_active);
 
+    const crawledToReactivate = isAdmin ? (selectedPropertyIds.size > 0
+      ? crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active)
+      : []) : [];
+
     try {
       const now = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
       
-      const { error } = await supabase
-        .from('properties')
-        .update({ 
-          is_active: true, 
-          last_activated_at: now,
-          updated_at: now 
-        })
-        .in('id', propertiesToReactivate.map(p => p.id));
+      const promises: Promise<any>[] = [];
 
-      if (error) throw error;
+      // Reactivate internal properties
+      if (internalToReactivate.length > 0) {
+        promises.push(
+          (async () => {
+            const { error } = await supabase
+              .from('properties')
+              .update({ is_active: true, last_activated_at: now, updated_at: now })
+              .in('id', internalToReactivate.map(p => p.id));
+            if (error) throw error;
+          })()
+        );
+      }
+
+      // Reactivate crawled external properties
+      if (crawledToReactivate.length > 0) {
+        promises.push(
+          (async () => {
+            const { error } = await supabase
+              .from('external_properties')
+              .update({ is_active: true, expires_at: expiresAt, updated_at: now })
+              .in('id', crawledToReactivate.map((l: any) => l.id));
+            if (error) throw error;
+          })()
+        );
+      }
+
+      await Promise.all(promises);
 
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
       queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+      
+      // Invalidate discovery cache
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate' },
+      });
+
       setSelectedPropertyIds(new Set());
 
+      const total = internalToReactivate.length + crawledToReactivate.length;
       toast({
         title: "Properties reactivated",
-        description: `Successfully reactivated ${propertiesToReactivate.length} ${propertiesToReactivate.length === 1 ? 'property' : 'properties'}.`,
+        description: `Successfully reactivated ${total} ${total === 1 ? 'property' : 'properties'}${crawledToReactivate.length > 0 ? ` (${crawledToReactivate.length} crawled)` : ''}.`,
       });
     } catch (error) {
       console.error('Reactivate all error:', error);
@@ -571,9 +614,14 @@ export const RealtorDashboard = ({
     }
   };
 
-  const inactiveCount = selectedPropertyIds.size > 0 
-    ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active).length
-    : realtorProperties.filter(p => !p.is_active).length;
+  const inactiveCount = (() => {
+    if (selectedPropertyIds.size > 0) {
+      const internalInactive = realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active).length;
+      const crawledInactive = isAdmin ? crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length : 0;
+      return internalInactive + crawledInactive;
+    }
+    return realtorProperties.filter(p => !p.is_active).length;
+  })();
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-16">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
         {/* Stats */}
@@ -648,10 +696,10 @@ export const RealtorDashboard = ({
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={selectedPropertyIds.size === realtorProperties.length ? clearSelection : selectAllProperties}
+                    onClick={selectedPropertyIds.size === allSelectableIds.length ? clearSelection : selectAllProperties}
                     className="text-xs"
                   >
-                    {selectedPropertyIds.size === realtorProperties.length ? (
+                    {selectedPropertyIds.size === allSelectableIds.length ? (
                       <>
                         <CheckSquare className="w-4 h-4 mr-1" />
                         Clear All
@@ -659,7 +707,7 @@ export const RealtorDashboard = ({
                     ) : (
                       <>
                         <Square className="w-4 h-4 mr-1" />
-                        Select All ({realtorProperties.length})
+                        Select All ({allSelectableIds.length})
                       </>
                     )}
                   </Button>
@@ -793,24 +841,78 @@ export const RealtorDashboard = ({
         {isAdmin && (
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
             <div className="p-4 md:p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2">
-                    <Globe className="w-5 h-5" />
-                    Crawled External Listings
-                  </h2>
-                  <p className="text-slate-600 text-sm">
-                    {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} total crawled listings
-                  </p>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2">
+                      <Globe className="w-5 h-5" />
+                      Crawled External Listings
+                    </h2>
+                    <p className="text-slate-600 text-sm">
+                      {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} total crawled listings
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleReactivateAll}
+                      disabled={isReactivating || crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length === 0}
+                      variant="outline"
+                      className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                      size="sm"
+                    >
+                      <Power className={`w-4 h-4 mr-1.5 ${isReactivating ? 'animate-pulse' : ''}`} />
+                      Reactivate ({crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => queryClient.invalidateQueries({ queryKey: ['crawled-listings'] })}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-1" />
+                      Refresh
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ['crawled-listings'] })}
-                >
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Refresh
-                </Button>
+                {/* Selection toolbar for crawled */}
+                {crawledListings.length > 0 && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const crawledIds = crawledListings.map((l: any) => `ext-${l.id}`);
+                        const allSelected = crawledIds.every((id: string) => selectedPropertyIds.has(id));
+                        setSelectedPropertyIds(prev => {
+                          const newSet = new Set(prev);
+                          if (allSelected) {
+                            crawledIds.forEach((id: string) => newSet.delete(id));
+                          } else {
+                            crawledIds.forEach((id: string) => newSet.add(id));
+                          }
+                          return newSet;
+                        });
+                      }}
+                      className="text-xs"
+                    >
+                      {crawledListings.every((l: any) => selectedPropertyIds.has(`ext-${l.id}`)) ? (
+                        <>
+                          <CheckSquare className="w-4 h-4 mr-1" />
+                          Clear All Crawled
+                        </>
+                      ) : (
+                        <>
+                          <Square className="w-4 h-4 mr-1" />
+                          Select All Crawled ({crawledListings.length})
+                        </>
+                      )}
+                    </Button>
+                    {crawledListings.some((l: any) => selectedPropertyIds.has(`ext-${l.id}`)) && (
+                      <span className="text-xs text-muted-foreground px-2 border-l border-slate-200">
+                        {crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`)).length} selected
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="p-4 md:p-6">
@@ -824,16 +926,33 @@ export const RealtorDashboard = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {crawledListings.map((listing: any) => (
-                    <Card key={listing.id} className={`overflow-hidden border transition-shadow ${listing.is_active ? 'border-slate-200 hover:shadow-lg' : 'border-slate-200 opacity-60'}`}>
+                    <Card key={listing.id} className={`overflow-hidden border transition-shadow ${selectedPropertyIds.has(`ext-${listing.id}`) ? 'border-primary ring-2 ring-primary/20' : listing.is_active ? 'border-slate-200 hover:shadow-lg' : 'border-slate-200 opacity-60'}`}>
                       {listing.images && listing.images.length > 0 && (
                         <div className="relative">
                           <img src={listing.images[0]} alt={listing.title} className="w-full h-32 md:h-48 object-cover" />
+                          <div className="absolute top-2 left-2">
+                            <Button
+                              size="icon"
+                              variant={selectedPropertyIds.has(`ext-${listing.id}`) ? "default" : "secondary"}
+                              className="h-8 w-8 rounded-md shadow-lg"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePropertySelection(`ext-${listing.id}`);
+                              }}
+                            >
+                              {selectedPropertyIds.has(`ext-${listing.id}`) ? (
+                                <CheckSquare className="w-4 h-4" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </div>
                           <div className="absolute top-2 right-2">
                             <Badge className="bg-white/90 text-slate-800 font-semibold text-xs">
                               {listing.price ? formatPrice(listing.price) : 'Price N/A'}/mo
                             </Badge>
                           </div>
-                          <div className="absolute top-2 left-2">
+                          <div className="absolute top-10 left-2">
                             <Badge variant="secondary" className="text-xs">
                               {listing.source}
                             </Badge>
