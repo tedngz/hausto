@@ -499,13 +499,14 @@ Deno.serve(async (req) => {
     if (body.action === 'backfill-vibe') {
       console.log('[scheduled-crawl] Starting bulk vibe backfill for external properties');
       
+      // Fetch more properties to check — we filter client-side anyway
       const { data: needsVibe } = await supabase
         .from('external_properties')
         .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis, highlights')
         .eq('is_active', true)
         .not('images', 'eq', '{}')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (!needsVibe || needsVibe.length === 0) {
         return new Response(JSON.stringify({ success: true, message: 'No properties to backfill', analyzed: 0 }), {
@@ -513,25 +514,33 @@ Deno.serve(async (req) => {
         });
       }
 
+      const isGenericHighlight = (h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space';
+
       const toBackfill = needsVibe.filter((p: any) => {
         if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
         if (!p.vibe_analysis?.colors || p.vibe_analysis.colors.length === 0) return true;
         if (!p.vibe_analysis?.activities || p.vibe_analysis.activities.length === 0) return true;
         if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
         if (!p.highlights || p.highlights.length === 0) return true;
-        const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space');
-        if (allGeneric) return true;
+        if (p.highlights.every((h: string) => isGenericHighlight(h))) return true;
         return false;
       });
 
       console.log(`[scheduled-crawl] Found ${toBackfill.length}/${needsVibe.length} properties needing vibe backfill`);
 
+      if (toBackfill.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: 'All properties already have vibe data', analyzed: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       let analyzed = 0;
+      let failed = 0;
       const results: any[] = [];
       let stoppedEarly = false;
       for (const prop of toBackfill) {
         const elapsed = Date.now() - startTime;
-        if (elapsed > 130000) {
+        if (elapsed > 120000) {
           console.log(`[scheduled-crawl] Stopping backfill - ${Math.round(elapsed/1000)}s elapsed`);
           stoppedEarly = true;
           break;
@@ -539,23 +548,27 @@ Deno.serve(async (req) => {
         try {
           const success = await runVibeAnalysis(supabase, prop.id, prop);
           if (success) analyzed++;
+          else failed++;
           results.push({ id: prop.id, title: prop.title, success });
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 1000));
         } catch (e) {
           console.error(`[scheduled-crawl] Backfill error for ${prop.id}:`, e);
           results.push({ id: prop.id, title: prop.title, success: false, error: String(e) });
+          failed++;
         }
       }
 
-      // Self-chain via QStash if we stopped early and there's likely more work
+      // Self-chain via QStash if we stopped early OR if there are more properties than we processed
+      // This ensures all properties eventually get processed across multiple runs
       let chained = false;
-      if (stoppedEarly && analyzed < toBackfill.length) {
-        console.log(`[scheduled-crawl] Self-chaining backfill: ${analyzed}/${toBackfill.length} done, more remaining`);
+      const remainingCount = toBackfill.length - analyzed - failed;
+      if (stoppedEarly && remainingCount > 0) {
+        console.log(`[scheduled-crawl] Self-chaining backfill: ${analyzed} done, ~${remainingCount} remaining`);
         chained = await qstashPublish({ action: 'backfill-vibe', continuation: true }, 5);
       }
 
-      console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed}/${toBackfill.length}${chained ? ' (continuation queued)' : ''}`);
-      return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, results, chained, duration: `${Date.now() - startTime}ms` }), {
+      console.log(`[scheduled-crawl] Vibe backfill complete: ${analyzed} success, ${failed} failed out of ${toBackfill.length}${chained ? ' (continuation queued)' : ''}`);
+      return new Response(JSON.stringify({ success: true, total: toBackfill.length, analyzed, failed, results, chained, duration: `${Date.now() - startTime}ms` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
