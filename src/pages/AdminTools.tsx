@@ -981,53 +981,30 @@ const AdminTools = () => {
                const ALL_DISTRICTS: Record<string, { label: string; districts: string[] }> = {
                 ho_chi_minh: {
                   label: 'Ho Chi Minh City',
-                  districts: ['quận 1','quận 3','quận 4','quận 7','quận 10','bình thạnh','phú nhuận','tân bình','gò vấp','thủ đức'],
+                  districts: ['District 1','District 3','District 4','District 7','District 10','Binh Thanh','Phu Nhuan','Tan Binh','Go Vap','Thu Duc'],
                 },
                 hanoi: {
                   label: 'Hanoi',
-                  districts: ['ba đình','hoàn kiếm','đống đa','cầu giấy','hai bà trưng','tây hồ','long biên'],
+                  districts: ['Ba Dinh','Hoan Kiem','Dong Da','Cau Giay','Hai Ba Trung','Tay Ho','Long Bien'],
                 },
                 da_nang: {
                   label: 'Da Nang',
-                  districts: ['hải châu','sơn trà','ngũ hành sơn'],
+                  districts: ['Hai Chau','Son Tra','Ngu Hanh Son'],
                 },
               };
 
-              const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
-              // Generate alternative names for matching (e.g. "quận 7" -> also match "district 7", "q7")
-              const getAliases = (district: string): string[] => {
-                const norm = normalize(district);
-                const aliases = [norm];
-                const quanMatch = norm.match(/^quan (\d+)$/);
-                if (quanMatch) {
-                  aliases.push(`district ${quanMatch[1]}`);
-                  aliases.push(`q${quanMatch[1]}`);
-                }
-                // Vietnamese district name mappings
-                const nameMap: Record<string, string[]> = {
-                  'binh thanh': ['binh thanh district', 'binh thanh'],
-                  'phu nhuan': ['phu nhuan district', 'phu nhuan'],
-                  'tan binh': ['tan binh district', 'tan binh'],
-                  'go vap': ['go vap district', 'go vap'],
-                  'thu duc': ['thu duc', 'thu duc city'],
-                  'ba dinh': ['ba dinh district', 'ba dinh'],
-                  'hoan kiem': ['hoan kiem district', 'hoan kiem'],
-                  'dong da': ['dong da district', 'dong da'],
-                  'cau giay': ['cau giay district', 'cau giay'],
-                  'hai ba trung': ['hai ba trung district', 'hai ba trung'],
-                  'tay ho': ['tay ho district', 'tay ho'],
-                  'long bien': ['long bien district', 'long bien'],
-                  'hai chau': ['hai chau district', 'hai chau'],
-                  'son tra': ['son tra district', 'son tra'],
-                  'ngu hanh son': ['ngu hanh son district', 'ngu hanh son'],
-                };
-                if (nameMap[norm]) aliases.push(...nameMap[norm]);
-                return aliases;
-              };
+              const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
               const matchesDistrict = (districtName: string, locationKey: string): boolean => {
-                const aliases = getAliases(districtName);
-                for (const alias of aliases) {
-                  if (locationKey === alias || locationKey.includes(alias) || alias.includes(locationKey)) return true;
+                const norm = normalize(districtName);
+                const normKey = normalize(locationKey);
+                // Direct containment
+                if (normKey.includes(norm) || norm.includes(normKey)) return true;
+                // For "district N", also match "q N" and "quan N"
+                const distMatch = norm.match(/^district (\d+)$/);
+                if (distMatch) {
+                  const n = distMatch[1];
+                  if (normKey.includes(`district ${n}`) || normKey.includes(`q${n}`) || normKey.includes(`quan ${n}`)) return true;
                 }
                 return false;
               };
