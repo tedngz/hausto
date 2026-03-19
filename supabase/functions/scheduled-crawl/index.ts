@@ -523,7 +523,14 @@ Deno.serve(async (req) => {
         if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
         if (!p.highlights || p.highlights.length === 0) return true;
         if (p.highlights.every((h: string) => isGenericHighlight(h))) return true;
-        return false;
+
+        const hasUsableSecondaryHighlight = p.vibe_analysis.image_analyses.some((analysis: any) => {
+          const imageIndex = Number(analysis?.image_index);
+          const highlight = analysis?.image_highlight || analysis?.highlight;
+          return Number.isFinite(imageIndex) && imageIndex > 0 && highlight && !isGenericHighlight(highlight);
+        });
+
+        return !hasUsableSecondaryHighlight;
       });
 
       console.log(`[scheduled-crawl] Found ${toBackfill.length}/${needsVibe.length} properties needing vibe backfill`);
@@ -722,13 +729,21 @@ Deno.serve(async (req) => {
           .limit(5);
 
         if (needsVibe) {
-          const toAnalyze = needsVibe.filter((p: any) => {
-            if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
-            if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
-            if (!p.highlights || p.highlights.length === 0) return true;
-            const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space');
-            return allGeneric;
-          });
+            const toAnalyze = needsVibe.filter((p: any) => {
+              if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
+              if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
+              if (!p.highlights || p.highlights.length === 0) return true;
+              const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space');
+              if (allGeneric) return true;
+
+              const hasUsableSecondaryHighlight = p.vibe_analysis.image_analyses.some((analysis: any) => {
+                const imageIndex = Number(analysis?.image_index);
+                const highlight = analysis?.image_highlight || analysis?.highlight;
+                return Number.isFinite(imageIndex) && imageIndex > 0 && highlight && highlight !== 'Premium living space feature' && highlight !== 'Quality living space';
+              });
+
+              return !hasUsableSecondaryHighlight;
+            });
 
           for (const prop of toAnalyze) {
             if (Date.now() - startTime > 120000) break;
