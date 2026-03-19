@@ -561,22 +561,26 @@ export const RealtorDashboard = ({
       // Reactivate internal properties
       if (internalToReactivate.length > 0) {
         promises.push(
-          supabase
-            .from('properties')
-            .update({ is_active: true, last_activated_at: now, updated_at: now })
-            .in('id', internalToReactivate.map(p => p.id))
-            .then(({ error }) => { if (error) throw error; })
+          (async () => {
+            const { error } = await supabase
+              .from('properties')
+              .update({ is_active: true, last_activated_at: now, updated_at: now })
+              .in('id', internalToReactivate.map(p => p.id));
+            if (error) throw error;
+          })()
         );
       }
 
       // Reactivate crawled external properties
       if (crawledToReactivate.length > 0) {
         promises.push(
-          supabase
-            .from('external_properties')
-            .update({ is_active: true, expires_at: expiresAt, updated_at: now })
-            .in('id', crawledToReactivate.map((l: any) => l.id))
-            .then(({ error }) => { if (error) throw error; })
+          (async () => {
+            const { error } = await supabase
+              .from('external_properties')
+              .update({ is_active: true, expires_at: expiresAt, updated_at: now })
+              .in('id', crawledToReactivate.map((l: any) => l.id));
+            if (error) throw error;
+          })()
         );
       }
 
