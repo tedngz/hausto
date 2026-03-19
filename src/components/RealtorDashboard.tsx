@@ -517,11 +517,17 @@ export const RealtorDashboard = ({
   };
 
   const handleReactivateAll = () => {
-    const inactiveProperties = selectedPropertyIds.size > 0 
+    const internalInactive = selectedPropertyIds.size > 0 
       ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active)
       : realtorProperties.filter(p => !p.is_active);
+    
+    const crawledInactive = isAdmin ? (selectedPropertyIds.size > 0
+      ? crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active)
+      : []) : [];
 
-    if (inactiveProperties.length === 0) {
+    const totalInactive = internalInactive.length + crawledInactive.length;
+
+    if (totalInactive === 0) {
       toast({
         title: "No inactive properties",
         description: selectedPropertyIds.size > 0 
@@ -538,31 +544,59 @@ export const RealtorDashboard = ({
     setIsReactivateDialogOpen(false);
     setIsReactivating(true);
 
-    const propertiesToReactivate = selectedPropertyIds.size > 0 
+    const internalToReactivate = selectedPropertyIds.size > 0 
       ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active)
       : realtorProperties.filter(p => !p.is_active);
 
+    const crawledToReactivate = isAdmin ? (selectedPropertyIds.size > 0
+      ? crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active)
+      : []) : [];
+
     try {
       const now = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
       
-      const { error } = await supabase
-        .from('properties')
-        .update({ 
-          is_active: true, 
-          last_activated_at: now,
-          updated_at: now 
-        })
-        .in('id', propertiesToReactivate.map(p => p.id));
+      const promises: Promise<any>[] = [];
 
-      if (error) throw error;
+      // Reactivate internal properties
+      if (internalToReactivate.length > 0) {
+        promises.push(
+          supabase
+            .from('properties')
+            .update({ is_active: true, last_activated_at: now, updated_at: now })
+            .in('id', internalToReactivate.map(p => p.id))
+            .then(({ error }) => { if (error) throw error; })
+        );
+      }
+
+      // Reactivate crawled external properties
+      if (crawledToReactivate.length > 0) {
+        promises.push(
+          supabase
+            .from('external_properties')
+            .update({ is_active: true, expires_at: expiresAt, updated_at: now })
+            .in('id', crawledToReactivate.map((l: any) => l.id))
+            .then(({ error }) => { if (error) throw error; })
+        );
+      }
+
+      await Promise.all(promises);
 
       queryClient.invalidateQueries({ queryKey: ['realtor-properties'] });
       queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+      
+      // Invalidate discovery cache
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate' },
+      });
+
       setSelectedPropertyIds(new Set());
 
+      const total = internalToReactivate.length + crawledToReactivate.length;
       toast({
         title: "Properties reactivated",
-        description: `Successfully reactivated ${propertiesToReactivate.length} ${propertiesToReactivate.length === 1 ? 'property' : 'properties'}.`,
+        description: `Successfully reactivated ${total} ${total === 1 ? 'property' : 'properties'}${crawledToReactivate.length > 0 ? ` (${crawledToReactivate.length} crawled)` : ''}.`,
       });
     } catch (error) {
       console.error('Reactivate all error:', error);
@@ -576,9 +610,14 @@ export const RealtorDashboard = ({
     }
   };
 
-  const inactiveCount = selectedPropertyIds.size > 0 
-    ? realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active).length
-    : realtorProperties.filter(p => !p.is_active).length;
+  const inactiveCount = (() => {
+    if (selectedPropertyIds.size > 0) {
+      const internalInactive = realtorProperties.filter(p => selectedPropertyIds.has(p.id) && !p.is_active).length;
+      const crawledInactive = isAdmin ? crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length : 0;
+      return internalInactive + crawledInactive;
+    }
+    return realtorProperties.filter(p => !p.is_active).length;
+  })();
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-16">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
         {/* Stats */}
