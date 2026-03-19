@@ -19,6 +19,7 @@ import { VibeScore } from '@/components/VibeScore';
 import { toast } from 'sonner';
 import { sampleProperties } from '@/data/sampleProperties';
 import { useAuth } from '@/hooks/useAuth';
+import { HAUSTO_AGENT_ID, HAUSTO_AGENT_NAME } from '@/constants/haustoAgent';
 import { useQuery } from '@tanstack/react-query';
 interface SwipeInterfaceProps {
   userPreferences: UserPreferences | null;
