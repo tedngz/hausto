@@ -1064,13 +1064,18 @@ const AdminTools = () => {
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {cityData.districts.map(district => {
-                            const norm = normalize(district);
                             let info: { lastCrawled: string; sources: Set<string>; count: number } | null = null;
                             if (districtCoverage) {
                               for (const [key, val] of districtCoverage) {
-                                if (key === norm || key.includes(norm) || norm.includes(key)) {
-                                  info = val;
-                                  break;
+                                if (matchesDistrict(district, key)) {
+                                  // Merge if multiple location keys match the same district
+                                  if (!info) {
+                                    info = { ...val, sources: new Set(val.sources) };
+                                  } else {
+                                    val.sources.forEach(s => info!.sources.add(s));
+                                    info.count += val.count;
+                                    if (val.lastCrawled > info.lastCrawled) info.lastCrawled = val.lastCrawled;
+                                  }
                                 }
                               }
                             }
