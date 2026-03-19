@@ -841,24 +841,78 @@ export const RealtorDashboard = ({
         {isAdmin && (
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
             <div className="p-4 md:p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2">
-                    <Globe className="w-5 h-5" />
-                    Crawled External Listings
-                  </h2>
-                  <p className="text-slate-600 text-sm">
-                    {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} total crawled listings
-                  </p>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2">
+                      <Globe className="w-5 h-5" />
+                      Crawled External Listings
+                    </h2>
+                    <p className="text-slate-600 text-sm">
+                      {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} total crawled listings
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleReactivateAll}
+                      disabled={isReactivating || crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length === 0}
+                      variant="outline"
+                      className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                      size="sm"
+                    >
+                      <Power className={`w-4 h-4 mr-1.5 ${isReactivating ? 'animate-pulse' : ''}`} />
+                      Reactivate ({crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => queryClient.invalidateQueries({ queryKey: ['crawled-listings'] })}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-1" />
+                      Refresh
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ['crawled-listings'] })}
-                >
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Refresh
-                </Button>
+                {/* Selection toolbar for crawled */}
+                {crawledListings.length > 0 && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const crawledIds = crawledListings.map((l: any) => `ext-${l.id}`);
+                        const allSelected = crawledIds.every((id: string) => selectedPropertyIds.has(id));
+                        setSelectedPropertyIds(prev => {
+                          const newSet = new Set(prev);
+                          if (allSelected) {
+                            crawledIds.forEach((id: string) => newSet.delete(id));
+                          } else {
+                            crawledIds.forEach((id: string) => newSet.add(id));
+                          }
+                          return newSet;
+                        });
+                      }}
+                      className="text-xs"
+                    >
+                      {crawledListings.every((l: any) => selectedPropertyIds.has(`ext-${l.id}`)) ? (
+                        <>
+                          <CheckSquare className="w-4 h-4 mr-1" />
+                          Clear All Crawled
+                        </>
+                      ) : (
+                        <>
+                          <Square className="w-4 h-4 mr-1" />
+                          Select All Crawled ({crawledListings.length})
+                        </>
+                      )}
+                    </Button>
+                    {crawledListings.some((l: any) => selectedPropertyIds.has(`ext-${l.id}`)) && (
+                      <span className="text-xs text-muted-foreground px-2 border-l border-slate-200">
+                        {crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`)).length} selected
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="p-4 md:p-6">
