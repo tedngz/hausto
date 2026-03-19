@@ -201,6 +201,14 @@ export const PropertyCard = ({
           </div>
         </div>
 
+        {/* Highlight Tags from AI Analysis */}
+        {apartment.highlights && apartment.highlights.length > 0 && 
+         !apartment.highlights.every(h => h === 'Premium living space feature' || h === 'Quality living space') && (
+          <div className="mb-3 pb-3 border-b border-border">
+            <PropertyHighlightTags apartment={apartment} maxTagsPerCategory={2} showIcons={true} />
+          </div>
+        )}
+
         {/* Amenities Section */}
         {apartment.amenities && apartment.amenities.length > 0 && <div className="mb-3 pb-3 border-b border-border">
             <PropertyAmenities amenities={apartment.amenities} compact />
@@ -242,7 +250,12 @@ export const PropertyCard = ({
                   return rawIdx === arrayIndex;
                 });
 
-                const imageHighlight = analysisForImage?.image_highlight || analysisForImage?.highlight;
+                const imageHighlight = analysisForImage?.image_highlight || analysisForImage?.highlight || 
+                  // Fallback: use highlights array if available and not generic
+                  (() => {
+                    const h = apartment.highlights?.[arrayIndex];
+                    return h && h !== 'Premium living space feature' && h !== 'Quality living space' ? h : undefined;
+                  })();
 
                 return (
                   <div key={sliceIndex} className="space-y-2">
