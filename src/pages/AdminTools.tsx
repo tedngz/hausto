@@ -491,9 +491,9 @@ const AdminTools = () => {
     setBackfillProgress(null);
 
     try {
-      toast.info("Finding properties with missing image_analyses...");
+      toast.info("Finding properties with missing valid image highlights...");
 
-      // Fetch external properties that need re-analysis (have images but no image_analyses)
+      // Fetch external properties that need re-analysis (have images but missing usable per-image highlights)
       const { data: properties, error: fetchError } = await supabase
         .from('external_properties')
         .select('id, title, images, vibe_analysis')
@@ -503,18 +503,32 @@ const AdminTools = () => {
 
       if (fetchError) throw fetchError;
 
-      // Filter to those with per_image but no image_analyses, or no vibe_analysis at all
+      const isUsableHighlight = (value: unknown) => {
+        const text = String(value || '').trim();
+        return !!text && text !== 'Premium living space feature' && text !== 'Quality living space';
+      };
+
+      // Re-analyze if legacy data exists, image_analyses are missing, or only empty/generic secondary highlights exist
       const needsReanalysis = (properties || []).filter((p: any) => {
         const va = p.vibe_analysis;
+        const analyses = Array.isArray(va?.image_analyses) ? va.image_analyses : [];
+
         if (!va || typeof va !== 'object') return true;
-        if (va.per_image && (!va.image_analyses || va.image_analyses.length === 0)) return true;
-        if (!va.image_analyses || va.image_analyses.length === 0) return true;
-        return false;
+        if (va.per_image && analyses.length === 0) return true;
+        if (analyses.length === 0) return true;
+
+        const hasUsableSecondaryHighlight = analyses.some((analysis: any) => {
+          const imageIndex = Number(analysis?.image_index);
+          const highlight = analysis?.image_highlight || analysis?.highlight;
+          return Number.isFinite(imageIndex) && imageIndex > 0 && isUsableHighlight(highlight);
+        });
+
+        return !hasUsableSecondaryHighlight;
       });
 
       const total = needsReanalysis.length;
       if (total === 0) {
-        toast.success("All properties already have image_analyses!");
+        toast.success("All properties already have valid image highlights!");
         setBatchReanalyzeResults({ total: 0, fixed: 0, errors: 0 });
         setIsBatchReanalyzing(false);
         return;
