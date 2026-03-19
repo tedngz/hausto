@@ -584,6 +584,15 @@ const AdminTools = () => {
 
       setBatchReanalyzeResults({ total, fixed, errors });
       setBackfillProgress(null);
+
+      // Invalidate property discovery cache so updated vibe_analysis is served
+      if (fixed > 0) {
+        await supabase.functions.invoke('property-discovery-cache', {
+          body: { action: 'invalidate' },
+        });
+        console.log('[Backfill] Property discovery cache invalidated');
+      }
+
       toast.success(`Backfill complete! Fixed ${fixed}/${total} properties.`);
     } catch (error: any) {
       console.error('Batch re-analyze error:', error);
