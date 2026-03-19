@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { Loader2, Sparkles, CheckCircle2, XCircle, Search, Globe, ShieldAlert, Clock, Calendar, Activity, RefreshCw, Pause, Play, Settings2, Eye, MapPin, Image as ImageIcon, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -61,6 +62,7 @@ const AdminTools = () => {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isBatchReanalyzing, setIsBatchReanalyzing] = useState(false);
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
+  const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
 
   // State for expanded crawl run
   const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
@@ -486,6 +488,7 @@ const AdminTools = () => {
   const handleBatchReanalyzeImageHighlights = async () => {
     setIsBatchReanalyzing(true);
     setBatchReanalyzeResults(null);
+    setBackfillProgress(null);
 
     try {
       toast.info("Finding properties with missing image_analyses...");
@@ -525,6 +528,7 @@ const AdminTools = () => {
       // Process one at a time to avoid rate limits
       for (let i = 0; i < needsReanalysis.length; i++) {
         const prop = needsReanalysis[i];
+        setBackfillProgress({ current: i + 1, total, currentTitle: prop.title || 'Unknown', fixed, errors });
         try {
           const imagesToAnalyze = (prop.images || []).slice(0, 5);
           if (imagesToAnalyze.length === 0) continue;
@@ -579,6 +583,7 @@ const AdminTools = () => {
       }
 
       setBatchReanalyzeResults({ total, fixed, errors });
+      setBackfillProgress(null);
       toast.success(`Backfill complete! Fixed ${fixed}/${total} properties.`);
     } catch (error: any) {
       console.error('Batch re-analyze error:', error);
@@ -786,6 +791,24 @@ const AdminTools = () => {
               </>
             )}
           </Button>
+
+          {backfillProgress && (
+            <div className="space-y-3 p-4 bg-muted rounded-lg">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>{backfillProgress.current} of {backfillProgress.total} properties</span>
+                <span>{Math.round((backfillProgress.current / backfillProgress.total) * 100)}%</span>
+              </div>
+              <Progress value={(backfillProgress.current / backfillProgress.total) * 100} className="h-2" />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="truncate">{backfillProgress.currentTitle}</span>
+              </div>
+              <div className="flex gap-4 text-xs">
+                <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-primary" /> {backfillProgress.fixed} fixed</span>
+                <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" /> {backfillProgress.errors} errors</span>
+              </div>
+            </div>
+          )}
 
           {batchReanalyzeResults && (
             <div className="p-4 bg-muted rounded-lg space-y-2">
