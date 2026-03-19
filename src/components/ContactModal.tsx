@@ -11,6 +11,7 @@ import { UserProfile } from '@/components/LoginModal';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { HAUSTO_AGENT_ID, HAUSTO_AGENT_NAME } from '@/constants/haustoAgent';
 
 interface ContactModalProps {
   apartment: Apartment;
