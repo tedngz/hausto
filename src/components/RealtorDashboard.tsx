@@ -696,10 +696,10 @@ export const RealtorDashboard = ({
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={selectedPropertyIds.size === realtorProperties.length ? clearSelection : selectAllProperties}
+                    onClick={selectedPropertyIds.size === allSelectableIds.length ? clearSelection : selectAllProperties}
                     className="text-xs"
                   >
-                    {selectedPropertyIds.size === realtorProperties.length ? (
+                    {selectedPropertyIds.size === allSelectableIds.length ? (
                       <>
                         <CheckSquare className="w-4 h-4 mr-1" />
                         Clear All
@@ -707,7 +707,7 @@ export const RealtorDashboard = ({
                     ) : (
                       <>
                         <Square className="w-4 h-4 mr-1" />
-                        Select All ({realtorProperties.length})
+                        Select All ({allSelectableIds.length})
                       </>
                     )}
                   </Button>
