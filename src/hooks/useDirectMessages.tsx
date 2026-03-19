@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 
 interface DirectMessage {
   id: string;
@@ -22,6 +23,16 @@ interface DirectMessage {
   };
 }
 
+interface MatchConversationProperty {
+  property_id: string;
+  title: string;
+  location: string;
+  price: number;
+  images: string[];
+  property_source_provider_name?: string;
+  property_source_provider_phone?: string;
+}
+
 interface MatchConversation {
   id: string;
   renter_id: string;
@@ -35,16 +46,17 @@ interface MatchConversation {
   realtor_name?: string;
   renter_avatar?: string;
   realtor_avatar?: string;
-  properties?: Array<{
-    property_id: string;
-    title: string;
-    location: string;
-    price: number;
-    images: string[];
-    property_source_provider_name?: string;
-    property_source_provider_phone?: string;
-  }>;
+  properties?: MatchConversationProperty[];
 }
+
+const appendUniqueProperty = (
+  list: MatchConversationProperty[],
+  property: MatchConversationProperty
+) => {
+  if (!list.some((item) => item.property_id === property.property_id)) {
+    list.push(property);
+  }
+};
 
 export const useDirectMessages = () => {
   const { user } = useAuth();
@@ -79,19 +91,29 @@ export const useDirectMessages = () => {
       if (data && data.length > 0) {
         const userIds = data.flatMap(conv => [conv.renter_id, conv.realtor_id]).filter(Boolean) as string[];
 
-        const { data: profiles, error: profilesError } = await supabase
-          .rpc('get_matched_public_profiles', { user_ids: userIds });
+        const [profilesResult, conversationPropertiesResult, legacyExternalMatchesResult] = await Promise.all([
+          supabase.rpc('get_matched_public_profiles', { user_ids: userIds }),
+          supabase.rpc('get_conversation_properties'),
+          supabase
+            .from('property_matches')
+            .select('property_id, renter_id, realtor_id, property_type')
+            .eq('property_type', 'external')
+            .eq('renter_id', user.id),
+        ]);
 
+        const { data: profiles, error: profilesError } = profilesResult;
         if (profilesError) {
           console.error('Error fetching user profiles:', profilesError);
         }
 
-        // Fetch all conversation properties once (may return multiple rows per conversation/pair)
-        const { data: allProperties, error: propsError } = await supabase
-          .rpc('get_conversation_properties');
-
+        const { data: allProperties, error: propsError } = conversationPropertiesResult;
         if (propsError) {
           console.error('Error fetching conversation properties:', propsError);
+        }
+
+        const { data: legacyExternalMatches, error: legacyMatchesError } = legacyExternalMatchesResult;
+        if (legacyMatchesError) {
+          console.error('Error fetching legacy external matches:', legacyMatchesError);
         }
 
         // Build quick maps for names, avatars and properties grouped by renter/realtor pair
@@ -102,24 +124,57 @@ export const useDirectMessages = () => {
           if (p.avatar_url) avatarById.set(p.id, p.avatar_url);
         });
 
-        const propertiesByPair = new Map<string, Array<{ property_id: string; title: string; location: string; price: number; images: string[]; property_source_provider_name?: string; property_source_provider_phone?: string }>>();
+        const propertiesByPair = new Map<string, MatchConversationProperty[]>();
         (allProperties || []).forEach((row: any) => {
           const key = `${row.renter_id}::${row.realtor_id}`;
           const list = propertiesByPair.get(key) || [];
-          // Ensure unique properties per pair
-          if (!list.some(p => p.property_id === row.property_id)) {
-            list.push({
-              property_id: row.property_id,
-              title: row.title,
-              location: row.location,
-              price: Number(row.price ?? 0),
-              images: row.images || [],
-              property_source_provider_name: row.property_source_provider_name,
-              property_source_provider_phone: row.property_source_provider_phone,
-            });
-          }
+          appendUniqueProperty(list, {
+            property_id: row.property_id,
+            title: row.title,
+            location: row.location,
+            price: Number(row.price ?? 0),
+            images: row.images || [],
+            property_source_provider_name: row.property_source_provider_name,
+            property_source_provider_phone: row.property_source_provider_phone,
+          });
           propertiesByPair.set(key, list);
         });
+
+        const legacyMatchesNeedingMerge = (legacyExternalMatches || []).filter(
+          (match) => match.realtor_id !== HAUSTO_AGENT_ID
+        );
+
+        if (legacyMatchesNeedingMerge.length > 0) {
+          const legacyPropertyIds = [...new Set(legacyMatchesNeedingMerge.map((match) => match.property_id))];
+          const { data: legacyExternalProperties, error: legacyExternalPropsError } = await supabase
+            .from('external_properties')
+            .select('id, title, location, price, images, contact_name, contact_phone')
+            .in('id', legacyPropertyIds);
+
+          if (legacyExternalPropsError) {
+            console.error('Error fetching legacy external property details:', legacyExternalPropsError);
+          }
+
+          const propertyById = new Map((legacyExternalProperties || []).map((property) => [property.id, property]));
+
+          legacyMatchesNeedingMerge.forEach((match) => {
+            const property = propertyById.get(match.property_id);
+            if (!property) return;
+
+            const key = `${match.renter_id}::${HAUSTO_AGENT_ID}`;
+            const list = propertiesByPair.get(key) || [];
+            appendUniqueProperty(list, {
+              property_id: property.id,
+              title: property.title,
+              location: property.location,
+              price: Number(property.price ?? 0),
+              images: property.images || [],
+              property_source_provider_name: property.contact_name || undefined,
+              property_source_provider_phone: property.contact_phone || undefined,
+            });
+            propertiesByPair.set(key, list);
+          });
+        }
 
         // Deduplicate conversations strictly by renter/realtor pair and merge property lists per pair
         const pairMap = new Map<string, MatchConversation>();
