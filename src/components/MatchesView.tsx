@@ -97,22 +97,24 @@ export const MatchesView = ({
     const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;
     const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
 
-    // Check if property is still available
-    const { data: property, error } = await supabase
-      .from('properties')
-      .select('id, is_active')
-      .eq('id', apartment.id)
-      .maybeSingle();
+    if (!isExternal) {
+      // Check if property is still available (only for internal properties)
+      const { data: property, error } = await supabase
+        .from('properties')
+        .select('id, is_active')
+        .eq('id', apartment.id)
+        .maybeSingle();
 
-    if (error || !property || !property.is_active) {
-      toast.info("Property No Longer Available", {
-        description: "This property is no longer listed. It may have been rented or removed by the owner."
-      });
-      return;
+      if (error || !property || !property.is_active) {
+        toast.info("Property No Longer Available", {
+          description: "This property is no longer listed. It may have been rented or removed by the owner."
+        });
+        return;
+      }
     }
 
-    // Get or create conversation with this realtor
-    const conversationId = await getOrCreateConversation(user.id, apartment.realtor.id);
+    // Get or create conversation with the realtor (or Hausto Agent for external)
+    const conversationId = await getOrCreateConversation(user.id, realtorId);
     
     if (conversationId) {
       setCurrentConversationId(conversationId);
