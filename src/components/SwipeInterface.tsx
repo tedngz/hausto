@@ -278,7 +278,7 @@ export const SwipeInterface = ({
             };
             const propertyCity = normalizeCity(propertyCityRaw);
             locationMatch = userPreferences.location.some(preferredLoc => {
-              const preferredLocNorm = preferredLoc.toLowerCase().trim();
+              const preferredLocNorm = stripDiacritics(preferredLoc.toLowerCase().trim());
               const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
               const preferredCityRaw = preferredParts[preferredParts.length - 1];
               const preferredCity = normalizeCity(preferredCityRaw);
