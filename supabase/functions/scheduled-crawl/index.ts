@@ -745,6 +745,18 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Invalidate property discovery cache after crawl + vibe analysis
+    if (newListings > 0 || updatedListings > 0 || vibeAnalyzed > 0) {
+      try {
+        await supabase.functions.invoke('property-discovery-cache', {
+          body: { action: 'invalidate' },
+        });
+        console.log('[scheduled-crawl] Property discovery cache invalidated');
+      } catch (e) {
+        console.error('[scheduled-crawl] Failed to invalidate cache:', e);
+      }
+    }
+
     const duration = Date.now() - startTime;
 
     const summary = {
