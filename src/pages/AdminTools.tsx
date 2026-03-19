@@ -527,6 +527,7 @@ const AdminTools = () => {
       // Process one at a time to avoid rate limits
       for (let i = 0; i < needsReanalysis.length; i++) {
         const prop = needsReanalysis[i];
+        setBackfillProgress({ current: i + 1, total, currentTitle: prop.title || 'Unknown', fixed, errors });
         try {
           const imagesToAnalyze = (prop.images || []).slice(0, 5);
           if (imagesToAnalyze.length === 0) continue;
