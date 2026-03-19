@@ -1039,10 +1039,9 @@ const AdminTools = () => {
                 <div className="space-y-4">
                   {Object.entries(ALL_DISTRICTS).map(([cityKey, cityData]) => {
                     const crawledCount = cityData.districts.filter(d => {
-                      const norm = normalize(d);
                       if (!districtCoverage) return false;
                       for (const [key] of districtCoverage) {
-                        if (key === norm || key.includes(norm) || norm.includes(key)) return true;
+                        if (matchesDistrict(d, key)) return true;
                       }
                       return false;
                     }).length;
