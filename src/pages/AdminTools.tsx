@@ -994,6 +994,43 @@ const AdminTools = () => {
               };
 
               const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+              // Generate alternative names for matching (e.g. "quận 7" -> also match "district 7", "q7")
+              const getAliases = (district: string): string[] => {
+                const norm = normalize(district);
+                const aliases = [norm];
+                const quanMatch = norm.match(/^quan (\d+)$/);
+                if (quanMatch) {
+                  aliases.push(`district ${quanMatch[1]}`);
+                  aliases.push(`q${quanMatch[1]}`);
+                }
+                // Vietnamese district name mappings
+                const nameMap: Record<string, string[]> = {
+                  'binh thanh': ['binh thanh district', 'binh thanh'],
+                  'phu nhuan': ['phu nhuan district', 'phu nhuan'],
+                  'tan binh': ['tan binh district', 'tan binh'],
+                  'go vap': ['go vap district', 'go vap'],
+                  'thu duc': ['thu duc', 'thu duc city'],
+                  'ba dinh': ['ba dinh district', 'ba dinh'],
+                  'hoan kiem': ['hoan kiem district', 'hoan kiem'],
+                  'dong da': ['dong da district', 'dong da'],
+                  'cau giay': ['cau giay district', 'cau giay'],
+                  'hai ba trung': ['hai ba trung district', 'hai ba trung'],
+                  'tay ho': ['tay ho district', 'tay ho'],
+                  'long bien': ['long bien district', 'long bien'],
+                  'hai chau': ['hai chau district', 'hai chau'],
+                  'son tra': ['son tra district', 'son tra'],
+                  'ngu hanh son': ['ngu hanh son district', 'ngu hanh son'],
+                };
+                if (nameMap[norm]) aliases.push(...nameMap[norm]);
+                return aliases;
+              };
+              const matchesDistrict = (districtName: string, locationKey: string): boolean => {
+                const aliases = getAliases(districtName);
+                for (const alias of aliases) {
+                  if (locationKey === alias || locationKey.includes(alias) || alias.includes(locationKey)) return true;
+                }
+                return false;
+              };
 
               const totalDistricts = Object.values(ALL_DISTRICTS).reduce((sum, c) => sum + c.districts.length, 0);
               let totalCrawled = 0;
