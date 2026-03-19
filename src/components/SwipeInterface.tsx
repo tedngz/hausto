@@ -69,6 +69,7 @@ export const SwipeInterface = ({
         .from('external_properties')
         .select('*')
         .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
         .order('crawled_at', { ascending: false })
         .limit(100);
       if (error) {
@@ -253,27 +254,32 @@ export const SwipeInterface = ({
           // Strict location matching with city/district groups (HCM vs Hanoi vs Danang)
           let locationMatch = false;
           if (userPreferences.location?.length) {
-            const propertyLocationNorm = apartment.location.toLowerCase().trim();
+            // Strip Vietnamese diacritics for consistent matching
+            const stripDiacritics = (str: string) =>
+              str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+
+            const propertyLocationNorm = stripDiacritics(apartment.location.toLowerCase().trim());
             const propertyParts = propertyLocationNorm.split(',').map(p => p.trim());
             // Use last part as city (works for both "District, City" and "Street, Ward, District, City")
             const propertyCityRaw = propertyParts[propertyParts.length - 1];
             const normalizeCity = (value: string) => {
-              const v = value.toLowerCase();
-              if (v.includes('ho chi minh') || v.includes('hcm') || v.includes('hồ chí minh')) return 'hcm';
-              if (v.includes('ha noi') || v.includes('hanoi') || v.includes('hà nội')) return 'hanoi';
-              if (v.includes('da nang') || v.includes('danang') || v.includes('đà nẵng')) return 'danang';
+              const v = stripDiacritics(value.toLowerCase());
+              if (v.includes('ho chi minh') || v.includes('hcm') || v.includes('tp ho chi minh') || v.includes('saigon')) return 'hcm';
+              if (v.includes('ha noi') || v.includes('hanoi')) return 'hanoi';
+              if (v.includes('da nang') || v.includes('danang')) return 'danang';
               return v.trim();
             };
             const normalizeDistrict = (value: string) => {
-              return value.toLowerCase()
+              return stripDiacritics(value.toLowerCase())
                 .replace(/district\s*/i, '')
-                .replace(/quận\s*/i, '')
-                .replace(/huyện\s*/i, '')
+                .replace(/quan\s*/i, '')
+                .replace(/huyen\s*/i, '')
+                .replace(/phuong\s*/i, '')
                 .trim();
             };
             const propertyCity = normalizeCity(propertyCityRaw);
             locationMatch = userPreferences.location.some(preferredLoc => {
-              const preferredLocNorm = preferredLoc.toLowerCase().trim();
+              const preferredLocNorm = stripDiacritics(preferredLoc.toLowerCase().trim());
               const preferredParts = preferredLocNorm.split(',').map(p => p.trim());
               const preferredCityRaw = preferredParts[preferredParts.length - 1];
               const preferredCity = normalizeCity(preferredCityRaw);
