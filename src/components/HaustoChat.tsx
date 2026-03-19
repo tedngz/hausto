@@ -1196,6 +1196,7 @@ export const HaustoChat = ({
                     key={prop.property_id}
                     onClick={async () => {
                       try {
+                        // Try internal properties first
                         const { data: fullProperty, error } = await supabase
                           .from('properties')
                           .select('*')
@@ -1204,35 +1205,71 @@ export const HaustoChat = ({
 
                         if (error) throw error;
 
-                        if (!fullProperty || !fullProperty.is_active) {
-                          toast({
-                            title: 'Property No Longer Available',
-                            description: 'This property is no longer listed. It may have been rented or removed by the owner.',
+                        if (fullProperty && fullProperty.is_active) {
+                          setDetailModalApartment({
+                            id: fullProperty.id,
+                            images: fullProperty.images || [],
+                            title: fullProperty.title,
+                            location: fullProperty.location,
+                            price: Number(fullProperty.price || 0),
+                            size: fullProperty.size || '',
+                            vibe: fullProperty.vibe || '',
+                            description: fullProperty.description || '',
+                            highlights: fullProperty.highlights || [],
+                            vibe_analysis: fullProperty.vibe_analysis,
+                            property_source_link: fullProperty.property_source_link,
+                            realtor: {
+                              id: currentConv.realtor_id,
+                              name: currentConv.realtor_name || 'Property Owner',
+                              phone: '+1-234-567-8900',
+                              email: 'contact@realtor.com'
+                            },
+                            matchId: currentConv.id
                           });
+                          setShowPropertyList(false);
                           return;
                         }
 
-                        setDetailModalApartment({
-                          id: fullProperty.id,
-                          images: fullProperty.images || [],
-                          title: fullProperty.title,
-                          location: fullProperty.location,
-                          price: Number(fullProperty.price || 0),
-                          size: fullProperty.size || '',
-                          vibe: fullProperty.vibe || '',
-                          description: fullProperty.description || '',
-                          highlights: fullProperty.highlights || [],
-                          vibe_analysis: fullProperty.vibe_analysis,
-                          property_source_link: fullProperty.property_source_link,
-                          realtor: {
-                            id: currentConv.realtor_id,
-                            name: currentConv.realtor_name || 'Property Owner',
-                            phone: '+1-234-567-8900',
-                            email: 'contact@realtor.com'
-                          },
-                          matchId: currentConv.id
+                        // Try external properties
+                        const { data: extProperty, error: extError } = await supabase
+                          .from('external_properties')
+                          .select('*')
+                          .eq('id', prop.property_id)
+                          .maybeSingle();
+
+                        if (extError) throw extError;
+
+                        if (extProperty && extProperty.is_active) {
+                          setDetailModalApartment({
+                            id: extProperty.id,
+                            images: extProperty.images || [],
+                            title: extProperty.title,
+                            location: extProperty.location,
+                            price: Number(extProperty.price || 0),
+                            size: extProperty.size || '',
+                            vibe: extProperty.vibe || '',
+                            description: extProperty.description || '',
+                            highlights: extProperty.highlights || [],
+                            vibe_analysis: extProperty.vibe_analysis,
+                            property_source_link: extProperty.source_url,
+                            property_source_provider_name: extProperty.contact_name,
+                            property_source_provider_phone: extProperty.contact_phone,
+                            realtor: {
+                              id: currentConv.realtor_id,
+                              name: currentConv.realtor_name || 'Hausto Agent',
+                              phone: '',
+                              email: ''
+                            },
+                            matchId: currentConv.id
+                          });
+                          setShowPropertyList(false);
+                          return;
+                        }
+
+                        toast({
+                          title: 'Property No Longer Available',
+                          description: 'This property is no longer listed. It may have been rented or removed by the owner.',
                         });
-                        setShowPropertyList(false);
                       } catch (error) {
                         console.error('Error fetching property details:', error);
                         toast({
