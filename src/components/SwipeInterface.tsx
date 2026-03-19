@@ -94,9 +94,9 @@ export const SwipeInterface = ({
     highlights: ext.highlights || [],
     amenities: ext.amenities || [],
     realtor: {
-      id: `ext-${ext.source}`,
-      name: ext.contact_name || ext.source === 'batdongsan' ? 'Batdongsan.com.vn' : ext.source === 'nhatot' ? 'Nhà Tốt' : 'External Listing',
-      phone: ext.contact_phone || '',
+      id: HAUSTO_AGENT_ID,
+      name: HAUSTO_AGENT_NAME,
+      phone: '',
       email: '',
       avatar: '',
     },
