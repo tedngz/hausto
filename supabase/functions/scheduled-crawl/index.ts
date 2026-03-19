@@ -714,7 +714,7 @@ Deno.serve(async (req) => {
             if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
             if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
             if (!p.highlights || p.highlights.length === 0) return true;
-            const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature');
+            const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space');
             return allGeneric;
           });
 
