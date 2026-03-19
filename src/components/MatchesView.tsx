@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { HAUSTO_AGENT_ID, HAUSTO_AGENT_NAME } from '@/constants/haustoAgent';
 interface MatchesViewProps {
   userPreferences?: UserPreferences;
   userProfile?: UserProfile;
@@ -73,11 +74,9 @@ export const MatchesView = ({
       property_source_provider_name: match.properties.property_source_provider_name || match.properties.contact_name,
       property_source_provider_phone: match.properties.property_source_provider_phone || match.properties.contact_phone,
       realtor: {
-        id: match.properties.realtor_id || match.realtor_id || '',
-        name: isExternal
-          ? (match.properties.contact_name || 'External Listing')
-          : (match.realtor_name || 'Property Owner'),
-        phone: isExternal ? (match.properties.contact_phone || '') : '+1-234-567-8900',
+        id: isExternal ? HAUSTO_AGENT_ID : (match.properties.realtor_id || match.realtor_id || ''),
+        name: isExternal ? HAUSTO_AGENT_NAME : (match.realtor_name || 'Property Owner'),
+        phone: isExternal ? '' : '+1-234-567-8900',
         email: isExternal ? '' : 'contact@realtor.com',
         avatar: isExternal ? '' : (match.realtor_avatar || '')
       },
@@ -94,28 +93,28 @@ export const MatchesView = ({
       return;
     }
 
-    // For external properties, open the source link
-    if (apartment.property_source_link && apartment.realtor.id.startsWith('ext-')) {
-      window.open(apartment.property_source_link, '_blank');
-      return;
+    // For external properties, open messaging with Hausto Agent
+    const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;
+    const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
+
+    if (!isExternal) {
+      // Check if property is still available (only for internal properties)
+      const { data: property, error } = await supabase
+        .from('properties')
+        .select('id, is_active')
+        .eq('id', apartment.id)
+        .maybeSingle();
+
+      if (error || !property || !property.is_active) {
+        toast.info("Property No Longer Available", {
+          description: "This property is no longer listed. It may have been rented or removed by the owner."
+        });
+        return;
+      }
     }
 
-    // Check if property is still available
-    const { data: property, error } = await supabase
-      .from('properties')
-      .select('id, is_active')
-      .eq('id', apartment.id)
-      .maybeSingle();
-
-    if (error || !property || !property.is_active) {
-      toast.info("Property No Longer Available", {
-        description: "This property is no longer listed. It may have been rented or removed by the owner."
-      });
-      return;
-    }
-
-    // Get or create conversation with this realtor
-    const conversationId = await getOrCreateConversation(user.id, apartment.realtor.id);
+    // Get or create conversation with the realtor (or Hausto Agent for external)
+    const conversationId = await getOrCreateConversation(user.id, realtorId);
     
     if (conversationId) {
       setCurrentConversationId(conversationId);

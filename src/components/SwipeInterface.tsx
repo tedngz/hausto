@@ -19,6 +19,7 @@ import { VibeScore } from '@/components/VibeScore';
 import { toast } from 'sonner';
 import { sampleProperties } from '@/data/sampleProperties';
 import { useAuth } from '@/hooks/useAuth';
+import { HAUSTO_AGENT_ID, HAUSTO_AGENT_NAME } from '@/constants/haustoAgent';
 import { useQuery } from '@tanstack/react-query';
 interface SwipeInterfaceProps {
   userPreferences: UserPreferences | null;
@@ -93,9 +94,9 @@ export const SwipeInterface = ({
     highlights: ext.highlights || [],
     amenities: ext.amenities || [],
     realtor: {
-      id: `ext-${ext.source}`,
-      name: ext.contact_name || ext.source === 'batdongsan' ? 'Batdongsan.com.vn' : ext.source === 'nhatot' ? 'Nhà Tốt' : 'External Listing',
-      phone: ext.contact_phone || '',
+      id: HAUSTO_AGENT_ID,
+      name: HAUSTO_AGENT_NAME,
+      phone: '',
       email: '',
       avatar: '',
     },
@@ -475,8 +476,8 @@ export const SwipeInterface = ({
       if (isExternal) {
         // Extract real UUID from ext-prefixed id
         const realId = currentApartment.id.replace(/^ext-/, '');
-        // Use current user's ID as placeholder realtor_id for external properties
-        await createMatch(realId, user?.id || '', 'external');
+        // Use Hausto Agent as the realtor for external properties
+        await createMatch(realId, HAUSTO_AGENT_ID, 'external');
         console.log('External match created successfully');
       } else {
         const realProperty = realProperties?.find(p => p.id === currentApartment.id);

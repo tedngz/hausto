@@ -11,6 +11,7 @@ import { UserProfile } from '@/components/LoginModal';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { HAUSTO_AGENT_ID, HAUSTO_AGENT_NAME } from '@/constants/haustoAgent';
 
 interface ContactModalProps {
   apartment: Apartment;
@@ -20,11 +21,14 @@ interface ContactModalProps {
 
 export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalProps) => {
   const { user } = useAuth();
+  const isExternalListing = apartment.realtor.id === HAUSTO_AGENT_ID;
   const [formData, setFormData] = useState({
     name: userProfile?.name || '',
     email: userProfile?.email || '',
     phone: userProfile?.phone || '',
-    message: `Hi ${apartment.realtor.name}, I'm interested in viewing "${apartment.title}" in ${translateLocationToEnglish(apartment.location)}. Could we schedule a viewing?`
+    message: isExternalListing
+      ? `Hi Hausto Agent, I'm interested in "${apartment.title}" in ${translateLocationToEnglish(apartment.location)}. Could you help me connect with the property owner?`
+      : `Hi ${apartment.realtor.name}, I'm interested in viewing "${apartment.title}" in ${translateLocationToEnglish(apartment.location)}. Could we schedule a viewing?`
   });
   const { toast } = useToast();
 
@@ -186,9 +190,11 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <span>
-              {apartment.property_source_provider_name 
-                ? `Contact Property Owner - ${apartment.property_source_provider_name}`
-                : 'Contact Realtor'}
+              {isExternalListing
+                ? 'Message Hausto Agent'
+                : apartment.property_source_provider_name 
+                  ? `Contact Property Owner - ${apartment.property_source_provider_name}`
+                  : 'Contact Realtor'}
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -208,11 +214,17 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
           </div>
           
           <div className="bg-gray-50 p-3 rounded-lg">
-            <p className="text-sm font-medium">{apartment.realtor.name}</p>
+            <p className="text-sm font-medium">{isExternalListing ? HAUSTO_AGENT_NAME : apartment.realtor.name}</p>
             <p className="text-xs text-gray-600">
-              {apartment.property_source_provider_name ? 'Property Manager' : 'Licensed Realtor'}
+              {isExternalListing ? 'Your dedicated property assistant' : apartment.property_source_provider_name ? 'Property Manager' : 'Licensed Realtor'}
             </p>
-            {apartment.property_source_provider_name && (
+            {isExternalListing && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                <p className="font-medium mb-1">About this listing</p>
+                <p>This is a crawled listing. Hausto Agent will help you connect with the property owner and coordinate viewings on your behalf.</p>
+              </div>
+            )}
+            {!isExternalListing && apartment.property_source_provider_name && (
               <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
                 <p className="font-medium mb-1">About this listing</p>
                 <p>This property is managed by {apartment.property_source_provider_name}. Your message will be sent through Hausto, and we'll connect you directly with the property owner.</p>
