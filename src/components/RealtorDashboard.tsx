@@ -503,8 +503,13 @@ export const RealtorDashboard = ({
     });
   };
 
+  const allSelectableIds = [
+    ...realtorProperties.map(p => p.id),
+    ...(isAdmin ? crawledListings.map((l: any) => `ext-${l.id}`) : []),
+  ];
+
   const selectAllProperties = () => {
-    setSelectedPropertyIds(new Set(realtorProperties.map(p => p.id)));
+    setSelectedPropertyIds(new Set(allSelectableIds));
   };
 
   const clearSelection = () => {
