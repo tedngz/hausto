@@ -93,11 +93,9 @@ export const MatchesView = ({
       return;
     }
 
-    // For external properties, open the source link
-    if (apartment.property_source_link && apartment.realtor.id.startsWith('ext-')) {
-      window.open(apartment.property_source_link, '_blank');
-      return;
-    }
+    // For external properties, open messaging with Hausto Agent
+    const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;
+    const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
 
     // Check if property is still available
     const { data: property, error } = await supabase
