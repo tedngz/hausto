@@ -77,7 +77,6 @@ async function executeBrowserlessScript(script: string, timeout = 30000): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       query: script,
-      budgetTimeMs: timeout,
     }),
     signal: AbortSignal.timeout(timeout + 5000),
   });
