@@ -38,38 +38,15 @@ export const VibeScore = ({ score, apartment, showBreakdown = false, size = 'md'
     return { level: 'Casual vibe', color: 'bg-gray-500 text-white border-gray-400', emoji: '💭' };
   };
 
-  const getStyleTags = () => {
-    // Get styles from vibe_analysis
-    const vibeAnalysis = apartment?.vibe_analysis;
-    if (vibeAnalysis?.styles && vibeAnalysis.styles.length > 0) {
-      return vibeAnalysis.styles;
-    }
-    
-    // Return empty array if no data
+  const toSafeArray = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
+    if (typeof value === 'string' && value.trim()) return value.split(',').map(s => s.trim()).filter(Boolean);
     return [];
   };
 
-  const getColorPalette = () => {
-    // Get colors from vibe_analysis
-    const vibeAnalysis = apartment?.vibe_analysis;
-    if (vibeAnalysis?.colors && vibeAnalysis.colors.length > 0) {
-      return vibeAnalysis.colors;
-    }
-    
-    // Return empty array if no data
-    return [];
-  };
-
-  const getActivities = () => {
-    // Get activities from vibe_analysis
-    const vibeAnalysis = apartment?.vibe_analysis;
-    if (vibeAnalysis?.activities && vibeAnalysis.activities.length > 0) {
-      return vibeAnalysis.activities;
-    }
-    
-    // Return empty array if no data
-    return [];
-  };
+  const getStyleTags = (): string[] => toSafeArray(apartment?.vibe_analysis?.styles);
+  const getColorPalette = (): string[] => toSafeArray(apartment?.vibe_analysis?.colors);
+  const getActivities = (): string[] => toSafeArray(apartment?.vibe_analysis?.activities);
 
   const sizeClasses = {
     sm: 'text-xs px-2 py-1',
