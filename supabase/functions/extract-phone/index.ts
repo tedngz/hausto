@@ -10,74 +10,44 @@ const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Marketplace-specific selectors and login flows
+// Marketplace-specific selectors for phone extraction
 const MARKETPLACE_CONFIG: Record<string, {
-  loginUrl: string;
-  usernameSelector: string;
-  passwordSelector: string;
-  submitSelector: string;
   phoneRevealSelector: string;
   phoneResultSelector: string;
-  usernameEnv: string;
-  passwordEnv: string;
-  loginCheckSelector: string;
 }> = {
   batdongsan: {
-    loginUrl: 'https://batdongsan.com.vn/dang-nhap',
-    usernameSelector: 'input[name="email"], input[name="username"], input[type="email"]',
-    passwordSelector: 'input[name="password"], input[type="password"]',
-    submitSelector: 'button[type="submit"], .btn-login, .js__btn-login',
-    phoneRevealSelector: '.js__phone-btn, .phone-btn, button[data-toggle="phone"], .btn-show-phone, [class*="phone"][class*="btn"], [class*="show"][class*="phone"], a[href*="tel:"]',
-    phoneResultSelector: '.js__phone-number, .phone-number, [class*="phone-number"], [class*="phoneNumber"], a[href^="tel:"]',
-    usernameEnv: 'BATDONGSAN_USERNAME',
-    passwordEnv: 'BATDONGSAN_PASSWORD',
-    loginCheckSelector: '.user-menu, .logged-in, .js__user-info, [class*="avatar"], [class*="user-name"]',
+    phoneRevealSelector: '[class*="phone"] button, .re__btn-short-info-phone, .js__phone-btn, .re__contact-phone button',
+    phoneResultSelector: '[class*="phone-number"], .re__contact-phone a[href^="tel:"], a[href^="tel:"]',
   },
   nhatot: {
-    loginUrl: 'https://www.nhatot.com/dang-nhap',
-    usernameSelector: 'input[name="email"], input[name="phone"], input[type="email"], input[type="tel"]',
-    passwordSelector: 'input[name="password"], input[type="password"]',
-    submitSelector: 'button[type="submit"], .btn-login, [class*="login-btn"]',
-    phoneRevealSelector: '.ContactPhone_btn__wrapper, [class*="ContactPhone"], [class*="show-phone"], button[class*="phone"], [data-aut-id="btnPhone"]',
-    phoneResultSelector: '.ContactPhone_phone__number, [class*="phone__number"], [class*="phoneNumber"], a[href^="tel:"]',
-    usernameEnv: 'NHATOT_USERNAME',
-    passwordEnv: 'NHATOT_PASSWORD',
-    loginCheckSelector: '.Avatar, [class*="avatar"], [class*="user-menu"], [class*="UserMenu"]',
+    phoneRevealSelector: '[class*="ContactPhone"] button, [data-aut-id="btnPhone"], button[class*="phone"]',
+    phoneResultSelector: '[class*="phone__number"], [class*="ContactPhone"] a[href^="tel:"], a[href^="tel:"]',
   },
 };
 
-// Clean and validate phone number
 function cleanPhoneNumber(raw: string): string | null {
   if (!raw) return null;
-  // Remove all non-digit chars except leading +
   let cleaned = raw.replace(/[^\d+]/g, '');
-  // Remove country code prefix if present
   if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
   if (cleaned.startsWith('84') && cleaned.length > 10) cleaned = '0' + cleaned.slice(2);
-  // Validate Vietnamese phone (10-11 digits starting with 0)
   if (/^0\d{9,10}$/.test(cleaned)) return cleaned;
-  // Also accept raw 9-10 digit numbers
   if (/^\d{9,10}$/.test(cleaned)) return '0' + cleaned;
   return null;
 }
 
-// Detect marketplace from URL
 function detectMarketplace(url: string): string | null {
   if (url.includes('batdongsan.com.vn')) return 'batdongsan';
   if (url.includes('nhatot.com') || url.includes('chotot.com')) return 'nhatot';
   return null;
 }
 
-// Execute a Browserless BQL (Browser Query Language) script
 async function executeBrowserlessScript(script: string, timeout = 30000): Promise<any> {
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
 
   const response = await fetch(`https://production-sfo.browserless.io/chromium/bql?token=${BROWSERLESS_API_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: script,
-    }),
+    body: JSON.stringify({ query: script }),
     signal: AbortSignal.timeout(timeout + 5000),
   });
 
@@ -89,82 +59,87 @@ async function executeBrowserlessScript(script: string, timeout = 30000): Promis
   return response.json();
 }
 
-// Build BQL mutation for login + phone extraction
-function buildPhoneExtractionScript(
-  listingUrl: string,
-  config: typeof MARKETPLACE_CONFIG[string],
-  username: string,
-  password: string,
-): string {
-  return `
-mutation ExtractPhone {
-  goto(url: "${config.loginUrl}", waitUntil: networkIdle) {
-    status
-    url
-  }
+// Build inline JS for phone extraction that runs inside the browser
+function buildPhoneExtractionJS(config: typeof MARKETPLACE_CONFIG[string]): string {
+  // Escape for embedding in BQL template literal
+  const revealSels = config.phoneRevealSelector.split(', ');
+  const resultSels = config.phoneResultSelector.split(', ');
+  
+  return [
+    'async function extractPhone() {',
+    '  await new Promise(r => setTimeout(r, 2000));',
+    '  // Check existing tel links',
+    '  var telLinks = document.querySelectorAll("a[href^=\\"tel:\\"]");',
+    '  for (var i = 0; i < telLinks.length; i++) {',
+    '    var phone = telLinks[i].getAttribute("href").replace("tel:", "").trim();',
+    '    if (phone && phone.replace(/[^0-9]/g, "").length >= 9) return JSON.stringify({phone: phone, method: "tel_link"});',
+    '  }',
+    '  // Click reveal buttons',
+    '  var allEls = document.querySelectorAll("button, a, span, div");',
+    '  for (var j = 0; j < allEls.length; j++) {',
+    '    var txt = allEls[j].textContent || "";',
+    '    if (txt.indexOf("Hiện số") >= 0 || txt.indexOf("Xem SĐT") >= 0 || txt.indexOf("Show phone") >= 0) {',
+    '      allEls[j].click();',
+    '      await new Promise(r => setTimeout(r, 3000));',
+    '      break;',
+    '    }',
+    '  }',
+    ...revealSels.map(sel => [
+      `  var btns = document.querySelectorAll("${sel.trim()}");`,
+      '  for (var k = 0; k < btns.length; k++) { btns[k].click(); }',
+    ]).flat(),
+    '  await new Promise(r => setTimeout(r, 2000));',
+    '  // Re-check tel links after click',
+    '  telLinks = document.querySelectorAll("a[href^=\\"tel:\\"]");',
+    '  for (var m = 0; m < telLinks.length; m++) {',
+    '    var p2 = telLinks[m].getAttribute("href").replace("tel:", "").trim();',
+    '    if (p2 && p2.replace(/[^0-9]/g, "").length >= 9) return JSON.stringify({phone: p2, method: "reveal_click"});',
+    '  }',
+    ...resultSels.map(sel => [
+      `  var results = document.querySelectorAll("${sel.trim()}");`,
+      '  for (var n = 0; n < results.length; n++) {',
+      '    var t = results[n].textContent.trim();',
+      '    if (t && /0[0-9\\s.-]{8,}/.test(t)) return JSON.stringify({phone: t, method: "result_selector"});',
+      '  }',
+    ]).flat(),
+    '  // Regex scan body',
+    '  var bodyText = document.body.innerText;',
+    '  var match = bodyText.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/);',
+    '  if (match) return JSON.stringify({phone: match[0], method: "body_regex"});',
+    '  return JSON.stringify({phone: null, method: "not_found"});',
+    '}',
+    'return extractPhone();',
+  ].join('\n');
+}
 
-  usernameInput: type(
-    selector: "${config.usernameSelector}"
-    text: "${username}"
-  ) {
-    time
-  }
-
-  passwordInput: type(
-    selector: "${config.passwordSelector}"
-    text: "${password}"
-  ) {
-    time
-  }
-
-  submitLogin: click(selector: "${config.submitSelector}") {
-    time
-  }
-
-  waitForLogin: waitForSelector(
-    selector: "${config.loginCheckSelector}"
-    timeout: 10000
-  ) {
-    time
-  }
-
-  navigateToListing: goto(url: "${listingUrl}", waitUntil: networkIdle) {
+function buildExtractionScript(listingUrl: string, jsCode: string): string {
+  // Escape the JS code for BQL content string
+  const escapedJS = jsCode.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  
+  return `mutation ExtractPhone {
+  goto(url: "${listingUrl}", waitUntil: networkIdle) {
     status
     url
   }
 
   waitForPage: waitForSelector(
     selector: "body"
-    timeout: 5000
-  ) {
-    time
-  }
-
-  revealPhone: click(selector: "${config.phoneRevealSelector}") {
-    time
-  }
-
-  waitForPhone: waitForSelector(
-    selector: "${config.phoneResultSelector}"
     timeout: 8000
   ) {
     time
   }
 
-  phoneText: text(selector: "${config.phoneResultSelector}") {
-    text
-  }
-
-  pageContent: text(selector: "body") {
-    text
+  phoneData: evaluate(
+    content: "${escapedJS}"
+    timeout: 15000
+  ) {
+    value
   }
 }`;
 }
 
-// Fallback: simpler script that just navigates and looks for tel: links
 function buildFallbackScript(listingUrl: string): string {
-  return `
-mutation FallbackPhone {
+  return `mutation FallbackPhone {
   goto(url: "${listingUrl}", waitUntil: networkIdle) {
     status
     url
@@ -187,18 +162,14 @@ mutation FallbackPhone {
 }`;
 }
 
-// Extract phone from page content using regex patterns
 function extractPhoneFromText(text: string): string | null {
   if (!text) return null;
-  
-  // Vietnamese phone patterns
   const patterns = [
-    /(?:0[3-9]\d{8})/g,                    // Standard 10-digit
-    /(?:\+84[3-9]\d{8})/g,                 // With country code
-    /(?:84[3-9]\d{8})/g,                   // Country code without +
-    /(?:0\d{2}[\s.-]?\d{3}[\s.-]?\d{4})/g, // Formatted
+    /(?:0[3-9]\d{8})/g,
+    /(?:\+84[3-9]\d{8})/g,
+    /(?:84[3-9]\d{8})/g,
+    /(?:0\d{2}[\s.-]?\d{3}[\s.-]?\d{4})/g,
   ];
-  
   for (const pattern of patterns) {
     const matches = text.match(pattern);
     if (matches) {
@@ -211,7 +182,6 @@ function extractPhoneFromText(text: string): string | null {
   return null;
 }
 
-// Main extraction for a single listing
 async function extractPhoneForListing(
   listingUrl: string,
   marketplace: string,
@@ -219,48 +189,38 @@ async function extractPhoneForListing(
   const config = MARKETPLACE_CONFIG[marketplace];
   if (!config) return { phone: null, method: 'unsupported_marketplace' };
 
-  const username = Deno.env.get(config.usernameEnv);
-  const password = Deno.env.get(config.passwordEnv);
-  
-  if (!username || !password) {
-    console.log(`[extract-phone] No credentials for ${marketplace}`);
-    return { phone: null, method: 'no_credentials' };
-  }
-
-  // Attempt 1: Full login + reveal flow
+  // Attempt 1: Navigate + JS evaluate (click reveal + extract)
   try {
-    console.log(`[extract-phone] Attempting login + reveal for: ${listingUrl}`);
-    const script = buildPhoneExtractionScript(listingUrl, config, username, password);
-    const result = await executeBrowserlessScript(script, 25000);
-    
-    // Check phone text from revealed element
-    const phoneText = result?.data?.phoneText?.text;
-    if (phoneText) {
-      const phone = cleanPhoneNumber(phoneText);
-      if (phone) {
-        console.log(`[extract-phone] Found phone via reveal: ${phone}`);
-        return { phone, method: 'reveal_button' };
+    console.log(`[extract-phone] Attempting JS evaluate for: ${listingUrl}`);
+    const jsCode = buildPhoneExtractionJS(config);
+    const script = buildExtractionScript(listingUrl, jsCode);
+    const result = await executeBrowserlessScript(script, 30000);
+
+    const phoneDataStr = result?.data?.phoneData?.value;
+    if (phoneDataStr) {
+      try {
+        const phoneData = JSON.parse(phoneDataStr);
+        if (phoneData.phone) {
+          const phone = cleanPhoneNumber(phoneData.phone);
+          if (phone) {
+            console.log(`[extract-phone] Found phone via ${phoneData.method}: ${phone}`);
+            return { phone, method: phoneData.method };
+          }
+        }
+      } catch (e) {
+        console.warn(`[extract-phone] Failed to parse evaluate result:`, phoneDataStr);
       }
     }
-
-    // Check tel: links in page
-    const pageContent = result?.data?.pageContent?.text || '';
-    const phoneFromContent = extractPhoneFromText(pageContent);
-    if (phoneFromContent) {
-      console.log(`[extract-phone] Found phone in page content: ${phoneFromContent}`);
-      return { phone: phoneFromContent, method: 'page_content' };
-    }
   } catch (error) {
-    console.warn(`[extract-phone] Login+reveal failed for ${listingUrl}:`, error);
+    console.warn(`[extract-phone] JS evaluate failed for ${listingUrl}:`, error);
   }
 
-  // Attempt 2: Fallback - just navigate and look for tel: links (no login)
+  // Attempt 2: Fallback - navigate and check tel: links + body text
   try {
     console.log(`[extract-phone] Fallback: checking tel: links for ${listingUrl}`);
     const fallbackScript = buildFallbackScript(listingUrl);
     const result = await executeBrowserlessScript(fallbackScript, 15000);
-    
-    // Extract from tel: links
+
     const phoneLinksHtml = result?.data?.phoneLinks?.html || '';
     const telMatch = phoneLinksHtml.match(/href="tel:([^"]+)"/);
     if (telMatch) {
@@ -271,7 +231,6 @@ async function extractPhoneForListing(
       }
     }
 
-    // Extract from page text
     const pageContent = result?.data?.pageContent?.text || '';
     const phoneFromContent = extractPhoneFromText(pageContent);
     if (phoneFromContent) {
@@ -291,7 +250,6 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate: service role or user JWT
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -301,7 +259,7 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '');
     const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
-    
+
     if (!isServiceRole) {
       const supabaseAuth = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
         global: { headers: { Authorization: authHeader } },
@@ -322,10 +280,9 @@ serve(async (req) => {
 
     const body = await req.json();
     const { listings, propertyId, sourceUrl, marketplace: explicitMarketplace } = body;
-
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Mode 1: Single property by ID (update existing record)
+    // Mode 1: Single property
     if (propertyId && sourceUrl) {
       const marketplace = explicitMarketplace || detectMarketplace(sourceUrl);
       if (!marketplace) {
@@ -335,27 +292,23 @@ serve(async (req) => {
       }
 
       const { phone, method } = await extractPhoneForListing(sourceUrl, marketplace);
-      
+
       if (phone) {
         await supabase
           .from('external_properties')
           .update({ contact_phone: phone, updated_at: new Date().toISOString() })
           .eq('id', propertyId);
-        
         console.log(`[extract-phone] Updated property ${propertyId} with phone ${phone} (method: ${method})`);
       }
 
-      return new Response(JSON.stringify({ 
-        success: true, phone, method, propertyId 
-      }), {
+      return new Response(JSON.stringify({ success: true, phone, method, propertyId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Mode 2: Batch extraction for multiple listings
+    // Mode 2: Batch extraction
     if (Array.isArray(listings) && listings.length > 0) {
-      const maxBatch = 10;
-      const batch = listings.slice(0, maxBatch);
+      const batch = listings.slice(0, 10);
       const results: Array<{ sourceUrl: string; phone: string | null; method: string; propertyId?: string }> = [];
       let extracted = 0;
 
@@ -363,7 +316,7 @@ serve(async (req) => {
         const url = listing.sourceUrl || listing.source_url;
         const id = listing.propertyId || listing.id;
         const mp = listing.marketplace || listing.source || detectMarketplace(url);
-        
+
         if (!url || !mp) {
           results.push({ sourceUrl: url, phone: null, method: 'invalid_input' });
           continue;
@@ -371,7 +324,7 @@ serve(async (req) => {
 
         const { phone, method } = await extractPhoneForListing(url, mp);
         results.push({ sourceUrl: url, phone, method, propertyId: id });
-        
+
         if (phone && id) {
           await supabase
             .from('external_properties')
@@ -380,25 +333,18 @@ serve(async (req) => {
           extracted++;
         }
 
-        // Brief pause between requests to avoid rate limits
         if (batch.indexOf(listing) < batch.length - 1) {
           await new Promise(r => setTimeout(r, 2000));
         }
       }
 
       console.log(`[extract-phone] Batch: ${extracted}/${batch.length} phones extracted`);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        total: batch.length, 
-        extracted, 
-        results 
-      }), {
+      return new Response(JSON.stringify({ success: true, total: batch.length, extracted, results }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Mode 3: Auto-fill — find external properties missing phone numbers
+    // Mode 3: Auto-fill
     if (body.autoFill) {
       const limit = Math.min(body.limit || 5, 10);
       const { data: missingPhone } = await supabase
@@ -415,17 +361,12 @@ serve(async (req) => {
         });
       }
 
-      console.log(`[extract-phone] AutoFill: processing ${missingPhone.length} properties missing phone`);
-
       const results: Array<{ id: string; phone: string | null; method: string }> = [];
       let extracted = 0;
 
       for (const prop of missingPhone) {
         const mp = prop.source || detectMarketplace(prop.source_url);
-        if (!mp) {
-          results.push({ id: prop.id, phone: null, method: 'unsupported' });
-          continue;
-        }
+        if (!mp) { results.push({ id: prop.id, phone: null, method: 'unsupported' }); continue; }
 
         const { phone, method } = await extractPhoneForListing(prop.source_url, mp);
         results.push({ id: prop.id, phone, method });
@@ -443,24 +384,22 @@ serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ 
-        success: true, total: missingPhone.length, extracted, results 
-      }), {
+      return new Response(JSON.stringify({ success: true, total: missingPhone.length, extracted, results }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify({ 
-      error: 'Provide either {propertyId, sourceUrl}, {listings: [...]}, or {autoFill: true}' 
+    return new Response(JSON.stringify({
+      error: 'Provide either {propertyId, sourceUrl}, {listings: [...]}, or {autoFill: true}'
     }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('[extract-phone] Error:', error);
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       error: error instanceof Error ? error.message : 'Unknown error',
-      success: false 
+      success: false
     }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
