@@ -18,6 +18,22 @@ const CACHE_TTL = 60 * 60 * 2; // 2 hours
 const MAX_DETAIL_PAGES = 10; // Max individual listings to scrape
 const DETAIL_SCRAPE_TIMEOUT = 15000; // 15s per detail page
 
+// ─── Data Safety Helpers ─────────────────────────────────────────
+function toSafeArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  if (typeof value === 'string' && value.trim()) return value.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
+}
+
+function sanitizeVibeAnalysis(va: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...va,
+    styles: toSafeArray(va.styles ?? va.style),
+    colors: toSafeArray(va.colors),
+    activities: toSafeArray(va.activities),
+  };
+}
+
 // ─── Direct Save Helpers (for scheduled crawl mode) ─────────────
 const MIN_PRICE_VND = 2_000_000;
 const MAX_PRICE_VND = 200_000_000;
