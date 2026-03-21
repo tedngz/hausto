@@ -115,12 +115,9 @@ function buildPhoneExtractionJS(config: typeof MARKETPLACE_CONFIG[string]): stri
   ].join('\n');
 }
 
-function buildExtractionScript(listingUrl: string, jsCode: string): string {
-  // Escape the JS code for BQL content string
-  const escapedJS = jsCode.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  
-  return `mutation ExtractPhone {
-  goto(url: "${listingUrl}", waitUntil: networkIdle) {
+function buildExtractionScript(listingUrl: string): string {
+  return `mutation ExtractPhone($url: String!, $jsCode: String!) {
+  goto(url: $url, waitUntil: networkIdle) {
     status
     url
   }
@@ -133,7 +130,7 @@ function buildExtractionScript(listingUrl: string, jsCode: string): string {
   }
 
   phoneData: evaluate(
-    content: "${escapedJS}"
+    content: $jsCode
     timeout: 15000
   ) {
     value
