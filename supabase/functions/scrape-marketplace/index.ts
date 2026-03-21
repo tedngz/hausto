@@ -1246,10 +1246,69 @@ serve(async (req) => {
       const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '');
       console.log(`[scrape-marketplace] DirectSave result:`, JSON.stringify(saveResult));
 
+      // Trigger phone extraction for newly saved properties missing phone numbers
+      let phoneExtracted = 0;
+      if (saveResult.newListings > 0) {
+        try {
+          const extractPhoneUrl = `${SUPABASE_URL}/functions/v1/extract-phone`;
+          // Build listings array from the properties that were just saved (new ones without phone)
+          const listingsToExtract = filteredProperties
+            .filter(p => !p.sourceProviderPhone && p.sourceUrl)
+            .slice(0, 5) // Limit to 5 per crawl to manage Browserless credits
+            .map(p => ({
+              source_url: normalizeSourceUrl(p.sourceUrl),
+              source: marketplace,
+            }));
+
+          if (listingsToExtract.length > 0) {
+            // Fetch their DB IDs
+            const supabasePhone = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+            const sourceUrls = listingsToExtract.map(l => l.source_url);
+            const { data: savedProps } = await supabasePhone
+              .from('external_properties')
+              .select('id, source_url, source')
+              .in('source_url', sourceUrls)
+              .is('contact_phone', null);
+
+            if (savedProps && savedProps.length > 0) {
+              console.log(`[scrape-marketplace] Triggering phone extraction for ${savedProps.length} new listings`);
+              
+              // Fire-and-forget: don't wait for completion to avoid timeout
+              fetch(extractPhoneUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  listings: savedProps.map(p => ({
+                    id: p.id,
+                    sourceUrl: p.source_url,
+                    source: p.source,
+                  })),
+                }),
+              }).then(async (res) => {
+                if (res.ok) {
+                  const data = await res.json();
+                  console.log(`[scrape-marketplace] Phone extraction result: ${data.extracted}/${data.total} extracted`);
+                } else {
+                  console.warn(`[scrape-marketplace] Phone extraction failed: ${res.status}`);
+                }
+              }).catch(err => {
+                console.warn(`[scrape-marketplace] Phone extraction error:`, err);
+              });
+            }
+          }
+        } catch (phoneErr) {
+          console.warn(`[scrape-marketplace] Phone extraction trigger error:`, phoneErr);
+        }
+      }
+
       return new Response(JSON.stringify({
         success: true,
         directSave: true,
         ...saveResult,
+        phoneExtractionTriggered: saveResult.newListings > 0,
         totalScraped: filteredProperties.length,
         source: marketplace,
         crawlMethod: 'detail-page-paginated-directsave',
