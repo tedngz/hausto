@@ -113,20 +113,25 @@ serve(async (req) => {
     const openaiKey = Deno.env.get('OPENAI_API_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Auth check
+    // Auth check - accept service role, anon key, or valid JWT
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+    
     if (!token) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const isServiceOrAnon = token === serviceKey || token === anonKey;
+    if (!isServiceOrAnon) {
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const { limit = 10 } = await req.json().catch(() => ({}));
