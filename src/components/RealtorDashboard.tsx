@@ -979,6 +979,11 @@ export const RealtorDashboard = ({
                         <div className="text-xs text-muted-foreground mb-3">
                           Crawled: {new Date(listing.crawled_at).toLocaleDateString()}
                           {listing.contact_name && <span> • {listing.contact_name}</span>}
+                          {listing.contact_phone && (
+                            <span className="ml-1">
+                              • <a href={`tel:${listing.contact_phone}`} className="text-primary hover:underline font-medium">{listing.contact_phone}</a>
+                            </span>
+                          )}
                         </div>
                         {/* Active toggle */}
                         <div className="flex items-center justify-between mb-3">
