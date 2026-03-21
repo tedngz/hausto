@@ -106,14 +106,29 @@ serve(async (req) => {
             is_suspended: false,
           };
         } else if (subscription.status === "SUSPENDED") {
-          // Suspended = user cancelled but can reactivate without re-entering payment
-          subscriptionStatus = {
-            subscribed: true,
-            subscription_tier: "premium",
-            subscription_end: subscriberData.subscription_end || null,
-            paypal_subscription_id: subscriberData.paypal_subscription_id,
-            is_suspended: true,
-          };
+          // Suspended = user cancelled but may still have premium until end date
+          const endDate = subscriberData.subscription_end ? new Date(subscriberData.subscription_end) : null;
+          const isStillActive = endDate ? endDate > new Date() : false;
+          logStep("Suspended subscription expiration check", { subscription_end: subscriberData.subscription_end, isStillActive });
+          
+          if (isStillActive) {
+            subscriptionStatus = {
+              subscribed: true,
+              subscription_tier: "premium",
+              subscription_end: subscriberData.subscription_end || null,
+              paypal_subscription_id: subscriberData.paypal_subscription_id,
+              is_suspended: true,
+            };
+          } else {
+            // Subscription period has ended — downgrade to free
+            subscriptionStatus = {
+              subscribed: false,
+              subscription_tier: "free",
+              subscription_end: subscriberData.subscription_end || null,
+              paypal_subscription_id: subscriberData.paypal_subscription_id,
+              is_suspended: true,
+            };
+          }
         }
       }
     } else if (subscriberData?.subscribed && subscriberData?.subscription_end) {
