@@ -259,8 +259,9 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '');
     const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
+    const isAnonKey = token === Deno.env.get('SUPABASE_ANON_KEY');
 
-    if (!isServiceRole) {
+    if (!isServiceRole && !isAnonKey) {
       const supabaseAuth = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
         global: { headers: { Authorization: authHeader } },
       });
