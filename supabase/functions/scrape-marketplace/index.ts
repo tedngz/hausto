@@ -166,7 +166,7 @@ async function savePropertiesToDB(
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
-        vibe_analysis: property.vibe_analysis || {},
+        vibe_analysis: sanitizeVibeAnalysis(property.vibe_analysis || {}),
         is_active: true,
       };
 
