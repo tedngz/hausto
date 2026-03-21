@@ -833,8 +833,8 @@ RESPOND WITH VALID JSON ONLY:
       vibe: primaryVibe || vibeAnalysis.style || 'Modern',
       vibe_analysis: {
         style: vibeAnalysis.style,
-        colors: vibeAnalysis.colors,
-        activities: vibeAnalysis.activities,
+        colors: toSafeArray(vibeAnalysis.colors),
+        activities: toSafeArray(vibeAnalysis.activities),
         amenities: Array.isArray(p.amenities) ? p.amenities : [],
         vibe_scores: vibeScores,
       },
