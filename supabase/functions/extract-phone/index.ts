@@ -264,24 +264,23 @@ serve(async (req) => {
   }
 
   try {
-    // Auth: accept service role or valid JWT
+    // Auth: accept service role, valid JWT, or anon key (for internal/automated calls)
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    const token = authHeader.replace('Bearer ', '');
-    const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
-    if (!isServiceRole) {
-      const supabaseAuth = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token);
-      if (authError || !userData?.user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
+      const isAnonKey = token === anonKey;
+      if (!isServiceRole && !isAnonKey) {
+        const supabaseAuth = createClient(SUPABASE_URL, anonKey!, {
+          global: { headers: { Authorization: authHeader } },
         });
+        const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token);
+        if (authError || !userData?.user) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
     }
 
