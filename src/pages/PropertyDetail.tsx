@@ -26,7 +26,7 @@ const PropertyDetail = () => {
       if (!id) return;
 
       try {
-        // Fetch property - must be active and within the 10-day visibility period
+        // Try internal properties first
         const { data: property, error: propertyError } = await supabase
           .from('properties')
           .select('*')
@@ -37,51 +37,86 @@ const PropertyDetail = () => {
 
         if (propertyError) throw propertyError;
 
-        if (!property) {
-          setLoading(false);
-          return;
+        if (property) {
+          const { data: realtor } = await supabase
+            .from('profiles')
+            .select('id, name, phone, email, avatar_url, bio')
+            .eq('id', property.realtor_id)
+            .maybeSingle();
+
+          const transformedApartment: Apartment = {
+            id: property.id,
+            images: property.images || [],
+            title: property.title,
+            location: property.location,
+            price: Number(property.price || 0),
+            size: property.size || '',
+            vibe: property.vibe || '',
+            description: property.description || '',
+            highlights: property.highlights || [],
+            amenities: property.amenities || [],
+            vibe_analysis: property.vibe_analysis,
+            property_source_link: property.property_source_link,
+            property_source_provider_name: property.property_source_provider_name,
+            property_source_provider_phone: property.property_source_provider_phone,
+            rooms: (property as any).rooms || null,
+            realtor: realtor ? {
+              id: realtor.id,
+              name: realtor.name || 'Property Owner',
+              phone: realtor.phone || '',
+              email: realtor.email || '',
+              avatar: realtor.avatar_url,
+            } : {
+              id: property.realtor_id,
+              name: 'Property Owner',
+              phone: '',
+              email: '',
+              avatar: undefined,
+            },
+          };
+          setApartment(transformedApartment);
+        } else {
+          // Fallback: check external_properties
+          const { data: extProperty, error: extError } = await supabase
+            .from('external_properties')
+            .select('*')
+            .eq('id', id)
+            .eq('is_active', true)
+            .gt('expires_at', new Date().toISOString())
+            .maybeSingle();
+
+          if (extError) throw extError;
+
+          if (extProperty) {
+            const transformedApartment: Apartment = {
+              id: extProperty.id,
+              images: extProperty.images || [],
+              title: extProperty.title,
+              location: extProperty.location,
+              price: Number(extProperty.price || 0),
+              size: extProperty.size || '',
+              vibe: extProperty.vibe || '',
+              description: extProperty.description || '',
+              highlights: extProperty.highlights || [],
+              amenities: extProperty.amenities || [],
+              vibe_analysis: extProperty.vibe_analysis,
+              property_source_link: extProperty.source_url,
+              property_source_provider_name: extProperty.contact_name || extProperty.source,
+              property_source_provider_phone: extProperty.contact_phone || undefined,
+              rooms: extProperty.rooms || null,
+              latitude: extProperty.latitude,
+              longitude: extProperty.longitude,
+              realtor: {
+                id: 'external',
+                name: extProperty.contact_name || extProperty.source || 'External Listing',
+                phone: extProperty.contact_phone || '',
+                email: '',
+                avatar: undefined,
+              },
+            };
+            setApartment(transformedApartment);
+          }
         }
-
-        // Fetch realtor profile (may not be available for non-authenticated users)
-        const { data: realtor } = await supabase
-          .from('profiles')
-          .select('id, name, phone, email, avatar_url, bio')
-          .eq('id', property.realtor_id)
-          .maybeSingle();
-
-        // Transform to Apartment type
-        const transformedApartment: Apartment = {
-          id: property.id,
-          images: property.images || [],
-          title: property.title,
-          location: property.location,
-          price: Number(property.price || 0),
-          size: property.size || '',
-          vibe: property.vibe || '',
-          description: property.description || '',
-          highlights: property.highlights || [],
-          amenities: property.amenities || [],
-          vibe_analysis: property.vibe_analysis,
-          property_source_link: property.property_source_link,
-          property_source_provider_name: property.property_source_provider_name,
-          property_source_provider_phone: property.property_source_provider_phone,
-          rooms: (property as any).rooms || null,
-          realtor: realtor ? {
-            id: realtor.id,
-            name: realtor.name || 'Property Owner',
-            phone: realtor.phone || '',
-            email: realtor.email || '',
-            avatar: realtor.avatar_url,
-          } : {
-            id: property.realtor_id,
-            name: 'Property Owner',
-            phone: '',
-            email: '',
-            avatar: undefined,
-          },
-        };
-
-        setApartment(transformedApartment);
       } catch (error) {
         console.error('Error fetching property:', error);
       } finally {
