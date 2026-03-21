@@ -41,13 +41,16 @@ function detectMarketplace(url: string): string | null {
   return null;
 }
 
-async function executeBrowserlessScript(script: string, timeout = 30000): Promise<any> {
+async function executeBrowserlessScript(script: string, variables?: Record<string, unknown>, timeout = 30000): Promise<any> {
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
+
+  const body: Record<string, unknown> = { query: script };
+  if (variables && Object.keys(variables).length > 0) body.variables = variables;
 
   const response = await fetch(`https://production-sfo.browserless.io/chromium/bql?token=${BROWSERLESS_API_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: script }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeout + 5000),
   });
 
