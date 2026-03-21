@@ -931,7 +931,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         sourceProviderName: p.contactName,
         sourceProviderPhone: p.contactPhone,
         vibe: pv || va.style || 'Modern',
-        vibe_analysis: { style: va.style, colors: va.colors, activities: va.activities, amenities: Array.isArray(p.amenities) ? p.amenities : [], vibe_scores: vs },
+        vibe_analysis: { style: va.style, colors: toSafeArray(va.colors), activities: toSafeArray(va.activities), amenities: Array.isArray(p.amenities) ? p.amenities : [], vibe_scores: vs },
       } as ExternalProperty;
     });
   } catch (error) {
