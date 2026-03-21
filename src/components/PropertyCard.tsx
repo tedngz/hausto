@@ -243,12 +243,8 @@ export const PropertyCard = ({
                   return rawIdx === arrayIndex;
                 });
 
-                const imageHighlight = analysisForImage?.image_highlight || analysisForImage?.highlight || 
-                  // Fallback: use highlights array if available and not generic
-                  (() => {
-                    const h = apartment.highlights?.[arrayIndex];
-                    return h && h !== 'Premium living space feature' && h !== 'Quality living space' ? h : undefined;
-                  })();
+                // Only show highlights that came from per-image AI analysis, never generic property-level highlights
+                const imageHighlight = analysisForImage?.image_highlight || analysisForImage?.highlight || undefined;
 
                 return (
                   <div key={sliceIndex} className="space-y-2">
