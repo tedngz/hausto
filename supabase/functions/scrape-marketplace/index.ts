@@ -18,6 +18,22 @@ const CACHE_TTL = 60 * 60 * 2; // 2 hours
 const MAX_DETAIL_PAGES = 10; // Max individual listings to scrape
 const DETAIL_SCRAPE_TIMEOUT = 15000; // 15s per detail page
 
+// ─── Data Safety Helpers ─────────────────────────────────────────
+function toSafeArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  if (typeof value === 'string' && value.trim()) return value.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
+}
+
+function sanitizeVibeAnalysis(va: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...va,
+    styles: toSafeArray(va.styles ?? va.style),
+    colors: toSafeArray(va.colors),
+    activities: toSafeArray(va.activities),
+  };
+}
+
 // ─── Direct Save Helpers (for scheduled crawl mode) ─────────────
 const MIN_PRICE_VND = 2_000_000;
 const MAX_PRICE_VND = 200_000_000;
@@ -166,7 +182,7 @@ async function savePropertiesToDB(
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
-        vibe_analysis: property.vibe_analysis || {},
+        vibe_analysis: sanitizeVibeAnalysis(property.vibe_analysis || {}),
         is_active: true,
       };
 
@@ -833,8 +849,8 @@ RESPOND WITH VALID JSON ONLY:
       vibe: primaryVibe || vibeAnalysis.style || 'Modern',
       vibe_analysis: {
         style: vibeAnalysis.style,
-        colors: vibeAnalysis.colors,
-        activities: vibeAnalysis.activities,
+        colors: toSafeArray(vibeAnalysis.colors),
+        activities: toSafeArray(vibeAnalysis.activities),
         amenities: Array.isArray(p.amenities) ? p.amenities : [],
         vibe_scores: vibeScores,
       },
@@ -931,7 +947,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         sourceProviderName: p.contactName,
         sourceProviderPhone: p.contactPhone,
         vibe: pv || va.style || 'Modern',
-        vibe_analysis: { style: va.style, colors: va.colors, activities: va.activities, amenities: Array.isArray(p.amenities) ? p.amenities : [], vibe_scores: vs },
+        vibe_analysis: { style: va.style, colors: toSafeArray(va.colors), activities: toSafeArray(va.activities), amenities: Array.isArray(p.amenities) ? p.amenities : [], vibe_scores: vs },
       } as ExternalProperty;
     });
   } catch (error) {
