@@ -113,19 +113,25 @@ serve(async (req) => {
     const openaiKey = Deno.env.get('OPENAI_API_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Auth check - accept service role, anon key, or valid JWT
-    const authHeader = req.headers.get('Authorization') || '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
+    // Auth check - accept any valid auth (service role key is used for DB access)
+    const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+    const apikey = req.headers.get('apikey') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
     
-    if (!token) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const isServiceOrAnon = token === serviceKey || token === anonKey;
-    if (!isServiceOrAnon) {
+    console.log(`[backfill] Auth: token length=${token.length}, apikey length=${apikey.length}, anonKey length=${anonKey.length}`);
+    
+    // Accept if apikey matches anon key (standard Supabase invocation) or token is service key
+    const hasValidApikey = apikey === anonKey;
+    const isServiceRole = token === serviceKey;
+    
+    if (!hasValidApikey && !isServiceRole) {
+      // Try JWT verification
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       const { data: { user } } = await supabase.auth.getUser(token);
       if (!user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
