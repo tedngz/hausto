@@ -193,8 +193,9 @@ async function extractPhoneForListing(
   try {
     console.log(`[extract-phone] Attempting JS evaluate for: ${listingUrl}`);
     const jsCode = buildPhoneExtractionJS(config);
-    const script = buildExtractionScript(listingUrl, jsCode);
-    const result = await executeBrowserlessScript(script, 30000);
+    const script = buildExtractionScript(listingUrl);
+    const variables = { url: listingUrl, jsCode };
+    const result = await executeBrowserlessScript(script, variables, 30000);
 
     const phoneDataStr = result?.data?.phoneData?.value;
     if (phoneDataStr) {
