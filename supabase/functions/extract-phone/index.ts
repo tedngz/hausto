@@ -62,60 +62,73 @@ async function executeBrowserlessScript(script: string, variables?: Record<strin
   return response.json();
 }
 
-// Build inline JS for phone extraction that runs inside the browser
+// Build JS code to run inside the browser for phone extraction
 function buildPhoneExtractionJS(config: typeof MARKETPLACE_CONFIG[string]): string {
-  // Escape for embedding in BQL template literal
-  const revealSels = config.phoneRevealSelector.split(', ');
-  const resultSels = config.phoneResultSelector.split(', ');
-  
-  return [
-    'async function extractPhone() {',
-    '  await new Promise(r => setTimeout(r, 2000));',
-    '  // Check existing tel links',
-    '  var telLinks = document.querySelectorAll("a[href^=\\"tel:\\"]");',
-    '  for (var i = 0; i < telLinks.length; i++) {',
-    '    var phone = telLinks[i].getAttribute("href").replace("tel:", "").trim();',
-    '    if (phone && phone.replace(/[^0-9]/g, "").length >= 9) return JSON.stringify({phone: phone, method: "tel_link"});',
-    '  }',
-    '  // Click reveal buttons',
-    '  var allEls = document.querySelectorAll("button, a, span, div");',
-    '  for (var j = 0; j < allEls.length; j++) {',
-    '    var txt = allEls[j].textContent || "";',
-    '    if (txt.indexOf("Hiện số") >= 0 || txt.indexOf("Xem SĐT") >= 0 || txt.indexOf("Show phone") >= 0) {',
-    '      allEls[j].click();',
-    '      await new Promise(r => setTimeout(r, 3000));',
-    '      break;',
-    '    }',
-    '  }',
-    ...revealSels.map(sel => [
-      `  var btns = document.querySelectorAll("${sel.trim()}");`,
-      '  for (var k = 0; k < btns.length; k++) { btns[k].click(); }',
-    ]).flat(),
-    '  await new Promise(r => setTimeout(r, 2000));',
-    '  // Re-check tel links after click',
-    '  telLinks = document.querySelectorAll("a[href^=\\"tel:\\"]");',
-    '  for (var m = 0; m < telLinks.length; m++) {',
-    '    var p2 = telLinks[m].getAttribute("href").replace("tel:", "").trim();',
-    '    if (p2 && p2.replace(/[^0-9]/g, "").length >= 9) return JSON.stringify({phone: p2, method: "reveal_click"});',
-    '  }',
-    ...resultSels.map(sel => [
-      `  var results = document.querySelectorAll("${sel.trim()}");`,
-      '  for (var n = 0; n < results.length; n++) {',
-      '    var t = results[n].textContent.trim();',
-      '    if (t && /0[0-9\\s.-]{8,}/.test(t)) return JSON.stringify({phone: t, method: "result_selector"});',
-      '  }',
-    ]).flat(),
-    '  // Regex scan body',
-    '  var bodyText = document.body.innerText;',
-    '  var match = bodyText.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/);',
-    '  if (match) return JSON.stringify({phone: match[0], method: "body_regex"});',
-    '  return JSON.stringify({phone: null, method: "not_found"});',
-    '}',
-    'return extractPhone();',
-  ].join('\n');
+  const revealSels = config.phoneRevealSelector.split(', ').map(s => s.trim());
+  const resultSels = config.phoneResultSelector.split(', ').map(s => s.trim());
+  // Known service/hotline numbers to exclude
+  const excludeNumbers = ['19001881', '1900', '19006263'];
+
+  return `(async () => {
+    await new Promise(r => setTimeout(r, 2000));
+    
+    var exclude = ${JSON.stringify(excludeNumbers)};
+    function isExcluded(p) {
+      var digits = p.replace(/[^0-9]/g, '');
+      for (var i = 0; i < exclude.length; i++) { if (digits.indexOf(exclude[i]) >= 0) return true; }
+      return false;
+    }
+    
+    // Step 1: Check existing tel: links (excluding hotlines)
+    var telLinks = document.querySelectorAll('a[href^="tel:"]');
+    for (var i = 0; i < telLinks.length; i++) {
+      var phone = telLinks[i].getAttribute('href').replace('tel:', '').trim();
+      if (phone && phone.replace(/[^0-9]/g, '').length >= 9 && !isExcluded(phone)) {
+        return JSON.stringify({phone: phone, method: 'tel_link'});
+      }
+    }
+    
+    // Step 2: Click any element containing "Hiện số" text
+    var allEls = document.querySelectorAll('button, a, span, div');
+    for (var j = 0; j < allEls.length; j++) {
+      var txt = (allEls[j].textContent || '').trim();
+      if (txt.indexOf('Hiện số') >= 0 || txt.indexOf('Xem SĐT') >= 0 || txt.indexOf('Xem số') >= 0) {
+        allEls[j].click();
+        await new Promise(r => setTimeout(r, 3000));
+        break;
+      }
+    }
+    
+    // Step 3: Click specific reveal selectors
+    ${revealSels.map(sel => `try { var b = document.querySelectorAll('${sel}'); for (var x = 0; x < b.length; x++) b[x].click(); } catch(e) {}`).join('\n    ')}
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Step 4: Re-check tel: links after clicking
+    telLinks = document.querySelectorAll('a[href^="tel:"]');
+    for (var m = 0; m < telLinks.length; m++) {
+      var p2 = telLinks[m].getAttribute('href').replace('tel:', '').trim();
+      if (p2 && p2.replace(/[^0-9]/g, '').length >= 9 && !isExcluded(p2)) {
+        return JSON.stringify({phone: p2, method: 'reveal_click'});
+      }
+    }
+    
+    // Step 5: Check result selectors
+    ${resultSels.map(sel => `try { var r = document.querySelectorAll('${sel}'); for (var n = 0; n < r.length; n++) { var t = r[n].textContent.trim(); if (t && /0[3-9][0-9]{8}/.test(t.replace(/[\\s.-]/g, '')) && !isExcluded(t)) return JSON.stringify({phone: t, method: 'result_selector'}); } } catch(e) {}`).join('\n    ')}
+    
+    // Step 6: Regex scan body for Vietnamese phone
+    var bodyText = document.body.innerText;
+    var match = bodyText.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/g);
+    if (match) {
+      for (var q = 0; q < match.length; q++) {
+        if (!isExcluded(match[q])) return JSON.stringify({phone: match[q], method: 'body_regex'});
+      }
+    }
+    
+    return JSON.stringify({phone: null, method: 'not_found'});
+  })()`;
 }
 
-function buildExtractionScript(listingUrl: string): string {
+function buildExtractionQuery(): string {
   return `mutation ExtractPhone($url: String!, $jsCode: String!) {
   goto(url: $url, waitUntil: networkIdle) {
     status
@@ -135,7 +148,7 @@ function buildExtractionScript(listingUrl: string): string {
   ) {
     value
   }
-}`;
+}`
 }
 
 function buildFallbackScript(listingUrl: string): string {
