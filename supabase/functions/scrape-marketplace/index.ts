@@ -803,13 +803,6 @@ RESPOND WITH VALID JSON ONLY:
     content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     const p = JSON.parse(content);
-    const vibeAnalysis = p.vibe_analysis || { style: 'Modern', colors: ['Neutral'], activities: ['Relaxing'], vibe_scores: {} };
-    const vibeScores = vibeAnalysis.vibe_scores || {};
-    const primaryVibe = Object.entries(vibeScores)
-      .sort(([,a], [,b]) => (b as number) - (a as number))
-      .slice(0, 2)
-      .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1))
-      .join(', ');
     
     // Filter images to only valid URLs
     const validImages = (Array.isArray(p.images) ? p.images : detailImages)
@@ -826,20 +819,14 @@ RESPOND WITH VALID JSON ONLY:
       rooms: p.rooms || '',
       images: validImages,
       description: p.description || '',
-      highlights: Array.isArray(p.highlights) ? p.highlights : [],
+      highlights: [],
       amenities: Array.isArray(p.amenities) ? p.amenities : [],
       source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
       sourceUrl,
       sourceProviderName: p.contactName,
       sourceProviderPhone: p.contactPhone,
-      vibe: primaryVibe || vibeAnalysis.style || 'Modern',
-      vibe_analysis: {
-        style: vibeAnalysis.style,
-        colors: toSafeArray(vibeAnalysis.colors),
-        activities: toSafeArray(vibeAnalysis.activities),
-        amenities: Array.isArray(p.amenities) ? p.amenities : [],
-        vibe_scores: vibeScores,
-      },
+      vibe: undefined,
+      vibe_analysis: undefined,
     };
   } catch (error) {
     console.error(`[Phase 3] AI extraction error for ${sourceUrl}:`, error);
