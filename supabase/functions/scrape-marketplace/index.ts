@@ -755,17 +755,10 @@ CRITICAL INSTRUCTIONS:
 2. This is a SINGLE property detail page - extract ONE property with complete details
 3. Include ALL property images from the list above (filter out non-property images)
 4. Write a detailed, engaging English description (150-300 words)
-5. Extract 5-7 lifestyle highlights in English
-6. Extract ALL amenities mentioned
-7. Extract contact info (name, phone) if available
-8. Extract exact address/location
-9. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
-
-VIBE ANALYSIS:
-- style: One of [Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage]
-- colors: Array from [Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold]
-- activities: Array from [Working, Reading, Relaxing, Entertaining, Cooking, Exercising]
-- vibe_scores: Scores 1-10 for: modern, cozy, luxurious, minimalist, spacious, natural_light, urban, elegant
+5. Extract ALL amenities mentioned
+6. Extract contact info (name, phone) if available
+7. Extract exact address/location
+8. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -777,16 +770,9 @@ RESPOND WITH VALID JSON ONLY:
   "rooms": "Studio",
   "images": ["url1", "url2", ...],
   "description": "Detailed English description...",
-  "highlights": ["highlight1", "highlight2", ...],
   "amenities": ["Air Conditioning", "WiFi", ...],
   "contactName": "...",
-  "contactPhone": "...",
-  "vibe_analysis": {
-    "style": "Modern",
-    "colors": ["Neutral", "White"],
-    "activities": ["Working", "Relaxing"],
-    "vibe_scores": {"modern": 8, "cozy": 6, "luxurious": 5, "minimalist": 7, "spacious": 6, "natural_light": 8, "urban": 7, "elegant": 6}
-  }
+  "contactPhone": "..."
 }`;
 
   try {
@@ -817,13 +803,6 @@ RESPOND WITH VALID JSON ONLY:
     content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     const p = JSON.parse(content);
-    const vibeAnalysis = p.vibe_analysis || { style: 'Modern', colors: ['Neutral'], activities: ['Relaxing'], vibe_scores: {} };
-    const vibeScores = vibeAnalysis.vibe_scores || {};
-    const primaryVibe = Object.entries(vibeScores)
-      .sort(([,a], [,b]) => (b as number) - (a as number))
-      .slice(0, 2)
-      .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1))
-      .join(', ');
     
     // Filter images to only valid URLs
     const validImages = (Array.isArray(p.images) ? p.images : detailImages)
@@ -840,20 +819,14 @@ RESPOND WITH VALID JSON ONLY:
       rooms: p.rooms || '',
       images: validImages,
       description: p.description || '',
-      highlights: Array.isArray(p.highlights) ? p.highlights : [],
+      highlights: [],
       amenities: Array.isArray(p.amenities) ? p.amenities : [],
       source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
       sourceUrl,
       sourceProviderName: p.contactName,
       sourceProviderPhone: p.contactPhone,
-      vibe: primaryVibe || vibeAnalysis.style || 'Modern',
-      vibe_analysis: {
-        style: vibeAnalysis.style,
-        colors: toSafeArray(vibeAnalysis.colors),
-        activities: toSafeArray(vibeAnalysis.activities),
-        amenities: Array.isArray(p.amenities) ? p.amenities : [],
-        vibe_scores: vibeScores,
-      },
+      vibe: undefined,
+      vibe_analysis: undefined,
     };
   } catch (error) {
     console.error(`[Phase 3] AI extraction error for ${sourceUrl}:`, error);
@@ -891,11 +864,9 @@ For EACH property:
 - rooms: Apartment type, one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 - images: 3-5 image URLs from above
 - description: 100-200 word English description
-- highlights: 4-5 English lifestyle highlights
 - amenities: English amenity names
 - sourceUrl: Listing URL
 - contactName, contactPhone: If available
-- vibe_analysis: { style, colors, activities, vibe_scores: {modern,cozy,luxurious,minimalist,spacious,natural_light,urban,elegant} (1-10) }
 
 RESPOND WITH VALID JSON: {"properties": [...]}`;
 
@@ -925,9 +896,6 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
     
     const parsed = JSON.parse(content);
     return (parsed.properties || []).map((p: any, i: number) => {
-      const va = p.vibe_analysis || { style: 'Modern', colors: ['Neutral'], activities: ['Relaxing'], vibe_scores: {} };
-      const vs = va.vibe_scores || {};
-      const pv = Object.entries(vs).sort(([,a],[,b]) => (b as number) - (a as number)).slice(0,2).map(([k]) => k.charAt(0).toUpperCase() + k.slice(1)).join(', ');
       const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => img?.startsWith('http')).slice(0, 6);
       
       return {
@@ -940,14 +908,14 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         rooms: p.rooms || '',
         images: imgs.length > 0 ? imgs : extractedImages.slice(i * 4, i * 4 + 4),
         description: p.description || '',
-        highlights: Array.isArray(p.highlights) ? p.highlights : [],
+        highlights: [],
         amenities: Array.isArray(p.amenities) ? p.amenities : [],
         source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
         sourceUrl: p.sourceUrl || '',
         sourceProviderName: p.contactName,
         sourceProviderPhone: p.contactPhone,
-        vibe: pv || va.style || 'Modern',
-        vibe_analysis: { style: va.style, colors: toSafeArray(va.colors), activities: toSafeArray(va.activities), amenities: Array.isArray(p.amenities) ? p.amenities : [], vibe_scores: vs },
+        vibe: undefined,
+        vibe_analysis: undefined,
       } as ExternalProperty;
     });
   } catch (error) {
