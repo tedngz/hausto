@@ -755,17 +755,10 @@ CRITICAL INSTRUCTIONS:
 2. This is a SINGLE property detail page - extract ONE property with complete details
 3. Include ALL property images from the list above (filter out non-property images)
 4. Write a detailed, engaging English description (150-300 words)
-5. Extract 5-7 lifestyle highlights in English
-6. Extract ALL amenities mentioned
-7. Extract contact info (name, phone) if available
-8. Extract exact address/location
-9. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
-
-VIBE ANALYSIS:
-- style: One of [Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage]
-- colors: Array from [Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold]
-- activities: Array from [Working, Reading, Relaxing, Entertaining, Cooking, Exercising]
-- vibe_scores: Scores 1-10 for: modern, cozy, luxurious, minimalist, spacious, natural_light, urban, elegant
+5. Extract ALL amenities mentioned
+6. Extract contact info (name, phone) if available
+7. Extract exact address/location
+8. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -777,16 +770,9 @@ RESPOND WITH VALID JSON ONLY:
   "rooms": "Studio",
   "images": ["url1", "url2", ...],
   "description": "Detailed English description...",
-  "highlights": ["highlight1", "highlight2", ...],
   "amenities": ["Air Conditioning", "WiFi", ...],
   "contactName": "...",
-  "contactPhone": "...",
-  "vibe_analysis": {
-    "style": "Modern",
-    "colors": ["Neutral", "White"],
-    "activities": ["Working", "Relaxing"],
-    "vibe_scores": {"modern": 8, "cozy": 6, "luxurious": 5, "minimalist": 7, "spacious": 6, "natural_light": 8, "urban": 7, "elegant": 6}
-  }
+  "contactPhone": "..."
 }`;
 
   try {
