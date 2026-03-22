@@ -864,11 +864,9 @@ For EACH property:
 - rooms: Apartment type, one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 - images: 3-5 image URLs from above
 - description: 100-200 word English description
-- highlights: 4-5 English lifestyle highlights
 - amenities: English amenity names
 - sourceUrl: Listing URL
 - contactName, contactPhone: If available
-- vibe_analysis: { style, colors, activities, vibe_scores: {modern,cozy,luxurious,minimalist,spacious,natural_light,urban,elegant} (1-10) }
 
 RESPOND WITH VALID JSON: {"properties": [...]}`;
 
