@@ -181,9 +181,9 @@ function resolveLocationQuery(location: string): string[] {
   const districtMatch = lower.match(/district\s*(\d+)/i) || lower.match(/\bd(\d+)\b/i);
   if (districtMatch && queries.length < 2) {
     const num = districtMatch[1];
-    const cityPart = lower.includes('hanoi') || lower.includes('ha noi')
+    const cityPart = lower.includes('hanoi') || lower.includes('ha noi') || lower.includes('hà nội')
       ? 'Hà Nội'
-      : lower.includes('da nang')
+      : lower.includes('da nang') || lower.includes('đà nẵng')
         ? 'Đà Nẵng'
         : 'Hồ Chí Minh';
     queries.push(`Quận ${num}, ${cityPart}`);
@@ -206,7 +206,38 @@ function resolveLocationQuery(location: string): string[] {
   // Always include the original as fallback
   queries.push(location);
 
-  return queries;
+  // 5. Progressive fallback: try subsets of comma-separated parts (drop street-level detail)
+  // e.g. "22, Cau Dat, Tràng Tiền, Hoàn Kiếm, Hà Nội" → try last 3 parts, then last 2
+  const cleanedParts = (cleaned !== location ? cleaned : location).split(',').map(p => p.trim()).filter(Boolean);
+  if (cleanedParts.length >= 3) {
+    // Try last 3 parts (ward, district, city)
+    queries.push(cleanedParts.slice(-3).join(', '));
+    // Try last 2 parts (district, city)
+    queries.push(cleanedParts.slice(-2).join(', '));
+  } else if (cleanedParts.length === 2) {
+    queries.push(cleanedParts.join(', '));
+  }
+
+  // 6. Try extracting known Vietnamese district/ward names from the text (with diacritics already present)
+  const knownDistricts = [
+    'Hoàn Kiếm', 'Ba Đình', 'Đống Đa', 'Cầu Giấy', 'Hai Bà Trưng', 'Tây Hồ',
+    'Long Biên', 'Thanh Xuân', 'Hoàng Mai', 'Hải Châu', 'Thanh Khê', 'Sơn Trà',
+    'Ngũ Hành Sơn', 'Bình Thạnh', 'Phú Nhuận', 'Tân Bình', 'Gò Vấp', 'Thủ Đức',
+    'Quận 1', 'Quận 2', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7',
+    'Quận 8', 'Quận 9', 'Quận 10', 'Quận 11', 'Quận 12',
+  ];
+  const knownCities = ['Hà Nội', 'Hồ Chí Minh', 'Đà Nẵng'];
+  
+  const foundCity = knownCities.find(c => location.includes(c));
+  const foundDistrict = knownDistricts.find(d => location.includes(d));
+  if (foundDistrict && foundCity) {
+    queries.push(`${foundDistrict}, ${foundCity}`);
+  } else if (foundCity) {
+    queries.push(foundCity);
+  }
+
+  // Deduplicate while preserving order
+  return [...new Set(queries)];
 }
 
 /**
