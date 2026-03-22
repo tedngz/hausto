@@ -896,9 +896,6 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
     
     const parsed = JSON.parse(content);
     return (parsed.properties || []).map((p: any, i: number) => {
-      const va = p.vibe_analysis || { style: 'Modern', colors: ['Neutral'], activities: ['Relaxing'], vibe_scores: {} };
-      const vs = va.vibe_scores || {};
-      const pv = Object.entries(vs).sort(([,a],[,b]) => (b as number) - (a as number)).slice(0,2).map(([k]) => k.charAt(0).toUpperCase() + k.slice(1)).join(', ');
       const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => img?.startsWith('http')).slice(0, 6);
       
       return {
@@ -911,14 +908,14 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         rooms: p.rooms || '',
         images: imgs.length > 0 ? imgs : extractedImages.slice(i * 4, i * 4 + 4),
         description: p.description || '',
-        highlights: Array.isArray(p.highlights) ? p.highlights : [],
+        highlights: [],
         amenities: Array.isArray(p.amenities) ? p.amenities : [],
         source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
         sourceUrl: p.sourceUrl || '',
         sourceProviderName: p.contactName,
         sourceProviderPhone: p.contactPhone,
-        vibe: pv || va.style || 'Modern',
-        vibe_analysis: { style: va.style, colors: toSafeArray(va.colors), activities: toSafeArray(va.activities), amenities: Array.isArray(p.amenities) ? p.amenities : [], vibe_scores: vs },
+        vibe: undefined,
+        vibe_analysis: undefined,
       } as ExternalProperty;
     });
   } catch (error) {

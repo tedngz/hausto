@@ -482,7 +482,7 @@ serve(async (req) => {
                 // Check if this property already exists by normalized source_url
                 const { data: existingByUrl } = await supabase
                   .from('external_properties')
-                  .select('id, external_id, source_url')
+                  .select('id, external_id, source_url, vibe_analysis, images')
                   .eq('source', marketplace)
                   .eq('source_url', normalizedUrl)
                   .maybeSingle();
@@ -490,7 +490,7 @@ serve(async (req) => {
                 // Also check by external_id for backward compat
                 const { data: existingById } = !existingByUrl ? await supabase
                   .from('external_properties')
-                  .select('id, external_id, source_url')
+                  .select('id, external_id, source_url, vibe_analysis, images')
                   .eq('source', marketplace)
                   .eq('external_id', externalId)
                   .maybeSingle() : { data: existingByUrl };
@@ -511,13 +511,10 @@ serve(async (req) => {
                       size: property.size || null,
                       rooms: property.rooms || null,
                       description: property.description || null,
-                      highlights: property.highlights || [],
                       amenities: property.amenities || [],
                       images: property.images || [],
                       contact_name: property.sourceProviderName || null,
                       contact_phone: property.sourceProviderPhone || null,
-                      vibe: property.vibe || null,
-                      vibe_analysis: property.vibe_analysis || {},
                       crawled_at: new Date().toISOString(),
                       expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                       is_active: true,
@@ -532,7 +529,36 @@ serve(async (req) => {
                     crawlResult.propertiesStored++;
                     console.log(`[crawl-external-properties] Updated existing: "${property.title}"`);
                   }
-                  continue; // Skip vibe re-analysis for existing listings
+
+                  // Run vibe analysis for existing listings that lack image-based analysis
+                  const existingVibe = existingRecord.vibe_analysis as Record<string, any> | null;
+                  const hasImageAnalysis = Array.isArray(existingVibe?.image_analyses) && existingVibe.image_analyses.length > 0;
+                  const existingImages = existingRecord.images as string[] | null;
+                  
+                  if (runVibeAnalysis && !hasImageAnalysis && existingImages && existingImages.length > 0) {
+                    try {
+                      console.log(`[crawl-external-properties] Existing listing missing image-based vibe, running analysis for "${property.title}"`);
+                      const vibeResult = await analyzePropertyImagesVibe(existingImages);
+                      if (vibeResult) {
+                        await supabase
+                          .from('external_properties')
+                          .update({
+                            vibe: vibeResult.vibe,
+                            vibe_analysis: vibeResult.vibe_analysis,
+                            highlights: vibeResult.highlights.length > 0 ? vibeResult.highlights : undefined,
+                            amenities: vibeResult.amenities.length > 0 ? vibeResult.amenities : undefined,
+                          })
+                          .eq('id', existingRecord.id);
+                        crawlResult.vibeAnalyzed++;
+                        console.log(`[crawl-external-properties] Backfilled vibe for existing: "${property.title}"`);
+                      }
+                    } catch (vibeErr) {
+                      console.error(`[crawl-external-properties] Vibe backfill error:`, vibeErr);
+                    }
+                    await new Promise(r => setTimeout(r, 500));
+                  }
+
+                  continue;
                 }
                 
                 // New listing — insert
