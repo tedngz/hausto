@@ -169,17 +169,29 @@ const Discover = () => {
     setRealtorMatches(prev => [...prev, newMatch]);
   };
   const switchUserType = () => {
-    setUserType(null);
-    setCurrentView('onboarding');
-    setUserPreferences(null);
+    const newType = userType === 'renter' ? 'realtor' : 'renter';
+    setUserType(newType);
+    if (user) {
+      localStorage.setItem(`userType_${user.id}`, newType);
+    }
+    if (newType === 'realtor') {
+      setCurrentView('dashboard');
+    } else {
+      // Restore saved preferences if available
+      if (user) {
+        const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
+        if (savedPreferences) {
+          try {
+            setUserPreferences(JSON.parse(savedPreferences));
+          } catch (error) {
+            console.error('Error parsing saved preferences:', error);
+          }
+        }
+      }
+      setCurrentView('ai-chat');
+    }
     setMatches([]);
     setRealtorMatches([]);
-
-    // Clear localStorage
-    if (user) {
-      localStorage.removeItem(`userType_${user.id}`);
-      localStorage.removeItem(`userPreferences_${user.id}`);
-    }
   };
   if (loading) {
     return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
