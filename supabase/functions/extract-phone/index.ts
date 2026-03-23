@@ -10,48 +10,11 @@ const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Marketplace configs with login details
-const MARKETPLACE_CONFIG: Record<string, {
-  phoneRevealSelector: string;
-  phoneResultSelector: string;
-  loginUrl: string;
-  usernameSelector: string;
-  passwordSelector: string;
-  submitSelector: string;
-  loginSuccessIndicator: string;
-  usernameEnvKey: string;
-  passwordEnvKey: string;
-}> = {
-  batdongsan: {
-    phoneRevealSelector: '[class*="phone"] button, .re__btn-short-info-phone, .js__phone-btn, .re__contact-phone button',
-    phoneResultSelector: '[class*="phone-number"], .re__contact-phone a[href^="tel:"], a[href^="tel:"]',
-    loginUrl: 'https://batdongsan.com.vn/dang-nhap',
-    usernameSelector: 'input[name="email"], input[name="username"], input[type="email"], #email, #username',
-    passwordSelector: 'input[name="password"], input[type="password"], #password',
-    submitSelector: 'button[type="submit"], .btn-login, .re__btn-se-login, form button',
-    loginSuccessIndicator: '.re__avatar, .user-menu, .re__header-user',
-    usernameEnvKey: 'BATDONGSAN_USERNAME',
-    passwordEnvKey: 'BATDONGSAN_PASSWORD',
-  },
-  nhatot: {
-    phoneRevealSelector: '[class*="ContactPhone"] button, [data-aut-id="btnPhone"], button[class*="phone"]',
-    phoneResultSelector: '[class*="phone__number"], [class*="ContactPhone"] a[href^="tel:"], a[href^="tel:"]',
-    loginUrl: 'https://www.nhatot.com/dang-nhap',
-    usernameSelector: 'input[name="email"], input[name="phone"], input[type="email"], input[type="tel"]',
-    passwordSelector: 'input[name="password"], input[type="password"]',
-    submitSelector: 'button[type="submit"], [class*="LoginButton"], form button',
-    loginSuccessIndicator: '[class*="avatar"], [class*="UserMenu"], [class*="logged-in"]',
-    usernameEnvKey: 'NHATOT_USERNAME',
-    passwordEnvKey: 'NHATOT_PASSWORD',
-  },
-};
-
 // Known hotline numbers to exclude
 const EXCLUDE_NUMBERS = ['19001881', '1900', '19006263'];
 
 function cleanPhoneNumber(raw: string): string | null {
   if (!raw) return null;
-  // Reject masked numbers
   if (raw.includes('*')) return null;
   let cleaned = raw.replace(/[^\d+]/g, '');
   if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
@@ -88,92 +51,244 @@ async function executeBrowserlessScript(script: string, variables?: Record<strin
   return response.json();
 }
 
-// Build JS to login on the marketplace
-function buildLoginJS(config: typeof MARKETPLACE_CONFIG[string], username: string, password: string): string {
+// Build a single JS that: opens login modal on the listing page, logs in, then reveals phone
+function buildLoginAndExtractJS(marketplace: string, username: string, password: string): string {
+  const isNhatot = marketplace === 'nhatot';
+  
   return `(async () => {
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000));
     
-    // Find and fill username field
-    var userSels = ${JSON.stringify(config.usernameSelector.split(', ').map(s => s.trim()))};
-    var userInput = null;
-    for (var i = 0; i < userSels.length; i++) {
-      userInput = document.querySelector(userSels[i]);
-      if (userInput) break;
+    var exclude = ${JSON.stringify(EXCLUDE_NUMBERS)};
+    function isExcluded(p) {
+      var digits = p.replace(/[^0-9]/g, '');
+      for (var i = 0; i < exclude.length; i++) { if (digits.indexOf(exclude[i]) >= 0) return true; }
+      return false;
     }
-    if (!userInput) return JSON.stringify({success: false, error: 'username_field_not_found'});
-    
-    // Focus, clear, and type username
-    userInput.focus();
-    userInput.value = '';
-    var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    nativeInputValueSetter.call(userInput, ${JSON.stringify(username)});
-    userInput.dispatchEvent(new Event('input', {bubbles: true}));
-    userInput.dispatchEvent(new Event('change', {bubbles: true}));
-    
-    await new Promise(r => setTimeout(r, 500));
-    
-    // Find and fill password field
-    var pwdSels = ${JSON.stringify(config.passwordSelector.split(', ').map(s => s.trim()))};
-    var pwdInput = null;
-    for (var j = 0; j < pwdSels.length; j++) {
-      pwdInput = document.querySelector(pwdSels[j]);
-      if (pwdInput) break;
-    }
-    if (!pwdInput) return JSON.stringify({success: false, error: 'password_field_not_found'});
-    
-    pwdInput.focus();
-    pwdInput.value = '';
-    nativeInputValueSetter.call(pwdInput, ${JSON.stringify(password)});
-    pwdInput.dispatchEvent(new Event('input', {bubbles: true}));
-    pwdInput.dispatchEvent(new Event('change', {bubbles: true}));
-    
-    await new Promise(r => setTimeout(r, 500));
-    
-    // Click submit
-    var submitSels = ${JSON.stringify(config.submitSelector.split(', ').map(s => s.trim()))};
-    var submitBtn = null;
-    for (var k = 0; k < submitSels.length; k++) {
-      submitBtn = document.querySelector(submitSels[k]);
-      if (submitBtn) break;
-    }
-    if (submitBtn) {
-      submitBtn.click();
-    } else {
-      // Try submitting the form directly
-      var form = userInput.closest('form');
-      if (form) form.submit();
+    function isMasked(p) { return p.indexOf('*') >= 0; }
+    function isValidPhone(p) {
+      return p && !isMasked(p) && p.replace(/[^0-9]/g, '').length >= 9 && !isExcluded(p);
     }
     
-    // Wait for login to complete (page redirect or element appears)
-    await new Promise(r => setTimeout(r, 5000));
+    // Helper to set input value with React compatibility
+    var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    function setInput(el, val) {
+      el.focus();
+      nativeSetter.call(el, val);
+      el.dispatchEvent(new Event('input', {bubbles: true}));
+      el.dispatchEvent(new Event('change', {bubbles: true}));
+    }
     
-    // Check for success indicators
-    var successSels = ${JSON.stringify(config.loginSuccessIndicator.split(', ').map(s => s.trim()))};
-    for (var m = 0; m < successSels.length; m++) {
-      if (document.querySelector(successSels[m])) {
-        return JSON.stringify({success: true, method: 'success_indicator'});
+    // Step 0: Check if phone is already visible (no login needed)
+    var telLinks = document.querySelectorAll('a[href^="tel:"]');
+    for (var i = 0; i < telLinks.length; i++) {
+      var phone = telLinks[i].getAttribute('href').replace('tel:', '').trim();
+      if (isValidPhone(phone)) {
+        return JSON.stringify({phone: phone, method: 'tel_link_immediate', loginAttempted: false});
       }
     }
     
-    // Check if URL changed (redirected away from login page)
-    if (!window.location.href.includes('dang-nhap')) {
-      return JSON.stringify({success: true, method: 'url_redirect'});
+    // Step 1: Find and click the login button in the header/nav
+    var loginClicked = false;
+    var loginSelectors = ${isNhatot 
+      ? `['a[href*="dang-nhap"]', 'button:has-text("Đăng nhập")', '[class*="login"]', '[data-aut-id="btnLogin"]']`
+      : `['a[href*="dang-nhap"]', '.re__link-se--login', '[class*="login"]', 'a:has-text("Đăng nhập")']`
+    };
+    
+    // Try CSS selectors first
+    for (var s = 0; s < loginSelectors.length; s++) {
+      try {
+        var el = document.querySelector(loginSelectors[s]);
+        if (el) { el.click(); loginClicked = true; break; }
+      } catch(e) {}
     }
     
-    // Check cookies for session
-    if (document.cookie.length > 50) {
-      return JSON.stringify({success: true, method: 'cookies_set'});
+    // Fallback: find any element with "Đăng nhập" text
+    if (!loginClicked) {
+      var allEls = document.querySelectorAll('a, button, span, div');
+      for (var j = 0; j < allEls.length; j++) {
+        var txt = (allEls[j].textContent || '').trim();
+        if (txt === 'Đăng nhập' || txt === 'ĐĂNG NHẬP') {
+          allEls[j].click();
+          loginClicked = true;
+          break;
+        }
+      }
     }
     
-    return JSON.stringify({success: false, error: 'login_uncertain', url: window.location.href});
+    if (!loginClicked) {
+      return JSON.stringify({phone: null, method: 'login_button_not_found', loginAttempted: false});
+    }
+    
+    // Wait for login modal/form to appear
+    await new Promise(r => setTimeout(r, 3000));
+    
+    // Step 2: Fill login form
+    var userInput = null;
+    var pwdInput = null;
+    
+    // Find username/email input
+    var userSels = ['input[name="email"]', 'input[name="username"]', 'input[type="email"]', 'input[name="phone"]', 'input[type="tel"]', 'input[name="loginName"]'];
+    for (var u = 0; u < userSels.length; u++) {
+      var candidates = document.querySelectorAll(userSels[u]);
+      for (var c = 0; c < candidates.length; c++) {
+        // Pick visible input (not hidden)
+        var style = window.getComputedStyle(candidates[c]);
+        if (style.display !== 'none' && style.visibility !== 'hidden' && candidates[c].offsetParent !== null) {
+          userInput = candidates[c];
+          break;
+        }
+      }
+      if (userInput) break;
+    }
+    
+    // Fallback: find any visible text/email input in a form or modal
+    if (!userInput) {
+      var allInputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type])');
+      for (var ai = 0; ai < allInputs.length; ai++) {
+        var st = window.getComputedStyle(allInputs[ai]);
+        if (st.display !== 'none' && st.visibility !== 'hidden' && allInputs[ai].offsetParent !== null) {
+          // Check if it's in a modal/overlay context
+          var parent = allInputs[ai].closest('[class*="modal"], [class*="Modal"], [class*="dialog"], [class*="Dialog"], [class*="popup"], [class*="Popup"], [class*="overlay"], [class*="login"], [class*="Login"]');
+          if (parent) { userInput = allInputs[ai]; break; }
+        }
+      }
+    }
+    
+    if (!userInput) {
+      return JSON.stringify({phone: null, method: 'username_input_not_found', loginAttempted: true});
+    }
+    
+    setInput(userInput, ${JSON.stringify(username)});
+    await new Promise(r => setTimeout(r, 500));
+    
+    // Find password input
+    var pwdCandidates = document.querySelectorAll('input[type="password"]');
+    for (var p = 0; p < pwdCandidates.length; p++) {
+      var pst = window.getComputedStyle(pwdCandidates[p]);
+      if (pst.display !== 'none' && pst.visibility !== 'hidden' && pwdCandidates[p].offsetParent !== null) {
+        pwdInput = pwdCandidates[p];
+        break;
+      }
+    }
+    
+    if (!pwdInput) {
+      return JSON.stringify({phone: null, method: 'password_input_not_found', loginAttempted: true});
+    }
+    
+    setInput(pwdInput, ${JSON.stringify(password)});
+    await new Promise(r => setTimeout(r, 500));
+    
+    // Step 3: Submit login
+    var submitted = false;
+    // Find submit button in the same form/modal context
+    var form = userInput.closest('form');
+    if (form) {
+      var submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+      if (submitBtn) { submitBtn.click(); submitted = true; }
+      else {
+        var btns = form.querySelectorAll('button');
+        for (var b = 0; b < btns.length; b++) {
+          var btxt = (btns[b].textContent || '').trim().toLowerCase();
+          if (btxt.indexOf('đăng nhập') >= 0 || btxt.indexOf('login') >= 0) {
+            btns[b].click(); submitted = true; break;
+          }
+        }
+        if (!submitted) form.submit();
+      }
+      submitted = true;
+    }
+    
+    if (!submitted) {
+      // Try to find a submit button anywhere in a modal
+      var modalBtns = document.querySelectorAll('[class*="modal"] button, [class*="Modal"] button, [class*="dialog"] button, [class*="login"] button');
+      for (var mb = 0; mb < modalBtns.length; mb++) {
+        var mbtxt = (modalBtns[mb].textContent || '').trim().toLowerCase();
+        if (mbtxt.indexOf('đăng nhập') >= 0 || mbtxt.indexOf('login') >= 0) {
+          modalBtns[mb].click(); submitted = true; break;
+        }
+      }
+    }
+    
+    // Wait for login to complete
+    await new Promise(r => setTimeout(r, 5000));
+    
+    // Step 4: Now try to reveal phone number
+    // Click reveal buttons
+    var revealTexts = ['Hiện số', 'Xem SĐT', 'Xem số', 'Bấm để hiện số'];
+    var allClickables = document.querySelectorAll('button, a, span, div');
+    for (var rv = 0; rv < allClickables.length; rv++) {
+      var rvtxt = (allClickables[rv].textContent || '').trim();
+      for (var rt = 0; rt < revealTexts.length; rt++) {
+        if (rvtxt.indexOf(revealTexts[rt]) >= 0) {
+          allClickables[rv].click();
+          await new Promise(r => setTimeout(r, 3000));
+          break;
+        }
+      }
+    }
+    
+    // Also click marketplace-specific selectors
+    ${marketplace === 'batdongsan' 
+      ? `var bdsRevealSels = ['[class*="phone"] button', '.re__btn-short-info-phone', '.js__phone-btn', '.re__contact-phone button'];
+    for (var bs = 0; bs < bdsRevealSels.length; bs++) {
+      try { var bels = document.querySelectorAll(bdsRevealSels[bs]); for (var be = 0; be < bels.length; be++) bels[be].click(); } catch(e) {}
+    }`
+      : `var ntRevealSels = ['[class*="ContactPhone"] button', '[data-aut-id="btnPhone"]', 'button[class*="phone"]'];
+    for (var ns = 0; ns < ntRevealSels.length; ns++) {
+      try { var nels = document.querySelectorAll(ntRevealSels[ns]); for (var ne = 0; ne < nels.length; ne++) nels[ne].click(); } catch(e) {}
+    }`}
+    
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Step 5: Extract phone number
+    // Check tel: links
+    telLinks = document.querySelectorAll('a[href^="tel:"]');
+    for (var t = 0; t < telLinks.length; t++) {
+      var p2 = telLinks[t].getAttribute('href').replace('tel:', '').trim();
+      if (isValidPhone(p2)) {
+        return JSON.stringify({phone: p2, method: 'tel_link_after_login', loginAttempted: true});
+      }
+    }
+    
+    // Check phone-related elements
+    var phoneSels = ['[class*="phone-number"]', '[class*="PhoneNumber"]', '[class*="phone__number"]', '.re__contact-phone', '[class*="ContactPhone"]'];
+    for (var ps = 0; ps < phoneSels.length; ps++) {
+      try {
+        var pels = document.querySelectorAll(phoneSels[ps]);
+        for (var pe = 0; pe < pels.length; pe++) {
+          var ptxt = pels[pe].textContent.trim();
+          var pmatch = ptxt.match(/0[3-9]\\d{8}/);
+          if (pmatch && !isMasked(ptxt) && !isExcluded(pmatch[0])) {
+            return JSON.stringify({phone: pmatch[0], method: 'phone_element_after_login', loginAttempted: true});
+          }
+        }
+      } catch(e) {}
+    }
+    
+    // Regex scan body
+    var bodyText = document.body.innerText;
+    var matches = bodyText.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/g);
+    if (matches) {
+      for (var w = 0; w < matches.length; w++) {
+        if (!isMasked(matches[w]) && !isExcluded(matches[w])) {
+          return JSON.stringify({phone: matches[w], method: 'body_regex_after_login', loginAttempted: true});
+        }
+      }
+    }
+    
+    // Check if we found only masked numbers
+    var maskedFound = /0[3-9]\\d+\\*{2,}/.test(bodyText);
+    return JSON.stringify({
+      phone: null, 
+      method: maskedFound ? 'masked_only_login_may_have_failed' : 'not_found_after_login',
+      loginAttempted: true,
+      currentUrl: window.location.href
+    });
   })()`;
 }
 
-// Build JS to extract phone from listing page (same as before but with masked number rejection)
-function buildPhoneExtractionJS(config: typeof MARKETPLACE_CONFIG[string]): string {
-  const revealSels = config.phoneRevealSelector.split(', ').map(s => s.trim());
-  const resultSels = config.phoneResultSelector.split(', ').map(s => s.trim());
-
+// Build simple extraction JS without login (for fallback)
+function buildSimpleExtractJS(): string {
   return `(async () => {
     await new Promise(r => setTimeout(r, 2000));
     
@@ -183,202 +298,69 @@ function buildPhoneExtractionJS(config: typeof MARKETPLACE_CONFIG[string]): stri
       for (var i = 0; i < exclude.length; i++) { if (digits.indexOf(exclude[i]) >= 0) return true; }
       return false;
     }
-    function isMasked(p) {
-      return p.indexOf('*') >= 0;
-    }
+    function isMasked(p) { return p.indexOf('*') >= 0; }
     function isValidPhone(p) {
       return p && !isMasked(p) && p.replace(/[^0-9]/g, '').length >= 9 && !isExcluded(p);
     }
     
-    // Step 1: Check existing tel: links
+    // Check tel: links
     var telLinks = document.querySelectorAll('a[href^="tel:"]');
     for (var i = 0; i < telLinks.length; i++) {
       var phone = telLinks[i].getAttribute('href').replace('tel:', '').trim();
       if (isValidPhone(phone)) {
-        return JSON.stringify({phone: phone, method: 'tel_link_pre'});
+        return JSON.stringify({phone: phone, method: 'tel_link_no_login'});
       }
     }
     
-    // Step 2: Click any element containing "Hiện số" text (reveal button)
+    // Click reveal buttons
     var allEls = document.querySelectorAll('button, a, span, div');
     for (var j = 0; j < allEls.length; j++) {
       var txt = (allEls[j].textContent || '').trim();
-      if (txt.indexOf('Hiện số') >= 0 || txt.indexOf('Xem SĐT') >= 0 || txt.indexOf('Xem số') >= 0 || txt.indexOf('Bấm để hiện') >= 0) {
+      if (txt.indexOf('Hiện số') >= 0 || txt.indexOf('Xem SĐT') >= 0) {
         allEls[j].click();
         await new Promise(r => setTimeout(r, 3000));
         break;
       }
     }
     
-    // Step 3: Click specific reveal selectors
-    ${revealSels.map(sel => `try { var b = document.querySelectorAll('${sel}'); for (var x = 0; x < b.length; x++) b[x].click(); } catch(e) {}`).join('\n    ')}
-    await new Promise(r => setTimeout(r, 3000));
-    
-    // Step 4: Re-check tel: links after clicking
+    // Re-check tel: links
     telLinks = document.querySelectorAll('a[href^="tel:"]');
     for (var m = 0; m < telLinks.length; m++) {
       var p2 = telLinks[m].getAttribute('href').replace('tel:', '').trim();
       if (isValidPhone(p2)) {
-        return JSON.stringify({phone: p2, method: 'reveal_click'});
+        return JSON.stringify({phone: p2, method: 'tel_link_after_reveal'});
       }
     }
     
-    // Step 5: Check result selectors for unmasked numbers
-    ${resultSels.map(sel => `try { var r = document.querySelectorAll('${sel}'); for (var n = 0; n < r.length; n++) { var t = r[n].textContent.trim(); if (isValidPhone(t) && /0[3-9][0-9]{8}/.test(t.replace(/[\\s.-]/g, ''))) return JSON.stringify({phone: t, method: 'result_selector'}); } } catch(e) {}`).join('\n    ')}
-    
-    // Step 6: Check for phone in any visible element with phone-like classes
-    var phoneLikeEls = document.querySelectorAll('[class*="phone"], [class*="Phone"], [class*="contact"], [class*="Contact"]');
-    for (var q = 0; q < phoneLikeEls.length; q++) {
-      var content = phoneLikeEls[q].textContent.trim();
-      var phoneMatch = content.match(/0[3-9]\\d{8}/);
-      if (phoneMatch && !isMasked(content) && !isExcluded(phoneMatch[0])) {
-        return JSON.stringify({phone: phoneMatch[0], method: 'phone_class_element'});
-      }
-    }
-    
-    // Step 7: Regex scan body for Vietnamese phone (excluding masked)
+    // Body regex
     var bodyText = document.body.innerText;
     var match = bodyText.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/g);
     if (match) {
       for (var w = 0; w < match.length; w++) {
         if (!isMasked(match[w]) && !isExcluded(match[w])) {
-          return JSON.stringify({phone: match[w], method: 'body_regex'});
+          return JSON.stringify({phone: match[w], method: 'body_regex_no_login'});
         }
       }
     }
     
-    // Check if we found masked numbers (login didn't work)
-    var maskedFound = false;
-    var allText = document.body.innerText;
-    if (/0[3-9]\d+\*{2,}/.test(allText)) maskedFound = true;
-    
+    var maskedFound = /0[3-9]\\d+\\*{2,}/.test(bodyText);
     return JSON.stringify({phone: null, method: maskedFound ? 'masked_only' : 'not_found'});
   })()`;
 }
 
-// BQL query: Login first, then navigate to listing and extract
-function buildLoginThenExtractQuery(): string {
-  return `mutation LoginAndExtract($loginUrl: String!, $loginJS: String!, $listingUrl: String!, $extractJS: String!) {
-  loginPage: goto(url: $loginUrl, waitUntil: networkIdle) {
-    status
-    url
-  }
-
-  waitForLogin: waitForSelector(
-    selector: "body"
-    timeout: 8000
-  ) {
-    time
-  }
-
-  doLogin: evaluate(
-    content: $loginJS
-    timeout: 20000
-  ) {
-    value
-  }
-
-  listingPage: goto(url: $listingUrl, waitUntil: networkIdle) {
-    status
-    url
-  }
-
-  waitForListing: waitForSelector(
-    selector: "body"
-    timeout: 8000
-  ) {
-    time
-  }
-
-  phoneData: evaluate(
-    content: $extractJS
-    timeout: 20000
-  ) {
-    value
-  }
-}`;
-}
-
-// BQL query: Direct extraction without login (fallback)
-function buildDirectExtractQuery(): string {
+function buildBQLQuery(): string {
   return `mutation ExtractPhone($url: String!, $jsCode: String!) {
   goto(url: $url, waitUntil: networkIdle) {
     status
     url
   }
-
-  waitForPage: waitForSelector(
-    selector: "body"
-    timeout: 8000
-  ) {
+  waitForPage: waitForSelector(selector: "body", timeout: 10000) {
     time
   }
-
-  phoneData: evaluate(
-    content: $jsCode
-    timeout: 15000
-  ) {
+  phoneData: evaluate(content: $jsCode, timeout: 45000) {
     value
   }
 }`;
-}
-
-function buildFallbackScript(listingUrl: string): string {
-  return `mutation FallbackPhone {
-  goto(url: "${listingUrl}", waitUntil: networkIdle) {
-    status
-    url
-  }
-
-  waitForPage: waitForSelector(
-    selector: "body"
-    timeout: 5000
-  ) {
-    time
-  }
-
-  phoneLinks: html(selector: "a[href^='tel:']") {
-    html
-  }
-
-  pageContent: text(selector: "body") {
-    text
-  }
-}`;
-}
-
-function extractPhoneFromText(text: string): string | null {
-  if (!text) return null;
-  // Reject if text contains masked numbers
-  if (text.includes('*')) {
-    // Try to find unmasked numbers only
-    const lines = text.split('\n');
-    for (const line of lines) {
-      if (line.includes('*')) continue;
-      const match = line.match(/0[3-9]\d{8}/);
-      if (match) {
-        const cleaned = cleanPhoneNumber(match[0]);
-        if (cleaned) return cleaned;
-      }
-    }
-    return null;
-  }
-  const patterns = [
-    /(?:0[3-9]\d{8})/g,
-    /(?:\+84[3-9]\d{8})/g,
-    /(?:84[3-9]\d{8})/g,
-    /(?:0\d{2}[\s.-]?\d{3}[\s.-]?\d{4})/g,
-  ];
-  for (const pattern of patterns) {
-    const matches = text.match(pattern);
-    if (matches) {
-      for (const match of matches) {
-        const cleaned = cleanPhoneNumber(match);
-        if (cleaned) return cleaned;
-      }
-    }
-  }
-  return null;
 }
 
 function parsePhoneResult(resultStr: string | undefined | null): { phone: string | null; method: string } {
@@ -399,94 +381,46 @@ async function extractPhoneForListing(
   listingUrl: string,
   marketplace: string,
 ): Promise<{ phone: string | null; method: string }> {
-  const config = MARKETPLACE_CONFIG[marketplace];
-  if (!config) return { phone: null, method: 'unsupported_marketplace' };
-
-  const username = Deno.env.get(config.usernameEnvKey);
-  const password = Deno.env.get(config.passwordEnvKey);
+  const envKeys: Record<string, [string, string]> = {
+    batdongsan: ['BATDONGSAN_USERNAME', 'BATDONGSAN_PASSWORD'],
+    nhatot: ['NHATOT_USERNAME', 'NHATOT_PASSWORD'],
+  };
+  
+  const [userKey, passKey] = envKeys[marketplace] || [];
+  const username = userKey ? Deno.env.get(userKey) : null;
+  const password = passKey ? Deno.env.get(passKey) : null;
   const hasCredentials = username && password;
 
-  // Attempt 1: Login + extract (if credentials available)
+  // Attempt 1: Login on listing page + extract
   if (hasCredentials) {
     try {
-      console.log(`[extract-phone] Attempting login+extract for ${marketplace}: ${listingUrl}`);
-      const loginJS = buildLoginJS(config, username, password);
-      const extractJS = buildPhoneExtractionJS(config);
-      const query = buildLoginThenExtractQuery();
-      const variables = {
-        loginUrl: config.loginUrl,
-        loginJS,
-        listingUrl,
-        extractJS,
-      };
-      const result = await executeBrowserlessScript(query, variables, 60000);
+      console.log(`[extract-phone] Login+extract on listing page for ${marketplace}: ${listingUrl}`);
+      const jsCode = buildLoginAndExtractJS(marketplace, username, password);
+      const query = buildBQLQuery();
+      const result = await executeBrowserlessScript(query, { url: listingUrl, jsCode }, 60000);
 
-      // Check login result
-      const loginResultStr = result?.data?.doLogin?.value;
-      if (loginResultStr) {
-        try {
-          const loginData = JSON.parse(loginResultStr);
-          console.log(`[extract-phone] Login result: ${JSON.stringify(loginData)}`);
-        } catch { /* ignore parse errors */ }
-      }
-
-      // Check phone extraction result
       const phoneResult = parsePhoneResult(result?.data?.phoneData?.value);
-      if (phoneResult.phone) {
-        console.log(`[extract-phone] Found phone via login+extract (${phoneResult.method}): ${phoneResult.phone}`);
-        return phoneResult;
-      }
-
-      // If we got masked_only, login may have failed
-      if (phoneResult.method === 'masked_only') {
-        console.warn(`[extract-phone] Login may have failed for ${marketplace} - got masked numbers`);
-      }
+      console.log(`[extract-phone] Login+extract result: ${JSON.stringify(phoneResult)}`);
+      if (phoneResult.phone) return phoneResult;
     } catch (error) {
-      console.warn(`[extract-phone] Login+extract failed for ${listingUrl}:`, error);
+      console.warn(`[extract-phone] Login+extract failed:`, error);
     }
   }
 
-  // Attempt 2: Direct extraction without login (for sites that show some phones publicly)
+  // Attempt 2: Simple extraction without login
   try {
-    console.log(`[extract-phone] Attempting direct extract for: ${listingUrl}`);
-    const jsCode = buildPhoneExtractionJS(config);
-    const query = buildDirectExtractQuery();
-    const variables = { url: listingUrl, jsCode };
-    const result = await executeBrowserlessScript(query, variables, 30000);
+    console.log(`[extract-phone] Simple extract for: ${listingUrl}`);
+    const jsCode = buildSimpleExtractJS();
+    const query = buildBQLQuery();
+    const result = await executeBrowserlessScript(query, { url: listingUrl, jsCode }, 30000);
 
     const phoneResult = parsePhoneResult(result?.data?.phoneData?.value);
     if (phoneResult.phone) {
-      console.log(`[extract-phone] Found phone via direct extract (${phoneResult.method}): ${phoneResult.phone}`);
+      console.log(`[extract-phone] Simple extract found: ${phoneResult.phone}`);
       return phoneResult;
     }
   } catch (error) {
-    console.warn(`[extract-phone] Direct extract failed for ${listingUrl}:`, error);
-  }
-
-  // Attempt 3: Fallback - check tel: links and body text
-  try {
-    console.log(`[extract-phone] Fallback: checking tel: links for ${listingUrl}`);
-    const fallbackScript = buildFallbackScript(listingUrl);
-    const result = await executeBrowserlessScript(fallbackScript, undefined, 15000);
-
-    const phoneLinksHtml = result?.data?.phoneLinks?.html || '';
-    const telMatch = phoneLinksHtml.match(/href="tel:([^"]+)"/);
-    if (telMatch) {
-      const phone = cleanPhoneNumber(telMatch[1]);
-      if (phone) {
-        console.log(`[extract-phone] Found phone via tel: link: ${phone}`);
-        return { phone, method: 'fallback_tel_link' };
-      }
-    }
-
-    const pageContent = result?.data?.pageContent?.text || '';
-    const phoneFromContent = extractPhoneFromText(pageContent);
-    if (phoneFromContent) {
-      console.log(`[extract-phone] Found phone in fallback content: ${phoneFromContent}`);
-      return { phone: phoneFromContent, method: 'fallback_content' };
-    }
-  } catch (error) {
-    console.warn(`[extract-phone] Fallback failed for ${listingUrl}:`, error);
+    console.warn(`[extract-phone] Simple extract failed:`, error);
   }
 
   return { phone: null, method: 'not_found' };
