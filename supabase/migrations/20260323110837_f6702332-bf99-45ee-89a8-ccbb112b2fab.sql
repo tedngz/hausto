@@ -1,0 +1,1 @@
+UPDATE external_properties SET contact_phone = NULL, updated_at = NOW() WHERE contact_phone LIKE '%*%' AND is_active = true;
