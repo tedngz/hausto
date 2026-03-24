@@ -144,14 +144,19 @@ function buildExtractJS(): string {
       }
     }
     
-    var maskedFound = /0[3-9]\\d+\\*{2,}/.test(bodyText);
+    var maskedFound = /0[3-9]\d+\*{2,}/.test(bodyText);
+    var title = document.title || '';
+    var telCount = document.querySelectorAll('a[href^="tel:"]').length;
+    var bodyLen = bodyText.length;
     return JSON.stringify({
       phone: null, 
       method: maskedFound ? 'masked_only' : 'not_found',
-      url: window.location.href
+      url: window.location.href,
+      title: title.substring(0, 100),
+      telCount: telCount,
+      bodyLen: bodyLen
     });
   })()`;
-}
 
 // Build BQL with cookie injection before navigation
 function buildBQLWithCookies(cookies: Array<{name: string; value: string; domain: string; path: string}>): string {
