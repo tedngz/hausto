@@ -157,7 +157,7 @@ function buildExtractJS(): string {
       bodyLen: bodyLen
     });
   })()`;
-
+}
 // Build BQL with cookie injection before navigation
 function buildBQLWithCookies(cookies: Array<{name: string; value: string; domain: string; path: string}>): string {
   if (cookies.length === 0) {
