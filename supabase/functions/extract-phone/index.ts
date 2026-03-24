@@ -241,6 +241,7 @@ async function extractPhoneForListing(
     }
 
     const result = await response.json();
+    console.log(`[extract-phone] Raw BQL response: ${JSON.stringify(result).substring(0, 500)}`);
     const phoneResult = parsePhoneResult(result?.data?.phoneData?.value);
     console.log(`[extract-phone] Result: ${JSON.stringify(phoneResult)}`);
     return phoneResult;
