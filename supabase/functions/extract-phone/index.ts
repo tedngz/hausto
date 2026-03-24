@@ -198,7 +198,7 @@ function buildBQLWithCookies(cookies: Array<{name: string; value: string; domain
 }`;
 }
 
-function parsePhoneResult(resultStr: string | undefined | null): { phone: string | null; method: string } {
+function parsePhoneResult(resultStr: string | undefined | null): { phone: string | null; method: string; debug?: Record<string, unknown> } {
   if (!resultStr) return { phone: null, method: 'no_result' };
   try {
     const data = JSON.parse(resultStr);
@@ -206,7 +206,7 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
       const phone = cleanPhoneNumber(data.phone);
       if (phone) return { phone, method: data.method };
     }
-    return { phone: null, method: data.method || 'parse_no_phone' };
+    return { phone: null, method: data.method || 'parse_no_phone', debug: { title: data.title, telCount: data.telCount, bodyLen: data.bodyLen, url: data.url } };
   } catch {
     return { phone: null, method: 'parse_error' };
   }
