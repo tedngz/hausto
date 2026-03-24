@@ -156,7 +156,6 @@ function buildExtractJS(): string {
 // Build BQL with cookie injection before navigation
 function buildBQLWithCookies(cookies: Array<{name: string; value: string; domain: string; path: string}>): string {
   if (cookies.length === 0) {
-    // No cookies — simple goto + extract
     return `mutation ExtractPhone($url: String!, $jsCode: String!) {
   goto(url: $url, waitUntil: networkIdle) {
     status
@@ -168,9 +167,18 @@ function buildBQLWithCookies(cookies: Array<{name: string; value: string; domain
 }`;
   }
 
-  // With cookies: inject first, then navigate
-  return `mutation ExtractPhone($url: String!, $jsCode: String!, $cookies: [CookieInput!]!) {
-  setCookies: cookies(cookies: $cookies) {
+  // Inline cookies directly in the BQL mutation (avoids variable type issues)
+  const cookieEntries = cookies.map(c => {
+    const escapedName = c.name.replace(/"/g, '\\"');
+    const escapedValue = c.value.replace(/"/g, '\\"');
+    const escapedDomain = c.domain.replace(/"/g, '\\"');
+    return `{ name: "${escapedName}", value: "${escapedValue}", domain: "${escapedDomain}", path: "/" }`;
+  }).join(',\n    ');
+
+  return `mutation ExtractPhone($url: String!, $jsCode: String!) {
+  setCookies: cookies(cookies: [
+    ${cookieEntries}
+  ]) {
     cookies {
       name
     }
