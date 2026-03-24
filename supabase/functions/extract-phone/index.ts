@@ -218,9 +218,6 @@ async function extractPhoneForListing(
   const query = buildBQLWithCookies(cookies);
 
   const variables: Record<string, unknown> = { url: listingUrl, jsCode };
-  if (cookies.length > 0) {
-    variables.cookies = cookies;
-  }
 
   try {
     console.log(`[extract-phone] Extracting from ${listingUrl} (cookies: ${cookies.length > 0 ? 'yes' : 'no'})`);
