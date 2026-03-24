@@ -165,49 +165,24 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
     const variables: Record<string, unknown> = { url: listingUrl, jsCode };
 
     if (hasCookies) {
-      // Two-step: navigate to domain root first to set cookies, then go to actual URL
+      // Navigate to domain root, set cookies via document.cookie, then go to listing
+      const domainUrl = marketplace === 'batdongsan' ? 'https://batdongsan.com.vn/' : 'https://www.nhatot.com/';
+      const setCookieJS = `(async () => {
+        var pairs = ${JSON.stringify(cookieStr)}.split('; ');
+        for (var i = 0; i < pairs.length; i++) document.cookie = pairs[i] + '; path=/';
+        return pairs.length;
+      })()`;
+      
       query = `mutation ExtractPhone($url: String!, $jsCode: String!) {
-  blankPage: goto(url: "about:blank", waitUntil: load) {
-    status
-  }
-  injectCookies: evaluate(content: ${JSON.stringify(`(async () => {
-    // Set cookies by making a fetch to the domain with cookie header
-    // Actually use CDP-like approach: set via document.cookie won't work on about:blank
-    // Instead, navigate to the domain first
-    return 'ready';
-  })()`)}, timeout: 5000) {
-    value
-  }
-  navigateToDomain: goto(url: "${marketplace === 'batdongsan' ? 'https://batdongsan.com.vn' : 'https://www.nhatot.com'}", waitUntil: networkIdle) {
-    status
-  }
-  setCookiesOnDomain: evaluate(content: ${JSON.stringify(`(async () => {
-    var cookies = ${JSON.stringify(cookieStr)};
-    var pairs = cookies.split('; ');
-    for (var i = 0; i < pairs.length; i++) {
-      document.cookie = pairs[i] + '; path=/';
-    }
-    return 'set ' + pairs.length + ' cookies';
-  })()`)}, timeout: 10000) {
-    value
-  }
-  gotoListing: goto(url: $url, waitUntil: networkIdle) {
-    status
-    url
-  }
-  phoneData: evaluate(content: $jsCode, timeout: 45000) {
-    value
-  }
+  domainPage: goto(url: "${domainUrl}", waitUntil: domContentLoaded) { status }
+  setCookies: evaluate(content: ${JSON.stringify(setCookieJS)}, timeout: 5000) { value }
+  gotoListing: goto(url: $url, waitUntil: networkIdle) { status url }
+  phoneData: evaluate(content: $jsCode, timeout: 45000) { value }
 }`;
     } else {
       query = `mutation ExtractPhone($url: String!, $jsCode: String!) {
-  goto(url: $url, waitUntil: networkIdle) {
-    status
-    url
-  }
-  phoneData: evaluate(content: $jsCode, timeout: 45000) {
-    value
-  }
+  goto(url: $url, waitUntil: networkIdle) { status url }
+  phoneData: evaluate(content: $jsCode, timeout: 45000) { value }
 }`;
     }
 
