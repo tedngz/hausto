@@ -49,14 +49,185 @@ function buildExtractJS(): string {
       return p && !isMasked(p) && p.replace(/[^0-9]/g, '').length >= 9 && !isExcluded(p);
     }
     
-    // Check tel: links
+    // Step 1: Check existing tel: links (already revealed)
     var telLinks = document.querySelectorAll('a[href^="tel:"]');
     for (var i = 0; i < telLinks.length; i++) {
       var phone = telLinks[i].getAttribute('href').replace('tel:', '').trim();
       if (isValidPhone(phone)) return JSON.stringify({phone: phone, method: 'tel_link'});
     }
     
-    // Click reveal buttons
+    // Step 2: For Batdongsan - find encrypted phone 'raw' attribute and call DecryptPhone API
+    var isBDS = window.location.hostname.indexOf('batdongsan') >= 0;
+    if (isBDS) {
+      // Look for elements with 'raw' attribute containing encrypted phone data
+      var rawSels = [
+        '[raw]', '[data-raw]', '[data-phone-raw]',
+        '.re__contact-phone [raw]', '[class*="phone"] [raw]',
+        '.js__phone [raw]', '.re__btn-short-info-phone[raw]'
+      ];
+      var encryptedPhone = null;
+      for (var rs = 0; rs < rawSels.length; rs++) {
+        try {
+          var rawEls = document.querySelectorAll(rawSels[rs]);
+          for (var re = 0; re < rawEls.length; re++) {
+            var rawVal = rawEls[re].getAttribute('raw') || rawEls[re].getAttribute('data-raw') || rawEls[re].getAttribute('data-phone-raw');
+            if (rawVal && rawVal.length > 5) { encryptedPhone = rawVal; break; }
+          }
+          if (encryptedPhone) break;
+        } catch(ex) {}
+      }
+      
+      // Also scan script tags and JS variables for encrypted phone data
+      if (!encryptedPhone) {
+        try {
+          var scripts = document.querySelectorAll('script:not([src])');
+          for (var si = 0; si < scripts.length; si++) {
+            var sc = scripts[si].textContent || '';
+            // Look for phone patterns in inline scripts
+            var rawMatch = sc.match(/["']raw["']\\s*:\\s*["']([^"']{10,})["']/);
+            if (rawMatch) { encryptedPhone = rawMatch[1]; break; }
+            var phoneEncMatch = sc.match(/PhoneNumber["']?\\s*[:=]\\s*["']([^"']{10,})["']/);
+            if (phoneEncMatch) { encryptedPhone = phoneEncMatch[1]; break; }
+            var encMatch = sc.match(/encrypted(?:Phone)?["']?\\s*[:=]\\s*["']([^"']{10,})["']/i);
+            if (encMatch) { encryptedPhone = encMatch[1]; break; }
+          }
+        } catch(ex) {}
+      }
+      
+      // Also check data attributes on phone containers
+      if (!encryptedPhone) {
+        try {
+          var phoneContainers = document.querySelectorAll('[class*="phone"], [class*="Phone"], .re__contact-phone, .js__phone-container');
+          for (var pc = 0; pc < phoneContainers.length; pc++) {
+            var attrs = phoneContainers[pc].attributes;
+            for (var ai = 0; ai < attrs.length; ai++) {
+              var attrVal = attrs[ai].value;
+              if (attrs[ai].name !== 'class' && attrs[ai].name !== 'style' && attrVal.length > 10 && /[A-Za-z0-9+/=]{10,}/.test(attrVal)) {
+                encryptedPhone = attrVal;
+                break;
+              }
+            }
+            if (encryptedPhone) break;
+          }
+        } catch(ex) {}
+      }
+      
+      if (encryptedPhone) {
+        // Try to get Turnstile challenge token if available
+        var challengeToken = null;
+        try {
+          // Turnstile renders in an iframe, try to get the token
+          if (window.turnstile) {
+            challengeToken = await new Promise(function(resolve) {
+              window.turnstile.render('#cf-turnstile-container', {
+                sitekey: document.querySelector('[data-sitekey]')?.getAttribute('data-sitekey') || '',
+                callback: function(token) { resolve(token); }
+              });
+              setTimeout(function() { resolve(null); }, 10000);
+            });
+          }
+          // Also try getting token from existing turnstile widget
+          if (!challengeToken) {
+            var tsInput = document.querySelector('[name="cf-turnstile-response"]') || document.querySelector('input[name*="turnstile"]');
+            if (tsInput) challengeToken = tsInput.value;
+          }
+        } catch(ex) {}
+        
+        // Call DecryptPhone API with or without token
+        try {
+          var reqBody = { PhoneNumber: encryptedPhone };
+          if (challengeToken) reqBody.ChallengeToken = challengeToken;
+          
+          var decryptResp = await fetch('/Product/ProductDetail/DecryptPhone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+            body: JSON.stringify(reqBody)
+          });
+          
+          var respText = await decryptResp.text();
+          if (decryptResp.ok) {
+            try {
+              var decryptData = JSON.parse(respText);
+              var decrypted = decryptData.PhoneNumber || decryptData.phoneNumber || decryptData.phone || decryptData.Phone;
+              if (!decrypted && typeof decryptData === 'object') {
+                var keys = Object.keys(decryptData);
+                for (var dk = 0; dk < keys.length; dk++) {
+                  var dv = decryptData[keys[dk]];
+                  if (typeof dv === 'string' && /0[3-9]\d{8,9}/.test(dv.replace(/[^0-9]/g, ''))) { decrypted = dv; break; }
+                }
+              }
+              if (decrypted && isValidPhone(decrypted)) {
+                return JSON.stringify({phone: decrypted, method: 'decrypt_api'});
+              }
+            } catch(pe) {}
+          }
+          // Log the API response for debugging
+          return JSON.stringify({phone: null, method: 'decrypt_api_debug', debug: {
+            status: decryptResp.status,
+            response: respText.substring(0, 300),
+            hadToken: !!challengeToken,
+            encrypted: encryptedPhone.substring(0, 30)
+          }});
+        } catch(ex) {
+          // Fall through to click approach
+        }
+      }
+      
+      // Intercept XHR/fetch to capture decrypted phone from reveal button click
+      var interceptedPhone = null;
+      var origFetch = window.fetch;
+      window.fetch = function() {
+        return origFetch.apply(this, arguments).then(function(resp) {
+          var url = (arguments[0] && arguments[0].url) || (typeof arguments[0] === 'string' ? arguments[0] : '');
+          if (url.indexOf('DecryptPhone') >= 0 || url.indexOf('decrypt') >= 0 || url.indexOf('phone') >= 0) {
+            resp.clone().text().then(function(t) {
+              try {
+                var d = JSON.parse(t);
+                var p = d.PhoneNumber || d.phoneNumber || d.phone || d.Phone;
+                if (p && !isMasked(p)) interceptedPhone = p;
+              } catch(e) {}
+            });
+          }
+          return resp;
+        });
+      };
+      var origXHROpen = XMLHttpRequest.prototype.open;
+      var origXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(m, u) {
+        this._url = u;
+        return origXHROpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function() {
+        var xhr = this;
+        xhr.addEventListener('load', function() {
+          var u = xhr._url || '';
+          if (u.indexOf('DecryptPhone') >= 0 || u.indexOf('decrypt') >= 0 || u.indexOf('phone') >= 0) {
+            try {
+              var d = JSON.parse(xhr.responseText);
+              var p = d.PhoneNumber || d.phoneNumber || d.phone || d.Phone;
+              if (p && !isMasked(p)) interceptedPhone = p;
+            } catch(e) {}
+          }
+        });
+        return origXHRSend.apply(this, arguments);
+      };
+    }
+    
+    // For Nhatot - look for phone in API data embedded in page
+    var isNhatot = window.location.hostname.indexOf('nhatot') >= 0 || window.location.hostname.indexOf('chotot') >= 0;
+    if (isNhatot) {
+      try {
+        var nextData = document.getElementById('__NEXT_DATA__');
+        if (nextData) {
+          var ndJson = JSON.parse(nextData.textContent);
+          var ndStr = JSON.stringify(ndJson);
+          var ndMatch = ndStr.match(/0[3-9]\d{8}/);
+          if (ndMatch && isValidPhone(ndMatch[0])) return JSON.stringify({phone: ndMatch[0], method: 'nhatot_next_data'});
+        }
+      } catch(ex) {}
+    }
+    
+    // Step 3: Click reveal buttons (fallback for both marketplaces)
     var revealTexts = ['Hiện số', 'Xem SĐT', 'Xem số', 'Bấm để hiện số'];
     var allEls = document.querySelectorAll('button, a, span, div');
     for (var j = 0; j < allEls.length; j++) {
@@ -75,19 +246,24 @@ function buildExtractJS(): string {
       '.re__contact-phone button', '[class*="ContactPhone"] button',
       '[data-aut-id="btnPhone"]', 'button[class*="phone"]'
     ];
-    for (var rs = 0; rs < revealSels.length; rs++) {
-      try { var els = document.querySelectorAll(revealSels[rs]); for (var e = 0; e < els.length; e++) els[e].click(); } catch(ex) {}
+    for (var rsi = 0; rsi < revealSels.length; rsi++) {
+      try { var els = document.querySelectorAll(revealSels[rsi]); for (var e = 0; e < els.length; e++) els[e].click(); } catch(ex) {}
     }
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000));
     
-    // Re-check tel: links
+    // Check intercepted phone from XHR/fetch monkey-patch
+    if (interceptedPhone && isValidPhone(interceptedPhone)) {
+      return JSON.stringify({phone: interceptedPhone, method: 'xhr_intercept'});
+    }
+    
+    // Step 4: Re-check tel: links after reveal
     telLinks = document.querySelectorAll('a[href^="tel:"]');
     for (var t = 0; t < telLinks.length; t++) {
       var p2 = telLinks[t].getAttribute('href').replace('tel:', '').trim();
       if (isValidPhone(p2)) return JSON.stringify({phone: p2, method: 'tel_link_after_reveal'});
     }
     
-    // Check phone elements
+    // Step 5: Check phone elements
     var phoneSels = ['[class*="phone-number"]', '[class*="PhoneNumber"]', '[class*="phone__number"]', '.re__contact-phone', '[class*="ContactPhone"]'];
     for (var ps = 0; ps < phoneSels.length; ps++) {
       try {
@@ -100,7 +276,7 @@ function buildExtractJS(): string {
       } catch(ex) {}
     }
     
-    // Body regex
+    // Step 6: Body regex fallback
     var bodyText = document.body.innerText;
     var matches = bodyText.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/g);
     if (matches) {
@@ -110,12 +286,28 @@ function buildExtractJS(): string {
     }
     
     var maskedFound = /0[3-9]\\d+\\*{2,}/.test(bodyText);
+    var debugInfo = {
+      url: window.location.href,
+      title: (document.title || '').substring(0, 100),
+      bodyLen: bodyText.length,
+      isBDS: isBDS
+    };
+    if (isBDS) {
+      var phoneEls = document.querySelectorAll('[class*="phone"], [class*="Phone"]');
+      debugInfo.phoneElCount = phoneEls.length;
+      debugInfo.encryptedFound = !!encryptedPhone;
+      debugInfo.interceptedPhone = interceptedPhone;
+      if (phoneEls.length > 0) {
+        debugInfo.phoneElSample = (phoneEls[0].outerHTML || '').substring(0, 300);
+      }
+      // Check all elements with 'raw' attribute
+      var rawEls = document.querySelectorAll('[raw]');
+      debugInfo.rawElCount = rawEls.length;
+    }
     return JSON.stringify({
       phone: null,
       method: maskedFound ? 'masked_only' : 'not_found',
-      url: window.location.href,
-      title: (document.title || '').substring(0, 100),
-      bodyLen: bodyText.length
+      debug: debugInfo
     });
   })()`;
 }
@@ -140,7 +332,7 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
       const phone = cleanPhoneNumber(data.phone);
       if (phone) return { phone, method: data.method };
     }
-    return { phone: null, method: data.method || 'parse_no_phone', debug: { title: data.title, bodyLen: data.bodyLen, url: data.url } };
+    return { phone: null, method: data.method || 'parse_no_phone', debug: data.debug || { title: data.title, bodyLen: data.bodyLen, url: data.url } };
   } catch {
     return { phone: null, method: 'parse_error' };
   }
@@ -201,15 +393,27 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
 
     const result = await response.json();
     
-    if (result.errors) {
-      console.error(`[extract-phone] BQL errors: ${JSON.stringify(result.errors).substring(0, 300)}`);
+    // Log full BQL response for debugging
+    console.log(`[extract-phone] BQL response keys: ${JSON.stringify(Object.keys(result.data || {}))}`);
+    if (result.data?.gotoListing) {
+      console.log(`[extract-phone] Goto listing: status=${result.data.gotoListing.status}, url=${result.data.gotoListing.url}`);
     }
-    if (hasCookies && result.data?.setCookiesOnDomain?.value) {
-      console.log(`[extract-phone] Cookie injection: ${result.data.setCookiesOnDomain.value}`);
+    if (result.data?.goto) {
+      console.log(`[extract-phone] Goto: status=${result.data.goto.status}, url=${result.data.goto.url}`);
     }
     
-    const phoneResult = parsePhoneResult(result?.data?.phoneData?.value);
-    console.log(`[extract-phone] Result: ${JSON.stringify(phoneResult)}`);
+    if (result.errors) {
+      console.error(`[extract-phone] BQL errors: ${JSON.stringify(result.errors).substring(0, 500)}`);
+    }
+    if (hasCookies && result.data?.setCookies?.value) {
+      console.log(`[extract-phone] Cookie injection: ${result.data.setCookies.value}`);
+    }
+    
+    const rawValue = result?.data?.phoneData?.value;
+    console.log(`[extract-phone] Raw evaluate value: ${typeof rawValue === 'string' ? rawValue.substring(0, 500) : rawValue}`);
+    
+    const phoneResult = parsePhoneResult(rawValue);
+    console.log(`[extract-phone] Result: ${JSON.stringify(phoneResult).substring(0, 500)}`);
     return phoneResult;
   } catch (error) {
     console.error(`[extract-phone] Error:`, error);
