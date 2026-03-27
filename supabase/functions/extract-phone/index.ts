@@ -113,56 +113,82 @@ function buildExtractJS(): string {
       }
       
       if (encryptedPhone) {
+        // Try calling DecryptPhone API - first without Turnstile token
         try {
-          // Call the DecryptPhone API directly
           var decryptResp = await fetch('/Product/ProductDetail/DecryptPhone', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Requested-With': 'XMLHttpRequest',
-              'Accept': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
             body: JSON.stringify({ PhoneNumber: encryptedPhone })
           });
-          
           if (decryptResp.ok) {
             var decryptData = await decryptResp.json();
-            var decrypted = decryptData.PhoneNumber || decryptData.phoneNumber || decryptData.phone || decryptData.Phone || (typeof decryptData === 'string' ? decryptData : null);
+            var decrypted = decryptData.PhoneNumber || decryptData.phoneNumber || decryptData.phone || decryptData.Phone;
             if (!decrypted && typeof decryptData === 'object') {
-              // Try to find phone in any field
               var keys = Object.keys(decryptData);
               for (var dk = 0; dk < keys.length; dk++) {
                 var dv = decryptData[keys[dk]];
-                if (typeof dv === 'string' && /0[3-9]\\d{8,9}/.test(dv.replace(/[^0-9]/g, ''))) {
-                  decrypted = dv; break;
-                }
+                if (typeof dv === 'string' && /0[3-9]\d{8,9}/.test(dv.replace(/[^0-9]/g, ''))) { decrypted = dv; break; }
               }
             }
             if (decrypted && isValidPhone(decrypted)) {
-              return JSON.stringify({phone: decrypted, method: 'decrypt_api', debug: {encrypted: encryptedPhone.substring(0,20)}});
+              return JSON.stringify({phone: decrypted, method: 'decrypt_api'});
             }
-            // Log what we got back for debugging
-            return JSON.stringify({phone: null, method: 'decrypt_api_no_phone', debug: {response: JSON.stringify(decryptData).substring(0,200), encrypted: encryptedPhone.substring(0,20)}});
-          } else {
-            // Try alternative endpoint
-            var altResp = await fetch('/api/phone/decrypt', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-              body: JSON.stringify({ phone: encryptedPhone })
-            });
-            if (altResp.ok) {
-              var altData = await altResp.json();
-              var altPhone = altData.phone || altData.PhoneNumber || altData.phoneNumber;
-              if (altPhone && isValidPhone(altPhone)) {
-                return JSON.stringify({phone: altPhone, method: 'decrypt_api_alt'});
-              }
-            }
-            return JSON.stringify({phone: null, method: 'decrypt_api_error', debug: {status: decryptResp.status, encrypted: encryptedPhone.substring(0,20)}});
           }
-        } catch(decErr) {
-          return JSON.stringify({phone: null, method: 'decrypt_api_exception', debug: {error: (decErr.message || '').substring(0,100), encrypted: encryptedPhone.substring(0,20)}});
-        }
+        } catch(ex) {}
       }
+      
+      // Intercept XHR/fetch to capture decrypted phone from reveal button click
+      var interceptedPhone = null;
+      var origFetch = window.fetch;
+      window.fetch = function() {
+        return origFetch.apply(this, arguments).then(function(resp) {
+          var url = (arguments[0] && arguments[0].url) || (typeof arguments[0] === 'string' ? arguments[0] : '');
+          if (url.indexOf('DecryptPhone') >= 0 || url.indexOf('decrypt') >= 0 || url.indexOf('phone') >= 0) {
+            resp.clone().text().then(function(t) {
+              try {
+                var d = JSON.parse(t);
+                var p = d.PhoneNumber || d.phoneNumber || d.phone || d.Phone;
+                if (p && !isMasked(p)) interceptedPhone = p;
+              } catch(e) {}
+            });
+          }
+          return resp;
+        });
+      };
+      var origXHROpen = XMLHttpRequest.prototype.open;
+      var origXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(m, u) {
+        this._url = u;
+        return origXHROpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function() {
+        var xhr = this;
+        xhr.addEventListener('load', function() {
+          var u = xhr._url || '';
+          if (u.indexOf('DecryptPhone') >= 0 || u.indexOf('decrypt') >= 0 || u.indexOf('phone') >= 0) {
+            try {
+              var d = JSON.parse(xhr.responseText);
+              var p = d.PhoneNumber || d.phoneNumber || d.phone || d.Phone;
+              if (p && !isMasked(p)) interceptedPhone = p;
+            } catch(e) {}
+          }
+        });
+        return origXHRSend.apply(this, arguments);
+      };
+    }
+    
+    // For Nhatot - look for phone in API data embedded in page
+    var isNhatot = window.location.hostname.indexOf('nhatot') >= 0 || window.location.hostname.indexOf('chotot') >= 0;
+    if (isNhatot) {
+      try {
+        var nextData = document.getElementById('__NEXT_DATA__');
+        if (nextData) {
+          var ndJson = JSON.parse(nextData.textContent);
+          var ndStr = JSON.stringify(ndJson);
+          var ndMatch = ndStr.match(/0[3-9]\d{8}/);
+          if (ndMatch && isValidPhone(ndMatch[0])) return JSON.stringify({phone: ndMatch[0], method: 'nhatot_next_data'});
+        }
+      } catch(ex) {}
     }
     
     // Step 3: Click reveal buttons (fallback for both marketplaces)
