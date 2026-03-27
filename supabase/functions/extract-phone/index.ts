@@ -257,12 +257,16 @@ function buildExtractJS(): string {
       isBDS: isBDS
     };
     if (isBDS) {
-      // Collect debug info about phone-related elements
       var phoneEls = document.querySelectorAll('[class*="phone"], [class*="Phone"]');
       debugInfo.phoneElCount = phoneEls.length;
+      debugInfo.encryptedFound = !!encryptedPhone;
+      debugInfo.interceptedPhone = interceptedPhone;
       if (phoneEls.length > 0) {
         debugInfo.phoneElSample = (phoneEls[0].outerHTML || '').substring(0, 300);
       }
+      // Check all elements with 'raw' attribute
+      var rawEls = document.querySelectorAll('[raw]');
+      debugInfo.rawElCount = rawEls.length;
     }
     return JSON.stringify({
       phone: null,
