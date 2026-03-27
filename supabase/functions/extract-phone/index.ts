@@ -296,7 +296,7 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
       const phone = cleanPhoneNumber(data.phone);
       if (phone) return { phone, method: data.method };
     }
-    return { phone: null, method: data.method || 'parse_no_phone', debug: { title: data.title, bodyLen: data.bodyLen, url: data.url } };
+    return { phone: null, method: data.method || 'parse_no_phone', debug: data.debug || { title: data.title, bodyLen: data.bodyLen, url: data.url } };
   } catch {
     return { phone: null, method: 'parse_error' };
   }
