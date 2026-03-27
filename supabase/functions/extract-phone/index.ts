@@ -213,7 +213,12 @@ function buildExtractJS(): string {
     for (var rsi = 0; rsi < revealSels.length; rsi++) {
       try { var els = document.querySelectorAll(revealSels[rsi]); for (var e = 0; e < els.length; e++) els[e].click(); } catch(ex) {}
     }
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000));
+    
+    // Check intercepted phone from XHR/fetch monkey-patch
+    if (interceptedPhone && isValidPhone(interceptedPhone)) {
+      return JSON.stringify({phone: interceptedPhone, method: 'xhr_intercept'});
+    }
     
     // Step 4: Re-check tel: links after reveal
     telLinks = document.querySelectorAll('a[href^="tel:"]');
