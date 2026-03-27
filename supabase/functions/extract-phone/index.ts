@@ -49,14 +49,123 @@ function buildExtractJS(): string {
       return p && !isMasked(p) && p.replace(/[^0-9]/g, '').length >= 9 && !isExcluded(p);
     }
     
-    // Check tel: links
+    // Step 1: Check existing tel: links (already revealed)
     var telLinks = document.querySelectorAll('a[href^="tel:"]');
     for (var i = 0; i < telLinks.length; i++) {
       var phone = telLinks[i].getAttribute('href').replace('tel:', '').trim();
       if (isValidPhone(phone)) return JSON.stringify({phone: phone, method: 'tel_link'});
     }
     
-    // Click reveal buttons
+    // Step 2: For Batdongsan - find encrypted phone 'raw' attribute and call DecryptPhone API
+    var isBDS = window.location.hostname.indexOf('batdongsan') >= 0;
+    if (isBDS) {
+      // Look for elements with 'raw' attribute containing encrypted phone data
+      var rawSels = [
+        '[raw]', '[data-raw]', '[data-phone-raw]',
+        '.re__contact-phone [raw]', '[class*="phone"] [raw]',
+        '.js__phone [raw]', '.re__btn-short-info-phone[raw]'
+      ];
+      var encryptedPhone = null;
+      for (var rs = 0; rs < rawSels.length; rs++) {
+        try {
+          var rawEls = document.querySelectorAll(rawSels[rs]);
+          for (var re = 0; re < rawEls.length; re++) {
+            var rawVal = rawEls[re].getAttribute('raw') || rawEls[re].getAttribute('data-raw') || rawEls[re].getAttribute('data-phone-raw');
+            if (rawVal && rawVal.length > 5) { encryptedPhone = rawVal; break; }
+          }
+          if (encryptedPhone) break;
+        } catch(ex) {}
+      }
+      
+      // Also scan script tags and JS variables for encrypted phone data
+      if (!encryptedPhone) {
+        try {
+          var scripts = document.querySelectorAll('script:not([src])');
+          for (var si = 0; si < scripts.length; si++) {
+            var sc = scripts[si].textContent || '';
+            // Look for phone patterns in inline scripts
+            var rawMatch = sc.match(/["']raw["']\\s*:\\s*["']([^"']{10,})["']/);
+            if (rawMatch) { encryptedPhone = rawMatch[1]; break; }
+            var phoneEncMatch = sc.match(/PhoneNumber["']?\\s*[:=]\\s*["']([^"']{10,})["']/);
+            if (phoneEncMatch) { encryptedPhone = phoneEncMatch[1]; break; }
+            var encMatch = sc.match(/encrypted(?:Phone)?["']?\\s*[:=]\\s*["']([^"']{10,})["']/i);
+            if (encMatch) { encryptedPhone = encMatch[1]; break; }
+          }
+        } catch(ex) {}
+      }
+      
+      // Also check data attributes on phone containers
+      if (!encryptedPhone) {
+        try {
+          var phoneContainers = document.querySelectorAll('[class*="phone"], [class*="Phone"], .re__contact-phone, .js__phone-container');
+          for (var pc = 0; pc < phoneContainers.length; pc++) {
+            var attrs = phoneContainers[pc].attributes;
+            for (var ai = 0; ai < attrs.length; ai++) {
+              var attrVal = attrs[ai].value;
+              if (attrs[ai].name !== 'class' && attrs[ai].name !== 'style' && attrVal.length > 10 && /[A-Za-z0-9+/=]{10,}/.test(attrVal)) {
+                encryptedPhone = attrVal;
+                break;
+              }
+            }
+            if (encryptedPhone) break;
+          }
+        } catch(ex) {}
+      }
+      
+      if (encryptedPhone) {
+        try {
+          // Call the DecryptPhone API directly
+          var decryptResp = await fetch('/Product/ProductDetail/DecryptPhone', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({ PhoneNumber: encryptedPhone })
+          });
+          
+          if (decryptResp.ok) {
+            var decryptData = await decryptResp.json();
+            var decrypted = decryptData.PhoneNumber || decryptData.phoneNumber || decryptData.phone || decryptData.Phone || (typeof decryptData === 'string' ? decryptData : null);
+            if (!decrypted && typeof decryptData === 'object') {
+              // Try to find phone in any field
+              var keys = Object.keys(decryptData);
+              for (var dk = 0; dk < keys.length; dk++) {
+                var dv = decryptData[keys[dk]];
+                if (typeof dv === 'string' && /0[3-9]\\d{8,9}/.test(dv.replace(/[^0-9]/g, ''))) {
+                  decrypted = dv; break;
+                }
+              }
+            }
+            if (decrypted && isValidPhone(decrypted)) {
+              return JSON.stringify({phone: decrypted, method: 'decrypt_api', debug: {encrypted: encryptedPhone.substring(0,20)}});
+            }
+            // Log what we got back for debugging
+            return JSON.stringify({phone: null, method: 'decrypt_api_no_phone', debug: {response: JSON.stringify(decryptData).substring(0,200), encrypted: encryptedPhone.substring(0,20)}});
+          } else {
+            // Try alternative endpoint
+            var altResp = await fetch('/api/phone/decrypt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+              body: JSON.stringify({ phone: encryptedPhone })
+            });
+            if (altResp.ok) {
+              var altData = await altResp.json();
+              var altPhone = altData.phone || altData.PhoneNumber || altData.phoneNumber;
+              if (altPhone && isValidPhone(altPhone)) {
+                return JSON.stringify({phone: altPhone, method: 'decrypt_api_alt'});
+              }
+            }
+            return JSON.stringify({phone: null, method: 'decrypt_api_error', debug: {status: decryptResp.status, encrypted: encryptedPhone.substring(0,20)}});
+          }
+        } catch(decErr) {
+          return JSON.stringify({phone: null, method: 'decrypt_api_exception', debug: {error: (decErr.message || '').substring(0,100), encrypted: encryptedPhone.substring(0,20)}});
+        }
+      }
+    }
+    
+    // Step 3: Click reveal buttons (fallback for both marketplaces)
     var revealTexts = ['Hiện số', 'Xem SĐT', 'Xem số', 'Bấm để hiện số'];
     var allEls = document.querySelectorAll('button, a, span, div');
     for (var j = 0; j < allEls.length; j++) {
@@ -75,19 +184,19 @@ function buildExtractJS(): string {
       '.re__contact-phone button', '[class*="ContactPhone"] button',
       '[data-aut-id="btnPhone"]', 'button[class*="phone"]'
     ];
-    for (var rs = 0; rs < revealSels.length; rs++) {
-      try { var els = document.querySelectorAll(revealSels[rs]); for (var e = 0; e < els.length; e++) els[e].click(); } catch(ex) {}
+    for (var rsi = 0; rsi < revealSels.length; rsi++) {
+      try { var els = document.querySelectorAll(revealSels[rsi]); for (var e = 0; e < els.length; e++) els[e].click(); } catch(ex) {}
     }
     await new Promise(r => setTimeout(r, 2000));
     
-    // Re-check tel: links
+    // Step 4: Re-check tel: links after reveal
     telLinks = document.querySelectorAll('a[href^="tel:"]');
     for (var t = 0; t < telLinks.length; t++) {
       var p2 = telLinks[t].getAttribute('href').replace('tel:', '').trim();
       if (isValidPhone(p2)) return JSON.stringify({phone: p2, method: 'tel_link_after_reveal'});
     }
     
-    // Check phone elements
+    // Step 5: Check phone elements
     var phoneSels = ['[class*="phone-number"]', '[class*="PhoneNumber"]', '[class*="phone__number"]', '.re__contact-phone', '[class*="ContactPhone"]'];
     for (var ps = 0; ps < phoneSels.length; ps++) {
       try {
@@ -100,7 +209,7 @@ function buildExtractJS(): string {
       } catch(ex) {}
     }
     
-    // Body regex
+    // Step 6: Body regex fallback
     var bodyText = document.body.innerText;
     var matches = bodyText.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/g);
     if (matches) {
@@ -110,12 +219,24 @@ function buildExtractJS(): string {
     }
     
     var maskedFound = /0[3-9]\\d+\\*{2,}/.test(bodyText);
+    var debugInfo = {
+      url: window.location.href,
+      title: (document.title || '').substring(0, 100),
+      bodyLen: bodyText.length,
+      isBDS: isBDS
+    };
+    if (isBDS) {
+      // Collect debug info about phone-related elements
+      var phoneEls = document.querySelectorAll('[class*="phone"], [class*="Phone"]');
+      debugInfo.phoneElCount = phoneEls.length;
+      if (phoneEls.length > 0) {
+        debugInfo.phoneElSample = (phoneEls[0].outerHTML || '').substring(0, 300);
+      }
+    }
     return JSON.stringify({
       phone: null,
       method: maskedFound ? 'masked_only' : 'not_found',
-      url: window.location.href,
-      title: (document.title || '').substring(0, 100),
-      bodyLen: bodyText.length
+      debug: debugInfo
     });
   })()`;
 }
