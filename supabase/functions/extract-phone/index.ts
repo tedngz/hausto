@@ -113,28 +113,64 @@ function buildExtractJS(): string {
       }
       
       if (encryptedPhone) {
-        // Try calling DecryptPhone API - first without Turnstile token
+        // Try to get Turnstile challenge token if available
+        var challengeToken = null;
         try {
+          // Turnstile renders in an iframe, try to get the token
+          if (window.turnstile) {
+            challengeToken = await new Promise(function(resolve) {
+              window.turnstile.render('#cf-turnstile-container', {
+                sitekey: document.querySelector('[data-sitekey]')?.getAttribute('data-sitekey') || '',
+                callback: function(token) { resolve(token); }
+              });
+              setTimeout(function() { resolve(null); }, 10000);
+            });
+          }
+          // Also try getting token from existing turnstile widget
+          if (!challengeToken) {
+            var tsInput = document.querySelector('[name="cf-turnstile-response"]') || document.querySelector('input[name*="turnstile"]');
+            if (tsInput) challengeToken = tsInput.value;
+          }
+        } catch(ex) {}
+        
+        // Call DecryptPhone API with or without token
+        try {
+          var reqBody = { PhoneNumber: encryptedPhone };
+          if (challengeToken) reqBody.ChallengeToken = challengeToken;
+          
           var decryptResp = await fetch('/Product/ProductDetail/DecryptPhone', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-            body: JSON.stringify({ PhoneNumber: encryptedPhone })
+            body: JSON.stringify(reqBody)
           });
+          
+          var respText = await decryptResp.text();
           if (decryptResp.ok) {
-            var decryptData = await decryptResp.json();
-            var decrypted = decryptData.PhoneNumber || decryptData.phoneNumber || decryptData.phone || decryptData.Phone;
-            if (!decrypted && typeof decryptData === 'object') {
-              var keys = Object.keys(decryptData);
-              for (var dk = 0; dk < keys.length; dk++) {
-                var dv = decryptData[keys[dk]];
-                if (typeof dv === 'string' && /0[3-9]\d{8,9}/.test(dv.replace(/[^0-9]/g, ''))) { decrypted = dv; break; }
+            try {
+              var decryptData = JSON.parse(respText);
+              var decrypted = decryptData.PhoneNumber || decryptData.phoneNumber || decryptData.phone || decryptData.Phone;
+              if (!decrypted && typeof decryptData === 'object') {
+                var keys = Object.keys(decryptData);
+                for (var dk = 0; dk < keys.length; dk++) {
+                  var dv = decryptData[keys[dk]];
+                  if (typeof dv === 'string' && /0[3-9]\d{8,9}/.test(dv.replace(/[^0-9]/g, ''))) { decrypted = dv; break; }
+                }
               }
-            }
-            if (decrypted && isValidPhone(decrypted)) {
-              return JSON.stringify({phone: decrypted, method: 'decrypt_api'});
-            }
+              if (decrypted && isValidPhone(decrypted)) {
+                return JSON.stringify({phone: decrypted, method: 'decrypt_api'});
+              }
+            } catch(pe) {}
           }
-        } catch(ex) {}
+          // Log the API response for debugging
+          return JSON.stringify({phone: null, method: 'decrypt_api_debug', debug: {
+            status: decryptResp.status,
+            response: respText.substring(0, 300),
+            hadToken: !!challengeToken,
+            encrypted: encryptedPhone.substring(0, 30)
+          }});
+        } catch(ex) {
+          // Fall through to click approach
+        }
       }
       
       // Intercept XHR/fetch to capture decrypted phone from reveal button click
