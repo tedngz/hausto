@@ -357,15 +357,27 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
 
     const result = await response.json();
     
-    if (result.errors) {
-      console.error(`[extract-phone] BQL errors: ${JSON.stringify(result.errors).substring(0, 300)}`);
+    // Log full BQL response for debugging
+    console.log(`[extract-phone] BQL response keys: ${JSON.stringify(Object.keys(result.data || {}))}`);
+    if (result.data?.gotoListing) {
+      console.log(`[extract-phone] Goto listing: status=${result.data.gotoListing.status}, url=${result.data.gotoListing.url}`);
     }
-    if (hasCookies && result.data?.setCookiesOnDomain?.value) {
-      console.log(`[extract-phone] Cookie injection: ${result.data.setCookiesOnDomain.value}`);
+    if (result.data?.goto) {
+      console.log(`[extract-phone] Goto: status=${result.data.goto.status}, url=${result.data.goto.url}`);
     }
     
-    const phoneResult = parsePhoneResult(result?.data?.phoneData?.value);
-    console.log(`[extract-phone] Result: ${JSON.stringify(phoneResult)}`);
+    if (result.errors) {
+      console.error(`[extract-phone] BQL errors: ${JSON.stringify(result.errors).substring(0, 500)}`);
+    }
+    if (hasCookies && result.data?.setCookies?.value) {
+      console.log(`[extract-phone] Cookie injection: ${result.data.setCookies.value}`);
+    }
+    
+    const rawValue = result?.data?.phoneData?.value;
+    console.log(`[extract-phone] Raw evaluate value: ${typeof rawValue === 'string' ? rawValue.substring(0, 500) : rawValue}`);
+    
+    const phoneResult = parsePhoneResult(rawValue);
+    console.log(`[extract-phone] Result: ${JSON.stringify(phoneResult).substring(0, 500)}`);
     return phoneResult;
   } catch (error) {
     console.error(`[extract-phone] Error:`, error);
