@@ -299,7 +299,8 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
     const variables: Record<string, unknown> = { url: listingUrl, jsCode };
 
     if (hasCookies) {
-      // Navigate to domain root, set cookies via document.cookie, then go to listing
+      // Navigate to domain root first, inject cookies client-side, then go to listing
+      // Use verify to handle Cloudflare "Are you human?" interstitials
       const domainUrl = marketplace === 'batdongsan' ? 'https://batdongsan.com.vn/' : 'https://www.nhatot.com/';
       const setCookieJS = `(async () => {
         var pairs = ${JSON.stringify(cookieStr)}.split('; ');
@@ -309,13 +310,17 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
       
       query = `mutation ExtractPhone($url: String!, $jsCode: String!) {
   domainPage: goto(url: "${domainUrl}", waitUntil: domContentLoaded) { status }
+  verifyDomain: verify(type: cloudflare) { found solved }
   setCookies: evaluate(content: ${JSON.stringify(setCookieJS)}, timeout: 5000) { value }
   gotoListing: goto(url: $url, waitUntil: networkIdle) { status url }
+  verifyListing: verify(type: cloudflare) { found solved }
   phoneData: evaluate(content: $jsCode, timeout: 45000) { value }
 }`;
     } else {
       query = `mutation ExtractPhone($url: String!, $jsCode: String!) {
   goto(url: $url, waitUntil: networkIdle) { status url }
+  verifyPage: verify(type: cloudflare) { found solved }
+  reloadAfterVerify: goto(url: $url, waitUntil: networkIdle) { status url }
   phoneData: evaluate(content: $jsCode, timeout: 45000) { value }
 }`;
     }
