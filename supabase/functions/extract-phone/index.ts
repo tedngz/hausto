@@ -348,6 +348,18 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
     if (result.data?.goto) {
       console.log(`[extract-phone] Goto: status=${result.data.goto.status}, url=${result.data.goto.url}`);
     }
+    if (result.data?.verifyDomain) {
+      console.log(`[extract-phone] Verify domain: found=${result.data.verifyDomain.found}, solved=${result.data.verifyDomain.solved}`);
+    }
+    if (result.data?.verifyListing) {
+      console.log(`[extract-phone] Verify listing: found=${result.data.verifyListing.found}, solved=${result.data.verifyListing.solved}`);
+    }
+    if (result.data?.verifyPage) {
+      console.log(`[extract-phone] Verify page: found=${result.data.verifyPage.found}, solved=${result.data.verifyPage.solved}`);
+    }
+    if (result.data?.reloadAfterVerify) {
+      console.log(`[extract-phone] Reload after verify: status=${result.data.reloadAfterVerify.status}, url=${result.data.reloadAfterVerify.url}`);
+    }
     
     if (result.errors) {
       console.error(`[extract-phone] BQL errors: ${JSON.stringify(result.errors).substring(0, 500)}`);
