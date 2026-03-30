@@ -463,8 +463,8 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
   // For Nhatot: try direct HTTP fetch first (no browser needed, faster & free)
   if (marketplace === 'nhatot') {
     const directResult = await tryNhatotDirectFetch(listingUrl);
-    if (directResult.phone) return directResult;
-    console.log(`[extract-phone] Nhatot direct fetch failed (${directResult.method}), falling back to Browserless`);
+    // For Nhatot, don't fall back to Browserless (Cloudflare blocks it too)
+    return directResult;
   }
   
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
