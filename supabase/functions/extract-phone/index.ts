@@ -417,6 +417,7 @@ async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string
 function deepFindPhoneInObject(obj: unknown, depth = 0): string | null {
   if (!obj || depth > 12) return null;
   if (typeof obj === 'string') {
+    if (obj.includes('*')) return null; // Skip masked numbers
     const trimmed = obj.trim();
     if (/^\+?\d[\d\s.-]{8,14}$/.test(trimmed)) {
       const cleaned = cleanPhoneNumber(trimmed);
