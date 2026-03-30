@@ -1,0 +1,1 @@
+UPDATE external_properties SET contact_phone = NULL WHERE contact_phone LIKE '%*%';
