@@ -64,16 +64,78 @@ function buildExtractJS(): string {
     var isBDS = window.location.hostname.indexOf('batdongsan') >= 0;
     var isNhatot = window.location.hostname.indexOf('nhatot') >= 0 || window.location.hostname.indexOf('chotot') >= 0;
     
-    // For Nhatot - check __NEXT_DATA__ first (often has phone in server data)
+    // For Nhatot - deep parse __NEXT_DATA__ for phone fields
     if (isNhatot) {
       try {
         var nextData = document.getElementById('__NEXT_DATA__');
         if (nextData) {
-          var ndStr = nextData.textContent;
+          var ndStr = nextData.textContent || '';
+          
+          // Deep search JSON for phone-like keys
+          function deepFindPhone(obj, depth) {
+            if (!obj || depth > 10) return null;
+            if (typeof obj === 'string') {
+              if (/^\\+?\\d[\\d\\s.-]{8,14}$/.test(obj.trim())) {
+                var cleaned = obj.replace(/[^0-9+]/g, '');
+                if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
+                if (cleaned.startsWith('84') && cleaned.length > 10) cleaned = '0' + cleaned.slice(2);
+                if (/^0[3-9]\\d{8,9}$/.test(cleaned) && !isExcluded(cleaned)) return cleaned;
+              }
+              return null;
+            }
+            if (Array.isArray(obj)) {
+              for (var ai = 0; ai < obj.length; ai++) {
+                var r = deepFindPhone(obj[ai], depth + 1);
+                if (r) return r;
+              }
+              return null;
+            }
+            if (typeof obj === 'object') {
+              // Prioritize phone-related keys
+              var phoneKeys = ['phone', 'phone_number', 'phoneNumber', 'mobile', 'contact_phone', 'seller_phone', 'account_phone'];
+              for (var pk = 0; pk < phoneKeys.length; pk++) {
+                if (obj[phoneKeys[pk]]) {
+                  var pv = deepFindPhone(obj[phoneKeys[pk]], depth + 1);
+                  if (pv) return pv;
+                }
+              }
+              // Then check all other keys
+              var keys = Object.keys(obj);
+              for (var ki = 0; ki < keys.length; ki++) {
+                if (phoneKeys.indexOf(keys[ki]) >= 0) continue;
+                var kv = deepFindPhone(obj[keys[ki]], depth + 1);
+                if (kv) return kv;
+              }
+            }
+            return null;
+          }
+          
+          try {
+            var parsed = JSON.parse(ndStr);
+            var deepPhone = deepFindPhone(parsed, 0);
+            if (deepPhone) return JSON.stringify({phone: deepPhone, method: 'nhatot_next_data_deep'});
+          } catch(pe) {}
+          
+          // Fallback: regex on raw text
           var phoneMatch = findPhoneInText(ndStr);
-          if (phoneMatch) return JSON.stringify({phone: phoneMatch, method: 'nhatot_next_data'});
+          if (phoneMatch) return JSON.stringify({phone: phoneMatch, method: 'nhatot_next_data_regex'});
         }
       } catch(ex) {}
+      
+      // Also check Nhatot API responses embedded in page (window.__NEXT_DATA__.props.pageProps)
+      try {
+        var scripts = document.querySelectorAll('script[type="application/json"]');
+        for (var si = 0; si < scripts.length; si++) {
+          var sText = scripts[si].textContent || '';
+          if (sText.indexOf('phone') >= 0 || sText.indexOf('Phone') >= 0) {
+            try {
+              var sData = JSON.parse(sText);
+              var sPhone = deepFindPhone(sData, 0);
+              if (sPhone) return JSON.stringify({phone: sPhone, method: 'nhatot_script_json'});
+            } catch(se) {}
+          }
+        }
+      } catch(ex2) {}
     }
     
     // Step 2: Set up XHR/fetch interception BEFORE clicking
