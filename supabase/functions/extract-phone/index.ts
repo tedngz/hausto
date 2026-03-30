@@ -342,7 +342,141 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
   }
 }
 
+// Direct HTTP fetch for Nhatot - extract phone from __NEXT_DATA__ without browser
+async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string | null; method: string }> {
+  try {
+    const cookieStr = getCookieString('nhatot');
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
+    };
+    if (cookieStr) headers['Cookie'] = cookieStr;
+
+    const resp = await fetch(listingUrl, { headers, signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) return { phone: null, method: `nhatot_fetch_${resp.status}` };
+    
+    const html = await resp.text();
+    console.log(`[extract-phone] Nhatot direct fetch: ${html.length} bytes`);
+    
+    // Extract __NEXT_DATA__ JSON
+    const nextDataMatch = html.match(/<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/);
+    if (nextDataMatch) {
+      const jsonStr = nextDataMatch[1];
+      try {
+        const data = JSON.parse(jsonStr);
+        const phone = deepFindPhoneInObject(data);
+        if (phone) {
+          console.log(`[extract-phone] Found phone in __NEXT_DATA__: ${phone}`);
+          return { phone, method: 'nhatot_direct_next_data' };
+        }
+        console.log(`[extract-phone] __NEXT_DATA__ parsed but no phone found`);
+      } catch (e) {
+        console.log(`[extract-phone] __NEXT_DATA__ parse error`);
+      }
+    }
+    
+    // Also try Nhatot's API endpoint directly - listing ID from URL
+    const listingIdMatch = listingUrl.match(/(\d+)\.htm/);
+    if (listingIdMatch) {
+      const listingId = listingIdMatch[1];
+      // Nhatot exposes ad details via API
+      const apiHeaders: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      };
+      if (cookieStr) apiHeaders['Cookie'] = cookieStr;
+      
+      try {
+        const apiResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
+          headers: apiHeaders,
+          signal: AbortSignal.timeout(10000),
+        });
+        if (apiResp.ok) {
+          const apiData = await apiResp.json();
+          console.log(`[extract-phone] Nhatot API response keys: ${Object.keys(apiData).join(',')}`);
+          const apiPhone = deepFindPhoneInObject(apiData);
+          if (apiPhone) {
+            console.log(`[extract-phone] Found phone in Nhatot API: ${apiPhone}`);
+            return { phone: apiPhone, method: 'nhatot_api_direct' };
+          }
+        }
+      } catch (apiErr) {
+        console.log(`[extract-phone] Nhatot API error: ${apiErr}`);
+      }
+    }
+    
+    // Regex fallback on raw HTML
+    const htmlPhoneMatch = html.match(/0[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g);
+    if (htmlPhoneMatch) {
+      for (const m of htmlPhoneMatch) {
+        const cleaned = cleanPhoneNumber(m);
+        if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+          return { phone: cleaned, method: 'nhatot_html_regex' };
+        }
+      }
+    }
+    
+    return { phone: null, method: 'nhatot_direct_no_phone' };
+  } catch (err) {
+    console.error(`[extract-phone] Nhatot direct fetch error:`, err);
+    return { phone: null, method: 'nhatot_direct_error' };
+  }
+}
+
+// Deep search an object for phone number values
+function deepFindPhoneInObject(obj: unknown, depth = 0): string | null {
+  if (!obj || depth > 12) return null;
+  if (typeof obj === 'string') {
+    const trimmed = obj.trim();
+    if (/^\+?\d[\d\s.-]{8,14}$/.test(trimmed)) {
+      const cleaned = cleanPhoneNumber(trimmed);
+      if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) return cleaned;
+    }
+    return null;
+  }
+  if (typeof obj === 'number') {
+    const numStr = String(obj);
+    if (/^\d{9,11}$/.test(numStr)) {
+      const cleaned = cleanPhoneNumber(numStr);
+      if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) return cleaned;
+    }
+    return null;
+  }
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const r = deepFindPhoneInObject(item, depth + 1);
+      if (r) return r;
+    }
+    return null;
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    const record = obj as Record<string, unknown>;
+    // Priority keys
+    const phoneKeys = ['phone', 'phone_number', 'phoneNumber', 'mobile', 'contact_phone', 'seller_phone', 'account_phone', 'phone_hidden'];
+    for (const pk of phoneKeys) {
+      if (pk in record) {
+        const r = deepFindPhoneInObject(record[pk], depth + 1);
+        if (r) return r;
+      }
+    }
+    for (const key of Object.keys(record)) {
+      if (phoneKeys.includes(key)) continue;
+      const r = deepFindPhoneInObject(record[key], depth + 1);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
 async function extractPhoneForListing(listingUrl: string, marketplace: string): Promise<{ phone: string | null; method: string }> {
+  // For Nhatot: try direct HTTP fetch first (no browser needed, faster & free)
+  if (marketplace === 'nhatot') {
+    const directResult = await tryNhatotDirectFetch(listingUrl);
+    if (directResult.phone) return directResult;
+    console.log(`[extract-phone] Nhatot direct fetch failed (${directResult.method}), falling back to Browserless`);
+  }
+  
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
 
   const cookieStr = getCookieString(marketplace);
