@@ -64,16 +64,78 @@ function buildExtractJS(): string {
     var isBDS = window.location.hostname.indexOf('batdongsan') >= 0;
     var isNhatot = window.location.hostname.indexOf('nhatot') >= 0 || window.location.hostname.indexOf('chotot') >= 0;
     
-    // For Nhatot - check __NEXT_DATA__ first (often has phone in server data)
+    // For Nhatot - deep parse __NEXT_DATA__ for phone fields
     if (isNhatot) {
       try {
         var nextData = document.getElementById('__NEXT_DATA__');
         if (nextData) {
-          var ndStr = nextData.textContent;
+          var ndStr = nextData.textContent || '';
+          
+          // Deep search JSON for phone-like keys
+          function deepFindPhone(obj, depth) {
+            if (!obj || depth > 10) return null;
+            if (typeof obj === 'string') {
+              if (/^\\+?\\d[\\d\\s.-]{8,14}$/.test(obj.trim())) {
+                var cleaned = obj.replace(/[^0-9+]/g, '');
+                if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
+                if (cleaned.startsWith('84') && cleaned.length > 10) cleaned = '0' + cleaned.slice(2);
+                if (/^0[3-9]\\d{8,9}$/.test(cleaned) && !isExcluded(cleaned)) return cleaned;
+              }
+              return null;
+            }
+            if (Array.isArray(obj)) {
+              for (var ai = 0; ai < obj.length; ai++) {
+                var r = deepFindPhone(obj[ai], depth + 1);
+                if (r) return r;
+              }
+              return null;
+            }
+            if (typeof obj === 'object') {
+              // Prioritize phone-related keys
+              var phoneKeys = ['phone', 'phone_number', 'phoneNumber', 'mobile', 'contact_phone', 'seller_phone', 'account_phone'];
+              for (var pk = 0; pk < phoneKeys.length; pk++) {
+                if (obj[phoneKeys[pk]]) {
+                  var pv = deepFindPhone(obj[phoneKeys[pk]], depth + 1);
+                  if (pv) return pv;
+                }
+              }
+              // Then check all other keys
+              var keys = Object.keys(obj);
+              for (var ki = 0; ki < keys.length; ki++) {
+                if (phoneKeys.indexOf(keys[ki]) >= 0) continue;
+                var kv = deepFindPhone(obj[keys[ki]], depth + 1);
+                if (kv) return kv;
+              }
+            }
+            return null;
+          }
+          
+          try {
+            var parsed = JSON.parse(ndStr);
+            var deepPhone = deepFindPhone(parsed, 0);
+            if (deepPhone) return JSON.stringify({phone: deepPhone, method: 'nhatot_next_data_deep'});
+          } catch(pe) {}
+          
+          // Fallback: regex on raw text
           var phoneMatch = findPhoneInText(ndStr);
-          if (phoneMatch) return JSON.stringify({phone: phoneMatch, method: 'nhatot_next_data'});
+          if (phoneMatch) return JSON.stringify({phone: phoneMatch, method: 'nhatot_next_data_regex'});
         }
       } catch(ex) {}
+      
+      // Also check Nhatot API responses embedded in page (window.__NEXT_DATA__.props.pageProps)
+      try {
+        var scripts = document.querySelectorAll('script[type="application/json"]');
+        for (var si = 0; si < scripts.length; si++) {
+          var sText = scripts[si].textContent || '';
+          if (sText.indexOf('phone') >= 0 || sText.indexOf('Phone') >= 0) {
+            try {
+              var sData = JSON.parse(sText);
+              var sPhone = deepFindPhone(sData, 0);
+              if (sPhone) return JSON.stringify({phone: sPhone, method: 'nhatot_script_json'});
+            } catch(se) {}
+          }
+        }
+      } catch(ex2) {}
     }
     
     // Step 2: Set up XHR/fetch interception BEFORE clicking
@@ -280,7 +342,131 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
   }
 }
 
+// Direct Chotot API fetch for Nhatot - no browser needed
+async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string | null; method: string }> {
+  try {
+    // Extract listing ID from URL
+    const listingIdMatch = listingUrl.match(/(\d+)\.htm/);
+    if (!listingIdMatch) return { phone: null, method: 'nhatot_no_listing_id' };
+    const listingId = listingIdMatch[1];
+
+    // Use Chotot's public API (no Cloudflare blocking)
+    const apiResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    
+    if (!apiResp.ok) {
+      console.log(`[extract-phone] Chotot API returned ${apiResp.status}`);
+      return { phone: null, method: `nhatot_api_${apiResp.status}` };
+    }
+    
+    const apiData = await apiResp.json();
+    const ad = apiData?.ad;
+    if (!ad) return { phone: null, method: 'nhatot_api_no_ad' };
+    
+    // The 'phone' field is always masked (e.g. "086293****"), skip it
+    // Instead search the body/description text for full phone numbers
+    const body = ad.body || '';
+    const subject = ad.subject || '';
+    const fullName = ad.full_name || ad.account_name || '';
+    const searchText = `${body} ${subject} ${fullName}`;
+    
+    console.log(`[extract-phone] Chotot API: phone=${ad.phone}, body=${body.length} chars, account=${ad.account_name}`);
+    
+    // Search for unmasked phone numbers in body text
+    const phoneMatches = searchText.match(/0[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g);
+    if (phoneMatches) {
+      for (const m of phoneMatches) {
+        if (m.includes('*')) continue;
+        const cleaned = cleanPhoneNumber(m);
+        if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+          console.log(`[extract-phone] Found full phone in Nhatot body: ${cleaned}`);
+          return { phone: cleaned, method: 'nhatot_body_text' };
+        }
+      }
+    }
+    
+    // Also try +84 format
+    const intlMatches = searchText.match(/\+84\s?\d[\s.-]?\d{3}[\s.-]?\d{3}[\s.-]?\d{3}/g);
+    if (intlMatches) {
+      for (const m of intlMatches) {
+        if (m.includes('*')) continue;
+        const cleaned = cleanPhoneNumber(m);
+        if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+          console.log(`[extract-phone] Found intl phone in Nhatot body: ${cleaned}`);
+          return { phone: cleaned, method: 'nhatot_body_intl' };
+        }
+      }
+    }
+    
+    // Store the masked phone as fallback info (better than nothing for debugging)
+    const maskedPhone = ad.phone || '';
+    console.log(`[extract-phone] Nhatot: only masked phone available: ${maskedPhone}`);
+    return { phone: null, method: 'nhatot_masked_only' };
+  } catch (err) {
+    console.error(`[extract-phone] Nhatot direct fetch error:`, err);
+    return { phone: null, method: 'nhatot_direct_error' };
+  }
+}
+
+// Deep search an object for phone number values
+function deepFindPhoneInObject(obj: unknown, depth = 0): string | null {
+  if (!obj || depth > 12) return null;
+  if (typeof obj === 'string') {
+    if (obj.includes('*')) return null; // Skip masked numbers
+    const trimmed = obj.trim();
+    if (/^\+?\d[\d\s.-]{8,14}$/.test(trimmed)) {
+      const cleaned = cleanPhoneNumber(trimmed);
+      if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) return cleaned;
+    }
+    return null;
+  }
+  if (typeof obj === 'number') {
+    const numStr = String(obj);
+    if (/^\d{9,11}$/.test(numStr)) {
+      const cleaned = cleanPhoneNumber(numStr);
+      if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) return cleaned;
+    }
+    return null;
+  }
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const r = deepFindPhoneInObject(item, depth + 1);
+      if (r) return r;
+    }
+    return null;
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    const record = obj as Record<string, unknown>;
+    // Priority keys
+    const phoneKeys = ['phone', 'phone_number', 'phoneNumber', 'mobile', 'contact_phone', 'seller_phone', 'account_phone', 'phone_hidden'];
+    for (const pk of phoneKeys) {
+      if (pk in record) {
+        const r = deepFindPhoneInObject(record[pk], depth + 1);
+        if (r) return r;
+      }
+    }
+    for (const key of Object.keys(record)) {
+      if (phoneKeys.includes(key)) continue;
+      const r = deepFindPhoneInObject(record[key], depth + 1);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
 async function extractPhoneForListing(listingUrl: string, marketplace: string): Promise<{ phone: string | null; method: string }> {
+  // For Nhatot: try direct HTTP fetch first (no browser needed, faster & free)
+  if (marketplace === 'nhatot') {
+    const directResult = await tryNhatotDirectFetch(listingUrl);
+    // For Nhatot, don't fall back to Browserless (Cloudflare blocks it too)
+    return directResult;
+  }
+  
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
 
   const cookieStr = getCookieString(marketplace);
