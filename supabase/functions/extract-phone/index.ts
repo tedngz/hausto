@@ -342,82 +342,71 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
   }
 }
 
-// Direct HTTP fetch for Nhatot - extract phone from __NEXT_DATA__ without browser
+// Direct Chotot API fetch for Nhatot - no browser needed
 async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string | null; method: string }> {
   try {
-    const cookieStr = getCookieString('nhatot');
-    const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
-    };
-    if (cookieStr) headers['Cookie'] = cookieStr;
-
-    const resp = await fetch(listingUrl, { headers, signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) return { phone: null, method: `nhatot_fetch_${resp.status}` };
-    
-    const html = await resp.text();
-    console.log(`[extract-phone] Nhatot direct fetch: ${html.length} bytes`);
-    
-    // Extract __NEXT_DATA__ JSON
-    const nextDataMatch = html.match(/<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/);
-    if (nextDataMatch) {
-      const jsonStr = nextDataMatch[1];
-      try {
-        const data = JSON.parse(jsonStr);
-        const phone = deepFindPhoneInObject(data);
-        if (phone) {
-          console.log(`[extract-phone] Found phone in __NEXT_DATA__: ${phone}`);
-          return { phone, method: 'nhatot_direct_next_data' };
-        }
-        console.log(`[extract-phone] __NEXT_DATA__ parsed but no phone found`);
-      } catch (e) {
-        console.log(`[extract-phone] __NEXT_DATA__ parse error`);
-      }
-    }
-    
-    // Also try Nhatot's API endpoint directly - listing ID from URL
+    // Extract listing ID from URL
     const listingIdMatch = listingUrl.match(/(\d+)\.htm/);
-    if (listingIdMatch) {
-      const listingId = listingIdMatch[1];
-      // Nhatot exposes ad details via API
-      const apiHeaders: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    if (!listingIdMatch) return { phone: null, method: 'nhatot_no_listing_id' };
+    const listingId = listingIdMatch[1];
+
+    // Use Chotot's public API (no Cloudflare blocking)
+    const apiResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json',
-      };
-      if (cookieStr) apiHeaders['Cookie'] = cookieStr;
-      
-      try {
-        const apiResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
-          headers: apiHeaders,
-          signal: AbortSignal.timeout(10000),
-        });
-        if (apiResp.ok) {
-          const apiData = await apiResp.json();
-          console.log(`[extract-phone] Nhatot API response keys: ${Object.keys(apiData).join(',')}`);
-          const apiPhone = deepFindPhoneInObject(apiData);
-          if (apiPhone) {
-            console.log(`[extract-phone] Found phone in Nhatot API: ${apiPhone}`);
-            return { phone: apiPhone, method: 'nhatot_api_direct' };
-          }
-        }
-      } catch (apiErr) {
-        console.log(`[extract-phone] Nhatot API error: ${apiErr}`);
-      }
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    
+    if (!apiResp.ok) {
+      console.log(`[extract-phone] Chotot API returned ${apiResp.status}`);
+      return { phone: null, method: `nhatot_api_${apiResp.status}` };
     }
     
-    // Regex fallback on raw HTML
-    const htmlPhoneMatch = html.match(/0[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g);
-    if (htmlPhoneMatch) {
-      for (const m of htmlPhoneMatch) {
+    const apiData = await apiResp.json();
+    const ad = apiData?.ad;
+    if (!ad) return { phone: null, method: 'nhatot_api_no_ad' };
+    
+    // The 'phone' field is always masked (e.g. "086293****"), skip it
+    // Instead search the body/description text for full phone numbers
+    const body = ad.body || '';
+    const subject = ad.subject || '';
+    const fullName = ad.full_name || ad.account_name || '';
+    const searchText = `${body} ${subject} ${fullName}`;
+    
+    console.log(`[extract-phone] Chotot API: phone=${ad.phone}, body=${body.length} chars, account=${ad.account_name}`);
+    
+    // Search for unmasked phone numbers in body text
+    const phoneMatches = searchText.match(/0[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g);
+    if (phoneMatches) {
+      for (const m of phoneMatches) {
+        if (m.includes('*')) continue;
         const cleaned = cleanPhoneNumber(m);
         if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
-          return { phone: cleaned, method: 'nhatot_html_regex' };
+          console.log(`[extract-phone] Found full phone in Nhatot body: ${cleaned}`);
+          return { phone: cleaned, method: 'nhatot_body_text' };
         }
       }
     }
     
-    return { phone: null, method: 'nhatot_direct_no_phone' };
+    // Also try +84 format
+    const intlMatches = searchText.match(/\+84\s?\d[\s.-]?\d{3}[\s.-]?\d{3}[\s.-]?\d{3}/g);
+    if (intlMatches) {
+      for (const m of intlMatches) {
+        if (m.includes('*')) continue;
+        const cleaned = cleanPhoneNumber(m);
+        if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+          console.log(`[extract-phone] Found intl phone in Nhatot body: ${cleaned}`);
+          return { phone: cleaned, method: 'nhatot_body_intl' };
+        }
+      }
+    }
+    
+    // Store the masked phone as fallback info (better than nothing for debugging)
+    const maskedPhone = ad.phone || '';
+    console.log(`[extract-phone] Nhatot: only masked phone available: ${maskedPhone}`);
+    return { phone: null, method: 'nhatot_masked_only' };
   } catch (err) {
     console.error(`[extract-phone] Nhatot direct fetch error:`, err);
     return { phone: null, method: 'nhatot_direct_error' };
