@@ -45,6 +45,7 @@ export const RealtorDashboard = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditingExternal, setIsEditingExternal] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewCrawledApartment, setPreviewCrawledApartment] = useState<Apartment | null>(null);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
