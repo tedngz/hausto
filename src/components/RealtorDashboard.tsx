@@ -1095,7 +1095,8 @@ export const RealtorDashboard = ({
       <PropertyEditModal isOpen={isEditModalOpen} onClose={() => {
       setIsEditModalOpen(false);
       setSelectedProperty(null);
-    }} property={selectedProperty} />
+      setIsEditingExternal(false);
+    }} property={selectedProperty} isExternal={isEditingExternal} />
 
       <PropertyPreviewModal isOpen={isPreviewModalOpen} onClose={() => {
       setIsPreviewModalOpen(false);
