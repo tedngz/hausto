@@ -769,38 +769,100 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
     });
     const mergedImageAnalyses = Array.from(analysesByIndex.values());
 
-    updateProperty({
-      id: property.id,
-      title,
-      description,
-      location,
-      price: priceInVND,
-      size: size ? `${size}m²` : undefined,
-      vibe: selectedStyles[0] || null,
-      highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
-      vibeAnalysis: {
-        ...currentVibeAnalysis,
-        image_analyses: mergedImageAnalyses,
-        styles: selectedStyles,
-        colors: selectedColors,
-        activities: selectedActivities,
-        amenities: selectedAmenities
-      },
-      newImageFiles,
-      existingImages,
-      amenities: selectedAmenities,
-      propertySourceLink: sourceLink,
-      propertySourceProviderName: sourceProviderName,
-      propertySourceProviderPhone: sourceProviderPhone,
-      latitude: pinLatitude,
-      longitude: pinLongitude,
-      rooms: rooms || undefined,
-    });
+    const mergedVibeAnalysis = {
+      ...currentVibeAnalysis,
+      image_analyses: mergedImageAnalyses,
+      styles: selectedStyles,
+      colors: selectedColors,
+      activities: selectedActivities,
+      amenities: selectedAmenities
+    };
 
-    // Reset form
-    setNewImageFiles([]);
-    setNewImagePreviews([]);
-    onClose();
+    if (isExternal) {
+      // Save directly to external_properties table
+      saveExternalProperty(property.id, priceInVND, mergedVibeAnalysis);
+    } else {
+      updateProperty({
+        id: property.id,
+        title,
+        description,
+        location,
+        price: priceInVND,
+        size: size ? `${size}m²` : undefined,
+        vibe: selectedStyles[0] || null,
+        highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
+        vibeAnalysis: mergedVibeAnalysis,
+        newImageFiles,
+        existingImages,
+        amenities: selectedAmenities,
+        propertySourceLink: sourceLink,
+        propertySourceProviderName: sourceProviderName,
+        propertySourceProviderPhone: sourceProviderPhone,
+        latitude: pinLatitude,
+        longitude: pinLongitude,
+        rooms: rooms || undefined,
+      });
+
+      // Reset form
+      setNewImageFiles([]);
+      setNewImagePreviews([]);
+      onClose();
+    }
+  };
+
+  const saveExternalProperty = async (id: string, priceInVND: number, vibeAnalysis: any) => {
+    setIsSavingExternal(true);
+    try {
+      const { error } = await supabase
+        .from('external_properties')
+        .update({
+          title,
+          description,
+          location,
+          price: priceInVND,
+          size: size ? `${size}m²` : undefined,
+          rooms: rooms || null,
+          vibe: selectedStyles[0] || null,
+          highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
+          vibe_analysis: vibeAnalysis,
+          amenities: selectedAmenities,
+          contact_name: sourceProviderName || null,
+          contact_phone: sourceProviderPhone || null,
+          source_url: sourceLink || '',
+          latitude: pinLatitude,
+          longitude: pinLongitude,
+          images: existingImages,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Invalidate caches
+      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate' },
+      });
+
+      toast({
+        title: "External Listing Updated!",
+        description: "The crawled listing has been successfully updated.",
+      });
+
+      setNewImageFiles([]);
+      setNewImagePreviews([]);
+      onClose();
+    } catch (error) {
+      console.error('Error updating external property:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update external listing. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingExternal(false);
+    }
   };
 
   if (!isOpen || !property) return null;
