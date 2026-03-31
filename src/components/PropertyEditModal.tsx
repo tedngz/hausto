@@ -57,6 +57,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
   const { currency, convertPrice } = useCurrency();
+  const queryClient = useQueryClient();
+  const [isSavingExternal, setIsSavingExternal] = useState(false);
 
   const styleOptions = ['Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
     'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage'];
