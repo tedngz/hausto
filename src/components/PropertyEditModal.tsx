@@ -218,9 +218,15 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
     let cancelled = false;
     const fetchFresh = async () => {
       if (!isOpen || !property?.id) return;
+      
+      const table = isExternal ? 'external_properties' : 'properties';
+      const selectFields = isExternal
+        ? 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, source_url, contact_name, contact_phone, updated_at'
+        : 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, property_source_link, property_source_provider_name, property_source_provider_phone, updated_at';
+      
       const { data: fresh, error } = await supabase
-        .from('properties')
-        .select('id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, property_source_link, property_source_provider_name, property_source_provider_phone, updated_at')
+        .from(table)
+        .select(selectFields)
         .eq('id', property.id)
         .single();
       if (error) {

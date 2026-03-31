@@ -1017,6 +1017,15 @@ export const RealtorDashboard = ({
                             size="sm"
                             variant="outline"
                             className="text-xs flex-1"
+                            onClick={() => handleEditCrawled(listing)}
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs flex-1"
                             onClick={() => window.open(listing.source_url, '_blank')}
                           >
                             <ExternalLink className="w-3 h-3 mr-1" />
