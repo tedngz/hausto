@@ -872,8 +872,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
       <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Edit Property</h2>
-            <p className="text-gray-600">Update your property listing</p>
+            <h2 className="text-2xl font-bold text-gray-900">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
+            <p className="text-gray-600">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="w-5 h-5" />
