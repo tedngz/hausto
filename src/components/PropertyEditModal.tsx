@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,9 +22,10 @@ interface PropertyEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   property: Property | null;
+  isExternal?: boolean;
 }
 
-export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditModalProps) => {
+export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = false }: PropertyEditModalProps) => {
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
@@ -56,6 +58,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
   const { updateProperty, isUpdating } = useProperties();
   const { toast } = useToast();
   const { currency, convertPrice } = useCurrency();
+  const queryClient = useQueryClient();
+  const [isSavingExternal, setIsSavingExternal] = useState(false);
 
   const styleOptions = ['Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
     'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage'];
@@ -214,9 +218,15 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     let cancelled = false;
     const fetchFresh = async () => {
       if (!isOpen || !property?.id) return;
+      
+      const table = isExternal ? 'external_properties' : 'properties';
+      const selectFields = isExternal
+        ? 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, source_url, contact_name, contact_phone, updated_at'
+        : 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, property_source_link, property_source_provider_name, property_source_provider_phone, updated_at';
+      
       const { data: fresh, error } = await supabase
-        .from('properties')
-        .select('id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, property_source_link, property_source_provider_name, property_source_provider_phone, updated_at')
+        .from(table)
+        .select(selectFields)
         .eq('id', property.id)
         .single();
       if (error) {
@@ -278,7 +288,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
 
   // Live-refresh amenities when property is re-analyzed elsewhere (e.g., batch)
   useEffect(() => {
-    if (!isOpen || !property?.id) return;
+    if (!isOpen || !property?.id || isExternal) return;
 
     const channel = supabase
       .channel(`property-updates-${property.id}`)
@@ -759,38 +769,100 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
     });
     const mergedImageAnalyses = Array.from(analysesByIndex.values());
 
-    updateProperty({
-      id: property.id,
-      title,
-      description,
-      location,
-      price: priceInVND,
-      size: size ? `${size}m²` : undefined,
-      vibe: selectedStyles[0] || null,
-      highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
-      vibeAnalysis: {
-        ...currentVibeAnalysis,
-        image_analyses: mergedImageAnalyses,
-        styles: selectedStyles,
-        colors: selectedColors,
-        activities: selectedActivities,
-        amenities: selectedAmenities
-      },
-      newImageFiles,
-      existingImages,
-      amenities: selectedAmenities,
-      propertySourceLink: sourceLink,
-      propertySourceProviderName: sourceProviderName,
-      propertySourceProviderPhone: sourceProviderPhone,
-      latitude: pinLatitude,
-      longitude: pinLongitude,
-      rooms: rooms || undefined,
-    });
+    const mergedVibeAnalysis = {
+      ...currentVibeAnalysis,
+      image_analyses: mergedImageAnalyses,
+      styles: selectedStyles,
+      colors: selectedColors,
+      activities: selectedActivities,
+      amenities: selectedAmenities
+    };
 
-    // Reset form
-    setNewImageFiles([]);
-    setNewImagePreviews([]);
-    onClose();
+    if (isExternal) {
+      // Save directly to external_properties table
+      saveExternalProperty(property.id, priceInVND, mergedVibeAnalysis);
+    } else {
+      updateProperty({
+        id: property.id,
+        title,
+        description,
+        location,
+        price: priceInVND,
+        size: size ? `${size}m²` : undefined,
+        vibe: selectedStyles[0] || null,
+        highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
+        vibeAnalysis: mergedVibeAnalysis,
+        newImageFiles,
+        existingImages,
+        amenities: selectedAmenities,
+        propertySourceLink: sourceLink,
+        propertySourceProviderName: sourceProviderName,
+        propertySourceProviderPhone: sourceProviderPhone,
+        latitude: pinLatitude,
+        longitude: pinLongitude,
+        rooms: rooms || undefined,
+      });
+
+      // Reset form
+      setNewImageFiles([]);
+      setNewImagePreviews([]);
+      onClose();
+    }
+  };
+
+  const saveExternalProperty = async (id: string, priceInVND: number, vibeAnalysis: any) => {
+    setIsSavingExternal(true);
+    try {
+      const { error } = await supabase
+        .from('external_properties')
+        .update({
+          title,
+          description,
+          location,
+          price: priceInVND,
+          size: size ? `${size}m²` : undefined,
+          rooms: rooms || null,
+          vibe: selectedStyles[0] || null,
+          highlights: [...selectedStyles, ...selectedColors, ...selectedActivities],
+          vibe_analysis: vibeAnalysis,
+          amenities: selectedAmenities,
+          contact_name: sourceProviderName || null,
+          contact_phone: sourceProviderPhone || null,
+          source_url: sourceLink || '',
+          latitude: pinLatitude,
+          longitude: pinLongitude,
+          images: existingImages,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Invalidate caches
+      queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      supabase.functions.invoke('property-discovery-cache', {
+        body: { action: 'invalidate' },
+      });
+
+      toast({
+        title: "External Listing Updated!",
+        description: "The crawled listing has been successfully updated.",
+      });
+
+      setNewImageFiles([]);
+      setNewImagePreviews([]);
+      onClose();
+    } catch (error) {
+      console.error('Error updating external property:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update external listing. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingExternal(false);
+    }
   };
 
   if (!isOpen || !property) return null;
@@ -800,8 +872,8 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
       <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Edit Property</h2>
-            <p className="text-gray-600">Update your property listing</p>
+            <h2 className="text-2xl font-bold text-gray-900">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
+            <p className="text-gray-600">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="w-5 h-5" />
@@ -1323,16 +1395,16 @@ export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditMod
             </Button>
             <Button 
               onClick={handleSubmit}
-              disabled={isUpdating || !title || !location || !price}
+              disabled={(isUpdating || isSavingExternal) || !title || !location || !price}
               className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
             >
-              {isUpdating ? (
+              {(isUpdating || isSavingExternal) ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Updating...
                 </>
               ) : (
-                'Update Property'
+                isExternal ? 'Update External Listing' : 'Update Property'
               )}
             </Button>
           </div>

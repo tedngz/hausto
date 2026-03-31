@@ -45,6 +45,7 @@ export const RealtorDashboard = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditingExternal, setIsEditingExternal] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewCrawledApartment, setPreviewCrawledApartment] = useState<Apartment | null>(null);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
@@ -213,6 +214,38 @@ export const RealtorDashboard = ({
   const unreadMatches = realtorMatches.filter(match => new Date(match.created_at).getTime() > Date.now() - 86400000);
   const handleEdit = (property: Property) => {
     setSelectedProperty(property);
+    setIsEditingExternal(false);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditCrawled = (listing: any) => {
+    // Convert crawled listing to Property-like object for PropertyEditModal
+    const asProperty: Property = {
+      id: listing.id,
+      realtor_id: `ext-${listing.source}`,
+      title: listing.title,
+      description: listing.description || '',
+      location: listing.location,
+      price: Number(listing.price) || 0,
+      size: listing.size || null,
+      rooms: listing.rooms || null,
+      vibe: listing.vibe || null,
+      highlights: listing.highlights || [],
+      images: listing.images || [],
+      vibe_analysis: listing.vibe_analysis || null,
+      property_source_link: listing.source_url,
+      property_source_provider_name: listing.contact_name || null,
+      property_source_provider_phone: listing.contact_phone || null,
+      amenities: listing.amenities || [],
+      created_at: listing.created_at || listing.crawled_at || new Date().toISOString(),
+      updated_at: listing.updated_at || new Date().toISOString(),
+      is_active: listing.is_active ?? true,
+      last_activated_at: listing.crawled_at || listing.created_at || new Date().toISOString(),
+      latitude: listing.latitude || null,
+      longitude: listing.longitude || null,
+    };
+    setSelectedProperty(asProperty);
+    setIsEditingExternal(true);
     setIsEditModalOpen(true);
   };
   const handlePreview = (property: Property) => {
@@ -1017,6 +1050,15 @@ export const RealtorDashboard = ({
                             size="sm"
                             variant="outline"
                             className="text-xs flex-1"
+                            onClick={() => handleEditCrawled(listing)}
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs flex-1"
                             onClick={() => window.open(listing.source_url, '_blank')}
                           >
                             <ExternalLink className="w-3 h-3 mr-1" />
@@ -1053,7 +1095,8 @@ export const RealtorDashboard = ({
       <PropertyEditModal isOpen={isEditModalOpen} onClose={() => {
       setIsEditModalOpen(false);
       setSelectedProperty(null);
-    }} property={selectedProperty} />
+      setIsEditingExternal(false);
+    }} property={selectedProperty} isExternal={isEditingExternal} />
 
       <PropertyPreviewModal isOpen={isPreviewModalOpen} onClose={() => {
       setIsPreviewModalOpen(false);
