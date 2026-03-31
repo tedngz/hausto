@@ -1395,16 +1395,16 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
             </Button>
             <Button 
               onClick={handleSubmit}
-              disabled={isUpdating || !title || !location || !price}
+              disabled={(isUpdating || isSavingExternal) || !title || !location || !price}
               className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
             >
-              {isUpdating ? (
+              {(isUpdating || isSavingExternal) ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Updating...
                 </>
               ) : (
-                'Update Property'
+                isExternal ? 'Update External Listing' : 'Update Property'
               )}
             </Button>
           </div>
