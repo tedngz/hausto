@@ -214,6 +214,38 @@ export const RealtorDashboard = ({
   const unreadMatches = realtorMatches.filter(match => new Date(match.created_at).getTime() > Date.now() - 86400000);
   const handleEdit = (property: Property) => {
     setSelectedProperty(property);
+    setIsEditingExternal(false);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditCrawled = (listing: any) => {
+    // Convert crawled listing to Property-like object for PropertyEditModal
+    const asProperty: Property = {
+      id: listing.id,
+      realtor_id: `ext-${listing.source}`,
+      title: listing.title,
+      description: listing.description || '',
+      location: listing.location,
+      price: Number(listing.price) || 0,
+      size: listing.size || null,
+      rooms: listing.rooms || null,
+      vibe: listing.vibe || null,
+      highlights: listing.highlights || [],
+      images: listing.images || [],
+      vibe_analysis: listing.vibe_analysis || null,
+      property_source_link: listing.source_url,
+      property_source_provider_name: listing.contact_name || null,
+      property_source_provider_phone: listing.contact_phone || null,
+      amenities: listing.amenities || [],
+      created_at: listing.created_at || listing.crawled_at || new Date().toISOString(),
+      updated_at: listing.updated_at || new Date().toISOString(),
+      is_active: listing.is_active ?? true,
+      last_activated_at: listing.crawled_at || listing.created_at || new Date().toISOString(),
+      latitude: listing.latitude || null,
+      longitude: listing.longitude || null,
+    };
+    setSelectedProperty(asProperty);
+    setIsEditingExternal(true);
     setIsEditModalOpen(true);
   };
   const handlePreview = (property: Property) => {
