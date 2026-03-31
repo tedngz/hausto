@@ -715,47 +715,54 @@ Deno.serve(async (req) => {
       console.warn('[scheduled-crawl] Failed to chain vibe backfill via QStash — will attempt inline analysis');
     }
 
-    // Step 4: If we have time remaining, do inline vibe analysis
+    // Step 4: If we have time remaining, do inline vibe analysis for ALL properties missing highlights
     if (OPENAI_API_KEY && scrapeResult?.success) {
       const remainingTime = 150000 - (Date.now() - startTime);
       if (remainingTime > 30000) {
-        // Find recently inserted properties needing vibe analysis
+        // Fetch more properties to find all that need analysis
         const { data: needsVibe } = await supabase
           .from('external_properties')
           .select('id, title, location, price, size, rooms, images, amenities, vibe_analysis, highlights')
           .eq('is_active', true)
           .not('images', 'eq', '{}')
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(20);
 
         if (needsVibe) {
+          const isGenericHighlight = (h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space';
+
             const toAnalyze = needsVibe.filter((p: any) => {
               if (!p.vibe_analysis?.styles || p.vibe_analysis.styles.length === 0) return true;
               if (!p.vibe_analysis?.image_analyses || p.vibe_analysis.image_analyses.length === 0) return true;
               if (!p.highlights || p.highlights.length === 0) return true;
-              const allGeneric = p.highlights.every((h: string) => !h || h === 'Premium living space feature' || h === 'Quality living space');
-              if (allGeneric) return true;
+              if (p.highlights.every((h: string) => isGenericHighlight(h))) return true;
 
               const hasUsableSecondaryHighlight = p.vibe_analysis.image_analyses.some((analysis: any) => {
                 const imageIndex = Number(analysis?.image_index);
                 const highlight = analysis?.image_highlight || analysis?.highlight;
-                return Number.isFinite(imageIndex) && imageIndex > 0 && highlight && highlight !== 'Premium living space feature' && highlight !== 'Quality living space';
+                return Number.isFinite(imageIndex) && imageIndex > 0 && highlight && !isGenericHighlight(highlight);
               });
 
               return !hasUsableSecondaryHighlight;
             });
 
           for (const prop of toAnalyze) {
-            if (Date.now() - startTime > 120000) break;
+            if (Date.now() - startTime > 140000) break; // Leave 10s buffer
             try {
               const success = await runVibeAnalysis(supabase, prop.id, prop);
               if (success) vibeAnalyzed++;
-              await new Promise(r => setTimeout(r, 2000));
+              await new Promise(r => setTimeout(r, 1500));
             } catch (e) {
               console.error(`[scheduled-crawl] Inline vibe error for ${prop.id}:`, e);
             }
           }
           console.log(`[scheduled-crawl] Inline vibe: ${vibeAnalyzed}/${toAnalyze.length} analyzed`);
+
+          // If we couldn't finish all, chain another backfill
+          if (toAnalyze.length > vibeAnalyzed) {
+            console.log(`[scheduled-crawl] ${toAnalyze.length - vibeAnalyzed} properties still need vibe - chaining additional backfill`);
+            await qstashPublish({ action: 'backfill-vibe', continuation: true, source: 'inline-overflow' }, 15);
+          }
         }
       }
     }

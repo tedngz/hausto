@@ -187,14 +187,27 @@ async function savePropertiesToDB(
       };
 
       if (existing) {
+        // Preserve existing vibe_analysis and highlights if they have image-based data
+        const existingVibe = existing.vibe_analysis as Record<string, any> | null;
+        const hasExistingImageAnalysis = Array.isArray(existingVibe?.image_analyses) && existingVibe.image_analyses.length > 0;
+        
+        const updateData: Record<string, any> = {
+          ...propertyData,
+          last_verified_at: now,
+          updated_at: now,
+          expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+        
+        // Don't overwrite good vibe data with empty scrape data
+        if (hasExistingImageAnalysis) {
+          delete updateData.vibe_analysis;
+          delete updateData.highlights;
+          delete updateData.vibe;
+        }
+        
         await supabase
           .from('external_properties')
-          .update({
-            ...propertyData,
-            last_verified_at: now,
-            updated_at: now,
-            expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-          })
+          .update(updateData)
           .eq('id', existing.id);
         updatedListings++;
       } else {
