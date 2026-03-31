@@ -21,6 +21,7 @@ interface PropertyEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   property: Property | null;
+  isExternal?: boolean;
 }
 
 export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditModalProps) => {
