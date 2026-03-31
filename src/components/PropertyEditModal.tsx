@@ -288,7 +288,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
 
   // Live-refresh amenities when property is re-analyzed elsewhere (e.g., batch)
   useEffect(() => {
-    if (!isOpen || !property?.id) return;
+    if (!isOpen || !property?.id || isExternal) return;
 
     const channel = supabase
       .channel(`property-updates-${property.id}`)
