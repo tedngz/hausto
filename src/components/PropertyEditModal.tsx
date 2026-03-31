@@ -24,7 +24,7 @@ interface PropertyEditModalProps {
   isExternal?: boolean;
 }
 
-export const PropertyEditModal = ({ isOpen, onClose, property }: PropertyEditModalProps) => {
+export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = false }: PropertyEditModalProps) => {
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
