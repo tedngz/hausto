@@ -130,8 +130,8 @@ export const LandingPage = () => {
               <div className="text-muted-foreground">Happy Matches</div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-primary mb-2">98%</div>
-              <div className="text-muted-foreground">Satisfaction Rate</div>
+              <div className="text-4xl font-bold text-primary mb-2">10x</div>
+              <div className="text-muted-foreground">Matching Rate</div>
             </div>
           </div>
         </div>
