@@ -13,6 +13,15 @@ const redis = new Redis({
   token: Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!,
 });
 
+// ========== WORD-BOUNDARY MATCHING HELPER ==========
+// Prevents "d1" from matching "d10", "district 1" from matching "district 10", etc.
+function matchesWord(text: string, term: string): boolean {
+  // Escape regex special characters in the term
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(?:^|[\\s,./;:\\-()\\[\\]])${escaped}(?=$|[\\s,./;:\\-()\\[\\]])`, 'i');
+  return regex.test(text);
+}
+
 // ========== LOCATION KNOWLEDGE BASE ==========
 // Sub-districts and wards for each main district
 const HCM_SUBDISTRICTS: Record<string, string[]> = {
