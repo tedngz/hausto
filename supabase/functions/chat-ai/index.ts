@@ -432,7 +432,7 @@ function extractSpecificDistricts(text: string): string[] {
   
   // Check main districts first
   for (const area of [...hcmMainDistricts, ...hanoiMainDistricts, ...danangMainDistricts]) {
-    if (area.names.some(n => lowerText.includes(n))) {
+    if (area.names.some(n => matchesWord(lowerText, n))) {
       if (!districts.includes(area.canonical)) {
         districts.push(area.canonical);
       }
