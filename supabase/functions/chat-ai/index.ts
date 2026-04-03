@@ -255,18 +255,18 @@ function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   }
   
   // Check Hanoi aliases and districts
-  if (LOCATION_DATA.hanoi.aliases.some(a => lowerText.includes(a))) return 'hanoi';
+  if (LOCATION_DATA.hanoi.aliases.some(a => matchesWord(lowerText, a))) return 'hanoi';
   for (const tier of Object.values(LOCATION_DATA.hanoi.districts)) {
-    if (tier.names.some(d => lowerText.includes(d))) return 'hanoi';
+    if (tier.names.some(d => matchesWord(lowerText, d))) return 'hanoi';
   }
   for (const wards of Object.values(HANOI_SUBDISTRICTS)) {
     if (wards.some(w => lowerText.includes(w))) return 'hanoi';
   }
   
   // Check Da Nang aliases and districts
-  if (LOCATION_DATA.danang.aliases.some(a => lowerText.includes(a))) return 'danang';
+  if (LOCATION_DATA.danang.aliases.some(a => matchesWord(lowerText, a))) return 'danang';
   for (const tier of Object.values(LOCATION_DATA.danang.districts)) {
-    if (tier.names.some(d => lowerText.includes(d))) return 'danang';
+    if (tier.names.some(d => matchesWord(lowerText, d))) return 'danang';
   }
   for (const wards of Object.values(DANANG_SUBDISTRICTS)) {
     if (wards.some(w => lowerText.includes(w))) return 'danang';
