@@ -707,7 +707,7 @@ function filterAndScoreProperties(
         if (parent === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7') || matchesWord(locLower, 'd7'))) return true;
         if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
         if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
-        return locLower.includes(parent);
+        return matchesWord(locLower, parent);
       });
       
       // Check if property is an EXACT match to user's requested sub-area (e.g., "Thao Dien" when user asked for Thao Dien)
