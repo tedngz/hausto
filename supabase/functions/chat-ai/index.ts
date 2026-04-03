@@ -13,6 +13,15 @@ const redis = new Redis({
   token: Deno.env.get('UPSTASH_REDIS_REST_TOKEN')!,
 });
 
+// ========== WORD-BOUNDARY MATCHING HELPER ==========
+// Prevents "d1" from matching "d10", "district 1" from matching "district 10", etc.
+function matchesWord(text: string, term: string): boolean {
+  // Escape regex special characters in the term
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(?:^|[\\s,./;:\\-()\\[\\]])${escaped}(?=$|[\\s,./;:\\-()\\[\\]])`, 'i');
+  return regex.test(text);
+}
+
 // ========== LOCATION KNOWLEDGE BASE ==========
 // Sub-districts and wards for each main district
 const HCM_SUBDISTRICTS: Record<string, string[]> = {
@@ -233,9 +242,9 @@ function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   const lowerText = text.toLowerCase();
   
   // Check HCMC aliases and districts
-  if (LOCATION_DATA.hcm.aliases.some(a => lowerText.includes(a))) return 'hcm';
+  if (LOCATION_DATA.hcm.aliases.some(a => matchesWord(lowerText, a))) return 'hcm';
   for (const tier of Object.values(LOCATION_DATA.hcm.districts)) {
-    if (tier.names.some(d => lowerText.includes(d))) return 'hcm';
+    if (tier.names.some(d => matchesWord(lowerText, d))) return 'hcm';
   }
   // Check HCM sub-districts and roads
   for (const wards of Object.values(HCM_SUBDISTRICTS)) {
@@ -246,18 +255,18 @@ function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   }
   
   // Check Hanoi aliases and districts
-  if (LOCATION_DATA.hanoi.aliases.some(a => lowerText.includes(a))) return 'hanoi';
+  if (LOCATION_DATA.hanoi.aliases.some(a => matchesWord(lowerText, a))) return 'hanoi';
   for (const tier of Object.values(LOCATION_DATA.hanoi.districts)) {
-    if (tier.names.some(d => lowerText.includes(d))) return 'hanoi';
+    if (tier.names.some(d => matchesWord(lowerText, d))) return 'hanoi';
   }
   for (const wards of Object.values(HANOI_SUBDISTRICTS)) {
     if (wards.some(w => lowerText.includes(w))) return 'hanoi';
   }
   
   // Check Da Nang aliases and districts
-  if (LOCATION_DATA.danang.aliases.some(a => lowerText.includes(a))) return 'danang';
+  if (LOCATION_DATA.danang.aliases.some(a => matchesWord(lowerText, a))) return 'danang';
   for (const tier of Object.values(LOCATION_DATA.danang.districts)) {
-    if (tier.names.some(d => lowerText.includes(d))) return 'danang';
+    if (tier.names.some(d => matchesWord(lowerText, d))) return 'danang';
   }
   for (const wards of Object.values(DANANG_SUBDISTRICTS)) {
     if (wards.some(w => lowerText.includes(w))) return 'danang';
@@ -270,9 +279,9 @@ function getLocationTier(location: string, city: 'hcm' | 'hanoi' | 'danang'): 'c
   const locLower = location.toLowerCase();
   const cityData = LOCATION_DATA[city];
   
-  if (cityData.districts.center.names.some(d => locLower.includes(d))) return 'center';
-  if (cityData.districts.nearCenter.names.some(d => locLower.includes(d))) return 'near-center';
-  if (cityData.districts.suburban.names.some(d => locLower.includes(d))) return 'suburban';
+  if (cityData.districts.center.names.some(d => matchesWord(locLower, d))) return 'center';
+  if (cityData.districts.nearCenter.names.some(d => matchesWord(locLower, d))) return 'near-center';
+  if (cityData.districts.suburban.names.some(d => matchesWord(locLower, d))) return 'suburban';
   
   return 'unknown';
 }
@@ -423,7 +432,7 @@ function extractSpecificDistricts(text: string): string[] {
   
   // Check main districts first
   for (const area of [...hcmMainDistricts, ...hanoiMainDistricts, ...danangMainDistricts]) {
-    if (area.names.some(n => lowerText.includes(n))) {
+    if (area.names.some(n => matchesWord(lowerText, n))) {
       if (!districts.includes(area.canonical)) {
         districts.push(area.canonical);
       }
@@ -432,7 +441,7 @@ function extractSpecificDistricts(text: string): string[] {
   
   // Check sub-areas and add both the sub-area AND its parent district
   for (const area of hcmSubAreas) {
-    if (area.names.some(n => lowerText.includes(n))) {
+    if (area.names.some(n => matchesWord(lowerText, n))) {
       if (!districts.includes(area.canonical)) {
         districts.push(area.canonical);
       }
@@ -610,9 +619,9 @@ function filterAndScoreProperties(
       const otherCities = Object.entries(LOCATION_DATA).filter(([key]) => key !== context.city);
       let isOtherCity = false;
       for (const [, cityData] of otherCities) {
-        if (cityData.aliases.some(a => locLower.includes(a)) ||
+        if (cityData.aliases.some(a => matchesWord(locLower, a)) ||
           Object.values(cityData.districts).some(tier => 
-            tier.names.some(d => locLower.includes(d))
+            tier.names.some(d => matchesWord(locLower, d))
           )) {
           isOtherCity = true;
           break;
@@ -676,10 +685,10 @@ function filterAndScoreProperties(
       
       // Check if property matches any requested specific area (exact match)
       const matchesExactArea = context.specificDistricts.some(district => {
-        if (district === 'district 1' && (locLower.includes('district 1') || locLower.includes('d1,') || locLower.includes('quan 1'))) return true;
-        if (district === 'district 2' && (locLower.includes('district 2') || locLower.includes('d2,') || locLower.includes('quan 2'))) return true;
-        if (district === 'district 3' && (locLower.includes('district 3') || locLower.includes('d3,') || locLower.includes('quan 3'))) return true;
-        if (district === 'district 7' && (locLower.includes('district 7') || locLower.includes('d7,') || locLower.includes('quan 7'))) return true;
+        if (district === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'd1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1'))) return true;
+        if (district === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'd2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2'))) return true;
+        if (district === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'd3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3'))) return true;
+        if (district === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'd7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7'))) return true;
         if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
         if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
         if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
@@ -687,18 +696,18 @@ function filterAndScoreProperties(
         if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
         if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
         if (district === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
-        return locLower.includes(district);
+        return matchesWord(locLower, district);
       });
       
       // Check if property is in a parent district that user wants
       const matchesParentDistrict = Array.from(wantedParentDistricts).some(parent => {
-        if (parent === 'district 1' && (locLower.includes('district 1') || locLower.includes('quan 1') || /\bd1\b/.test(locLower))) return true;
-        if (parent === 'district 2' && (locLower.includes('district 2') || locLower.includes('quan 2') || /\bd2\b/.test(locLower))) return true;
-        if (parent === 'district 3' && (locLower.includes('district 3') || locLower.includes('quan 3') || /\bd3\b/.test(locLower))) return true;
-        if (parent === 'district 7' && (locLower.includes('district 7') || locLower.includes('quan 7') || /\bd7\b/.test(locLower))) return true;
+        if (parent === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1') || matchesWord(locLower, 'd1'))) return true;
+        if (parent === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2') || matchesWord(locLower, 'd2'))) return true;
+        if (parent === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3') || matchesWord(locLower, 'd3'))) return true;
+        if (parent === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7') || matchesWord(locLower, 'd7'))) return true;
         if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
         if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
-        return locLower.includes(parent);
+        return matchesWord(locLower, parent);
       });
       
       // Check if property is an EXACT match to user's requested sub-area (e.g., "Thao Dien" when user asked for Thao Dien)
@@ -732,9 +741,9 @@ function filterAndScoreProperties(
         matchReasons.push(`in nearby ${p.location.split(',')[0]}`);
         console.log(`[Scoring] Property ${p.id} parent district match: ${p.location}`);
       } else {
-        // NOT in requested districts - lower priority but still include
-        score -= 5;
-        locationMatch = false;
+        // NOT in requested districts - HARD EXCLUDE when user specified a district
+        console.log(`[Scoring] Property ${p.id} EXCLUDED - not in requested districts: ${p.location}`);
+        continue; // Skip this property entirely
       }
     }
     
