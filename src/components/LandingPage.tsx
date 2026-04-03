@@ -131,7 +131,7 @@ export const LandingPage = () => {
             </div>
             <div>
               <div className="text-4xl font-bold text-primary mb-2">10x</div>
-              <div className="text-muted-foreground">Matching Rate</div>
+              <div className="text-muted-foreground">Matching Speed</div>
             </div>
           </div>
         </div>
