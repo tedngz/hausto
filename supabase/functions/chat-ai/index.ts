@@ -279,9 +279,9 @@ function getLocationTier(location: string, city: 'hcm' | 'hanoi' | 'danang'): 'c
   const locLower = location.toLowerCase();
   const cityData = LOCATION_DATA[city];
   
-  if (cityData.districts.center.names.some(d => locLower.includes(d))) return 'center';
-  if (cityData.districts.nearCenter.names.some(d => locLower.includes(d))) return 'near-center';
-  if (cityData.districts.suburban.names.some(d => locLower.includes(d))) return 'suburban';
+  if (cityData.districts.center.names.some(d => matchesWord(locLower, d))) return 'center';
+  if (cityData.districts.nearCenter.names.some(d => matchesWord(locLower, d))) return 'near-center';
+  if (cityData.districts.suburban.names.some(d => matchesWord(locLower, d))) return 'suburban';
   
   return 'unknown';
 }
