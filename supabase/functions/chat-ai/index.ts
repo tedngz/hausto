@@ -685,10 +685,10 @@ function filterAndScoreProperties(
       
       // Check if property matches any requested specific area (exact match)
       const matchesExactArea = context.specificDistricts.some(district => {
-        if (district === 'district 1' && (locLower.includes('district 1') || locLower.includes('d1,') || locLower.includes('quan 1'))) return true;
-        if (district === 'district 2' && (locLower.includes('district 2') || locLower.includes('d2,') || locLower.includes('quan 2'))) return true;
-        if (district === 'district 3' && (locLower.includes('district 3') || locLower.includes('d3,') || locLower.includes('quan 3'))) return true;
-        if (district === 'district 7' && (locLower.includes('district 7') || locLower.includes('d7,') || locLower.includes('quan 7'))) return true;
+        if (district === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'd1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1'))) return true;
+        if (district === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'd2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2'))) return true;
+        if (district === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'd3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3'))) return true;
+        if (district === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'd7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7'))) return true;
         if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
         if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
         if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
@@ -696,15 +696,15 @@ function filterAndScoreProperties(
         if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
         if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
         if (district === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
-        return locLower.includes(district);
+        return matchesWord(locLower, district);
       });
       
       // Check if property is in a parent district that user wants
       const matchesParentDistrict = Array.from(wantedParentDistricts).some(parent => {
-        if (parent === 'district 1' && (locLower.includes('district 1') || locLower.includes('quan 1') || /\bd1\b/.test(locLower))) return true;
-        if (parent === 'district 2' && (locLower.includes('district 2') || locLower.includes('quan 2') || /\bd2\b/.test(locLower))) return true;
-        if (parent === 'district 3' && (locLower.includes('district 3') || locLower.includes('quan 3') || /\bd3\b/.test(locLower))) return true;
-        if (parent === 'district 7' && (locLower.includes('district 7') || locLower.includes('quan 7') || /\bd7\b/.test(locLower))) return true;
+        if (parent === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1') || matchesWord(locLower, 'd1'))) return true;
+        if (parent === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2') || matchesWord(locLower, 'd2'))) return true;
+        if (parent === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3') || matchesWord(locLower, 'd3'))) return true;
+        if (parent === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7') || matchesWord(locLower, 'd7'))) return true;
         if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
         if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
         return locLower.includes(parent);
