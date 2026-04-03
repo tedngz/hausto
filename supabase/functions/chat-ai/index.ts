@@ -441,7 +441,7 @@ function extractSpecificDistricts(text: string): string[] {
   
   // Check sub-areas and add both the sub-area AND its parent district
   for (const area of hcmSubAreas) {
-    if (area.names.some(n => lowerText.includes(n))) {
+    if (area.names.some(n => matchesWord(lowerText, n))) {
       if (!districts.includes(area.canonical)) {
         districts.push(area.canonical);
       }
