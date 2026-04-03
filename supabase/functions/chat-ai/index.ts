@@ -242,9 +242,9 @@ function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   const lowerText = text.toLowerCase();
   
   // Check HCMC aliases and districts
-  if (LOCATION_DATA.hcm.aliases.some(a => lowerText.includes(a))) return 'hcm';
+  if (LOCATION_DATA.hcm.aliases.some(a => matchesWord(lowerText, a))) return 'hcm';
   for (const tier of Object.values(LOCATION_DATA.hcm.districts)) {
-    if (tier.names.some(d => lowerText.includes(d))) return 'hcm';
+    if (tier.names.some(d => matchesWord(lowerText, d))) return 'hcm';
   }
   // Check HCM sub-districts and roads
   for (const wards of Object.values(HCM_SUBDISTRICTS)) {
