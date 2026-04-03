@@ -604,10 +604,6 @@ export const HomeAI = ({
                                           {property.matchScore}% match
                                         </Badge>
                                       </div>
-                                      {/* External Source Badge */}
-                                      {property.isExternal && property.source && <div className="absolute bottom-2 left-2">
-                                          <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />
-                                        </div>}
                                       {/* Like Button - Mobile position */}
                                       <div className="absolute top-2 right-2 sm:hidden">
                                          <Button onClick={e => {
@@ -648,6 +644,7 @@ export const HomeAI = ({
                                            <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
                                          </div>
                                           {property.size && <span className="font-medium">{property.size}</span>}
+                                          {property.isExternal && property.source && <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />}
                                         </div>
 
                                        {/* Amenities */}
@@ -779,10 +776,6 @@ export const HomeAI = ({
                                 {property.matchScore}% match
                               </Badge>
                             </div>
-                            {/* External Source Badge */}
-                            {property.isExternal && property.source && <div className="absolute bottom-2 left-2">
-                                <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />
-                              </div>}
                             {/* Like Button - Mobile position */}
                             <div className="absolute top-2 right-2 sm:hidden">
                               <Button onClick={e => {
@@ -821,6 +814,7 @@ export const HomeAI = ({
                                  <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
                                </div>
                                {property.size && <span className="font-medium">{property.size}</span>}
+                               {property.isExternal && property.source && <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />}
                              </div>
 
                              {/* Property Highlights */}
