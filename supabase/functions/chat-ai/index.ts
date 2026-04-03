@@ -741,9 +741,9 @@ function filterAndScoreProperties(
         matchReasons.push(`in nearby ${p.location.split(',')[0]}`);
         console.log(`[Scoring] Property ${p.id} parent district match: ${p.location}`);
       } else {
-        // NOT in requested districts - lower priority but still include
-        score -= 5;
-        locationMatch = false;
+        // NOT in requested districts - HARD EXCLUDE when user specified a district
+        console.log(`[Scoring] Property ${p.id} EXCLUDED - not in requested districts: ${p.location}`);
+        continue; // Skip this property entirely
       }
     }
     
