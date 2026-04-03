@@ -619,9 +619,9 @@ function filterAndScoreProperties(
       const otherCities = Object.entries(LOCATION_DATA).filter(([key]) => key !== context.city);
       let isOtherCity = false;
       for (const [, cityData] of otherCities) {
-        if (cityData.aliases.some(a => locLower.includes(a)) ||
+        if (cityData.aliases.some(a => matchesWord(locLower, a)) ||
           Object.values(cityData.districts).some(tier => 
-            tier.names.some(d => locLower.includes(d))
+            tier.names.some(d => matchesWord(locLower, d))
           )) {
           isOtherCity = true;
           break;
