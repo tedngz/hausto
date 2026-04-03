@@ -776,10 +776,6 @@ export const HomeAI = ({
                                 {property.matchScore}% match
                               </Badge>
                             </div>
-                            {/* External Source Badge */}
-                            {property.isExternal && property.source && <div className="absolute bottom-2 left-2">
-                                <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />
-                              </div>}
                             {/* Like Button - Mobile position */}
                             <div className="absolute top-2 right-2 sm:hidden">
                               <Button onClick={e => {
