@@ -1717,6 +1717,12 @@ Maximum ${maxResults} properties in results.`;
         description: p.description,
         highlights: p.highlights,
         images: p.images,
+        amenities: p.amenities,
+        vibe_analysis: p.vibe_analysis || null,
+        rooms: p.rooms || null,
+        property_source_link: p.property_source_link || null,
+        sourceProviderName: p.providerName || null,
+        sourceProviderPhone: p.providerPhone || null,
         matchScore: p.matchScore,
         matchReason: p.matchReasons.length > 0 
           ? p.matchReasons.join(', ') 
