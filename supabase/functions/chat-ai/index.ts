@@ -582,6 +582,9 @@ interface PropertyWithScore {
   realtor_id: string;
   size: string;
   vibe: string;
+  rooms?: string;
+  vibe_analysis?: any;
+  property_source_link?: string;
   providerName?: string;
   providerPhone?: string;
   // Scoring
@@ -592,7 +595,6 @@ interface PropertyWithScore {
   styleMatchCount: number;
   locationTier: string;
   matchReasons: string[];
-  // Whether this property is an exact sub-area match (e.g., Thao Dien when user asked for Thao Dien)
   isExactSubAreaMatch?: boolean;
   // External property flags
   isExternal?: boolean;
