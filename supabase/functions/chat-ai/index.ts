@@ -902,11 +902,18 @@ function validateAndFixAIResults(
     // Fix any incorrect data
     const fixed = {
       ...result,
-      price: actualProperty.price, // Use actual price
-      location: actualProperty.location, // Use actual location
-      images: actualProperty.images, // Use actual images
+      price: actualProperty.price,
+      location: actualProperty.location,
+      images: actualProperty.images,
       realtor_id: actualProperty.realtor_id,
-      matchScore: actualProperty.matchScore, // Use our calculated score
+      matchScore: actualProperty.matchScore,
+      amenities: actualProperty.amenities,
+      highlights: actualProperty.highlights,
+      vibe_analysis: actualProperty.vibe_analysis || null,
+      rooms: actualProperty.rooms || null,
+      property_source_link: actualProperty.property_source_link || null,
+      sourceProviderName: actualProperty.providerName || null,
+      sourceProviderPhone: actualProperty.providerPhone || null,
       isExternal: !!actualProperty.isExternal,
       source: actualProperty.source || null,
       sourceUrl: actualProperty.sourceUrl || null,
