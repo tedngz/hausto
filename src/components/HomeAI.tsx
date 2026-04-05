@@ -649,10 +649,31 @@ export const HomeAI = ({
                                           {property.isExternal && property.source && <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />}
                                         </div>
 
+                                       {/* Property Highlights */}
+                                       {property.highlights && property.highlights.length > 0 && <div className="mb-3">
+                                           <HighlightTags highlights={property.highlights} maxWords={3} />
+                                         </div>}
+
                                        {/* Amenities */}
                                        {(property.vibe_analysis?.amenities || property.amenities) && <PropertyAmenities amenities={property.vibe_analysis?.amenities || property.amenities || []} compact={true} />}
 
-                                       {/* Why it matches - More prominent on mobile */}
+                                       {/* Image Highlights */}
+                                       {property.vibe_analysis?.image_analyses && property.vibe_analysis.image_analyses.length > 0 && (
+                                         <div className="mb-3 space-y-1">
+                                           {property.vibe_analysis.image_analyses.slice(0, 3).map((analysis: any, idx: number) => {
+                                             const highlight = analysis?.image_highlight || analysis?.highlight;
+                                             if (!highlight) return null;
+                                             return (
+                                               <div key={idx} className="flex items-start gap-1.5">
+                                                 <span className="text-xs text-primary">✦</span>
+                                                 <span className="text-xs text-muted-foreground leading-relaxed">{highlight}</span>
+                                               </div>
+                                             );
+                                           })}
+                                         </div>
+                                       )}
+
+                                       {/* Why it matches */}
                                       <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left px-0 py-0">
                                         <p className="text-sm text-foreground text-left">
                                           <span className="font-semibold text-primary">Why it matches: </span>
