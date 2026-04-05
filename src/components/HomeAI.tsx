@@ -817,13 +817,6 @@ export const HomeAI = ({
                                {property.isExternal && property.source && <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />}
                              </div>
 
-                             {/* Property Highlights */}
-                             {property.highlights && property.highlights.length > 0 && <div className="mb-3">
-                                 <HighlightTags highlights={property.highlights} maxWords={3} />
-                               </div>}
-
-                             {/* Amenities */}
-                             {(property.vibe_analysis?.amenities || property.amenities) && <PropertyAmenities amenities={property.vibe_analysis?.amenities || property.amenities || []} compact={true} />}
 
                              {/* Why it matches - More prominent on mobile */}
                              <div className="bg-secondary/10 p-3 rounded-lg mb-3 text-left">
