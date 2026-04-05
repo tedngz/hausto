@@ -582,6 +582,9 @@ interface PropertyWithScore {
   realtor_id: string;
   size: string;
   vibe: string;
+  rooms?: string;
+  vibe_analysis?: any;
+  property_source_link?: string;
   providerName?: string;
   providerPhone?: string;
   // Scoring
@@ -592,7 +595,6 @@ interface PropertyWithScore {
   styleMatchCount: number;
   locationTier: string;
   matchReasons: string[];
-  // Whether this property is an exact sub-area match (e.g., Thao Dien when user asked for Thao Dien)
   isExactSubAreaMatch?: boolean;
   // External property flags
   isExternal?: boolean;
@@ -850,8 +852,11 @@ function filterAndScoreProperties(
       realtor_id: p.realtor_id,
       size: p.size || '',
       vibe: p.vibe || styles.join(', ') || 'Modern',
-      providerName: p.property_source_provider_name,
-      providerPhone: p.property_source_provider_phone,
+      rooms: p.rooms || null,
+      vibe_analysis: p.vibe_analysis || null,
+      property_source_link: p.property_source_link || p._sourceUrl || null,
+      providerName: p.property_source_provider_name || p.contact_name || null,
+      providerPhone: p.property_source_provider_phone || p.contact_phone || null,
       matchScore: score,
       priceMatch,
       locationMatch,
@@ -897,11 +902,18 @@ function validateAndFixAIResults(
     // Fix any incorrect data
     const fixed = {
       ...result,
-      price: actualProperty.price, // Use actual price
-      location: actualProperty.location, // Use actual location
-      images: actualProperty.images, // Use actual images
+      price: actualProperty.price,
+      location: actualProperty.location,
+      images: actualProperty.images,
       realtor_id: actualProperty.realtor_id,
-      matchScore: actualProperty.matchScore, // Use our calculated score
+      matchScore: actualProperty.matchScore,
+      amenities: actualProperty.amenities,
+      highlights: actualProperty.highlights,
+      vibe_analysis: actualProperty.vibe_analysis || null,
+      rooms: actualProperty.rooms || null,
+      property_source_link: actualProperty.property_source_link || null,
+      sourceProviderName: actualProperty.providerName || null,
+      sourceProviderPhone: actualProperty.providerPhone || null,
       isExternal: !!actualProperty.isExternal,
       source: actualProperty.source || null,
       sourceUrl: actualProperty.sourceUrl || null,
@@ -1705,6 +1717,12 @@ Maximum ${maxResults} properties in results.`;
         description: p.description,
         highlights: p.highlights,
         images: p.images,
+        amenities: p.amenities,
+        vibe_analysis: p.vibe_analysis || null,
+        rooms: p.rooms || null,
+        property_source_link: p.property_source_link || null,
+        sourceProviderName: p.providerName || null,
+        sourceProviderPhone: p.providerPhone || null,
         matchScore: p.matchScore,
         matchReason: p.matchReasons.length > 0 
           ? p.matchReasons.join(', ') 
