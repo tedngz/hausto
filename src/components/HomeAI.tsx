@@ -35,12 +35,14 @@ interface PropertyMatch {
   realtor_id?: string;
   vibe_analysis?: any;
   amenities?: string[];
+  rooms?: string;
+  property_source_link?: string;
+  sourceProviderName?: string;
+  sourceProviderPhone?: string;
   // External marketplace properties
   isExternal?: boolean;
   source?: 'batdongsan' | 'nhatot' | 'airbnb' | null;
   sourceUrl?: string | null;
-  sourceProviderName?: string;
-  sourceProviderPhone?: string;
   // Cache metadata
   cached?: boolean;
   crawledAt?: string;
