@@ -916,10 +916,14 @@ export const HomeAI = ({
         highlights: selectedProperty.highlights,
         images: selectedProperty.images,
         amenities: selectedProperty.vibe_analysis?.amenities || selectedProperty.amenities || [],
+        rooms: selectedProperty.rooms || null,
+        property_source_link: selectedProperty.property_source_link || selectedProperty.sourceUrl || undefined,
+        property_source_provider_name: selectedProperty.sourceProviderName || undefined,
+        property_source_provider_phone: selectedProperty.sourceProviderPhone || undefined,
         realtor: {
           id: selectedProperty.realtor_id || "contact",
-          name: "Match for contact details",
-          phone: "",
+          name: selectedProperty.sourceProviderName || "Match for contact details",
+          phone: selectedProperty.sourceProviderPhone || "",
           email: ""
         },
         vibe_analysis: selectedProperty.vibe_analysis
