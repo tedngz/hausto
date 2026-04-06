@@ -1,38 +1,46 @@
 
 
-## Analysis: Phase 3 vibe_analysis Token Waste
+# GPT-4o-mini vs Gemini 2.5 Flash: Vibe Analysis Comparison
 
-### Finding
+## Objective
+Run both models on the same property image and compare output quality for vibe scoring, amenity detection, and image highlights.
 
-Phase 3 (in `scrape-marketplace`) asks GPT-4o-mini to generate `vibe_analysis` (style, colors, activities, vibe_scores) and `highlights` from the listing's **text content**. However, for **new listings**, the post-save step 7 (in `crawl-external-properties`, lines 582-611) immediately overwrites all of these fields with **image-based** analysis from GPT-4o-mini Vision.
+## Test Setup
+- **Sample property**: "Eco Green Apartment for Rent" (ID: 637a444b)
+- **Sample image**: `https://file4.batdongsan.com.vn/resize/1275x717/2023/11/10/20231110113154-53f7_wm.jpg`
+- **Prompt**: The existing `analyze-vibe` prompt with `generateContent = true`
+- **GPT-4o-mini**: Called via direct OpenAI API (current implementation, `OPENAI_API_KEY`)
+- **Gemini 2.5 Flash**: Called via Lovable AI Gateway (`LOVABLE_API_KEY`)
 
-The only scenario where Phase 3 vibe data survives is for **existing/updated listings** (line 535 skips vibe re-analysis), but that data is text-based and lower quality than the image-based version.
+## Execution Plan
 
-### Impact on User Experience
+### Step 1: Create comparison script
+Write a Python script that sends the same image + prompt to both models and captures:
+- Vibe scores (modern, cozy, luxurious, etc.)
+- Detected amenities count and specificity
+- Image highlight quality
+- Detailed analysis depth
+- Response time
+- JSON parsing reliability
 
-- **Discovery ranking**: `vibeScoring.ts` uses `vibe_analysis.styles`, `colors`, and `activities` to calculate match scores. These come from the post-save image analysis for new listings, so Phase 3's version has zero impact.
-- **Vibe badge display**: `VibeScore.tsx` reads styles/colors/activities for the popover breakdown — again sourced from the final stored values (post-save overwrites).
-- **Vector search**: Embeddings are generated from title, description, location, amenities, and highlights — the highlights get overwritten too.
-- **Per-image highlights**: Only the post-save step produces positional per-image highlights; Phase 3 produces generic text highlights.
+### Step 2: Run comparison
+Execute the script, which will:
+1. Fetch and base64-encode the sample image
+2. Send identical prompts to GPT-4o-mini (OpenAI API) and Gemini 2.5 Flash (Lovable Gateway)
+3. Parse and compare JSON outputs side-by-side
 
-### Recommendation: Remove vibe fields from Phase 3 prompt
+### Step 3: Generate report
+Output a formatted comparison table to `/mnt/documents/vibe-analysis-comparison.md` covering:
+- Score differences across all 10 vibe dimensions
+- Amenity detection completeness
+- Highlight creativity and specificity
+- JSON format compliance
+- Latency comparison
+- Cost implications
 
-**What to keep in Phase 3** (essential extraction, no duplication):
-- title, location, price, priceDisplay, size, rooms, images, description, contactName, contactPhone, amenities
-
-**What to remove from Phase 3** (duplicated and overwritten):
-- vibe_analysis (style, colors, activities, vibe_scores)
-- highlights (replaced by per-image highlights from step 7)
-
-**Additional fix**: For existing/updated listings that currently skip vibe re-analysis (line 535), trigger vibe analysis if `vibe_analysis` is empty or missing `image_analyses`, so they also get image-based quality data.
-
-### Token Savings Estimate
-
-The Phase 3 prompt is ~800 tokens. Removing the vibe analysis section (~200 tokens from prompt + ~150 tokens from response) saves ~350 tokens per listing. At 5-10 listings per crawl run, that is 1,750-3,500 tokens saved per run.
-
-### Changes
-
-1. **`supabase/functions/scrape-marketplace/index.ts`** — Remove vibe_analysis fields from the Phase 3 extraction prompt and response parsing. Keep only the core property data fields.
-
-2. **`supabase/functions/crawl-external-properties/index.ts`** — For existing/updated listings, run vibe analysis if the stored `vibe_analysis` lacks `image_analyses` (indicating it was text-based or empty), instead of unconditionally skipping.
+## Technical Details
+- GPT-4o-mini endpoint: `https://api.openai.com/v1/chat/completions`
+- Gemini 2.5 Flash endpoint: `https://ai.gateway.lovable.dev/v1/chat/completions` (model: `google/gemini-2.5-flash`)
+- Both use the same OpenAI-compatible chat completions format
+- Image sent as base64 data URI in both cases
 
