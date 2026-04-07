@@ -1246,7 +1246,7 @@ serve(async (req) => {
           const globalIdx = i + batchIdx;
           console.log(`[Phase 2] Scraping detail page ${globalIdx + 1}/${newLinks.length}: ${listing.url}`);
           
-          const detail = await scrapeDetailPage(listing.url);
+          const detail = await scrapeDetailPage(listing.url, marketplace);
           if (!detail) {
             console.log(`[Phase 2] Failed to scrape detail page: ${listing.url}`);
             return null;
