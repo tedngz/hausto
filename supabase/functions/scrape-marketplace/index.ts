@@ -871,7 +871,7 @@ async function extractPropertyFromDetailPage(
   const prompt = `You are a property data extraction expert. Extract the SINGLE rental property listing from this ${marketplace} individual listing detail page.
 
 DETAIL PAGE CONTENT:
-${detailMarkdown.substring(0, 10000)}
+${detailMarkdown.substring(0, 12000)}
 
 IMAGES FOUND ON THIS PAGE (assign ALL relevant property images):
 ${detailImages.slice(0, 30).join('\n')}
@@ -881,17 +881,17 @@ SOURCE URL: ${sourceUrl}
 CRITICAL INSTRUCTIONS:
 1. ALL text output MUST be in ENGLISH - translate Vietnamese content
 2. This is a SINGLE property detail page - extract ONE property with complete details
-3. Include ALL property images from the list above (filter out non-property images)
+3. Include ALL property images from the list above (filter out non-property images like logos/icons)
 4. Write a detailed, engaging English description (150-300 words)
-5. Extract ALL amenities mentioned
-6. Extract contact info (name, phone) if available
-7. Extract exact address/location
+5. Extract ALL amenities mentioned in the listing
+6. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
+7. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. For example: "Đường Hoàng Hoa Thám, Phường Ngọc Hà, Quận Ba Đình, Hà Nội" — do NOT simplify to just the city name. Keep the Vietnamese location names as-is (do NOT translate location names).
 8. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 
 RESPOND WITH VALID JSON ONLY:
 {
   "title": "Descriptive English title",
-  "location": "Full address/location",
+  "location": "FULL address: Street, Ward, District, City (keep Vietnamese names)",
   "price": 5000000,
   "priceDisplay": "5 triệu/tháng",
   "size": "25m²",
@@ -904,38 +904,32 @@ RESPOND WITH VALID JSON ONLY:
 }`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'Extract structured property data from a single Vietnamese property listing detail page. Output English. Respond with valid JSON only.' },
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: 2000,
-        temperature: 0.2,
-      }),
-    });
+    const content = await callAI(
+      [
+        { role: 'system', content: 'Extract structured property data from a single Vietnamese property listing detail page. Output English. Keep location names in Vietnamese. Respond with valid JSON only.' },
+        { role: 'user', content: prompt }
+      ],
+      2500,
+      0.2
+    );
 
-    if (!response.ok) {
-      console.error(`[Phase 3] OpenAI error for ${sourceUrl}:`, await response.text());
+    if (!content) {
+      console.error(`[Phase 3] AI call failed for ${sourceUrl}`);
       return null;
     }
 
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
-    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const p = JSON.parse(cleaned);
     
-    const p = JSON.parse(content);
-    
-    // Filter images to only valid URLs
-    const validImages = (Array.isArray(p.images) ? p.images : detailImages)
+    // Use AI-extracted images if available, otherwise use scraped images
+    // Normalize batdongsan image URLs to full-size
+    let finalImages = (Array.isArray(p.images) && p.images.length > 0 ? p.images : detailImages)
       .filter((img: string) => img?.startsWith('http'))
-      .slice(0, 10);
+      .slice(0, 15);
+    
+    if (marketplace === 'batdongsan') {
+      finalImages = finalImages.map(normalizeBatdongsanImageUrl);
+    }
 
     return {
       id: `external-${marketplace}-${Date.now()}-${index}`,
@@ -945,7 +939,7 @@ RESPOND WITH VALID JSON ONLY:
       priceDisplay: p.priceDisplay || `${p.price?.toLocaleString()} VND`,
       size: p.size || 'N/A',
       rooms: p.rooms || '',
-      images: validImages,
+      images: finalImages,
       description: p.description || '',
       highlights: [],
       amenities: Array.isArray(p.amenities) ? p.amenities : [],
