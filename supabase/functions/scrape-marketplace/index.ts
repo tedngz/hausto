@@ -983,28 +983,18 @@ For EACH property:
 RESPOND WITH VALID JSON: {"properties": [...]}`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'Extract structured property data from Vietnamese website content. Output English. Valid JSON only.' },
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: 4000,
-        temperature: 0.3,
-      }),
-    });
+    const content = await callAI(
+      [
+        { role: 'system', content: 'Extract structured property data from Vietnamese website content. Output English. Keep location/address names in Vietnamese. Valid JSON only.' },
+        { role: 'user', content: prompt }
+      ],
+      4000,
+      0.3
+    );
 
-    if (!response.ok) return [];
+    if (!content) return [];
     
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '{"properties":[]}';
-    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    let cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     const parsed = JSON.parse(content);
     return (parsed.properties || []).map((p: any, i: number) => {
