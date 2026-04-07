@@ -213,14 +213,19 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
     
     if (imageContent.length === 0) return null;
     
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Prefer Lovable Gateway with Gemini 2.5 Flash, fallback to OpenAI
+    const apiUrl = LOVABLE_API_KEY ? AI_GATEWAY_URL : 'https://api.openai.com/v1/chat/completions';
+    const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+    const model = LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o-mini';
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model,
         messages: [{
           role: 'user',
           content: [
@@ -262,7 +267,7 @@ Return ONLY valid JSON:
     });
     
     if (!response.ok) {
-      console.error('[vibe-analysis] OpenAI error:', await response.text());
+      console.error('[vibe-analysis] AI error:', await response.text());
       return null;
     }
     
