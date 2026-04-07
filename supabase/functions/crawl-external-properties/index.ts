@@ -159,7 +159,12 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
   highlights: string[];
   amenities: string[];
 } | null> {
-  if (!OPENAI_API_KEY || !images || images.length === 0) return null;
+  if (!LOVABLE_API_KEY && !OPENAI_API_KEY) {
+    if (!images || images.length === 0) return null;
+    console.warn('[vibe-analysis] No AI API key configured');
+    return null;
+  }
+  if (!images || images.length === 0) return null;
   
   try {
     // Use up to 5 images for per-image highlights
