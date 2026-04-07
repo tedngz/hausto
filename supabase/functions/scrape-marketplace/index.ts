@@ -115,6 +115,111 @@ function normalizeLocationText(location: string): string {
   return location.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// ─── AI Call Helper (prefer Gemini via Gateway, fallback OpenAI) ──
+async function callAI(messages: { role: string; content: any }[], maxTokens: number = 2000, temperature: number = 0.2): Promise<string | null> {
+  // Prefer Lovable Gateway with Gemini 2.5 Flash
+  if (LOVABLE_API_KEY) {
+    try {
+      const response = await fetch(AI_GATEWAY_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || null;
+      }
+      console.warn('[callAI] Gateway error:', response.status, await response.text());
+    } catch (e) {
+      console.warn('[callAI] Gateway failed:', e);
+    }
+  }
+  
+  // Fallback to OpenAI
+  if (OPENAI_API_KEY) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || null;
+      }
+      console.warn('[callAI] OpenAI error:', response.status);
+    } catch (e) {
+      console.warn('[callAI] OpenAI failed:', e);
+    }
+  }
+  
+  return null;
+}
+
+// ─── Batdongsan Image URL Normalization ──────────────────────────
+// Convert thumbnail/crop URLs to full-size and extract gallery images
+function normalizeBatdongsanImageUrl(url: string): string {
+  // Convert crop/WxH/ to resize/1275x717/ for full-size images
+  return url
+    .replace(/\/crop\/\d+x\d+\//i, '/resize/1275x717/')
+    .replace(/\/resize\/\d+x\d+\//i, '/resize/1275x717/');
+}
+
+function extractBatdongsanGalleryImages(html: string): string[] {
+  const images: string[] = [];
+  
+  // Pattern 1: Extract from image gallery data attributes and src
+  const galleryPatterns = [
+    // Full-size images in data attributes
+    /data-(?:src|original|lazy-src)=["'](https:\/\/file\d+\.batdongsan\.com\.vn\/[^"']+)["']/gi,
+    // Standard img src
+    /src=["'](https:\/\/file\d+\.batdongsan\.com\.vn\/(?:resize|crop)\/[^"']+)["']/gi,
+    // Background images
+    /url\(["']?(https:\/\/file\d+\.batdongsan\.com\.vn\/[^"')]+)["']?\)/gi,
+  ];
+  
+  for (const regex of galleryPatterns) {
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      if (match[1]) images.push(match[1]);
+    }
+  }
+  
+  // Deduplicate by base filename (ignore resize/crop differences)
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const img of images) {
+    const base = img.replace(/\/(resize|crop)\/\d+x\d+\//i, '/NORM/');
+    if (!seen.has(base)) {
+      seen.add(base);
+      unique.push(normalizeBatdongsanImageUrl(img));
+    }
+  }
+  
+  // Filter out logos, icons, avatars
+  return unique.filter(img =>
+    !img.includes('logo') && !img.includes('icon') && !img.includes('avatar') &&
+    !img.includes('sprite') && !img.includes('placeholder') &&
+    img.match(/\.(jpg|jpeg|png|webp)/i)
+  );
+}
+
 function detectCity(location: string): string {
   const lower = location.toLowerCase();
   if (/(ho chi minh|hcm|saigon|sài gòn|thủ đức|thu duc|quận [0-9]|quan [0-9]|district [0-9]|d[0-9]|bình thạnh|binh thanh|phú nhuận|phu nhuan|tân bình|tan binh|gò vấp|go vap|tân phú|tan phu|bình tân|binh tan|bình chánh|binh chanh|nhà bè|nha be|hóc môn|hoc mon|củ chi|cu chi|cần giờ|can gio)/i.test(lower)) return 'ho_chi_minh';
