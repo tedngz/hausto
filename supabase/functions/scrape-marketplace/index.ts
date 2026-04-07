@@ -996,7 +996,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
     
     let cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(cleaned);
     return (parsed.properties || []).map((p: any, i: number) => {
       const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => img?.startsWith('http')).slice(0, 6);
       
