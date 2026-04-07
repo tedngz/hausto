@@ -285,7 +285,7 @@ async function savePropertiesToDB(
         description: property.description || null,
         highlights: property.highlights || [],
         amenities: property.amenities || [],
-        images: (property.images || []).slice(0, 5),
+        images: (property.images || []).slice(0, 15),
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
