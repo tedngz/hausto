@@ -969,7 +969,7 @@ CRITICAL: ALL text MUST be in ENGLISH. Extract up to 5 properties.
 
 For EACH property:
 - title: English descriptive title
-- location: Location (keep Vietnamese area names)
+- location: FULL address with street, ward, district, city (keep Vietnamese place names as-is)
 - price: Numeric VND
 - priceDisplay: Original price text
 - size: m² if available
