@@ -788,7 +788,7 @@ function htmlToBasicMarkdown(html: string): string {
 }
 
 // ─── Phase 2: Scrape individual listing detail pages ─────────────
-async function scrapeDetailPage(url: string): Promise<{
+async function scrapeDetailPage(url: string, marketplace: string): Promise<{
   markdown: string;
   images: string[];
   links: string[];
@@ -804,12 +804,20 @@ async function scrapeDetailPage(url: string): Promise<{
       html = result.html;
       links = result.links;
       markdown = result.markdown;
-      images = extractImagesFromHtml(html);
     } else {
       html = await directFetch(url);
-      images = extractImagesFromHtml(html);
       links = extractLinksFromHtml(html, url);
       markdown = htmlToBasicMarkdown(html);
+    }
+    
+    // Use marketplace-specific image extraction for better quality
+    if (marketplace === 'batdongsan') {
+      images = extractBatdongsanGalleryImages(html);
+    }
+    
+    // Fallback to generic extraction
+    if (images.length === 0) {
+      images = extractImagesFromHtml(html);
     }
     
     if (!markdown || markdown.length < 100) return null;
