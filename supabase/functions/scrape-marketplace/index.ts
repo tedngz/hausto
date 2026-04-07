@@ -9,6 +9,8 @@ const corsHeaders = {
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -113,6 +115,111 @@ function normalizeLocationText(location: string): string {
   return location.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// ─── AI Call Helper (prefer Gemini via Gateway, fallback OpenAI) ──
+async function callAI(messages: { role: string; content: any }[], maxTokens: number = 2000, temperature: number = 0.2): Promise<string | null> {
+  // Prefer Lovable Gateway with Gemini 2.5 Flash
+  if (LOVABLE_API_KEY) {
+    try {
+      const response = await fetch(AI_GATEWAY_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || null;
+      }
+      console.warn('[callAI] Gateway error:', response.status, await response.text());
+    } catch (e) {
+      console.warn('[callAI] Gateway failed:', e);
+    }
+  }
+  
+  // Fallback to OpenAI
+  if (OPENAI_API_KEY) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || null;
+      }
+      console.warn('[callAI] OpenAI error:', response.status);
+    } catch (e) {
+      console.warn('[callAI] OpenAI failed:', e);
+    }
+  }
+  
+  return null;
+}
+
+// ─── Batdongsan Image URL Normalization ──────────────────────────
+// Convert thumbnail/crop URLs to full-size and extract gallery images
+function normalizeBatdongsanImageUrl(url: string): string {
+  // Convert crop/WxH/ to resize/1275x717/ for full-size images
+  return url
+    .replace(/\/crop\/\d+x\d+\//i, '/resize/1275x717/')
+    .replace(/\/resize\/\d+x\d+\//i, '/resize/1275x717/');
+}
+
+function extractBatdongsanGalleryImages(html: string): string[] {
+  const images: string[] = [];
+  
+  // Pattern 1: Extract from image gallery data attributes and src
+  const galleryPatterns = [
+    // Full-size images in data attributes
+    /data-(?:src|original|lazy-src)=["'](https:\/\/file\d+\.batdongsan\.com\.vn\/[^"']+)["']/gi,
+    // Standard img src
+    /src=["'](https:\/\/file\d+\.batdongsan\.com\.vn\/(?:resize|crop)\/[^"']+)["']/gi,
+    // Background images
+    /url\(["']?(https:\/\/file\d+\.batdongsan\.com\.vn\/[^"')]+)["']?\)/gi,
+  ];
+  
+  for (const regex of galleryPatterns) {
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      if (match[1]) images.push(match[1]);
+    }
+  }
+  
+  // Deduplicate by base filename (ignore resize/crop differences)
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const img of images) {
+    const base = img.replace(/\/(resize|crop)\/\d+x\d+\//i, '/NORM/');
+    if (!seen.has(base)) {
+      seen.add(base);
+      unique.push(normalizeBatdongsanImageUrl(img));
+    }
+  }
+  
+  // Filter out logos, icons, avatars
+  return unique.filter(img =>
+    !img.includes('logo') && !img.includes('icon') && !img.includes('avatar') &&
+    !img.includes('sprite') && !img.includes('placeholder') &&
+    img.match(/\.(jpg|jpeg|png|webp)/i)
+  );
+}
+
 function detectCity(location: string): string {
   const lower = location.toLowerCase();
   if (/(ho chi minh|hcm|saigon|sài gòn|thủ đức|thu duc|quận [0-9]|quan [0-9]|district [0-9]|d[0-9]|bình thạnh|binh thanh|phú nhuận|phu nhuan|tân bình|tan binh|gò vấp|go vap|tân phú|tan phu|bình tân|binh tan|bình chánh|binh chanh|nhà bè|nha be|hóc môn|hoc mon|củ chi|cu chi|cần giờ|can gio)/i.test(lower)) return 'ho_chi_minh';
@@ -178,7 +285,7 @@ async function savePropertiesToDB(
         description: property.description || null,
         highlights: property.highlights || [],
         amenities: property.amenities || [],
-        images: (property.images || []).slice(0, 5),
+        images: (property.images || []).slice(0, 15),
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
@@ -502,31 +609,21 @@ async function extractListingUrls(
   console.log(`[Phase 1] Found ${unique.length} unique listing URLs from link extraction`);
   
   // If regex didn't find enough, use AI to extract URLs from markdown
-  if (unique.length < 3 && OPENAI_API_KEY) {
+  if (unique.length < 3 && (LOVABLE_API_KEY || OPENAI_API_KEY)) {
     console.log(`[Phase 1] Using AI fallback to find listing URLs...`);
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'Extract individual property listing URLs from search page content. Return JSON only.' },
-            { role: 'user', content: `Extract all individual property listing detail page URLs from this ${marketplace} search results page. Only include URLs that lead to INDIVIDUAL property detail pages, not search/filter pages.\n\nAVAILABLE LINKS:\n${links.slice(0, 100).join('\n')}\n\nPAGE CONTENT (first 4000 chars):\n${markdown.substring(0, 4000)}\n\nReturn JSON: {"listings": [{"url": "...", "title": "...", "price": "..."}]}` }
-          ],
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
-      });
+      const content = await callAI(
+        [
+          { role: 'system', content: 'Extract individual property listing URLs from search page content. Return JSON only.' },
+          { role: 'user', content: `Extract all individual property listing detail page URLs from this ${marketplace} search results page. Only include URLs that lead to INDIVIDUAL property detail pages, not search/filter pages.\n\nAVAILABLE LINKS:\n${links.slice(0, 100).join('\n')}\n\nPAGE CONTENT (first 4000 chars):\n${markdown.substring(0, 4000)}\n\nReturn JSON: {"listings": [{"url": "...", "title": "...", "price": "..."}]}` }
+        ],
+        2000,
+        0.1
+      );
       
-      if (response.ok) {
-        const data = await response.json();
-        let content = data.choices?.[0]?.message?.content || '{"listings":[]}';
-        content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        const parsed = JSON.parse(content);
+      if (content) {
+        const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(cleaned);
         
         for (const listing of (parsed.listings || [])) {
           if (listing.url && !seen.has(listing.url)) {
@@ -681,7 +778,7 @@ function htmlToBasicMarkdown(html: string): string {
 }
 
 // ─── Phase 2: Scrape individual listing detail pages ─────────────
-async function scrapeDetailPage(url: string): Promise<{
+async function scrapeDetailPage(url: string, marketplace: string): Promise<{
   markdown: string;
   images: string[];
   links: string[];
@@ -697,12 +794,20 @@ async function scrapeDetailPage(url: string): Promise<{
       html = result.html;
       links = result.links;
       markdown = result.markdown;
-      images = extractImagesFromHtml(html);
     } else {
       html = await directFetch(url);
-      images = extractImagesFromHtml(html);
       links = extractLinksFromHtml(html, url);
       markdown = htmlToBasicMarkdown(html);
+    }
+    
+    // Use marketplace-specific image extraction for better quality
+    if (marketplace === 'batdongsan') {
+      images = extractBatdongsanGalleryImages(html);
+    }
+    
+    // Fallback to generic extraction
+    if (images.length === 0) {
+      images = extractImagesFromHtml(html);
     }
     
     if (!markdown || markdown.length < 100) return null;
@@ -756,7 +861,7 @@ async function extractPropertyFromDetailPage(
   const prompt = `You are a property data extraction expert. Extract the SINGLE rental property listing from this ${marketplace} individual listing detail page.
 
 DETAIL PAGE CONTENT:
-${detailMarkdown.substring(0, 10000)}
+${detailMarkdown.substring(0, 12000)}
 
 IMAGES FOUND ON THIS PAGE (assign ALL relevant property images):
 ${detailImages.slice(0, 30).join('\n')}
@@ -766,17 +871,17 @@ SOURCE URL: ${sourceUrl}
 CRITICAL INSTRUCTIONS:
 1. ALL text output MUST be in ENGLISH - translate Vietnamese content
 2. This is a SINGLE property detail page - extract ONE property with complete details
-3. Include ALL property images from the list above (filter out non-property images)
+3. Include ALL property images from the list above (filter out non-property images like logos/icons)
 4. Write a detailed, engaging English description (150-300 words)
-5. Extract ALL amenities mentioned
-6. Extract contact info (name, phone) if available
-7. Extract exact address/location
+5. Extract ALL amenities mentioned in the listing
+6. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
+7. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. For example: "Đường Hoàng Hoa Thám, Phường Ngọc Hà, Quận Ba Đình, Hà Nội" — do NOT simplify to just the city name. Keep the Vietnamese location names as-is (do NOT translate location names).
 8. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 
 RESPOND WITH VALID JSON ONLY:
 {
   "title": "Descriptive English title",
-  "location": "Full address/location",
+  "location": "FULL address: Street, Ward, District, City (keep Vietnamese names)",
   "price": 5000000,
   "priceDisplay": "5 triệu/tháng",
   "size": "25m²",
@@ -789,38 +894,32 @@ RESPOND WITH VALID JSON ONLY:
 }`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'Extract structured property data from a single Vietnamese property listing detail page. Output English. Respond with valid JSON only.' },
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: 2000,
-        temperature: 0.2,
-      }),
-    });
+    const content = await callAI(
+      [
+        { role: 'system', content: 'Extract structured property data from a single Vietnamese property listing detail page. Output English. Keep location names in Vietnamese. Respond with valid JSON only.' },
+        { role: 'user', content: prompt }
+      ],
+      2500,
+      0.2
+    );
 
-    if (!response.ok) {
-      console.error(`[Phase 3] OpenAI error for ${sourceUrl}:`, await response.text());
+    if (!content) {
+      console.error(`[Phase 3] AI call failed for ${sourceUrl}`);
       return null;
     }
 
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
-    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const p = JSON.parse(cleaned);
     
-    const p = JSON.parse(content);
-    
-    // Filter images to only valid URLs
-    const validImages = (Array.isArray(p.images) ? p.images : detailImages)
+    // Use AI-extracted images if available, otherwise use scraped images
+    // Normalize batdongsan image URLs to full-size
+    let finalImages = (Array.isArray(p.images) && p.images.length > 0 ? p.images : detailImages)
       .filter((img: string) => img?.startsWith('http'))
-      .slice(0, 10);
+      .slice(0, 15);
+    
+    if (marketplace === 'batdongsan') {
+      finalImages = finalImages.map(normalizeBatdongsanImageUrl);
+    }
 
     return {
       id: `external-${marketplace}-${Date.now()}-${index}`,
@@ -830,7 +929,7 @@ RESPOND WITH VALID JSON ONLY:
       priceDisplay: p.priceDisplay || `${p.price?.toLocaleString()} VND`,
       size: p.size || 'N/A',
       rooms: p.rooms || '',
-      images: validImages,
+      images: finalImages,
       description: p.description || '',
       highlights: [],
       amenities: Array.isArray(p.amenities) ? p.amenities : [],
@@ -870,7 +969,7 @@ CRITICAL: ALL text MUST be in ENGLISH. Extract up to 5 properties.
 
 For EACH property:
 - title: English descriptive title
-- location: Location (keep Vietnamese area names)
+- location: FULL address with street, ward, district, city (keep Vietnamese place names as-is)
 - price: Numeric VND
 - priceDisplay: Original price text
 - size: m² if available
@@ -884,30 +983,20 @@ For EACH property:
 RESPOND WITH VALID JSON: {"properties": [...]}`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'Extract structured property data from Vietnamese website content. Output English. Valid JSON only.' },
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: 4000,
-        temperature: 0.3,
-      }),
-    });
+    const content = await callAI(
+      [
+        { role: 'system', content: 'Extract structured property data from Vietnamese website content. Output English. Keep location/address names in Vietnamese. Valid JSON only.' },
+        { role: 'user', content: prompt }
+      ],
+      4000,
+      0.3
+    );
 
-    if (!response.ok) return [];
+    if (!content) return [];
     
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '{"properties":[]}';
-    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    let cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(cleaned);
     return (parsed.properties || []).map((p: any, i: number) => {
       const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => img?.startsWith('http')).slice(0, 6);
       
@@ -983,8 +1072,7 @@ serve(async (req) => {
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) throw new Error('No AI API key configured (LOVABLE_API_KEY or OPENAI_API_KEY)');
 
     // Check cache
     const cacheKey = `marketplace:v2:${marketplace}:${query}:${location || 'all'}`;
@@ -1158,7 +1246,7 @@ serve(async (req) => {
           const globalIdx = i + batchIdx;
           console.log(`[Phase 2] Scraping detail page ${globalIdx + 1}/${newLinks.length}: ${listing.url}`);
           
-          const detail = await scrapeDetailPage(listing.url);
+          const detail = await scrapeDetailPage(listing.url, marketplace);
           if (!detail) {
             console.log(`[Phase 2] Failed to scrape detail page: ${listing.url}`);
             return null;
