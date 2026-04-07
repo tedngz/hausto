@@ -609,31 +609,21 @@ async function extractListingUrls(
   console.log(`[Phase 1] Found ${unique.length} unique listing URLs from link extraction`);
   
   // If regex didn't find enough, use AI to extract URLs from markdown
-  if (unique.length < 3 && OPENAI_API_KEY) {
+  if (unique.length < 3 && (LOVABLE_API_KEY || OPENAI_API_KEY)) {
     console.log(`[Phase 1] Using AI fallback to find listing URLs...`);
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'Extract individual property listing URLs from search page content. Return JSON only.' },
-            { role: 'user', content: `Extract all individual property listing detail page URLs from this ${marketplace} search results page. Only include URLs that lead to INDIVIDUAL property detail pages, not search/filter pages.\n\nAVAILABLE LINKS:\n${links.slice(0, 100).join('\n')}\n\nPAGE CONTENT (first 4000 chars):\n${markdown.substring(0, 4000)}\n\nReturn JSON: {"listings": [{"url": "...", "title": "...", "price": "..."}]}` }
-          ],
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
-      });
+      const content = await callAI(
+        [
+          { role: 'system', content: 'Extract individual property listing URLs from search page content. Return JSON only.' },
+          { role: 'user', content: `Extract all individual property listing detail page URLs from this ${marketplace} search results page. Only include URLs that lead to INDIVIDUAL property detail pages, not search/filter pages.\n\nAVAILABLE LINKS:\n${links.slice(0, 100).join('\n')}\n\nPAGE CONTENT (first 4000 chars):\n${markdown.substring(0, 4000)}\n\nReturn JSON: {"listings": [{"url": "...", "title": "...", "price": "..."}]}` }
+        ],
+        2000,
+        0.1
+      );
       
-      if (response.ok) {
-        const data = await response.json();
-        let content = data.choices?.[0]?.message?.content || '{"listings":[]}';
-        content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        const parsed = JSON.parse(content);
+      if (content) {
+        const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(cleaned);
         
         for (const listing of (parsed.listings || [])) {
           if (listing.url && !seen.has(listing.url)) {
