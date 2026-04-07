@@ -1072,8 +1072,7 @@ serve(async (req) => {
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) throw new Error('No AI API key configured (LOVABLE_API_KEY or OPENAI_API_KEY)');
 
     // Check cache
     const cacheKey = `marketplace:v2:${marketplace}:${query}:${location || 'all'}`;
