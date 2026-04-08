@@ -370,6 +370,39 @@ function extractSpecificDistricts(text: string): string[] {
   const districts: string[] = [];
   
   // HCM main districts
+  // Known residential complexes/landmarks → district mapping
+  const HCM_COMPLEXES: Record<string, string> = {
+    'celadon city': 'tan phu',
+    'vinhomes central park': 'binh thanh',
+    'vinhomes grand park': 'thu duc',
+    'masteri thao dien': 'district 2',
+    'masteri an phu': 'district 2',
+    'the sun avenue': 'district 2',
+    'gateway thao dien': 'district 2',
+    'estella heights': 'district 2',
+    'sala': 'district 2',
+    'saigon pearl': 'binh thanh',
+    'sunwah pearl': 'binh thanh',
+    'landmark 81': 'binh thanh',
+    'the manor': 'binh thanh',
+    'phu my hung': 'district 7',
+    'sunrise city': 'district 7',
+    'midtown': 'district 7',
+    'gold view': 'district 4',
+    'river gate': 'district 4',
+    'kingston residence': 'phu nhuan',
+    'orchard garden': 'phu nhuan',
+    'botanica premier': 'tan binh',
+  };
+  
+  // Check complex names first
+  for (const [complex, district] of Object.entries(HCM_COMPLEXES)) {
+    if (lowerText.includes(complex)) {
+      if (!districts.includes(complex)) districts.push(complex); // Add complex name itself for exact matching
+      if (!districts.includes(district)) districts.push(district);
+    }
+  }
+  
   const hcmMainDistricts = [
     { names: ['d1', 'district 1', 'quan 1', 'quận 1', 'q1'], canonical: 'district 1' },
     { names: ['d2', 'district 2', 'quan 2', 'quận 2', 'q2'], canonical: 'district 2' },
@@ -381,8 +414,12 @@ function extractSpecificDistricts(text: string): string[] {
     { names: ['binh thanh', 'bình thạnh'], canonical: 'binh thanh' },
     { names: ['phu nhuan', 'phú nhuận'], canonical: 'phu nhuan' },
     { names: ['tan binh', 'tân bình'], canonical: 'tan binh' },
+    { names: ['tan phu', 'tân phú'], canonical: 'tan phu' },
     { names: ['go vap', 'gò vấp'], canonical: 'go vap' },
     { names: ['thu duc', 'thủ đức'], canonical: 'thu duc' },
+    { names: ['binh tan', 'bình tân'], canonical: 'binh tan' },
+    { names: ['d9', 'district 9', 'quan 9', 'quận 9', 'q9'], canonical: 'district 9' },
+    { names: ['d12', 'district 12', 'quan 12', 'quận 12', 'q12'], canonical: 'district 12' },
   ];
   
   // HCM sub-areas (wards) - with their parent district
@@ -611,7 +648,19 @@ function filterAndScoreProperties(
   
   for (const p of properties) {
     const locLower = p.location.toLowerCase();
-    const amenities = p.vibe_analysis?.amenities || p.amenities || [];
+    const titleLowerPre = (p.title || '').toLowerCase();
+    
+    // Extract amenities: check top-level first, then aggregate from image_analyses
+    let amenities = p.vibe_analysis?.amenities || p.amenities || [];
+    if ((!amenities || amenities.length === 0) && p.vibe_analysis?.image_analyses) {
+      const imageAmenities = new Set<string>();
+      for (const img of p.vibe_analysis.image_analyses) {
+        if (Array.isArray(img.amenities)) {
+          for (const a of img.amenities) imageAmenities.add(a);
+        }
+      }
+      amenities = Array.from(imageAmenities);
+    }
     const styles = p.vibe_analysis?.styles || [];
     
     // ========== HARD FILTERS (Eliminate non-matching) ==========
@@ -632,7 +681,7 @@ function filterAndScoreProperties(
       if (isOtherCity) continue; // Skip properties from wrong city
     }
     
-    // 2. Must have amenities
+    // 2. Must have amenities (from any source)
     if (amenities.length === 0) continue;
     
     // ========== SCORING ==========
