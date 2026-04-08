@@ -728,18 +728,25 @@ function filterAndScoreProperties(
         }
       }
       // Also add directly mentioned main districts
+      const MAIN_DISTRICT_NAMES = ['district 1', 'district 2', 'district 3', 'district 4', 'district 5', 
+        'district 7', 'district 9', 'district 10', 'district 12', 'binh thanh', 'phu nhuan', 'thu duc', 
+        'go vap', 'tan binh', 'tan phu', 'binh tan'];
       for (const d of context.specificDistricts) {
-        if (['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)) {
+        if (MAIN_DISTRICT_NAMES.includes(d)) {
           wantedParentDistricts.add(d);
         }
       }
       
       // Check if property matches any requested specific area (exact match)
+      // Also check location AND title for complex/building names (e.g. "Celadon City")
+      const searchableText = `${locLower} ${titleLowerPre}`;
       const matchesExactArea = context.specificDistricts.some(district => {
         if (district === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'd1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1'))) return true;
         if (district === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'd2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2'))) return true;
         if (district === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'd3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3'))) return true;
         if (district === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'd7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7'))) return true;
+        if (district === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
+        if (district === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
         if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
         if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
         if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
@@ -747,6 +754,8 @@ function filterAndScoreProperties(
         if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
         if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
         if (district === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
+        // Complex/building name match (check both location and title)
+        if (searchableText.includes(district)) return true;
         return matchesWord(locLower, district);
       });
       
