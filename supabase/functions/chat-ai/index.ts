@@ -783,7 +783,8 @@ function filterAndScoreProperties(
         if (subArea === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return (isExactSubAreaMatch = true);
         if (subArea === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return (isExactSubAreaMatch = true);
         if (subArea === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return (isExactSubAreaMatch = true);
-        if (locLower.includes(subArea)) return (isExactSubAreaMatch = true);
+        // Complex/building name match (check location AND title)
+        if (searchableText.includes(subArea)) return (isExactSubAreaMatch = true);
         return false;
       });
  
