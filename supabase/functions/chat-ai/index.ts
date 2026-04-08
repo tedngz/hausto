@@ -370,6 +370,39 @@ function extractSpecificDistricts(text: string): string[] {
   const districts: string[] = [];
   
   // HCM main districts
+  // Known residential complexes/landmarks → district mapping
+  const HCM_COMPLEXES: Record<string, string> = {
+    'celadon city': 'tan phu',
+    'vinhomes central park': 'binh thanh',
+    'vinhomes grand park': 'thu duc',
+    'masteri thao dien': 'district 2',
+    'masteri an phu': 'district 2',
+    'the sun avenue': 'district 2',
+    'gateway thao dien': 'district 2',
+    'estella heights': 'district 2',
+    'sala': 'district 2',
+    'saigon pearl': 'binh thanh',
+    'sunwah pearl': 'binh thanh',
+    'landmark 81': 'binh thanh',
+    'the manor': 'binh thanh',
+    'phu my hung': 'district 7',
+    'sunrise city': 'district 7',
+    'midtown': 'district 7',
+    'gold view': 'district 4',
+    'river gate': 'district 4',
+    'kingston residence': 'phu nhuan',
+    'orchard garden': 'phu nhuan',
+    'botanica premier': 'tan binh',
+  };
+  
+  // Check complex names first
+  for (const [complex, district] of Object.entries(HCM_COMPLEXES)) {
+    if (lowerText.includes(complex)) {
+      if (!districts.includes(complex)) districts.push(complex); // Add complex name itself for exact matching
+      if (!districts.includes(district)) districts.push(district);
+    }
+  }
+  
   const hcmMainDistricts = [
     { names: ['d1', 'district 1', 'quan 1', 'quận 1', 'q1'], canonical: 'district 1' },
     { names: ['d2', 'district 2', 'quan 2', 'quận 2', 'q2'], canonical: 'district 2' },
@@ -381,8 +414,12 @@ function extractSpecificDistricts(text: string): string[] {
     { names: ['binh thanh', 'bình thạnh'], canonical: 'binh thanh' },
     { names: ['phu nhuan', 'phú nhuận'], canonical: 'phu nhuan' },
     { names: ['tan binh', 'tân bình'], canonical: 'tan binh' },
+    { names: ['tan phu', 'tân phú'], canonical: 'tan phu' },
     { names: ['go vap', 'gò vấp'], canonical: 'go vap' },
     { names: ['thu duc', 'thủ đức'], canonical: 'thu duc' },
+    { names: ['binh tan', 'bình tân'], canonical: 'binh tan' },
+    { names: ['d9', 'district 9', 'quan 9', 'quận 9', 'q9'], canonical: 'district 9' },
+    { names: ['d12', 'district 12', 'quan 12', 'quận 12', 'q12'], canonical: 'district 12' },
   ];
   
   // HCM sub-areas (wards) - with their parent district
@@ -611,7 +648,19 @@ function filterAndScoreProperties(
   
   for (const p of properties) {
     const locLower = p.location.toLowerCase();
-    const amenities = p.vibe_analysis?.amenities || p.amenities || [];
+    const titleLowerPre = (p.title || '').toLowerCase();
+    
+    // Extract amenities: check top-level first, then aggregate from image_analyses
+    let amenities = p.vibe_analysis?.amenities || p.amenities || [];
+    if ((!amenities || amenities.length === 0) && p.vibe_analysis?.image_analyses) {
+      const imageAmenities = new Set<string>();
+      for (const img of p.vibe_analysis.image_analyses) {
+        if (Array.isArray(img.amenities)) {
+          for (const a of img.amenities) imageAmenities.add(a);
+        }
+      }
+      amenities = Array.from(imageAmenities);
+    }
     const styles = p.vibe_analysis?.styles || [];
     
     // ========== HARD FILTERS (Eliminate non-matching) ==========
@@ -632,7 +681,7 @@ function filterAndScoreProperties(
       if (isOtherCity) continue; // Skip properties from wrong city
     }
     
-    // 2. Must have amenities
+    // 2. Must have amenities (from any source)
     if (amenities.length === 0) continue;
     
     // ========== SCORING ==========
@@ -679,18 +728,25 @@ function filterAndScoreProperties(
         }
       }
       // Also add directly mentioned main districts
+      const MAIN_DISTRICT_NAMES = ['district 1', 'district 2', 'district 3', 'district 4', 'district 5', 
+        'district 7', 'district 9', 'district 10', 'district 12', 'binh thanh', 'phu nhuan', 'thu duc', 
+        'go vap', 'tan binh', 'tan phu', 'binh tan'];
       for (const d of context.specificDistricts) {
-        if (['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)) {
+        if (MAIN_DISTRICT_NAMES.includes(d)) {
           wantedParentDistricts.add(d);
         }
       }
       
       // Check if property matches any requested specific area (exact match)
+      // Also check location AND title for complex/building names (e.g. "Celadon City")
+      const searchableText = `${locLower} ${titleLowerPre}`;
       const matchesExactArea = context.specificDistricts.some(district => {
         if (district === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'd1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1'))) return true;
         if (district === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'd2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2'))) return true;
         if (district === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'd3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3'))) return true;
         if (district === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'd7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7'))) return true;
+        if (district === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
+        if (district === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
         if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
         if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
         if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
@@ -698,6 +754,8 @@ function filterAndScoreProperties(
         if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
         if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
         if (district === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
+        // Complex/building name match (check both location and title)
+        if (searchableText.includes(district)) return true;
         return matchesWord(locLower, district);
       });
       
@@ -707,6 +765,8 @@ function filterAndScoreProperties(
         if (parent === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2') || matchesWord(locLower, 'd2'))) return true;
         if (parent === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3') || matchesWord(locLower, 'd3'))) return true;
         if (parent === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7') || matchesWord(locLower, 'd7'))) return true;
+        if (parent === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
+        if (parent === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
         if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
         if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
         return matchesWord(locLower, parent);
@@ -714,7 +774,7 @@ function filterAndScoreProperties(
       
       // Check if property is an EXACT match to user's requested sub-area (e.g., "Thao Dien" when user asked for Thao Dien)
       const requestedSubAreas = context.specificDistricts.filter(d => 
-        !['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)
+        !MAIN_DISTRICT_NAMES.includes(d)
       );
       
       const matchesExactSubArea = requestedSubAreas.length > 0 && requestedSubAreas.some(subArea => {
@@ -723,7 +783,8 @@ function filterAndScoreProperties(
         if (subArea === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return (isExactSubAreaMatch = true);
         if (subArea === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return (isExactSubAreaMatch = true);
         if (subArea === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return (isExactSubAreaMatch = true);
-        if (locLower.includes(subArea)) return (isExactSubAreaMatch = true);
+        // Complex/building name match (check location AND title)
+        if (searchableText.includes(subArea)) return (isExactSubAreaMatch = true);
         return false;
       });
  
