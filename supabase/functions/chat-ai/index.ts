@@ -765,6 +765,8 @@ function filterAndScoreProperties(
         if (parent === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2') || matchesWord(locLower, 'd2'))) return true;
         if (parent === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3') || matchesWord(locLower, 'd3'))) return true;
         if (parent === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7') || matchesWord(locLower, 'd7'))) return true;
+        if (parent === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
+        if (parent === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
         if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
         if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
         return matchesWord(locLower, parent);
@@ -772,7 +774,7 @@ function filterAndScoreProperties(
       
       // Check if property is an EXACT match to user's requested sub-area (e.g., "Thao Dien" when user asked for Thao Dien)
       const requestedSubAreas = context.specificDistricts.filter(d => 
-        !['district 1', 'district 2', 'district 3', 'district 7', 'binh thanh', 'phu nhuan', 'thu duc', 'go vap', 'tan binh'].includes(d)
+        !MAIN_DISTRICT_NAMES.includes(d)
       );
       
       const matchesExactSubArea = requestedSubAreas.length > 0 && requestedSubAreas.some(subArea => {
