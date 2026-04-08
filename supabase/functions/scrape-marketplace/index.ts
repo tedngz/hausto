@@ -231,12 +231,8 @@ function extractBatdongsanGalleryImages(html: string): string[] {
     }
   }
   
-  // Filter out logos, icons, avatars
-  return unique.filter(img =>
-    !img.includes('logo') && !img.includes('icon') && !img.includes('avatar') &&
-    !img.includes('sprite') && !img.includes('placeholder') &&
-    img.match(/\.(jpg|jpeg|png|webp)/i)
-  );
+  // Filter out non-property images using shared validator
+  return unique.filter(isValidPropertyImageUrl);
 }
 
 function detectCity(location: string): string {
