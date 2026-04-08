@@ -152,14 +152,28 @@ async function generatePropertyEmbedding(property: any): Promise<number[] | null
     return null;
   }
 }
-// Analyze property images using OpenAI Vision (same approach as analyze-vibe edge function)
+
+// ─── Image URL Filtering (reject videos, unrelated content) ──────
+function isValidPropertyImageUrl(url: string): boolean {
+  if (!url || !url.startsWith('http')) return false;
+  const lower = url.toLowerCase();
+  if (/\.(mp4|avi|mov|wmv|flv|mkv|webm|m3u8|ts)(\?|$)/i.test(lower)) return false;
+  if (lower.includes('/video/') || lower.includes('/videos/')) return false;
+  if (/\b(logo|icon|avatar|sprite|placeholder|banner|ads?|advert|tracking|pixel|badge|button)\b/i.test(lower)) return false;
+  if (/\b(facebook|twitter|zalo|share|social|og-image)\b/i.test(lower)) return false;
+  if (/\/\d{1,2}x\d{1,2}\//i.test(lower)) return false;
+  if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower) && !lower.includes('batdongsan.com.vn') && !lower.includes('nhatot.com')) return false;
+  return true;
+}
+
+// Analyze property images using OpenAI Vision (prefer OpenAI, fallback Gemini)
 async function analyzePropertyImagesVibe(images: string[]): Promise<{
   vibe: string;
   vibe_analysis: Record<string, any>;
   highlights: string[];
   amenities: string[];
 } | null> {
-  if (!LOVABLE_API_KEY && !OPENAI_API_KEY) {
+  if (!OPENAI_API_KEY && !LOVABLE_API_KEY) {
     if (!images || images.length === 0) return null;
     console.warn('[vibe-analysis] No AI API key configured');
     return null;
@@ -167,8 +181,8 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
   if (!images || images.length === 0) return null;
   
   try {
-    // Use up to 5 images for per-image highlights
-    const imagesToAnalyze = images.filter(img => img?.startsWith('http')).slice(0, 5);
+    // Use up to 5 images, filter invalid URLs
+    const imagesToAnalyze = images.filter(img => isValidPropertyImageUrl(img)).slice(0, 5);
     if (imagesToAnalyze.length === 0) return null;
     
     console.log(`[vibe-analysis] Analyzing ${imagesToAnalyze.length} images with per-image highlights...`);
@@ -183,6 +197,12 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
         if (!imgResponse.ok) continue;
         
         const contentType = imgResponse.headers.get('content-type') || '';
+        // Skip non-image content types
+        if (!contentType.includes('image/')) {
+          console.log(`[vibe-analysis] Skipping non-image content-type: ${contentType} for ${imageUrl}`);
+          continue;
+        }
+        
         const imageBuffer = await imgResponse.arrayBuffer();
         const imageBytes = new Uint8Array(imageBuffer);
         
@@ -213,10 +233,10 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
     
     if (imageContent.length === 0) return null;
     
-    // Prefer Lovable Gateway with Gemini 2.5 Flash, fallback to OpenAI
-    const apiUrl = LOVABLE_API_KEY ? AI_GATEWAY_URL : 'https://api.openai.com/v1/chat/completions';
-    const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
-    const model = LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o-mini';
+    // Prefer OpenAI, fallback to Lovable Gateway
+    const apiUrl = OPENAI_API_KEY ? 'https://api.openai.com/v1/chat/completions' : AI_GATEWAY_URL;
+    const apiKey = OPENAI_API_KEY || LOVABLE_API_KEY;
+    const model = OPENAI_API_KEY ? 'gpt-4o-mini' : 'google/gemini-2.5-flash';
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -524,7 +544,7 @@ serve(async (req) => {
                       rooms: property.rooms || null,
                       description: property.description || null,
                       amenities: property.amenities || [],
-                      images: property.images || [],
+                      images: (property.images || []).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 5),
                       contact_name: property.sourceProviderName || null,
                       contact_phone: property.sourceProviderPhone || null,
                       crawled_at: new Date().toISOString(),
@@ -589,7 +609,7 @@ serve(async (req) => {
                   description: property.description || null,
                   highlights: property.highlights || [],
                   amenities: property.amenities || [],
-                  images: property.images || [],
+                  images: (property.images || []).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 5),
                   contact_name: property.sourceProviderName || null,
                   contact_phone: property.sourceProviderPhone || null,
                   vibe: property.vibe || null,

@@ -115,35 +115,9 @@ function normalizeLocationText(location: string): string {
   return location.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-// ─── AI Call Helper (prefer Gemini via Gateway, fallback OpenAI) ──
+// ─── AI Call Helper (prefer OpenAI, fallback Gemini via Gateway) ──
 async function callAI(messages: { role: string; content: any }[], maxTokens: number = 2000, temperature: number = 0.2): Promise<string | null> {
-  // Prefer Lovable Gateway with Gemini 2.5 Flash
-  if (LOVABLE_API_KEY) {
-    try {
-      const response = await fetch(AI_GATEWAY_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages,
-          max_tokens: maxTokens,
-          temperature,
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return data.choices?.[0]?.message?.content || null;
-      }
-      console.warn('[callAI] Gateway error:', response.status, await response.text());
-    } catch (e) {
-      console.warn('[callAI] Gateway failed:', e);
-    }
-  }
-  
-  // Fallback to OpenAI
+  // Prefer OpenAI
   if (OPENAI_API_KEY) {
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -163,13 +137,58 @@ async function callAI(messages: { role: string; content: any }[], maxTokens: num
         const data = await response.json();
         return data.choices?.[0]?.message?.content || null;
       }
-      console.warn('[callAI] OpenAI error:', response.status);
+      console.warn('[callAI] OpenAI error:', response.status, await response.text());
     } catch (e) {
       console.warn('[callAI] OpenAI failed:', e);
     }
   }
   
+  // Fallback to Lovable Gateway with Gemini 2.5 Flash
+  if (LOVABLE_API_KEY) {
+    try {
+      const response = await fetch(AI_GATEWAY_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || null;
+      }
+      console.warn('[callAI] Gateway error:', response.status);
+    } catch (e) {
+      console.warn('[callAI] Gateway failed:', e);
+    }
+  }
+  
   return null;
+}
+
+// ─── Image URL Filtering (reject videos, unrelated content) ──────
+function isValidPropertyImageUrl(url: string): boolean {
+  if (!url || !url.startsWith('http')) return false;
+  const lower = url.toLowerCase();
+  // Reject video formats
+  if (/\.(mp4|avi|mov|wmv|flv|mkv|webm|m3u8|ts)(\?|$)/i.test(lower)) return false;
+  // Reject non-image content
+  if (lower.includes('/video/') || lower.includes('/videos/')) return false;
+  // Reject logos, icons, avatars, sprites, placeholders
+  if (/\b(logo|icon|avatar|sprite|placeholder|banner|ads?|advert|tracking|pixel|badge|button)\b/i.test(lower)) return false;
+  // Reject social media / sharing images
+  if (/\b(facebook|twitter|zalo|share|social|og-image)\b/i.test(lower)) return false;
+  // Reject very small images (likely icons/thumbnails)
+  if (/\/\d{1,2}x\d{1,2}\//i.test(lower)) return false;
+  // Must have an image extension or be from known image CDN
+  if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower) && !lower.includes('batdongsan.com.vn') && !lower.includes('nhatot.com')) return false;
+  return true;
 }
 
 // ─── Batdongsan Image URL Normalization ──────────────────────────
@@ -212,12 +231,8 @@ function extractBatdongsanGalleryImages(html: string): string[] {
     }
   }
   
-  // Filter out logos, icons, avatars
-  return unique.filter(img =>
-    !img.includes('logo') && !img.includes('icon') && !img.includes('avatar') &&
-    !img.includes('sprite') && !img.includes('placeholder') &&
-    img.match(/\.(jpg|jpeg|png|webp)/i)
-  );
+  // Filter out non-property images using shared validator
+  return unique.filter(isValidPropertyImageUrl);
 }
 
 function detectCity(location: string): string {
@@ -285,7 +300,7 @@ async function savePropertiesToDB(
         description: property.description || null,
         highlights: property.highlights || [],
         amenities: property.amenities || [],
-        images: (property.images || []).slice(0, 15),
+        images: (property.images || []).filter(isValidPropertyImageUrl).slice(0, 5),
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
@@ -914,8 +929,8 @@ RESPOND WITH VALID JSON ONLY:
     // Use AI-extracted images if available, otherwise use scraped images
     // Normalize batdongsan image URLs to full-size
     let finalImages = (Array.isArray(p.images) && p.images.length > 0 ? p.images : detailImages)
-      .filter((img: string) => img?.startsWith('http'))
-      .slice(0, 15);
+      .filter((img: string) => isValidPropertyImageUrl(img))
+      .slice(0, 5);
     
     if (marketplace === 'batdongsan') {
       finalImages = finalImages.map(normalizeBatdongsanImageUrl);
@@ -998,7 +1013,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
     
     const parsed = JSON.parse(cleaned);
     return (parsed.properties || []).map((p: any, i: number) => {
-      const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => img?.startsWith('http')).slice(0, 6);
+      const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 5);
       
       return {
         id: `external-${marketplace}-${Date.now()}-${i}`,
