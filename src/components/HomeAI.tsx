@@ -600,12 +600,6 @@ export const HomeAI = ({
                                           <Home className="h-10 w-10 text-primary mb-2" />
                                           <span className="text-xs text-muted-foreground font-medium">External Listing</span>
                                         </div>}
-                                      {/* Match Score Overlay */}
-                                      <div className="absolute top-2 left-2">
-                                        <Badge className="bg-primary/90 text-primary-foreground border-none text-sm font-semibold px-2 py-1">
-                                          {property.matchScore}% match
-                                        </Badge>
-                                      </div>
                                       {/* Like Button - Mobile position */}
                                       <div className="absolute top-2 right-2 sm:hidden">
                                          <Button onClick={e => {
