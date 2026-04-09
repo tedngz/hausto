@@ -635,13 +635,13 @@ export const HomeAI = ({
                                          </div>
                                       </div>
 
-                                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                                         <div className="flex items-center">
-                                           <span className="font-semibold text-foreground text-sm">{formatPrice(property.price)}</span>
+                                       <div className="flex flex-wrap items-center gap-2 mb-3">
+                                          <Badge className="bg-primary text-primary-foreground font-semibold">
+                                            {formatPrice(property.price)}/mo
+                                          </Badge>
+                                           {property.size && <Badge variant="outline" className="text-xs">{property.size}</Badge>}
+                                           {property.isExternal && property.source && <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />}
                                          </div>
-                                          {property.size && <span className="font-medium">{property.size}</span>}
-                                          {property.isExternal && property.source && <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />}
-                                        </div>
 
 
                                        {/* Why it matches */}
