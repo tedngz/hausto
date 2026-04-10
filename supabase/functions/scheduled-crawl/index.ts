@@ -705,7 +705,7 @@ Deno.serve(async (req) => {
           location: bestTarget.location,
           crawlLocation: bestTarget.location,
           includeVibeAnalysis: false,
-          maxResults: config.maxListingsPerRun,
+          maxResults: effectiveMax,
           pages: 1,
           directSave: true,
         }),
