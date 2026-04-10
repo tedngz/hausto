@@ -17,6 +17,8 @@ const QSTASH_NEXT_SIGNING_KEY = Deno.env.get('QSTASH_NEXT_SIGNING_KEY');
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/scheduled-crawl`;
 
 const CONFIG_KEY = 'crawl:config';
+const DAILY_COUNT_KEY = 'crawl:daily_count';
+const MAX_DAILY_LISTINGS = 10;
 
 // ===== QStash signature verification =====
 async function verifyQStashSignature(signature: string, body: string): Promise<boolean> {
@@ -244,6 +246,10 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
     'đất nền', 'đất thổ cư', 'đất nông nghiệp', 'farmland', 'land for sale',
     'khách sạn', 'hotel for', 'resort for', 'motel', 'nhà nghỉ cho thuê',
     'căn hộ dịch vụ bán', 'penthouse bán',
+    'văn phòng', 'office space', 'office', 'cho thuê văn phòng', 'thuê văn phòng',
+    'officetel cho thuê', 'cho thuê officetel',
+    'mặt bằng', 'retail space', 'commercial space', 'business space',
+    'cho thuê mặt bằng', 'thuê mặt bằng',
   ];
   for (const keyword of nonResidentialKeywords) {
     if (text.includes(keyword)) return { suspicious: true, reason: `Non-residential: "${keyword}"` };
@@ -656,6 +662,25 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[scheduled-crawl] Target: ${bestTarget.location} on ${bestTarget.marketplace} (last crawl: ${bestTarget.lastCrawl ? new Date(bestTarget.lastCrawl).toISOString() : 'never'})`);
+
+    // Check daily listing limit before proceeding
+    const todayKey = `${DAILY_COUNT_KEY}:${new Date().toISOString().slice(0, 10)}`;
+    const dailyCount = (await redisGet(todayKey)) || 0;
+    if (dailyCount >= MAX_DAILY_LISTINGS) {
+      console.log(`[scheduled-crawl] Daily limit reached: ${dailyCount}/${MAX_DAILY_LISTINGS} listings today. Skipping.`);
+      return new Response(JSON.stringify({
+        success: true,
+        message: `Daily limit reached (${dailyCount}/${MAX_DAILY_LISTINGS})`,
+        config,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Cap maxListingsPerRun to remaining daily budget
+    const remainingBudget = MAX_DAILY_LISTINGS - dailyCount;
+    const effectiveMax = Math.min(config.maxListingsPerRun, remainingBudget);
+    console.log(`[scheduled-crawl] Daily budget: ${dailyCount}/${MAX_DAILY_LISTINGS} used, effective max this run: ${effectiveMax}`);
 
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
