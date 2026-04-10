@@ -71,6 +71,10 @@ function isSuspiciousListing(property: any): { suspicious: boolean; reason?: str
     'đất nền', 'đất thổ cư', 'đất nông nghiệp', 'farmland', 'land for sale',
     'khách sạn', 'hotel for', 'resort for', 'motel', 'nhà nghỉ cho thuê',
     'căn hộ dịch vụ bán', 'penthouse bán',
+    'văn phòng', 'office space', 'office', 'cho thuê văn phòng', 'thuê văn phòng',
+    'officetel cho thuê', 'cho thuê officetel',
+    'mặt bằng', 'retail space', 'commercial space', 'business space',
+    'cho thuê mặt bằng', 'thuê mặt bằng',
   ];
   for (const keyword of nonResidentialKeywords) {
     if (text.includes(keyword)) return { suspicious: true, reason: `Non-residential: "${keyword}"` };
@@ -873,7 +877,7 @@ async function extractPropertyFromDetailPage(
   marketplace: string,
   index: number
 ): Promise<ExternalProperty | null> {
-  const prompt = `You are a property data extraction expert. Extract the SINGLE rental property listing from this ${marketplace} individual listing detail page.
+  const prompt = `You are a property data extraction expert specializing in lifestyle and interior design. Extract the SINGLE rental property listing from this ${marketplace} individual listing detail page.
 
 DETAIL PAGE CONTENT:
 ${detailMarkdown.substring(0, 12000)}
@@ -887,22 +891,23 @@ CRITICAL INSTRUCTIONS:
 1. ALL text output MUST be in ENGLISH - translate Vietnamese content
 2. This is a SINGLE property detail page - extract ONE property with complete details
 3. Include ALL property images from the list above (filter out non-property images like logos/icons)
-4. Write a detailed, engaging English description (150-300 words)
-5. Extract ONLY physical amenities/features of the property (e.g., Air Conditioning, WiFi, Balcony, Washing Machine, Parking, Pool, Gym, Elevator, Security Camera). Do NOT include: deposit amounts, rental terms, apartment type/category, number of rooms, price info, floor number, building name, payment terms, or any non-physical attribute
-6. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
-7. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. For example: "Đường Hoàng Hoa Thám, Phường Ngọc Hà, Quận Ba Đình, Hà Nội" — do NOT simplify to just the city name. Keep the Vietnamese location names as-is (do NOT translate location names).
-8. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
+4. **TITLE**: Write a vibe-focused, evocative title that captures the STYLE and ATMOSPHERE of the space (e.g., "Sun-Drenched Minimalist Loft with Panoramic City Views", "Cozy Industrial-Chic Studio in Vibrant District 1", "Serene Japanese-Inspired Apartment with Rooftop Garden"). Do NOT use generic titles like "Modern Apartment for Rent" or just repeat the address.
+5. **DESCRIPTION**: Write a lifestyle-focused description (150-300 words) that emphasizes the VIBE, DESIGN AESTHETIC, and LIVING EXPERIENCE. Describe the atmosphere, natural light, design style, color palette, textures, and how the space FEELS to live in. Mention how the layout supports daily rituals (morning coffee, remote work, hosting friends). Weave in practical details naturally. Think of it as a lifestyle magazine feature, not a real estate listing.
+6. Extract ONLY physical amenities/features of the property (e.g., Air Conditioning, WiFi, Balcony, Washing Machine, Parking, Pool, Gym, Elevator, Security Camera). Do NOT include: deposit amounts, rental terms, apartment type/category, number of rooms, price info, floor number, building name, payment terms, or any non-physical attribute
+7. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
+8. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. Keep the Vietnamese location names as-is (do NOT translate location names).
+9. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 
 RESPOND WITH VALID JSON ONLY:
 {
-  "title": "Descriptive English title",
+  "title": "Evocative vibe-focused English title",
   "location": "FULL address: Street, Ward, District, City (keep Vietnamese names)",
   "price": 5000000,
   "priceDisplay": "5 triệu/tháng",
   "size": "25m²",
   "rooms": "Studio",
   "images": ["url1", "url2", ...],
-  "description": "Detailed English description...",
+  "description": "Lifestyle-focused English description emphasizing vibe and atmosphere...",
   "amenities": ["Air Conditioning", "WiFi", ...],
   "contactName": "...",
   "contactPhone": "..."
