@@ -263,7 +263,7 @@ Return a JSON object with:
    - image_index: the 0-based index of the image
    - image_highlight: A short lifestyle highlight specific to THIS image (e.g., "Sun-drenched living room with panoramic city views", "Sleek modern kitchen with marble countertops")
    - suggested_amenities: Array of amenities visible in THIS specific image
-6. amenities: Array of ALL visible amenities across all images IN ENGLISH
+6. amenities: Array of ALL visible PHYSICAL amenities/features across all images IN ENGLISH. Only include tangible items (appliances, fixtures, furniture, facilities). Do NOT include: deposit info, rental terms, apartment type, room count, price, floor number, or any non-physical attribute
 
 Return ONLY valid JSON:
 {
