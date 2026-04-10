@@ -888,7 +888,7 @@ CRITICAL INSTRUCTIONS:
 2. This is a SINGLE property detail page - extract ONE property with complete details
 3. Include ALL property images from the list above (filter out non-property images like logos/icons)
 4. Write a detailed, engaging English description (150-300 words)
-5. Extract ALL amenities mentioned in the listing
+5. Extract ONLY physical amenities/features of the property (e.g., Air Conditioning, WiFi, Balcony, Washing Machine, Parking, Pool, Gym, Elevator, Security Camera). Do NOT include: deposit amounts, rental terms, apartment type/category, number of rooms, price info, floor number, building name, payment terms, or any non-physical attribute
 6. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
 7. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. For example: "Đường Hoàng Hoa Thám, Phường Ngọc Hà, Quận Ba Đình, Hà Nội" — do NOT simplify to just the city name. Keep the Vietnamese location names as-is (do NOT translate location names).
 8. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"

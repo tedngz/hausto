@@ -121,6 +121,24 @@ const amenityIconMap: Record<string, { icon: any; label: string }> = {
   'Pendant Light': { icon: Lamp, label: 'Pendant Light' },
 };
 
+// Filter out non-amenity items that AI sometimes includes
+const NON_AMENITY_PATTERNS = [
+  /deposit/i, /tiền cọc/i, /đặt cọc/i,
+  /bedroom/i, /phòng ngủ/i, /studio/i, /penthouse/i, /shared room/i,
+  /triệu|million|vnd|usd|\$/i,
+  /floor\s*\d/i, /tầng\s*\d/i,
+  /payment/i, /rental\s*term/i, /contract/i, /lease/i,
+  /apartment\s*type/i, /property\s*type/i,
+  /^\d+\s*(m²|sqm|sq\s*ft|bedrooms?|rooms?|bathrooms?)$/i,
+  /per\s*month/i, /\/month/i, /\/mo/i,
+];
+
+const isValidAmenity = (amenity: string): boolean => {
+  const trimmed = amenity.trim();
+  if (trimmed.length < 2 || trimmed.length > 40) return false;
+  return !NON_AMENITY_PATTERNS.some(pattern => pattern.test(trimmed));
+};
+
 // Normalize amenity names to match icon keys
 const normalizeAmenity = (amenity: string): string => {
   const normalized = amenity.trim();
