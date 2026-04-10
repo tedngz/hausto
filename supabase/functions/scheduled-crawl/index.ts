@@ -732,6 +732,19 @@ Deno.serve(async (req) => {
     const filtered = scrapeResult?.filtered || 0;
     let vibeAnalyzed = 0;
 
+    // Update daily listing counter
+    if (newListings > 0) {
+      const updatedDailyCount = dailyCount + newListings;
+      // TTL = seconds until midnight UTC
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setUTCDate(midnight.getUTCDate() + 1);
+      midnight.setUTCHours(0, 0, 0, 0);
+      const ttlSeconds = Math.max(60, Math.floor((midnight.getTime() - now.getTime()) / 1000));
+      await redisSet(todayKey, updatedDailyCount, ttlSeconds);
+      console.log(`[scheduled-crawl] Daily count updated: ${updatedDailyCount}/${MAX_DAILY_LISTINGS}`);
+    }
+
     // Step 3: Always chain vibe backfill via QStash after each crawl
     // This ensures any properties with missing/generic highlights get processed
     console.log(`[scheduled-crawl] Chaining vibe backfill (new: ${newListings}, updated: ${updatedListings})`);
