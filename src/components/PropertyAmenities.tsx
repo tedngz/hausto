@@ -158,8 +158,9 @@ const normalizeAmenity = (amenity: string): string => {
 export const PropertyAmenities = ({ amenities, compact = true }: PropertyAmenitiesProps) => {
   if (!amenities || amenities.length === 0) return null;
 
-  // Deduplicate and normalize amenities
-  const uniqueAmenities = Array.from(new Set(amenities.map(normalizeAmenity)))
+  // Deduplicate, filter, and normalize amenities
+  const uniqueAmenities = Array.from(new Set(amenities.filter(isValidAmenity).map(normalizeAmenity)))
+    .filter(a => isValidAmenity(a))
     .slice(0, compact ? 8 : 12);
 
   if (uniqueAmenities.length === 0) return null;
