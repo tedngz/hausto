@@ -289,7 +289,7 @@ const AdminTools = () => {
   // Show loading while checking auth/role
   if (authLoading || isCheckingRole) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl flex items-center justify-center min-h-[60vh]">
+      <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -298,7 +298,7 @@ const AdminTools = () => {
   // Block access if not authenticated or not admin
   if (!user || !isAdmin) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl flex flex-col items-center justify-center min-h-[60vh] text-center gap-4">
+      <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl flex flex-col items-center justify-center min-h-[60vh] text-center gap-4">
         <ShieldAlert className="h-16 w-16 text-destructive" />
         <h1 className="text-2xl font-bold">Access Denied</h1>
         <p className="text-muted-foreground">You don't have permission to access Admin Tools.</p>
@@ -617,8 +617,8 @@ const AdminTools = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl space-y-6">
-      <h1 className="text-3xl font-bold">Admin Tools</h1>
+    <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
+      <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
 
       {/* Crawl External Listings - moved to top */}
       <Card>
@@ -632,7 +632,7 @@ const AdminTools = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>City</Label>
               <select
@@ -670,7 +670,7 @@ const AdminTools = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
             <div className="flex items-center gap-2">
               <Switch checked={crawlForceRefresh} onCheckedChange={setCrawlForceRefresh} id="force-refresh" />
               <Label htmlFor="force-refresh" className="text-sm">Force refresh (skip cache)</Label>
@@ -860,16 +860,16 @@ const AdminTools = () => {
       </Card>
 
       <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+        <CardHeader className="px-4 md:px-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-base md:text-lg">
                 <Clock className="h-5 w-5" />
                 Auto-Crawl Schedule
                 {isPaused && <Badge variant="destructive" className="text-xs">Paused</Badge>}
                 {!isPaused && <Badge variant="default" className="text-xs bg-emerald-600">Active</Badge>}
               </CardTitle>
-              <CardDescription className="mt-1">
+              <CardDescription className="mt-1 text-xs md:text-sm">
                 Cron runs every 30 min. The function checks config and crawls the least-recently-crawled location.
               </CardDescription>
             </div>
@@ -878,7 +878,7 @@ const AdminTools = () => {
               size="sm"
               onClick={handleTogglePause}
               disabled={isSavingConfig}
-              className="shrink-0"
+              className="shrink-0 self-start"
             >
               {isSavingConfig ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -951,7 +951,7 @@ const AdminTools = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="p-3 bg-muted rounded-lg text-center">
               <p className="text-xs text-muted-foreground">Cron Interval</p>
               <p className="text-sm font-bold">Every 30 min</p>
@@ -1118,7 +1118,7 @@ const AdminTools = () => {
 
           {/* Crawl Activity Log */}
           <div className="border-t pt-3 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <p className="text-sm font-semibold flex items-center gap-1">
                 <Clock className="h-4 w-4" /> Recent Crawl Runs
               </p>
@@ -1172,7 +1172,7 @@ const AdminTools = () => {
                   const isExpanded = expandedRunIdx === idx;
                   return (
                     <div key={idx} className="space-y-1.5">
-                      <div className="flex items-center justify-between p-2 bg-muted/50 rounded text-xs gap-2">
+                      <div className="flex flex-wrap items-center justify-between p-2 bg-muted/50 rounded text-xs gap-1.5 sm:gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
                           <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
