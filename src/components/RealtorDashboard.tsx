@@ -875,7 +875,7 @@ export const RealtorDashboard = ({
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
             <div className="p-4 md:p-6 border-b border-slate-200">
               <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2">
                       <Globe className="w-5 h-5" />
@@ -885,7 +885,7 @@ export const RealtorDashboard = ({
                       {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} total crawled listings
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       onClick={handleReactivateAll}
                       disabled={isReactivating || crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length === 0}
@@ -894,7 +894,7 @@ export const RealtorDashboard = ({
                       size="sm"
                     >
                       <Power className={`w-4 h-4 mr-1.5 ${isReactivating ? 'animate-pulse' : ''}`} />
-                      Reactivate ({crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length})
+                      {isMobile ? 'Reactivate' : `Reactivate (${crawledListings.filter((l: any) => selectedPropertyIds.has(`ext-${l.id}`) && !l.is_active).length})`}
                     </Button>
                     <Button
                       variant="outline"
@@ -1036,42 +1036,42 @@ export const RealtorDashboard = ({
                             </div>
                           )}
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1">
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-xs flex-1"
+                            className="text-xs flex-1 min-w-0 px-2 py-1"
                             onClick={() => handlePreviewCrawled(listing)}
                           >
-                            <Eye className="w-3 h-3 mr-1" />
-                            Preview
+                            <Eye className="w-3 h-3 mr-1 flex-shrink-0" />
+                            <span className="truncate">{isMobile ? 'View' : 'Preview'}</span>
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-xs flex-1"
+                            className="text-xs flex-1 min-w-0 px-2 py-1"
                             onClick={() => handleEditCrawled(listing)}
                           >
-                            <Edit className="w-3 h-3 mr-1" />
-                            Edit
+                            <Edit className="w-3 h-3 mr-1 flex-shrink-0" />
+                            <span className="truncate">Edit</span>
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-xs flex-1"
+                            className="text-xs flex-1 min-w-0 px-2 py-1"
                             onClick={() => window.open(listing.source_url, '_blank')}
                           >
-                            <ExternalLink className="w-3 h-3 mr-1" />
-                            Source
+                            <ExternalLink className="w-3 h-3 mr-1 flex-shrink-0" />
+                            <span className="truncate">{isMobile ? 'Src' : 'Source'}</span>
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 flex-1"
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 flex-1 min-w-0 px-2 py-1"
                             onClick={() => handleDeleteCrawledListing(listing.id)}
                           >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Delete
+                            <Trash2 className="w-3 h-3 mr-1 flex-shrink-0" />
+                            <span className="truncate">{isMobile ? 'Del' : 'Delete'}</span>
                           </Button>
                         </div>
                       </div>
