@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.extract-phone]
 verify_jwt = false
+
+[functions.backfill-image-highlights]
+verify_jwt = false

@@ -805,6 +805,29 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Trigger backfill-image-highlights for any properties missing image-level highlights
+    if (newListings > 0 || vibeAnalyzed > 0) {
+      try {
+        const backfillResp = await fetch(`${SUPABASE_URL}/functions/v1/backfill-image-highlights`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          },
+          body: JSON.stringify({ limit: 20 }),
+        });
+        if (backfillResp.ok) {
+          const backfillData = await backfillResp.json();
+          console.log(`[scheduled-crawl] Backfill image highlights: ${backfillData.successCount || 0}/${backfillData.total || 0} processed`);
+        } else {
+          console.error(`[scheduled-crawl] Backfill image highlights failed: ${backfillResp.status}`);
+        }
+      } catch (e) {
+        console.error('[scheduled-crawl] Failed to trigger backfill-image-highlights:', e);
+      }
+    }
+
     // Invalidate property discovery cache after crawl + vibe analysis
     if (newListings > 0 || updatedListings > 0 || vibeAnalyzed > 0) {
       try {
