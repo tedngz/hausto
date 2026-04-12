@@ -195,6 +195,99 @@ function isValidPropertyImageUrl(url: string): boolean {
   return true;
 }
 
+// ─── Vision-based Image Screening ───────────────────────────────
+// Check image consistency and select best representative images
+async function screenPropertyImages(
+  images: string[]
+): Promise<{ consistent: boolean; selectedImages: string[]; reason?: string } | null> {
+  if (images.length < 2) return { consistent: true, selectedImages: images };
+
+  const maxToCheck = Math.min(images.length, 10);
+  const imageContent: any[] = [];
+  const validIndexes: number[] = [];
+
+  for (let i = 0; i < maxToCheck; i++) {
+    try {
+      const resp = await fetch(images[i], { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) continue;
+      const ct = resp.headers.get('content-type') || '';
+      const buf = await resp.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      if (bytes.length > 4 * 1024 * 1024) continue;
+
+      let b64 = '';
+      const chunk = 8192;
+      for (let j = 0; j < bytes.length; j += chunk) {
+        b64 += String.fromCharCode.apply(null, Array.from(bytes.subarray(j, Math.min(j + chunk, bytes.length))));
+      }
+
+      let mime = 'image/jpeg';
+      if (ct.includes('png')) mime = 'image/png';
+      else if (ct.includes('webp')) mime = 'image/webp';
+
+      imageContent.push({
+        type: 'image_url',
+        image_url: { url: `data:${mime};base64,${btoa(b64)}`, detail: 'low' }
+      });
+      validIndexes.push(i);
+    } catch {
+      continue;
+    }
+  }
+
+  if (imageContent.length < 2) return { consistent: true, selectedImages: images.slice(0, 5) };
+
+  const needsSelection = images.length > 5;
+  const prompt = `You are screening ${imageContent.length} images from a rental property listing.
+
+**TASK 1 - CONSISTENCY CHECK:**
+Do these images show the SAME apartment/unit? Look for:
+- Consistent flooring, wall colors, furniture style across interior shots
+- Images clearly from different apartments (completely different style, color scheme, layout)
+- Signs of a broker compilation mixing photos from multiple units
+
+Mark INCONSISTENT only if 3+ images clearly show DIFFERENT apartments (not just different rooms of the same unit).
+
+**TASK 2 - IMAGE SELECTION${needsSelection ? '' : ' (keep all)'}:**
+${needsSelection ? `Pick the BEST 5 images. PRIORITIZE interior shots (rooms, kitchen, bathroom, balcony views FROM the apartment). EXCLUDE: building exterior/facade, promotional banners, people/agents, neighborhood street photos, duplicates, floor plans.` : 'Keep all images since there are 5 or fewer.'}
+
+Return ONLY valid JSON:
+{"is_consistent": true, "reason": "brief explanation", "selected": [${needsSelection ? '0,1,2,3,4' : validIndexes.join(',')}]}
+
+Indexes are 0-based matching the image order shown.`;
+
+  const content = await callAI([{
+    role: 'user',
+    content: [{ type: 'text', text: prompt }, ...imageContent]
+  }], 300, 0.2);
+
+  if (!content) return null;
+
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    const parsed = JSON.parse(jsonMatch[0]);
+    const isConsistent = parsed.is_consistent !== false;
+    const reason = parsed.reason || '';
+
+    let selectedImages: string[];
+    if (needsSelection && Array.isArray(parsed.selected)) {
+      const selectedIndexes = parsed.selected
+        .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length)
+        .map((i: number) => images[validIndexes[i]])
+        .filter(Boolean)
+        .slice(0, 5);
+      selectedImages = selectedIndexes.length >= 3 ? selectedIndexes : images.slice(0, 5);
+    } else {
+      selectedImages = images.slice(0, 5);
+    }
+
+    return { consistent: isConsistent, selectedImages, reason };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Batdongsan Image URL Normalization ──────────────────────────
 // Convert thumbnail/crop URLs to full-size and extract gallery images
 function normalizeBatdongsanImageUrl(url: string): string {
@@ -304,7 +397,7 @@ async function savePropertiesToDB(
         description: property.description || null,
         highlights: property.highlights || [],
         amenities: property.amenities || [],
-        images: (property.images || []).filter(isValidPropertyImageUrl).slice(0, 5),
+        images: (property.images || []).filter(isValidPropertyImageUrl),
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
@@ -319,6 +412,7 @@ async function savePropertiesToDB(
         
         const updateData: Record<string, any> = {
           ...propertyData,
+          images: propertyData.images.slice(0, 5), // Keep existing limit for updates
           last_verified_at: now,
           updated_at: now,
           expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
@@ -337,10 +431,34 @@ async function savePropertiesToDB(
           .eq('id', existing.id);
         updatedListings++;
       } else {
+        // NEW LISTINGS: Screen images for consistency & select best ones
+        const validImages = propertyData.images;
+        let finalImages = validImages.slice(0, 5);
+
+        if (validImages.length >= 2) {
+          try {
+            const screening = await screenPropertyImages(validImages);
+            if (screening) {
+              if (!screening.consistent) {
+                filtered++;
+                console.log(`[directSave] Filtered (inconsistent images): ${property.title?.substring(0, 50)} - ${screening.reason}`);
+                continue;
+              }
+              finalImages = screening.selectedImages;
+              if (finalImages.length !== validImages.length) {
+                console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+              }
+            }
+          } catch (e) {
+            console.warn(`[directSave] Image screening failed, using first 5:`, e);
+          }
+        }
+
         const { error: insertError } = await supabase
           .from('external_properties')
           .insert({
             ...propertyData,
+            images: finalImages,
             external_id: externalId,
             source: marketplace,
             source_url: normalizedUrl,
