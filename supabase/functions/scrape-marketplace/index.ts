@@ -397,7 +397,7 @@ async function savePropertiesToDB(
         description: property.description || null,
         highlights: property.highlights || [],
         amenities: property.amenities || [],
-        images: (property.images || []).filter(isValidPropertyImageUrl).slice(0, 5),
+        images: (property.images || []).filter(isValidPropertyImageUrl),
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
@@ -412,6 +412,7 @@ async function savePropertiesToDB(
         
         const updateData: Record<string, any> = {
           ...propertyData,
+          images: propertyData.images.slice(0, 5), // Keep existing limit for updates
           last_verified_at: now,
           updated_at: now,
           expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
@@ -430,10 +431,34 @@ async function savePropertiesToDB(
           .eq('id', existing.id);
         updatedListings++;
       } else {
+        // NEW LISTINGS: Screen images for consistency & select best ones
+        const validImages = propertyData.images;
+        let finalImages = validImages.slice(0, 5);
+
+        if (validImages.length >= 2) {
+          try {
+            const screening = await screenPropertyImages(validImages);
+            if (screening) {
+              if (!screening.consistent) {
+                filtered++;
+                console.log(`[directSave] Filtered (inconsistent images): ${property.title?.substring(0, 50)} - ${screening.reason}`);
+                continue;
+              }
+              finalImages = screening.selectedImages;
+              if (finalImages.length !== validImages.length) {
+                console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+              }
+            }
+          } catch (e) {
+            console.warn(`[directSave] Image screening failed, using first 5:`, e);
+          }
+        }
+
         const { error: insertError } = await supabase
           .from('external_properties')
           .insert({
             ...propertyData,
+            images: finalImages,
             external_id: externalId,
             source: marketplace,
             source_url: normalizedUrl,
