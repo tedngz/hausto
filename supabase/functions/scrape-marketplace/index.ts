@@ -277,7 +277,13 @@ Indexes are 0-based matching the image order shown.`;
     if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]);
     const isConsistent = parsed.is_consistent !== false;
+    const isQualityAcceptable = parsed.is_quality_acceptable !== false;
     const reason = parsed.reason || '';
+
+    // Reject if either inconsistent or poor quality
+    if (!isConsistent || !isQualityAcceptable) {
+      return { consistent: false, selectedImages: [], reason: reason || (isQualityAcceptable ? 'Inconsistent images' : 'Poor quality: unfinished/dirty/dark apartment') };
+    }
 
     let selectedImages: string[];
     if (needsSelection && Array.isArray(parsed.selected)) {
@@ -291,7 +297,7 @@ Indexes are 0-based matching the image order shown.`;
       selectedImages = images.slice(0, 5);
     }
 
-    return { consistent: isConsistent, selectedImages, reason };
+    return { consistent: true, selectedImages, reason };
   } catch {
     return null;
   }
