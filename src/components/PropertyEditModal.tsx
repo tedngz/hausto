@@ -868,19 +868,19 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
   if (!isOpen || !property) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
-        <div className="flex items-center justify-between p-6 border-b">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
-            <p className="text-gray-600">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <Card className="w-full sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto bg-white rounded-t-2xl sm:rounded-xl">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b sticky top-0 bg-white z-10">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
+            <p className="text-sm text-gray-600 hidden sm:block">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button variant="ghost" size="sm" onClick={onClose} className="shrink-0">
             <X className="w-5 h-5" />
           </Button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
           {/* Step 1: Upload and Manage Images */}
           <div className="space-y-4">
             <div>
@@ -906,7 +906,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
 
                 {/* Image Grid */}
                 {(existingImages.length > 0 || newImagePreviews.length > 0) && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                     {existingImages.map((img, index) => (
                       <div key={`existing-${index}`} className="relative group">
                         <img 
@@ -944,7 +944,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
           </div>
 
           {/* Step 2: Basic Information */}
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label htmlFor="location">Location *</Label>
               <div className="relative">
@@ -1012,7 +1012,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
             />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label htmlFor="sourceProviderName">Source Provider Name (Optional)</Label>
               <Input 
@@ -1033,7 +1033,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label htmlFor="price">Monthly Rent *</Label>
               <div className="flex space-x-2">
@@ -1321,7 +1321,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
               <p className="text-sm text-gray-600 mb-3">Review and edit your images and AI-generated highlights</p>
               
               {/* Image Review Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
                 {[...existingImages, ...newImagePreviews].map((preview, index) => {
                   const imageHighlight = imageHighlights[index] || { text: '', imageIndexes: [index] };
                   
@@ -1381,22 +1381,22 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
           </div>
 
           {/* Preview and Submit Buttons */}
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <Button variant="outline" onClick={onClose}>
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
               Cancel
             </Button>
             <Button 
               variant="outline"
               onClick={() => setShowPreview(true)}
-              className="border-blue-500 text-blue-500 hover:bg-blue-50"
+              className="w-full sm:w-auto border-blue-500 text-blue-500 hover:bg-blue-50"
             >
               <Eye className="w-4 h-4 mr-2" />
-              Preview Listing
+              Preview
             </Button>
             <Button 
               onClick={handleSubmit}
               disabled={(isUpdating || isSavingExternal) || !title || !location || !price}
-              className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
+              className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
             >
               {(isUpdating || isSavingExternal) ? (
                 <>
@@ -1404,7 +1404,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
                   Updating...
                 </>
               ) : (
-                isExternal ? 'Update External Listing' : 'Update Property'
+                isExternal ? 'Update Listing' : 'Update Property'
               )}
             </Button>
           </div>
