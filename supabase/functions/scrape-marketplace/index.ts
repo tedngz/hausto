@@ -248,11 +248,20 @@ Do these images show the SAME apartment/unit? Look for:
 
 Mark INCONSISTENT only if 3+ images clearly show DIFFERENT apartments (not just different rooms of the same unit).
 
-**TASK 2 - IMAGE SELECTION${needsSelection ? '' : ' (keep all)'}:**
+**TASK 2 - QUALITY CHECK:**
+Reject the listing (set is_quality_acceptable to false) if the apartment appears:
+- UNFINISHED: exposed wires, holes in walls, missing fixtures, raw concrete, construction debris
+- DIRTY/UNTIDY: visible filth, stains, clutter, garbage, mold, peeling paint
+- DARK/GLOOMY: very poor lighting with no natural light, dingy atmosphere
+- UNINHABITABLE: broken windows, water damage, severely deteriorated condition
+
+Only reject if the MAJORITY of interior images show these issues (1 slightly dark photo among good ones is OK).
+
+**TASK 3 - IMAGE SELECTION${needsSelection ? '' : ' (keep all)'}:**
 ${needsSelection ? `Pick the BEST 5 images. PRIORITIZE interior shots (rooms, kitchen, bathroom, balcony views FROM the apartment). EXCLUDE: building exterior/facade, promotional banners, people/agents, neighborhood street photos, duplicates, floor plans.` : 'Keep all images since there are 5 or fewer.'}
 
 Return ONLY valid JSON:
-{"is_consistent": true, "reason": "brief explanation", "selected": [${needsSelection ? '0,1,2,3,4' : validIndexes.join(',')}]}
+{"is_consistent": true, "is_quality_acceptable": true, "reason": "brief explanation", "selected": [${needsSelection ? '0,1,2,3,4' : validIndexes.join(',')}]}
 
 Indexes are 0-based matching the image order shown.`;
 
@@ -268,7 +277,13 @@ Indexes are 0-based matching the image order shown.`;
     if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]);
     const isConsistent = parsed.is_consistent !== false;
+    const isQualityAcceptable = parsed.is_quality_acceptable !== false;
     const reason = parsed.reason || '';
+
+    // Reject if either inconsistent or poor quality
+    if (!isConsistent || !isQualityAcceptable) {
+      return { consistent: false, selectedImages: [], reason: reason || (isQualityAcceptable ? 'Inconsistent images' : 'Poor quality: unfinished/dirty/dark apartment') };
+    }
 
     let selectedImages: string[];
     if (needsSelection && Array.isArray(parsed.selected)) {
@@ -282,7 +297,7 @@ Indexes are 0-based matching the image order shown.`;
       selectedImages = images.slice(0, 5);
     }
 
-    return { consistent: isConsistent, selectedImages, reason };
+    return { consistent: true, selectedImages, reason };
   } catch {
     return null;
   }
