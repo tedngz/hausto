@@ -868,14 +868,14 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
   if (!isOpen || !property) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
-        <div className="flex items-center justify-between p-6 border-b">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
-            <p className="text-gray-600">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <Card className="w-full sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto bg-white rounded-t-2xl sm:rounded-xl">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b sticky top-0 bg-white z-10">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
+            <p className="text-sm text-gray-600 hidden sm:block">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button variant="ghost" size="sm" onClick={onClose} className="shrink-0">
             <X className="w-5 h-5" />
           </Button>
         </div>
