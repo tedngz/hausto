@@ -237,7 +237,6 @@ async function screenPropertyImages(
 
   if (imageContent.length < 2) return { consistent: true, selectedImages: images.slice(0, 5) };
 
-  const needsSelection = images.length > 5;
   const prompt = `You are screening ${imageContent.length} images from a rental property listing.
 
 **TASK 1 - CONSISTENCY CHECK:**
@@ -257,11 +256,22 @@ Reject the listing (set is_quality_acceptable to false) if the apartment appears
 
 Only reject if the MAJORITY of interior images show these issues (1 slightly dark photo among good ones is OK).
 
-**TASK 3 - IMAGE SELECTION${needsSelection ? '' : ' (keep all)'}:**
-${needsSelection ? `Pick the BEST 5 images. PRIORITIZE interior shots (rooms, kitchen, bathroom, balcony views FROM the apartment). EXCLUDE: building exterior/facade, promotional banners, people/agents, neighborhood street photos, duplicates, floor plans.` : 'Keep all images since there are 5 or fewer.'}
+**TASK 3 - IMAGE SELECTION (ALWAYS FILTER):**
+From ALL images, select ONLY images that show the apartment interior or views from the apartment (rooms, kitchen, bathroom, living area, balcony views FROM inside).
+
+ALWAYS EXCLUDE these types - do NOT include them in "selected" regardless of how many images there are:
+- Photos of PEOPLE (agents, tenants, selfies, group photos, portraits)
+- Building EXTERIOR/FACADE shots (outside view of building, entrance, parking lot)
+- Promotional BANNERS, watermark-heavy images, text overlays, advertisements
+- NEIGHBORHOOD/STREET photos (roads, nearby shops, aerial city views)
+- Floor plans, maps, diagrams
+- Amenity photos that are clearly stock/generic (pool, gym that look like marketing material)
+- Duplicates or near-identical angles
+
+${images.length > 5 ? 'Pick the BEST 5 from qualifying interior images.' : 'Keep all qualifying interior images (remove non-apartment images even if fewer than 5 remain).'}
 
 Return ONLY valid JSON:
-{"is_consistent": true, "is_quality_acceptable": true, "reason": "brief explanation", "selected": [${needsSelection ? '0,1,2,3,4' : validIndexes.join(',')}]}
+{"is_consistent": true, "is_quality_acceptable": true, "reason": "brief explanation", "selected": [0,1,2]}
 
 Indexes are 0-based matching the image order shown.`;
 
@@ -286,13 +296,14 @@ Indexes are 0-based matching the image order shown.`;
     }
 
     let selectedImages: string[];
-    if (needsSelection && Array.isArray(parsed.selected)) {
+    if (Array.isArray(parsed.selected) && parsed.selected.length > 0) {
       const selectedIndexes = parsed.selected
         .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length)
         .map((i: number) => images[validIndexes[i]])
         .filter(Boolean)
         .slice(0, 5);
-      selectedImages = selectedIndexes.length >= 3 ? selectedIndexes : images.slice(0, 5);
+      // If AI selected at least 1 image, use its selection; otherwise fall back
+      selectedImages = selectedIndexes.length >= 1 ? selectedIndexes : images.slice(0, 5);
     } else {
       selectedImages = images.slice(0, 5);
     }
