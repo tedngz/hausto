@@ -296,13 +296,14 @@ Indexes are 0-based matching the image order shown.`;
     }
 
     let selectedImages: string[];
-    if (needsSelection && Array.isArray(parsed.selected)) {
+    if (Array.isArray(parsed.selected) && parsed.selected.length > 0) {
       const selectedIndexes = parsed.selected
         .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length)
         .map((i: number) => images[validIndexes[i]])
         .filter(Boolean)
         .slice(0, 5);
-      selectedImages = selectedIndexes.length >= 3 ? selectedIndexes : images.slice(0, 5);
+      // If AI selected at least 1 image, use its selection; otherwise fall back
+      selectedImages = selectedIndexes.length >= 1 ? selectedIndexes : images.slice(0, 5);
     } else {
       selectedImages = images.slice(0, 5);
     }
