@@ -359,7 +359,7 @@ serve(async (req) => {
 
   const startTime = Date.now();
   const results: CrawlResult[] = [];
-  
+  const newlyInsertedIds: string[] = []; // Track IDs for deterministic backfill
   try {
   // Authenticate the caller
   const authHeader = req.headers.get('Authorization');
@@ -620,9 +620,10 @@ serve(async (req) => {
                   ...(geoLat !== null && geoLon !== null ? { latitude: geoLat, longitude: geoLon } : {}),
                 };
                 
-                const { error: insertError } = await supabase
+                const { data: insertedRows, error: insertError } = await supabase
                   .from('external_properties')
-                  .insert(propertyData);
+                  .insert(propertyData)
+                  .select('id');
                 
                 if (insertError) {
                   // Could be a race condition duplicate
@@ -635,6 +636,9 @@ serve(async (req) => {
                 } else {
                   crawlResult.newListings++;
                   crawlResult.propertiesStored++;
+                  if (insertedRows?.[0]?.id) {
+                    newlyInsertedIds.push(insertedRows[0].id);
+                  }
                   
                   // Run image-based vibe analysis only for NEW listings
                   if (runVibeAnalysis && propertyData.images && propertyData.images.length > 0) {
@@ -694,11 +698,48 @@ serve(async (req) => {
     const totalVibeAnalyzed = results.reduce((sum, r) => sum + r.vibeAnalyzed, 0);
     const totalSkipped = results.filter(r => r.skipped).length;
     const totalErrors = results.filter(r => r.error).length;
+
+    // ── Deterministic backfill: check which new listings still lack image highlights ──
+    let backfillTriggered = 0;
+    if (newlyInsertedIds.length > 0) {
+      // Check which newly inserted properties are missing image_analyses
+      const { data: needsHighlights } = await supabase
+        .from('external_properties')
+        .select('id, vibe_analysis')
+        .in('id', newlyInsertedIds);
+
+      const missingIds = (needsHighlights || [])
+        .filter((p: any) => {
+          const analyses = p.vibe_analysis?.image_analyses;
+          return !analyses || !Array.isArray(analyses) || analyses.length === 0;
+        })
+        .map((p: any) => p.id);
+
+      if (missingIds.length > 0) {
+        console.log(`[crawl-external-properties] ${missingIds.length}/${newlyInsertedIds.length} new listings still need image highlights, firing backfill...`);
+        try {
+          // Fire-and-forget call to backfill-image-highlights with specific IDs
+          fetch(`${SUPABASE_URL}/functions/v1/backfill-image-highlights`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({ property_ids: missingIds }),
+          }).catch(err => console.error('[crawl-external-properties] Backfill call failed:', err));
+          backfillTriggered = missingIds.length;
+        } catch (e) {
+          console.error('[crawl-external-properties] Failed to trigger backfill:', e);
+        }
+      } else {
+        console.log(`[crawl-external-properties] All ${newlyInsertedIds.length} new listings already have image highlights`);
+      }
+    }
     
     const duration = Date.now() - startTime;
     
     console.log(`[crawl-external-properties] Completed in ${duration}ms:`, {
-      totalFound, totalStored, totalNew, totalUpdated, totalDuplicatesSkipped, totalVibeAnalyzed, totalSkipped, totalErrors,
+      totalFound, totalStored, totalNew, totalUpdated, totalDuplicatesSkipped, totalVibeAnalyzed, totalSkipped, totalErrors, backfillTriggered,
     });
     
     return new Response(JSON.stringify({
@@ -716,6 +757,7 @@ serve(async (req) => {
         totalVibeAnalyzed,
         totalSkipped,
         totalErrors,
+        backfillTriggered,
       },
       results,
     }), {
