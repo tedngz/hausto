@@ -620,9 +620,10 @@ serve(async (req) => {
                   ...(geoLat !== null && geoLon !== null ? { latitude: geoLat, longitude: geoLon } : {}),
                 };
                 
-                const { error: insertError } = await supabase
+                const { data: insertedRows, error: insertError } = await supabase
                   .from('external_properties')
-                  .insert(propertyData);
+                  .insert(propertyData)
+                  .select('id');
                 
                 if (insertError) {
                   // Could be a race condition duplicate
@@ -635,6 +636,9 @@ serve(async (req) => {
                 } else {
                   crawlResult.newListings++;
                   crawlResult.propertiesStored++;
+                  if (insertedRows?.[0]?.id) {
+                    newlyInsertedIds.push(insertedRows[0].id);
+                  }
                   
                   // Run image-based vibe analysis only for NEW listings
                   if (runVibeAnalysis && propertyData.images && propertyData.images.length > 0) {
