@@ -359,7 +359,7 @@ serve(async (req) => {
 
   const startTime = Date.now();
   const results: CrawlResult[] = [];
-  
+  const newlyInsertedIds: string[] = []; // Track IDs for deterministic backfill
   try {
   // Authenticate the caller
   const authHeader = req.headers.get('Authorization');
