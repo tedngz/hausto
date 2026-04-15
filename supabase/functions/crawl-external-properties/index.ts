@@ -757,6 +757,7 @@ serve(async (req) => {
         totalVibeAnalyzed,
         totalSkipped,
         totalErrors,
+        backfillTriggered,
       },
       results,
     }), {
