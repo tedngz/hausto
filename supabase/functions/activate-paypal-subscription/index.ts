@@ -27,33 +27,50 @@ serve(async (req) => {
 
     const { subscription_id } = await req.json();
 
+    if (!subscription_id) {
+      throw new Error("Missing subscription_id");
+    }
+
     const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
     const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
     const apiBase = Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com";
 
-    let nextBillingTime: string | null = null;
-
-    if (clientId && clientSecret && subscription_id) {
-      const authResp = await fetch(`${apiBase}/v1/oauth2/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-        },
-        body: "grant_type=client_credentials",
-      });
-
-      if (authResp.ok) {
-        const { access_token } = await authResp.json();
-        const subResp = await fetch(`${apiBase}/v1/billing/subscriptions/${subscription_id}`, {
-          headers: { "Authorization": `Bearer ${access_token}`, "Content-Type": "application/json" },
-        });
-        if (subResp.ok) {
-          const subData = await subResp.json();
-          nextBillingTime = subData.billing_info?.next_billing_time || null;
-        }
-      }
+    if (!clientId || !clientSecret) {
+      throw new Error("PayPal credentials not configured");
     }
+
+    // Verify the subscription is actually ACTIVE on PayPal before activating
+    const authResp = await fetch(`${apiBase}/v1/oauth2/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: "grant_type=client_credentials",
+    });
+
+    if (!authResp.ok) {
+      throw new Error("Failed to authenticate with PayPal");
+    }
+
+    const { access_token } = await authResp.json();
+    const subResp = await fetch(`${apiBase}/v1/billing/subscriptions/${subscription_id}`, {
+      headers: { "Authorization": `Bearer ${access_token}`, "Content-Type": "application/json" },
+    });
+
+    if (!subResp.ok) {
+      throw new Error("Invalid PayPal subscription ID");
+    }
+
+    const subData = await subResp.json();
+    const status = subData.status;
+
+    // Only activate if PayPal confirms the subscription is ACTIVE or APPROVED
+    if (status !== "ACTIVE" && status !== "APPROVED") {
+      throw new Error(`PayPal subscription is not active (status: ${status})`);
+    }
+
+    const nextBillingTime: string | null = subData.billing_info?.next_billing_time || null;
 
     const { error: upsertError } = await supabaseClient.from("subscribers").upsert({
       user_id: user.id,
