@@ -196,7 +196,7 @@ export const PropertyCard = ({
                 {apartment.rooms}
               </Badge>}
             {apartment.size && <Badge variant="outline" className="text-xs">
-                {apartment.size}
+                {/m²|m2|sqm|sqft/i.test(apartment.size) ? apartment.size : `${apartment.size} m²`}
               </Badge>}
           </div>
         </div>
