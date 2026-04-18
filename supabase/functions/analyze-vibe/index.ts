@@ -254,8 +254,11 @@ serve(async (req) => {
                 ✅ REQUIRED: Specific, unique detail visible in THIS image
                 🚨 CRITICAL: Must be COMPLETELY DIFFERENT from other images in this property - focus on different room/feature/benefit
              
-             3. SUGGESTED_ACTIVITIES: Based on the image highlight, list 1-2 specific activities this space enables
-                Examples: If you see "well-integrated kitchen appliances" → "Cooking"; if "dedicated workspace" → "Working"
+             3. SUGGESTED_ACTIVITIES: Based on the image highlight, list 1-2 activities this space enables.
+                🚨 STRICT: You MUST pick ONLY from this exact allowlist (case-sensitive, no other words allowed):
+                ["Working", "Reading", "Relaxing", "Entertaining", "Cooking", "Exercising"]
+                Examples: kitchen → "Cooking"; workspace/desk → "Working"; living/bedroom/balcony → "Relaxing"; dining/bar → "Entertaining"; gym/yoga → "Exercising"; reading nook → "Reading".
+                ❌ Do NOT invent labels like "Living", "Sleeping", "Socializing", "Studying" — map them to the closest allowed value.
              
              4. SUGGESTED_AMENITIES: Based on the image highlight, list 1-2 specific amenities visible in this image
                 Examples: If you see "well-integrated kitchen appliances" → "Kitchen Appliances"; if "marble bathroom" → "Luxury Bathroom"

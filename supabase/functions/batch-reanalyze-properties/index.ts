@@ -189,9 +189,29 @@ serve(async (req) => {
         // Bold from colorful/modern
         if (analysis.colorful >= 7 || (analysis.modern >= 7 && analysis.colorful >= 5)) aiColors.push('Bold');
         
-        // Extract activities from AI analysis (map from available properties)
-        // Start with image-suggested activities
-        aiActivities.push(...suggestedActivitiesFromImages);
+        // Extract activities from AI analysis — restricted to quiz allowlist
+        const ALLOWED_ACTIVITIES = ['Working', 'Reading', 'Relaxing', 'Entertaining', 'Cooking', 'Exercising'];
+        const ACTIVITY_SYNONYMS: Record<string, string> = {
+          'work': 'Working', 'working': 'Working', 'office': 'Working', 'study': 'Working', 'studying': 'Working',
+          'read': 'Reading', 'reading': 'Reading',
+          'relax': 'Relaxing', 'relaxing': 'Relaxing', 'living': 'Relaxing', 'lounging': 'Relaxing', 'resting': 'Relaxing', 'sleeping': 'Relaxing', 'meditation': 'Relaxing', 'meditating': 'Relaxing',
+          'entertain': 'Entertaining', 'entertaining': 'Entertaining', 'socializing': 'Entertaining', 'hosting': 'Entertaining', 'gathering': 'Entertaining', 'dining': 'Entertaining',
+          'cook': 'Cooking', 'cooking': 'Cooking', 'baking': 'Cooking',
+          'exercise': 'Exercising', 'exercising': 'Exercising', 'workout': 'Exercising', 'yoga': 'Exercising', 'fitness': 'Exercising',
+        };
+        const normalizeActivity = (raw: string): string | null => {
+          if (!raw || typeof raw !== 'string') return null;
+          const key = raw.trim().toLowerCase();
+          if (ACTIVITY_SYNONYMS[key]) return ACTIVITY_SYNONYMS[key];
+          const matched = ALLOWED_ACTIVITIES.find(a => a.toLowerCase() === key);
+          return matched || null;
+        };
+
+        // Start with image-suggested activities (normalized)
+        suggestedActivitiesFromImages.forEach(a => {
+          const n = normalizeActivity(a);
+          if (n) aiActivities.push(n);
+        });
         
         // Working from modern/spacious
         if (analysis.modern >= 6 || analysis.spacious >= 7) aiActivities.push('Working');
@@ -206,10 +226,10 @@ serve(async (req) => {
         // Exercising from spacious
         if (analysis.spacious >= 8) aiActivities.push('Exercising');
         
-        // Remove duplicates and limit selections
+        // Remove duplicates and limit selections (strict allowlist)
         const uniqueStyles = [...new Set(aiStyles)].slice(0, 3);
         const uniqueColors = [...new Set(aiColors)].slice(0, 3);
-        const uniqueActivities = [...new Set(aiActivities)].slice(0, 3);
+        const uniqueActivities = [...new Set(aiActivities)].filter(a => ALLOWED_ACTIVITIES.includes(a)).slice(0, 3);
         const uniqueAmenities = [...new Set(suggestedAmenitiesFromImages)].slice(0, 5);
         
         // Fallbacks if AI didn't detect enough
