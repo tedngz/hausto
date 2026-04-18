@@ -1657,8 +1657,8 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 Maximum ${maxResults} properties in results.`;
 
     // Call Lovable AI Gateway with the enhanced prompt
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
 
     // Build messages with history - include images as multimodal content if present
     const userMessageContent: any = validImages.length > 0
@@ -1674,24 +1674,24 @@ Maximum ${maxResults} properties in results.`;
       { role: 'user', content: userMessageContent }
     ];
 
-    console.log('[AI] Calling Lovable AI Gateway with google/gemini-2.5-flash');
+    console.log('[AI] Calling OpenAI API with gpt-5');
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-5',
         messages: messagesWithHistory,
-        max_tokens: 2500,
+        max_completion_tokens: 2500,
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('[AI] Lovable AI error:', aiResponse.status, errorText);
+      console.error('[AI] OpenAI API error:', aiResponse.status, errorText);
       
       // Handle rate limits
       if (aiResponse.status === 429) {
@@ -1700,10 +1700,10 @@ Maximum ${maxResults} properties in results.`;
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
         );
       }
-      if (aiResponse.status === 402) {
+      if (aiResponse.status === 401) {
         return new Response(
-          JSON.stringify({ error: 'AI service credits exhausted. Please contact support.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
+          JSON.stringify({ error: 'OpenAI authentication failed. Please check API key.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         );
       }
       
