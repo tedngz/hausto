@@ -253,6 +253,17 @@ function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   for (const road of Object.keys(HCM_ROADS)) {
     if (lowerText.includes(road)) return 'hcm';
   }
+  // HCM landmarks (airport, malls, hospitals, etc.)
+  const hcmLandmarkKeywords = [
+    'tan son nhat', 'tân sơn nhất', 'tsn airport', 'sgn airport', 'saigon airport',
+    'ben thanh market', 'chợ bến thành', 'cho ray', 'chợ rẫy', 'rmit',
+    'bitexco', 'landmark 81', 'notre dame cathedral', 'nhà thờ đức bà',
+    'independence palace', 'dinh độc lập', 'crescent mall', 'takashimaya',
+    'aeon mall tan phu', 'aeon tan phu', 'aeon mall binh tan', 'aeon binh tan',
+    'saigon centre', 'diamond plaza', 'tao dan park', 'gia dinh park',
+    'mien dong bus station', 'mien tay bus station', 'saigon railway station', 'ga sài gòn',
+  ];
+  if (hcmLandmarkKeywords.some(k => lowerText.includes(k))) return 'hcm';
   
   // Check Hanoi aliases and districts
   if (LOCATION_DATA.hanoi.aliases.some(a => matchesWord(lowerText, a))) return 'hanoi';
@@ -394,8 +405,59 @@ function extractSpecificDistricts(text: string): string[] {
     'orchard garden': 'phu nhuan',
     'botanica premier': 'tan binh',
   };
-  
-  // Check complex names first
+
+  // Famous landmarks (airports, hospitals, universities, malls, parks, markets) → district
+  // Critical for queries like "near Tan Son Nhat airport" → Tan Binh, not D2
+  const HCM_LANDMARKS: Record<string, string> = {
+    // Airports
+    'tan son nhat': 'tan binh', 'tân sơn nhất': 'tan binh',
+    'tsn airport': 'tan binh', 'sgn airport': 'tan binh', 'saigon airport': 'tan binh',
+    'tan son nhat airport': 'tan binh',
+    // Markets
+    'ben thanh market': 'district 1', 'chợ bến thành': 'district 1',
+    'binh tay market': 'district 6', 'chợ bình tây': 'district 6',
+    'an dong market': 'district 5',
+    // Malls / commercial
+    'vincom dong khoi': 'district 1', 'diamond plaza': 'district 1',
+    'takashimaya': 'district 1', 'saigon centre': 'district 1',
+    'crescent mall': 'district 7', 'sc vivocity': 'district 7',
+    'aeon mall tan phu': 'tan phu', 'aeon tan phu': 'tan phu',
+    'aeon mall binh tan': 'binh tan', 'aeon binh tan': 'binh tan',
+    'parkson hung vuong': 'district 5',
+    'estella place': 'district 2',
+    // Universities
+    'rmit': 'district 7', 'rmit university': 'district 7',
+    'university of economics': 'district 1', 'ueh': 'district 1',
+    'bach khoa university': 'district 10', 'hcmut': 'district 10',
+    'university of medicine': 'district 5',
+    // Hospitals
+    'cho ray hospital': 'district 5', 'chợ rẫy': 'district 5',
+    'fv hospital': 'district 7', 'vinmec central park': 'binh thanh',
+    'tam anh hospital': 'tan binh',
+    // Parks / landmarks
+    'tao dan park': 'district 1', 'công viên tao đàn': 'district 1',
+    '23/9 park': 'district 1', '30/4 park': 'district 1',
+    'gia dinh park': 'go vap', 'công viên gia định': 'go vap',
+    'le van tam park': 'district 1',
+    'notre dame cathedral': 'district 1', 'nhà thờ đức bà': 'district 1',
+    'independence palace': 'district 1', 'dinh độc lập': 'district 1',
+    'bitexco': 'district 1', 'bitexco tower': 'district 1',
+    'landmark 81 tower': 'binh thanh',
+    'thu thiem bridge': 'district 2',
+    // Stations / transit
+    'mien dong bus station': 'binh thanh', 'bến xe miền đông': 'binh thanh',
+    'mien tay bus station': 'binh tan', 'bến xe miền tây': 'binh tan',
+    'saigon railway station': 'district 3', 'ga sài gòn': 'district 3',
+  };
+
+  // Check landmark names first (highest priority)
+  for (const [landmark, district] of Object.entries(HCM_LANDMARKS)) {
+    if (lowerText.includes(landmark)) {
+      if (!districts.includes(district)) districts.push(district);
+    }
+  }
+
+  // Check complex names
   for (const [complex, district] of Object.entries(HCM_COMPLEXES)) {
     if (lowerText.includes(complex)) {
       if (!districts.includes(complex)) districts.push(complex); // Add complex name itself for exact matching
