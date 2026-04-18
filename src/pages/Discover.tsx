@@ -142,7 +142,7 @@ const Discover = () => {
     if (user) {
       localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(preferences));
     }
-    setCurrentView('ai-chat');
+    setCurrentView('swipe');
   };
   const handleRestartOnboarding = () => {
     setUserPreferences(null);
