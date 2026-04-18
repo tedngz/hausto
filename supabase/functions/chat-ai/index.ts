@@ -1329,23 +1329,45 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     if (validImages.length > 0) {
       console.log(`[Image Analysis] Analyzing ${validImages.length} uploaded images for style detection`);
       
-      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-      if (LOVABLE_API_KEY) {
+      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+      if (OPENAI_API_KEY) {
         try {
           const imageContentParts: any[] = validImages.map((img: string) => ({
             type: 'image_url',
             image_url: { url: img }
           }));
           
-          const imageAnalysisResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          const imageAnalysisResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Authorization': `Bearer ${OPENAI_API_KEY}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'google/gemini-2.5-flash',
+              model: 'gpt-4o-mini',
               messages: [
+                { 
+                  role: 'system', 
+                  content: `You are a property style analyzer. Analyze the uploaded interior/exterior images and identify the design styles, colors, and vibe. 
+                  
+RESPOND IN EXACTLY THIS JSON FORMAT (no markdown, no extra text):
+{"styles":["Modern","Minimalist"],"colors":["Neutral","White"],"description":"Brief 1-sentence description of the overall aesthetic"}
+
+Use ONLY these style options: Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage
+Use ONLY these color options: Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold
+Pick 1-3 styles and 1-2 colors that best match.` 
+                },
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: 'Analyze these reference images and detect the interior design style, color palette, and overall vibe.' },
+                    ...imageContentParts
+                  ]
+                }
+              ],
+              max_tokens: 300,
+            }),
+          });
                 { 
                   role: 'system', 
                   content: `You are a property style analyzer. Analyze the uploaded interior/exterior images and identify the design styles, colors, and vibe. 
