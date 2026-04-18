@@ -366,15 +366,34 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
     if ((analysisResult.elegant || 0) >= 6) derivedColors.push('Refined');
     if (derivedColors.length === 0) derivedColors.push('Neutral', 'Warm');
 
-    // Collect activities from all image analyses
+    // Collect activities from all image analyses, restricted to quiz allowlist
+    const ALLOWED_ACTIVITIES = ['Working', 'Reading', 'Relaxing', 'Entertaining', 'Cooking', 'Exercising'];
+    const ACTIVITY_SYNONYMS: Record<string, string> = {
+      'work': 'Working', 'working': 'Working', 'office': 'Working', 'study': 'Working', 'studying': 'Working',
+      'read': 'Reading', 'reading': 'Reading',
+      'relax': 'Relaxing', 'relaxing': 'Relaxing', 'living': 'Relaxing', 'lounging': 'Relaxing', 'resting': 'Relaxing', 'sleeping': 'Relaxing', 'meditation': 'Relaxing', 'meditating': 'Relaxing',
+      'entertain': 'Entertaining', 'entertaining': 'Entertaining', 'socializing': 'Entertaining', 'hosting': 'Entertaining', 'gathering': 'Entertaining', 'dining': 'Entertaining',
+      'cook': 'Cooking', 'cooking': 'Cooking', 'baking': 'Cooking',
+      'exercise': 'Exercising', 'exercising': 'Exercising', 'workout': 'Exercising', 'yoga': 'Exercising', 'fitness': 'Exercising',
+    };
+    const normalizeActivity = (raw: string): string | null => {
+      if (!raw || typeof raw !== 'string') return null;
+      const key = raw.trim().toLowerCase();
+      if (ACTIVITY_SYNONYMS[key]) return ACTIVITY_SYNONYMS[key];
+      const matched = ALLOWED_ACTIVITIES.find(a => a.toLowerCase() === key);
+      return matched || null;
+    };
     const allActivities = new Set<string>();
     for (const a of imageAnalysesRaw) {
       if (a.suggested_activities) {
-        a.suggested_activities.forEach((act: string) => allActivities.add(act));
+        a.suggested_activities.forEach((act: string) => {
+          const normalized = normalizeActivity(act);
+          if (normalized) allActivities.add(normalized);
+        });
       }
     }
     const derivedActivities = Array.from(allActivities).slice(0, 5);
-    if (derivedActivities.length === 0) derivedActivities.push('Relaxing', 'Living');
+    if (derivedActivities.length === 0) derivedActivities.push('Relaxing');
 
     const updatedVibeAnalysis = {
       ...(propertyData.vibe_analysis || {}),
