@@ -1368,28 +1368,6 @@ Pick 1-3 styles and 1-2 colors that best match.`
               max_tokens: 300,
             }),
           });
-                { 
-                  role: 'system', 
-                  content: `You are a property style analyzer. Analyze the uploaded interior/exterior images and identify the design styles, colors, and vibe. 
-                  
-RESPOND IN EXACTLY THIS JSON FORMAT (no markdown, no extra text):
-{"styles":["Modern","Minimalist"],"colors":["Neutral","White"],"description":"Brief 1-sentence description of the overall aesthetic"}
-
-Use ONLY these style options: Modern, Cozy, Industrial, Bohemian, Scandinavian, Minimalist, Contemporary, Traditional, Rustic, Luxury, Urban, Vintage
-Use ONLY these color options: Neutral, Warm, Cool, Bright, Dark, Colorful, Natural, White, Earth, Bold
-Pick 1-3 styles and 1-2 colors that best match.` 
-                },
-                {
-                  role: 'user',
-                  content: [
-                    { type: 'text', text: 'Analyze these reference images and detect the interior design style, color palette, and overall vibe.' },
-                    ...imageContentParts
-                  ]
-                }
-              ],
-              max_tokens: 300,
-            }),
-          });
 
           if (imageAnalysisResponse.ok) {
             const analysisData = await imageAnalysisResponse.json();
