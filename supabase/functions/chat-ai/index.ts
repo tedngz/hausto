@@ -253,6 +253,17 @@ function detectCity(text: string): 'hcm' | 'hanoi' | 'danang' | null {
   for (const road of Object.keys(HCM_ROADS)) {
     if (lowerText.includes(road)) return 'hcm';
   }
+  // HCM landmarks (airport, malls, hospitals, etc.)
+  const hcmLandmarkKeywords = [
+    'tan son nhat', 'tân sơn nhất', 'tsn airport', 'sgn airport', 'saigon airport',
+    'ben thanh market', 'chợ bến thành', 'cho ray', 'chợ rẫy', 'rmit',
+    'bitexco', 'landmark 81', 'notre dame cathedral', 'nhà thờ đức bà',
+    'independence palace', 'dinh độc lập', 'crescent mall', 'takashimaya',
+    'aeon mall tan phu', 'aeon tan phu', 'aeon mall binh tan', 'aeon binh tan',
+    'saigon centre', 'diamond plaza', 'tao dan park', 'gia dinh park',
+    'mien dong bus station', 'mien tay bus station', 'saigon railway station', 'ga sài gòn',
+  ];
+  if (hcmLandmarkKeywords.some(k => lowerText.includes(k))) return 'hcm';
   
   // Check Hanoi aliases and districts
   if (LOCATION_DATA.hanoi.aliases.some(a => matchesWord(lowerText, a))) return 'hanoi';
