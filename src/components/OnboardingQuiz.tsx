@@ -39,8 +39,11 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   useEffect(() => {
     setShowContent(true);
     setIsAnimating(false);
-    // Scroll to top on mobile when step changes
+    // Scroll to top when step changes (window + any scrollable ancestor)
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.querySelectorAll('.overflow-y-auto').forEach((el) => {
+      (el as HTMLElement).scrollTo({ top: 0, behavior: 'smooth' });
+    });
   }, [currentStep]);
 
 
