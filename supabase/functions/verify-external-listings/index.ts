@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
 
     console.log(`[verify-external-listings] Verifying ${listings.length} listings`);
 
-    for (const item of listings) {
+    const processOne = async (item: any) => {
       summary.checked++;
       const result = await verifyListing(item.source, item.source_url);
       const now = new Date().toISOString();
@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
           summary.deactivated_ids.push(item.id);
         }
         await supabase.from('external_properties').update(update).eq('id', item.id);
-        console.log(`[verify-external-listings] Dead detected (${newCount}/${FAILURE_THRESHOLD}) - ${item.id} - ${result.reason}`);
+        console.log(`[verify-external-listings] Dead (${newCount}/${FAILURE_THRESHOLD}) - ${item.id} - ${result.reason}`);
       } else {
         summary.errors++;
         await supabase.from('external_properties').update({
@@ -185,6 +185,12 @@ Deno.serve(async (req) => {
         }).eq('id', item.id);
         console.log(`[verify-external-listings] Error - ${item.id} - ${result.reason}`);
       }
+    };
+
+    // Process in concurrent chunks to stay within edge timeout while limiting Browserless parallelism
+    for (let i = 0; i < listings.length; i += CONCURRENCY) {
+      const chunk = listings.slice(i, i + CONCURRENCY);
+      await Promise.all(chunk.map(processOne));
     }
 
     // Invalidate discovery cache if we deactivated anything
