@@ -1,46 +1,48 @@
 
+Yes — we can build a scheduled job that pings each external listing's source URL and deactivates the ones that no longer exist.
 
-# GPT-4o-mini vs Gemini 2.5 Flash: Vibe Analysis Comparison
+# Plan: Auto-verify external listings against source sites
 
-## Objective
-Run both models on the same property image and compare output quality for vibe scoring, amenity detection, and image highlights.
+## What it does
+A background job runs on a schedule, checks each active external listing's source URL, and deactivates listings whose source page is gone or marked expired. Healthy listings get a refreshed `last_verified_at` timestamp.
 
-## Test Setup
-- **Sample property**: "Eco Green Apartment for Rent" (ID: 637a444b)
-- **Sample image**: `https://file4.batdongsan.com.vn/resize/1275x717/2023/11/10/20231110113154-53f7_wm.jpg`
-- **Prompt**: The existing `analyze-vibe` prompt with `generateContent = true`
-- **GPT-4o-mini**: Called via direct OpenAI API (current implementation, `OPENAI_API_KEY`)
-- **Gemini 2.5 Flash**: Called via Lovable AI Gateway (`LOVABLE_API_KEY`)
+## How verification works per source
+- **Nhatot**: 404 or redirect to `/tin-dang-het-han`, or HTML contains "tin đăng đã bị gỡ" / "không tồn tại" → dead.
+- **Batdongsan**: often returns 200 with a notice page → must check HTML for "Tin không tồn tại", "đã bị xóa", or "hết hạn". Needs Browserless (Cloudflare-protected, already configured).
+- **Airbnb**: 404 / 410, or "Listing unavailable" / "We can't find" in body → dead.
+- Network errors / 5xx / timeouts → do NOT deactivate (transient). Logged and retried next run.
+- **Safety rule**: require 2 consecutive failed checks before flipping `is_active = false`, so a temporary site glitch doesn't wipe valid listings.
 
-## Execution Plan
+## New pieces
 
-### Step 1: Create comparison script
-Write a Python script that sends the same image + prompt to both models and captures:
-- Vibe scores (modern, cozy, luxurious, etc.)
-- Detected amenities count and specificity
-- Image highlight quality
-- Detailed analysis depth
-- Response time
-- JSON parsing reliability
+1. **Edge function `verify-external-listings`** (`verify_jwt = false`)
+   - Pulls up to 50 active listings ordered by oldest `last_verified_at`
+   - Fetches each source URL with 10s timeout + source-specific dead detector
+   - Increments `verification_failures` on dead detection, resets on success
+   - At 2 failures → `is_active = false` + invalidates `property-discovery-cache`
+   - Batch capped at 50/run to stay under the 150s edge limit
 
-### Step 2: Run comparison
-Execute the script, which will:
-1. Fetch and base64-encode the sample image
-2. Send identical prompts to GPT-4o-mini (OpenAI API) and Gemini 2.5 Flash (Lovable Gateway)
-3. Parse and compare JSON outputs side-by-side
+2. **Schema migration on `external_properties`**
+   - Add `verification_failures INTEGER DEFAULT 0`
+   - Add `last_verification_status TEXT` ('alive' | 'dead' | 'error') for admin visibility
+   - `last_verified_at` column already exists — will start being used
 
-### Step 3: Generate report
-Output a formatted comparison table to `/mnt/documents/vibe-analysis-comparison.md` covering:
-- Score differences across all 10 vibe dimensions
-- Amenity detection completeness
-- Highlight creativity and specificity
-- JSON format compliance
-- Latency comparison
-- Cost implications
+3. **pg_cron schedule** — every 6 hours (covers ~200 listings/day comfortably). Inserted via Supabase SQL Editor per project rule.
 
-## Technical Details
-- GPT-4o-mini endpoint: `https://api.openai.com/v1/chat/completions`
-- Gemini 2.5 Flash endpoint: `https://ai.gateway.lovable.dev/v1/chat/completions` (model: `google/gemini-2.5-flash`)
-- Both use the same OpenAI-compatible chat completions format
-- Image sent as base64 data URI in both cases
+4. **Admin Tools UI** (`src/pages/AdminTools.tsx`)
+   - "Verify external listings now" button for manual runs
+   - Show `last_verified_at`, `last_verification_status`, and failure count next to each listing
 
+## Files to change
+- `supabase/migrations/<new>` — 2 new columns on `external_properties`
+- `supabase/functions/verify-external-listings/index.ts` — new function
+- `src/pages/AdminTools.tsx` — manual trigger + status display
+- pg_cron SQL — provided to you to paste in SQL Editor after deploy
+
+## Quick decisions to confirm before I build
+
+- **Frequency**: every 6 hours (recommended), once daily, or every 2 hours?
+- **Strictness**: require 2 consecutive failures (recommended), or deactivate on first detection?
+- **Sources**: all three (Nhatot + Batdongsan + Airbnb), or skip Batdongsan to avoid the Browserless cost per check?
+
+Reply with your picks (e.g. "6h, 2 failures, all three") and I'll implement it.
