@@ -656,7 +656,9 @@ const AdminTools = () => {
     }
   };
 
+  return (
     <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
+
       <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
 
       {/* Crawl External Listings - moved to top */}
