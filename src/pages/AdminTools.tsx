@@ -64,6 +64,10 @@ const AdminTools = () => {
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
 
+  // Verify external listings state
+  const [isVerifyingListings, setIsVerifyingListings] = useState(false);
+  const [verifyListingsResult, setVerifyListingsResult] = useState<{ checked: number; alive: number; deactivated: number; dead_increment: number; errors: number } | null>(null);
+
   // State for expanded crawl run
   const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
   const [expandedRunProperties, setExpandedRunProperties] = useState<any[]>([]);
@@ -616,8 +620,45 @@ const AdminTools = () => {
     }
   };
 
+  // Verify external listings
+  const { data: verifyStats, refetch: refetchVerifyStats } = useQuery({
+    queryKey: ['external-verify-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('id, title, source, last_verified_at, last_verification_status, verification_failures')
+        .eq('is_active', true)
+        .order('last_verified_at', { ascending: true, nullsFirst: true })
+        .limit(20);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60_000,
+  });
+
+  const handleVerifyExternalListings = async () => {
+    setIsVerifyingListings(true);
+    setVerifyListingsResult(null);
+    try {
+      toast.info('Verifying external listings against source sites...');
+      const { data, error } = await supabase.functions.invoke('verify-external-listings');
+      if (error) throw error;
+      setVerifyListingsResult(data?.summary || null);
+      toast.success('Verification complete', {
+        description: `Checked ${data?.summary?.checked || 0}, deactivated ${data?.summary?.deactivated || 0}.`,
+      });
+      refetchVerifyStats();
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Verification failed', { description: e.message });
+    } finally {
+      setIsVerifyingListings(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
+
       <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
 
       {/* Crawl External Listings - moved to top */}
@@ -784,7 +825,72 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
+      {/* Verify External Listings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5" />
+            Verify External Listings
+          </CardTitle>
+          <CardDescription>
+            Check active external listings against their source sites (Nhatot, Batdongsan, Airbnb).
+            Listings detected as removed/expired twice in a row are auto-deactivated. Runs daily via cron.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button onClick={handleVerifyExternalListings} disabled={isVerifyingListings}>
+            {isVerifyingListings ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verifying (up to 50)…</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-2" /> Verify external listings now</>
+            )}
+          </Button>
+
+          {verifyListingsResult && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Checked</div><div className="font-semibold">{verifyListingsResult.checked}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Alive</div><div className="font-semibold text-green-600">{verifyListingsResult.alive}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Dead hits</div><div className="font-semibold text-amber-600">{verifyListingsResult.dead_increment}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Deactivated</div><div className="font-semibold text-destructive">{verifyListingsResult.deactivated}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Errors</div><div className="font-semibold">{verifyListingsResult.errors}</div></div>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Oldest-verified active listings</Label>
+            <div className="border rounded-md divide-y max-h-80 overflow-auto">
+              {(verifyStats || []).map((row: any) => (
+                <div key={row.id} className="p-2 text-xs flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate">{row.title}</div>
+                    <div className="text-muted-foreground truncate">{row.source}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {row.verification_failures > 0 && (
+                      <Badge variant="destructive" className="text-[10px]">fails: {row.verification_failures}</Badge>
+                    )}
+                    <Badge
+                      variant={row.last_verification_status === 'alive' ? 'secondary' : row.last_verification_status === 'dead' ? 'destructive' : 'outline'}
+                      className="text-[10px]"
+                    >
+                      {row.last_verification_status || 'pending'}
+                    </Badge>
+                    <span className="text-muted-foreground whitespace-nowrap">
+                      {row.last_verified_at ? getTimeAgo(row.last_verified_at) : 'never'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {(!verifyStats || verifyStats.length === 0) && (
+                <div className="p-3 text-xs text-muted-foreground text-center">No active external listings.</div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Batch Re-analyze Image Highlights */}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

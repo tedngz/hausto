@@ -289,6 +289,7 @@ export type Database = {
           id: string
           images: string[] | null
           is_active: boolean | null
+          last_verification_status: string | null
           last_verified_at: string | null
           latitude: number | null
           location: string
@@ -302,6 +303,7 @@ export type Database = {
           source_url: string
           title: string
           updated_at: string | null
+          verification_failures: number
           vibe: string | null
           vibe_analysis: Json | null
         }
@@ -319,6 +321,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           is_active?: boolean | null
+          last_verification_status?: string | null
           last_verified_at?: string | null
           latitude?: number | null
           location: string
@@ -332,6 +335,7 @@ export type Database = {
           source_url: string
           title: string
           updated_at?: string | null
+          verification_failures?: number
           vibe?: string | null
           vibe_analysis?: Json | null
         }
@@ -349,6 +353,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           is_active?: boolean | null
+          last_verification_status?: string | null
           last_verified_at?: string | null
           latitude?: number | null
           location?: string
@@ -362,6 +367,7 @@ export type Database = {
           source_url?: string
           title?: string
           updated_at?: string | null
+          verification_failures?: number
           vibe?: string | null
           vibe_analysis?: Json | null
         }
