@@ -620,7 +620,42 @@ const AdminTools = () => {
     }
   };
 
-  return (
+  // Verify external listings
+  const { data: verifyStats, refetch: refetchVerifyStats } = useQuery({
+    queryKey: ['external-verify-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('id, title, source, last_verified_at, last_verification_status, verification_failures')
+        .eq('is_active', true)
+        .order('last_verified_at', { ascending: true, nullsFirst: true })
+        .limit(20);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60_000,
+  });
+
+  const handleVerifyExternalListings = async () => {
+    setIsVerifyingListings(true);
+    setVerifyListingsResult(null);
+    try {
+      toast.info('Verifying external listings against source sites...');
+      const { data, error } = await supabase.functions.invoke('verify-external-listings');
+      if (error) throw error;
+      setVerifyListingsResult(data?.summary || null);
+      toast.success('Verification complete', {
+        description: `Checked ${data?.summary?.checked || 0}, deactivated ${data?.summary?.deactivated || 0}.`,
+      });
+      refetchVerifyStats();
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Verification failed', { description: e.message });
+    } finally {
+      setIsVerifyingListings(false);
+    }
+  };
+
     <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
       <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
 
