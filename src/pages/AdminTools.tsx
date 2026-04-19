@@ -64,6 +64,10 @@ const AdminTools = () => {
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
 
+  // Verify external listings state
+  const [isVerifyingListings, setIsVerifyingListings] = useState(false);
+  const [verifyListingsResult, setVerifyListingsResult] = useState<{ checked: number; alive: number; deactivated: number; dead_increment: number; errors: number } | null>(null);
+
   // State for expanded crawl run
   const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
   const [expandedRunProperties, setExpandedRunProperties] = useState<any[]>([]);
