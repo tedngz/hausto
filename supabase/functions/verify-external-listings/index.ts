@@ -7,7 +7,8 @@ const corsHeaders = {
 
 const FAILURE_THRESHOLD = 2;
 const FETCH_TIMEOUT_MS = 10_000;
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 25;
+const CONCURRENCY = 5;
 
 type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string };
 
