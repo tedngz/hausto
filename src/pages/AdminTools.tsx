@@ -290,16 +290,7 @@ const AdminTools = () => {
     enabled: !!user?.id,
   });
 
-  // Show loading while checking auth/role
-  if (authLoading || isCheckingRole) {
-    return (
-      <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  // Verify external listings (must be before early return to keep hook order stable)
+  // Verify external listings (must be before any early return to keep hook order stable)
   const { data: verifyStats, refetch: refetchVerifyStats } = useQuery({
     queryKey: ['external-verify-stats'],
     queryFn: async () => {
@@ -313,7 +304,17 @@ const AdminTools = () => {
       return data || [];
     },
     refetchInterval: 60_000,
+    enabled: !!user && !!isAdmin,
   });
+
+  // Show loading while checking auth/role
+  if (authLoading || isCheckingRole) {
+    return (
+      <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   // Block access if not authenticated or not admin
   if (!user || !isAdmin) {
