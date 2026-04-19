@@ -110,12 +110,37 @@ async function verifyBatdongsan(url: string): Promise<DeadResult> {
   }
 }
 
+async function verifyViaBrowserless(url: string, deadKeywords: string[]): Promise<DeadResult> {
+  const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
+  if (!browserlessKey) return { status: 'error', reason: 'no_browserless_key' };
+  try {
+    const res = await fetch(`https://production-sfo.browserless.io/content?token=${browserlessKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, gotoOptions: { waitUntil: 'domcontentloaded', timeout: 15_000 } }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (res.status === 404 || res.status === 410) return { status: 'dead', reason: `http_${res.status}` };
+    if (!res.ok) return { status: 'error', reason: `browserless_${res.status}` };
+    const html = (await res.text()).toLowerCase();
+    for (const kw of deadKeywords) {
+      if (html.includes(kw)) return { status: 'dead', reason: `keyword:${kw}` };
+    }
+    // Heuristic: a healthy listing page is large; tiny responses likely indicate a notice page
+    if (html.length < 2000) return { status: 'dead', reason: 'tiny_response' };
+    return { status: 'alive' };
+  } catch (e) {
+    return { status: 'error', reason: (e as Error).message };
+  }
+}
+
 async function verifyListing(source: string, url: string): Promise<DeadResult> {
   const kind = detectSource(source, url);
   switch (kind) {
-    case 'nhatot': return await verifyPlain(url, NHATOT_DEAD_KEYWORDS);
+    // Both Nhatot and Batdongsan are Cloudflare-protected — go through Browserless
+    case 'nhatot': return await verifyViaBrowserless(url, NHATOT_DEAD_KEYWORDS);
+    case 'batdongsan': return await verifyViaBrowserless(url, BATDONGSAN_DEAD_KEYWORDS);
     case 'airbnb': return await verifyPlain(url, AIRBNB_DEAD_KEYWORDS);
-    case 'batdongsan': return await verifyBatdongsan(url);
     default: return { status: 'error', reason: 'unknown_source' };
   }
 }
