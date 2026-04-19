@@ -85,31 +85,6 @@ async function verifyPlain(url: string, deadKeywords: string[]): Promise<DeadRes
   }
 }
 
-async function verifyBatdongsan(url: string): Promise<DeadResult> {
-  const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
-  if (!browserlessKey) {
-    // Fallback to plain fetch
-    return await verifyPlain(url, BATDONGSAN_DEAD_KEYWORDS);
-  }
-  try {
-    const res = await fetch(`https://production-sfo.browserless.io/content?token=${browserlessKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, gotoOptions: { waitUntil: 'domcontentloaded', timeout: 15_000 } }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (res.status === 404 || res.status === 410) return { status: 'dead', reason: `http_${res.status}` };
-    if (!res.ok) return { status: 'error', reason: `browserless_${res.status}` };
-    const html = (await res.text()).toLowerCase();
-    for (const kw of BATDONGSAN_DEAD_KEYWORDS) {
-      if (html.includes(kw)) return { status: 'dead', reason: `keyword:${kw}` };
-    }
-    return { status: 'alive' };
-  } catch (e) {
-    return { status: 'error', reason: (e as Error).message };
-  }
-}
-
 async function verifyViaBrowserless(url: string, deadKeywords: string[]): Promise<DeadResult> {
   const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
   if (!browserlessKey) return { status: 'error', reason: 'no_browserless_key' };
