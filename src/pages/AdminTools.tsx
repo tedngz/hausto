@@ -825,7 +825,72 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
+      {/* Verify External Listings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5" />
+            Verify External Listings
+          </CardTitle>
+          <CardDescription>
+            Check active external listings against their source sites (Nhatot, Batdongsan, Airbnb).
+            Listings detected as removed/expired twice in a row are auto-deactivated. Runs daily via cron.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button onClick={handleVerifyExternalListings} disabled={isVerifyingListings}>
+            {isVerifyingListings ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Verifying (up to 50)…</>
+            ) : (
+              <><RefreshCw className="h-4 w-4 mr-2" /> Verify external listings now</>
+            )}
+          </Button>
+
+          {verifyListingsResult && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Checked</div><div className="font-semibold">{verifyListingsResult.checked}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Alive</div><div className="font-semibold text-green-600">{verifyListingsResult.alive}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Dead hits</div><div className="font-semibold text-amber-600">{verifyListingsResult.dead_increment}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Deactivated</div><div className="font-semibold text-destructive">{verifyListingsResult.deactivated}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Errors</div><div className="font-semibold">{verifyListingsResult.errors}</div></div>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Oldest-verified active listings</Label>
+            <div className="border rounded-md divide-y max-h-80 overflow-auto">
+              {(verifyStats || []).map((row: any) => (
+                <div key={row.id} className="p-2 text-xs flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate">{row.title}</div>
+                    <div className="text-muted-foreground truncate">{row.source}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {row.verification_failures > 0 && (
+                      <Badge variant="destructive" className="text-[10px]">fails: {row.verification_failures}</Badge>
+                    )}
+                    <Badge
+                      variant={row.last_verification_status === 'alive' ? 'secondary' : row.last_verification_status === 'dead' ? 'destructive' : 'outline'}
+                      className="text-[10px]"
+                    >
+                      {row.last_verification_status || 'pending'}
+                    </Badge>
+                    <span className="text-muted-foreground whitespace-nowrap">
+                      {row.last_verified_at ? getTimeAgo(row.last_verified_at) : 'never'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {(!verifyStats || verifyStats.length === 0) && (
+                <div className="p-3 text-xs text-muted-foreground text-center">No active external listings.</div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Batch Re-analyze Image Highlights */}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
