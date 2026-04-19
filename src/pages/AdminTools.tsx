@@ -299,6 +299,22 @@ const AdminTools = () => {
     );
   }
 
+  // Verify external listings (must be before early return to keep hook order stable)
+  const { data: verifyStats, refetch: refetchVerifyStats } = useQuery({
+    queryKey: ['external-verify-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('id, title, source, last_verified_at, last_verification_status, verification_failures')
+        .eq('is_active', true)
+        .order('last_verified_at', { ascending: true, nullsFirst: true })
+        .limit(20);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60_000,
+  });
+
   // Block access if not authenticated or not admin
   if (!user || !isAdmin) {
     return (
@@ -619,22 +635,6 @@ const AdminTools = () => {
       setIsBatchReanalyzing(false);
     }
   };
-
-  // Verify external listings
-  const { data: verifyStats, refetch: refetchVerifyStats } = useQuery({
-    queryKey: ['external-verify-stats'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('external_properties')
-        .select('id, title, source, last_verified_at, last_verification_status, verification_failures')
-        .eq('is_active', true)
-        .order('last_verified_at', { ascending: true, nullsFirst: true })
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    },
-    refetchInterval: 60_000,
-  });
 
   const handleVerifyExternalListings = async () => {
     setIsVerifyingListings(true);
