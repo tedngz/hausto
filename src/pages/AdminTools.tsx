@@ -667,6 +667,7 @@ const AdminTools = () => {
         description: `Checked ${data?.summary?.checked || 0}, deactivated ${data?.summary?.deactivated || 0}.`,
       });
       refetchVerifyStats();
+      refetchDeactivated();
     } catch (e: any) {
       console.error(e);
       toast.error('Verification failed', { description: e.message });
