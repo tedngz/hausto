@@ -36,282 +36,82 @@ function getCookieString(marketplace: string): string {
 
 function buildExtractJS(): string {
   return `(async () => {
-    await new Promise(r => setTimeout(r, 2000));
-    
-    var exclude = ${JSON.stringify(EXCLUDE_NUMBERS)};
-    function isExcluded(p) {
-      var digits = p.replace(/[^0-9]/g, '');
-      for (var i = 0; i < exclude.length; i++) { if (digits.indexOf(exclude[i]) >= 0) return true; }
-      return false;
-    }
-    function isMasked(p) { return p.indexOf('*') >= 0; }
-    function isValidPhone(p) {
-      return p && !isMasked(p) && p.replace(/[^0-9]/g, '').length >= 9 && !isExcluded(p);
-    }
-    function findPhoneInText(text) {
-      var m = text.match(/0[3-9]\\d[\\s.-]?\\d{3}[\\s.-]?\\d{4}/g);
-      if (m) { for (var i = 0; i < m.length; i++) { if (!isMasked(m[i]) && !isExcluded(m[i])) return m[i]; } }
-      return null;
-    }
-    
-    // Step 1: Check existing tel: links
-    var telLinks = document.querySelectorAll('a[href^="tel:"]');
-    for (var i = 0; i < telLinks.length; i++) {
-      var phone = telLinks[i].getAttribute('href').replace('tel:', '').trim();
-      if (isValidPhone(phone)) return JSON.stringify({phone: phone, method: 'tel_link'});
-    }
-    
-    var isBDS = window.location.hostname.indexOf('batdongsan') >= 0;
-    var isNhatot = window.location.hostname.indexOf('nhatot') >= 0 || window.location.hostname.indexOf('chotot') >= 0;
-    
-    // For Nhatot - deep parse __NEXT_DATA__ for phone fields
-    if (isNhatot) {
-      try {
-        var nextData = document.getElementById('__NEXT_DATA__');
-        if (nextData) {
-          var ndStr = nextData.textContent || '';
-          
-          // Deep search JSON for phone-like keys
-          function deepFindPhone(obj, depth) {
-            if (!obj || depth > 10) return null;
-            if (typeof obj === 'string') {
-              if (/^\\+?\\d[\\d\\s.-]{8,14}$/.test(obj.trim())) {
-                var cleaned = obj.replace(/[^0-9+]/g, '');
-                if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
-                if (cleaned.startsWith('84') && cleaned.length > 10) cleaned = '0' + cleaned.slice(2);
-                if (/^0[3-9]\\d{8,9}$/.test(cleaned) && !isExcluded(cleaned)) return cleaned;
-              }
-              return null;
-            }
-            if (Array.isArray(obj)) {
-              for (var ai = 0; ai < obj.length; ai++) {
-                var r = deepFindPhone(obj[ai], depth + 1);
-                if (r) return r;
-              }
-              return null;
-            }
-            if (typeof obj === 'object') {
-              // Prioritize phone-related keys
-              var phoneKeys = ['phone', 'phone_number', 'phoneNumber', 'mobile', 'contact_phone', 'seller_phone', 'account_phone'];
-              for (var pk = 0; pk < phoneKeys.length; pk++) {
-                if (obj[phoneKeys[pk]]) {
-                  var pv = deepFindPhone(obj[phoneKeys[pk]], depth + 1);
-                  if (pv) return pv;
-                }
-              }
-              // Then check all other keys
-              var keys = Object.keys(obj);
-              for (var ki = 0; ki < keys.length; ki++) {
-                if (phoneKeys.indexOf(keys[ki]) >= 0) continue;
-                var kv = deepFindPhone(obj[keys[ki]], depth + 1);
-                if (kv) return kv;
-              }
-            }
-            return null;
-          }
-          
-          try {
-            var parsed = JSON.parse(ndStr);
-            var deepPhone = deepFindPhone(parsed, 0);
-            if (deepPhone) return JSON.stringify({phone: deepPhone, method: 'nhatot_next_data_deep'});
-          } catch(pe) {}
-          
-          // Fallback: regex on raw text
-          var phoneMatch = findPhoneInText(ndStr);
-          if (phoneMatch) return JSON.stringify({phone: phoneMatch, method: 'nhatot_next_data_regex'});
-        }
-      } catch(ex) {}
-      
-      // Also check Nhatot API responses embedded in page (window.__NEXT_DATA__.props.pageProps)
-      try {
-        var scripts = document.querySelectorAll('script[type="application/json"]');
-        for (var si = 0; si < scripts.length; si++) {
-          var sText = scripts[si].textContent || '';
-          if (sText.indexOf('phone') >= 0 || sText.indexOf('Phone') >= 0) {
-            try {
-              var sData = JSON.parse(sText);
-              var sPhone = deepFindPhone(sData, 0);
-              if (sPhone) return JSON.stringify({phone: sPhone, method: 'nhatot_script_json'});
-            } catch(se) {}
-          }
-        }
-      } catch(ex2) {}
-    }
-    
-    // Step 2: Set up XHR/fetch interception BEFORE clicking
-    var interceptedPhones = [];
-    var origFetch = window.fetch;
-    window.fetch = function() {
-      var args = arguments;
-      return origFetch.apply(this, args).then(function(resp) {
-        try {
-          var url = '';
-          if (typeof args[0] === 'string') url = args[0];
-          else if (args[0] && args[0].url) url = args[0].url;
-          if (url.indexOf('Phone') >= 0 || url.indexOf('phone') >= 0 || url.indexOf('ecrypt') >= 0 || url.indexOf('contact') >= 0) {
-            resp.clone().text().then(function(t) {
-              try {
-                var d = JSON.parse(t);
-                var vals = Object.values(d);
-                for (var vi = 0; vi < vals.length; vi++) {
-                  if (typeof vals[vi] === 'string' && /0[3-9]\\d{8,9}/.test(vals[vi].replace(/[^0-9]/g, ''))) {
-                    interceptedPhones.push(vals[vi]);
-                  }
-                }
-              } catch(e) {
-                var fm = t.match(/0[3-9]\\d{8}/);
-                if (fm) interceptedPhones.push(fm[0]);
-              }
-            });
-          }
-        } catch(e) {}
-        return resp;
-      });
-    };
-    var origXHROpen = XMLHttpRequest.prototype.open;
-    var origXHRSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function(m, u) { this._url = u; return origXHROpen.apply(this, arguments); };
-    XMLHttpRequest.prototype.send = function() {
-      var xhr = this;
-      xhr.addEventListener('load', function() {
-        var u = xhr._url || '';
-        if (u.indexOf('Phone') >= 0 || u.indexOf('phone') >= 0 || u.indexOf('ecrypt') >= 0 || u.indexOf('contact') >= 0) {
-          try {
-            var d = JSON.parse(xhr.responseText);
-            var vals = Object.values(d);
-            for (var vi = 0; vi < vals.length; vi++) {
-              if (typeof vals[vi] === 'string' && /0[3-9]\\d{8,9}/.test(vals[vi].replace(/[^0-9]/g, ''))) {
-                interceptedPhones.push(vals[vi]);
-              }
-            }
-          } catch(e) {
-            var fm = (xhr.responseText || '').match(/0[3-9]\\d{8}/);
-            if (fm) interceptedPhones.push(fm[0]);
-          }
-        }
-      });
-      return origXHRSend.apply(this, arguments);
-    };
-    
-    // Step 3: Click ALL reveal buttons - try multiple rounds
-    var clickedAny = false;
-    
-    // Round 1: Click by text content
-    var revealTexts = ['Hiện số', 'Xem SĐT', 'Xem số', 'Bấm để hiện', 'Hiện số điện thoại', 'Show phone'];
-    var clickableEls = document.querySelectorAll('button, a, span, div, [role="button"]');
-    for (var j = 0; j < clickableEls.length; j++) {
-      var txt = (clickableEls[j].textContent || '').trim();
-      for (var rt = 0; rt < revealTexts.length; rt++) {
-        if (txt.indexOf(revealTexts[rt]) >= 0) {
-          clickableEls[j].click();
-          clickedAny = true;
-        }
-      }
-    }
-    
-    // Round 2: Click by CSS selectors common on BDS/Nhatot
-    var revealSels = [
-      '.re__btn-short-info-phone', '.js__phone-btn', '.js__phone',
-      '[class*="phone"] button', '[class*="Phone"] button',
-      '.re__contact-phone button', '.re__contact-phone a',
-      '[class*="ContactPhone"] button', '[data-aut-id="btnPhone"]',
-      'button[class*="phone"]', 'button[class*="Phone"]',
-      '.phone-show-btn', '[class*="reveal"]',
-      '.re__btn-icon-phone', '[class*="phone-button"]'
+    const revealTexts = ['Hiện số', 'Xem SĐT', 'Xem số', 'Bấm để hiện', 'Hiện số điện thoại', 'Show phone'];
+    const clickSelectors = [
+      '.re__btn-short-info-phone',
+      '.js__phone-btn',
+      '.js__phone',
+      '.re__contact-phone button',
+      '.re__contact-phone a',
+      '[data-aut-id="btnPhone"]',
+      'button[class*="phone"]',
+      'button[class*="Phone"]',
+      '[class*="phone-button"]'
     ];
-    for (var rsi = 0; rsi < revealSels.length; rsi++) {
-      try {
-        var els = document.querySelectorAll(revealSels[rsi]);
-        for (var e = 0; e < els.length; e++) { els[e].click(); clickedAny = true; }
-      } catch(ex) {}
-    }
-    
-    // Wait for AJAX response after clicks
-    if (clickedAny) {
-      // Wait up to 8 seconds, checking every 500ms
-      for (var wait = 0; wait < 16; wait++) {
-        await new Promise(r => setTimeout(r, 500));
-        
-        // Check intercepted phones
-        for (var ip = 0; ip < interceptedPhones.length; ip++) {
-          if (isValidPhone(interceptedPhones[ip])) {
-            return JSON.stringify({phone: interceptedPhones[ip], method: 'xhr_intercept_after_click'});
-          }
-        }
-        
-        // Check if new tel: links appeared
-        var newTels = document.querySelectorAll('a[href^="tel:"]');
-        for (var nt = 0; nt < newTels.length; nt++) {
-          var tp = newTels[nt].getAttribute('href').replace('tel:', '').trim();
-          if (isValidPhone(tp)) return JSON.stringify({phone: tp, method: 'tel_link_after_click'});
-        }
-        
-        // Check if phone number appeared in phone-related elements
-        var phoneSels2 = ['[class*="phone-number"]', '[class*="PhoneNumber"]', '[class*="phone__number"]', '.re__contact-phone', '[class*="ContactPhone"]'];
-        for (var ps2 = 0; ps2 < phoneSels2.length; ps2++) {
-          try {
-            var pels2 = document.querySelectorAll(phoneSels2[ps2]);
-            for (var pe2 = 0; pe2 < pels2.length; pe2++) {
-              var ptxt2 = pels2[pe2].textContent.trim();
-              var found2 = findPhoneInText(ptxt2);
-              if (found2) return JSON.stringify({phone: found2, method: 'phone_element_after_click'});
-            }
-          } catch(ex) {}
-        }
-      }
-      
-      // One more click attempt - sometimes the first click just opens a dropdown
-      for (var j2 = 0; j2 < clickableEls.length; j2++) {
-        var txt2 = (clickableEls[j2].textContent || '').trim();
-        for (var rt2 = 0; rt2 < revealTexts.length; rt2++) {
-          if (txt2.indexOf(revealTexts[rt2]) >= 0) {
-            clickableEls[j2].click();
-          }
-        }
-      }
-      await new Promise(r => setTimeout(r, 3000));
-      
-      // Final check after second click round
-      for (var ip2 = 0; ip2 < interceptedPhones.length; ip2++) {
-        if (isValidPhone(interceptedPhones[ip2])) {
-          return JSON.stringify({phone: interceptedPhones[ip2], method: 'xhr_intercept_retry'});
-        }
-      }
-      var finalTels = document.querySelectorAll('a[href^="tel:"]');
-      for (var ft = 0; ft < finalTels.length; ft++) {
-        var fp = finalTels[ft].getAttribute('href').replace('tel:', '').trim();
-        if (isValidPhone(fp)) return JSON.stringify({phone: fp, method: 'tel_link_retry'});
-      }
-    }
-    
-    // Step 4: Body text regex scan (catches phones in description text)
-    var bodyText = document.body.innerText;
-    var bodyPhone = findPhoneInText(bodyText);
-    if (bodyPhone) return JSON.stringify({phone: bodyPhone, method: 'body_regex'});
-    
-    // Debug info
-    var maskedFound = /0[3-9]\\d+\\*{2,}/.test(bodyText);
-    var debugInfo = {
-      url: window.location.href,
-      title: (document.title || '').substring(0, 100),
-      bodyLen: bodyText.length,
-      isBDS: isBDS,
-      isNhatot: isNhatot,
-      clickedAny: clickedAny,
-      interceptedCount: interceptedPhones.length,
-      interceptedRaw: interceptedPhones.slice(0, 3)
+    const readSelectors = [
+      'a[href^="tel:"]',
+      '.re__contact-phone',
+      '[class*="phone-number"]',
+      '[class*="PhoneNumber"]',
+      '[class*="phone__number"]',
+      '[class*="ContactPhone"]',
+      '[class*="phone"]',
+      '[class*="Phone"]'
+    ];
+
+    const normalize = (value) => {
+      if (!value || value.includes('*')) return null;
+      let cleaned = value.replace(/[^\d+]/g, '');
+      if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
+      if (cleaned.startsWith('84') && cleaned.length > 10) cleaned = '0' + cleaned.slice(2);
+      if (/^0\d{9,10}$/.test(cleaned)) return cleaned;
+      if (/^\d{9,10}$/.test(cleaned)) return '0' + cleaned;
+      return null;
     };
-    if (isBDS) {
-      var phoneEls = document.querySelectorAll('[class*="phone"], [class*="Phone"]');
-      debugInfo.phoneElCount = phoneEls.length;
-      if (phoneEls.length > 0) debugInfo.phoneElSample = (phoneEls[0].outerHTML || '').substring(0, 300);
-      var rawEls = document.querySelectorAll('[raw]');
-      debugInfo.rawElCount = rawEls.length;
+
+    const readPhoneFromText = (value) => {
+      if (!value) return null;
+      const matches = value.match(/(?:\+84|84|0)[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g) || [];
+      for (const match of matches) {
+        const phone = normalize(match);
+        if (phone) return phone;
+      }
+      return null;
+    };
+
+    const extractFromDom = () => {
+      for (const selector of readSelectors) {
+        const nodes = document.querySelectorAll(selector);
+        for (const node of nodes) {
+          const href = node.getAttribute?.('href') || '';
+          const phone = normalize(href.replace('tel:', '')) || readPhoneFromText(node.textContent || '');
+          if (phone) return phone;
+        }
+      }
+      return readPhoneFromText(document.body?.innerText || '');
+    };
+
+    const initial = extractFromDom();
+    if (initial) return JSON.stringify({ phone: initial, method: 'browserless_dom_initial' });
+
+    const clickTargets = document.querySelectorAll('button, a, span, div, [role="button"]');
+    for (const node of clickTargets) {
+      const label = (node.textContent || '').trim();
+      if (revealTexts.some((text) => label.includes(text))) {
+        node.click?.();
+      }
     }
+    for (const selector of clickSelectors) {
+      for (const node of document.querySelectorAll(selector)) {
+        node.click?.();
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const afterClick = extractFromDom();
     return JSON.stringify({
-      phone: null,
-      method: maskedFound ? 'masked_only' : 'not_found',
-      debug: debugInfo
+      phone: afterClick,
+      method: afterClick ? 'browserless_dom_after_click' : 'browserless_dom_miss',
     });
   })()`;
 }
