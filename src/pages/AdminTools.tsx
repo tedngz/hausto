@@ -87,6 +87,7 @@ const AdminTools = () => {
   // Verify external listings state
   const [isVerifyingListings, setIsVerifyingListings] = useState(false);
   const [verifyListingsResult, setVerifyListingsResult] = useState<{ checked: number; alive: number; deactivated: number; dead_increment: number; errors: number } | null>(null);
+  const [reExtractingId, setReExtractingId] = useState<string | null>(null);
 
   // State for expanded crawl run
   const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
@@ -316,7 +317,7 @@ const AdminTools = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, source, source_url, last_verified_at, last_verification_status, last_verification_reason, verification_failures')
+        .select('id, title, source, source_url, last_verified_at, last_verification_status, last_verification_reason, verification_failures, contact_phone, phone_extraction_attempts')
         .eq('is_active', true)
         .order('last_verified_at', { ascending: true, nullsFirst: true })
         .limit(20);
@@ -696,6 +697,28 @@ const AdminTools = () => {
     }
   };
 
+  const handleReExtractPhone = async (row: { id: string; source_url: string; source: string }) => {
+    setReExtractingId(row.id);
+    try {
+      toast.info('Re-extracting phone number…');
+      const { data, error } = await supabase.functions.invoke('extract-phone', {
+        body: { propertyId: row.id, sourceUrl: row.source_url, marketplace: row.source },
+      });
+      if (error) throw error;
+      if (data?.phone) {
+        toast.success(`Phone found: ${data.phone}`, { description: `via ${data.method}` });
+      } else {
+        toast.warning('No phone found', { description: `method: ${data?.method || 'unknown'}` });
+      }
+      refetchVerifyStats();
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Re-extract failed', { description: e.message });
+    } finally {
+      setReExtractingId(null);
+    }
+  };
+
   return (
     <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
 
@@ -990,6 +1013,24 @@ const AdminTools = () => {
                         <strong className="text-foreground">Last issue:</strong> {explainVerificationReason(row.last_verification_reason)}
                       </div>
                     )}
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <div className="text-muted-foreground truncate">
+                        {row.contact_phone ? (
+                          <span><strong className="text-foreground">📞 {row.contact_phone}</strong></span>
+                        ) : (
+                          <span>No phone · {row.phone_extraction_attempts ?? 0}/3 attempts</span>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[10px] px-2"
+                        disabled={reExtractingId === row.id || (!row.contact_phone && (row.phone_extraction_attempts ?? 0) >= 3 && reExtractingId !== row.id)}
+                        onClick={() => handleReExtractPhone(row)}
+                      >
+                        {reExtractingId === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Re-extract phone'}
+                      </Button>
+                    </div>
                   </div>
                 );
               })}

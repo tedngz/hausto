@@ -342,6 +342,73 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
   }
 }
 
+// Layer 1 (Batdongsan): parse phone from HTML response (JSON-LD, __NUXT__, embedded scripts)
+// — no Browserless cost. Returns null if nothing found in HTML.
+async function tryBatdongsanHTMLParse(listingUrl: string): Promise<{ phone: string | null; method: string }> {
+  try {
+    const cookieStr = Deno.env.get('BATDONGSAN_COOKIES') || '';
+    const resp = await fetch(listingUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
+        ...(cookieStr ? { Cookie: cookieStr } : {}),
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!resp.ok) return { phone: null, method: `bds_html_${resp.status}` };
+    const html = await resp.text();
+
+    // 1. tel: links
+    const tel = html.match(/href=["']tel:([^"']+)["']/i);
+    if (tel) {
+      const cleaned = cleanPhoneNumber(tel[1]);
+      if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+        return { phone: cleaned, method: 'bds_html_tel' };
+      }
+    }
+
+    // 2. JSON-LD blocks
+    const ldRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let ldMatch: RegExpExecArray | null;
+    while ((ldMatch = ldRegex.exec(html)) !== null) {
+      try {
+        const data = JSON.parse(ldMatch[1].trim());
+        const found = deepFindPhoneInObject(data);
+        if (found) return { phone: found, method: 'bds_html_jsonld' };
+      } catch { /* skip */ }
+    }
+
+    // 3. __NUXT__ / __NEXT_DATA__ / window.__INITIAL_STATE__ payloads
+    const payloadRegex = /(?:window\.__NUXT__|window\.__NEXT_DATA__|window\.__INITIAL_STATE__)\s*=\s*({[\s\S]*?});?\s*<\/script>/g;
+    let pm: RegExpExecArray | null;
+    while ((pm = payloadRegex.exec(html)) !== null) {
+      try {
+        const data = JSON.parse(pm[1]);
+        const found = deepFindPhoneInObject(data);
+        if (found) return { phone: found, method: 'bds_html_payload' };
+      } catch { /* skip */ }
+    }
+
+    // 4. Body text regex (sometimes phone is in description text, not masked)
+    const bodyMatches = html.match(/0[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g);
+    if (bodyMatches) {
+      for (const m of bodyMatches) {
+        if (m.includes('*')) continue;
+        const cleaned = cleanPhoneNumber(m);
+        if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+          return { phone: cleaned, method: 'bds_html_body' };
+        }
+      }
+    }
+
+    return { phone: null, method: 'bds_html_not_found' };
+  } catch (err) {
+    console.error('[extract-phone] BDS HTML parse error:', err);
+    return { phone: null, method: 'bds_html_error' };
+  }
+}
+
 // Direct Chotot API fetch for Nhatot - no browser needed
 async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string | null; method: string }> {
   try {
@@ -350,7 +417,34 @@ async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string
     if (!listingIdMatch) return { phone: null, method: 'nhatot_no_listing_id' };
     const listingId = listingIdMatch[1];
 
-    // Use Chotot's public API (no Cloudflare blocking)
+    // Try mobile-app gateway headers first — returns unmasked contact_phone for most listings
+    const mobileHeaders = {
+      'User-Agent': 'Chotot/4.94.0 (iPhone; iOS 17.4; Scale/3.00)',
+      'Accept': 'application/json',
+      'Accept-Language': 'vi-VN,vi;q=0.9',
+      'x-app-version': '4.94.0',
+      'x-device-platform': 'ios',
+      'x-client-id': 'chotot-ios',
+    };
+    const mobileResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
+      headers: mobileHeaders,
+      signal: AbortSignal.timeout(12000),
+    });
+    if (mobileResp.ok) {
+      const mobileData = await mobileResp.json();
+      const ad = mobileData?.ad;
+      if (ad) {
+        const found = deepFindPhoneInObject(ad);
+        if (found) {
+          console.log(`[extract-phone] Nhatot mobile API found phone: ${found}`);
+          return { phone: found, method: 'nhatot_mobile_api' };
+        }
+      }
+    } else {
+      console.log(`[extract-phone] Nhatot mobile API ${mobileResp.status}, falling back to web headers`);
+    }
+
+    // Fallback to standard web request
     const apiResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -466,7 +560,17 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
     // For Nhatot, don't fall back to Browserless (Cloudflare blocks it too)
     return directResult;
   }
-  
+
+  // Batdongsan Layer 1: try HTML parse first (free, no Browserless)
+  if (marketplace === 'batdongsan') {
+    const htmlResult = await tryBatdongsanHTMLParse(listingUrl);
+    if (htmlResult.phone) {
+      console.log(`[extract-phone] BDS HTML parse hit (${htmlResult.method}): ${htmlResult.phone}`);
+      return htmlResult;
+    }
+    console.log(`[extract-phone] BDS HTML parse miss (${htmlResult.method}), falling back to Browserless click`);
+  }
+
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
 
   const cookieStr = getCookieString(marketplace);
@@ -601,6 +705,28 @@ serve(async (req) => {
     const { listings, propertyId, sourceUrl, marketplace: explicitMarketplace } = body;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Helper: persist successful phone or increment attempts on failure
+    const recordResult = async (id: string | undefined, phone: string | null) => {
+      if (!id) return;
+      if (phone) {
+        await supabase.from('external_properties').update({
+          contact_phone: phone,
+          phone_extraction_attempts: 0,
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+      } else {
+        const { data: cur } = await supabase
+          .from('external_properties')
+          .select('phone_extraction_attempts')
+          .eq('id', id).maybeSingle();
+        const next = (cur?.phone_extraction_attempts ?? 0) + 1;
+        await supabase.from('external_properties').update({
+          phone_extraction_attempts: next,
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+      }
+    };
+
     // Mode 1: Single property
     if (propertyId && sourceUrl) {
       const marketplace = explicitMarketplace || detectMarketplace(sourceUrl);
@@ -611,10 +737,8 @@ serve(async (req) => {
       }
 
       const { phone, method } = await extractPhoneForListing(sourceUrl, marketplace);
-      if (phone) {
-        await supabase.from('external_properties').update({ contact_phone: phone, updated_at: new Date().toISOString() }).eq('id', propertyId);
-        console.log(`[extract-phone] Updated ${propertyId} with ${phone}`);
-      }
+      await recordResult(propertyId, phone);
+      if (phone) console.log(`[extract-phone] Updated ${propertyId} with ${phone}`);
       return new Response(JSON.stringify({ success: true, phone, method, propertyId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -634,10 +758,8 @@ serve(async (req) => {
 
         const { phone, method } = await extractPhoneForListing(url, mp);
         results.push({ sourceUrl: url, phone, method, propertyId: id });
-        if (phone && id) {
-          await supabase.from('external_properties').update({ contact_phone: phone, updated_at: new Date().toISOString() }).eq('id', id);
-          extracted++;
-        }
+        await recordResult(id, phone);
+        if (phone && id) extracted++;
         if (batch.indexOf(listing) < batch.length - 1) await new Promise(r => setTimeout(r, 2000));
       }
 
@@ -646,16 +768,17 @@ serve(async (req) => {
       });
     }
 
-    // Mode 3: Auto-fill
+    // Mode 3: Auto-fill (skip listings that have already failed 3+ times)
     if (body.autoFill) {
       const limit = Math.min(body.limit || 5, 10);
       const { data: missingPhone } = await supabase
-        .from('external_properties').select('id, source_url, source')
+        .from('external_properties').select('id, source_url, source, phone_extraction_attempts')
         .is('contact_phone', null).eq('is_active', true)
+        .lt('phone_extraction_attempts', 3)
         .order('created_at', { ascending: false }).limit(limit);
 
       if (!missingPhone || missingPhone.length === 0) {
-        return new Response(JSON.stringify({ success: true, message: 'No properties missing phone numbers', extracted: 0 }), {
+        return new Response(JSON.stringify({ success: true, message: 'No properties missing phone numbers (or all exhausted retry budget)', extracted: 0 }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -668,10 +791,8 @@ serve(async (req) => {
         if (!mp) { results.push({ id: prop.id, phone: null, method: 'unsupported' }); continue; }
         const { phone, method } = await extractPhoneForListing(prop.source_url, mp);
         results.push({ id: prop.id, phone, method });
-        if (phone) {
-          await supabase.from('external_properties').update({ contact_phone: phone, updated_at: new Date().toISOString() }).eq('id', prop.id);
-          extracted++;
-        }
+        await recordResult(prop.id, phone);
+        if (phone) extracted++;
         if (missingPhone.indexOf(prop) < missingPhone.length - 1) await new Promise(r => setTimeout(r, 2000));
       }
 
