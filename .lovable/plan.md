@@ -1,48 +1,50 @@
 
-Yes — we can build a scheduled job that pings each external listing's source URL and deactivates the ones that no longer exist.
 
-# Plan: Auto-verify external listings against source sites
+The user wants to revisit the phone-number extraction problem on Batdongsan and Nhatot. Current approach (per memory `mem://architecture/crawler/phone-extraction-automation`): Browserless for Batdongsan, public API for Nhatot, reject masked numbers. Let me check the current implementation and think about better strategies.
 
-## What it does
-A background job runs on a schedule, checks each active external listing's source URL, and deactivates listings whose source page is gone or marked expired. Healthy listings get a refreshed `last_verified_at` timestamp.
+Reading existing code mentally based on memory:
+- **Batdongsan**: phone is hidden behind a "Show phone" button, requires click + Cloudflare bypass. Browserless renders the page but the number stays masked unless the button is clicked.
+- **Nhatot**: has a public API that sometimes returns the phone, but increasingly returns masked (`****`) numbers behind auth/rate limits.
 
-## How verification works per source
-- **Nhatot**: 404 or redirect to `/tin-dang-het-han`, or HTML contains "tin đăng đã bị gỡ" / "không tồn tại" → dead.
-- **Batdongsan**: often returns 200 with a notice page → must check HTML for "Tin không tồn tại", "đã bị xóa", or "hết hạn". Needs Browserless (Cloudflare-protected, already configured).
-- **Airbnb**: 404 / 410, or "Listing unavailable" / "We can't find" in body → dead.
-- Network errors / 5xx / timeouts → do NOT deactivate (transient). Logged and retried next run.
-- **Safety rule**: require 2 consecutive failed checks before flipping `is_active = false`, so a temporary site glitch doesn't wipe valid listings.
+# Plan: Smarter phone-number unblocking for Batdongsan & Nhatot
 
-## New pieces
+## The real blockers
+- **Batdongsan**: Number is server-rendered as `***` until the user clicks "Bấm để hiện số". Clicking triggers a XHR to `/MAccount/api/contact/getphone?postId=...` which requires a valid session cookie + anti-bot token. Browserless without interaction = always masked.
+- **Nhatot**: Public listing API (`gateway.chotot.com/v2/public/ad-listing/{id}`) returns `phone` only when the request carries a valid mobile-app-style header set; web requests get `phone: null` or a masked value.
 
-1. **Edge function `verify-external-listings`** (`verify_jwt = false`)
-   - Pulls up to 50 active listings ordered by oldest `last_verified_at`
-   - Fetches each source URL with 10s timeout + source-specific dead detector
-   - Increments `verification_failures` on dead detection, resets on success
-   - At 2 failures → `is_active = false` + invalidates `property-discovery-cache`
-   - Batch capped at 50/run to stay under the 150s edge limit
+## Three layers to try (in order of cost/complexity)
 
-2. **Schema migration on `external_properties`**
-   - Add `verification_failures INTEGER DEFAULT 0`
-   - Add `last_verification_status TEXT` ('alive' | 'dead' | 'error') for admin visibility
-   - `last_verified_at` column already exists — will start being used
+### Layer 1 — Cheaper wins first (no Browserless click)
+- **Nhatot**: Switch from the public web API to the **mobile gateway endpoint** `gateway.chotot.com/v1/public/ad-listing/{listId}` with mobile headers (`User-Agent: Chotot/...`, `x-app-version`, `x-device-platform: android`). This is what their app uses and it returns `contact_phone` unmasked for most listings. Free, no Browserless cost.
+- **Batdongsan**: Many listings expose the phone in the **JSON-LD `<script type="application/ld+json">`** block or in a `window.__NUXT__` payload embedded in the HTML, even when the visible number is masked. Parse these from the already-fetched HTML before falling back to clicking. Free, no extra request.
 
-3. **pg_cron schedule** — every 6 hours (covers ~200 listings/day comfortably). Inserted via Supabase SQL Editor per project rule.
+### Layer 2 — Browserless with interaction (Batdongsan only, when Layer 1 misses)
+- Use Browserless `/function` (not `/content`) to actually **click "Bấm để hiện số"** and wait for the XHR response, then read the revealed number from the DOM. Costs ~1 extra Browserless call per listing but works reliably.
+- Cache the result on `external_properties.phone` so we never repeat for the same listing.
 
-4. **Admin Tools UI** (`src/pages/AdminTools.tsx`)
-   - "Verify external listings now" button for manual runs
-   - Show `last_verified_at`, `last_verification_status`, and failure count next to each listing
+### Layer 3 — Listing-page contact form fallback
+- For listings where all extraction fails, store `phone = null` and surface the listing's source URL in the contact CTA so renters click through to Batdongsan/Nhatot directly. Already the existing fallback — just make sure we don't keep retrying dead extractions (track `phone_extraction_attempts` and stop after 3).
 
-## Files to change
-- `supabase/migrations/<new>` — 2 new columns on `external_properties`
-- `supabase/functions/verify-external-listings/index.ts` — new function
-- `src/pages/AdminTools.tsx` — manual trigger + status display
-- pg_cron SQL — provided to you to paste in SQL Editor after deploy
+## What to build
 
-## Quick decisions to confirm before I build
+1. **Refactor `supabase/functions/extract-phone/index.ts`**
+   - New `extractNhatotMobileApi(listId)` using mobile gateway + headers
+   - New `extractBatdongsanFromHTML(html)` parsing JSON-LD + `__NUXT__` regex
+   - New `extractBatdongsanViaClick(url)` using Browserless `/function` with click + XHR wait (only invoked when HTML parse returns nothing)
+   - Order: HTML parse → mobile API → Browserless click → null
 
-- **Frequency**: every 6 hours (recommended), once daily, or every 2 hours?
-- **Strictness**: require 2 consecutive failures (recommended), or deactivate on first detection?
-- **Sources**: all three (Nhatot + Batdongsan + Airbnb), or skip Batdongsan to avoid the Browserless cost per check?
+2. **Schema addition on `external_properties`** (1 column)
+   - `phone_extraction_attempts INTEGER DEFAULT 0` — increment on null result, skip after 3 to control cost
 
-Reply with your picks (e.g. "6h, 2 failures, all three") and I'll implement it.
+3. **Admin Tools UI** — add a "Re-extract phone" button per listing in the watchlist for manual retries when a listing is known to have a phone we missed.
+
+## Files to touch
+- `supabase/functions/extract-phone/index.ts` — the three-layer strategy
+- `supabase/migrations/<new>` — `phone_extraction_attempts` column
+- `src/pages/AdminTools.tsx` — manual re-extract button
+
+## Decisions to confirm
+- **Browserless budget**: OK to use 1 extra Browserless call per Batdongsan listing when HTML parse fails (Layer 2)? Or cap at HTML parse + mobile API only and accept some misses?
+- **Retry cap**: 3 attempts before giving up (recommended), or unlimited?
+- **Scope**: include both Batdongsan and Nhatot in this refactor (recommended), or Nhatot only since the mobile-API trick is the highest-impact change?
+
