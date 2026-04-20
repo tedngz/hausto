@@ -560,7 +560,17 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
     // For Nhatot, don't fall back to Browserless (Cloudflare blocks it too)
     return directResult;
   }
-  
+
+  // Batdongsan Layer 1: try HTML parse first (free, no Browserless)
+  if (marketplace === 'batdongsan') {
+    const htmlResult = await tryBatdongsanHTMLParse(listingUrl);
+    if (htmlResult.phone) {
+      console.log(`[extract-phone] BDS HTML parse hit (${htmlResult.method}): ${htmlResult.phone}`);
+      return htmlResult;
+    }
+    console.log(`[extract-phone] BDS HTML parse miss (${htmlResult.method}), falling back to Browserless click`);
+  }
+
   if (!BROWSERLESS_API_KEY) throw new Error('BROWSERLESS_API_KEY not configured');
 
   const cookieStr = getCookieString(marketplace);
