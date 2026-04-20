@@ -282,6 +282,7 @@ export type Database = {
           contact_phone: string | null
           crawled_at: string | null
           created_at: string | null
+          deactivated_at: string | null
           description: string | null
           expires_at: string | null
           external_id: string
@@ -289,6 +290,7 @@ export type Database = {
           id: string
           images: string[] | null
           is_active: boolean | null
+          last_verification_reason: string | null
           last_verification_status: string | null
           last_verified_at: string | null
           latitude: number | null
@@ -314,6 +316,7 @@ export type Database = {
           contact_phone?: string | null
           crawled_at?: string | null
           created_at?: string | null
+          deactivated_at?: string | null
           description?: string | null
           expires_at?: string | null
           external_id: string
@@ -321,6 +324,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           is_active?: boolean | null
+          last_verification_reason?: string | null
           last_verification_status?: string | null
           last_verified_at?: string | null
           latitude?: number | null
@@ -346,6 +350,7 @@ export type Database = {
           contact_phone?: string | null
           crawled_at?: string | null
           created_at?: string | null
+          deactivated_at?: string | null
           description?: string | null
           expires_at?: string | null
           external_id?: string
@@ -353,6 +358,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           is_active?: boolean | null
+          last_verification_reason?: string | null
           last_verification_status?: string | null
           last_verified_at?: string | null
           latitude?: number | null
