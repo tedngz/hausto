@@ -342,6 +342,73 @@ function parsePhoneResult(resultStr: string | undefined | null): { phone: string
   }
 }
 
+// Layer 1 (Batdongsan): parse phone from HTML response (JSON-LD, __NUXT__, embedded scripts)
+// — no Browserless cost. Returns null if nothing found in HTML.
+async function tryBatdongsanHTMLParse(listingUrl: string): Promise<{ phone: string | null; method: string }> {
+  try {
+    const cookieStr = Deno.env.get('BATDONGSAN_COOKIES') || '';
+    const resp = await fetch(listingUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
+        ...(cookieStr ? { Cookie: cookieStr } : {}),
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!resp.ok) return { phone: null, method: `bds_html_${resp.status}` };
+    const html = await resp.text();
+
+    // 1. tel: links
+    const tel = html.match(/href=["']tel:([^"']+)["']/i);
+    if (tel) {
+      const cleaned = cleanPhoneNumber(tel[1]);
+      if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+        return { phone: cleaned, method: 'bds_html_tel' };
+      }
+    }
+
+    // 2. JSON-LD blocks
+    const ldRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let ldMatch: RegExpExecArray | null;
+    while ((ldMatch = ldRegex.exec(html)) !== null) {
+      try {
+        const data = JSON.parse(ldMatch[1].trim());
+        const found = deepFindPhoneInObject(data);
+        if (found) return { phone: found, method: 'bds_html_jsonld' };
+      } catch { /* skip */ }
+    }
+
+    // 3. __NUXT__ / __NEXT_DATA__ / window.__INITIAL_STATE__ payloads
+    const payloadRegex = /(?:window\.__NUXT__|window\.__NEXT_DATA__|window\.__INITIAL_STATE__)\s*=\s*({[\s\S]*?});?\s*<\/script>/g;
+    let pm: RegExpExecArray | null;
+    while ((pm = payloadRegex.exec(html)) !== null) {
+      try {
+        const data = JSON.parse(pm[1]);
+        const found = deepFindPhoneInObject(data);
+        if (found) return { phone: found, method: 'bds_html_payload' };
+      } catch { /* skip */ }
+    }
+
+    // 4. Body text regex (sometimes phone is in description text, not masked)
+    const bodyMatches = html.match(/0[3-9]\d[\s.-]?\d{3}[\s.-]?\d{4}/g);
+    if (bodyMatches) {
+      for (const m of bodyMatches) {
+        if (m.includes('*')) continue;
+        const cleaned = cleanPhoneNumber(m);
+        if (cleaned && !EXCLUDE_NUMBERS.some(ex => cleaned.includes(ex))) {
+          return { phone: cleaned, method: 'bds_html_body' };
+        }
+      }
+    }
+
+    return { phone: null, method: 'bds_html_not_found' };
+  } catch (err) {
+    console.error('[extract-phone] BDS HTML parse error:', err);
+    return { phone: null, method: 'bds_html_error' };
+  }
+}
+
 // Direct Chotot API fetch for Nhatot - no browser needed
 async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string | null; method: string }> {
   try {
@@ -350,7 +417,34 @@ async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string
     if (!listingIdMatch) return { phone: null, method: 'nhatot_no_listing_id' };
     const listingId = listingIdMatch[1];
 
-    // Use Chotot's public API (no Cloudflare blocking)
+    // Try mobile-app gateway headers first — returns unmasked contact_phone for most listings
+    const mobileHeaders = {
+      'User-Agent': 'Chotot/4.94.0 (iPhone; iOS 17.4; Scale/3.00)',
+      'Accept': 'application/json',
+      'Accept-Language': 'vi-VN,vi;q=0.9',
+      'x-app-version': '4.94.0',
+      'x-device-platform': 'ios',
+      'x-client-id': 'chotot-ios',
+    };
+    const mobileResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
+      headers: mobileHeaders,
+      signal: AbortSignal.timeout(12000),
+    });
+    if (mobileResp.ok) {
+      const mobileData = await mobileResp.json();
+      const ad = mobileData?.ad;
+      if (ad) {
+        const found = deepFindPhoneInObject(ad);
+        if (found) {
+          console.log(`[extract-phone] Nhatot mobile API found phone: ${found}`);
+          return { phone: found, method: 'nhatot_mobile_api' };
+        }
+      }
+    } else {
+      console.log(`[extract-phone] Nhatot mobile API ${mobileResp.status}, falling back to web headers`);
+    }
+
+    // Fallback to standard web request
     const apiResp = await fetch(`https://gateway.chotot.com/v1/public/ad-listing/${listingId}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
