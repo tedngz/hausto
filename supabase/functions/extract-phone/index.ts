@@ -705,6 +705,28 @@ serve(async (req) => {
     const { listings, propertyId, sourceUrl, marketplace: explicitMarketplace } = body;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Helper: persist successful phone or increment attempts on failure
+    const recordResult = async (id: string | undefined, phone: string | null) => {
+      if (!id) return;
+      if (phone) {
+        await supabase.from('external_properties').update({
+          contact_phone: phone,
+          phone_extraction_attempts: 0,
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+      } else {
+        const { data: cur } = await supabase
+          .from('external_properties')
+          .select('phone_extraction_attempts')
+          .eq('id', id).maybeSingle();
+        const next = (cur?.phone_extraction_attempts ?? 0) + 1;
+        await supabase.from('external_properties').update({
+          phone_extraction_attempts: next,
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+      }
+    };
+
     // Mode 1: Single property
     if (propertyId && sourceUrl) {
       const marketplace = explicitMarketplace || detectMarketplace(sourceUrl);
@@ -715,10 +737,8 @@ serve(async (req) => {
       }
 
       const { phone, method } = await extractPhoneForListing(sourceUrl, marketplace);
-      if (phone) {
-        await supabase.from('external_properties').update({ contact_phone: phone, updated_at: new Date().toISOString() }).eq('id', propertyId);
-        console.log(`[extract-phone] Updated ${propertyId} with ${phone}`);
-      }
+      await recordResult(propertyId, phone);
+      if (phone) console.log(`[extract-phone] Updated ${propertyId} with ${phone}`);
       return new Response(JSON.stringify({ success: true, phone, method, propertyId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -738,10 +758,8 @@ serve(async (req) => {
 
         const { phone, method } = await extractPhoneForListing(url, mp);
         results.push({ sourceUrl: url, phone, method, propertyId: id });
-        if (phone && id) {
-          await supabase.from('external_properties').update({ contact_phone: phone, updated_at: new Date().toISOString() }).eq('id', id);
-          extracted++;
-        }
+        await recordResult(id, phone);
+        if (phone && id) extracted++;
         if (batch.indexOf(listing) < batch.length - 1) await new Promise(r => setTimeout(r, 2000));
       }
 
@@ -750,16 +768,17 @@ serve(async (req) => {
       });
     }
 
-    // Mode 3: Auto-fill
+    // Mode 3: Auto-fill (skip listings that have already failed 3+ times)
     if (body.autoFill) {
       const limit = Math.min(body.limit || 5, 10);
       const { data: missingPhone } = await supabase
-        .from('external_properties').select('id, source_url, source')
+        .from('external_properties').select('id, source_url, source, phone_extraction_attempts')
         .is('contact_phone', null).eq('is_active', true)
+        .lt('phone_extraction_attempts', 3)
         .order('created_at', { ascending: false }).limit(limit);
 
       if (!missingPhone || missingPhone.length === 0) {
-        return new Response(JSON.stringify({ success: true, message: 'No properties missing phone numbers', extracted: 0 }), {
+        return new Response(JSON.stringify({ success: true, message: 'No properties missing phone numbers (or all exhausted retry budget)', extracted: 0 }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -772,10 +791,8 @@ serve(async (req) => {
         if (!mp) { results.push({ id: prop.id, phone: null, method: 'unsupported' }); continue; }
         const { phone, method } = await extractPhoneForListing(prop.source_url, mp);
         results.push({ id: prop.id, phone, method });
-        if (phone) {
-          await supabase.from('external_properties').update({ contact_phone: phone, updated_at: new Date().toISOString() }).eq('id', prop.id);
-          extracted++;
-        }
+        await recordResult(prop.id, phone);
+        if (phone) extracted++;
         if (missingPhone.indexOf(prop) < missingPhone.length - 1) await new Promise(r => setTimeout(r, 2000));
       }
 
