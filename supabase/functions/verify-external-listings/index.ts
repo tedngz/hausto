@@ -160,6 +160,7 @@ Deno.serve(async (req) => {
         await supabase.from('external_properties').update({
           last_verified_at: now,
           last_verification_status: 'alive',
+          last_verification_reason: null,
           verification_failures: 0,
         }).eq('id', item.id);
       } else if (result.status === 'dead') {
@@ -168,10 +169,12 @@ Deno.serve(async (req) => {
         const update: Record<string, unknown> = {
           last_verified_at: now,
           last_verification_status: 'dead',
+          last_verification_reason: result.reason ?? 'unknown',
           verification_failures: newCount,
         };
         if (newCount >= FAILURE_THRESHOLD) {
           update.is_active = false;
+          update.deactivated_at = now;
           summary.deactivated++;
           summary.deactivated_ids.push(item.id);
         }
@@ -182,6 +185,7 @@ Deno.serve(async (req) => {
         await supabase.from('external_properties').update({
           last_verified_at: now,
           last_verification_status: 'error',
+          last_verification_reason: result.reason ?? 'unknown',
         }).eq('id', item.id);
         console.log(`[verify-external-listings] Error - ${item.id} - ${result.reason}`);
       }
