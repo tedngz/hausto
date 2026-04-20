@@ -889,38 +889,110 @@ const AdminTools = () => {
           {verifyListingsResult && (
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
               <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Checked</div><div className="font-semibold">{verifyListingsResult.checked}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Alive</div><div className="font-semibold text-green-600">{verifyListingsResult.alive}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Dead hits</div><div className="font-semibold text-amber-600">{verifyListingsResult.dead_increment}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Alive</div><div className="font-semibold text-primary">{verifyListingsResult.alive}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Dead hits</div><div className="font-semibold">{verifyListingsResult.dead_increment}</div></div>
               <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Deactivated</div><div className="font-semibold text-destructive">{verifyListingsResult.deactivated}</div></div>
               <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Errors</div><div className="font-semibold">{verifyListingsResult.errors}</div></div>
             </div>
           )}
 
+          {/* Recently auto-deactivated — explains WHY each listing was removed */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Oldest-verified active listings</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">
+                Recently removed listings ({deactivatedListings?.length || 0})
+              </Label>
+              <span className="text-[10px] text-muted-foreground">Auto-deactivated after 2 failed checks</span>
+            </div>
             <div className="border rounded-md divide-y max-h-80 overflow-auto">
-              {(verifyStats || []).map((row: any) => (
-                <div key={row.id} className="p-2 text-xs flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">{row.title}</div>
-                    <div className="text-muted-foreground truncate">{row.source}</div>
+              {(deactivatedListings || []).map((row: any) => (
+                <div key={row.id} className="p-3 text-xs space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{row.title}</div>
+                      <div className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                        <span className="capitalize">{row.source}</span>
+                        {row.source_url && (
+                          <a
+                            href={row.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                          >
+                            view source <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <Badge variant="destructive" className="text-[10px] shrink-0">removed</Badge>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {row.verification_failures > 0 && (
-                      <Badge variant="destructive" className="text-[10px]">fails: {row.verification_failures}</Badge>
-                    )}
-                    <Badge
-                      variant={row.last_verification_status === 'alive' ? 'secondary' : row.last_verification_status === 'dead' ? 'destructive' : 'outline'}
-                      className="text-[10px]"
-                    >
-                      {row.last_verification_status || 'pending'}
-                    </Badge>
-                    <span className="text-muted-foreground whitespace-nowrap">
-                      {row.last_verified_at ? getTimeAgo(row.last_verified_at) : 'never'}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+                    <span>
+                      <strong className="text-foreground">Reason:</strong> {explainVerificationReason(row.last_verification_reason)}
+                    </span>
+                    <span>
+                      <strong className="text-foreground">Removed:</strong> {row.deactivated_at ? getTimeAgo(row.deactivated_at) : '—'}
                     </span>
                   </div>
                 </div>
               ))}
+              {(!deactivatedListings || deactivatedListings.length === 0) && (
+                <div className="p-3 text-xs text-muted-foreground text-center">No listings have been auto-removed yet.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Watchlist — active listings, oldest verified first, with current health */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Active watchlist (oldest verified first)</Label>
+            <div className="border rounded-md divide-y max-h-80 overflow-auto">
+              {(verifyStats || []).map((row: any) => {
+                const status = row.last_verification_status || 'pending';
+                const fails = row.verification_failures || 0;
+                return (
+                  <div key={row.id} className="p-2.5 text-xs space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{row.title}</div>
+                        <div className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                          <span className="capitalize">{row.source}</span>
+                          {row.source_url && (
+                            <a
+                              href={row.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                            >
+                              source <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {fails > 0 && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            {fails}/2 fails
+                          </Badge>
+                        )}
+                        <Badge
+                          variant={status === 'alive' ? 'secondary' : status === 'dead' ? 'destructive' : 'outline'}
+                          className="text-[10px] capitalize"
+                        >
+                          {status}
+                        </Badge>
+                        <span className="text-muted-foreground whitespace-nowrap">
+                          {row.last_verified_at ? getTimeAgo(row.last_verified_at) : 'never'}
+                        </span>
+                      </div>
+                    </div>
+                    {status !== 'alive' && row.last_verification_reason && (
+                      <div className="text-muted-foreground pl-0.5">
+                        <strong className="text-foreground">Last issue:</strong> {explainVerificationReason(row.last_verification_reason)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {(!verifyStats || verifyStats.length === 0) && (
                 <div className="p-3 text-xs text-muted-foreground text-center">No active external listings.</div>
               )}
