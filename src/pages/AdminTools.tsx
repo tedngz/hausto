@@ -696,7 +696,6 @@ const AdminTools = () => {
     }
   };
 
-  const [reExtractingId, setReExtractingId] = useState<string | null>(null);
   const handleReExtractPhone = async (row: { id: string; source_url: string; source: string }) => {
     setReExtractingId(row.id);
     try {
@@ -718,6 +717,11 @@ const AdminTools = () => {
       setReExtractingId(null);
     }
   };
+
+  return (
+    <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
+
+      <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
 
       {/* Crawl External Listings - moved to top */}
       <Card>
