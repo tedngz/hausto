@@ -26,6 +26,26 @@ function getTimeAgo(timestamp: string): string {
   return `${days}d ago`;
 }
 
+// Convert verifier raw reason codes into human-readable explanations
+function explainVerificationReason(reason: string | null | undefined): string {
+  if (!reason) return 'Unknown';
+  if (reason.startsWith('http_404') || reason.startsWith('http_410')) return 'Page removed (404/410)';
+  if (reason.startsWith('http_5')) return 'Source site error';
+  if (reason.startsWith('http_')) return `HTTP ${reason.replace('http_', '')}`;
+  if (reason === 'redirect_expired') return 'Redirected to "expired" page';
+  if (reason === 'tiny_response') return 'Empty / notice page returned';
+  if (reason === 'no_browserless_key') return 'Browserless key missing';
+  if (reason.startsWith('browserless_')) return `Browserless error (${reason.replace('browserless_', '')})`;
+  if (reason.startsWith('keyword:')) {
+    const kw = reason.slice('keyword:'.length);
+    return `Listing marked removed: "${kw}"`;
+  }
+  if (reason === 'unknown_source') return 'Unknown source type';
+  if (reason.toLowerCase().includes('abort') || reason.toLowerCase().includes('timeout')) return 'Request timed out';
+  return reason;
+}
+
+
 const AdminTools = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
