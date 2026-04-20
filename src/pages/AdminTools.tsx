@@ -696,10 +696,28 @@ const AdminTools = () => {
     }
   };
 
-  return (
-    <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
-
-      <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
+  const [reExtractingId, setReExtractingId] = useState<string | null>(null);
+  const handleReExtractPhone = async (row: { id: string; source_url: string; source: string }) => {
+    setReExtractingId(row.id);
+    try {
+      toast.info('Re-extracting phone number…');
+      const { data, error } = await supabase.functions.invoke('extract-phone', {
+        body: { propertyId: row.id, sourceUrl: row.source_url, marketplace: row.source },
+      });
+      if (error) throw error;
+      if (data?.phone) {
+        toast.success(`Phone found: ${data.phone}`, { description: `via ${data.method}` });
+      } else {
+        toast.warning('No phone found', { description: `method: ${data?.method || 'unknown'}` });
+      }
+      refetchVerifyStats();
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Re-extract failed', { description: e.message });
+    } finally {
+      setReExtractingId(null);
+    }
+  };
 
       {/* Crawl External Listings - moved to top */}
       <Card>
