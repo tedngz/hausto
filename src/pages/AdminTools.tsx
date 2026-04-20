@@ -1013,6 +1013,24 @@ const AdminTools = () => {
                         <strong className="text-foreground">Last issue:</strong> {explainVerificationReason(row.last_verification_reason)}
                       </div>
                     )}
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <div className="text-muted-foreground truncate">
+                        {row.contact_phone ? (
+                          <span><strong className="text-foreground">📞 {row.contact_phone}</strong></span>
+                        ) : (
+                          <span>No phone · {row.phone_extraction_attempts ?? 0}/3 attempts</span>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[10px] px-2"
+                        disabled={reExtractingId === row.id || (!row.contact_phone && (row.phone_extraction_attempts ?? 0) >= 3 && reExtractingId !== row.id)}
+                        onClick={() => handleReExtractPhone(row)}
+                      >
+                        {reExtractingId === row.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Re-extract phone'}
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
