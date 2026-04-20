@@ -297,6 +297,7 @@ export type Database = {
           location: string
           location_normalized: string | null
           longitude: number | null
+          phone_extraction_attempts: number
           price: number | null
           price_display: string | null
           rooms: string | null
@@ -331,6 +332,7 @@ export type Database = {
           location: string
           location_normalized?: string | null
           longitude?: number | null
+          phone_extraction_attempts?: number
           price?: number | null
           price_display?: string | null
           rooms?: string | null
@@ -365,6 +367,7 @@ export type Database = {
           location?: string
           location_normalized?: string | null
           longitude?: number | null
+          phone_extraction_attempts?: number
           price?: number | null
           price_display?: string | null
           rooms?: string | null
