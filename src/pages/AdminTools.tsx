@@ -296,10 +296,28 @@ const AdminTools = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, source, last_verified_at, last_verification_status, verification_failures')
+        .select('id, title, source, source_url, last_verified_at, last_verification_status, last_verification_reason, verification_failures')
         .eq('is_active', true)
         .order('last_verified_at', { ascending: true, nullsFirst: true })
         .limit(20);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60_000,
+    enabled: !!user && !!isAdmin,
+  });
+
+  // Recently auto-deactivated listings (so admin sees what was removed and why)
+  const { data: deactivatedListings, refetch: refetchDeactivated } = useQuery({
+    queryKey: ['external-deactivated'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('external_properties')
+        .select('id, title, source, source_url, deactivated_at, last_verification_reason, verification_failures, last_verified_at')
+        .eq('is_active', false)
+        .not('deactivated_at', 'is', null)
+        .order('deactivated_at', { ascending: false })
+        .limit(15);
       if (error) throw error;
       return data || [];
     },
