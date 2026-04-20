@@ -87,6 +87,7 @@ const AdminTools = () => {
   // Verify external listings state
   const [isVerifyingListings, setIsVerifyingListings] = useState(false);
   const [verifyListingsResult, setVerifyListingsResult] = useState<{ checked: number; alive: number; deactivated: number; dead_increment: number; errors: number } | null>(null);
+  const [reExtractingId, setReExtractingId] = useState<string | null>(null);
 
   // State for expanded crawl run
   const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
