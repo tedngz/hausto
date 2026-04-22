@@ -92,6 +92,7 @@ const AdminTools = () => {
   // State for expanded crawl run
   const [expandedRunIdx, setExpandedRunIdx] = useState<number | null>(null);
   const [expandedRunProperties, setExpandedRunProperties] = useState<any[]>([]);
+  const [expandedRunPropertyIds, setExpandedRunPropertyIds] = useState<string[]>([]);
   const [isLoadingRunProperties, setIsLoadingRunProperties] = useState(false);
 
   // Fetch crawl schedule config from Redis via scheduled-crawl function
