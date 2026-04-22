@@ -1505,18 +1505,35 @@ const AdminTools = () => {
                           ) : expandedRunProperties.length > 0 ? (
                             expandedRunProperties.map((prop) => {
                               const vibeAnalysis = prop.vibe_analysis as any;
-                              const perImage = vibeAnalysis?.per_image;
-                              const imageAnalyses = vibeAnalysis?.image_analyses;
-                              const hasValidAnalysis = (arr: any) =>
-                                Array.isArray(arr) &&
-                                arr.length > 0 &&
-                                arr.some((a: any) => {
-                                  const hl = (a?.image_highlight || '').trim();
-                                  const detail = String(a?.detailed_analysis || '');
-                                  return hl && !/rate.?limit|API error|rate_limit_exceeded|Analysis failed/i.test(detail);
-                                });
-                              const hasPerImage = hasValidAnalysis(perImage) || hasValidAnalysis(imageAnalyses);
                               const imageCount = (prop.images || []).length;
+                              const analyses =
+                                (Array.isArray(vibeAnalysis?.image_analyses) && vibeAnalysis.image_analyses) ||
+                                (Array.isArray(vibeAnalysis?.per_image) && vibeAnalysis.per_image) ||
+                                [];
+                              // Generic fallback highlights to reject (case-insensitive substring match)
+                              const GENERIC_HIGHLIGHTS = [
+                                'apartment interior',
+                                'apartment view',
+                                'property image',
+                                'interior view',
+                                'living space',
+                                'room view',
+                                'general view',
+                              ];
+                              const isSpecificHighlight = (hl: string, detail: string) => {
+                                const t = hl.trim().toLowerCase();
+                                if (!t || t.length < 4) return false;
+                                if (GENERIC_HIGHLIGHTS.some((g) => t === g || t.includes(g))) return false;
+                                if (/rate.?limit|api error|rate_limit_exceeded|analysis failed/i.test(detail)) return false;
+                                return true;
+                              };
+                              // ✓ only when every image has a specific, non-generic highlight
+                              const hasPerImage =
+                                imageCount > 0 &&
+                                analyses.length >= imageCount &&
+                                analyses.slice(0, imageCount).every((a: any) =>
+                                  isSpecificHighlight(String(a?.image_highlight || ''), String(a?.detailed_analysis || ''))
+                                );
                               return (
                                 <div
                                   key={prop.id}
