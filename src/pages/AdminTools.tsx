@@ -176,10 +176,25 @@ const AdminTools = () => {
         propertyIds: string[];
       }> = [];
 
-      let currentRun: typeof runs[0] | null = null;
+      const extractDistrict = (loc: string | null): string => {
+        if (!loc) return 'unknown';
+        const parts = loc.split(',').map((p) => p.trim()).filter(Boolean);
+        // Look for a segment that mentions a district keyword
+        const districtPart = parts.find((p) =>
+          /\b(qu[aâậ]n|huy[eệ]n|th[aàả]nh ph[oốồ]|district)\b/i.test(p) ||
+          /\bd\d{1,2}\b/i.test(p)
+        );
+        if (districtPart) return districtPart;
+        // Fallback: second-to-last segment (typically district before city)
+        if (parts.length >= 2) return parts[parts.length - 2];
+        return parts[0] || 'unknown';
+      };
+
+      let currentRun: (typeof runs[0] & { districts: Set<string> }) | null = null;
 
       for (const prop of data) {
         const crawlTime = new Date(prop.crawled_at!).getTime();
+        const district = extractDistrict(prop.location_normalized);
         
         if (
           !currentRun ||
@@ -191,15 +206,18 @@ const AdminTools = () => {
             timestamp: prop.crawled_at!,
             city: prop.city || 'unknown',
             source: prop.source || 'unknown',
-            location: prop.location_normalized || 'unknown',
+            location: '',
             count: 0,
             propertyIds: [],
+            districts: new Set<string>(),
           };
           runs.push(currentRun);
         }
         
         currentRun.count++;
         currentRun.propertyIds.push(prop.id);
+        if (district && district !== 'unknown') currentRun.districts.add(district);
+        currentRun.location = Array.from(currentRun.districts).slice(0, 3).join(', ');
       }
 
       return runs.slice(0, 10);
