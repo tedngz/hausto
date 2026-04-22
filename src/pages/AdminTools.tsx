@@ -1470,7 +1470,7 @@ const AdminTools = () => {
                           <span className="text-muted-foreground whitespace-nowrap">{timeAgo}</span>
                           <Badge variant="outline" className="text-xs shrink-0">{cityLabel}</Badge>
                           <Badge variant="secondary" className="text-xs shrink-0">{run.source}</Badge>
-                          <span className="truncate text-muted-foreground">{run.location}</span>
+                          
                         </div>
                         <Badge
                           className="text-xs shrink-0 cursor-pointer hover:bg-primary/80 transition-colors"
