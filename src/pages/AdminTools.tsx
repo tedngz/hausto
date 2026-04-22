@@ -309,14 +309,8 @@ const AdminTools = () => {
 
   const [previewProperty, setPreviewProperty] = useState<any>(null);
 
-  const handleExpandRun = async (idx: number, propertyIds: string[]) => {
-    if (expandedRunIdx === idx) {
-      setExpandedRunIdx(null);
-      setExpandedRunProperties([]);
-      return;
-    }
-    setExpandedRunIdx(idx);
-    setIsLoadingRunProperties(true);
+  const fetchExpandedRunProperties = async (propertyIds: string[], showLoading = false) => {
+    if (showLoading) setIsLoadingRunProperties(true);
     try {
       const { data, error } = await supabase
         .from('external_properties')
@@ -325,11 +319,33 @@ const AdminTools = () => {
       if (error) throw error;
       setExpandedRunProperties(data || []);
     } catch {
-      setExpandedRunProperties([]);
+      if (showLoading) setExpandedRunProperties([]);
     } finally {
-      setIsLoadingRunProperties(false);
+      if (showLoading) setIsLoadingRunProperties(false);
     }
   };
+
+  const handleExpandRun = async (idx: number, propertyIds: string[]) => {
+    if (expandedRunIdx === idx) {
+      setExpandedRunIdx(null);
+      setExpandedRunProperties([]);
+      setExpandedRunPropertyIds([]);
+      return;
+    }
+    setExpandedRunIdx(idx);
+    setExpandedRunPropertyIds(propertyIds);
+    await fetchExpandedRunProperties(propertyIds, true);
+  };
+
+  // Auto-refresh expanded run properties every 30s so badges (e.g. ✓/✗ vibe) reflect backfill progress live
+  useEffect(() => {
+    if (expandedRunIdx === null || expandedRunPropertyIds.length === 0) return;
+    const interval = setInterval(() => {
+      fetchExpandedRunProperties(expandedRunPropertyIds, false);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [expandedRunIdx, expandedRunPropertyIds]);
+
 
   const { data: isAdmin, isLoading: isCheckingRole } = useQuery({
     queryKey: ['is-admin', user?.id],
