@@ -178,14 +178,30 @@ const AdminTools = () => {
 
       const extractDistrict = (loc: string | null): string => {
         if (!loc) return 'unknown';
-        const parts = loc.split(',').map((p) => p.trim()).filter(Boolean);
-        // Look for a segment that mentions a district keyword
-        const districtPart = parts.find((p) =>
-          /\b(qu[aâậ]n|huy[eệ]n|th[aàả]nh ph[oốồ]|district)\b/i.test(p) ||
-          /\bd\d{1,2}\b/i.test(p)
+        // location_normalized often strips diacritics + spaces (e.g. "qun 4", "huyn binh chanh")
+        // Tokens come either as comma-separated parts or as a single run-on string.
+        // Strategy: scan for a "district keyword + value" pair anywhere in the text.
+        const text = loc.toLowerCase();
+
+        // 1. Numbered HCM districts: "qun 4", "quan 4", "q.4", "d4", "district 4"
+        const numbered = text.match(/\b(?:qu[aâậ]?n|quan|q\.?|district|d)\s*(\d{1,2})\b/);
+        if (numbered) return `Quận ${numbered[1]}`;
+
+        // 2. Named districts/huyện: capture keyword + 1–3 following words (until next admin keyword or end)
+        const named = text.match(
+          /\b(qu[aâậ]?n|quan|huy[eệ]?n|huyen)\s+([a-zà-ỹ]+(?:\s+[a-zà-ỹ]+){0,2}?)(?=\s+(?:phng|phuong|phuờng|tp|thanh pho|th[aàả]nh ph[oốồ]|$|,))/
         );
-        if (districtPart) return districtPart;
-        // Fallback: second-to-last segment (typically district before city)
+        if (named) {
+          const kw = /huy/.test(named[1]) ? 'Huyện' : 'Quận';
+          const name = named[2].replace(/\b\w/g, (c) => c.toUpperCase());
+          return `${kw} ${name}`;
+        }
+
+        // 3. Thủ Đức city
+        if (/\bth[uủ]\s*[dđ][uưứ]?c\b/.test(text)) return 'Thủ Đức';
+
+        // 4. Fallback: second-to-last comma segment
+        const parts = loc.split(',').map((p) => p.trim()).filter(Boolean);
         if (parts.length >= 2) return parts[parts.length - 2];
         return parts[0] || 'unknown';
       };
