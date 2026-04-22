@@ -1505,7 +1505,17 @@ const AdminTools = () => {
                           ) : expandedRunProperties.length > 0 ? (
                             expandedRunProperties.map((prop) => {
                               const vibeAnalysis = prop.vibe_analysis as any;
-                              const hasPerImage = vibeAnalysis?.per_image && vibeAnalysis.per_image.length > 0;
+                              const perImage = vibeAnalysis?.per_image;
+                              const imageAnalyses = vibeAnalysis?.image_analyses;
+                              const hasValidAnalysis = (arr: any) =>
+                                Array.isArray(arr) &&
+                                arr.length > 0 &&
+                                arr.some((a: any) => {
+                                  const hl = (a?.image_highlight || '').trim();
+                                  const detail = String(a?.detailed_analysis || '');
+                                  return hl && !/rate.?limit|API error|rate_limit_exceeded|Analysis failed/i.test(detail);
+                                });
+                              const hasPerImage = hasValidAnalysis(perImage) || hasValidAnalysis(imageAnalyses);
                               const imageCount = (prop.images || []).length;
                               return (
                                 <div
