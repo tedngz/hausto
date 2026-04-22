@@ -144,21 +144,32 @@ serve(async (req) => {
 
     let needsBackfill: any[] = [];
 
+    // A property needs backfill if it has images AND
+    //  - no image_analyses array, OR
+    //  - the array is empty, OR
+    //  - any entry has an empty image_highlight, OR
+    //  - any entry's detailed_analysis contains an API/rate-limit error
+    const needsReprocess = (p: any): boolean => {
+      if (!p.images || p.images.length === 0) return false;
+      const analyses = p.vibe_analysis?.image_analyses;
+      if (!analyses || !Array.isArray(analyses) || analyses.length === 0) return true;
+      return analyses.some((a: any) => {
+        const hl = (a?.image_highlight || '').trim();
+        const detail = String(a?.detailed_analysis || '');
+        const failed = !hl || /rate.?limit|API error|rate_limit_exceeded|Analysis failed/i.test(detail);
+        return failed;
+      });
+    };
+
     if (Array.isArray(property_ids) && property_ids.length > 0) {
-      // Targeted mode: backfill specific properties by ID
       console.log(`[backfill] Targeted mode: ${property_ids.length} property IDs`);
       const { data: targeted, error: tErr } = await supabase
         .from('external_properties')
         .select('id, title, images, vibe_analysis, highlights')
         .in('id', property_ids);
       if (tErr) throw tErr;
-      needsBackfill = (targeted || []).filter((p: any) => {
-        const analyses = p.vibe_analysis?.image_analyses;
-        const missing = !analyses || !Array.isArray(analyses) || analyses.length === 0;
-        return missing && p.images && p.images.length > 0;
-      });
+      needsBackfill = (targeted || []).filter(needsReprocess);
     } else {
-      // Scan mode: find properties missing image_analyses
       const { data: properties, error } = await supabase
         .from('external_properties')
         .select('id, title, images, vibe_analysis, highlights')
@@ -166,10 +177,7 @@ serve(async (req) => {
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) throw error;
-      needsBackfill = (properties || []).filter((p: any) => {
-        const analyses = p.vibe_analysis?.image_analyses;
-        return !analyses || !Array.isArray(analyses) || analyses.length === 0;
-      }).filter((p: any) => p.images && p.images.length > 0);
+      needsBackfill = (properties || []).filter(needsReprocess);
     }
 
     console.log(`[backfill] Found ${needsBackfill.length} properties needing image highlights`);
