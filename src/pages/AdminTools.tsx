@@ -107,6 +107,41 @@ const AdminTools = () => {
     },
   });
 
+  // Vibe queue depth (jobs not yet completed)
+  const { data: vibeQueueStats, refetch: refetchVibeQueue } = useQuery({
+    queryKey: ['vibe-queue-stats'],
+    queryFn: async () => {
+      const [{ count: queued }, { count: processing }, { count: failed }, { count: pendingProps }] = await Promise.all([
+        supabase.from('vibe_analysis_queue').select('id', { count: 'exact', head: true }).eq('status', 'queued'),
+        supabase.from('vibe_analysis_queue').select('id', { count: 'exact', head: true }).eq('status', 'processing'),
+        supabase.from('vibe_analysis_queue').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
+        supabase.from('external_properties').select('id', { count: 'exact', head: true }).neq('vibe_status', 'complete'),
+      ]);
+      return {
+        queued: queued || 0,
+        processing: processing || 0,
+        failed: failed || 0,
+        pendingProperties: pendingProps || 0,
+      };
+    },
+    refetchInterval: 15000,
+  });
+
+  // Recent crawler rejections
+  const { data: rejections, refetch: refetchRejections } = useQuery({
+    queryKey: ['crawler-rejections'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('crawler_rejections')
+        .select('id, source, source_url, reason, sample_images, rejected_at')
+        .order('rejected_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60000,
+  });
+
   const [localFrequency, setLocalFrequency] = useState<number | null>(null);
   const [localMaxListings, setLocalMaxListings] = useState<number | null>(null);
 
