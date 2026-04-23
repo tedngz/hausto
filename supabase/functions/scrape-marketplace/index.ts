@@ -195,11 +195,23 @@ function isValidPropertyImageUrl(url: string): boolean {
   return true;
 }
 
+// ─── Interior Gate (Quality-First) ──────────────────────────────
+// Hard gate: requires at least one true interior shot. Drops exteriors,
+// people, banners, neighborhood photos, etc. Returns rejection reason
+// when no interior shots are found so we can log it to crawler_rejections.
+async function interiorGate(
+  images: string[]
+): Promise<{ has_interior: boolean; selected: string[]; reason?: string } | null> {
+  if (images.length === 0) return { has_interior: false, selected: [], reason: 'no_images' };
+  // For very small galleries, still try to gate.
+  return await screenPropertyImages(images);
+}
+
 // ─── Vision-based Image Screening ───────────────────────────────
 // Check image consistency and select best representative images
 async function screenPropertyImages(
   images: string[]
-): Promise<{ consistent: boolean; selectedImages: string[]; reason?: string } | null> {
+): Promise<{ has_interior: boolean; selected: string[]; reason?: string } | null> {
   if (images.length < 2) return { consistent: true, selectedImages: images };
 
   const maxToCheck = Math.min(images.length, 10);
