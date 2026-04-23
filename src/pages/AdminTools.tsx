@@ -1612,6 +1612,141 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
+      {/* Vibe Analysis Queue */}
+      <Card>
+        <CardHeader className="px-4 md:px-6">
+          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+            <Activity className="h-5 w-5" />
+            Vibe Analysis Queue
+          </CardTitle>
+          <CardDescription className="text-xs md:text-sm">
+            Background processor for per-image vibe analysis. Listings only become discoverable once <code>vibe_status = complete</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-4 md:px-6 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-md border p-3">
+              <div className="text-xs text-muted-foreground">Queued</div>
+              <div className="text-2xl font-semibold">{vibeQueueStats?.queued ?? '—'}</div>
+            </div>
+            <div className="rounded-md border p-3">
+              <div className="text-xs text-muted-foreground">Processing</div>
+              <div className="text-2xl font-semibold">{vibeQueueStats?.processing ?? '—'}</div>
+            </div>
+            <div className="rounded-md border p-3">
+              <div className="text-xs text-muted-foreground">Failed</div>
+              <div className="text-2xl font-semibold text-destructive">{vibeQueueStats?.failed ?? '—'}</div>
+            </div>
+            <div className="rounded-md border p-3">
+              <div className="text-xs text-muted-foreground">Properties pending</div>
+              <div className="text-2xl font-semibold">{vibeQueueStats?.pendingProperties ?? '—'}</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const t = toast.loading('Processing vibe queue batch...');
+                try {
+                  const { data, error } = await supabase.functions.invoke('process-vibe-queue', { body: { batchSize: 4 } });
+                  if (error) throw error;
+                  toast.success(`Processed ${data?.processed ?? 0}, completed ${data?.completed ?? 0}`, { id: t });
+                  refetchVibeQueue();
+                } catch (e: any) {
+                  toast.error(`Queue run failed: ${e.message}`, { id: t });
+                }
+              }}
+            >
+              <Play className="h-4 w-4 mr-1" />
+              Process batch now
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const t = toast.loading('Re-enqueuing pending properties...');
+                try {
+                  const { data, error } = await supabase.functions.invoke('backfill-image-highlights', {
+                    body: { limit: 50, requeue_only: true },
+                  });
+                  if (error) throw error;
+                  toast.success(`Enqueued ${data?.enqueued ?? 0} of ${data?.total ?? 0}`, { id: t });
+                  refetchVibeQueue();
+                } catch (e: any) {
+                  toast.error(`Requeue failed: ${e.message}`, { id: t });
+                }
+              }}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Re-enqueue pending
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Crawler Rejections */}
+      <Card>
+        <CardHeader className="px-4 md:px-6">
+          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+            <XCircle className="h-5 w-5" />
+            Crawler Rejections
+            {rejections && rejections.length > 0 && (
+              <Badge variant="outline" className="text-xs">{rejections.length}</Badge>
+            )}
+          </CardTitle>
+          <CardDescription className="text-xs md:text-sm">
+            URLs the crawler refused to insert (e.g. outdoor-only galleries, missing interiors).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-4 md:px-6">
+          {!rejections || rejections.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No rejections logged yet.</p>
+          ) : (
+            <div className="divide-y border rounded-md max-h-[420px] overflow-y-auto">
+              {rejections.map((r: any) => (
+                <div key={r.id} className="p-2.5 text-xs space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="outline" className="text-[10px] capitalize">{r.source}</Badge>
+                      <Badge variant="destructive" className="text-[10px]">{r.reason}</Badge>
+                    </div>
+                    <span className="text-muted-foreground whitespace-nowrap">{getTimeAgo(r.rejected_at)}</span>
+                  </div>
+                  <a
+                    href={r.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate text-primary hover:underline"
+                  >
+                    {r.source_url}
+                  </a>
+                  {Array.isArray(r.sample_images) && r.sample_images.length > 0 && (
+                    <div className="flex gap-1 overflow-x-auto pt-1">
+                      {r.sample_images.slice(0, 4).map((img: string, i: number) => (
+                        <img
+                          key={i}
+                          src={img}
+                          alt=""
+                          className="h-12 w-16 object-cover rounded border flex-shrink-0"
+                          loading="lazy"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3">
+            <Button size="sm" variant="ghost" onClick={() => refetchRejections()}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
 
 
       {/* Property Preview Dialog */}
