@@ -1,106 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { analyzeImagesQualityFirst } from "../analyze-vibe/shared.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-
-async function analyzeImages(images: string[], openaiKey: string): Promise<any[] | null> {
-  const imageContent = [];
-  const validIndexes: number[] = [];
-
-  for (let i = 0; i < Math.min(images.length, 5); i++) {
-    try {
-      const resp = await fetch(images[i]);
-      if (!resp.ok) continue;
-      const ct = resp.headers.get('content-type') || '';
-      const buf = await resp.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      if (bytes.length > 5 * 1024 * 1024) continue;
-
-      let b64 = '';
-      const chunk = 8192;
-      for (let j = 0; j < bytes.length; j += chunk) {
-        b64 += String.fromCharCode.apply(null, Array.from(bytes.subarray(j, Math.min(j + chunk, bytes.length))));
-      }
-
-      let mime = 'image/jpeg';
-      if (ct.includes('png')) mime = 'image/png';
-      else if (ct.includes('webp')) mime = 'image/webp';
-
-      imageContent.push({
-        type: 'image_url',
-        image_url: { url: `data:${mime};base64,${btoa(b64)}`, detail: 'low' }
-      });
-      validIndexes.push(i);
-    } catch {
-      continue;
-    }
-  }
-
-  if (imageContent.length === 0) return null;
-
-  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openaiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `Analyze these ${imageContent.length} rental property images. For EACH image, provide a unique lifestyle highlight specific to what you SEE in that image.
-
-Return ONLY valid JSON with this structure:
-{
-  "image_analyses": [
-    {"image_index": 0, "image_highlight": "Specific highlight about THIS image (7-12 words)", "suggested_amenities": ["Amenity1"]},
-    {"image_index": 1, "image_highlight": "Specific highlight about THIS image (7-12 words)", "suggested_amenities": ["Amenity1"]}
-  ]
-}
-
-Rules:
-- Each image_highlight MUST describe what is VISIBLE in that specific image
-- NO generic descriptions like "modern living space" or "fully furnished apartment"
-- Be specific: mention visible furniture, views, materials, colors, layout features
-- Each highlight must be DIFFERENT from the others`
-          },
-          ...imageContent,
-        ]
-      }],
-      max_tokens: 800,
-      temperature: 0.3,
-    }),
-  });
-
-  if (!resp.ok) {
-    console.error('[backfill] OpenAI error:', await resp.text());
-    return null;
-  }
-
-  const data = await resp.json();
-  const content = data.choices?.[0]?.message?.content || '';
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-
-  const parsed = JSON.parse(jsonMatch[0]);
-  const analyses = Array.isArray(parsed.image_analyses) ? parsed.image_analyses : [];
-
-  // Map back to original indexes
-  return analyses.map((ia: any, idx: number) => ({
-    ...ia,
-    image_index: validIndexes[idx] ?? idx,
-    image_highlight: ia.image_highlight ? capitalize(String(ia.image_highlight)) : '',
-    suggested_amenities: Array.isArray(ia.suggested_amenities) ? ia.suggested_amenities : [],
-  }));
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -113,20 +18,16 @@ serve(async (req) => {
     const openaiKey = Deno.env.get('OPENAI_API_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Auth check - accept any valid auth (service role key is used for DB access)
+    // Auth: accept anon apikey or service-role token
     const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
     const apikey = req.headers.get('apikey') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
-    
-    console.log(`[backfill] Auth: token length=${token.length}, apikey length=${apikey.length}, anonKey length=${anonKey.length}`);
-    
-    // Accept if apikey matches anon key (standard Supabase invocation) or token is service key
+
     const hasValidApikey = apikey === anonKey;
     const isServiceRole = token === serviceKey;
-    
+
     if (!hasValidApikey && !isServiceRole) {
-      // Try JWT verification
       if (!token) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -140,76 +41,115 @@ serve(async (req) => {
       }
     }
 
-    const { limit = 10, property_ids } = await req.json().catch(() => ({}));
+    const { limit = 10, property_ids, requeue_only = false } = await req.json().catch(() => ({}));
 
+    // Selection: any external_properties row with images that is NOT vibe_status='complete'
+    // OR has rate-limit-poisoned strings in detailed_analysis from a previous failure.
     let needsBackfill: any[] = [];
 
-    // A property needs backfill if it has images AND
-    //  - no image_analyses array, OR
-    //  - the array is empty, OR
-    //  - any entry has an empty image_highlight, OR
-    //  - any entry's detailed_analysis contains an API/rate-limit error
-    const needsReprocess = (p: any): boolean => {
-      if (!p.images || p.images.length === 0) return false;
-      const analyses = p.vibe_analysis?.image_analyses;
-      if (!analyses || !Array.isArray(analyses) || analyses.length === 0) return true;
+    const isPoisoned = (p: any): boolean => {
+      const va = p.vibe_analysis;
+      const analyses = Array.isArray(va?.image_analyses) ? va.image_analyses : [];
+      if (analyses.length === 0) return true;
       return analyses.some((a: any) => {
-        const hl = (a?.image_highlight || '').trim();
+        const hl = String(a?.image_highlight || '').trim();
         const detail = String(a?.detailed_analysis || '');
-        const failed = !hl || /rate.?limit|API error|rate_limit_exceeded|Analysis failed/i.test(detail);
-        return failed;
+        return !hl || /rate.?limit|api error|rate_limit_exceeded|analysis failed/i.test(detail);
       });
     };
 
     if (Array.isArray(property_ids) && property_ids.length > 0) {
-      console.log(`[backfill] Targeted mode: ${property_ids.length} property IDs`);
-      const { data: targeted, error: tErr } = await supabase
+      const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, images, vibe_analysis, highlights')
+        .select('id, title, images, vibe_analysis, vibe_status, highlights')
         .in('id', property_ids);
-      if (tErr) throw tErr;
-      needsBackfill = (targeted || []).filter(needsReprocess);
+      if (error) throw error;
+      needsBackfill = (data || []).filter((p) =>
+        Array.isArray(p.images) && p.images.length > 0 &&
+        (p.vibe_status !== 'complete' || isPoisoned(p))
+      );
     } else {
-      const { data: properties, error } = await supabase
+      const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, images, vibe_analysis, highlights')
-        .eq('is_active', true)
+        .select('id, title, images, vibe_analysis, vibe_status, highlights')
+        .neq('vibe_status', 'complete')
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) throw error;
-      needsBackfill = (properties || []).filter(needsReprocess);
+      needsBackfill = (data || []).filter((p) => Array.isArray(p.images) && p.images.length > 0);
     }
 
-    console.log(`[backfill] Found ${needsBackfill.length} properties needing image highlights`);
+    console.log(`[backfill] ${needsBackfill.length} properties need vibe analysis`);
 
-    const results = [];
+    // Requeue mode: only mark as pending and enqueue, don't process here.
+    if (requeue_only) {
+      let enqueued = 0;
+      for (const prop of needsBackfill) {
+        await supabase
+          .from('external_properties')
+          .update({ vibe_status: 'pending', is_active: false, updated_at: new Date().toISOString() })
+          .eq('id', prop.id);
+        const { error: qErr } = await supabase
+          .from('vibe_analysis_queue')
+          .insert({ property_id: prop.id, status: 'queued' });
+        if (!qErr || qErr.code === '23505') enqueued++;
+      }
+      return new Response(JSON.stringify({ success: true, enqueued, total: needsBackfill.length }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const results: any[] = [];
     for (const prop of needsBackfill) {
       try {
-        console.log(`[backfill] Analyzing: ${prop.id} - ${prop.title}`);
-        const analyses = await analyzeImages(prop.images, openaiKey);
+        const images = (prop.images || []).slice(0, 5);
+        const result = await analyzeImagesQualityFirst({ imageUrls: images, openaiKey });
 
-        if (!analyses || analyses.length === 0) {
-          results.push({ id: prop.id, title: prop.title, success: false, error: 'No analyses returned' });
+        if (!result.allSucceeded) {
+          // Quality-first: leave as pending, enqueue for retry. NO fake highlights.
+          await supabase
+            .from('external_properties')
+            .update({
+              vibe_status: 'pending',
+              is_active: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', prop.id);
+          await supabase
+            .from('vibe_analysis_queue')
+            .insert({ property_id: prop.id, status: 'queued', last_error: JSON.stringify(result.failures).substring(0, 500) })
+            .then(() => {}, () => {});
+          results.push({
+            id: prop.id, title: prop.title, success: false,
+            reason: 'partial_failure_requeued',
+            failures: result.failures,
+          });
           continue;
         }
 
-        // Build per-image highlights array
-        const perImageHighlights = prop.images.map((_: any, idx: number) => {
-          const a = analyses.find((ia: any) => ia.image_index === idx);
-          return a?.image_highlight || '';
-        }).filter(Boolean);
+        const analyses = result.analyses;
+        const positionalHighlights = analyses
+          .map((a) => String(a.image_highlight || '').trim())
+          .filter(Boolean);
 
-        // Merge into existing vibe_analysis
+        const allAmenities = new Set<string>();
+        analyses.forEach((a) => {
+          if (Array.isArray(a.amenities)) a.amenities.forEach((x: string) => allAmenities.add(x));
+        });
+
         const updatedVibe = {
           ...(prop.vibe_analysis || {}),
           image_analyses: analyses,
+          amenities: Array.from(allAmenities),
         };
 
         const { error: updateErr } = await supabase
           .from('external_properties')
           .update({
             vibe_analysis: updatedVibe,
-            highlights: perImageHighlights.length > 0 ? perImageHighlights : prop.highlights,
+            highlights: positionalHighlights,
+            vibe_status: 'complete',
+            is_active: true,
             updated_at: new Date().toISOString(),
           })
           .eq('id', prop.id);
@@ -217,7 +157,7 @@ serve(async (req) => {
         if (updateErr) {
           results.push({ id: prop.id, title: prop.title, success: false, error: updateErr.message });
         } else {
-          console.log(`[backfill] ✓ ${prop.id}: ${analyses.length} image highlights generated`);
+          console.log(`[backfill] ✓ ${prop.id}: ${analyses.length} highlights`);
           results.push({ id: prop.id, title: prop.title, success: true, highlightCount: analyses.length });
         }
       } catch (e) {
@@ -225,8 +165,8 @@ serve(async (req) => {
       }
     }
 
-    const successCount = results.filter(r => r.success).length;
-    console.log(`[backfill] Done: ${successCount}/${results.length} succeeded`);
+    const successCount = results.filter((r) => r.success).length;
+    console.log(`[backfill] Done: ${successCount}/${results.length}`);
 
     return new Response(JSON.stringify({
       success: true,

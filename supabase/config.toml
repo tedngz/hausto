@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.verify-external-listings]
 verify_jwt = false
+
+[functions.process-vibe-queue]
+verify_jwt = false
