@@ -195,12 +195,24 @@ function isValidPropertyImageUrl(url: string): boolean {
   return true;
 }
 
+// ─── Interior Gate (Quality-First) ──────────────────────────────
+// Hard gate: requires at least one true interior shot. Drops exteriors,
+// people, banners, neighborhood photos, etc. Returns rejection reason
+// when no interior shots are found so we can log it to crawler_rejections.
+async function interiorGate(
+  images: string[]
+): Promise<{ has_interior: boolean; selected: string[]; reason?: string } | null> {
+  if (images.length === 0) return { has_interior: false, selected: [], reason: 'no_images' };
+  // For very small galleries, still try to gate.
+  return await screenPropertyImages(images);
+}
+
 // ─── Vision-based Image Screening ───────────────────────────────
 // Check image consistency and select best representative images
 async function screenPropertyImages(
   images: string[]
-): Promise<{ consistent: boolean; selectedImages: string[]; reason?: string } | null> {
-  if (images.length < 2) return { consistent: true, selectedImages: images };
+): Promise<{ has_interior: boolean; selected: string[]; reason?: string } | null> {
+  if (images.length === 0) return { has_interior: false, selected: [], reason: 'no_images' };
 
   const maxToCheck = Math.min(images.length, 10);
   const imageContent: any[] = [];
@@ -235,45 +247,35 @@ async function screenPropertyImages(
     }
   }
 
-  if (imageContent.length < 2) return { consistent: true, selectedImages: images.slice(0, 5) };
+  if (imageContent.length === 0) {
+    return { has_interior: false, selected: [], reason: 'no_fetchable_images' };
+  }
 
-  const prompt = `You are screening ${imageContent.length} images from a rental property listing.
+  const prompt = `You are screening ${imageContent.length} images from a rental apartment listing.
 
-**TASK 1 - CONSISTENCY CHECK:**
-Do these images show the SAME apartment/unit? Look for:
-- Consistent flooring, wall colors, furniture style across interior shots
-- Images clearly from different apartments (completely different style, color scheme, layout)
-- Signs of a broker compilation mixing photos from multiple units
+**HARD REQUIREMENT — INTERIOR COVERAGE:**
+At least ONE image MUST clearly show an apartment INTERIOR (living room, bedroom, kitchen, bathroom, dining area, or interior balcony view from inside the apartment looking out).
 
-Mark INCONSISTENT only if 3+ images clearly show DIFFERENT apartments (not just different rooms of the same unit).
+If ALL images show only exteriors, building facades, neighborhood/street views, amenity buildings (pool/gym from far), people, banners, floor plans, or marketing material — set has_interior=false.
 
-**TASK 2 - QUALITY CHECK:**
-Reject the listing (set is_quality_acceptable to false) if the apartment appears:
-- UNFINISHED: exposed wires, holes in walls, missing fixtures, raw concrete, construction debris
-- DIRTY/UNTIDY: visible filth, stains, clutter, garbage, mold, peeling paint
-- DARK/GLOOMY: very poor lighting with no natural light, dingy atmosphere
-- UNINHABITABLE: broken windows, water damage, severely deteriorated condition
+**QUALITY GATE:**
+Reject (set is_quality_acceptable=false) if the apartment appears UNFINISHED (raw concrete, exposed wires), severely DIRTY/DAMAGED, or UNINHABITABLE in the majority of interior shots. One slightly dim photo is fine.
 
-Only reject if the MAJORITY of interior images show these issues (1 slightly dark photo among good ones is OK).
+**CONSISTENCY:**
+Set is_consistent=false ONLY if 3+ images clearly show DIFFERENT apartments.
 
-**TASK 3 - IMAGE SELECTION (ALWAYS FILTER):**
-From ALL images, select ONLY images that show the apartment interior or views from the apartment (rooms, kitchen, bathroom, living area, balcony views FROM inside).
-
-ALWAYS EXCLUDE these types - do NOT include them in "selected" regardless of how many images there are:
-- Photos of PEOPLE (agents, tenants, selfies, group photos, portraits)
-- Building EXTERIOR/FACADE shots (outside view of building, entrance, parking lot)
-- Promotional BANNERS, watermark-heavy images, text overlays, advertisements
-- NEIGHBORHOOD/STREET photos (roads, nearby shops, aerial city views)
+**SELECTION:**
+From the qualifying INTERIOR images only, select up to 5 best representative shots (rooms, kitchen, bathroom, living area, interior balcony view). Exclude:
+- People (agents/tenants/portraits)
+- Building exteriors / facades / parking lots
+- Neighborhood / street / aerial photos
 - Floor plans, maps, diagrams
-- Amenity photos that are clearly stock/generic (pool, gym that look like marketing material)
-- Duplicates or near-identical angles
+- Banners, watermarked promotional images
+- Stock-style amenity photos
+- Near-duplicate angles
 
-${images.length > 5 ? 'Pick the BEST 5 from qualifying interior images.' : 'Keep all qualifying interior images (remove non-apartment images even if fewer than 5 remain).'}
-
-Return ONLY valid JSON:
-{"is_consistent": true, "is_quality_acceptable": true, "reason": "brief explanation", "selected": [0,1,2]}
-
-Indexes are 0-based matching the image order shown.`;
+Return ONLY valid JSON, indexes 0-based matching shown order:
+{"has_interior": true, "is_consistent": true, "is_quality_acceptable": true, "reason": "brief explanation", "selected": [0,2,3]}`;
 
   const content = await callAI([{
     role: 'user',
@@ -286,31 +288,69 @@ Indexes are 0-based matching the image order shown.`;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]);
+    const hasInterior = parsed.has_interior !== false;
     const isConsistent = parsed.is_consistent !== false;
     const isQualityAcceptable = parsed.is_quality_acceptable !== false;
     const reason = parsed.reason || '';
 
-    // Reject if either inconsistent or poor quality
-    if (!isConsistent || !isQualityAcceptable) {
-      return { consistent: false, selectedImages: [], reason: reason || (isQualityAcceptable ? 'Inconsistent images' : 'Poor quality: unfinished/dirty/dark apartment') };
+    if (!hasInterior) {
+      return { has_interior: false, selected: [], reason: reason || 'no_interior_images' };
+    }
+    if (!isConsistent) {
+      return { has_interior: false, selected: [], reason: reason || 'inconsistent_apartments' };
+    }
+    if (!isQualityAcceptable) {
+      return { has_interior: false, selected: [], reason: reason || 'poor_quality_unfinished_or_dirty' };
     }
 
-    let selectedImages: string[];
+    let selected: string[] = [];
     if (Array.isArray(parsed.selected) && parsed.selected.length > 0) {
-      const selectedIndexes = parsed.selected
+      selected = parsed.selected
         .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length)
         .map((i: number) => images[validIndexes[i]])
         .filter(Boolean)
         .slice(0, 5);
-      // If AI selected at least 1 image, use its selection; otherwise fall back
-      selectedImages = selectedIndexes.length >= 1 ? selectedIndexes : images.slice(0, 5);
-    } else {
-      selectedImages = images.slice(0, 5);
     }
 
-    return { consistent: true, selectedImages, reason };
+    if (selected.length === 0) {
+      return { has_interior: false, selected: [], reason: 'no_qualifying_interior_images_selected' };
+    }
+
+    return { has_interior: true, selected, reason };
   } catch {
     return null;
+  }
+}
+
+async function logCrawlerRejection(
+  supabase: any,
+  source_url: string,
+  source: string,
+  reason: string,
+  sample_images: string[]
+): Promise<void> {
+  try {
+    await supabase.from('crawler_rejections').insert({
+      source_url,
+      source,
+      reason,
+      sample_images: sample_images.slice(0, 5),
+    });
+  } catch (e) {
+    console.warn('[crawler_rejections] insert failed:', e);
+  }
+}
+
+async function enqueueVibeAnalysis(supabase: any, propertyId: string): Promise<void> {
+  try {
+    await supabase.from('vibe_analysis_queue').insert({
+      property_id: propertyId,
+      status: 'queued',
+    });
+  } catch (e: any) {
+    if (e?.code !== '23505') {
+      console.warn('[vibe_queue] enqueue failed:', e);
+    }
   }
 }
 
@@ -457,30 +497,31 @@ async function savePropertiesToDB(
           .eq('id', existing.id);
         updatedListings++;
       } else {
-        // NEW LISTINGS: Screen images for consistency & select best ones
+        // NEW LISTINGS: HARD interior gate. No interior shots → reject + log.
         const validImages = propertyData.images;
-        let finalImages = validImages.slice(0, 5);
+        let finalImages: string[] = [];
 
-        if (validImages.length >= 2) {
-          try {
-            const screening = await screenPropertyImages(validImages);
-            if (screening) {
-              if (!screening.consistent) {
-                filtered++;
-                console.log(`[directSave] Filtered (inconsistent images): ${property.title?.substring(0, 50)} - ${screening.reason}`);
-                continue;
-              }
-              finalImages = screening.selectedImages;
-              if (finalImages.length !== validImages.length) {
-                console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
-              }
-            }
-          } catch (e) {
-            console.warn(`[directSave] Image screening failed, using first 5:`, e);
+        try {
+          const gate = await interiorGate(validImages);
+          if (!gate || !gate.has_interior) {
+            filtered++;
+            const reason = gate?.reason || 'gate_failed';
+            console.log(`[directSave] Rejected (interior gate): ${property.title?.substring(0, 50)} - ${reason}`);
+            await logCrawlerRejection(supabase, normalizedUrl, marketplace, reason, validImages);
+            continue;
           }
+          finalImages = gate.selected;
+          if (finalImages.length !== validImages.length) {
+            console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+          }
+        } catch (e) {
+          console.warn(`[directSave] Interior gate errored, rejecting listing:`, e);
+          filtered++;
+          await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'gate_exception', validImages);
+          continue;
         }
 
-        const { error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from('external_properties')
           .insert({
             ...propertyData,
@@ -490,7 +531,12 @@ async function savePropertiesToDB(
             source_url: normalizedUrl,
             crawled_at: now,
             expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-          });
+            // Quality-first: hide listings until vibe analysis completes
+            is_active: false,
+            vibe_status: 'pending',
+          })
+          .select('id')
+          .maybeSingle();
 
         if (insertError) {
           if (insertError.code === '23505') {
@@ -500,7 +546,10 @@ async function savePropertiesToDB(
           }
         } else {
           newListings++;
-          console.log(`[directSave] New listing saved: ${property.title?.substring(0, 50)}`);
+          console.log(`[directSave] New listing saved (pending vibe): ${property.title?.substring(0, 50)}`);
+          if (inserted?.id) {
+            await enqueueVibeAnalysis(supabase, inserted.id);
+          }
         }
       }
     } catch (e) {

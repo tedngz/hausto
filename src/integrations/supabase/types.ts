@@ -173,6 +173,33 @@ export type Database = {
           },
         ]
       }
+      crawler_rejections: {
+        Row: {
+          id: string
+          reason: string
+          rejected_at: string
+          sample_images: Json
+          source: string
+          source_url: string
+        }
+        Insert: {
+          id?: string
+          reason: string
+          rejected_at?: string
+          sample_images?: Json
+          source: string
+          source_url: string
+        }
+        Update: {
+          id?: string
+          reason?: string
+          rejected_at?: string
+          sample_images?: Json
+          source?: string
+          source_url?: string
+        }
+        Relationships: []
+      }
       daily_usage: {
         Row: {
           ai_requests: number | null
@@ -309,6 +336,7 @@ export type Database = {
           verification_failures: number
           vibe: string | null
           vibe_analysis: Json | null
+          vibe_status: string
         }
         Insert: {
           amenities?: string[] | null
@@ -344,6 +372,7 @@ export type Database = {
           verification_failures?: number
           vibe?: string | null
           vibe_analysis?: Json | null
+          vibe_status?: string
         }
         Update: {
           amenities?: string[] | null
@@ -379,6 +408,7 @@ export type Database = {
           verification_failures?: number
           vibe?: string | null
           vibe_analysis?: Json | null
+          vibe_status?: string
         }
         Relationships: []
       }
@@ -908,6 +938,36 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      vibe_analysis_queue: {
+        Row: {
+          attempts: number
+          enqueued_at: string
+          id: string
+          last_error: string | null
+          property_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          property_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          property_id?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
