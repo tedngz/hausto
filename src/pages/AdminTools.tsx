@@ -1665,13 +1665,20 @@ const AdminTools = () => {
               size="sm"
               variant="outline"
               onClick={async () => {
-                const t = toast.loading('Re-enqueuing pending properties...');
+                const t = toast.loading('Finding listings with missing highlights...');
                 try {
                   const { data, error } = await supabase.functions.invoke('backfill-image-highlights', {
-                    body: { limit: 50, requeue_only: true },
+                    body: { limit: 200, requeue_only: true, missing_only: true },
                   });
                   if (error) throw error;
-                  toast.success(`Enqueued ${data?.enqueued ?? 0} of ${data?.total ?? 0}`, { id: t });
+                  const enq = data?.enqueued ?? 0;
+                  const total = data?.total ?? 0;
+                  toast.success(
+                    total === 0
+                      ? 'No listings with missing highlights found'
+                      : `Enqueued ${enq} of ${total} listings missing highlights`,
+                    { id: t }
+                  );
                   refetchVibeQueue();
                 } catch (e: any) {
                   toast.error(`Requeue failed: ${e.message}`, { id: t });
@@ -1679,7 +1686,7 @@ const AdminTools = () => {
               }}
             >
               <RefreshCw className="h-4 w-4 mr-1" />
-              Re-enqueue pending
+              Re-enqueue missing highlights
             </Button>
           </div>
         </CardContent>
