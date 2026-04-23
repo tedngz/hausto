@@ -41,10 +41,13 @@ serve(async (req) => {
       }
     }
 
-    const { limit = 10, property_ids, requeue_only = false } = await req.json().catch(() => ({}));
+    const { limit = 10, property_ids, requeue_only = false, missing_only = true } = await req.json().catch(() => ({}));
 
-    // Selection: any external_properties row with images that is NOT vibe_status='complete'
-    // OR has rate-limit-poisoned strings in detailed_analysis from a previous failure.
+    // Selection: only listings whose image highlights are actually missing or broken.
+    // A listing is considered "missing highlights" when:
+    //   - it has images, AND
+    //   - highlights array is empty/shorter than images, OR
+    //   - vibe_analysis.image_analyses is missing/empty/poisoned (rate-limit error strings, blank highlight)
     let needsBackfill: any[] = [];
 
     const isPoisoned = (p: any): boolean => {
@@ -58,6 +61,15 @@ serve(async (req) => {
       });
     };
 
+    const hasMissingHighlights = (p: any): boolean => {
+      const images = Array.isArray(p.images) ? p.images : [];
+      if (images.length === 0) return false; // nothing to analyze
+      const highlights = Array.isArray(p.highlights) ? p.highlights.filter((h: any) => typeof h === 'string' && h.trim()) : [];
+      const expected = Math.min(images.length, 5);
+      if (highlights.length < expected) return true;
+      return isPoisoned(p);
+    };
+
     if (Array.isArray(property_ids) && property_ids.length > 0) {
       const { data, error } = await supabase
         .from('external_properties')
@@ -66,17 +78,33 @@ serve(async (req) => {
       if (error) throw error;
       needsBackfill = (data || []).filter((p) =>
         Array.isArray(p.images) && p.images.length > 0 &&
-        (p.vibe_status !== 'complete' || isPoisoned(p))
+        (missing_only ? hasMissingHighlights(p) : (p.vibe_status !== 'complete' || isPoisoned(p)))
       );
     } else {
-      const { data, error } = await supabase
-        .from('external_properties')
-        .select('id, title, images, vibe_analysis, vibe_status, highlights')
-        .neq('vibe_status', 'complete')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-      if (error) throw error;
-      needsBackfill = (data || []).filter((p) => Array.isArray(p.images) && p.images.length > 0);
+      // Fetch a wider candidate pool then filter to truly-missing-highlights only.
+      // We page through in chunks to avoid the 1000-row Supabase cap when scanning broadly.
+      const candidates: any[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      const maxScan = 5000; // safety cap
+      while (candidates.length < limit && from < maxScan) {
+        const { data, error } = await supabase
+          .from('external_properties')
+          .select('id, title, images, vibe_analysis, vibe_status, highlights, created_at')
+          .order('created_at', { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        for (const p of data) {
+          if (missing_only ? hasMissingHighlights(p) : (p.vibe_status !== 'complete' && Array.isArray(p.images) && p.images.length > 0)) {
+            candidates.push(p);
+            if (candidates.length >= limit) break;
+          }
+        }
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      needsBackfill = candidates;
     }
 
     console.log(`[backfill] ${needsBackfill.length} properties need vibe analysis`);
