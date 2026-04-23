@@ -497,30 +497,31 @@ async function savePropertiesToDB(
           .eq('id', existing.id);
         updatedListings++;
       } else {
-        // NEW LISTINGS: Screen images for consistency & select best ones
+        // NEW LISTINGS: HARD interior gate. No interior shots → reject + log.
         const validImages = propertyData.images;
-        let finalImages = validImages.slice(0, 5);
+        let finalImages: string[] = [];
 
-        if (validImages.length >= 2) {
-          try {
-            const screening = await screenPropertyImages(validImages);
-            if (screening) {
-              if (!screening.consistent) {
-                filtered++;
-                console.log(`[directSave] Filtered (inconsistent images): ${property.title?.substring(0, 50)} - ${screening.reason}`);
-                continue;
-              }
-              finalImages = screening.selectedImages;
-              if (finalImages.length !== validImages.length) {
-                console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
-              }
-            }
-          } catch (e) {
-            console.warn(`[directSave] Image screening failed, using first 5:`, e);
+        try {
+          const gate = await interiorGate(validImages);
+          if (!gate || !gate.has_interior) {
+            filtered++;
+            const reason = gate?.reason || 'gate_failed';
+            console.log(`[directSave] Rejected (interior gate): ${property.title?.substring(0, 50)} - ${reason}`);
+            await logCrawlerRejection(supabase, normalizedUrl, marketplace, reason, validImages);
+            continue;
           }
+          finalImages = gate.selected;
+          if (finalImages.length !== validImages.length) {
+            console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+          }
+        } catch (e) {
+          console.warn(`[directSave] Interior gate errored, rejecting listing:`, e);
+          filtered++;
+          await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'gate_exception', validImages);
+          continue;
         }
 
-        const { error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from('external_properties')
           .insert({
             ...propertyData,
@@ -530,7 +531,12 @@ async function savePropertiesToDB(
             source_url: normalizedUrl,
             crawled_at: now,
             expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-          });
+            // Quality-first: hide listings until vibe analysis completes
+            is_active: false,
+            vibe_status: 'pending',
+          })
+          .select('id')
+          .maybeSingle();
 
         if (insertError) {
           if (insertError.code === '23505') {
@@ -540,7 +546,10 @@ async function savePropertiesToDB(
           }
         } else {
           newListings++;
-          console.log(`[directSave] New listing saved: ${property.title?.substring(0, 50)}`);
+          console.log(`[directSave] New listing saved (pending vibe): ${property.title?.substring(0, 50)}`);
+          if (inserted?.id) {
+            await enqueueVibeAnalysis(supabase, inserted.id);
+          }
         }
       }
     } catch (e) {
