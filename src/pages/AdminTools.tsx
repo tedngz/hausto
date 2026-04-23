@@ -1506,34 +1506,27 @@ const AdminTools = () => {
                             expandedRunProperties.map((prop) => {
                               const vibeAnalysis = prop.vibe_analysis as any;
                               const imageCount = (prop.images || []).length;
+                              // New: badge keys off vibe_status enum (set by analyze-vibe / queue consumer)
+                              // when ALL images successfully produced highlights. Fallback to legacy heuristic
+                              // for properties analyzed before the enum existed.
+                              const vibeStatus = (prop as any).vibe_status as string | undefined;
                               const analyses =
                                 (Array.isArray(vibeAnalysis?.image_analyses) && vibeAnalysis.image_analyses) ||
                                 (Array.isArray(vibeAnalysis?.per_image) && vibeAnalysis.per_image) ||
                                 [];
-                              // Generic fallback highlights to reject (case-insensitive substring match)
-                              const GENERIC_HIGHLIGHTS = [
-                                'apartment interior',
-                                'apartment view',
-                                'property image',
-                                'interior view',
-                                'living space',
-                                'room view',
-                                'general view',
-                              ];
-                              const isSpecificHighlight = (hl: string, detail: string) => {
-                                const t = hl.trim().toLowerCase();
-                                if (!t || t.length < 4) return false;
-                                if (GENERIC_HIGHLIGHTS.some((g) => t === g || t.includes(g))) return false;
-                                if (/rate.?limit|api error|rate_limit_exceeded|analysis failed/i.test(detail)) return false;
-                                return true;
-                              };
-                              // ✓ only when every image has a specific, non-generic highlight
-                              const hasPerImage =
+                              const legacyHasPerImage =
                                 imageCount > 0 &&
                                 analyses.length >= imageCount &&
-                                analyses.slice(0, imageCount).every((a: any) =>
-                                  isSpecificHighlight(String(a?.image_highlight || ''), String(a?.detailed_analysis || ''))
-                                );
+                                analyses.slice(0, imageCount).every((a: any) => {
+                                  const hl = String(a?.image_highlight || '').trim();
+                                  const detail = String(a?.detailed_analysis || '');
+                                  if (!hl || hl.length < 4) return false;
+                                  if (/rate.?limit|api error|rate_limit_exceeded|analysis failed/i.test(detail)) return false;
+                                  return true;
+                                });
+                              const hasPerImage = vibeStatus
+                                ? vibeStatus === 'complete'
+                                : legacyHasPerImage;
                               return (
                                 <div
                                   key={prop.id}
