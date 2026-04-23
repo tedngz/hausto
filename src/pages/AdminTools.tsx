@@ -314,7 +314,7 @@ const AdminTools = () => {
     try {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, location, price, images, vibe, vibe_analysis, highlights, amenities, source, source_url, city, crawled_at, is_active, size, rooms, contact_name, contact_phone')
+        .select('id, title, location, price, images, vibe, vibe_analysis, vibe_status, highlights, amenities, source, source_url, city, crawled_at, is_active, size, rooms, contact_name, contact_phone')
         .in('id', propertyIds);
       if (error) throw error;
       setExpandedRunProperties(data || []);
