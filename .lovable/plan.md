@@ -1,101 +1,126 @@
+## Root cause
 
+External listings *do* get scored correctly for "D1" (location strings like `"…, Quận 1, Tp Hồ Chí Minh"` already match the Vietnamese token `quận 1` used in the filter). The Vietnamese addresses are **not** the problem.
 
-## Root Causes
+The real causes are in `supabase/functions/chat-ai/index.ts` at the data-loading layer:
 
-### 1. Outdoor-only listings bypass vision QC
+### 1. External property fetch is capped and unordered
+```ts
+supabase.from('external_properties')
+  .select('*')
+  .eq('is_active', true)
+  .gt('expires_at', new Date().toISOString())
+  .limit(200)            // ← cap
+                         // ← no .order(), so Postgres returns rows in arbitrary order
+```
 
-The crawler has two parallel ingestion paths (see `mem://architecture/crawler/multi-phase-marketplace-scraping`):
+There are currently **228** active external properties (159 in HCMC, 19 in District 1). The arbitrary `.limit(200)` silently drops ~28 listings, and with no `ORDER BY`, the dropped slice is non-deterministic — D1 listings are often among those silently excluded before scoring even runs.
 
-- **Phase 3 (metadata-only)** — `scrape-marketplace` writes the listing to `external_properties` immediately after extracting title, price, location, and image URLs. **No vision call happens here.**
-- **Phase 7 (vision QC)** — `analyze-vibe` is only invoked when (a) Phase 3 succeeds AND (b) the daily vision budget allows AND (c) the listing isn't already cached as "high quality."
+### 2. Top-N slice starves externals
+After scoring, only `maxResults + 2` (= 7) properties are passed to the LLM:
+```ts
+const topProperties = scoredProperties.slice(0, maxResults + 2);
+```
+For a "D1" query there are 5 internal D1 listings + ~13 loaded external D1 listings. Internal listings tend to score similarly or higher (more complete amenities/vibe), so externals get pushed out of the top 7 entirely.
 
-When the daily OpenAI budget is exhausted or the function aborts at the 140s safety cutoff, Phase 7 is skipped but the Phase 3 row stays `is_active = true`. The `46f05279...` listing is one of these — it has only outdoor/exterior shots because nothing rejected the gallery.
-
-There is also no rejection rule that says "if every image is exterior, deactivate." The vision QC memory mentions filtering non-apartment images but the actual prompt in `analyze-vibe` does not gate the listing on interior coverage — it scores the images that exist.
-
-### 2. OpenAI TPM rate limits
-
-`analyze-vibe` and `backfill-image-highlights` both call `gpt-4o-mini` with **5 base64-encoded images per request** (~1–2 MB inlined data each). During a crawl burst:
-
-- Each property = 1 request × 5 images × ~2K vision tokens = ~10K input tokens.
-- The crawler processes properties **sequentially in the same function invocation** with no inter-request delay.
-- 10 listings ≈ 100K tokens in under a minute, which trips the `gpt-4o-mini` TPM ceiling on the project's tier.
-- On 429 the code logs the error to `detailed_analysis` and moves on — the row is saved with `"rate_limit_exceeded"` text where the highlight should be. That's why `abf7c5a1...` and 9 others have stale error strings.
-
-No retry, no backoff, no queue throttle, no Gemini fallback wired in for the vibe path (the memory says Gemini is the documented fallback but the code does not call it).
-
----
-
-## Plan — Quality-First Fix (No Fallbacks)
-
-### A. Block outdoor-only listings at ingestion
-
-Modify `supabase/functions/scrape-marketplace/index.ts`:
-
-1. Before saving a Phase 3 row, run a **lightweight interior gate**: a single `gpt-4o-mini` vision call on the first 3 images asking "does at least one image show an apartment interior (living room, bedroom, kitchen, bathroom)? Return JSON `{has_interior: bool, interior_indices: number[]}`."
-2. If `has_interior === false` → **do not insert the listing**. Log to a new `crawler_rejections` table (id, source_url, reason, sample_images, rejected_at) for admin visibility.
-3. If `has_interior === true` → keep only `interior_indices` images in the gallery, drop pure exterior shots before saving.
-
-This guarantees every listing entering `external_properties` has interior coverage. One extra vision call per listing, but it replaces wasted Phase 7 work on bad galleries.
-
-### B. Eliminate TPM rate limits with proper throttling
-
-Modify `supabase/functions/analyze-vibe/index.ts` and `supabase/functions/backfill-image-highlights/index.ts`:
-
-1. **Per-image requests instead of batch-of-5**: switch from "5 images in one prompt" to "1 image per request." Smaller payloads = lower TPM spike, better per-image specificity, and a single failure no longer poisons 5 highlights.
-2. **Token-budget-aware concurrency limiter**: add a Redis-backed sliding-window counter (`vibe:tpm:<minute>`) using existing Upstash infra. Before each call, check the current minute's token spend; if it would exceed 80% of the project's TPM cap, sleep until the next window.
-3. **Exponential backoff with jitter on 429**: 1s → 2s → 4s → 8s with ±20% jitter, max 3 retries. After 3 failures, the property stays in a `pending_vibe` state (new column `vibe_status text default 'pending'`) — never written as a fake highlight.
-4. **Strict status enum**: `vibe_status` ∈ `pending | processing | complete | rejected_no_interior`. The admin "✓ vibe" badge keys off `vibe_status = 'complete'`, removing all the heuristic string-checking added in earlier iterations.
-
-### C. Async background processing
-
-Move vibe analysis out of the synchronous crawl path:
-
-1. After scrape-marketplace saves a clean listing, push a job to a new `vibe_analysis_queue` table (`property_id`, `enqueued_at`, `attempts`).
-2. New scheduled function `process-vibe-queue` runs every 2 minutes via QStash, pulls up to N jobs (where N respects the TPM budget from step B2), processes them, marks `vibe_status = complete`.
-3. Listings remain `is_active = false` until `vibe_status = complete`. They become discoverable only after they pass full vision QC.
-
-### D. Backfill the existing damage
-
-One-time script (run from the Backfill admin tool):
-
-1. Find all `external_properties` with `vibe_status` missing or with `rate_limit_exceeded` strings in `detailed_analysis`.
-2. Reset them to `vibe_status = 'pending'`, `is_active = false`.
-3. Run the interior gate (step A) — deactivate ones that fail.
-4. Enqueue survivors into the vibe queue (step C).
+### 3. Hanoi-district false positives in the city filter (secondary)
+The hard city filter at line 730–744 marks a property as Hanoi if its location text contains a Hanoi district name as a word-bounded token. HCMC street names like **"Đường Hai Bà Trưng"** (a major D1/D3 street) collide with Hanoi's `'hai ba trung'` district name and cause those HCMC listings to be excluded as "wrong city". Same risk for other shared street names.
 
 ---
 
-## Technical Details
+## Plan
 
-**New DB migrations:**
-- `external_properties.vibe_status text default 'pending' check (vibe_status in ('pending','processing','complete','rejected_no_interior'))`
-- New table `crawler_rejections (id, source_url, source, reason, sample_images jsonb, rejected_at)`
-- New table `vibe_analysis_queue (id, property_id, enqueued_at, attempts int default 0, last_error text, status text default 'queued')`
-- RLS: admin-only on both new tables via `has_role(auth.uid(), 'admin')`
+Edit `supabase/functions/chat-ai/index.ts` only.
 
-**Edge function changes:**
-- `scrape-marketplace`: add `interiorGate()` call before insert
-- `analyze-vibe`: refactor to per-image, add Redis TPM limiter, add backoff
-- `backfill-image-highlights`: same refactor; remove "rate_limit_exceeded" tolerance — fail loudly to queue
-- New `process-vibe-queue`: scheduled consumer
-- `supabase/config.toml`: add `[functions.process-vibe-queue] verify_jwt = false`
+### Change 1 — Load all active externals, prioritised
 
-**Admin UI updates (`src/pages/AdminTools.tsx`):**
-- Replace badge heuristic with `vibe_status === 'complete'` check
-- Add a "Rejections" tab showing `crawler_rejections` (so you can see *why* a URL was skipped — outdoor-only, no images, etc.)
-- Add a "Vibe Queue" widget showing queue depth and TPM headroom
+Remove the silent cap and add deterministic ordering so newer D1 listings aren't dropped:
 
-**Removed code:**
-- `GENERIC_HIGHLIGHTS` array and string-matching validation in AdminTools (replaced by enum)
-- All `rate_limit_exceeded` swallow paths — these become hard failures that requeue
+```ts
+.from('external_properties')
+.select('*')
+.eq('is_active', true)
+.gt('expires_at', new Date().toISOString())
+.order('crawled_at', { ascending: false })
+.limit(500)
+```
+
+500 is a safe ceiling for current scale (228 active) and leaves headroom; we still order so any future overflow drops oldest first, not random.
+
+### Change 2 — Guarantee external representation in the top slice
+
+Replace the simple `slice(0, maxResults + 2)` with a quota-aware selection that keeps the top scored properties **and** ensures at least 2–3 externals when externals exist among matches:
+
+```ts
+const allTop = scoredProperties.slice(0, maxResults + 2);
+const externalsInScored = scoredProperties.filter(p => p.isExternal);
+const externalsInTop = allTop.filter(p => p.isExternal).length;
+const externalQuota = Math.min(3, externalsInScored.length);
+
+let topProperties = allTop;
+if (externalsInTop < externalQuota && externalsInScored.length > 0) {
+  // Reserve `externalQuota` slots for externals, fill the rest with best non-external
+  const topExternals = externalsInScored.slice(0, externalQuota);
+  const topInternals = scoredProperties
+    .filter(p => !p.isExternal)
+    .slice(0, (maxResults + 2) - externalQuota);
+  topProperties = [...topInternals, ...topExternals]
+    .sort((a, b) => {
+      if (a.isExactSubAreaMatch !== b.isExactSubAreaMatch) return a.isExactSubAreaMatch ? -1 : 1;
+      return b.matchScore - a.matchScore;
+    });
+}
+```
+
+This preserves overall sort priority but prevents externals from being completely starved.
+
+### Change 3 — Stop Hanoi-district false positives from HCMC street names
+
+In the `filterAndScoreProperties` city filter (line 730–744), only treat a property as belonging to another city if **either**:
+- its location string contains that city's **alias** (`hanoi`, `hà nội`, `da nang`, `đà nẵng`), OR
+- its district token appears **after a comma** (i.e. in the admin tail of the address, not as a street name).
+
+Concretely, change the Hanoi/Da Nang district check to require comma-prefixed context:
+
+```ts
+// Replace bare matchesWord(locLower, d) for non-target cities with:
+const matchesAdminDistrict = (loc: string, term: string) => {
+  // Match ", <term>," or ", <term>$" — i.e. district as administrative segment
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`,\\s*${escaped}(?=\\s*,|\\s*$)`, 'i').test(loc);
+};
+
+// In the loop:
+if (cityData.aliases.some(a => matchesWord(locLower, a)) ||
+    Object.values(cityData.districts).some(tier =>
+      tier.names.some(d => matchesAdminDistrict(locLower, d))
+    )) {
+  isOtherCity = true;
+  break;
+}
+```
+
+This keeps HCMC properties on streets like "Đường Hai Bà Trưng, Phường Bến Nghé, Quận 1, Tp Hồ Chí Minh" from being misclassified as Hanoi, while still excluding genuine Hanoi listings whose tail reads `…, Hai Bà Trưng, Hà Nội`.
+
+### Change 4 — Add diagnostic log
+
+Add one console.log right after scoring so future regressions are easy to spot:
+```ts
+console.log(`[Filtering] externals in scored=${scoredProperties.filter(p=>p.isExternal).length}, in topProperties=${topProperties.filter(p=>p.isExternal).length}`);
+```
 
 ---
+
+## Files touched
+
+- `supabase/functions/chat-ai/index.ts` (only)
+
+## Out of scope
+
+- No DB migrations.
+- No changes to scraping, vibe queue, or the public-property-search function.
+- No changes to address normalisation in the crawler — Vietnamese addresses are already correctly matched by the existing tokens.
 
 ## Outcome
 
-- **No outdoor-only listings** ever reach the discovery feed (interior gate at ingestion).
-- **Zero rate-limit poisoning** — TPM limiter prevents 429s; the rare 429 retries with backoff; persistent failures stay queued, never fake-completed.
-- **No fallbacks**: every published listing has real GPT-4o-mini per-image highlights or it isn't published.
-- Admin gets clear visibility into rejections and queue health.
-
+When a user asks for "D1", external HCMC listings stored as `"…, Quận 1, Tp Hồ Chí Minh"` reliably appear in the AI results: all active externals are considered, at least up to 3 are guaranteed in the top slice when they qualify, and HCMC streets sharing names with Hanoi districts are no longer wrongly filtered out.
