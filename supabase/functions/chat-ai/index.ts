@@ -727,14 +727,22 @@ function filterAndScoreProperties(
     
     // ========== HARD FILTERS (Eliminate non-matching) ==========
     
-    // 1. City filter (STRICT) - exclude properties from ALL other cities
+    // 1. City filter (STRICT) - exclude properties from ALL other cities.
+    // Only consider a property to belong to "another city" if EITHER its location
+    // contains that city's alias (e.g. "hà nội"), OR a district token appears as
+    // an admin segment (after a comma) — NOT as a street name like
+    // "Đường Hai Bà Trưng" inside an HCMC address.
     if (context.city) {
+      const matchesAdminDistrict = (loc: string, term: string) => {
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`,\\s*${escaped}(?=\\s*,|\\s*$)`, 'i').test(loc);
+      };
       const otherCities = Object.entries(LOCATION_DATA).filter(([key]) => key !== context.city);
       let isOtherCity = false;
       for (const [, cityData] of otherCities) {
         if (cityData.aliases.some(a => matchesWord(locLower, a)) ||
-          Object.values(cityData.districts).some(tier => 
-            tier.names.some(d => matchesWord(locLower, d))
+          Object.values(cityData.districts).some(tier =>
+            tier.names.some(d => matchesAdminDistrict(locLower, d))
           )) {
           isOtherCity = true;
           break;
