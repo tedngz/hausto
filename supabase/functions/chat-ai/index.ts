@@ -1215,7 +1215,8 @@ serve(async (req) => {
         .select('*')
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
-        .limit(200)
+        .order('crawled_at', { ascending: false })
+        .limit(500)
     ]);
 
     if (internalResult.error) {
