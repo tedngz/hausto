@@ -1571,8 +1571,26 @@ Pick 1-3 styles and 1-2 colors that best match.`
     const scoredProperties = filterAndScoreProperties(basePropertySet, accContext);
     console.log(`[Filtering] ${scoredProperties.length} properties after filtering (from ${properties.length})`);
 
-    // Take top scored properties directly instead of discarding lower-scored, but still sorted by score
-    const topProperties = scoredProperties.slice(0, maxResults + 2);
+    // Take top scored properties, but guarantee external listings get representation
+    // so they aren't starved out by internal listings that score similarly.
+    const topSize = maxResults + 2;
+    const allTop = scoredProperties.slice(0, topSize);
+    const externalsInScored = scoredProperties.filter(p => p.isExternal);
+    const externalsInTop = allTop.filter(p => p.isExternal).length;
+    const externalQuota = Math.min(3, externalsInScored.length);
+
+    let topProperties = allTop;
+    if (externalsInTop < externalQuota && externalsInScored.length > 0) {
+      const topExternals = externalsInScored.slice(0, externalQuota);
+      const topInternals = scoredProperties
+        .filter(p => !p.isExternal)
+        .slice(0, topSize - externalQuota);
+      topProperties = [...topInternals, ...topExternals].sort((a, b) => {
+        if (a.isExactSubAreaMatch !== b.isExactSubAreaMatch) return a.isExactSubAreaMatch ? -1 : 1;
+        return b.matchScore - a.matchScore;
+      });
+    }
+    console.log(`[Filtering] externals in scored=${externalsInScored.length}, in topProperties=${topProperties.filter(p => p.isExternal).length}`);
 
     // Separate into matching and non-matching buckets for logging only
     const perfectMatches = scoredProperties.filter(p => p.matchScore >= 70);
