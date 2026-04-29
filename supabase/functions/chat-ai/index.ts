@@ -373,6 +373,8 @@ interface AccumulatedContext {
   amenities: string[];
   styles: string[];
   specificDistricts: string[];
+  rejections: string[];   // things the user said they didn't want
+  likes: string[];        // things/properties the user reacted positively to
 }
 
 // Extract specific districts/areas mentioned by user (including sub-districts and roads)
