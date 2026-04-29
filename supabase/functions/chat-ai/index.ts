@@ -1597,6 +1597,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
                 } catch (metaErr) {
                   console.error('[Image Analysis] Failed to persist metadata:', metaErr);
                 }
+              }
             } catch (parseErr) {
               console.error('[Image Analysis] Failed to parse analysis result:', analysisContent);
             }
