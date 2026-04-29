@@ -1,126 +1,68 @@
-## Root cause
+## Goal
+Make Hausto AI reason better and hold conversation context more naturally so follow-ups feel fluid and recommendations are sharper.
 
-External listings *do* get scored correctly for "D1" (location strings like `"…, Quận 1, Tp Hồ Chí Minh"` already match the Vietnamese token `quận 1` used in the filter). The Vietnamese addresses are **not** the problem.
-
-The real causes are in `supabase/functions/chat-ai/index.ts` at the data-loading layer:
-
-### 1. External property fetch is capped and unordered
-```ts
-supabase.from('external_properties')
-  .select('*')
-  .eq('is_active', true)
-  .gt('expires_at', new Date().toISOString())
-  .limit(200)            // ← cap
-                         // ← no .order(), so Postgres returns rows in arbitrary order
-```
-
-There are currently **228** active external properties (159 in HCMC, 19 in District 1). The arbitrary `.limit(200)` silently drops ~28 listings, and with no `ORDER BY`, the dropped slice is non-deterministic — D1 listings are often among those silently excluded before scoring even runs.
-
-### 2. Top-N slice starves externals
-After scoring, only `maxResults + 2` (= 7) properties are passed to the LLM:
-```ts
-const topProperties = scoredProperties.slice(0, maxResults + 2);
-```
-For a "D1" query there are 5 internal D1 listings + ~13 loaded external D1 listings. Internal listings tend to score similarly or higher (more complete amenities/vibe), so externals get pushed out of the top 7 entirely.
-
-### 3. Hanoi-district false positives in the city filter (secondary)
-The hard city filter at line 730–744 marks a property as Hanoi if its location text contains a Hanoi district name as a word-bounded token. HCMC street names like **"Đường Hai Bà Trưng"** (a major D1/D3 street) collide with Hanoi's `'hai ba trung'` district name and cause those HCMC listings to be excluded as "wrong city". Same risk for other shared street names.
-
----
+## Current limitations (in `supabase/functions/chat-ai/index.ts`)
+1. Calls `gpt-5` with no `reasoning_effort` — model defaults to fast/shallow reasoning.
+2. Only the last **10 history messages** are sent to the model (line 1762), and DB fetch is capped at **15** (line 1293) — earlier turns get dropped.
+3. Previously suggested properties are extracted but only their IDs are surfaced; full conversational memory of "what we already discussed" is thin.
+4. System prompt is long and rule-heavy, which can crowd out reasoning. No explicit "think step-by-step" framing or self-check pass.
+5. No conversation summary/distillation when history gets long → context window fills with raw chat instead of insights.
+6. Image style detection runs on a separate `gpt-4o-mini` call but its findings aren't fed back as a structured memory the main model can reason over turn-after-turn.
 
 ## Plan
 
-Edit `supabase/functions/chat-ai/index.ts` only.
+### 1. Enable real reasoning on the main model
+In the main AI call (around line 1774):
+- Add `reasoning_effort: "medium"` to the gpt-5 request body (low for short follow-ups, medium for new searches — pick effort based on `isComparisonQuery` / message complexity).
+- Bump `max_completion_tokens` to `4000` to give reasoning room.
 
-### Change 1 — Load all active externals, prioritised
+### 2. Expand and smartly compress conversation memory
+- Increase DB history limit from 15 → **40 messages** (line 1293).
+- Send last **20** raw turns to the model (was 10, line 1762).
+- When history > 20 turns, generate a lightweight "conversation summary" (one extra small Lovable AI call using `google/gemini-3-flash-preview`) capturing: stated preferences, rejected options, properties already viewed, open questions. Inject this summary as a `system` message before the recent turns.
 
-Remove the silent cap and add deterministic ordering so newer D1 listings aren't dropped:
+### 3. Strengthen accumulated context
+Extend `buildAccumulatedContext` (line 566) to also track:
+- **Rejected preferences** — when user says "not that one", "too expensive", "don't like X".
+- **Confirmed likes** — properties the user reacted positively to.
+- **Open clarifications** — questions the AI asked that the user hasn't answered yet.
+Surface these in the system prompt as bullet sections so the model reasons over them, not just current filters.
 
-```ts
-.from('external_properties')
-.select('*')
-.eq('is_active', true)
-.gt('expires_at', new Date().toISOString())
-.order('crawled_at', { ascending: false })
-.limit(500)
-```
+### 4. Restructure system prompt for reasoning
+Reorganize the prompt (line 1643) into clearer sections:
+1. Role & tone
+2. What we know (accumulated context + rejections + likes)
+3. Conversation summary (when present)
+4. Available properties (current ranked list)
+5. Reasoning checklist — explicit "Before answering, think through: (a) Is this a follow-up or new search? (b) Did the user reject anything I should avoid? (c) Are there open questions I should answer before listing properties? (d) Does my recommendation order respect priority?"
+6. Output format
 
-500 is a safe ceiling for current scale (228 active) and leaves headroom; we still order so any future overflow drops oldest first, not random.
+Trim duplicated instructions (the file currently has two "8." and two "9." numbered rules).
 
-### Change 2 — Guarantee external representation in the top slice
+### 5. Better follow-up handling
+- Expand `detectComparisonQuery` to also catch reasoning-style follow-ups: "why", "tell me more about", "compare these two", "what's the difference", "which is better for…".
+- For these, lower property re-fetching and instruct the model to reason over the previously suggested set instead of returning a new JSON results array.
 
-Replace the simple `slice(0, maxResults + 2)` with a quota-aware selection that keeps the top scored properties **and** ensures at least 2–3 externals when externals exist among matches:
+### 6. Feed image analysis back as durable memory
+When `imageAnalysisResult` is produced, persist its styles/colors into the `chat_messages.metadata` of the user message so subsequent turns can see "user previously uploaded a Modern/Minimalist reference" without re-analyzing — and include that note in the accumulated-context block.
 
-```ts
-const allTop = scoredProperties.slice(0, maxResults + 2);
-const externalsInScored = scoredProperties.filter(p => p.isExternal);
-const externalsInTop = allTop.filter(p => p.isExternal).length;
-const externalQuota = Math.min(3, externalsInScored.length);
-
-let topProperties = allTop;
-if (externalsInTop < externalQuota && externalsInScored.length > 0) {
-  // Reserve `externalQuota` slots for externals, fill the rest with best non-external
-  const topExternals = externalsInScored.slice(0, externalQuota);
-  const topInternals = scoredProperties
-    .filter(p => !p.isExternal)
-    .slice(0, (maxResults + 2) - externalQuota);
-  topProperties = [...topInternals, ...topExternals]
-    .sort((a, b) => {
-      if (a.isExactSubAreaMatch !== b.isExactSubAreaMatch) return a.isExactSubAreaMatch ? -1 : 1;
-      return b.matchScore - a.matchScore;
-    });
-}
-```
-
-This preserves overall sort priority but prevents externals from being completely starved.
-
-### Change 3 — Stop Hanoi-district false positives from HCMC street names
-
-In the `filterAndScoreProperties` city filter (line 730–744), only treat a property as belonging to another city if **either**:
-- its location string contains that city's **alias** (`hanoi`, `hà nội`, `da nang`, `đà nẵng`), OR
-- its district token appears **after a comma** (i.e. in the admin tail of the address, not as a street name).
-
-Concretely, change the Hanoi/Da Nang district check to require comma-prefixed context:
-
-```ts
-// Replace bare matchesWord(locLower, d) for non-target cities with:
-const matchesAdminDistrict = (loc: string, term: string) => {
-  // Match ", <term>," or ", <term>$" — i.e. district as administrative segment
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`,\\s*${escaped}(?=\\s*,|\\s*$)`, 'i').test(loc);
-};
-
-// In the loop:
-if (cityData.aliases.some(a => matchesWord(locLower, a)) ||
-    Object.values(cityData.districts).some(tier =>
-      tier.names.some(d => matchesAdminDistrict(locLower, d))
-    )) {
-  isOtherCity = true;
-  break;
-}
-```
-
-This keeps HCMC properties on streets like "Đường Hai Bà Trưng, Phường Bến Nghé, Quận 1, Tp Hồ Chí Minh" from being misclassified as Hanoi, while still excluding genuine Hanoi listings whose tail reads `…, Hai Bà Trưng, Hà Nội`.
-
-### Change 4 — Add diagnostic log
-
-Add one console.log right after scoring so future regressions are easy to spot:
-```ts
-console.log(`[Filtering] externals in scored=${scoredProperties.filter(p=>p.isExternal).length}, in topProperties=${topProperties.filter(p=>p.isExternal).length}`);
-```
-
----
-
-## Files touched
-
-- `supabase/functions/chat-ai/index.ts` (only)
+## Technical changes
+- File: `supabase/functions/chat-ai/index.ts`
+  - Update history limits (lines 1293, 1762).
+  - Add `reasoning_effort` + raise `max_completion_tokens` (line 1774).
+  - Add conversation-summary helper (new function, ~30 LOC) invoked when `chatHistory.length > 20`.
+  - Extend `buildAccumulatedContext` + add `extractRejections`, `extractLikes` helpers (~40 LOC).
+  - Rewrite system prompt block (lines 1643–1746) — same data, cleaner structure, reasoning checklist, deduped numbering.
+  - Expand `detectComparisonQuery` patterns (line 628).
+  - Persist image-analysis metadata to `chat_messages` when present.
 
 ## Out of scope
+- No DB schema changes (metadata column already exists on `chat_messages`).
+- No model swap — staying on `gpt-5` since it's already wired and has the strongest reasoning of the available set.
+- No frontend changes — `useHomeAI`/`HomeAI` already pass full history server-side.
 
-- No DB migrations.
-- No changes to scraping, vibe queue, or the public-property-search function.
-- No changes to address normalisation in the crawler — Vietnamese addresses are already correctly matched by the existing tokens.
-
-## Outcome
-
-When a user asks for "D1", external HCMC listings stored as `"…, Quận 1, Tp Hồ Chí Minh"` reliably appear in the AI results: all active externals are considered, at least up to 3 are guaranteed in the top slice when they qualify, and HCMC streets sharing names with Hanoi districts are no longer wrongly filtered out.
+## Expected impact
+- More accurate follow-ups ("which one has a balcony?", "compare 2 and 3").
+- Fewer repeated suggestions of properties the user already rejected.
+- Smoother multi-turn conversations even past 15 messages.
+- Better reasoning on ambiguous requests (e.g., "somewhere quieter but still close to D1").
