@@ -59,6 +59,16 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
+    // Enforce realtor role - prevents any authenticated user from creating properties
+    const { data: isRealtor } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'realtor' });
+    const { data: isAdmin } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
+    if (!isRealtor && !isAdmin) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: realtor role required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { properties, startIndex = 0 } = await req.json();
     
     if (!Array.isArray(properties) || properties.length === 0) {
@@ -81,9 +91,9 @@ serve(async (req) => {
       const property = properties[i];
       
       try {
-        // Validate required fields
-        if (!property.location || !property.price || !property.realtor_id || !Array.isArray(property.images) || property.images.length === 0) {
-          throw new Error('Required fields missing: location, price, realtor_id, and images');
+        // Validate required fields (realtor_id is always pinned to authenticated user, never trusted from client)
+        if (!property.location || !property.price || !Array.isArray(property.images) || property.images.length === 0) {
+          throw new Error('Required fields missing: location, price, and images');
         }
 
         console.log(`Processing property ${startIndex + i + 1}: ${property.location}`);
@@ -271,7 +281,7 @@ serve(async (req) => {
           amenities: property.amenities || aiResult?.amenities || [],
           images: uploadedImages,
           vibe_analysis: aiContent || {},
-          realtor_id: property.realtor_id,
+          realtor_id: user.id, // SECURITY: pin to authenticated user, never trust client value
           property_source_link: property.property_source_link || null,
           property_source_provider_name: property.property_source_provider_name || null,
           property_source_provider_phone: property.property_source_provider_phone || null
