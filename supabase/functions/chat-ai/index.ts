@@ -1885,11 +1885,14 @@ Maximum ${maxResults} properties in results.`;
 
     const messagesWithHistory = [
       { role: 'system', content: systemPrompt },
-      ...chatHistory.slice(-10).map(msg => ({ role: msg.role, content: msg.content })),
+      ...chatHistory.slice(-20).map(msg => ({ role: msg.role, content: msg.content })),
       { role: 'user', content: userMessageContent }
     ];
 
-    console.log('[AI] Calling OpenAI API with gpt-5');
+    // Pick reasoning depth: higher for new searches / complex queries, lower for short follow-ups.
+    const isShortFollowUp = isComparisonQuery && message.length < 80;
+    const reasoningEffort = isShortFollowUp ? 'low' : 'medium';
+    console.log(`[AI] Calling OpenAI gpt-5 (reasoning_effort=${reasoningEffort}, history=${Math.min(chatHistory.length, 20)} turns)`);
 
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -1900,7 +1903,8 @@ Maximum ${maxResults} properties in results.`;
       body: JSON.stringify({
         model: 'gpt-5',
         messages: messagesWithHistory,
-        max_completion_tokens: 2500,
+        max_completion_tokens: 4000,
+        reasoning_effort: reasoningEffort,
       }),
     });
 
