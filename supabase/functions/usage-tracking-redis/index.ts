@@ -49,20 +49,15 @@ Deno.serve(async (req) => {
       });
     }
 
+    // SECURITY: cryptographically verify the JWT instead of trusting client-decoded payload
     let userId: string;
     try {
       const token = authHeader.replace('Bearer ', '');
-      const parts = token.split('.');
-      if (parts.length !== 3) throw new Error('Invalid JWT structure');
-
-      const payloadBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-      const payloadJson = atob(payloadBase64);
-      const payload = JSON.parse(payloadJson);
-
-      userId = payload.sub as string;
-      if (!userId) throw new Error('Missing sub in JWT payload');
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+      if (userError || !user) throw new Error(userError?.message || 'Invalid token');
+      userId = user.id;
     } catch (err) {
-      console.error('[Usage Tracking] Failed to parse JWT:', err);
+      console.error('[Usage Tracking] Failed to verify JWT:', err);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
