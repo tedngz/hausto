@@ -1567,6 +1567,36 @@ Pick 1-3 styles and 1-2 colors that best match.`
                   }
                 }
               }
+
+              // Persist analysis onto the latest user message metadata so subsequent
+              // turns retain memory of "user previously uploaded a Modern reference".
+              if (canPersist && imageAnalysisResult) {
+                try {
+                  const { data: latestUserMsg } = await supabase
+                    .from('chat_messages')
+                    .select('id, metadata')
+                    .eq('conversation_id', conversationId)
+                    .eq('role', 'user')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  if (latestUserMsg?.id) {
+                    const newMetadata = {
+                      ...(latestUserMsg.metadata || {}),
+                      imageAnalysis: {
+                        styles: imageAnalysisResult.styles,
+                        colors: imageAnalysisResult.colors,
+                        description: imageAnalysisResult.description,
+                      },
+                    };
+                    await supabase
+                      .from('chat_messages')
+                      .update({ metadata: newMetadata })
+                      .eq('id', latestUserMsg.id);
+                  }
+                } catch (metaErr) {
+                  console.error('[Image Analysis] Failed to persist metadata:', metaErr);
+                }
             } catch (parseErr) {
               console.error('[Image Analysis] Failed to parse analysis result:', analysisContent);
             }
