@@ -373,6 +373,8 @@ interface AccumulatedContext {
   amenities: string[];
   styles: string[];
   specificDistricts: string[];
+  rejections: string[];   // things the user said they didn't want
+  likes: string[];        // things/properties the user reacted positively to
 }
 
 // Extract specific districts/areas mentioned by user (including sub-districts and roads)
@@ -563,6 +565,48 @@ function extractSpecificDistricts(text: string): string[] {
   return districts;
 }
 
+// Detect dislikes / rejections in a user message
+function extractRejections(text: string): string[] {
+  const lower = text.toLowerCase();
+  const out: string[] = [];
+  const patterns: Array<[RegExp, string]> = [
+    [/(don'?t|do not|not) (like|want|need)\s+([a-z0-9\s\-]{2,30})/i, 'avoid: $3'],
+    [/no (more|other)?\s*([a-z0-9\s\-]{2,30})/i, 'no $2'],
+    [/too (expensive|small|far|noisy|dark|cramped|cheap)/i, 'too $1'],
+    [/(skip|remove|hide|exclude)\s+([a-z0-9\s\-]{2,30})/i, 'exclude $2'],
+    [/not (interested in|looking for|the right)/i, 'not interested'],
+    [/(hate|dislike)\s+([a-z0-9\s\-]{2,30})/i, 'dislikes $2'],
+  ];
+  for (const [re, label] of patterns) {
+    const m = lower.match(re);
+    if (m) {
+      const rendered = label.replace('$2', m[2] || '').replace('$3', m[3] || '').trim();
+      if (rendered && !out.includes(rendered)) out.push(rendered.slice(0, 60));
+    }
+  }
+  return out;
+}
+
+// Detect positive signals / likes
+function extractLikes(text: string): string[] {
+  const lower = text.toLowerCase();
+  const out: string[] = [];
+  const patterns: Array<[RegExp, string]> = [
+    [/(love|like|prefer|want) (the )?([a-z0-9\s\-]{2,30})/i, 'likes $3'],
+    [/(perfect|great|nice|good) (for|fit|match)/i, 'positive reaction'],
+    [/(this|that) (one|looks) (good|great|perfect|nice)/i, 'positive on shown option'],
+    [/show me more like/i, 'wants more like previous'],
+  ];
+  for (const [re, label] of patterns) {
+    const m = lower.match(re);
+    if (m) {
+      const rendered = label.replace('$3', m[3] || '').trim();
+      if (rendered && !out.includes(rendered)) out.push(rendered.slice(0, 60));
+    }
+  }
+  return out;
+}
+
 function buildAccumulatedContext(chatHistory: Array<{role: string, content: string}>, currentMessage: string): AccumulatedContext {
   const context: AccumulatedContext = {
     city: null,
@@ -572,7 +616,9 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     minPrice: null,
     amenities: [],
     styles: [],
-    specificDistricts: []
+    specificDistricts: [],
+    rejections: [],
+    likes: []
   };
   
   // Parse ONLY USER messages for preferences (ignore AI responses to prevent contamination)
@@ -614,6 +660,14 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     for (const d of specificDistricts) {
       if (!context.specificDistricts.includes(d)) context.specificDistricts.push(d);
     }
+
+    // Rejections & likes (accumulate)
+    for (const r of extractRejections(text)) {
+      if (!context.rejections.includes(r)) context.rejections.push(r);
+    }
+    for (const l of extractLikes(text)) {
+      if (!context.likes.includes(l)) context.likes.push(l);
+    }
   }
   
   // Determine location tier based on center preference
@@ -622,6 +676,43 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
   }
   
   return context;
+}
+
+// Summarize long conversation history into a compact memory block.
+// Uses Lovable AI Gateway with a fast model. Falls back to empty string on failure.
+async function summarizeConversation(
+  chatHistory: Array<{role: string, content: string}>
+): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY || chatHistory.length === 0) return '';
+  try {
+    const transcript = chatHistory
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 400)}`)
+      .join('\n');
+    const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-3-flash-preview',
+        messages: [
+          {
+            role: 'system',
+            content: 'Summarize this rental-property chat into a compact memory the assistant can reuse. Output 4 short bullet sections: Stated preferences, Things rejected/disliked, Properties already discussed (titles only), Open questions still unresolved. Be terse, no filler.'
+          },
+          { role: 'user', content: transcript }
+        ],
+      }),
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    return (data.choices?.[0]?.message?.content || '').trim();
+  } catch (e) {
+    console.error('[Summary] Failed:', e);
+    return '';
+  }
 }
 
 // Detect if user is asking to compare/filter previous results (not a new search)
@@ -662,6 +753,16 @@ function detectComparisonQuery(message: string): boolean {
     /cái nào/i,
     /căn nào/i,
     /phòng nào/i,
+    // Reasoning-style follow-ups about previously shown options
+    /^why\b/i,
+    /tell me more about/i,
+    /more details on/i,
+    /what'?s the difference/i,
+    /which (is|one is) (better|cheaper|bigger|closer)/i,
+    /pros and cons/i,
+    /should i (pick|choose|go with)/i,
+    /the (first|second|third|last) one/i,
+    /^(option|number) ?\d/i,
   ];
   
   return comparisonPatterns.some(p => p.test(message));
@@ -1290,7 +1391,7 @@ serve(async (req) => {
         .select('role, content')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
-        .limit(15); // Increased history limit for better context
+        .limit(40); // Wider history window for better long-conversation memory
 
       chatHistory = history || [];
     }
@@ -1392,6 +1493,14 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     
     // Build accumulated context from conversation history
     const accContext = buildAccumulatedContext(chatHistory, message);
+
+    // Compute a compact conversation summary when history is long, so the model
+    // keeps long-term context without flooding the prompt with raw transcript.
+    let conversationSummary = '';
+    if (chatHistory.length > 20) {
+      conversationSummary = await summarizeConversation(chatHistory.slice(0, -20));
+      if (conversationSummary) console.log('[Summary] Generated', conversationSummary.length, 'chars');
+    }
     
     // ========== IMAGE STYLE DETECTION ==========
     // If user uploaded reference images, analyze them to detect styles/vibes
@@ -1456,6 +1565,37 @@ Pick 1-3 styles and 1-2 colors that best match.`
                   if (!accContext.styles.includes(lowerStyle)) {
                     accContext.styles.push(lowerStyle);
                   }
+                }
+              }
+
+              // Persist analysis onto the latest user message metadata so subsequent
+              // turns retain memory of "user previously uploaded a Modern reference".
+              if (canPersist && imageAnalysisResult) {
+                try {
+                  const { data: latestUserMsg } = await supabase
+                    .from('chat_messages')
+                    .select('id, metadata')
+                    .eq('conversation_id', conversationId)
+                    .eq('role', 'user')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  if (latestUserMsg?.id) {
+                    const newMetadata = {
+                      ...(latestUserMsg.metadata || {}),
+                      imageAnalysis: {
+                        styles: imageAnalysisResult.styles,
+                        colors: imageAnalysisResult.colors,
+                        description: imageAnalysisResult.description,
+                      },
+                    };
+                    await supabase
+                      .from('chat_messages')
+                      .update({ metadata: newMetadata })
+                      .eq('id', latestUserMsg.id);
+                  }
+                } catch (metaErr) {
+                  console.error('[Image Analysis] Failed to persist metadata:', metaErr);
                 }
               }
             } catch (parseErr) {
@@ -1603,11 +1743,21 @@ Pick 1-3 styles and 1-2 colors that best match.`
     if (accContext.city) constraintsSummary.push(`City: ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`);
     if (accContext.maxPrice) constraintsSummary.push(`Budget: under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`);
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
+    if (accContext.specificDistricts.length > 0) constraintsSummary.push(`Specific areas: ${accContext.specificDistricts.join(', ')}`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
     if (imageAnalysisResult) {
       constraintsSummary.push(`🖼️ Image analysis detected: styles=[${imageAnalysisResult.styles.join(', ')}], colors=[${imageAnalysisResult.colors.join(', ')}] - "${imageAnalysisResult.description}"`);
     }
+    const rejectionsBlock = accContext.rejections.length > 0
+      ? `\n🚫 USER HAS REJECTED / DISLIKED:\n${accContext.rejections.map(r => `• ${r}`).join('\n')}\nNever re-suggest options matching these.`
+      : '';
+    const likesBlock = accContext.likes.length > 0
+      ? `\n💚 USER REACTED POSITIVELY TO:\n${accContext.likes.map(l => `• ${l}`).join('\n')}\nLean into these signals when ranking.`
+      : '';
+    const summaryBlock = conversationSummary
+      ? `\n🧠 EARLIER CONVERSATION SUMMARY:\n${conversationSummary}\n`
+      : '';
 
     // Check if we have center matches when user wants center
     const hasCenterMatches = accContext.wantsCenter && topProperties.some(p => p.locationTier === 'center');
@@ -1640,12 +1790,19 @@ ${scoredPreviousProperties.map((p, i) => `
 `
       : '';
 
-    const systemPrompt = `You are Hausto AI, a friendly and intelligent rental property assistant in Vietnam. You help renters find their perfect home.
+    const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
-${locationNote}
+${rejectionsBlock}${likesBlock}${summaryBlock}${locationNote}
 ${previousPropertiesSection}
+🪜 BEFORE YOU RESPOND, REASON THROUGH:
+1. Is this a NEW search or a FOLLOW-UP about properties already shown? (Check PREVIOUSLY SUGGESTED PROPERTIES section.)
+2. Did the user reject anything I should now avoid? Filter those out.
+3. Are there positive signals (likes) I should weight higher?
+4. Is there an open question or ambiguity I should clarify briefly before listing properties?
+5. Does my final ordering respect the priority list below and the user's stated preferences?
+
 📊 AVAILABLE PROPERTIES (${topProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${topProperties.length > 0 ? topProperties.map((p, i) => `
 [${i+1}] ${p.matchReasons.some(r => r.includes('exactly')) ? '⭐ EXACT MATCH' : '📍 NEARBY'} ${p.title}
@@ -1733,9 +1890,9 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
   "totalMatches": 3
 }
 
-8. **FOR CONVERSATIONAL QUERIES**: Only respond without JSON if user is NOT searching for properties (asking about neighborhoods, prices, advice, etc.)
+10. **FOR CONVERSATIONAL QUERIES**: If the user is NOT searching (asking advice, comparing trade-offs, asking neighborhood questions), respond conversationally without the JSON block — but still reference earlier turns and previously suggested properties when relevant.
 
-9. **LOCATION KNOWLEDGE**:
+11. **LOCATION KNOWLEDGE**:
    - HCMC Center: District 1, 3 (premium, walkable, expensive ~15-40M)
    - HCMC Near-Center: District 4, 5, Binh Thanh, Phu Nhuan (~10-25M)
    - HCMC Suburban: District 7, 2, Thu Duc (~7-18M, modern, spacious)
@@ -1759,11 +1916,14 @@ Maximum ${maxResults} properties in results.`;
 
     const messagesWithHistory = [
       { role: 'system', content: systemPrompt },
-      ...chatHistory.slice(-10).map(msg => ({ role: msg.role, content: msg.content })),
+      ...chatHistory.slice(-20).map(msg => ({ role: msg.role, content: msg.content })),
       { role: 'user', content: userMessageContent }
     ];
 
-    console.log('[AI] Calling OpenAI API with gpt-5');
+    // Pick reasoning depth: higher for new searches / complex queries, lower for short follow-ups.
+    const isShortFollowUp = isComparisonQuery && message.length < 80;
+    const reasoningEffort = isShortFollowUp ? 'low' : 'medium';
+    console.log(`[AI] Calling OpenAI gpt-5 (reasoning_effort=${reasoningEffort}, history=${Math.min(chatHistory.length, 20)} turns)`);
 
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -1774,7 +1934,8 @@ Maximum ${maxResults} properties in results.`;
       body: JSON.stringify({
         model: 'gpt-5',
         messages: messagesWithHistory,
-        max_completion_tokens: 2500,
+        max_completion_tokens: 4000,
+        reasoning_effort: reasoningEffort,
       }),
     });
 
