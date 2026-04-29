@@ -1859,9 +1859,9 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
   "totalMatches": 3
 }
 
-8. **FOR CONVERSATIONAL QUERIES**: Only respond without JSON if user is NOT searching for properties (asking about neighborhoods, prices, advice, etc.)
+10. **FOR CONVERSATIONAL QUERIES**: If the user is NOT searching (asking advice, comparing trade-offs, asking neighborhood questions), respond conversationally without the JSON block — but still reference earlier turns and previously suggested properties when relevant.
 
-9. **LOCATION KNOWLEDGE**:
+11. **LOCATION KNOWLEDGE**:
    - HCMC Center: District 1, 3 (premium, walkable, expensive ~15-40M)
    - HCMC Near-Center: District 4, 5, Binh Thanh, Phu Nhuan (~10-25M)
    - HCMC Suburban: District 7, 2, Thu Duc (~7-18M, modern, spacious)
