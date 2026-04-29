@@ -753,6 +753,16 @@ function detectComparisonQuery(message: string): boolean {
     /cái nào/i,
     /căn nào/i,
     /phòng nào/i,
+    // Reasoning-style follow-ups about previously shown options
+    /^why\b/i,
+    /tell me more about/i,
+    /more details on/i,
+    /what'?s the difference/i,
+    /which (is|one is) (better|cheaper|bigger|closer)/i,
+    /pros and cons/i,
+    /should i (pick|choose|go with)/i,
+    /the (first|second|third|last) one/i,
+    /^(option|number) ?\d/i,
   ];
   
   return comparisonPatterns.some(p => p.test(message));
