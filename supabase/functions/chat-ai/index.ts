@@ -565,6 +565,48 @@ function extractSpecificDistricts(text: string): string[] {
   return districts;
 }
 
+// Detect dislikes / rejections in a user message
+function extractRejections(text: string): string[] {
+  const lower = text.toLowerCase();
+  const out: string[] = [];
+  const patterns: Array<[RegExp, string]> = [
+    [/(don'?t|do not|not) (like|want|need)\s+([a-z0-9\s\-]{2,30})/i, 'avoid: $3'],
+    [/no (more|other)?\s*([a-z0-9\s\-]{2,30})/i, 'no $2'],
+    [/too (expensive|small|far|noisy|dark|cramped|cheap)/i, 'too $1'],
+    [/(skip|remove|hide|exclude)\s+([a-z0-9\s\-]{2,30})/i, 'exclude $2'],
+    [/not (interested in|looking for|the right)/i, 'not interested'],
+    [/(hate|dislike)\s+([a-z0-9\s\-]{2,30})/i, 'dislikes $2'],
+  ];
+  for (const [re, label] of patterns) {
+    const m = lower.match(re);
+    if (m) {
+      const rendered = label.replace('$2', m[2] || '').replace('$3', m[3] || '').trim();
+      if (rendered && !out.includes(rendered)) out.push(rendered.slice(0, 60));
+    }
+  }
+  return out;
+}
+
+// Detect positive signals / likes
+function extractLikes(text: string): string[] {
+  const lower = text.toLowerCase();
+  const out: string[] = [];
+  const patterns: Array<[RegExp, string]> = [
+    [/(love|like|prefer|want) (the )?([a-z0-9\s\-]{2,30})/i, 'likes $3'],
+    [/(perfect|great|nice|good) (for|fit|match)/i, 'positive reaction'],
+    [/(this|that) (one|looks) (good|great|perfect|nice)/i, 'positive on shown option'],
+    [/show me more like/i, 'wants more like previous'],
+  ];
+  for (const [re, label] of patterns) {
+    const m = lower.match(re);
+    if (m) {
+      const rendered = label.replace('$3', m[3] || '').trim();
+      if (rendered && !out.includes(rendered)) out.push(rendered.slice(0, 60));
+    }
+  }
+  return out;
+}
+
 function buildAccumulatedContext(chatHistory: Array<{role: string, content: string}>, currentMessage: string): AccumulatedContext {
   const context: AccumulatedContext = {
     city: null,
@@ -574,7 +616,9 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     minPrice: null,
     amenities: [],
     styles: [],
-    specificDistricts: []
+    specificDistricts: [],
+    rejections: [],
+    likes: []
   };
   
   // Parse ONLY USER messages for preferences (ignore AI responses to prevent contamination)
@@ -616,6 +660,14 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     for (const d of specificDistricts) {
       if (!context.specificDistricts.includes(d)) context.specificDistricts.push(d);
     }
+
+    // Rejections & likes (accumulate)
+    for (const r of extractRejections(text)) {
+      if (!context.rejections.includes(r)) context.rejections.push(r);
+    }
+    for (const l of extractLikes(text)) {
+      if (!context.likes.includes(l)) context.likes.push(l);
+    }
   }
   
   // Determine location tier based on center preference
@@ -624,6 +676,43 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
   }
   
   return context;
+}
+
+// Summarize long conversation history into a compact memory block.
+// Uses Lovable AI Gateway with a fast model. Falls back to empty string on failure.
+async function summarizeConversation(
+  chatHistory: Array<{role: string, content: string}>
+): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY || chatHistory.length === 0) return '';
+  try {
+    const transcript = chatHistory
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 400)}`)
+      .join('\n');
+    const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-3-flash-preview',
+        messages: [
+          {
+            role: 'system',
+            content: 'Summarize this rental-property chat into a compact memory the assistant can reuse. Output 4 short bullet sections: Stated preferences, Things rejected/disliked, Properties already discussed (titles only), Open questions still unresolved. Be terse, no filler.'
+          },
+          { role: 'user', content: transcript }
+        ],
+      }),
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    return (data.choices?.[0]?.message?.content || '').trim();
+  } catch (e) {
+    console.error('[Summary] Failed:', e);
+    return '';
+  }
 }
 
 // Detect if user is asking to compare/filter previous results (not a new search)
