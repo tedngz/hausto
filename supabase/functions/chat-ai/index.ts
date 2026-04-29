@@ -1712,11 +1712,21 @@ Pick 1-3 styles and 1-2 colors that best match.`
     if (accContext.city) constraintsSummary.push(`City: ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`);
     if (accContext.maxPrice) constraintsSummary.push(`Budget: under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`);
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
+    if (accContext.specificDistricts.length > 0) constraintsSummary.push(`Specific areas: ${accContext.specificDistricts.join(', ')}`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
     if (imageAnalysisResult) {
       constraintsSummary.push(`🖼️ Image analysis detected: styles=[${imageAnalysisResult.styles.join(', ')}], colors=[${imageAnalysisResult.colors.join(', ')}] - "${imageAnalysisResult.description}"`);
     }
+    const rejectionsBlock = accContext.rejections.length > 0
+      ? `\n🚫 USER HAS REJECTED / DISLIKED:\n${accContext.rejections.map(r => `• ${r}`).join('\n')}\nNever re-suggest options matching these.`
+      : '';
+    const likesBlock = accContext.likes.length > 0
+      ? `\n💚 USER REACTED POSITIVELY TO:\n${accContext.likes.map(l => `• ${l}`).join('\n')}\nLean into these signals when ranking.`
+      : '';
+    const summaryBlock = conversationSummary
+      ? `\n🧠 EARLIER CONVERSATION SUMMARY:\n${conversationSummary}\n`
+      : '';
 
     // Check if we have center matches when user wants center
     const hasCenterMatches = accContext.wantsCenter && topProperties.some(p => p.locationTier === 'center');
