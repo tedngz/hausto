@@ -1391,7 +1391,7 @@ serve(async (req) => {
         .select('role, content')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
-        .limit(15); // Increased history limit for better context
+        .limit(40); // Wider history window for better long-conversation memory
 
       chatHistory = history || [];
     }
