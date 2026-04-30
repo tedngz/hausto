@@ -497,10 +497,11 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               marketplace,
-              query: 'căn hộ chung cư cho thuê',
+              query: isProjectMode ? activeProject!.name : 'căn hộ chung cư cho thuê',
               location,
               includeVibeAnalysis: true,
               maxResults: maxListingsPerLocation,
+              ...(maxPriceVnd ? { maxPrice: maxPriceVnd } : {}),
             }),
             signal: controller.signal,
           });
@@ -522,13 +523,29 @@ serve(async (req) => {
             results.push(crawlResult);
             continue;
           }
+
+          // Project-mode post-filter: keep only listings whose text contains
+          // the project name or any alias. Also enforce max price as a safety net.
+          let filteredProperties = scrapeData.properties as any[];
+          if (isProjectMode && activeProject) {
+            const before = filteredProperties.length;
+            filteredProperties = filteredProperties.filter((p: any) => projectMatchesProperty(activeProject!, p));
+            console.log(`[crawl-external-properties] Project filter "${activeProject.name}": ${filteredProperties.length}/${before} kept`);
+          }
+          if (maxPriceVnd) {
+            const before = filteredProperties.length;
+            filteredProperties = filteredProperties.filter((p: any) => !p.price || Number(p.price) <= maxPriceVnd);
+            if (before !== filteredProperties.length) {
+              console.log(`[crawl-external-properties] Price filter <= ${maxPriceVnd}: ${filteredProperties.length}/${before} kept`);
+            }
+          }
           
-          crawlResult.propertiesFound = scrapeData.properties.length;
-          console.log(`[crawl-external-properties] Found ${scrapeData.properties.length} properties for ${location}/${marketplace}`);
+          crawlResult.propertiesFound = filteredProperties.length;
+          console.log(`[crawl-external-properties] Found ${filteredProperties.length} properties for ${location}/${marketplace}`);
           
           // Store in database if requested
           if (storeInDatabase) {
-            for (const property of scrapeData.properties) {
+            for (const property of filteredProperties) {
               try {
                 const locationNormalized = normalizeLocation(property.location || location);
                 const detectedCity = detectCity(property.location || location);
