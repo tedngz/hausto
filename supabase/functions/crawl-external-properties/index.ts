@@ -411,27 +411,42 @@ serve(async (req) => {
   const body: CrawlRequest = await req.json();
     const { 
       locations = [], 
+      projects = [],
       marketplaces = ['batdongsan', 'nhatot'],
       city = 'ho_chi_minh',
       forceRefresh = false,
       storeInDatabase = true,
       runVibeAnalysis = true,
       maxListingsPerLocation = 10,
+      maxPriceVnd,
     } = body;
     
-    console.log(`[crawl-external-properties] Starting crawl:`, { locations, marketplaces, city, forceRefresh, storeInDatabase, maxListingsPerLocation });
+    const isProjectMode = Array.isArray(projects) && projects.length > 0;
+
+    console.log(`[crawl-external-properties] Starting crawl:`, { mode: isProjectMode ? 'project' : 'location', locations, projectsCount: projects.length, marketplaces, city, forceRefresh, storeInDatabase, maxListingsPerLocation, maxPriceVnd });
     
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    // Use provided locations or default popular locations for the city
-    const locationsToScrape = locations.length > 0 ? locations : POPULAR_LOCATIONS[city] || POPULAR_LOCATIONS.ho_chi_minh;
+    // PROJECT MODE: process one project per call (client drains via remainingProjects).
+    // LOCATION MODE: process one location per call (existing behavior).
+    let activeProject: ProjectTarget | null = null;
+    let location: string;
+    let remainingLocations: string[] = [];
+    let remainingProjects: ProjectTarget[] = [];
+
+    if (isProjectMode) {
+      activeProject = projects[0];
+      remainingProjects = projects.slice(1);
+      // Use the project's district as the URL location (so marketplace URL builders
+      // resolve cleanly); project name is sent as the search keyword below.
+      location = activeProject.district || '';
+    } else {
+      const locationsToScrape = locations.length > 0 ? locations : POPULAR_LOCATIONS[city] || POPULAR_LOCATIONS.ho_chi_minh;
+      location = locationsToScrape[0];
+      remainingLocations = locationsToScrape.slice(1);
+    }
     
-    // IMPORTANT: Only process the FIRST location + marketplace combo to stay within compute limits.
-    // The client should call this function repeatedly for each location.
-    const location = locationsToScrape[0];
-    const remainingLocations = locationsToScrape.slice(1);
-    
-    console.log(`[crawl-external-properties] Processing location: ${location}, ${remainingLocations.length} remaining`);
+    console.log(`[crawl-external-properties] Processing ${isProjectMode ? `project="${activeProject?.name}" district="${location}"` : `location="${location}"`}, ${isProjectMode ? remainingProjects.length : remainingLocations.length} remaining`);
     
     for (const marketplace of marketplaces) {
         const crawlResult: CrawlResult = {
