@@ -20,14 +20,42 @@ const POPULAR_LOCATIONS: Record<string, string[]> = {
   da_nang: ['Hai Chau', 'Thanh Khe', 'Son Tra', 'Ngu Hanh Son', 'Lien Chieu', 'Cam Le'],
 };
 
+interface ProjectTarget {
+  name: string;
+  district?: string;
+  aliases?: string[];
+}
+
 interface CrawlRequest {
   locations?: string[];
+  // Optional: project-targeted crawl. When provided, the function loops over
+  // projects (one per call) and uses the project name as the marketplace
+  // search keyword, with district as the URL location.
+  projects?: ProjectTarget[];
   marketplaces?: ('batdongsan' | 'nhatot' | 'airbnb')[];
   city?: 'ho_chi_minh' | 'hanoi';
   forceRefresh?: boolean;
   storeInDatabase?: boolean;
   runVibeAnalysis?: boolean;
   maxListingsPerLocation?: number;
+  // VND/month ceiling. Applied as scrape-marketplace `maxPrice` and as a
+  // post-scrape safety filter.
+  maxPriceVnd?: number;
+}
+
+// Strip Vietnamese diacritics for case+accent-insensitive matching
+function stripDiacritics(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd');
+}
+
+function projectMatchesProperty(project: ProjectTarget, prop: any): boolean {
+  const haystack = stripDiacritics(
+    `${prop.title || ''} ${prop.description || ''} ${prop.location || ''}`
+  ).toLowerCase();
+  const needles = [project.name, ...(project.aliases || [])]
+    .map(n => stripDiacritics(n).toLowerCase().trim())
+    .filter(Boolean);
+  return needles.some(n => haystack.includes(n));
 }
 
 interface CrawlResult {
