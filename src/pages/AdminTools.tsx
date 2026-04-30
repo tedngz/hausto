@@ -90,7 +90,7 @@ const AdminTools = () => {
   // Project-targeted crawl state
   const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
   const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
-  const [projectCrawlMaxPriceM, setProjectCrawlMaxPriceM] = useState<number>(10); // millions VND/month
+  const [projectCrawlMinPriceM, setProjectCrawlMinPriceM] = useState<number>(10); // millions VND/month (minimum)
   const [projectCrawlMaxListings, setProjectCrawlMaxListings] = useState<number>(10);
   const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
   const [projectCrawlRunVibe, setProjectCrawlRunVibe] = useState(true);
@@ -667,10 +667,10 @@ const AdminTools = () => {
     const totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
     let projectsToSend: ApartmentProject[] = selected;
     let projectIndex = 0;
-    const maxPriceVnd = projectCrawlMaxPriceM * 1_000_000;
+    const minPriceVnd = projectCrawlMinPriceM * 1_000_000;
 
     try {
-      toast.info("Starting project-targeted crawl…", { description: `${totalProjects} project(s), max ${projectCrawlMaxPriceM}M VND/mo` });
+      toast.info("Starting project-targeted crawl…", { description: `${totalProjects} project(s), min ${projectCrawlMinPriceM}M VND/mo` });
 
       do {
         const currentProject = projectsToSend[0];
@@ -682,7 +682,7 @@ const AdminTools = () => {
             storeInDatabase: true,
             runVibeAnalysis: projectCrawlRunVibe,
             maxListingsPerLocation: projectCrawlMaxListings,
-            maxPriceVnd,
+            minPriceVnd,
           },
         });
 

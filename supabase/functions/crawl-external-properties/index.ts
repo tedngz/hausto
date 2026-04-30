@@ -38,9 +38,9 @@ interface CrawlRequest {
   storeInDatabase?: boolean;
   runVibeAnalysis?: boolean;
   maxListingsPerLocation?: number;
-  // VND/month ceiling. Applied as scrape-marketplace `maxPrice` and as a
-  // post-scrape safety filter.
-  maxPriceVnd?: number;
+  // VND/month floor. Applied as scrape-marketplace `minPrice` and as a
+  // post-scrape safety filter (keep listings >= minPriceVnd).
+  minPriceVnd?: number;
 }
 
 // Strip Vietnamese diacritics for case+accent-insensitive matching
@@ -418,12 +418,12 @@ serve(async (req) => {
       storeInDatabase = true,
       runVibeAnalysis = true,
       maxListingsPerLocation = 10,
-      maxPriceVnd,
+      minPriceVnd,
     } = body;
     
     const isProjectMode = Array.isArray(projects) && projects.length > 0;
 
-    console.log(`[crawl-external-properties] Starting crawl:`, { mode: isProjectMode ? 'project' : 'location', locations, projectsCount: projects.length, marketplaces, city, forceRefresh, storeInDatabase, maxListingsPerLocation, maxPriceVnd });
+    console.log(`[crawl-external-properties] Starting crawl:`, { mode: isProjectMode ? 'project' : 'location', locations, projectsCount: projects.length, marketplaces, city, forceRefresh, storeInDatabase, maxListingsPerLocation, minPriceVnd });
     
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
@@ -501,7 +501,7 @@ serve(async (req) => {
               location,
               includeVibeAnalysis: true,
               maxResults: maxListingsPerLocation,
-              ...(maxPriceVnd ? { maxPrice: maxPriceVnd } : {}),
+              ...(minPriceVnd ? { minPrice: minPriceVnd } : {}),
             }),
             signal: controller.signal,
           });
@@ -532,11 +532,11 @@ serve(async (req) => {
             filteredProperties = filteredProperties.filter((p: any) => projectMatchesProperty(activeProject!, p));
             console.log(`[crawl-external-properties] Project filter "${activeProject.name}": ${filteredProperties.length}/${before} kept`);
           }
-          if (maxPriceVnd) {
+          if (minPriceVnd) {
             const before = filteredProperties.length;
-            filteredProperties = filteredProperties.filter((p: any) => !p.price || Number(p.price) <= maxPriceVnd);
+            filteredProperties = filteredProperties.filter((p: any) => !p.price || Number(p.price) >= minPriceVnd);
             if (before !== filteredProperties.length) {
-              console.log(`[crawl-external-properties] Price filter <= ${maxPriceVnd}: ${filteredProperties.length}/${before} kept`);
+              console.log(`[crawl-external-properties] Price filter >= ${minPriceVnd}: ${filteredProperties.length}/${before} kept`);
             }
           }
           
