@@ -806,8 +806,11 @@ serve(async (req) => {
       success: true,
       summary: {
         duration: `${duration}ms`,
-        locationProcessed: location,
+        mode: isProjectMode ? 'project' : 'location',
+        locationProcessed: isProjectMode ? `${activeProject?.name} (${location})` : location,
+        projectProcessed: isProjectMode ? activeProject?.name : undefined,
         remainingLocations,
+        remainingProjects,
         marketplacesProcessed: marketplaces.length,
         totalFound,
         totalStored,
