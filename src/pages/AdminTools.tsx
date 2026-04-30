@@ -90,7 +90,7 @@ const AdminTools = () => {
   // Project-targeted crawl state
   const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
   const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
-  const [projectCrawlMaxPriceM, setProjectCrawlMaxPriceM] = useState<number>(10); // millions VND/month
+  const [projectCrawlMinPriceM, setProjectCrawlMinPriceM] = useState<number>(10); // millions VND/month (minimum)
   const [projectCrawlMaxListings, setProjectCrawlMaxListings] = useState<number>(10);
   const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
   const [projectCrawlRunVibe, setProjectCrawlRunVibe] = useState(true);
@@ -667,10 +667,10 @@ const AdminTools = () => {
     const totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
     let projectsToSend: ApartmentProject[] = selected;
     let projectIndex = 0;
-    const maxPriceVnd = projectCrawlMaxPriceM * 1_000_000;
+    const minPriceVnd = projectCrawlMinPriceM * 1_000_000;
 
     try {
-      toast.info("Starting project-targeted crawl…", { description: `${totalProjects} project(s), max ${projectCrawlMaxPriceM}M VND/mo` });
+      toast.info("Starting project-targeted crawl…", { description: `${totalProjects} project(s), min ${projectCrawlMinPriceM}M VND/mo` });
 
       do {
         const currentProject = projectsToSend[0];
@@ -682,7 +682,7 @@ const AdminTools = () => {
             storeInDatabase: true,
             runVibeAnalysis: projectCrawlRunVibe,
             maxListingsPerLocation: projectCrawlMaxListings,
-            maxPriceVnd,
+            minPriceVnd,
           },
         });
 
@@ -1086,10 +1086,10 @@ const AdminTools = () => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>Max price (M VND/month)</Label>
+              <Label>Min price (M VND/month)</Label>
               <div className="flex items-center gap-2">
-                <Slider value={[projectCrawlMaxPriceM]} onValueChange={(v) => setProjectCrawlMaxPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
-                <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxPriceM}M</span>
+                <Slider value={[projectCrawlMinPriceM]} onValueChange={(v) => setProjectCrawlMinPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
+                <span className="text-sm font-mono w-16 text-right">{projectCrawlMinPriceM}M</span>
               </div>
             </div>
             <div className="space-y-2">
