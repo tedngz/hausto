@@ -87,6 +87,17 @@ const AdminTools = () => {
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
 
+  // Project-targeted crawl state
+  const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
+  const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
+  const [projectCrawlMaxPriceM, setProjectCrawlMaxPriceM] = useState<number>(10); // millions VND/month
+  const [projectCrawlMaxListings, setProjectCrawlMaxListings] = useState<number>(10);
+  const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
+  const [projectCrawlRunVibe, setProjectCrawlRunVibe] = useState(true);
+  const [isProjectCrawling, setIsProjectCrawling] = useState(false);
+  const [projectCrawlProgress, setProjectCrawlProgress] = useState<{ current: number; total: number; project: string } | null>(null);
+  const [projectCrawlResults, setProjectCrawlResults] = useState<any>(null);
+
   // Verify external listings state
   const [isVerifyingListings, setIsVerifyingListings] = useState(false);
   const [verifyListingsResult, setVerifyListingsResult] = useState<{ checked: number; alive: number; deactivated: number; dead_increment: number; errors: number } | null>(null);
