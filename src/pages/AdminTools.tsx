@@ -645,6 +645,89 @@ const AdminTools = () => {
     }
   };
 
+  const handleProjectCrawl = async () => {
+    const selected = HCMC_APARTMENT_PROJECTS.filter(p => selectedProjectKeys.has(`${p.district}|${p.name}`));
+    if (selected.length === 0) {
+      toast.error("Select at least one project to crawl");
+      return;
+    }
+    const selectedMarketplaces = (Object.entries(projectCrawlMarketplaces) as [('batdongsan' | 'nhatot'), boolean][])
+      .filter(([, v]) => v).map(([k]) => k);
+    if (selectedMarketplaces.length === 0) {
+      toast.error("Select at least one marketplace");
+      return;
+    }
+
+    setIsProjectCrawling(true);
+    setProjectCrawlResults(null);
+    setProjectCrawlProgress(null);
+
+    const totalProjects = selected.length;
+    const allResults: any[] = [];
+    const totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
+    let projectsToSend: ApartmentProject[] = selected;
+    let projectIndex = 0;
+    const maxPriceVnd = projectCrawlMaxPriceM * 1_000_000;
+
+    try {
+      toast.info("Starting project-targeted crawl…", { description: `${totalProjects} project(s), max ${projectCrawlMaxPriceM}M VND/mo` });
+
+      do {
+        const currentProject = projectsToSend[0];
+        const { data, error } = await supabase.functions.invoke('crawl-external-properties', {
+          body: {
+            projects: projectsToSend.map(p => ({ name: p.name, district: p.district, aliases: p.aliases })),
+            marketplaces: selectedMarketplaces,
+            forceRefresh: true,
+            storeInDatabase: true,
+            runVibeAnalysis: projectCrawlRunVibe,
+            maxListingsPerLocation: projectCrawlMaxListings,
+            maxPriceVnd,
+          },
+        });
+
+        if (error) throw error;
+
+        const summary = data?.summary || {};
+        const remaining: { name: string; district?: string; aliases?: string[] }[] = summary.remainingProjects || [];
+
+        projectIndex++;
+        setProjectCrawlProgress({ current: projectIndex, total: totalProjects, project: currentProject.name });
+
+        if (data?.results) allResults.push(...data.results);
+        totals.totalFound += summary.totalFound || 0;
+        totals.totalNew += summary.totalNew || 0;
+        totals.totalUpdated += summary.totalUpdated || 0;
+        totals.totalDuplicatesSkipped += summary.totalDuplicatesSkipped || 0;
+        totals.totalVibeAnalyzed += summary.totalVibeAnalyzed || 0;
+        totals.totalSkipped += summary.totalSkipped || 0;
+        totals.totalErrors += summary.totalErrors || 0;
+        totals.totalStored += summary.totalStored || 0;
+
+        projectsToSend = remaining
+          .map(r => HCMC_APARTMENT_PROJECTS.find(p => p.name === r.name && p.district === r.district))
+          .filter((p): p is ApartmentProject => !!p);
+      } while (projectsToSend.length > 0);
+
+      setProjectCrawlResults({ ...totals, results: allResults });
+      toast.success("Project crawl complete", {
+        description: `${totals.totalNew} new · ${totals.totalUpdated} updated · ${totals.totalStored} stored`,
+      });
+
+      try {
+        await supabase.functions.invoke('property-discovery-cache', { body: { action: 'invalidate' } });
+      } catch (e) {
+        console.warn('Cache invalidation failed', e);
+      }
+    } catch (error: any) {
+      console.error('Project crawl error:', error);
+      toast.error("Project crawl failed", { description: error.message });
+    } finally {
+      setIsProjectCrawling(false);
+      setProjectCrawlProgress(null);
+    }
+  };
+
   const handleBatchReanalyzeImageHighlights = async () => {
     setIsBatchReanalyzing(true);
     setBatchReanalyzeResults(null);
