@@ -1086,10 +1086,10 @@ const AdminTools = () => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>Max price (M VND/month)</Label>
+              <Label>Min price (M VND/month)</Label>
               <div className="flex items-center gap-2">
-                <Slider value={[projectCrawlMaxPriceM]} onValueChange={(v) => setProjectCrawlMaxPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
-                <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxPriceM}M</span>
+                <Slider value={[projectCrawlMinPriceM]} onValueChange={(v) => setProjectCrawlMinPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
+                <span className="text-sm font-mono w-16 text-right">{projectCrawlMinPriceM}M</span>
               </div>
             </div>
             <div className="space-y-2">
