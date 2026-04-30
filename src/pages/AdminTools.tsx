@@ -14,6 +14,9 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject } from "@/data/hcmcApartmentProjects";
 
 function getTimeAgo(timestamp: string): string {
   const diff = Date.now() - new Date(timestamp).getTime();
@@ -83,6 +86,17 @@ const AdminTools = () => {
   const [isBatchReanalyzing, setIsBatchReanalyzing] = useState(false);
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
+
+  // Project-targeted crawl state
+  const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
+  const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
+  const [projectCrawlMaxPriceM, setProjectCrawlMaxPriceM] = useState<number>(10); // millions VND/month
+  const [projectCrawlMaxListings, setProjectCrawlMaxListings] = useState<number>(10);
+  const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
+  const [projectCrawlRunVibe, setProjectCrawlRunVibe] = useState(true);
+  const [isProjectCrawling, setIsProjectCrawling] = useState(false);
+  const [projectCrawlProgress, setProjectCrawlProgress] = useState<{ current: number; total: number; project: string } | null>(null);
+  const [projectCrawlResults, setProjectCrawlResults] = useState<any>(null);
 
   // Verify external listings state
   const [isVerifyingListings, setIsVerifyingListings] = useState(false);
@@ -631,6 +645,89 @@ const AdminTools = () => {
     }
   };
 
+  const handleProjectCrawl = async () => {
+    const selected = HCMC_APARTMENT_PROJECTS.filter(p => selectedProjectKeys.has(`${p.district}|${p.name}`));
+    if (selected.length === 0) {
+      toast.error("Select at least one project to crawl");
+      return;
+    }
+    const selectedMarketplaces = (Object.entries(projectCrawlMarketplaces) as [('batdongsan' | 'nhatot'), boolean][])
+      .filter(([, v]) => v).map(([k]) => k);
+    if (selectedMarketplaces.length === 0) {
+      toast.error("Select at least one marketplace");
+      return;
+    }
+
+    setIsProjectCrawling(true);
+    setProjectCrawlResults(null);
+    setProjectCrawlProgress(null);
+
+    const totalProjects = selected.length;
+    const allResults: any[] = [];
+    const totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
+    let projectsToSend: ApartmentProject[] = selected;
+    let projectIndex = 0;
+    const maxPriceVnd = projectCrawlMaxPriceM * 1_000_000;
+
+    try {
+      toast.info("Starting project-targeted crawl…", { description: `${totalProjects} project(s), max ${projectCrawlMaxPriceM}M VND/mo` });
+
+      do {
+        const currentProject = projectsToSend[0];
+        const { data, error } = await supabase.functions.invoke('crawl-external-properties', {
+          body: {
+            projects: projectsToSend.map(p => ({ name: p.name, district: p.district, aliases: p.aliases })),
+            marketplaces: selectedMarketplaces,
+            forceRefresh: true,
+            storeInDatabase: true,
+            runVibeAnalysis: projectCrawlRunVibe,
+            maxListingsPerLocation: projectCrawlMaxListings,
+            maxPriceVnd,
+          },
+        });
+
+        if (error) throw error;
+
+        const summary = data?.summary || {};
+        const remaining: { name: string; district?: string; aliases?: string[] }[] = summary.remainingProjects || [];
+
+        projectIndex++;
+        setProjectCrawlProgress({ current: projectIndex, total: totalProjects, project: currentProject.name });
+
+        if (data?.results) allResults.push(...data.results);
+        totals.totalFound += summary.totalFound || 0;
+        totals.totalNew += summary.totalNew || 0;
+        totals.totalUpdated += summary.totalUpdated || 0;
+        totals.totalDuplicatesSkipped += summary.totalDuplicatesSkipped || 0;
+        totals.totalVibeAnalyzed += summary.totalVibeAnalyzed || 0;
+        totals.totalSkipped += summary.totalSkipped || 0;
+        totals.totalErrors += summary.totalErrors || 0;
+        totals.totalStored += summary.totalStored || 0;
+
+        projectsToSend = remaining
+          .map(r => HCMC_APARTMENT_PROJECTS.find(p => p.name === r.name && p.district === r.district))
+          .filter((p): p is ApartmentProject => !!p);
+      } while (projectsToSend.length > 0);
+
+      setProjectCrawlResults({ ...totals, results: allResults });
+      toast.success("Project crawl complete", {
+        description: `${totals.totalNew} new · ${totals.totalUpdated} updated · ${totals.totalStored} stored`,
+      });
+
+      try {
+        await supabase.functions.invoke('property-discovery-cache', { body: { action: 'invalidate' } });
+      } catch (e) {
+        console.warn('Cache invalidation failed', e);
+      }
+    } catch (error: any) {
+      console.error('Project crawl error:', error);
+      toast.error("Project crawl failed", { description: error.message });
+    } finally {
+      setIsProjectCrawling(false);
+      setProjectCrawlProgress(null);
+    }
+  };
+
   const handleBatchReanalyzeImageHighlights = async () => {
     setIsBatchReanalyzing(true);
     setBatchReanalyzeResults(null);
@@ -971,6 +1068,128 @@ const AdminTools = () => {
             <p><strong>Note:</strong> Crawling uses Firecrawl + GPT-4o-mini for scraping and extraction. Each location/marketplace combo takes ~30-60s.</p>
             <p><strong>Cache:</strong> Results are cached for 6 hours unless force refresh is enabled.</p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Project-Targeted Crawl */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Project-Targeted Crawl (HCMC)
+          </CardTitle>
+          <CardDescription>
+            Crawl Batdongsan / Nhatot for listings in specific apartment projects, capped by max monthly rent.
+            Results are post-filtered by project name + aliases so only on-target listings are stored.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Max price (M VND/month)</Label>
+              <div className="flex items-center gap-2">
+                <Slider value={[projectCrawlMaxPriceM]} onValueChange={(v) => setProjectCrawlMaxPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
+                <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxPriceM}M</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Max listings / project</Label>
+              <div className="flex items-center gap-2">
+                <Slider value={[projectCrawlMaxListings]} onValueChange={(v) => setProjectCrawlMaxListings(v[0])} min={3} max={30} step={1} className="flex-1" />
+                <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxListings}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Marketplaces</Label>
+              <div className="flex items-center gap-4 pt-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={projectCrawlMarketplaces.batdongsan} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, batdongsan: !!c }))} />
+                  Batdongsan
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={projectCrawlMarketplaces.nhatot} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, nhatot: !!c }))} />
+                  Nhatot
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch checked={projectCrawlRunVibe} onCheckedChange={setProjectCrawlRunVibe} />
+                  Vibe
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Projects ({selectedProjectKeys.size} selected)</Label>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedProjectKeys(new Set())} disabled={selectedProjectKeys.size === 0}>Clear</Button>
+            </div>
+            <Input placeholder="Filter projects (e.g. Vinhomes, Celadon, Thao Dien)…" value={projectCrawlSearch} onChange={(e) => setProjectCrawlSearch(e.target.value)} />
+            <div className="max-h-80 overflow-y-auto border rounded-md p-3 space-y-3">
+              {Object.entries(groupProjectsByDistrict()).map(([district, list]) => {
+                const q = projectCrawlSearch.toLowerCase().trim();
+                const visible = list.filter(p => !q || p.name.toLowerCase().includes(q) || (p.aliases || []).some(a => a.toLowerCase().includes(q)) || p.district.toLowerCase().includes(q));
+                if (visible.length === 0) return null;
+                const visibleKeys = visible.map(p => `${p.district}|${p.name}`);
+                const allSelected = visibleKeys.every(k => selectedProjectKeys.has(k));
+                return (
+                  <div key={district} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold uppercase text-muted-foreground">{district}</div>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => {
+                        setSelectedProjectKeys(prev => {
+                          const next = new Set(prev);
+                          if (allSelected) visibleKeys.forEach(k => next.delete(k));
+                          else visibleKeys.forEach(k => next.add(k));
+                          return next;
+                        });
+                      }}>{allSelected ? 'Unselect all' : 'Select all'}</Button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                      {visible.map(p => {
+                        const key = `${p.district}|${p.name}`;
+                        const checked = selectedProjectKeys.has(key);
+                        return (
+                          <label key={key} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/50 cursor-pointer">
+                            <Checkbox checked={checked} onCheckedChange={(c) => {
+                              setSelectedProjectKeys(prev => {
+                                const next = new Set(prev);
+                                if (c) next.add(key); else next.delete(key);
+                                return next;
+                              });
+                            }} />
+                            <span className="truncate">{p.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <Button onClick={handleProjectCrawl} disabled={isProjectCrawling || selectedProjectKeys.size === 0}>
+            {isProjectCrawling ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Crawling projects…</>) : (<><Search className="h-4 w-4 mr-2" /> Start project crawl ({selectedProjectKeys.size})</>)}
+          </Button>
+
+          {projectCrawlProgress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Project {projectCrawlProgress.current} of {projectCrawlProgress.total}</span>
+                <span className="text-muted-foreground truncate ml-2">{projectCrawlProgress.project}</span>
+              </div>
+              <Progress value={(projectCrawlProgress.current / projectCrawlProgress.total) * 100} />
+            </div>
+          )}
+
+          {projectCrawlResults && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Found</div><div className="font-semibold">{projectCrawlResults.totalFound}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">New</div><div className="font-semibold text-primary">{projectCrawlResults.totalNew}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Updated</div><div className="font-semibold">{projectCrawlResults.totalUpdated}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Stored</div><div className="font-semibold">{projectCrawlResults.totalStored}</div></div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

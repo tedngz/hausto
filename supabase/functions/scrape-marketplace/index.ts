@@ -690,12 +690,17 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
       }
 
       let baseUrl: string;
+      // Treat the query as a project/keyword search whenever it isn't the generic
+      // crawl phrase. This lets the project-targeted crawl narrow Batdongsan results
+      // even when a district slug is present.
+      const isKeywordQuery = !!query && !/c[ăa]n h[ộo] chung c[ưu] cho thu[êe]/i.test(query);
+      const keywordParam = isKeywordQuery ? `?keyword=${encodeURIComponent(query)}` : '';
       if (districtSlug) {
-        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${districtSlug}-${citySlug}`;
+        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${districtSlug}-${citySlug}${keywordParam}`;
       } else if (locationAscii) {
         baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${citySlug}?keyword=${encodeURIComponent(location || query)}`;
       } else {
-        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${citySlug}`;
+        baseUrl = `https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-${citySlug}${keywordParam}`;
       }
       if (page > 1) {
         return baseUrl.includes('?')

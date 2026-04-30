@@ -20,14 +20,42 @@ const POPULAR_LOCATIONS: Record<string, string[]> = {
   da_nang: ['Hai Chau', 'Thanh Khe', 'Son Tra', 'Ngu Hanh Son', 'Lien Chieu', 'Cam Le'],
 };
 
+interface ProjectTarget {
+  name: string;
+  district?: string;
+  aliases?: string[];
+}
+
 interface CrawlRequest {
   locations?: string[];
+  // Optional: project-targeted crawl. When provided, the function loops over
+  // projects (one per call) and uses the project name as the marketplace
+  // search keyword, with district as the URL location.
+  projects?: ProjectTarget[];
   marketplaces?: ('batdongsan' | 'nhatot' | 'airbnb')[];
   city?: 'ho_chi_minh' | 'hanoi';
   forceRefresh?: boolean;
   storeInDatabase?: boolean;
   runVibeAnalysis?: boolean;
   maxListingsPerLocation?: number;
+  // VND/month ceiling. Applied as scrape-marketplace `maxPrice` and as a
+  // post-scrape safety filter.
+  maxPriceVnd?: number;
+}
+
+// Strip Vietnamese diacritics for case+accent-insensitive matching
+function stripDiacritics(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd');
+}
+
+function projectMatchesProperty(project: ProjectTarget, prop: any): boolean {
+  const haystack = stripDiacritics(
+    `${prop.title || ''} ${prop.description || ''} ${prop.location || ''}`
+  ).toLowerCase();
+  const needles = [project.name, ...(project.aliases || [])]
+    .map(n => stripDiacritics(n).toLowerCase().trim())
+    .filter(Boolean);
+  return needles.some(n => haystack.includes(n));
 }
 
 interface CrawlResult {
@@ -383,27 +411,42 @@ serve(async (req) => {
   const body: CrawlRequest = await req.json();
     const { 
       locations = [], 
+      projects = [],
       marketplaces = ['batdongsan', 'nhatot'],
       city = 'ho_chi_minh',
       forceRefresh = false,
       storeInDatabase = true,
       runVibeAnalysis = true,
       maxListingsPerLocation = 10,
+      maxPriceVnd,
     } = body;
     
-    console.log(`[crawl-external-properties] Starting crawl:`, { locations, marketplaces, city, forceRefresh, storeInDatabase, maxListingsPerLocation });
+    const isProjectMode = Array.isArray(projects) && projects.length > 0;
+
+    console.log(`[crawl-external-properties] Starting crawl:`, { mode: isProjectMode ? 'project' : 'location', locations, projectsCount: projects.length, marketplaces, city, forceRefresh, storeInDatabase, maxListingsPerLocation, maxPriceVnd });
     
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    // Use provided locations or default popular locations for the city
-    const locationsToScrape = locations.length > 0 ? locations : POPULAR_LOCATIONS[city] || POPULAR_LOCATIONS.ho_chi_minh;
+    // PROJECT MODE: process one project per call (client drains via remainingProjects).
+    // LOCATION MODE: process one location per call (existing behavior).
+    let activeProject: ProjectTarget | null = null;
+    let location: string;
+    let remainingLocations: string[] = [];
+    let remainingProjects: ProjectTarget[] = [];
+
+    if (isProjectMode) {
+      activeProject = projects[0];
+      remainingProjects = projects.slice(1);
+      // Use the project's district as the URL location (so marketplace URL builders
+      // resolve cleanly); project name is sent as the search keyword below.
+      location = activeProject.district || '';
+    } else {
+      const locationsToScrape = locations.length > 0 ? locations : POPULAR_LOCATIONS[city] || POPULAR_LOCATIONS.ho_chi_minh;
+      location = locationsToScrape[0];
+      remainingLocations = locationsToScrape.slice(1);
+    }
     
-    // IMPORTANT: Only process the FIRST location + marketplace combo to stay within compute limits.
-    // The client should call this function repeatedly for each location.
-    const location = locationsToScrape[0];
-    const remainingLocations = locationsToScrape.slice(1);
-    
-    console.log(`[crawl-external-properties] Processing location: ${location}, ${remainingLocations.length} remaining`);
+    console.log(`[crawl-external-properties] Processing ${isProjectMode ? `project="${activeProject?.name}" district="${location}"` : `location="${location}"`}, ${isProjectMode ? remainingProjects.length : remainingLocations.length} remaining`);
     
     for (const marketplace of marketplaces) {
         const crawlResult: CrawlResult = {
@@ -454,10 +497,11 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               marketplace,
-              query: 'căn hộ chung cư cho thuê',
+              query: isProjectMode ? activeProject!.name : 'căn hộ chung cư cho thuê',
               location,
               includeVibeAnalysis: true,
               maxResults: maxListingsPerLocation,
+              ...(maxPriceVnd ? { maxPrice: maxPriceVnd } : {}),
             }),
             signal: controller.signal,
           });
@@ -479,13 +523,29 @@ serve(async (req) => {
             results.push(crawlResult);
             continue;
           }
+
+          // Project-mode post-filter: keep only listings whose text contains
+          // the project name or any alias. Also enforce max price as a safety net.
+          let filteredProperties = scrapeData.properties as any[];
+          if (isProjectMode && activeProject) {
+            const before = filteredProperties.length;
+            filteredProperties = filteredProperties.filter((p: any) => projectMatchesProperty(activeProject!, p));
+            console.log(`[crawl-external-properties] Project filter "${activeProject.name}": ${filteredProperties.length}/${before} kept`);
+          }
+          if (maxPriceVnd) {
+            const before = filteredProperties.length;
+            filteredProperties = filteredProperties.filter((p: any) => !p.price || Number(p.price) <= maxPriceVnd);
+            if (before !== filteredProperties.length) {
+              console.log(`[crawl-external-properties] Price filter <= ${maxPriceVnd}: ${filteredProperties.length}/${before} kept`);
+            }
+          }
           
-          crawlResult.propertiesFound = scrapeData.properties.length;
-          console.log(`[crawl-external-properties] Found ${scrapeData.properties.length} properties for ${location}/${marketplace}`);
+          crawlResult.propertiesFound = filteredProperties.length;
+          console.log(`[crawl-external-properties] Found ${filteredProperties.length} properties for ${location}/${marketplace}`);
           
           // Store in database if requested
           if (storeInDatabase) {
-            for (const property of scrapeData.properties) {
+            for (const property of filteredProperties) {
               try {
                 const locationNormalized = normalizeLocation(property.location || location);
                 const detectedCity = detectCity(property.location || location);
@@ -746,8 +806,11 @@ serve(async (req) => {
       success: true,
       summary: {
         duration: `${duration}ms`,
-        locationProcessed: location,
+        mode: isProjectMode ? 'project' : 'location',
+        locationProcessed: isProjectMode ? `${activeProject?.name} (${location})` : location,
+        projectProcessed: isProjectMode ? activeProject?.name : undefined,
         remainingLocations,
+        remainingProjects,
         marketplacesProcessed: marketplaces.length,
         totalFound,
         totalStored,

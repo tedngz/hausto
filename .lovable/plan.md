@@ -1,68 +1,70 @@
 ## Goal
-Make Hausto AI reason better and hold conversation context more naturally so follow-ups feel fluid and recommendations are sharper.
+Add a curated list of well-known HCMC apartment projects and a new admin tool that crawls external listings filtered to those projects, with an optional max-price cap (default 10M VND/month).
 
-## Current limitations (in `supabase/functions/chat-ai/index.ts`)
-1. Calls `gpt-5` with no `reasoning_effort` — model defaults to fast/shallow reasoning.
-2. Only the last **10 history messages** are sent to the model (line 1762), and DB fetch is capped at **15** (line 1293) — earlier turns get dropped.
-3. Previously suggested properties are extracted but only their IDs are surfaced; full conversational memory of "what we already discussed" is thin.
-4. System prompt is long and rule-heavy, which can crowd out reasoning. No explicit "think step-by-step" framing or self-check pass.
-5. No conversation summary/distillation when history gets long → context window fills with raw chat instead of insights.
-6. Image style detection runs on a separate `gpt-4o-mini` call but its findings aren't fed back as a structured memory the main model can reason over turn-after-turn.
+## Updated HCMC apartment projects catalog
+Grouped by district (expanded with the user's suggestions and other commonly-searched projects):
 
-## Plan
+- **D1 / D4 (Central)**: Vinhomes Golden River (Ba Son), Saigon Royal, The Tresor, The Marq, Sunwah Pearl, Millennium, Icon 56, RiverGate Residence, Charmington La Pointe
+- **D2 / Thu Duc (East)**:
+  - Thao Dien / An Phu: Masteri Thao Dien, Masteri An Phu, Gateway Thao Dien, Estella Heights, The Estella, The Vista, Thao Dien Pearl, Q2 Thao Dien, Lumiere Riverside, D'Edge Thao Dien, Nassim Thao Dien
+  - Thu Thiem / An Khanh: Empire City, The River Thu Thiem, Sala (Sarimi / Sarina / Sadora), **New City Thu Thiem**, Diamond Island (Đảo Kim Cương)
+  - Cat Lai / An Phu south: The Sun Avenue, The Krista, The CBD Premium Home
+  - Thu Duc north: Vinhomes Grand Park (S-series + Origami + Glory), Lavita Charm, Lavita Garden, Centana Thu Thiem
+- **D7 (Phu My Hung South)**: Sky Garden 1/2/3, Riverside Residence, Happy Valley, Midtown (Sakura / The Peak / The Signature), Scenic Valley, The Panorama, Saigon South Residences (SSR), The Ascentia, Urban Hill, Hung Phuc (Happy Residence), Riviera Point, Eco Green Saigon
+- **Binh Thanh**: Vinhomes Central Park (Landmark 81 / Park / Central towers), Saigon Pearl (Ruby/Sapphire/Topaz), City Garden, The Manor, Pearl Plaza, Sunwah Pearl
+- **Phu Nhuan / Tan Binh**: The Botanica, Garden Gate, Newton Residence, Orchard Parkview, Orchard Garden, Kingston Residence, Republic Plaza, Cộng Hòa Garden
+- **Tan Phu**: **Celadon City** (Ruby / Emerald / Sapphire / Diamond Alnata), Carillon, Richstar, Jamila
+- **D10 / D11**: Hado Centrosa Garden, Rivera Park, Res 11, The Everrich Infinity (D5)
+- **Go Vap / D12**: The Botanica (Pho Quang), Orchid Park, Sunview Town, Dream Home Riverside
 
-### 1. Enable real reasoning on the main model
-In the main AI call (around line 1774):
-- Add `reasoning_effort: "medium"` to the gpt-5 request body (low for short follow-ups, medium for new searches — pick effort based on `isComparisonQuery` / message complexity).
-- Bump `max_completion_tokens` to `4000` to give reasoning room.
+These are stored as a typed list in the codebase so we can extend later. Each entry: `{ name, district, city, aliases? }` — aliases support Vietnamese variants ("Đảo Kim Cương" vs "Diamond Island", "Thủ Thiêm New City" vs "New City") so the marketplace keyword search hits both.
 
-### 2. Expand and smartly compress conversation memory
-- Increase DB history limit from 15 → **40 messages** (line 1293).
-- Send last **20** raw turns to the model (was 10, line 1762).
-- When history > 20 turns, generate a lightweight "conversation summary" (one extra small Lovable AI call using `google/gemini-3-flash-preview`) capturing: stated preferences, rejected options, properties already viewed, open questions. Inject this summary as a `system` message before the recent turns.
+## What we'll build
 
-### 3. Strengthen accumulated context
-Extend `buildAccumulatedContext` (line 566) to also track:
-- **Rejected preferences** — when user says "not that one", "too expensive", "don't like X".
-- **Confirmed likes** — properties the user reacted positively to.
-- **Open clarifications** — questions the AI asked that the user hasn't answered yet.
-Surface these in the system prompt as bullet sections so the model reasons over them, not just current filters.
+### 1. Project catalog (data file)
+New file `src/data/hcmcApartmentProjects.ts` exporting the grouped list above (typed). Also re-exported as a flat array for the admin UI.
 
-### 4. Restructure system prompt for reasoning
-Reorganize the prompt (line 1643) into clearer sections:
-1. Role & tone
-2. What we know (accumulated context + rejections + likes)
-3. Conversation summary (when present)
-4. Available properties (current ranked list)
-5. Reasoning checklist — explicit "Before answering, think through: (a) Is this a follow-up or new search? (b) Did the user reject anything I should avoid? (c) Are there open questions I should answer before listing properties? (d) Does my recommendation order respect priority?"
-6. Output format
+### 2. Backend: extend `crawl-external-properties`
+Currently it loops over `locations[]` with a fixed `query: 'căn hộ chung cư cho thuê'`. We extend it to also accept:
+- `projects?: { name: string; district?: string; aliases?: string[] }[]` — when provided, the function loops over projects instead of generic locations and sends each project name as the `query` to `scrape-marketplace` (and the project's district as `location`, so URLs still resolve cleanly on Batdongsan/Nhatot).
+- `maxPriceVnd?: number` — passed straight through to `scrape-marketplace` as `maxPrice` (already supported in its body schema).
 
-Trim duplicated instructions (the file currently has two "8." and two "9." numbered rules).
+Behavior:
+- For Batdongsan: when a district slug exists, the URL becomes `/cho-thue-can-ho-chung-cu-{district}-tp-hcm?keyword={projectName}` (small change in `buildSearchUrl` to also append `keyword=` when a district is present).
+- For Nhatot: existing fallback already supports `?q=`, so we pass the project name as the query.
+- After scraping, do a server-side post-filter: keep only properties whose `title + description + location` contains the project name OR any alias (case + diacritic insensitive). This avoids polluting the DB with unrelated listings the marketplace search returned.
+- Apply price filter post-scrape too (`price <= maxPriceVnd`) as a safety net for sites that ignore the URL price param.
+- Store properties as today (existing flow), so vibe analysis, dedup, and cache invalidation all work unchanged.
 
-### 5. Better follow-up handling
-- Expand `detectComparisonQuery` to also catch reasoning-style follow-ups: "why", "tell me more about", "compare these two", "what's the difference", "which is better for…".
-- For these, lower property re-fetching and instruct the model to reason over the previously suggested set instead of returning a new JSON results array.
+### 3. Admin UI: new "Project-Targeted Crawl" card
+Added to `src/pages/AdminTools.tsx`, near the existing crawl card. It contains:
+- Multi-select list of projects grouped by district (checkboxes with "Select all in D2", etc.).
+- A search/filter input to quickly find a project by name.
+- Marketplace toggles (Batdongsan + Nhatot; Airbnb hidden — wrong inventory type).
+- Max price input/slider, default **10,000,000 VND/month**, range 3M–50M.
+- "Max listings per project" slider (default 10).
+- "Run vibe analysis" toggle (reuse existing logic).
+- "Start project crawl" button → calls `crawl-external-properties` with the new `projects` + `maxPriceVnd` payload, iterating like today (one project per call, server returns `remainingProjects`).
+- Progress card mirrors the existing one but shows "Project X of Y · {projectName}".
+- Result card mirrors existing summary.
 
-### 6. Feed image analysis back as durable memory
-When `imageAnalysisResult` is produced, persist its styles/colors into the `chat_messages.metadata` of the user message so subsequent turns can see "user previously uploaded a Modern/Minimalist reference" without re-analyzing — and include that note in the accumulated-context block.
-
-## Technical changes
-- File: `supabase/functions/chat-ai/index.ts`
-  - Update history limits (lines 1293, 1762).
-  - Add `reasoning_effort` + raise `max_completion_tokens` (line 1774).
-  - Add conversation-summary helper (new function, ~30 LOC) invoked when `chatHistory.length > 20`.
-  - Extend `buildAccumulatedContext` + add `extractRejections`, `extractLikes` helpers (~40 LOC).
-  - Rewrite system prompt block (lines 1643–1746) — same data, cleaner structure, reasoning checklist, deduped numbering.
-  - Expand `detectComparisonQuery` patterns (line 628).
-  - Persist image-analysis metadata to `chat_messages` when present.
+### 4. Small wiring tweaks
+- `crawl-external-properties` returns `summary.remainingProjects` (analogous to `remainingLocations`) so the admin UI's `do { ... } while` loop drains the queue.
+- Reuse the existing `property-discovery-cache` invalidation hook on completion (no change needed, just runs after the loop).
 
 ## Out of scope
-- No DB schema changes (metadata column already exists on `chat_messages`).
-- No model swap — staying on `gpt-5` since it's already wired and has the strongest reasoning of the available set.
-- No frontend changes — `useHomeAI`/`HomeAI` already pass full history server-side.
+- No DB schema changes — all new data fits existing `external_properties` columns.
+- No change to scheduled crawler — this is a manual admin-only tool. (We can wire it into the schedule later if it proves useful.)
+- No new edge function — extending `crawl-external-properties` keeps auth, dedup, vibe, and cache behavior consistent.
+- Not touching public-property-search or chat-ai.
+
+## Files to change
+- `src/data/hcmcApartmentProjects.ts` — NEW
+- `src/pages/AdminTools.tsx` — add "Project-Targeted Crawl" card + handler
+- `supabase/functions/crawl-external-properties/index.ts` — accept `projects[]` + `maxPriceVnd`, loop over projects, post-filter by name/alias and price, return `remainingProjects`
+- `supabase/functions/scrape-marketplace/index.ts` — minor: append `?keyword=` to Batdongsan URL even when a district slug is present (so project-name targeting works)
 
 ## Expected impact
-- More accurate follow-ups ("which one has a balcony?", "compare 2 and 3").
-- Fewer repeated suggestions of properties the user already rejected.
-- Smoother multi-turn conversations even past 15 messages.
-- Better reasoning on ambiguous requests (e.g., "somewhere quieter but still close to D1").
+- Admin can run a focused crawl like "Vinhomes Central Park + Masteri Thao Dien + Celadon City under 10M" in one click.
+- DB fills with on-brand inventory matching popular searches users actually type, improving discovery + AI search results.
+- Price ceiling keeps the catalog aligned with the budget tier most renters look at.
