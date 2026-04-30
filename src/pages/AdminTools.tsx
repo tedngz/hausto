@@ -1071,6 +1071,128 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
+      {/* Project-Targeted Crawl */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Project-Targeted Crawl (HCMC)
+          </CardTitle>
+          <CardDescription>
+            Crawl Batdongsan / Nhatot for listings in specific apartment projects, capped by max monthly rent.
+            Results are post-filtered by project name + aliases so only on-target listings are stored.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Max price (M VND/month)</Label>
+              <div className="flex items-center gap-2">
+                <Slider value={[projectCrawlMaxPriceM]} onValueChange={(v) => setProjectCrawlMaxPriceM(v[0])} min={3} max={50} step={1} className="flex-1" />
+                <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxPriceM}M</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Max listings / project</Label>
+              <div className="flex items-center gap-2">
+                <Slider value={[projectCrawlMaxListings]} onValueChange={(v) => setProjectCrawlMaxListings(v[0])} min={3} max={30} step={1} className="flex-1" />
+                <span className="text-sm font-mono w-16 text-right">{projectCrawlMaxListings}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Marketplaces</Label>
+              <div className="flex items-center gap-4 pt-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={projectCrawlMarketplaces.batdongsan} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, batdongsan: !!c }))} />
+                  Batdongsan
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={projectCrawlMarketplaces.nhatot} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, nhatot: !!c }))} />
+                  Nhatot
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch checked={projectCrawlRunVibe} onCheckedChange={setProjectCrawlRunVibe} />
+                  Vibe
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Projects ({selectedProjectKeys.size} selected)</Label>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedProjectKeys(new Set())} disabled={selectedProjectKeys.size === 0}>Clear</Button>
+            </div>
+            <Input placeholder="Filter projects (e.g. Vinhomes, Celadon, Thao Dien)…" value={projectCrawlSearch} onChange={(e) => setProjectCrawlSearch(e.target.value)} />
+            <div className="max-h-80 overflow-y-auto border rounded-md p-3 space-y-3">
+              {Object.entries(groupProjectsByDistrict()).map(([district, list]) => {
+                const q = projectCrawlSearch.toLowerCase().trim();
+                const visible = list.filter(p => !q || p.name.toLowerCase().includes(q) || (p.aliases || []).some(a => a.toLowerCase().includes(q)) || p.district.toLowerCase().includes(q));
+                if (visible.length === 0) return null;
+                const visibleKeys = visible.map(p => `${p.district}|${p.name}`);
+                const allSelected = visibleKeys.every(k => selectedProjectKeys.has(k));
+                return (
+                  <div key={district} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold uppercase text-muted-foreground">{district}</div>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => {
+                        setSelectedProjectKeys(prev => {
+                          const next = new Set(prev);
+                          if (allSelected) visibleKeys.forEach(k => next.delete(k));
+                          else visibleKeys.forEach(k => next.add(k));
+                          return next;
+                        });
+                      }}>{allSelected ? 'Unselect all' : 'Select all'}</Button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                      {visible.map(p => {
+                        const key = `${p.district}|${p.name}`;
+                        const checked = selectedProjectKeys.has(key);
+                        return (
+                          <label key={key} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/50 cursor-pointer">
+                            <Checkbox checked={checked} onCheckedChange={(c) => {
+                              setSelectedProjectKeys(prev => {
+                                const next = new Set(prev);
+                                if (c) next.add(key); else next.delete(key);
+                                return next;
+                              });
+                            }} />
+                            <span className="truncate">{p.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <Button onClick={handleProjectCrawl} disabled={isProjectCrawling || selectedProjectKeys.size === 0}>
+            {isProjectCrawling ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Crawling projects…</>) : (<><Search className="h-4 w-4 mr-2" /> Start project crawl ({selectedProjectKeys.size})</>)}
+          </Button>
+
+          {projectCrawlProgress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Project {projectCrawlProgress.current} of {projectCrawlProgress.total}</span>
+                <span className="text-muted-foreground truncate ml-2">{projectCrawlProgress.project}</span>
+              </div>
+              <Progress value={(projectCrawlProgress.current / projectCrawlProgress.total) * 100} />
+            </div>
+          )}
+
+          {projectCrawlResults && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Found</div><div className="font-semibold">{projectCrawlResults.totalFound}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">New</div><div className="font-semibold text-primary">{projectCrawlResults.totalNew}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Updated</div><div className="font-semibold">{projectCrawlResults.totalUpdated}</div></div>
+              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Stored</div><div className="font-semibold">{projectCrawlResults.totalStored}</div></div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Verify External Listings */}
       <Card>
         <CardHeader>
