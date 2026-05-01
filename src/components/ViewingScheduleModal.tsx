@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -26,6 +26,7 @@ interface ViewingScheduleModalProps {
   onSubmit: (scheduleData: ViewingScheduleData) => void;
   matchedProperties: Property[];
   onPropertyClick?: (propertyId: string) => void;
+  initialSelectedIds?: string[];
 }
 
 export interface ViewingScheduleData {
@@ -35,12 +36,19 @@ export interface ViewingScheduleData {
   selectedPropertyIds: string[];
 }
 
-export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedProperties, onPropertyClick }: ViewingScheduleModalProps) => {
+export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedProperties, onPropertyClick, initialSelectedIds }: ViewingScheduleModalProps) => {
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [preferredTimes, setPreferredTimes] = useState<string[]>(['']);
   const [specialRequirements, setSpecialRequirements] = useState('');
-  const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
+  const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>(initialSelectedIds ?? []);
   const { toast } = useToast();
+
+  // Re-seed selection whenever modal opens or initial ids change
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedPropertyIds((initialSelectedIds ?? []).slice(0, 3));
+    }
+  }, [isOpen, initialSelectedIds?.join(',')]);
 
   const handleAddDate = (date: Date | undefined) => {
     if (!date) return;

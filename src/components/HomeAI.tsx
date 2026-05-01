@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart } from 'lucide-react';
+import { Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart, CalendarCheck } from 'lucide-react';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -20,6 +20,11 @@ import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { supabase } from '@/integrations/supabase/client';
 import { ExternalPropertyBadge } from '@/components/ExternalPropertyBadge';
+import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
+import { useSubscription } from '@/hooks/useSubscription';
+import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
+import { format } from 'date-fns';
+import { toast as sonnerToast } from 'sonner';
 interface PropertyMatch {
   id: string;
   title: string;
@@ -66,6 +71,9 @@ export const HomeAI = ({
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
+  const [isViewingScheduleOpen, setIsViewingScheduleOpen] = useState(false);
+  const [scheduleInitialIds, setScheduleInitialIds] = useState<string[]>([]);
+  const [isFastTrackBannerDismissed, setIsFastTrackBannerDismissed] = useState(false);
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
   const [tempUserMessageForLoggedIn, setTempUserMessageForLoggedIn] = useState<string | null>(null);
   const [tempUserImages, setTempUserImages] = useState<string[]>([]);
@@ -86,6 +94,7 @@ export const HomeAI = ({
   const {
     createMatch
   } = useMatches();
+  const { subscription_tier } = useSubscription();
   const {
     canPerformAction,
     updateUsage,
@@ -203,6 +212,8 @@ export const HomeAI = ({
     setTempUserMessage(null);
     setTempUserMessageForLoggedIn(null);
     setTempUserImages([]);
+    setLikedProperties(new Set());
+    setIsFastTrackBannerDismissed(false);
     // Clear any stored pending queries
     localStorage.removeItem('pendingSearchQuery');
   };
@@ -225,6 +236,30 @@ export const HomeAI = ({
       console.log(`Conversation ${conversationId} appears to be empty`);
     }
   };
+  const openScheduleForIds = (ids: string[]) => {
+    setScheduleInitialIds(ids.slice(0, 3));
+    setIsViewingScheduleOpen(true);
+    setIsFastTrackBannerDismissed(false);
+  };
+
+  const triggerFastTrackPrompt = (propertyId: string) => {
+    sonnerToast.success('Property liked!', {
+      description: subscription_tier === 'premium'
+        ? 'Want Hausto to coordinate the viewing for you?'
+        : 'Upgrade to let Hausto Agent coordinate your viewings.',
+      action: {
+        label: subscription_tier === 'premium' ? 'Schedule viewing' : 'Upgrade',
+        onClick: () => {
+          if (subscription_tier === 'premium') {
+            openScheduleForIds([propertyId]);
+          } else {
+            window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
+          }
+        }
+      }
+    });
+  };
+
   const handleLikeProperty = async (propertyId: string, realtorId?: string) => {
     if (!user) {
       localStorage.setItem('pendingSearchQuery', query);
@@ -245,6 +280,7 @@ export const HomeAI = ({
         // For external properties, use current user's ID as placeholder realtor_id
         // since there's no real realtor in the system for external listings
         await createMatch(propertyId, user.id, 'external');
+        triggerFastTrackPrompt(propertyId);
         return;
       }
 
@@ -256,6 +292,7 @@ export const HomeAI = ({
           .single();
         if (propertyData?.realtor_id) {
           await createMatch(propertyId, propertyData.realtor_id);
+          triggerFastTrackPrompt(propertyId);
         } else {
           toast({
             title: "Error",
@@ -265,11 +302,14 @@ export const HomeAI = ({
         }
       } else {
         await createMatch(propertyId, actualRealtorId);
+        triggerFastTrackPrompt(propertyId);
       }
     } catch (error: any) {
       console.error('Error liking property:', error);
-      // Don't revert if it's ALREADY_MATCHED - keep it visually liked
-      if (error?.message !== 'ALREADY_MATCHED') {
+      // Don't revert if it's ALREADY_MATCHED - keep it visually liked, and still offer scheduling
+      if (error?.message === 'ALREADY_MATCHED') {
+        triggerFastTrackPrompt(propertyId);
+      } else {
         setLikedProperties(prev => {
           const newSet = new Set(prev);
           newSet.delete(propertyId);
@@ -279,6 +319,68 @@ export const HomeAI = ({
       // Toast is already handled by useMatches onError
     }
   };
+
+  // Properties available for the viewing scheduler (only those the user liked in this session)
+  const matchedPropertiesForSchedule = useMemo(() => {
+    return allResults
+      .filter(p => likedProperties.has(p.id))
+      .map(p => ({
+        id: p.id,
+        title: p.title,
+        images: p.images,
+        location: p.location,
+        price: p.price,
+      }));
+  }, [allResults, likedProperties]);
+
+  const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
+    if (!user?.id) return;
+    try {
+      // Use the active AI conversation as the conversation_id when present
+      const conversationId = currentConversationId || crypto.randomUUID();
+
+      const { error: requestError } = await supabase.from('fast_track_requests').insert({
+        conversation_id: conversationId,
+        renter_id: user.id,
+        realtor_id: HAUSTO_AGENT_ID,
+        property_ids: scheduleData.selectedPropertyIds,
+        preferred_dates: scheduleData.dates.map(d => format(d, 'yyyy-MM-dd')),
+        preferred_times: scheduleData.preferredTimes,
+        special_requirements: scheduleData.specialRequirements || null,
+        status: 'pending',
+      });
+
+      if (requestError) throw requestError;
+
+      // Notify Hausto and the renter (best-effort)
+      try {
+        const selected = matchedPropertiesForSchedule.filter(p =>
+          scheduleData.selectedPropertyIds.includes(p.id)
+        );
+        await supabase.functions.invoke('notify-fast-track-request', {
+          body: {
+            renterEmail: user.email,
+            properties: selected,
+            preferredDates: scheduleData.dates.map(d => format(d, 'MMM dd, yyyy')),
+            preferredTimes: scheduleData.preferredTimes,
+            specialRequirements: scheduleData.specialRequirements || '',
+          },
+        });
+      } catch (notificationError) {
+        console.error('Error sending fast track notification:', notificationError);
+      }
+
+      sonnerToast.success('Viewing request sent!', {
+        description: 'Hausto Agent will reach out shortly to confirm your viewings.',
+      });
+      setIsViewingScheduleOpen(false);
+      setIsFastTrackBannerDismissed(true);
+    } catch (error) {
+      console.error('Error submitting viewing schedule:', error);
+      sonnerToast.error('Failed to submit viewing schedule. Please try again.');
+    }
+  };
+
   const handleSearch = async (searchQuery?: string) => {
     const queryToUse = searchQuery || query;
 
@@ -841,6 +943,45 @@ export const HomeAI = ({
         </div>}
 
 
+      {/* Fast-Track viewing banner — appears once a user has liked a property in this AI chat */}
+      {user && likedProperties.size > 0 && !isFastTrackBannerDismissed && (
+        <div className="mb-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-3 flex items-center gap-3 animate-fade-in">
+          <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+            <CalendarCheck className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-tight">
+              You've liked {likedProperties.size >= 3 ? '3+' : likedProperties.size} {likedProperties.size === 1 ? 'property' : 'properties'}
+            </p>
+            <p className="text-xs text-muted-foreground leading-tight">
+              Want Hausto to coordinate viewings for you?
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              if (subscription_tier === 'premium') {
+                openScheduleForIds(Array.from(likedProperties));
+              } else {
+                window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
+              }
+            }}
+          >
+            {subscription_tier === 'premium' ? 'Schedule viewings' : 'Upgrade'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 shrink-0"
+            onClick={() => setIsFastTrackBannerDismissed(true)}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       {/* Chat Input - Show for everyone until they search */}
       {(user || !hasSearched) && <div className="space-y-4">
           <div className="relative">
@@ -895,6 +1036,15 @@ export const HomeAI = ({
         setShowPropertyModal(false);
         setSelectedProperty(null);
       }} onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined} isAnonymous={!user} />
+
+      {/* Viewing Schedule Modal — Hausto Fast-Track */}
+      <ViewingScheduleModal
+        isOpen={isViewingScheduleOpen}
+        onClose={() => setIsViewingScheduleOpen(false)}
+        onSubmit={handleViewingScheduleSubmit}
+        matchedProperties={matchedPropertiesForSchedule}
+        initialSelectedIds={scheduleInitialIds}
+      />
       </div>
     </div>;
 };
