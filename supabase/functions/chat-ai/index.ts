@@ -698,6 +698,10 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
       context.maxPrice = price;
     }
     
+    // Bedroom count (most recent user mention wins, so users can change their mind)
+    const bedrooms = parseBedrooms(text);
+    if (bedrooms) context.bedrooms = bedrooms;
+    
     // Amenities (accumulate)
     const amenities = extractAmenities(text);
     for (const a of amenities) {
