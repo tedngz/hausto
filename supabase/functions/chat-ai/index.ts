@@ -1954,6 +1954,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
     }
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
     if (accContext.specificDistricts.length > 0) constraintsSummary.push(`Specific areas: ${accContext.specificDistricts.join(', ')}`);
+    if (accContext.requestedComplexes.length > 0) constraintsSummary.push(`Specific project/complex: ${accContext.requestedComplexes.join(', ')} (STRICT — only recommend properties IN this exact project; do NOT suggest similarly-named projects in other districts)`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
     if (imageAnalysisResult) {
