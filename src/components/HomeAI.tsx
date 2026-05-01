@@ -950,7 +950,16 @@ export const HomeAI = ({
               if (subscription_tier === 'premium') {
                 openScheduleForIds(Array.from(likedProperties));
               } else {
-                window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
+                // SubscriptionModal lives on /discover — navigate there if we're elsewhere,
+                // then dispatch the event so the modal opens.
+                if (window.location.pathname !== '/discover') {
+                  navigate('/discover');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
+                  }, 100);
+                } else {
+                  window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
+                }
               }
             }}
           >
