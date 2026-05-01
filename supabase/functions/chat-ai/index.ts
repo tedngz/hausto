@@ -668,6 +668,7 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     locationTier: null,
     maxPrice: null,
     minPrice: null,
+    bedrooms: null,
     amenities: [],
     styles: [],
     specificDistricts: [],
