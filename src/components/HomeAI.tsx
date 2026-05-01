@@ -25,6 +25,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { format } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 interface PropertyMatch {
   id: string;
   title: string;
@@ -74,6 +75,7 @@ export const HomeAI = ({
   const [isViewingScheduleOpen, setIsViewingScheduleOpen] = useState(false);
   const [scheduleInitialIds, setScheduleInitialIds] = useState<string[]>([]);
   const [isFastTrackBannerDismissed, setIsFastTrackBannerDismissed] = useState(false);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
   const [tempUserMessageForLoggedIn, setTempUserMessageForLoggedIn] = useState<string | null>(null);
   const [tempUserImages, setTempUserImages] = useState<string[]>([]);
@@ -950,16 +952,7 @@ export const HomeAI = ({
               if (subscription_tier === 'premium') {
                 openScheduleForIds(Array.from(likedProperties));
               } else {
-                // SubscriptionModal lives on /discover — navigate there if we're elsewhere,
-                // then dispatch the event so the modal opens.
-                if (window.location.pathname !== '/discover') {
-                  navigate('/discover');
-                  setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
-                  }, 100);
-                } else {
-                  window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
-                }
+                setIsSubscriptionModalOpen(true);
               }
             }}
           >
@@ -1039,6 +1032,11 @@ export const HomeAI = ({
         onSubmit={handleViewingScheduleSubmit}
         matchedProperties={matchedPropertiesForSchedule}
         initialSelectedIds={scheduleInitialIds}
+      />
+
+      <SubscriptionModal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
       />
       </div>
     </div>;
