@@ -767,16 +767,24 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
         }
       }
       
+      // If a project/keyword query is provided (anything other than the generic
+      // "căn hộ chung cư cho thuê" phrase), append `?q=` so Nhatot returns
+      // listings matching the project name — even when we have a district slug.
+      const isKeywordQueryNhatot = !!query && !/c[ăa]n h[ộo] chung c[ưu] cho thu[êe]/i.test(query);
+      const keywordParamNhatot = isKeywordQueryNhatot ? `?q=${encodeURIComponent(query)}` : '';
+
       if (nhatotDistrictSlug) {
-        const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotDistrictSlug}-${nhatotCity}`;
-        return page > 1 ? `${base}?page=${page}` : base;
+        const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotDistrictSlug}-${nhatotCity}${keywordParamNhatot}`;
+        if (page > 1) return base.includes('?') ? `${base}&page=${page}` : `${base}?page=${page}`;
+        return base;
       }
-      if (location) {
+      if (location && !isKeywordQueryNhatot) {
         const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotCity}?q=${encodeURIComponent(location)}`;
         return page > 1 ? `${base}&page=${page}` : base;
       }
-      const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotCity}`;
-      return page > 1 ? `${base}?page=${page}` : base;
+      const base = `https://www.nhatot.com/thue-can-ho-chung-cu-${nhatotCity}${keywordParamNhatot}`;
+      if (page > 1) return base.includes('?') ? `${base}&page=${page}` : `${base}?page=${page}`;
+      return base;
     }
       
     case 'airbnb': {
