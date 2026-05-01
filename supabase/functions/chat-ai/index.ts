@@ -427,6 +427,7 @@ interface AccumulatedContext {
   amenities: string[];
   styles: string[];
   specificDistricts: string[];
+  requestedComplexes: string[]; // Specific named projects/complexes (e.g. "vinhomes golden river")
   rejections: string[];   // things the user said they didn't want
   likes: string[];        // things/properties the user reacted positively to
 }
