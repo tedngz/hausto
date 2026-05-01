@@ -914,6 +914,14 @@ function filterAndScoreProperties(
     // 2. Must have amenities (from any source)
     if (amenities.length === 0) continue;
     
+    // 3. Bedroom count (STRICT) — if user specified a bedroom count, only keep matching properties.
+    // Properties with no `rooms` data are also filtered out to avoid mismatched results.
+    if (context.bedrooms) {
+      if (!propertyMatchesBedrooms(p.rooms, context.bedrooms)) {
+        continue;
+      }
+    }
+    
     // ========== SCORING ==========
     let score = 50; // Base score
     const matchReasons: string[] = [];
