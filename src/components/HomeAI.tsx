@@ -212,6 +212,8 @@ export const HomeAI = ({
     setTempUserMessage(null);
     setTempUserMessageForLoggedIn(null);
     setTempUserImages([]);
+    setLikedProperties(new Set());
+    setIsFastTrackBannerDismissed(false);
     // Clear any stored pending queries
     localStorage.removeItem('pendingSearchQuery');
   };
