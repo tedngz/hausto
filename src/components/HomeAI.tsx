@@ -943,44 +943,42 @@ export const HomeAI = ({
         </div>}
 
 
-      {/* Fast-Track viewing — sticky floating CTA so it's always visible after liking */}
+      {/* Fast-Track viewing banner — appears once a user has liked a property in this AI chat */}
       {user && likedProperties.size > 0 && !isFastTrackBannerDismissed && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md animate-fade-in">
-          <div className="rounded-2xl border border-primary/40 bg-background/95 backdrop-blur shadow-2xl p-3 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-              <CalendarCheck className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold leading-tight">
-                {likedProperties.size} {likedProperties.size === 1 ? 'property' : 'properties'} liked
-              </p>
-              <p className="text-xs text-muted-foreground leading-tight">
-                Let Hausto schedule viewings for you
-              </p>
-            </div>
-            <Button
-              size="sm"
-              className="shrink-0"
-              onClick={() => {
-                if (subscription_tier === 'premium') {
-                  openScheduleForIds(Array.from(likedProperties));
-                } else {
-                  window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
-                }
-              }}
-            >
-              {subscription_tier === 'premium' ? 'Schedule' : 'Upgrade'}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0 shrink-0"
-              onClick={() => setIsFastTrackBannerDismissed(true)}
-              aria-label="Dismiss"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+        <div className="mb-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-3 flex items-center gap-3 animate-fade-in">
+          <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+            <CalendarCheck className="h-5 w-5 text-primary" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-tight">
+              You've liked {likedProperties.size >= 3 ? '3+' : likedProperties.size} {likedProperties.size === 1 ? 'property' : 'properties'}
+            </p>
+            <p className="text-xs text-muted-foreground leading-tight">
+              Want Hausto to coordinate viewings for you?
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              if (subscription_tier === 'premium') {
+                openScheduleForIds(Array.from(likedProperties));
+              } else {
+                window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
+              }
+            }}
+          >
+            {subscription_tier === 'premium' ? 'Schedule viewings' : 'Upgrade'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 shrink-0"
+            onClick={() => setIsFastTrackBannerDismissed(true)}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       )}
 
