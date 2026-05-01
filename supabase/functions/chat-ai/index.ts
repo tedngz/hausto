@@ -1045,7 +1045,20 @@ function filterAndScoreProperties(
         continue;
       }
     }
-    
+
+    // 4. Named complex / project (STRICT) — if user named a specific project
+    // (e.g. "Vinhomes Golden River"), only keep properties whose title or location
+    // contains that exact project name. This prevents the AI from substituting
+    // similarly-named properties (e.g. "Saigon Riverside" in D7 for "Vinhomes Golden River" in D1).
+    if (context.requestedComplexes && context.requestedComplexes.length > 0) {
+      const haystack = `${locLower} ${titleLowerPre}`;
+      const matchesAnyComplex = context.requestedComplexes.some(c => haystack.includes(c));
+      if (!matchesAnyComplex) {
+        continue;
+      }
+    }
+
+
     // ========== SCORING ==========
     let score = 50; // Base score
     const matchReasons: string[] = [];
