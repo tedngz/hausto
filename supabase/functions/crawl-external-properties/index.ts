@@ -48,6 +48,16 @@ function stripDiacritics(str: string): string {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd');
 }
 
+// Generic / common words we strip when generating loose token-based fallbacks,
+// so a project like "The Botanica" still matches "Botanica Premier" listings.
+const PROJECT_STOPWORDS = new Set([
+  'the', 'city', 'park', 'garden', 'residence', 'residences', 'tower', 'towers',
+  'apartment', 'apartments', 'home', 'homes', 'plaza', 'pearl', 'house',
+  'view', 'sky', 'place', 'point', 'hill', 'gate', 'valley', 'heights',
+  'premium', 'premier', 'thu', 'duc', 'thao', 'dien', 'an', 'phu', 'phú',
+  'saigon', 'sai', 'gon', 'hcm', 'hochiminh', 'tphcm', 'q1', 'q2', 'q7',
+]);
+
 function projectMatchesProperty(project: ProjectTarget, prop: any): boolean {
   const haystack = stripDiacritics(
     `${prop.title || ''} ${prop.description || ''} ${prop.location || ''}`
@@ -55,7 +65,25 @@ function projectMatchesProperty(project: ProjectTarget, prop: any): boolean {
   const needles = [project.name, ...(project.aliases || [])]
     .map(n => stripDiacritics(n).toLowerCase().trim())
     .filter(Boolean);
-  return needles.some(n => haystack.includes(n));
+
+  // 1) Strict: full name/alias substring match.
+  if (needles.some(n => haystack.includes(n))) return true;
+
+  // 2) Loose fallback: at least one *distinctive* token from the project name
+  //    (3+ chars, not a stopword) appears in the haystack. Catches partial
+  //    mentions like "Vinhomes Central" or "Masteri" without name suffix.
+  const distinctiveTokens = new Set<string>();
+  for (const n of needles) {
+    for (const tok of n.split(/[\s\-_/.,]+/)) {
+      if (tok.length >= 4 && !PROJECT_STOPWORDS.has(tok)) {
+        distinctiveTokens.add(tok);
+      }
+    }
+  }
+  // Need at least one distinctive token to even attempt loose match —
+  // otherwise we'd over-match generic names.
+  if (distinctiveTokens.size === 0) return false;
+  return Array.from(distinctiveTokens).some(t => haystack.includes(t));
 }
 
 interface CrawlResult {
