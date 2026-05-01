@@ -848,7 +848,11 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
       if (!context.likes.includes(l)) context.likes.push(l);
     }
   }
-  
+
+  // Requested complexes: only honor those mentioned in the CURRENT user message
+  // so users can switch projects without sticky filters from earlier in the chat.
+  context.requestedComplexes = extractRequestedComplexes(currentMessage);
+
   // Determine location tier based on center preference
   if (context.wantsCenter) {
     context.locationTier = 'center';
