@@ -1183,11 +1183,39 @@ const AdminTools = () => {
           )}
 
           {projectCrawlResults && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Found</div><div className="font-semibold">{projectCrawlResults.totalFound}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">New</div><div className="font-semibold text-primary">{projectCrawlResults.totalNew}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Updated</div><div className="font-semibold">{projectCrawlResults.totalUpdated}</div></div>
-              <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Stored</div><div className="font-semibold">{projectCrawlResults.totalStored}</div></div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Found</div><div className="font-semibold">{projectCrawlResults.totalFound}</div></div>
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">New</div><div className="font-semibold text-primary">{projectCrawlResults.totalNew}</div></div>
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Updated</div><div className="font-semibold">{projectCrawlResults.totalUpdated}</div></div>
+                <div className="p-2 rounded border bg-muted/40"><div className="text-muted-foreground text-xs">Stored</div><div className="font-semibold">{projectCrawlResults.totalStored}</div></div>
+              </div>
+              {Array.isArray(projectCrawlResults.results) && projectCrawlResults.results.length > 0 && (
+                <div className="border rounded">
+                  <div className="px-3 py-2 text-xs font-semibold bg-muted/40 border-b grid grid-cols-12 gap-2">
+                    <div className="col-span-5">Project · district</div>
+                    <div className="col-span-2">Marketplace</div>
+                    <div className="col-span-1 text-right">Found</div>
+                    <div className="col-span-1 text-right">New</div>
+                    <div className="col-span-1 text-right">Upd</div>
+                    <div className="col-span-2 text-right">Status</div>
+                  </div>
+                  <div className="max-h-64 overflow-auto divide-y text-xs">
+                    {projectCrawlResults.results.map((r: any, idx: number) => (
+                      <div key={idx} className="px-3 py-2 grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-5 truncate font-medium">{r.location}</div>
+                        <div className="col-span-2 text-muted-foreground">{r.marketplace}</div>
+                        <div className="col-span-1 text-right">{r.propertiesFound}</div>
+                        <div className="col-span-1 text-right text-primary">{r.newListings}</div>
+                        <div className="col-span-1 text-right">{r.updatedListings}</div>
+                        <div className="col-span-2 text-right text-muted-foreground truncate">
+                          {r.skipped ? 'cached' : r.error ? `❌ ${r.error}` : `${r.propertiesStored} stored`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
