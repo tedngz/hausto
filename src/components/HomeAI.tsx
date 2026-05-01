@@ -943,6 +943,45 @@ export const HomeAI = ({
         </div>}
 
 
+      {/* Fast-Track viewing banner — appears once a user has liked a property in this AI chat */}
+      {user && likedProperties.size > 0 && !isFastTrackBannerDismissed && (
+        <div className="mb-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-3 flex items-center gap-3 animate-fade-in">
+          <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+            <CalendarCheck className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-tight">
+              You've liked {likedProperties.size >= 3 ? '3+' : likedProperties.size} {likedProperties.size === 1 ? 'property' : 'properties'}
+            </p>
+            <p className="text-xs text-muted-foreground leading-tight">
+              Want Hausto to coordinate viewings for you?
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              if (subscription_tier === 'premium') {
+                openScheduleForIds(Array.from(likedProperties));
+              } else {
+                window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
+              }
+            }}
+          >
+            {subscription_tier === 'premium' ? 'Schedule viewings' : 'Upgrade'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 shrink-0"
+            onClick={() => setIsFastTrackBannerDismissed(true)}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       {/* Chat Input - Show for everyone until they search */}
       {(user || !hasSearched) && <div className="space-y-4">
           <div className="relative">
@@ -997,6 +1036,15 @@ export const HomeAI = ({
         setShowPropertyModal(false);
         setSelectedProperty(null);
       }} onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined} isAnonymous={!user} />
+
+      {/* Viewing Schedule Modal — Hausto Fast-Track */}
+      <ViewingScheduleModal
+        isOpen={isViewingScheduleOpen}
+        onClose={() => setIsViewingScheduleOpen(false)}
+        onSubmit={handleViewingScheduleSubmit}
+        matchedProperties={matchedPropertiesForSchedule}
+        initialSelectedIds={scheduleInitialIds}
+      />
       </div>
     </div>;
 };
