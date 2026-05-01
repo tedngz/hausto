@@ -327,6 +327,59 @@ function parsePrice(text: string): number | null {
   return null;
 }
 
+// Returns canonical bedroom token: "studio", "1", "2", "3", "4+", or null
+function parseBedrooms(text: string): string | null {
+  const lower = text.toLowerCase();
+  // Studio
+  if (/\bstudio\b/.test(lower)) return 'studio';
+  // Penthouse — treat as its own category, don't conflate with bedroom counts
+  // Patterns: "2 bedroom(s)", "2-bedroom", "2br", "2 br", "2bd", "2 phòng ngủ", "2 phong ngu", "2 pn", "2pn"
+  const patterns: RegExp[] = [
+    /(\d+)\s*\+?\s*(?:bedroom|bed\s*room|bedrooms|bed-?room)s?\b/,
+    /(\d+)\s*\+?\s*br\b/,
+    /(\d+)\s*\+?\s*bd\b/,
+    /(\d+)\s*\+?\s*ph[oòô]ng\s*ng[uủ]/,
+    /(\d+)\s*\+?\s*pn\b/,
+  ];
+  for (const re of patterns) {
+    const m = lower.match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (!isNaN(n) && n >= 1) {
+        if (n >= 4) return '4+';
+        return String(n);
+      }
+    }
+  }
+  // "one bedroom", "two bedrooms"
+  const wordMap: Record<string, string> = {
+    one: '1', two: '2', three: '3', four: '4+', five: '4+',
+    một: '1', hai: '2', ba: '3', bốn: '4+', mot: '1', bon: '4+',
+  };
+  for (const [w, n] of Object.entries(wordMap)) {
+    const re = new RegExp(`\\b${w}\\s+(?:bedroom|bed-?room|ph[oòô]ng\\s*ng[uủ])`, 'i');
+    if (re.test(lower)) return n;
+  }
+  return null;
+}
+
+// Check if a property's `rooms` field matches the requested bedroom token
+function propertyMatchesBedrooms(roomsField: string | null | undefined, requested: string): boolean {
+  if (!roomsField) return false;
+  const r = roomsField.toLowerCase().trim();
+  if (requested === 'studio') return r.includes('studio');
+  if (requested === '4+') {
+    // Match 4 Bedrooms, 4+ Bedrooms, 5 Bedrooms, etc.
+    const m = r.match(/(\d+)\+?\s*bedroom/);
+    if (m) return parseInt(m[1], 10) >= 4;
+    return r.includes('4+') || r.includes('penthouse');
+  }
+  // Exact bedroom count match: "2 Bedrooms" but not "12 Bedrooms"
+  const m = r.match(/^(\d+)\s*bedroom/);
+  if (m) return m[1] === requested;
+  return false;
+}
+
 function extractAmenities(text: string): string[] {
   const lowerText = text.toLowerCase();
   const amenityMap: Record<string, string[]> = {
