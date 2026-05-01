@@ -437,29 +437,90 @@ function extractSpecificDistricts(text: string): string[] {
   const districts: string[] = [];
   
   // HCM main districts
-  // Known residential complexes/landmarks → district mapping
+  // Known residential complexes/landmarks → district mapping.
+  // IMPORTANT: longer / more specific keys MUST be checked before shorter ones
+  // (e.g. "vinhomes golden river" must win over a generic "river" token) — the
+  // matching loop iterates in insertion order, so keep specific entries first.
   const HCM_COMPLEXES: Record<string, string> = {
-    'celadon city': 'tan phu',
-    'vinhomes central park': 'binh thanh',
-    'vinhomes grand park': 'thu duc',
-    'masteri thao dien': 'district 2',
-    'masteri an phu': 'district 2',
-    'the sun avenue': 'district 2',
-    'gateway thao dien': 'district 2',
-    'estella heights': 'district 2',
-    'sala': 'district 2',
-    'saigon pearl': 'binh thanh',
-    'sunwah pearl': 'binh thanh',
-    'landmark 81': 'binh thanh',
-    'the manor': 'binh thanh',
+    // ── D1 (Central) ──
+    'vinhomes golden river': 'district 1',
+    'vinhomes ba son': 'district 1',
+    'the marq': 'district 1',
+    // ── D4 ──
+    'saigon royal': 'district 4',
+    'the tresor': 'district 4',
+    'millennium masteri': 'district 4',
+    'icon 56': 'district 4',
+    'rivergate residence': 'district 4',
+    'rivergate': 'district 4',
+    'gold view': 'district 4',
+    'river gate': 'district 4',
+    // ── D7 (Phu My Hung) ──
+    // NOTE: "saigon riverside" lives in D7 — keep BEFORE any generic "river" key
+    'saigon riverside': 'district 7',
+    'riverside residence': 'district 7',
+    'saigon south residences': 'district 7',
+    'sky garden': 'district 7',
+    'happy valley': 'district 7',
+    'midtown phu my hung': 'district 7',
+    'scenic valley': 'district 7',
+    'the panorama': 'district 7',
+    'the ascentia': 'district 7',
+    'urban hill': 'district 7',
+    'happy residence': 'district 7',
+    'riviera point': 'district 7',
+    'eco green saigon': 'district 7',
     'phu my hung': 'district 7',
     'sunrise city': 'district 7',
     'midtown': 'district 7',
-    'gold view': 'district 4',
-    'river gate': 'district 4',
+    // ── D2 / Thu Duc ──
+    'masteri thao dien': 'district 2',
+    'masteri an phu': 'district 2',
+    'gateway thao dien': 'district 2',
+    'estella heights': 'district 2',
+    'the estella': 'district 2',
+    'the vista an phu': 'district 2',
+    'the vista': 'district 2',
+    'thao dien pearl': 'district 2',
+    'q2 thao dien': 'district 2',
+    'lumiere riverside': 'district 2',
+    "d'edge thao dien": 'district 2',
+    'nassim thao dien': 'district 2',
+    'empire city': 'district 2',
+    'the river thu thiem': 'district 2',
+    'sala thu thiem': 'district 2',
+    'new city thu thiem': 'district 2',
+    'diamond island': 'district 2',
+    'the sun avenue': 'district 2',
+    'the krista': 'district 2',
+    'vinhomes grand park': 'thu duc',
+    'centana thu thiem': 'district 2',
+    'sala': 'district 2',
+    // ── Binh Thanh ──
+    'vinhomes central park': 'binh thanh',
+    'saigon pearl': 'binh thanh',
+    'sunwah pearl': 'binh thanh',
+    'landmark 81': 'binh thanh',
+    'city garden': 'binh thanh',
+    'the manor': 'binh thanh',
+    'pearl plaza': 'binh thanh',
+    // ── Tan Phu / Tan Binh / Phu Nhuan ──
+    'celadon city': 'tan phu',
+    'richstar': 'tan phu',
+    'the botanica': 'tan binh',
+    'botanica premier': 'tan binh',
+    'cong hoa garden': 'tan binh',
     'kingston residence': 'phu nhuan',
     'orchard garden': 'phu nhuan',
-    'botanica premier': 'tan binh',
+    'orchard parkview': 'phu nhuan',
+    'newton residence': 'phu nhuan',
+    'garden gate': 'phu nhuan',
+    // ── D5 / D10 / D11 ──
+    'hado centrosa garden': 'district 10',
+    'centrosa garden': 'district 10',
+    'rivera park': 'district 10',
+    'charmington la pointe': 'district 10',
+    'the everrich infinity': 'district 5',
   };
 
   // Famous landmarks (airports, hospitals, universities, malls, parks, markets) → district
