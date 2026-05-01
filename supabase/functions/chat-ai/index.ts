@@ -327,6 +327,59 @@ function parsePrice(text: string): number | null {
   return null;
 }
 
+// Returns canonical bedroom token: "studio", "1", "2", "3", "4+", or null
+function parseBedrooms(text: string): string | null {
+  const lower = text.toLowerCase();
+  // Studio
+  if (/\bstudio\b/.test(lower)) return 'studio';
+  // Penthouse — treat as its own category, don't conflate with bedroom counts
+  // Patterns: "2 bedroom(s)", "2-bedroom", "2br", "2 br", "2bd", "2 phòng ngủ", "2 phong ngu", "2 pn", "2pn"
+  const patterns: RegExp[] = [
+    /(\d+)\s*\+?\s*(?:bedroom|bed\s*room|bedrooms|bed-?room)s?\b/,
+    /(\d+)\s*\+?\s*br\b/,
+    /(\d+)\s*\+?\s*bd\b/,
+    /(\d+)\s*\+?\s*ph[oòô]ng\s*ng[uủ]/,
+    /(\d+)\s*\+?\s*pn\b/,
+  ];
+  for (const re of patterns) {
+    const m = lower.match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (!isNaN(n) && n >= 1) {
+        if (n >= 4) return '4+';
+        return String(n);
+      }
+    }
+  }
+  // "one bedroom", "two bedrooms"
+  const wordMap: Record<string, string> = {
+    one: '1', two: '2', three: '3', four: '4+', five: '4+',
+    một: '1', hai: '2', ba: '3', bốn: '4+', mot: '1', bon: '4+',
+  };
+  for (const [w, n] of Object.entries(wordMap)) {
+    const re = new RegExp(`\\b${w}\\s+(?:bedroom|bed-?room|ph[oòô]ng\\s*ng[uủ])`, 'i');
+    if (re.test(lower)) return n;
+  }
+  return null;
+}
+
+// Check if a property's `rooms` field matches the requested bedroom token
+function propertyMatchesBedrooms(roomsField: string | null | undefined, requested: string): boolean {
+  if (!roomsField) return false;
+  const r = roomsField.toLowerCase().trim();
+  if (requested === 'studio') return r.includes('studio');
+  if (requested === '4+') {
+    // Match 4 Bedrooms, 4+ Bedrooms, 5 Bedrooms, etc.
+    const m = r.match(/(\d+)\+?\s*bedroom/);
+    if (m) return parseInt(m[1], 10) >= 4;
+    return r.includes('4+') || r.includes('penthouse');
+  }
+  // Exact bedroom count match: "2 Bedrooms" but not "12 Bedrooms"
+  const m = r.match(/^(\d+)\s*bedroom/);
+  if (m) return m[1] === requested;
+  return false;
+}
+
 function extractAmenities(text: string): string[] {
   const lowerText = text.toLowerCase();
   const amenityMap: Record<string, string[]> = {
@@ -370,6 +423,7 @@ interface AccumulatedContext {
   locationTier: 'center' | 'near-center' | 'suburban' | null;
   maxPrice: number | null;
   minPrice: number | null;
+  bedrooms: string | null;  // 'studio' | '1' | '2' | '3' | '4+'
   amenities: string[];
   styles: string[];
   specificDistricts: string[];
@@ -614,6 +668,7 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     locationTier: null,
     maxPrice: null,
     minPrice: null,
+    bedrooms: null,
     amenities: [],
     styles: [],
     specificDistricts: [],
@@ -642,6 +697,10 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     if (price && (!context.maxPrice || price < context.maxPrice)) {
       context.maxPrice = price;
     }
+    
+    // Bedroom count (most recent user mention wins, so users can change their mind)
+    const bedrooms = parseBedrooms(text);
+    if (bedrooms) context.bedrooms = bedrooms;
     
     // Amenities (accumulate)
     const amenities = extractAmenities(text);
@@ -854,6 +913,14 @@ function filterAndScoreProperties(
     
     // 2. Must have amenities (from any source)
     if (amenities.length === 0) continue;
+    
+    // 3. Bedroom count (STRICT) — if user specified a bedroom count, only keep matching properties.
+    // Properties with no `rooms` data are also filtered out to avoid mismatched results.
+    if (context.bedrooms) {
+      if (!propertyMatchesBedrooms(p.rooms, context.bedrooms)) {
+        continue;
+      }
+    }
     
     // ========== SCORING ==========
     let score = 50; // Base score
@@ -1742,6 +1809,12 @@ Pick 1-3 styles and 1-2 colors that best match.`
     const constraintsSummary = [];
     if (accContext.city) constraintsSummary.push(`City: ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`);
     if (accContext.maxPrice) constraintsSummary.push(`Budget: under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`);
+    if (accContext.bedrooms) {
+      const label = accContext.bedrooms === 'studio' ? 'Studio'
+        : accContext.bedrooms === '4+' ? '4+ bedrooms'
+        : `${accContext.bedrooms} bedroom${accContext.bedrooms === '1' ? '' : 's'}`;
+      constraintsSummary.push(`Bedrooms: ${label} (STRICT — do NOT include other bedroom counts)`);
+    }
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
     if (accContext.specificDistricts.length > 0) constraintsSummary.push(`Specific areas: ${accContext.specificDistricts.join(', ')}`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
