@@ -427,8 +427,66 @@ interface AccumulatedContext {
   amenities: string[];
   styles: string[];
   specificDistricts: string[];
+  requestedComplexes: string[]; // Specific named projects/complexes (e.g. "vinhomes golden river")
   rejections: string[];   // things the user said they didn't want
   likes: string[];        // things/properties the user reacted positively to
+}
+
+// Canonical list of named HCM apartment complexes/projects.
+// Used as a HARD filter: when a user mentions one of these by name, only
+// properties whose title or location contain that complex name should be returned.
+// Keep names lowercase and ordered from most-specific to most-generic so that
+// substring checks pick the most specific match first (e.g. "vinhomes golden river"
+// must be matched before a generic "vinhomes" or "river" token).
+const HCM_COMPLEX_NAMES: string[] = [
+  // D1 / D4
+  'vinhomes golden river', 'vinhomes ba son', 'the marq',
+  'saigon royal', 'the tresor', 'millennium masteri', 'icon 56',
+  'rivergate residence', 'rivergate', 'gold view', 'river gate',
+  // D7 (Phu My Hung)
+  'saigon riverside', 'riverside residence', 'saigon south residences',
+  'sky garden', 'happy valley', 'midtown phu my hung', 'scenic valley',
+  'the panorama', 'the ascentia', 'urban hill', 'happy residence',
+  'riviera point', 'eco green saigon', 'sunrise city',
+  // D2 / Thu Duc
+  'masteri thao dien', 'masteri an phu', 'gateway thao dien',
+  'estella heights', 'the estella', 'the vista an phu', 'thao dien pearl',
+  'q2 thao dien', 'lumiere riverside', "d'edge thao dien", 'nassim thao dien',
+  'empire city', 'the river thu thiem', 'sala thu thiem', 'new city thu thiem',
+  'diamond island', 'the sun avenue', 'the krista',
+  'vinhomes grand park', 'centana thu thiem',
+  // Binh Thanh
+  'vinhomes central park', 'saigon pearl', 'sunwah pearl', 'landmark 81',
+  'city garden', 'pearl plaza',
+  // Tan Phu / Tan Binh / Phu Nhuan
+  'celadon city', 'richstar', 'the botanica', 'botanica premier',
+  'cong hoa garden', 'kingston residence', 'orchard garden', 'orchard parkview',
+  'newton residence', 'garden gate',
+  // D5 / D10 / D11
+  'hado centrosa garden', 'centrosa garden', 'rivera park',
+  'charmington la pointe', 'the everrich infinity',
+];
+
+/**
+ * Detect specific named complexes/projects mentioned in user text.
+ * Returns the canonical lowercase complex names found.
+ * When non-empty, the matching pipeline must HARD-filter properties to only
+ * those whose title/location contains the complex name — preventing the AI
+ * from confusing e.g. "Vinhomes Golden River" (D1) with "Saigon Riverside" (D7).
+ */
+function extractRequestedComplexes(text: string): string[] {
+  const lower = text.toLowerCase();
+  const found: string[] = [];
+  for (const name of HCM_COMPLEX_NAMES) {
+    if (lower.includes(name) && !found.includes(name)) {
+      found.push(name);
+    }
+  }
+  // Drop generic shorter matches if a more-specific one was already captured
+  // (e.g. don't keep "rivergate" if "rivergate residence" was matched).
+  return found.filter(n =>
+    !found.some(other => other !== n && other.includes(n) && other.length > n.length)
+  );
 }
 
 // Extract specific districts/areas mentioned by user (including sub-districts and roads)
@@ -437,29 +495,90 @@ function extractSpecificDistricts(text: string): string[] {
   const districts: string[] = [];
   
   // HCM main districts
-  // Known residential complexes/landmarks → district mapping
+  // Known residential complexes/landmarks → district mapping.
+  // IMPORTANT: longer / more specific keys MUST be checked before shorter ones
+  // (e.g. "vinhomes golden river" must win over a generic "river" token) — the
+  // matching loop iterates in insertion order, so keep specific entries first.
   const HCM_COMPLEXES: Record<string, string> = {
-    'celadon city': 'tan phu',
-    'vinhomes central park': 'binh thanh',
-    'vinhomes grand park': 'thu duc',
-    'masteri thao dien': 'district 2',
-    'masteri an phu': 'district 2',
-    'the sun avenue': 'district 2',
-    'gateway thao dien': 'district 2',
-    'estella heights': 'district 2',
-    'sala': 'district 2',
-    'saigon pearl': 'binh thanh',
-    'sunwah pearl': 'binh thanh',
-    'landmark 81': 'binh thanh',
-    'the manor': 'binh thanh',
+    // ── D1 (Central) ──
+    'vinhomes golden river': 'district 1',
+    'vinhomes ba son': 'district 1',
+    'the marq': 'district 1',
+    // ── D4 ──
+    'saigon royal': 'district 4',
+    'the tresor': 'district 4',
+    'millennium masteri': 'district 4',
+    'icon 56': 'district 4',
+    'rivergate residence': 'district 4',
+    'rivergate': 'district 4',
+    'gold view': 'district 4',
+    'river gate': 'district 4',
+    // ── D7 (Phu My Hung) ──
+    // NOTE: "saigon riverside" lives in D7 — keep BEFORE any generic "river" key
+    'saigon riverside': 'district 7',
+    'riverside residence': 'district 7',
+    'saigon south residences': 'district 7',
+    'sky garden': 'district 7',
+    'happy valley': 'district 7',
+    'midtown phu my hung': 'district 7',
+    'scenic valley': 'district 7',
+    'the panorama': 'district 7',
+    'the ascentia': 'district 7',
+    'urban hill': 'district 7',
+    'happy residence': 'district 7',
+    'riviera point': 'district 7',
+    'eco green saigon': 'district 7',
     'phu my hung': 'district 7',
     'sunrise city': 'district 7',
     'midtown': 'district 7',
-    'gold view': 'district 4',
-    'river gate': 'district 4',
+    // ── D2 / Thu Duc ──
+    'masteri thao dien': 'district 2',
+    'masteri an phu': 'district 2',
+    'gateway thao dien': 'district 2',
+    'estella heights': 'district 2',
+    'the estella': 'district 2',
+    'the vista an phu': 'district 2',
+    'the vista': 'district 2',
+    'thao dien pearl': 'district 2',
+    'q2 thao dien': 'district 2',
+    'lumiere riverside': 'district 2',
+    "d'edge thao dien": 'district 2',
+    'nassim thao dien': 'district 2',
+    'empire city': 'district 2',
+    'the river thu thiem': 'district 2',
+    'sala thu thiem': 'district 2',
+    'new city thu thiem': 'district 2',
+    'diamond island': 'district 2',
+    'the sun avenue': 'district 2',
+    'the krista': 'district 2',
+    'vinhomes grand park': 'thu duc',
+    'centana thu thiem': 'district 2',
+    'sala': 'district 2',
+    // ── Binh Thanh ──
+    'vinhomes central park': 'binh thanh',
+    'saigon pearl': 'binh thanh',
+    'sunwah pearl': 'binh thanh',
+    'landmark 81': 'binh thanh',
+    'city garden': 'binh thanh',
+    'the manor': 'binh thanh',
+    'pearl plaza': 'binh thanh',
+    // ── Tan Phu / Tan Binh / Phu Nhuan ──
+    'celadon city': 'tan phu',
+    'richstar': 'tan phu',
+    'the botanica': 'tan binh',
+    'botanica premier': 'tan binh',
+    'cong hoa garden': 'tan binh',
     'kingston residence': 'phu nhuan',
     'orchard garden': 'phu nhuan',
-    'botanica premier': 'tan binh',
+    'orchard parkview': 'phu nhuan',
+    'newton residence': 'phu nhuan',
+    'garden gate': 'phu nhuan',
+    // ── D5 / D10 / D11 ──
+    'hado centrosa garden': 'district 10',
+    'centrosa garden': 'district 10',
+    'rivera park': 'district 10',
+    'charmington la pointe': 'district 10',
+    'the everrich infinity': 'district 5',
   };
 
   // Famous landmarks (airports, hospitals, universities, malls, parks, markets) → district
@@ -672,6 +791,7 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     amenities: [],
     styles: [],
     specificDistricts: [],
+    requestedComplexes: [],
     rejections: [],
     likes: []
   };
@@ -728,7 +848,11 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
       if (!context.likes.includes(l)) context.likes.push(l);
     }
   }
-  
+
+  // Requested complexes: only honor those mentioned in the CURRENT user message
+  // so users can switch projects without sticky filters from earlier in the chat.
+  context.requestedComplexes = extractRequestedComplexes(currentMessage);
+
   // Determine location tier based on center preference
   if (context.wantsCenter) {
     context.locationTier = 'center';
@@ -921,7 +1045,20 @@ function filterAndScoreProperties(
         continue;
       }
     }
-    
+
+    // 4. Named complex / project (STRICT) — if user named a specific project
+    // (e.g. "Vinhomes Golden River"), only keep properties whose title or location
+    // contains that exact project name. This prevents the AI from substituting
+    // similarly-named properties (e.g. "Saigon Riverside" in D7 for "Vinhomes Golden River" in D1).
+    if (context.requestedComplexes && context.requestedComplexes.length > 0) {
+      const haystack = `${locLower} ${titleLowerPre}`;
+      const matchesAnyComplex = context.requestedComplexes.some(c => haystack.includes(c));
+      if (!matchesAnyComplex) {
+        continue;
+      }
+    }
+
+
     // ========== SCORING ==========
     let score = 50; // Base score
     const matchReasons: string[] = [];
@@ -1817,6 +1954,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
     }
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
     if (accContext.specificDistricts.length > 0) constraintsSummary.push(`Specific areas: ${accContext.specificDistricts.join(', ')}`);
+    if (accContext.requestedComplexes.length > 0) constraintsSummary.push(`Specific project/complex: ${accContext.requestedComplexes.join(', ')} (STRICT — only recommend properties IN this exact project; do NOT suggest similarly-named projects in other districts)`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
     if (imageAnalysisResult) {
