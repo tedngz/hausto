@@ -478,7 +478,9 @@ serve(async (req) => {
     
     for (const marketplace of marketplaces) {
         const crawlResult: CrawlResult = {
-          location,
+          location: isProjectMode && activeProject
+            ? `${activeProject.name} · ${activeProject.district}`
+            : location,
           marketplace,
           propertiesFound: 0,
           propertiesStored: 0,
