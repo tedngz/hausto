@@ -423,6 +423,7 @@ interface AccumulatedContext {
   locationTier: 'center' | 'near-center' | 'suburban' | null;
   maxPrice: number | null;
   minPrice: number | null;
+  bedrooms: string | null;  // 'studio' | '1' | '2' | '3' | '4+'
   amenities: string[];
   styles: string[];
   specificDistricts: string[];
