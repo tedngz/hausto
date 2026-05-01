@@ -432,6 +432,63 @@ interface AccumulatedContext {
   likes: string[];        // things/properties the user reacted positively to
 }
 
+// Canonical list of named HCM apartment complexes/projects.
+// Used as a HARD filter: when a user mentions one of these by name, only
+// properties whose title or location contain that complex name should be returned.
+// Keep names lowercase and ordered from most-specific to most-generic so that
+// substring checks pick the most specific match first (e.g. "vinhomes golden river"
+// must be matched before a generic "vinhomes" or "river" token).
+const HCM_COMPLEX_NAMES: string[] = [
+  // D1 / D4
+  'vinhomes golden river', 'vinhomes ba son', 'the marq',
+  'saigon royal', 'the tresor', 'millennium masteri', 'icon 56',
+  'rivergate residence', 'rivergate', 'gold view', 'river gate',
+  // D7 (Phu My Hung)
+  'saigon riverside', 'riverside residence', 'saigon south residences',
+  'sky garden', 'happy valley', 'midtown phu my hung', 'scenic valley',
+  'the panorama', 'the ascentia', 'urban hill', 'happy residence',
+  'riviera point', 'eco green saigon', 'sunrise city',
+  // D2 / Thu Duc
+  'masteri thao dien', 'masteri an phu', 'gateway thao dien',
+  'estella heights', 'the estella', 'the vista an phu', 'thao dien pearl',
+  'q2 thao dien', 'lumiere riverside', "d'edge thao dien", 'nassim thao dien',
+  'empire city', 'the river thu thiem', 'sala thu thiem', 'new city thu thiem',
+  'diamond island', 'the sun avenue', 'the krista',
+  'vinhomes grand park', 'centana thu thiem',
+  // Binh Thanh
+  'vinhomes central park', 'saigon pearl', 'sunwah pearl', 'landmark 81',
+  'city garden', 'pearl plaza',
+  // Tan Phu / Tan Binh / Phu Nhuan
+  'celadon city', 'richstar', 'the botanica', 'botanica premier',
+  'cong hoa garden', 'kingston residence', 'orchard garden', 'orchard parkview',
+  'newton residence', 'garden gate',
+  // D5 / D10 / D11
+  'hado centrosa garden', 'centrosa garden', 'rivera park',
+  'charmington la pointe', 'the everrich infinity',
+];
+
+/**
+ * Detect specific named complexes/projects mentioned in user text.
+ * Returns the canonical lowercase complex names found.
+ * When non-empty, the matching pipeline must HARD-filter properties to only
+ * those whose title/location contains the complex name — preventing the AI
+ * from confusing e.g. "Vinhomes Golden River" (D1) with "Saigon Riverside" (D7).
+ */
+function extractRequestedComplexes(text: string): string[] {
+  const lower = text.toLowerCase();
+  const found: string[] = [];
+  for (const name of HCM_COMPLEX_NAMES) {
+    if (lower.includes(name) && !found.includes(name)) {
+      found.push(name);
+    }
+  }
+  // Drop generic shorter matches if a more-specific one was already captured
+  // (e.g. don't keep "rivergate" if "rivergate residence" was matched).
+  return found.filter(n =>
+    !found.some(other => other !== n && other.includes(n) && other.length > n.length)
+  );
+}
+
 // Extract specific districts/areas mentioned by user (including sub-districts and roads)
 function extractSpecificDistricts(text: string): string[] {
   const lowerText = text.toLowerCase();
