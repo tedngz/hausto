@@ -1809,6 +1809,12 @@ Pick 1-3 styles and 1-2 colors that best match.`
     const constraintsSummary = [];
     if (accContext.city) constraintsSummary.push(`City: ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`);
     if (accContext.maxPrice) constraintsSummary.push(`Budget: under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`);
+    if (accContext.bedrooms) {
+      const label = accContext.bedrooms === 'studio' ? 'Studio'
+        : accContext.bedrooms === '4+' ? '4+ bedrooms'
+        : `${accContext.bedrooms} bedroom${accContext.bedrooms === '1' ? '' : 's'}`;
+      constraintsSummary.push(`Bedrooms: ${label} (STRICT — do NOT include other bedroom counts)`);
+    }
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
     if (accContext.specificDistricts.length > 0) constraintsSummary.push(`Specific areas: ${accContext.specificDistricts.join(', ')}`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
