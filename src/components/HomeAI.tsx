@@ -94,6 +94,7 @@ export const HomeAI = ({
   const {
     createMatch
   } = useMatches();
+  const { subscription_tier } = useSubscription();
   const {
     canPerformAction,
     updateUsage,
