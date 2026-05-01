@@ -791,6 +791,7 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     amenities: [],
     styles: [],
     specificDistricts: [],
+    requestedComplexes: [],
     rejections: [],
     likes: []
   };
