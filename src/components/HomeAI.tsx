@@ -242,22 +242,8 @@ export const HomeAI = ({
     setIsFastTrackBannerDismissed(false);
   };
 
-  const triggerFastTrackPrompt = (propertyId: string) => {
-    sonnerToast.success('Property liked!', {
-      description: subscription_tier === 'premium'
-        ? 'Want Hausto to coordinate the viewing for you?'
-        : 'Upgrade to let Hausto Agent coordinate your viewings.',
-      action: {
-        label: subscription_tier === 'premium' ? 'Schedule viewing' : 'Upgrade',
-        onClick: () => {
-          if (subscription_tier === 'premium') {
-            openScheduleForIds([propertyId]);
-          } else {
-            window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
-          }
-        }
-      }
-    });
+  const triggerFastTrackPrompt = (_propertyId: string) => {
+    // CTA popup removed — the in-chat banner handles the scheduling prompt.
   };
 
   const handleLikeProperty = async (propertyId: string, realtorId?: string) => {
