@@ -1399,8 +1399,8 @@ serve(async (req) => {
       console.log(`[scrape-marketplace] Authenticated via service role (scheduled crawl)`);
     }
 
-    const body = await req.json() as SearchParams & { pages?: number; directSave?: boolean; crawlLocation?: string };
-    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults, pages: explicitPages, directSave, crawlLocation } = body;
+    const body = await req.json() as SearchParams & { pages?: number; directSave?: boolean; crawlLocation?: string; rawMode?: boolean };
+    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults, pages: explicitPages, directSave, crawlLocation, rawMode = false } = body;
     
     // Use maxResults param or default
     const effectiveMaxResults = Math.min(Math.max(maxResults || MAX_DETAIL_PAGES, 1), 30);
