@@ -700,10 +700,162 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // ===== RAW HARVEST PROJECTS: target specific HCMC apartment complexes =====
+    if (body.action === 'raw-harvest-projects') {
+      console.log('[scheduled-crawl] RAW HARVEST PROJECTS mode start');
+      const RAW_PROJ_PREFIX = 'crawl:track:raw_proj';
+      const RAW_PROJ_SESSION_KEY = 'crawl:raw_proj:session';
+
+      // Curated HCMC project list (project name → district label used by scrape-marketplace)
+      const HCM_PROJECTS: { project: string; location: string }[] = [
+        // D1
+        { project: 'Vinhomes Golden River', location: 'Quận 1' },
+        { project: 'Vinhomes Ba Son', location: 'Quận 1' },
+        { project: 'The Marq', location: 'Quận 1' },
+        // D4
+        { project: 'Saigon Royal', location: 'Quận 4' },
+        { project: 'The Tresor', location: 'Quận 4' },
+        { project: 'Millennium Masteri', location: 'Quận 4' },
+        { project: 'Icon 56', location: 'Quận 4' },
+        { project: 'RiverGate Residence', location: 'Quận 4' },
+        { project: 'Gold View', location: 'Quận 4' },
+        // D7 / Phu My Hung
+        { project: 'Saigon Riverside', location: 'Quận 7' },
+        { project: 'Riverside Residence', location: 'Quận 7' },
+        { project: 'Saigon South Residences', location: 'Quận 7' },
+        { project: 'Sky Garden', location: 'Quận 7' },
+        { project: 'Happy Valley', location: 'Quận 7' },
+        { project: 'Midtown Phu My Hung', location: 'Quận 7' },
+        { project: 'Scenic Valley', location: 'Quận 7' },
+        { project: 'The Panorama', location: 'Quận 7' },
+        { project: 'The Ascentia', location: 'Quận 7' },
+        { project: 'Urban Hill', location: 'Quận 7' },
+        { project: 'Riviera Point', location: 'Quận 7' },
+        { project: 'Eco Green Saigon', location: 'Quận 7' },
+        { project: 'Sunrise City', location: 'Quận 7' },
+        // D2 / Thu Duc
+        { project: 'Masteri Thao Dien', location: 'Thủ Đức' },
+        { project: 'Masteri An Phu', location: 'Thủ Đức' },
+        { project: 'Gateway Thao Dien', location: 'Thủ Đức' },
+        { project: 'Estella Heights', location: 'Thủ Đức' },
+        { project: 'The Vista An Phu', location: 'Thủ Đức' },
+        { project: 'Thao Dien Pearl', location: 'Thủ Đức' },
+        { project: 'Q2 Thao Dien', location: 'Thủ Đức' },
+        { project: 'Lumiere Riverside', location: 'Thủ Đức' },
+        { project: "D'Edge Thao Dien", location: 'Thủ Đức' },
+        { project: 'Nassim Thao Dien', location: 'Thủ Đức' },
+        { project: 'Empire City', location: 'Thủ Đức' },
+        { project: 'The River Thu Thiem', location: 'Thủ Đức' },
+        { project: 'Sala Thu Thiem', location: 'Thủ Đức' },
+        { project: 'New City Thu Thiem', location: 'Thủ Đức' },
+        { project: 'Diamond Island', location: 'Thủ Đức' },
+        { project: 'The Sun Avenue', location: 'Thủ Đức' },
+        { project: 'Vinhomes Grand Park', location: 'Thủ Đức' },
+        { project: 'Centana Thu Thiem', location: 'Thủ Đức' },
+        // Binh Thanh
+        { project: 'Vinhomes Central Park', location: 'Bình Thạnh' },
+        { project: 'Saigon Pearl', location: 'Bình Thạnh' },
+        { project: 'Sunwah Pearl', location: 'Bình Thạnh' },
+        { project: 'The Manor', location: 'Bình Thạnh' },
+        { project: 'City Garden', location: 'Bình Thạnh' },
+        // Phu Nhuan / Tan Binh
+        { project: 'Botanica Premier', location: 'Tân Bình' },
+        { project: 'Newton Residence', location: 'Phú Nhuận' },
+        { project: 'Orchard Park View', location: 'Phú Nhuận' },
+      ];
+
+      // Allow caller to optionally restrict to one project
+      const onlyProject: string | undefined = body.project;
+      const candidates = onlyProject
+        ? HCM_PROJECTS.filter(p => p.project.toLowerCase() === onlyProject.toLowerCase())
+        : HCM_PROJECTS;
+
+      if (candidates.length === 0) {
+        return new Response(JSON.stringify({ success: false, message: 'No matching project' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Pick oldest unseen project+marketplace combo
+      const lastSeen = await Promise.all(
+        candidates.flatMap(p =>
+          MARKETPLACES.map(async mp => {
+            const norm = p.project.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const key = `${RAW_PROJ_PREFIX}:${norm}:${mp}`;
+            const v = await redisGet(key);
+            return { p, mp, key, ts: v ? Number(v) : null };
+          })
+        )
+      );
+      const best = lastSeen.find(r => r.ts === null) || lastSeen.sort((a, b) => (a.ts! - b.ts!))[0];
+      if (!best) {
+        return new Response(JSON.stringify({ success: true, message: 'No project targets' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      console.log(`[raw-harvest-projects] Target: ${best.p.project} (${best.p.location}) on ${best.mp}`);
+      await redisSet(best.key, Date.now(), 14 * 24 * 60 * 60);
+
+      let outOfCredits = false;
+      let summary: any = null;
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 140000);
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+          body: JSON.stringify({
+            marketplace: best.mp,
+            query: best.p.project,
+            location: best.p.location,
+            crawlLocation: best.p.location,
+            includeVibeAnalysis: false,
+            maxResults: 30,
+            pages: 3,
+            directSave: true,
+            rawMode: true,
+          }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(tid);
+        summary = await resp.json().catch(() => ({}));
+        if (resp.status === 402 || summary?.outOfCredits) {
+          outOfCredits = true;
+          console.warn('[raw-harvest-projects] Firecrawl out of credits, stopping chain');
+        }
+      } catch (e) {
+        console.error('[raw-harvest-projects] scrape call error:', e);
+      }
+
+      const session = (await redisGet(RAW_PROJ_SESSION_KEY)) || { newListings: 0, runs: 0, startedAt: Date.now() };
+      session.newListings += summary?.newListings || 0;
+      session.runs += 1;
+      session.lastTarget = `${best.p.project}/${best.mp}`;
+      session.lastSummary = summary;
+      session.outOfCredits = outOfCredits;
+      await redisSet(RAW_PROJ_SESSION_KEY, session, 24 * 60 * 60);
+
+      // Self-chain unless out of credits or restricted to a single project
+      let chained = false;
+      if (!outOfCredits && !onlyProject) {
+        chained = await qstashPublish({ action: 'raw-harvest-projects', continuation: true }, 5);
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        target: `${best.p.project}/${best.mp}`,
+        summary,
+        outOfCredits,
+        chained,
+        session,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // ===== RAW HARVEST status query =====
     if (body.action === 'raw-status') {
       const session = (await redisGet('crawl:raw:session')) || null;
-      return new Response(JSON.stringify({ success: true, session }), {
+      const projectsSession = (await redisGet('crawl:raw_proj:session')) || null;
+      return new Response(JSON.stringify({ success: true, session, projectsSession }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
