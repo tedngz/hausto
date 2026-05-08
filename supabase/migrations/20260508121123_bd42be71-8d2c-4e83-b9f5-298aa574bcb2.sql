@@ -1,0 +1,2 @@
+ALTER TABLE public.external_properties ADD COLUMN IF NOT EXISTS raw_only boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_external_properties_raw_pending ON public.external_properties (raw_only, vibe_status, is_active);
