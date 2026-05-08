@@ -869,6 +869,10 @@ async function extractListingUrls(
 // ─── Firecrawl-based Fetch (bypasses anti-bot protection) ───────
 const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
 
+export class FirecrawlOutOfCreditsError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'FirecrawlOutOfCreditsError'; }
+}
+
 async function firecrawlFetch(url: string): Promise<{ html: string; markdown: string; links: string[] }> {
   if (!FIRECRAWL_API_KEY) {
     throw new Error('FIRECRAWL_API_KEY not configured');
@@ -890,6 +894,9 @@ async function firecrawlFetch(url: string): Promise<{ html: string; markdown: st
   
   const data = await response.json();
   
+  if (response.status === 402 || /insufficient[_ ]credits/i.test(JSON.stringify(data || {}))) {
+    throw new FirecrawlOutOfCreditsError(`Firecrawl out of credits: ${data?.error || 'insufficient_credits'}`);
+  }
   if (!response.ok) {
     throw new Error(`Firecrawl error ${response.status}: ${data?.error || 'Unknown error'} for ${url}`);
   }
