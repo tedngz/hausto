@@ -193,10 +193,9 @@ export const SwipeInterface = ({
       const realtorProfiles = new Map<string, any>();
       if (realtorIds.length > 0) {
         try {
-          const {
-            data: profiles
-          } = await supabase.from('profiles').select('id, name, email, phone, avatar_url').in('id', realtorIds);
-          profiles?.forEach(profile => {
+          // Use SECURITY DEFINER RPC so realtor email/phone is only returned when allow_contact_sharing=true
+          const { data: profiles } = await supabase.rpc('get_realtor_public_profiles', { user_ids: realtorIds });
+          profiles?.forEach((profile: any) => {
             realtorProfiles.set(profile.id, profile);
           });
         } catch (error) {
