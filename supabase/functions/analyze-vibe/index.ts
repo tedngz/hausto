@@ -24,12 +24,14 @@ serve(async (req) => {
     const token = authHeader.replace(/^Bearer\s+/i, '');
     let userId = 'unknown';
     try {
-      const base64 = token.split('.')[1]?.replace(/-/g, '+').replace(/_/g, '/');
-      if (base64) {
-        const payload = JSON.parse(atob(base64));
-        userId = payload.sub || payload.user_id || userId;
-      }
-    } catch (_) { /* ignore */ }
+      // SECURITY: cryptographically verify JWT instead of trusting client-decoded payload
+      const supabaseAuth = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      );
+      const { data: { user } } = await supabaseAuth.auth.getUser(token);
+      if (user?.id) userId = user.id;
+    } catch (_) { /* ignore — userId stays 'unknown' for logging only */ }
 
     const { imageUrls, propertyId, propertyInfo } = await req.json();
     console.log('[analyze-vibe] User:', userId, 'images:', imageUrls?.length, 'propertyId:', propertyId);
