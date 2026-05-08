@@ -99,13 +99,12 @@ export const useProperties = () => {
       // Get realtor profiles
       let profilesMap = new Map<string, any>();
       if (realtorIds.length > 0) {
+        // Use SECURITY DEFINER RPC: realtor email/phone is gated by allow_contact_sharing
         const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, name, email, phone, avatar_url')
-          .in('id', realtorIds);
+          .rpc('get_realtor_public_profiles', { user_ids: realtorIds });
 
         if (profilesError) throw profilesError;
-        profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+        profilesMap = new Map((profilesData as any[])?.map((p: any) => [p.id, p]) || []);
       }
       
       // Transform internal properties
