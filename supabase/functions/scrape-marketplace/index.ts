@@ -417,8 +417,12 @@ async function savePropertiesToDB(
 
   for (const property of properties) {
     try {
+      // In raw mode, only filter clearly non-residential or for-sale listings — title/price/images checks relaxed
       const check = isSuspiciousListing(property);
-      if (check.suspicious) {
+      const skipForSuspicion = rawMode
+        ? !!check.suspicious && !!check.reason && (check.reason.startsWith('Sale keyword') || check.reason.startsWith('Non-residential'))
+        : check.suspicious;
+      if (skipForSuspicion) {
         filtered++;
         console.log(`[directSave] Filtered: ${property.title?.substring(0, 40)} - ${check.reason}`);
         continue;
