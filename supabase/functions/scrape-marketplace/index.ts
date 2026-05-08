@@ -1774,12 +1774,14 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Scrape marketplace error:', error);
-    return new Response(JSON.stringify({ 
-      success: false, 
+    const isOutOfCredits = error instanceof FirecrawlOutOfCreditsError || /out[_ ]of[_ ]credits|insufficient[_ ]credits/i.test(error instanceof Error ? error.message : '');
+    return new Response(JSON.stringify({
+      success: false,
+      outOfCredits: isOutOfCredits,
       error: error instanceof Error ? error.message : 'Unknown error',
       properties: []
     }), {
-      status: 500,
+      status: isOutOfCredits ? 402 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
