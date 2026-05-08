@@ -617,8 +617,97 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ===== RAW HARVEST: Use Firecrawl credits, skip OpenAI cost entirely =====
+    if (body.action === 'raw-harvest') {
+      console.log('[scheduled-crawl] RAW HARVEST mode start');
+      const RAW_TRACK_PREFIX = 'crawl:track:raw';
+      const RAW_SESSION_KEY = 'crawl:raw:session';
 
-    const config = await getConfig();
+      // Pick oldest raw-tracked location (separate from AI-mode tracker)
+      const rawLastSeen = await Promise.all(
+        CRAWL_LOCATIONS.flatMap(loc =>
+          MARKETPLACES.map(async mp => {
+            const norm = loc.location.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const key = `${RAW_TRACK_PREFIX}:${norm}:${mp}`;
+            const v = await redisGet(key);
+            return { loc, mp, key, ts: v ? Number(v) : null };
+          })
+        )
+      );
+      let bestRaw = rawLastSeen.find(r => r.ts === null) || rawLastSeen.sort((a, b) => (a.ts! - b.ts!))[0];
+      if (!bestRaw) {
+        return new Response(JSON.stringify({ success: true, message: 'No raw targets' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      console.log(`[raw-harvest] Target: ${bestRaw.loc.location} on ${bestRaw.mp}`);
+      // Mark immediately to avoid re-picking
+      await redisSet(bestRaw.key, Date.now(), 7 * 24 * 60 * 60);
+
+      let outOfCredits = false;
+      let summary: any = null;
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 140000);
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+          body: JSON.stringify({
+            marketplace: bestRaw.mp,
+            query: 'cho thuê căn hộ chung cư nhà ở',
+            location: bestRaw.loc.location,
+            crawlLocation: bestRaw.loc.location,
+            includeVibeAnalysis: false,
+            maxResults: 30,
+            pages: 3,
+            directSave: true,
+            rawMode: true,
+          }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(tid);
+        summary = await resp.json().catch(() => ({}));
+        if (resp.status === 402 || summary?.outOfCredits) {
+          outOfCredits = true;
+          console.warn('[raw-harvest] Firecrawl out of credits, stopping chain');
+        }
+      } catch (e) {
+        console.error('[raw-harvest] scrape call error:', e);
+      }
+
+      // Update session counter
+      const session = (await redisGet(RAW_SESSION_KEY)) || { newListings: 0, runs: 0, startedAt: Date.now() };
+      session.newListings += summary?.newListings || 0;
+      session.runs += 1;
+      session.lastTarget = `${bestRaw.loc.location}/${bestRaw.mp}`;
+      session.lastSummary = summary;
+      session.outOfCredits = outOfCredits;
+      await redisSet(RAW_SESSION_KEY, session, 24 * 60 * 60);
+
+      // Self-chain unless out of credits
+      let chained = false;
+      if (!outOfCredits) {
+        chained = await qstashPublish({ action: 'raw-harvest', continuation: true }, 5);
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        target: `${bestRaw.loc.location}/${bestRaw.mp}`,
+        summary,
+        outOfCredits,
+        chained,
+        session,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ===== RAW HARVEST status query =====
+    if (body.action === 'raw-status') {
+      const session = (await redisGet('crawl:raw:session')) || null;
+      return new Response(JSON.stringify({ success: true, session }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
 
     if (config.paused) {
       console.log('[scheduled-crawl] Crawling is paused. Skipping.');
