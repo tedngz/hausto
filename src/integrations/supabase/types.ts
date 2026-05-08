@@ -1045,6 +1045,19 @@ export type Database = {
           name: string
         }[]
       }
+      get_realtor_public_profiles: {
+        Args: { user_ids: string[] }
+        Returns: {
+          allow_contact_sharing: boolean
+          avatar_url: string
+          bio: string
+          email: string
+          id: string
+          location: string
+          name: string
+          phone: string
+        }[]
+      }
       get_renter_preferences_for_realtor: {
         Args: { renter_id: string }
         Returns: {
