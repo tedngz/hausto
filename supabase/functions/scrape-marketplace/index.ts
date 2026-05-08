@@ -1501,7 +1501,8 @@ serve(async (req) => {
       allMarkdown,
       allLinks,
       marketplace,
-      effectiveMaxResults
+      effectiveMaxResults,
+      rawMode,
     );
 
     let properties: ExternalProperty[] = [];
