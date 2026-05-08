@@ -854,7 +854,8 @@ Deno.serve(async (req) => {
     // ===== RAW HARVEST status query =====
     if (body.action === 'raw-status') {
       const session = (await redisGet('crawl:raw:session')) || null;
-      return new Response(JSON.stringify({ success: true, session }), {
+      const projectsSession = (await redisGet('crawl:raw_proj:session')) || null;
+      return new Response(JSON.stringify({ success: true, session, projectsSession }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
