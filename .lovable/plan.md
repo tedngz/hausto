@@ -1,79 +1,57 @@
+## Goal
 
-## Recommendation: Inline toast CTA + contextual chat banner
+Use remaining Firecrawl credits now to crawl as many marketplace listings as possible (Nhatot, Batdongsan) and store the raw data in `external_properties` **without spending any OpenAI credits**. Listings stay hidden from users until you later run vibe analysis on them.
 
-After comparing the options, the lowest-friction pattern is a **two-layer nudge inside the AI chat itself**, never sending the user to a different page or opening a heavy modal upfront:
+## How it works
 
-1. **Layer 1 — Success toast with action button** (immediate, zero-friction)
-   The instant a user taps the heart on a property in the AI chat, the existing "Property liked!" toast becomes actionable:
+A new admin-only "Raw Crawl" button kicks off a self-chaining crawl loop that:
+1. Uses Firecrawl to scrape marketplace listing URLs and detail pages.
+2. Saves listings as `is_active = false` with `vibe_status = 'pending'` so they don't appear in Discover, search, or sharing — but the raw data, images, contact info, and source URL are all persisted.
+3. Skips every OpenAI/Lovable AI call: no GPT-4o-mini vision interior gate, no AI-generated description, no vibe analysis, no image-highlights backfill.
+4. Self-chains via QStash to keep crawling district after district until either Firecrawl returns insufficient credits or all locations have been crawled in this session.
 
-   > ❤️ Property liked! · **[Schedule viewing →]**
+When you're ready to spend OpenAI credits later, the existing `backfill-image-highlights` and vibe-queue processors will pick these up because they're already enqueued in `vibe_analysis_queue`. Activating a listing happens automatically once vibe analysis succeeds.
 
-   One tap opens the existing `ViewingScheduleModal` pre-filled with that property already selected. This is the fastest path — the user's intent is already at peak right after liking.
+## Changes
 
-2. **Layer 2 — Soft inline banner in the chat thread** (persistent, batchable)
-   After the first like, a small dismissible card slides in at the bottom of the AI chat:
+### Database migration
+- Add column `external_properties.raw_only` (boolean, default false) — marks rows captured in raw mode, used by vibe processors and admin tools.
+- Add an admin SELECT path that already exists; no new RLS needed because `is_active = false` already hides rows from `anon` and `authenticated`. Admins keep full access via existing policy.
+- Optional index on `(is_active, vibe_status, raw_only)` to speed up backfill queries.
 
-   ```text
-   ┌──────────────────────────────────────────────┐
-   │ 🏠  You've liked 2 properties                │
-   │ Want Hausto to coordinate viewings for you?  │
-   │             [ Schedule viewings ]   [ ✕ ]    │
-   └──────────────────────────────────────────────┘
-   ```
+### `scrape-marketplace` edge function
+- Add `rawMode: boolean` to the request body. When true:
+  - Skip `selectInteriorImages()` (the GPT-4o-mini vision gate). Use URL-based filtering only (`isValidPropertyImageUrl`).
+  - Skip the AI description/vibe-text generation (`callAI` paths around lines 840, 1123, 1212). Use scraped title/description as-is.
+  - Save with `is_active: false`, `vibe_status: 'pending'`, `raw_only: true`.
+  - Still enqueue into `vibe_analysis_queue` so future processing finds them.
+  - Still extract phone numbers (Browserless / Nhatot public API) since that doesn't cost OpenAI.
+- Detect Firecrawl 402/insufficient-credits responses and return `{ outOfCredits: true }` so the caller can stop chaining.
 
-   It updates the count as more properties are liked (up to 3 — the fast-track cap) and lets users batch multiple likes into one viewing request, which is the natural Hausto flow. This catches users who dismissed the toast or liked several properties quickly.
+### `scheduled-crawl` edge function
+- Accept `mode: 'raw'` payload (manual trigger only — does not affect the cron loop).
+- In raw mode:
+  - Bypass the `MAX_DAILY_LISTINGS = 10` cap.
+  - Bypass the 48h location cooldown so it can sweep districts quickly.
+  - Pass `rawMode: true, includeVibeAnalysis: false, directSave: true` to `scrape-marketplace` and use a higher `maxResults` (e.g. 30 per call).
+  - Skip the inline `runVibeAnalysis` block, the `backfill-vibe` QStash chain, and the `backfill-image-highlights` call.
+  - Self-chain via QStash to the next location until `outOfCredits` is hit or no eligible locations remain.
 
-### Why not the other options
+### Admin UI (`src/pages/AdminTools.tsx`)
+- New section "Raw Marketplace Harvest" with:
+  - One-shot button **Start raw crawl** (calls `scheduled-crawl` with `{ mode: 'raw' }`).
+  - Live counter showing total `raw_only = true` listings stored, plus a count of those still `vibe_status = 'pending'`.
+  - Small note: "These listings are hidden from users until vibe analysis is run."
+- Add a separate **Process raw queue** button (later use) that triggers the existing `process-vibe-queue` / `backfill-image-highlights` pipeline against `raw_only = true` rows — so converting raw data into live listings is a deliberate, one-click action when you're ready to spend OpenAI credits.
 
-- **Auto-pop the modal on first like** → feels aggressive, interrupts browsing flow, users often like several before deciding.
-- **Separate page / route** → forces context switch, breaks the conversational feel.
-- **Only a button on the property card** → invisible until discovered; user has to actively look for it.
-- **Wait for AI to suggest it in chat** → too slow, hits LLM unpredictability, easy to miss in a long thread.
+## Out of scope
+- No changes to the cron schedule. The hourly cron keeps running normal AI-powered crawls within the 10/day cap.
+- No frontend changes for end-users. Discover, search, sharing, and the public agent API continue to filter by `is_active = true`, so raw rows stay invisible.
+- No changes to currency formatting, security policies, or other unrelated systems.
 
-The toast+banner combo gives both **instant action** (toast) and **gentle persistence** (banner), with the modal only appearing on explicit user intent.
+## Technical details
 
-### Free vs Premium
-
-Fast-track is currently a premium-only feature (HaustoChat gates `get_fast_track` on `subscription_tier === 'premium'`). The same gate applies here:
-- **Premium** users: CTA opens `ViewingScheduleModal` directly.
-- **Free** users: CTA opens the existing `SubscriptionModal` with copy "Hausto's Fast-Track Viewing is a Premium feature — let Hausto Agent coordinate up to 3 property viewings for you." Same intuitive path; just one extra step before the upgrade decision.
-
----
-
-## Implementation details (technical)
-
-**File: `src/components/HomeAI.tsx`**
-- Add state: `isViewingScheduleOpen`, plus reuse existing `likedProperties: Set<string>`.
-- Import `ViewingScheduleModal`, `useSubscription`, `SubscriptionModal`.
-- After `createMatch` resolves successfully inside `handleLikeProperty`, fire a Sonner toast with an `action` button:
-  ```ts
-  sonnerToast.success('Property liked!', {
-    action: {
-      label: 'Schedule viewing',
-      onClick: () => premium ? openScheduleModal([propertyId]) : openSubscriptionModal()
-    }
-  });
-  ```
-- Render a sticky `<div>` banner above the chat input when `likedProperties.size >= 1`, with count + dismiss button (state: `isFastTrackBannerDismissed`, resets when a new search starts).
-- Build `matchedProperties` prop for `ViewingScheduleModal` by mapping `likedProperties` → entries from `allResults` (id, title, images, location, price). The modal already supports multi-select up to 3.
-
-**File: `src/components/ViewingScheduleModal.tsx`**
-- Accept new optional prop `initialSelectedIds?: string[]` and seed `selectedPropertyIds` state with it on open. (One-line change so the toast CTA can pre-select the just-liked property.)
-
-**Submission handler in `HomeAI.tsx`** (mirrors `HaustoChat.handleViewingScheduleSubmit`):
-- `INSERT` into `fast_track_requests` with `renter_id = user.id`, `realtor_id = <Hausto Agent ID from src/constants/haustoAgent.ts>` (since AI chat properties may be external or from multiple realtors), `conversation_id = current chat_conversations.id`, `property_ids`, `preferred_dates`, `preferred_times`, `special_requirements`.
-- Call existing edge function `notify-fast-track-request` for emails to renter + Hausto.
-- Show success toast: "Hausto Agent will reach out shortly to confirm viewings."
-- Insert a confirmation `chat_messages` row (role=`assistant`) into the current AI conversation so the receipt lives in the chat history.
-
-**No DB / RLS / edge-function changes required** — `fast_track_requests` table, `notify-fast-track-request` function, and premium gating already exist.
-
-### Edge cases
-- Anonymous user likes → existing flow already redirects to `/auth`. No change.
-- Already-matched property → toast still shows action; user can still schedule.
-- More than 3 liked → banner caps display at "3+ properties · pick which to schedule"; modal enforces the 3-property limit.
-- User dismisses banner → stays dismissed for that conversation only; reappears on next AI search/conversation.
-
-### Files touched
-- `src/components/HomeAI.tsx` — toast action, banner, modal wiring, submit handler
-- `src/components/ViewingScheduleModal.tsx` — `initialSelectedIds` prop (~3 lines)
+- `raw_only` is the single source of truth for "this came in without AI processing". When the future processing run flips `vibe_status` to `'completed'` and `is_active` to `true`, you can either keep `raw_only = true` for analytics or clear it — easy follow-up.
+- Firecrawl insufficient-credits detection: check `response.status === 402` or response body containing `"insufficient_credits"` inside `firecrawlFetch`. Surface as a thrown error type the caller catches.
+- QStash self-chaining already exists in `scheduled-crawl`; the raw mode just keeps the `mode: 'raw'` flag in the chained payload.
+- Phone extraction (Browserless) is kept on; if you also want to skip it to save Browserless credits, that's a one-line toggle we can add.
