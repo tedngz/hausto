@@ -1683,7 +1683,8 @@ serve(async (req) => {
 
       // Trigger phone extraction for newly saved properties missing phone numbers
       let phoneExtracted = 0;
-      if (saveResult.newListings > 0) {
+      // Skip phone extraction in raw mode to also save Browserless credits
+      if (!rawMode && saveResult.newListings > 0) {
         try {
           const extractPhoneUrl = `${SUPABASE_URL}/functions/v1/extract-phone`;
           // Build listings array from the properties that were just saved (new ones without phone)
