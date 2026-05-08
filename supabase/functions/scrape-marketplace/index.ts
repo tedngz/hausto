@@ -410,14 +410,19 @@ async function savePropertiesToDB(
   properties: ExternalProperty[],
   marketplace: string,
   fallbackLocation: string,
+  rawMode: boolean = false,
 ): Promise<{ newListings: number; updatedListings: number; duplicatesSkipped: number; filtered: number }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   let newListings = 0, updatedListings = 0, duplicatesSkipped = 0, filtered = 0;
 
   for (const property of properties) {
     try {
+      // In raw mode, only filter clearly non-residential or for-sale listings — title/price/images checks relaxed
       const check = isSuspiciousListing(property);
-      if (check.suspicious) {
+      const skipForSuspicion = rawMode
+        ? !!check.suspicious && !!check.reason && (check.reason.startsWith('Sale keyword') || check.reason.startsWith('Non-residential'))
+        : check.suspicious;
+      if (skipForSuspicion) {
         filtered++;
         console.log(`[directSave] Filtered: ${property.title?.substring(0, 40)} - ${check.reason}`);
         continue;
@@ -497,44 +502,61 @@ async function savePropertiesToDB(
           .eq('id', existing.id);
         updatedListings++;
       } else {
-        // NEW LISTINGS: HARD interior gate. No interior shots → reject + log.
-        const validImages = propertyData.images;
         let finalImages: string[] = [];
+        const validImages = propertyData.images;
 
-        try {
-          const gate = await interiorGate(validImages);
-          if (!gate || !gate.has_interior) {
+        if (rawMode) {
+          // Raw mode: skip OpenAI vision interior gate. Save up to 10 URL-filtered images.
+          finalImages = validImages.slice(0, 10);
+          if (finalImages.length === 0) {
             filtered++;
-            const reason = gate?.reason || 'gate_failed';
-            console.log(`[directSave] Rejected (interior gate): ${property.title?.substring(0, 50)} - ${reason}`);
-            await logCrawlerRejection(supabase, normalizedUrl, marketplace, reason, validImages);
+            await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'raw_no_images', validImages);
             continue;
           }
-          finalImages = gate.selected;
-          if (finalImages.length !== validImages.length) {
-            console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+        } else {
+          // NEW LISTINGS: HARD interior gate. No interior shots → reject + log.
+          try {
+            const gate = await interiorGate(validImages);
+            if (!gate || !gate.has_interior) {
+              filtered++;
+              const reason = gate?.reason || 'gate_failed';
+              console.log(`[directSave] Rejected (interior gate): ${property.title?.substring(0, 50)} - ${reason}`);
+              await logCrawlerRejection(supabase, normalizedUrl, marketplace, reason, validImages);
+              continue;
+            }
+            finalImages = gate.selected;
+            if (finalImages.length !== validImages.length) {
+              console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+            }
+          } catch (e) {
+            console.warn(`[directSave] Interior gate errored, rejecting listing:`, e);
+            filtered++;
+            await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'gate_exception', validImages);
+            continue;
           }
-        } catch (e) {
-          console.warn(`[directSave] Interior gate errored, rejecting listing:`, e);
-          filtered++;
-          await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'gate_exception', validImages);
-          continue;
+        }
+
+        const insertPayload: Record<string, any> = {
+          ...propertyData,
+          images: finalImages,
+          external_id: externalId,
+          source: marketplace,
+          source_url: normalizedUrl,
+          crawled_at: now,
+          expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+          // Quality-first: hide listings until vibe analysis completes
+          is_active: false,
+          vibe_status: 'pending',
+        };
+
+        if (rawMode) {
+          insertPayload.raw_only = true;
+          insertPayload.raw_data = (property as any).raw_data || null;
         }
 
         const { data: inserted, error: insertError } = await supabase
           .from('external_properties')
-          .insert({
-            ...propertyData,
-            images: finalImages,
-            external_id: externalId,
-            source: marketplace,
-            source_url: normalizedUrl,
-            crawled_at: now,
-            expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-            // Quality-first: hide listings until vibe analysis completes
-            is_active: false,
-            vibe_status: 'pending',
-          })
+          .insert(insertPayload)
           .select('id')
           .maybeSingle();
 
@@ -546,8 +568,10 @@ async function savePropertiesToDB(
           }
         } else {
           newListings++;
-          console.log(`[directSave] New listing saved (pending vibe): ${property.title?.substring(0, 50)}`);
-          if (inserted?.id) {
+          console.log(`[directSave] New listing saved (${rawMode ? 'raw' : 'pending vibe'}): ${property.title?.substring(0, 50)}`);
+          if (inserted?.id && !rawMode) {
+            // Only enqueue immediate vibe analysis for non-raw listings.
+            // Raw listings are processed later via admin "Process raw queue" action.
             await enqueueVibeAnalysis(supabase, inserted.id);
           }
         }
@@ -805,7 +829,8 @@ async function extractListingUrls(
   markdown: string,
   links: string[],
   marketplace: string,
-  maxResultsCap: number = MAX_DETAIL_PAGES
+  maxResultsCap: number = MAX_DETAIL_PAGES,
+  skipAi: boolean = false,
 ): Promise<ListingLink[]> {
   console.log(`[Phase 1] Extracting listing URLs from ${marketplace} search page (${links.length} links found)`);
   
@@ -833,8 +858,8 @@ async function extractListingUrls(
   
   console.log(`[Phase 1] Found ${unique.length} unique listing URLs from link extraction`);
   
-  // If regex didn't find enough, use AI to extract URLs from markdown
-  if (unique.length < 3 && (LOVABLE_API_KEY || OPENAI_API_KEY)) {
+  // If regex didn't find enough, use AI to extract URLs from markdown (skipped in raw mode)
+  if (!skipAi && unique.length < 3 && (LOVABLE_API_KEY || OPENAI_API_KEY)) {
     console.log(`[Phase 1] Using AI fallback to find listing URLs...`);
     try {
       const content = await callAI(
@@ -869,6 +894,10 @@ async function extractListingUrls(
 // ─── Firecrawl-based Fetch (bypasses anti-bot protection) ───────
 const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
 
+export class FirecrawlOutOfCreditsError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'FirecrawlOutOfCreditsError'; }
+}
+
 async function firecrawlFetch(url: string): Promise<{ html: string; markdown: string; links: string[] }> {
   if (!FIRECRAWL_API_KEY) {
     throw new Error('FIRECRAWL_API_KEY not configured');
@@ -890,6 +919,9 @@ async function firecrawlFetch(url: string): Promise<{ html: string; markdown: st
   
   const data = await response.json();
   
+  if (response.status === 402 || /insufficient[_ ]credits/i.test(JSON.stringify(data || {}))) {
+    throw new FirecrawlOutOfCreditsError(`Firecrawl out of credits: ${data?.error || 'insufficient_credits'}`);
+  }
   if (!response.ok) {
     throw new Error(`Firecrawl error ${response.status}: ${data?.error || 'Unknown error'} for ${url}`);
   }
@@ -1252,6 +1284,85 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
   }
 }
 
+// ─── Raw mode: build minimal property record without AI ──────────
+function extractPriceFromText(text: string): { price: number; display: string } {
+  if (!text) return { price: 0, display: '' };
+  const t = text.toLowerCase().replace(/\s+/g, ' ');
+  // Vietnamese: "X triệu", "X tr", "X.Y triệu", "X.Y tỷ"
+  const triMatch = t.match(/(\d+(?:[.,]\d+)?)\s*(?:triệu|tri[eê]u|tr\b)/);
+  const tyMatch = t.match(/(\d+(?:[.,]\d+)?)\s*t[ỷy]/);
+  if (tyMatch) {
+    const v = parseFloat(tyMatch[1].replace(',', '.')) * 1_000_000_000;
+    return { price: Math.round(v), display: text.trim() };
+  }
+  if (triMatch) {
+    const v = parseFloat(triMatch[1].replace(',', '.')) * 1_000_000;
+    return { price: Math.round(v), display: text.trim() };
+  }
+  // Plain VND number
+  const numMatch = t.match(/(\d{6,11})/);
+  if (numMatch) return { price: parseInt(numMatch[1], 10), display: text.trim() };
+  return { price: 0, display: text.trim() };
+}
+
+function buildRawProperty(
+  detailMarkdown: string,
+  detailImages: string[],
+  sourceUrl: string,
+  marketplace: string,
+  index: number,
+  fallbackLocation: string,
+  listingTitle?: string,
+  listingPrice?: string,
+): ExternalProperty {
+  // Extract title: prefer first H1 / first non-empty line
+  const firstHeading = detailMarkdown.match(/^#{1,3}\s+(.{5,200})$/m)?.[1]?.trim();
+  const firstLine = detailMarkdown.split('\n').map(s => s.trim()).find(s => s.length > 10 && !s.startsWith('!') && !s.startsWith('http'));
+  const title = (listingTitle || firstHeading || firstLine || 'Marketplace listing').substring(0, 200);
+
+  // Price: prefer listing.price text from search page, else scan markdown
+  const priceSource = listingPrice || detailMarkdown.substring(0, 4000);
+  const { price, display } = extractPriceFromText(priceSource);
+
+  // Size: regex for "XX m²" / "XX m2"
+  const sizeMatch = detailMarkdown.match(/(\d{2,4})\s*m\s*[²2]/i);
+  const size = sizeMatch ? `${sizeMatch[1]}m²` : null;
+
+  // Filter images by URL only (no AI gate)
+  let images = detailImages.filter(isValidPropertyImageUrl);
+  if (marketplace === 'batdongsan') {
+    images = images.map(normalizeBatdongsanImageUrl);
+  }
+  images = [...new Set(images)].slice(0, 10);
+
+  return {
+    id: `external-${marketplace}-raw-${Date.now()}-${index}`,
+    title,
+    location: fallbackLocation || 'Vietnam',
+    price,
+    priceDisplay: display || (price > 0 ? `${price.toLocaleString()} VND` : ''),
+    size: size || 'N/A',
+    rooms: '',
+    images,
+    description: detailMarkdown.substring(0, 1000),
+    highlights: [],
+    amenities: [],
+    source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
+    sourceUrl,
+    sourceProviderName: undefined,
+    sourceProviderPhone: undefined,
+    vibe: undefined,
+    vibe_analysis: undefined,
+    // @ts-ignore - extra field carried into save payload
+    raw_data: {
+      markdown: detailMarkdown.substring(0, 50000),
+      images: detailImages.slice(0, 30),
+      source_url: sourceUrl,
+      scraped_at: new Date().toISOString(),
+    },
+  } as ExternalProperty;
+}
+
 // ─── Main Handler ────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -1289,8 +1400,8 @@ serve(async (req) => {
       console.log(`[scrape-marketplace] Authenticated via service role (scheduled crawl)`);
     }
 
-    const body = await req.json() as SearchParams & { pages?: number; directSave?: boolean; crawlLocation?: string };
-    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults, pages: explicitPages, directSave, crawlLocation } = body;
+    const body = await req.json() as SearchParams & { pages?: number; directSave?: boolean; crawlLocation?: string; rawMode?: boolean };
+    const { marketplace, query, location, minPrice, maxPrice, includeVibeAnalysis = true, maxResults, pages: explicitPages, directSave, crawlLocation, rawMode = false } = body;
     
     // Use maxResults param or default
     const effectiveMaxResults = Math.min(Math.max(maxResults || MAX_DETAIL_PAGES, 1), 30);
@@ -1298,16 +1409,18 @@ serve(async (req) => {
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
-    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) throw new Error('No AI API key configured (LOVABLE_API_KEY or OPENAI_API_KEY)');
+    if (!rawMode && !LOVABLE_API_KEY && !OPENAI_API_KEY) throw new Error('No AI API key configured (LOVABLE_API_KEY or OPENAI_API_KEY)');
 
-    // Check cache
+    // Check cache (skipped in raw mode — always fetch fresh to maximize Firecrawl harvest)
     const cacheKey = `marketplace:v2:${marketplace}:${query}:${location || 'all'}`;
-    const cached = await redisGet(cacheKey);
-    if (cached) {
-      console.log('Returning cached results for:', cacheKey);
-      return new Response(JSON.stringify({ success: true, properties: cached, cached: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!rawMode) {
+      const cached = await redisGet(cacheKey);
+      if (cached) {
+        console.log('Returning cached results for:', cacheKey);
+        return new Response(JSON.stringify({ success: true, properties: cached, cached: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // ── Phase 1: Scrape search results pages (pages 1-3) ──
@@ -1390,7 +1503,8 @@ serve(async (req) => {
       allMarkdown,
       allLinks,
       marketplace,
-      effectiveMaxResults
+      effectiveMaxResults,
+      rawMode,
     );
 
     let properties: ExternalProperty[] = [];
@@ -1478,8 +1592,22 @@ serve(async (req) => {
             return null;
           }
           
+          if (rawMode) {
+            console.log(`[Phase 3-RAW] Building raw record for detail page ${globalIdx + 1}: ${detail.markdown.length} chars, ${detail.images.length} images`);
+            return buildRawProperty(
+              detail.markdown,
+              detail.images,
+              listing.url,
+              marketplace,
+              globalIdx,
+              crawlLocation || location || '',
+              listing.title,
+              listing.price,
+            );
+          }
+
           console.log(`[Phase 3] Extracting property data from detail page ${globalIdx + 1}: ${detail.markdown.length} chars, ${detail.images.length} images`);
-          
+
           return extractPropertyFromDetailPage(
             detail.markdown,
             detail.images,
@@ -1518,8 +1646,8 @@ serve(async (req) => {
       console.log(`[Phase 3] Successfully extracted ${properties.length} properties from detail pages`);
     }
     
-    // ── Fallback: extract from search page if detail scraping yielded few results ──
-    if (properties.length < 2) {
+    // ── Fallback: extract from search page if detail scraping yielded few results (skipped in raw mode — costs OpenAI) ──
+    if (!rawMode && properties.length < 2) {
       console.log(`[Fallback] Only ${properties.length} from detail pages, falling back to search page extraction`);
       
       const searchImages = extractImagesFromHtml(allHtml);
@@ -1553,13 +1681,14 @@ serve(async (req) => {
 
     // Direct save mode: save properties to DB immediately (used by scheduled-crawl)
     if (directSave && isServiceRole) {
-      console.log(`[scrape-marketplace] DirectSave mode: saving ${filteredProperties.length} properties to DB`);
-      const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '');
+      console.log(`[scrape-marketplace] DirectSave mode (rawMode=${rawMode}): saving ${filteredProperties.length} properties to DB`);
+      const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '', rawMode);
       console.log(`[scrape-marketplace] DirectSave result:`, JSON.stringify(saveResult));
 
       // Trigger phone extraction for newly saved properties missing phone numbers
       let phoneExtracted = 0;
-      if (saveResult.newListings > 0) {
+      // Skip phone extraction in raw mode to also save Browserless credits
+      if (!rawMode && saveResult.newListings > 0) {
         try {
           const extractPhoneUrl = `${SUPABASE_URL}/functions/v1/extract-phone`;
           // Build listings array from the properties that were just saved (new ones without phone)
@@ -1649,12 +1778,14 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Scrape marketplace error:', error);
-    return new Response(JSON.stringify({ 
-      success: false, 
+    const isOutOfCredits = error instanceof FirecrawlOutOfCreditsError || /out[_ ]of[_ ]credits|insufficient[_ ]credits/i.test(error instanceof Error ? error.message : '');
+    return new Response(JSON.stringify({
+      success: false,
+      outOfCredits: isOutOfCredits,
       error: error instanceof Error ? error.message : 'Unknown error',
       properties: []
     }), {
-      status: 500,
+      status: isOutOfCredits ? 402 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

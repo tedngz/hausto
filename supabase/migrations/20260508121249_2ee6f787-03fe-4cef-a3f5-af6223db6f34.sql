@@ -1,0 +1,1 @@
+ALTER TABLE public.external_properties ADD COLUMN IF NOT EXISTS raw_data jsonb;
