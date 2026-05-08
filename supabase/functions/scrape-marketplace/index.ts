@@ -1409,16 +1409,18 @@ serve(async (req) => {
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
-    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) throw new Error('No AI API key configured (LOVABLE_API_KEY or OPENAI_API_KEY)');
+    if (!rawMode && !LOVABLE_API_KEY && !OPENAI_API_KEY) throw new Error('No AI API key configured (LOVABLE_API_KEY or OPENAI_API_KEY)');
 
-    // Check cache
+    // Check cache (skipped in raw mode — always fetch fresh to maximize Firecrawl harvest)
     const cacheKey = `marketplace:v2:${marketplace}:${query}:${location || 'all'}`;
-    const cached = await redisGet(cacheKey);
-    if (cached) {
-      console.log('Returning cached results for:', cacheKey);
-      return new Response(JSON.stringify({ success: true, properties: cached, cached: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!rawMode) {
+      const cached = await redisGet(cacheKey);
+      if (cached) {
+        console.log('Returning cached results for:', cacheKey);
+        return new Response(JSON.stringify({ success: true, properties: cached, cached: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // ── Phase 1: Scrape search results pages (pages 1-3) ──
