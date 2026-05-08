@@ -327,6 +327,7 @@ export type Database = {
           phone_extraction_attempts: number
           price: number | null
           price_display: string | null
+          raw_only: boolean
           rooms: string | null
           size: string | null
           source: string
@@ -363,6 +364,7 @@ export type Database = {
           phone_extraction_attempts?: number
           price?: number | null
           price_display?: string | null
+          raw_only?: boolean
           rooms?: string | null
           size?: string | null
           source: string
@@ -399,6 +401,7 @@ export type Database = {
           phone_extraction_attempts?: number
           price?: number | null
           price_display?: string | null
+          raw_only?: boolean
           rooms?: string | null
           size?: string | null
           source?: string
