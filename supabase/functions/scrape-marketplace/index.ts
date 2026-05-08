@@ -858,8 +858,8 @@ async function extractListingUrls(
   
   console.log(`[Phase 1] Found ${unique.length} unique listing URLs from link extraction`);
   
-  // If regex didn't find enough, use AI to extract URLs from markdown
-  if (unique.length < 3 && (LOVABLE_API_KEY || OPENAI_API_KEY)) {
+  // If regex didn't find enough, use AI to extract URLs from markdown (skipped in raw mode)
+  if (!skipAi && unique.length < 3 && (LOVABLE_API_KEY || OPENAI_API_KEY)) {
     console.log(`[Phase 1] Using AI fallback to find listing URLs...`);
     try {
       const content = await callAI(
