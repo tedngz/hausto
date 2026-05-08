@@ -829,7 +829,8 @@ async function extractListingUrls(
   markdown: string,
   links: string[],
   marketplace: string,
-  maxResultsCap: number = MAX_DETAIL_PAGES
+  maxResultsCap: number = MAX_DETAIL_PAGES,
+  skipAi: boolean = false,
 ): Promise<ListingLink[]> {
   console.log(`[Phase 1] Extracting listing URLs from ${marketplace} search page (${links.length} links found)`);
   
