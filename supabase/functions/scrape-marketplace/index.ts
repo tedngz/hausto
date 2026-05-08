@@ -1588,8 +1588,22 @@ serve(async (req) => {
             return null;
           }
           
+          if (rawMode) {
+            console.log(`[Phase 3-RAW] Building raw record for detail page ${globalIdx + 1}: ${detail.markdown.length} chars, ${detail.images.length} images`);
+            return buildRawProperty(
+              detail.markdown,
+              detail.images,
+              listing.url,
+              marketplace,
+              globalIdx,
+              crawlLocation || location || '',
+              listing.title,
+              listing.price,
+            );
+          }
+
           console.log(`[Phase 3] Extracting property data from detail page ${globalIdx + 1}: ${detail.markdown.length} chars, ${detail.images.length} images`);
-          
+
           return extractPropertyFromDetailPage(
             detail.markdown,
             detail.images,
