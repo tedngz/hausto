@@ -1283,6 +1283,85 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
   }
 }
 
+// ─── Raw mode: build minimal property record without AI ──────────
+function extractPriceFromText(text: string): { price: number; display: string } {
+  if (!text) return { price: 0, display: '' };
+  const t = text.toLowerCase().replace(/\s+/g, ' ');
+  // Vietnamese: "X triệu", "X tr", "X.Y triệu", "X.Y tỷ"
+  const triMatch = t.match(/(\d+(?:[.,]\d+)?)\s*(?:triệu|tri[eê]u|tr\b)/);
+  const tyMatch = t.match(/(\d+(?:[.,]\d+)?)\s*t[ỷy]/);
+  if (tyMatch) {
+    const v = parseFloat(tyMatch[1].replace(',', '.')) * 1_000_000_000;
+    return { price: Math.round(v), display: text.trim() };
+  }
+  if (triMatch) {
+    const v = parseFloat(triMatch[1].replace(',', '.')) * 1_000_000;
+    return { price: Math.round(v), display: text.trim() };
+  }
+  // Plain VND number
+  const numMatch = t.match(/(\d{6,11})/);
+  if (numMatch) return { price: parseInt(numMatch[1], 10), display: text.trim() };
+  return { price: 0, display: text.trim() };
+}
+
+function buildRawProperty(
+  detailMarkdown: string,
+  detailImages: string[],
+  sourceUrl: string,
+  marketplace: string,
+  index: number,
+  fallbackLocation: string,
+  listingTitle?: string,
+  listingPrice?: string,
+): ExternalProperty {
+  // Extract title: prefer first H1 / first non-empty line
+  const firstHeading = detailMarkdown.match(/^#{1,3}\s+(.{5,200})$/m)?.[1]?.trim();
+  const firstLine = detailMarkdown.split('\n').map(s => s.trim()).find(s => s.length > 10 && !s.startsWith('!') && !s.startsWith('http'));
+  const title = (listingTitle || firstHeading || firstLine || 'Marketplace listing').substring(0, 200);
+
+  // Price: prefer listing.price text from search page, else scan markdown
+  const priceSource = listingPrice || detailMarkdown.substring(0, 4000);
+  const { price, display } = extractPriceFromText(priceSource);
+
+  // Size: regex for "XX m²" / "XX m2"
+  const sizeMatch = detailMarkdown.match(/(\d{2,4})\s*m\s*[²2]/i);
+  const size = sizeMatch ? `${sizeMatch[1]}m²` : null;
+
+  // Filter images by URL only (no AI gate)
+  let images = detailImages.filter(isValidPropertyImageUrl);
+  if (marketplace === 'batdongsan') {
+    images = images.map(normalizeBatdongsanImageUrl);
+  }
+  images = [...new Set(images)].slice(0, 10);
+
+  return {
+    id: `external-${marketplace}-raw-${Date.now()}-${index}`,
+    title,
+    location: fallbackLocation || 'Vietnam',
+    price,
+    priceDisplay: display || (price > 0 ? `${price.toLocaleString()} VND` : ''),
+    size: size || 'N/A',
+    rooms: '',
+    images,
+    description: detailMarkdown.substring(0, 1000),
+    highlights: [],
+    amenities: [],
+    source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
+    sourceUrl,
+    sourceProviderName: undefined,
+    sourceProviderPhone: undefined,
+    vibe: undefined,
+    vibe_analysis: undefined,
+    // @ts-ignore - extra field carried into save payload
+    raw_data: {
+      markdown: detailMarkdown.substring(0, 50000),
+      images: detailImages.slice(0, 30),
+      source_url: sourceUrl,
+      scraped_at: new Date().toISOString(),
+    },
+  } as ExternalProperty;
+}
+
 // ─── Main Handler ────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
