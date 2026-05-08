@@ -709,6 +709,8 @@ Deno.serve(async (req) => {
     }
 
 
+    const config = await getConfig();
+
     if (config.paused) {
       console.log('[scheduled-crawl] Crawling is paused. Skipping.');
       return new Response(JSON.stringify({ success: true, message: 'Crawling is paused', config }), {
