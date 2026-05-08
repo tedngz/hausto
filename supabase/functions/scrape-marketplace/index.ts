@@ -502,44 +502,61 @@ async function savePropertiesToDB(
           .eq('id', existing.id);
         updatedListings++;
       } else {
-        // NEW LISTINGS: HARD interior gate. No interior shots → reject + log.
-        const validImages = propertyData.images;
         let finalImages: string[] = [];
+        const validImages = propertyData.images;
 
-        try {
-          const gate = await interiorGate(validImages);
-          if (!gate || !gate.has_interior) {
+        if (rawMode) {
+          // Raw mode: skip OpenAI vision interior gate. Save up to 10 URL-filtered images.
+          finalImages = validImages.slice(0, 10);
+          if (finalImages.length === 0) {
             filtered++;
-            const reason = gate?.reason || 'gate_failed';
-            console.log(`[directSave] Rejected (interior gate): ${property.title?.substring(0, 50)} - ${reason}`);
-            await logCrawlerRejection(supabase, normalizedUrl, marketplace, reason, validImages);
+            await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'raw_no_images', validImages);
             continue;
           }
-          finalImages = gate.selected;
-          if (finalImages.length !== validImages.length) {
-            console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+        } else {
+          // NEW LISTINGS: HARD interior gate. No interior shots → reject + log.
+          try {
+            const gate = await interiorGate(validImages);
+            if (!gate || !gate.has_interior) {
+              filtered++;
+              const reason = gate?.reason || 'gate_failed';
+              console.log(`[directSave] Rejected (interior gate): ${property.title?.substring(0, 50)} - ${reason}`);
+              await logCrawlerRejection(supabase, normalizedUrl, marketplace, reason, validImages);
+              continue;
+            }
+            finalImages = gate.selected;
+            if (finalImages.length !== validImages.length) {
+              console.log(`[directSave] Curated images ${validImages.length} → ${finalImages.length}: ${property.title?.substring(0, 50)}`);
+            }
+          } catch (e) {
+            console.warn(`[directSave] Interior gate errored, rejecting listing:`, e);
+            filtered++;
+            await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'gate_exception', validImages);
+            continue;
           }
-        } catch (e) {
-          console.warn(`[directSave] Interior gate errored, rejecting listing:`, e);
-          filtered++;
-          await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'gate_exception', validImages);
-          continue;
+        }
+
+        const insertPayload: Record<string, any> = {
+          ...propertyData,
+          images: finalImages,
+          external_id: externalId,
+          source: marketplace,
+          source_url: normalizedUrl,
+          crawled_at: now,
+          expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+          // Quality-first: hide listings until vibe analysis completes
+          is_active: false,
+          vibe_status: 'pending',
+        };
+
+        if (rawMode) {
+          insertPayload.raw_only = true;
+          insertPayload.raw_data = (property as any).raw_data || null;
         }
 
         const { data: inserted, error: insertError } = await supabase
           .from('external_properties')
-          .insert({
-            ...propertyData,
-            images: finalImages,
-            external_id: externalId,
-            source: marketplace,
-            source_url: normalizedUrl,
-            crawled_at: now,
-            expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-            // Quality-first: hide listings until vibe analysis completes
-            is_active: false,
-            vibe_status: 'pending',
-          })
+          .insert(insertPayload)
           .select('id')
           .maybeSingle();
 
@@ -551,8 +568,10 @@ async function savePropertiesToDB(
           }
         } else {
           newListings++;
-          console.log(`[directSave] New listing saved (pending vibe): ${property.title?.substring(0, 50)}`);
-          if (inserted?.id) {
+          console.log(`[directSave] New listing saved (${rawMode ? 'raw' : 'pending vibe'}): ${property.title?.substring(0, 50)}`);
+          if (inserted?.id && !rawMode) {
+            // Only enqueue immediate vibe analysis for non-raw listings.
+            // Raw listings are processed later via admin "Process raw queue" action.
             await enqueueVibeAnalysis(supabase, inserted.id);
           }
         }
