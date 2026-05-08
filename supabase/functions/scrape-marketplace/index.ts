@@ -410,6 +410,7 @@ async function savePropertiesToDB(
   properties: ExternalProperty[],
   marketplace: string,
   fallbackLocation: string,
+  rawMode: boolean = false,
 ): Promise<{ newListings: number; updatedListings: number; duplicatesSkipped: number; filtered: number }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   let newListings = 0, updatedListings = 0, duplicatesSkipped = 0, filtered = 0;
