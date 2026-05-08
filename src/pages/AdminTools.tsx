@@ -1221,6 +1221,91 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
+      {/* Raw Marketplace Harvest — uses Firecrawl credits, skips OpenAI */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            Raw Marketplace Harvest
+          </CardTitle>
+          <CardDescription>
+            Burn Firecrawl credits to scrape marketplaces and store raw listings (hidden, no OpenAI cost).
+            Each click runs ONE batch and auto-chains the next batch via QStash every ~5s until Firecrawl is out of credits.
+            Listings stay <code>is_active=false</code> until you run vibe analysis later.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest' } });
+                  if (error) throw error;
+                  const s = data?.summary;
+                  const newN = s?.newListings || 0;
+                  const updN = s?.updatedListings || 0;
+                  toast.success('Raw harvest (districts) — batch started', {
+                    description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
+                  });
+                } catch (err: any) {
+                  toast.error('Raw harvest failed', { description: err.message });
+                }
+              }}
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              Start Raw Harvest (Districts)
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest-projects' } });
+                  if (error) throw error;
+                  const s = data?.summary;
+                  const newN = s?.newListings || 0;
+                  const updN = s?.updatedListings || 0;
+                  toast.success('Raw harvest (HCMC projects) — batch started', {
+                    description: `${data?.target || ''} → +${newN} new, ${updN} re-saved${data?.outOfCredits ? ' · ⚠️ Firecrawl OUT OF CREDITS' : data?.chained ? ' · next batch chained' : ' · chain stopped'}`,
+                  });
+                } catch (err: any) {
+                  toast.error('Raw harvest (projects) failed', { description: err.message });
+                }
+              }}
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              Start Raw Harvest (HCMC Projects)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-status' } });
+                  if (error) throw error;
+                  const s = data?.session;
+                  const p = data?.projectsSession;
+                  toast.message('Raw harvest session', {
+                    description: [
+                      s ? `Districts: ${s.runs} runs · +${s.newListings} new · last ${s.lastTarget || '-'}${s.outOfCredits ? ' · OOC' : ''}` : 'Districts: none yet',
+                      p ? `Projects: ${p.runs} runs · +${p.newListings} new · last ${p.lastTarget || '-'}${p.outOfCredits ? ' · OOC' : ''}` : 'Projects: none yet',
+                    ].join(' | '),
+                  });
+                } catch (err: any) {
+                  toast.error('Status failed', { description: err.message });
+                }
+              }}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Check Raw Status
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground space-y-1 border-t pt-2">
+            <p><strong>Note on the toast:</strong> "+0 new, N re-saved" is normal — it means Firecrawl returned listings already stored. The chain keeps moving to fresh targets automatically.</p>
+            <p><strong>To convert raw → live later:</strong> run vibe analysis on rows where <code>raw_only=true</code> (one-click button coming, or use existing process-vibe-queue).</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Verify External Listings */}
       <Card>
         <CardHeader>
