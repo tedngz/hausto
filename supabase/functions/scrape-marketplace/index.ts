@@ -1642,8 +1642,8 @@ serve(async (req) => {
       console.log(`[Phase 3] Successfully extracted ${properties.length} properties from detail pages`);
     }
     
-    // ── Fallback: extract from search page if detail scraping yielded few results ──
-    if (properties.length < 2) {
+    // ── Fallback: extract from search page if detail scraping yielded few results (skipped in raw mode — costs OpenAI) ──
+    if (!rawMode && properties.length < 2) {
       console.log(`[Fallback] Only ${properties.length} from detail pages, falling back to search page extraction`);
       
       const searchImages = extractImagesFromHtml(allHtml);
@@ -1677,8 +1677,8 @@ serve(async (req) => {
 
     // Direct save mode: save properties to DB immediately (used by scheduled-crawl)
     if (directSave && isServiceRole) {
-      console.log(`[scrape-marketplace] DirectSave mode: saving ${filteredProperties.length} properties to DB`);
-      const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '');
+      console.log(`[scrape-marketplace] DirectSave mode (rawMode=${rawMode}): saving ${filteredProperties.length} properties to DB`);
+      const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '', rawMode);
       console.log(`[scrape-marketplace] DirectSave result:`, JSON.stringify(saveResult));
 
       // Trigger phone extraction for newly saved properties missing phone numbers
