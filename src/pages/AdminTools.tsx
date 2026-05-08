@@ -1753,6 +1753,47 @@ const AdminTools = () => {
                     <>Trigger Now</>
                   )}
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-harvest' } });
+                      if (error) throw error;
+                      const s = data?.summary;
+                      toast.success('Raw harvest started', {
+                        description: `${data?.target || ''} → +${s?.newListings || 0} raw, ${s?.duplicatesSkipped || 0} dup${data?.outOfCredits ? ' (Firecrawl OUT OF CREDITS)' : data?.chained ? ' (chained)' : ''}`,
+                      });
+                    } catch (err: any) {
+                      toast.error('Raw harvest failed', { description: err.message });
+                    }
+                  }}
+                  className="h-7 text-xs"
+                  title="Use Firecrawl credits to crawl marketplaces; skip OpenAI. Listings stay hidden until you run vibe later."
+                >
+                  Raw Harvest
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      const { data, error } = await supabase.functions.invoke('scheduled-crawl', { body: { action: 'raw-status' } });
+                      if (error) throw error;
+                      const s = data?.session;
+                      toast.message('Raw harvest session', {
+                        description: s
+                          ? `${s.runs} runs · +${s.newListings} new · last: ${s.lastTarget || '-'}${s.outOfCredits ? ' · OUT OF CREDITS' : ''}`
+                          : 'No active session',
+                      });
+                    } catch (err: any) {
+                      toast.error('Status failed', { description: err.message });
+                    }
+                  }}
+                  className="h-7 text-xs"
+                >
+                  Raw Status
+                </Button>
               </div>
             </div>
 
