@@ -1,57 +1,75 @@
-## Goal
+## Problem
 
-Use remaining Firecrawl credits now to crawl as many marketplace listings as possible (Nhatot, Batdongsan) and store the raw data in `external_properties` **without spending any OpenAI credits**. Listings stay hidden from users until you later run vibe analysis on them.
+Crawled `external_properties.images` are remote URLs (Nhatot/Batdongsan CDNs). When the source listing is removed, the images 404 — so the listing card on Hausto becomes a broken-image gallery, even though the row still exists.
 
-## How it works
+## Storage capacity check
 
-A new admin-only "Raw Crawl" button kicks off a self-chaining crawl loop that:
-1. Uses Firecrawl to scrape marketplace listing URLs and detail pages.
-2. Saves listings as `is_active = false` with `vibe_status = 'pending'` so they don't appear in Discover, search, or sharing — but the raw data, images, contact info, and source URL are all persisted.
-3. Skips every OpenAI/Lovable AI call: no GPT-4o-mini vision interior gate, no AI-generated description, no vibe analysis, no image-highlights backfill.
-4. Self-chains via QStash to keep crawling district after district until either Firecrawl returns insufficient credits or all locations have been crawled in this session.
+Current Supabase storage usage:
 
-When you're ready to spend OpenAI credits later, the existing `backfill-image-highlights` and vibe-queue processors will pick these up because they're already enqueued in `vibe_analysis_queue`. Activating a listing happens automatically once vibe analysis succeeds.
+| Bucket | Objects | Size |
+|---|---|---|
+| property-images (manual realtor uploads) | 1,228 | 174 MB |
+| avatars | 8 | 4 MB |
+| **Total** | | **~178 MB** |
 
-## Changes
+External crawled inventory:
 
-### Database migration
-- Add column `external_properties.raw_only` (boolean, default false) — marks rows captured in raw mode, used by vibe processors and admin tools.
-- Add an admin SELECT path that already exists; no new RLS needed because `is_active = false` already hides rows from `anon` and `authenticated`. Admins keep full access via existing policy.
-- Optional index on `(is_active, vibe_status, raw_only)` to speed up backfill queries.
+- 700 external_properties rows total (31 active processed, 161 raw-harvested)
+- 4,272 image URLs across all rows; 149 on currently-active processed listings
 
-### `scrape-marketplace` edge function
-- Add `rawMode: boolean` to the request body. When true:
-  - Skip `selectInteriorImages()` (the GPT-4o-mini vision gate). Use URL-based filtering only (`isValidPropertyImageUrl`).
-  - Skip the AI description/vibe-text generation (`callAI` paths around lines 840, 1123, 1212). Use scraped title/description as-is.
-  - Save with `is_active: false`, `vibe_status: 'pending'`, `raw_only: true`.
-  - Still enqueue into `vibe_analysis_queue` so future processing finds them.
-  - Still extract phone numbers (Browserless / Nhatot public API) since that doesn't cost OpenAI.
-- Detect Firecrawl 402/insufficient-credits responses and return `{ outOfCredits: true }` so the caller can stop chaining.
+Estimated cost to mirror everything (avg ~145 KB/image based on existing bucket):
 
-### `scheduled-crawl` edge function
-- Accept `mode: 'raw'` payload (manual trigger only — does not affect the cron loop).
-- In raw mode:
-  - Bypass the `MAX_DAILY_LISTINGS = 10` cap.
-  - Bypass the 48h location cooldown so it can sweep districts quickly.
-  - Pass `rawMode: true, includeVibeAnalysis: false, directSave: true` to `scrape-marketplace` and use a higher `maxResults` (e.g. 30 per call).
-  - Skip the inline `runVibeAnalysis` block, the `backfill-vibe` QStash chain, and the `backfill-image-highlights` call.
-  - Self-chain via QStash to the next location until `outOfCredits` is hit or no eligible locations remain.
+- All 4,272 images ≈ **~620 MB** → would push us to ~800 MB total
+- Active processed only (149 images) ≈ **~22 MB** → trivial
+- Active processed + raw harvested (~1,500 images) ≈ **~220 MB** → safe
 
-### Admin UI (`src/pages/AdminTools.tsx`)
-- New section "Raw Marketplace Harvest" with:
-  - One-shot button **Start raw crawl** (calls `scheduled-crawl` with `{ mode: 'raw' }`).
-  - Live counter showing total `raw_only = true` listings stored, plus a count of those still `vibe_status = 'pending'`.
-  - Small note: "These listings are hidden from users until vibe analysis is run."
-- Add a separate **Process raw queue** button (later use) that triggers the existing `process-vibe-queue` / `backfill-image-highlights` pipeline against `raw_only = true` rows — so converting raw data into live listings is a deliberate, one-click action when you're ready to spend OpenAI credits.
+Free Supabase tier is 1 GB. We have headroom for the active set, but mirroring every raw-harvested image plus ongoing daily crawls (10/day × ~5 imgs × 145 KB ≈ 7 MB/day, ~210 MB/month) will exhaust free tier in ~4 months. Pro tier is 100 GB, so this is only a concern if you stay on free.
 
-## Out of scope
-- No changes to the cron schedule. The hourly cron keeps running normal AI-powered crawls within the 10/day cap.
-- No frontend changes for end-users. Discover, search, sharing, and the public agent API continue to filter by `is_active = true`, so raw rows stay invisible.
-- No changes to currency formatting, security policies, or other unrelated systems.
+## Plan
 
-## Technical details
+### 1. New storage bucket `external-property-images`
 
-- `raw_only` is the single source of truth for "this came in without AI processing". When the future processing run flips `vibe_status` to `'completed'` and `is_active` to `true`, you can either keep `raw_only = true` for analytics or clear it — easy follow-up.
-- Firecrawl insufficient-credits detection: check `response.status === 402` or response body containing `"insufficient_credits"` inside `firecrawlFetch`. Surface as a thrown error type the caller catches.
-- QStash self-chaining already exists in `scheduled-crawl`; the raw mode just keeps the `mode: 'raw'` flag in the chained payload.
-- Phone extraction (Browserless) is kept on; if you also want to skip it to save Browserless credits, that's a one-line toggle we can add.
+Public bucket, separate from `property-images` so we can prune independently. Path convention: `{external_id}/{index}-{hash}.jpg`.
+
+### 2. Image-mirroring helper (shared utility)
+
+Add `supabase/functions/_shared/mirror-images.ts` with `mirrorImagesToStorage(urls, externalId, supabase)`:
+
+- Fetch each URL with timeout + size cap (e.g. 2 MB/image, reject > 5 MB)
+- Re-encode/normalize to JPEG (skip if already small jpeg)
+- Upload to bucket with deterministic path; skip if object already exists
+- Return new public storage URLs in same order; on per-image failure, fall back to original URL so we never break the gallery
+
+### 3. Wire mirroring into the crawl pipeline
+
+In `scrape-marketplace/index.ts` `savePropertiesToDB`, after vision QC selects the final image set and just before insert/update:
+
+- Mirror selected images
+- Store the storage URLs in `images[]`
+- Keep original URLs in `raw_data.original_image_urls` for debugging/reverification
+
+Apply to both raw-harvest and full-process paths (raw harvest also benefits since those listings disappear fastest).
+
+### 4. Backfill for existing rows
+
+New admin edge function `backfill-external-images`:
+
+- Scan active external_properties whose `images[]` still contain non-Supabase URLs
+- Run mirroring in small batches (10 rows) to stay under 150s
+- Add a button in `AdminTools.tsx` next to existing crawler controls
+
+### 5. Lifecycle / cleanup
+
+When `external_properties.is_active = false` for >30 days OR row deleted, delete the corresponding folder from storage. Add to existing `cleanup_expired_external_properties` flow (DB function calls a small edge function for storage delete, or run in `scheduled-crawl`).
+
+### 6. RLS / bucket policy
+
+Public read (same as `property-images`). Insert/update/delete restricted to service role (edge functions only).
+
+## Recommendation on scope
+
+Given free-tier headroom, suggest mirroring **only listings that pass vision QC** (i.e. when `vibe_status = 'complete'` / leaving raw set, or always for processed crawls). Skip mirroring during raw-harvest itself — those rows are throwaway candidates, and only ~5% become real listings. This keeps storage growth proportional to inventory the renters actually see.
+
+## Open question
+
+Do you want raw-harvested images mirrored too (safer but uses ~4× more storage), or only when a listing graduates to processed/active?
