@@ -1536,6 +1536,71 @@ const AdminTools = () => {
         </CardContent>
       </Card>
 
+      {/* Mirror crawled images to Supabase Storage */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            Mirror Crawled Images to Storage
+          </CardTitle>
+          <CardDescription>
+            Downloads remote CDN images on active external listings into the <code>external-property-images</code> bucket so they survive source-listing removal. Processes in small batches.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              onClick={async () => {
+                try {
+                  setMirrorRunning(true);
+                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: false } });
+                  if (error) throw error;
+                  setMirrorResult(data);
+                  toast.success(`Mirrored ${data?.processed ?? 0} listings`);
+                } catch (e: any) {
+                  toast.error('Mirror failed', { description: e?.message || String(e) });
+                } finally {
+                  setMirrorRunning(false);
+                }
+              }}
+              disabled={mirrorRunning}
+              size="lg"
+              className="w-full"
+            >
+              {mirrorRunning ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring...</>) : (<><Sparkles className="mr-2 h-4 w-4" />Mirror Next Batch (Processed)</>)}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  setMirrorRunning(true);
+                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: true } });
+                  if (error) throw error;
+                  setMirrorResult(data);
+                  toast.success(`Mirrored ${data?.processed ?? 0} listings (incl. raw)`);
+                } catch (e: any) {
+                  toast.error('Mirror failed', { description: e?.message || String(e) });
+                } finally {
+                  setMirrorRunning(false);
+                }
+              }}
+              disabled={mirrorRunning}
+              size="lg"
+              className="w-full"
+            >
+              Include Raw Harvest
+            </Button>
+          </div>
+          {mirrorResult && (
+            <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
+              <p>Processed: <span className="font-semibold">{mirrorResult.processed}</span></p>
+              <p>Remaining candidates this run: <span className="font-semibold">{mirrorResult.remaining_candidates}</span></p>
+              <p className="text-xs text-muted-foreground">Re-run to continue. New crawls auto-mirror after vibe analysis completes.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className={isPaused ? 'border-destructive/30 opacity-80' : ''}>
         <CardHeader className="px-4 md:px-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
