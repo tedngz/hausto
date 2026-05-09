@@ -834,18 +834,21 @@ async function extractListingUrls(
 ): Promise<ListingLink[]> {
   console.log(`[Phase 1] Extracting listing URLs from ${marketplace} search page (${links.length} links found)`);
   
-  // Filter links to property detail pages based on marketplace URL patterns
+  // Filter links to property detail pages based on marketplace URL patterns (RENT ONLY)
   const listingPatterns: Record<string, RegExp> = {
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
-    nhatot: /nhatot\.com\/.*\/\d{6,}\.htm/i,
+    nhatot: /nhatot\.com\/[^?#]*\/(thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
   };
-  
+
+  // Exclude any URL that clearly points to a buy/sell listing
+  const saleUrlPattern = /(mua-ban|nha-dat-ban|can-ban|ban-can-ho|ban-chung-cu|ban-nha|ban-dat|for-sale|\/ban-)/i;
+
   const pattern = listingPatterns[marketplace];
   if (!pattern) return [];
-  
+
   const listingUrls = links
-    .filter(link => pattern.test(link))
+    .filter(link => pattern.test(link) && !saleUrlPattern.test(link))
     .map(url => ({ url }));
   
   // Deduplicate by URL
