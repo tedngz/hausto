@@ -48,6 +48,7 @@ export const RealtorDashboard = ({
   const [isEditingExternal, setIsEditingExternal] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewCrawledApartment, setPreviewCrawledApartment] = useState<Apartment | null>(null);
+  const [showRawHarvested, setShowRawHarvested] = useState(false);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -106,13 +107,14 @@ export const RealtorDashboard = ({
 
   // Fetch crawled external listings for admin
   const { data: crawledListings = [], isLoading: isLoadingCrawled } = useQuery({
-    queryKey: ['crawled-listings'],
+    queryKey: ['crawled-listings', showRawHarvested],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
         .select('*')
+        .eq('raw_only', showRawHarvested)
         .order('crawled_at', { ascending: false })
-        .limit(200);
+        .limit(500);
       if (error) throw error;
       const listings = data || [];
 
@@ -879,11 +881,21 @@ export const RealtorDashboard = ({
                   <div>
                     <h2 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2">
                       <Globe className="w-5 h-5" />
-                      Crawled External Listings
+                      {showRawHarvested ? 'Raw-Harvested Listings' : 'Processed Crawled Listings'}
                     </h2>
                     <p className="text-slate-600 text-sm">
-                      {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} total crawled listings
+                      {crawledListings.filter((l: any) => l.is_active).length} active / {crawledListings.length} {showRawHarvested ? 'raw' : 'processed'} listings
                     </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Switch
+                        id="raw-harvest-toggle"
+                        checked={showRawHarvested}
+                        onCheckedChange={setShowRawHarvested}
+                      />
+                      <label htmlFor="raw-harvest-toggle" className="text-xs text-slate-600 cursor-pointer">
+                        Show raw-harvested (unprocessed) listings
+                      </label>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
