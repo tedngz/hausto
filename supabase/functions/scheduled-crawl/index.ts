@@ -75,34 +75,63 @@ async function verifyQStashSignature(signature: string, body: string): Promise<b
 }
 
 // ===== QStash self-chaining: publish a follow-up message =====
-async function qstashPublish(payload: Record<string, unknown>, delaySec = 5): Promise<boolean> {
-  if (!QSTASH_TOKEN) {
-    console.log('[scheduled-crawl] QSTASH_TOKEN not set, cannot self-chain');
-    return false;
-  }
+// Fallback fire-and-forget self-invocation (used when QStash isn't available)
+function selfInvokeFallback(payload: Record<string, unknown>, delaySec = 5): boolean {
   try {
-    const res = await fetch(`https://qstash.upstash.io/v2/publish/${FUNCTION_URL}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${QSTASH_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Upstash-Delay': `${delaySec}s`,
-        'Upstash-Retries': '2',
-      },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      console.log(`[scheduled-crawl] QStash self-chain published: messageId=${data.messageId}`);
-      return true;
-    } else {
-      console.error('[scheduled-crawl] QStash publish failed:', data);
-      return false;
+    const task = (async () => {
+      if (delaySec > 0) await new Promise(r => setTimeout(r, delaySec * 1000));
+      try {
+        const res = await fetch(FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        console.log(`[scheduled-crawl] self-invoke fallback chain status=${res.status} payload=${JSON.stringify(payload)}`);
+      } catch (err) {
+        console.error('[scheduled-crawl] self-invoke fallback error:', err);
+      }
+    })();
+    // @ts-ignore — EdgeRuntime is available in Supabase edge runtime
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(task);
     }
+    return true;
   } catch (e) {
-    console.error('[scheduled-crawl] QStash publish error:', e);
+    console.error('[scheduled-crawl] self-invoke schedule error:', e);
     return false;
   }
+}
+
+async function qstashPublish(payload: Record<string, unknown>, delaySec = 5): Promise<boolean> {
+  if (QSTASH_TOKEN) {
+    try {
+      const res = await fetch(`https://qstash.upstash.io/v2/publish/${FUNCTION_URL}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${QSTASH_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Upstash-Delay': `${delaySec}s`,
+          'Upstash-Retries': '2',
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        console.log(`[scheduled-crawl] QStash self-chain published: messageId=${data.messageId}`);
+        return true;
+      }
+      console.error('[scheduled-crawl] QStash publish failed, falling back to self-invoke:', data);
+    } catch (e) {
+      console.error('[scheduled-crawl] QStash publish error, falling back to self-invoke:', e);
+    }
+  } else {
+    console.log('[scheduled-crawl] QSTASH_TOKEN not set, using self-invoke fallback');
+  }
+  return selfInvokeFallback(payload, delaySec);
 }
 
 interface CrawlConfig {
