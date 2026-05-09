@@ -417,6 +417,14 @@ async function savePropertiesToDB(
 
   for (const property of properties) {
     try {
+      // Reject any URL that points at a buy/sell listing — applies in raw mode too
+      const urlForCheck = (property.sourceUrl || '').toLowerCase();
+      if (/(mua-ban|nha-dat-ban|can-ban|ban-can-ho|ban-chung-cu|ban-nha|ban-dat|for-sale|\/ban-)/i.test(urlForCheck)) {
+        filtered++;
+        console.log(`[directSave] Filtered sale URL: ${urlForCheck.substring(0, 80)}`);
+        continue;
+      }
+
       // In raw mode, only filter clearly non-residential or for-sale listings — title/price/images checks relaxed
       const check = isSuspiciousListing(property);
       const skipForSuspicion = rawMode
