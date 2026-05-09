@@ -1546,7 +1546,7 @@ const AdminTools = () => {
             Mirror Crawled Images to Storage
           </CardTitle>
           <CardDescription>
-            Downloads remote CDN images on active external listings into the <code>external-property-images</code> bucket so they survive source-listing removal. Processes in small batches.
+            Downloads remote CDN images on external listings into the <code>external-property-images</code> bucket so they survive source-listing removal. "Mirror Everything" loops until done (incl. raw + inactive).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1555,7 +1555,40 @@ const AdminTools = () => {
               onClick={async () => {
                 try {
                   setMirrorRunning(true);
-                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: false } });
+                  let totalProcessed = 0;
+                  let rounds = 0;
+                  const maxRounds = 200;
+                  while (rounds < maxRounds) {
+                    rounds++;
+                    const { data, error } = await supabase.functions.invoke('backfill-external-images', {
+                      body: { batchSize: 10, includeRaw: true, includeInactive: true },
+                    });
+                    if (error) throw error;
+                    const processed = Number(data?.processed ?? 0);
+                    totalProcessed += processed;
+                    setMirrorResult({ ...data, totalProcessed, rounds });
+                    if (processed === 0) break;
+                    await new Promise((r) => setTimeout(r, 500));
+                  }
+                  toast.success(`Mirrored ${totalProcessed} listings across ${rounds} rounds`);
+                } catch (e: any) {
+                  toast.error('Mirror failed', { description: e?.message || String(e) });
+                } finally {
+                  setMirrorRunning(false);
+                }
+              }}
+              disabled={mirrorRunning}
+              size="lg"
+              className="w-full"
+            >
+              {mirrorRunning ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring everything...</>) : (<><Sparkles className="mr-2 h-4 w-4" />Mirror Everything (raw + inactive)</>)}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  setMirrorRunning(true);
+                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: false, includeInactive: false } });
                   if (error) throw error;
                   setMirrorResult(data);
                   toast.success(`Mirrored ${data?.processed ?? 0} listings`);
@@ -1569,35 +1602,17 @@ const AdminTools = () => {
               size="lg"
               className="w-full"
             >
-              {mirrorRunning ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring...</>) : (<><Sparkles className="mr-2 h-4 w-4" />Mirror Next Batch (Processed)</>)}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  setMirrorRunning(true);
-                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { batchSize: 10, includeRaw: true } });
-                  if (error) throw error;
-                  setMirrorResult(data);
-                  toast.success(`Mirrored ${data?.processed ?? 0} listings (incl. raw)`);
-                } catch (e: any) {
-                  toast.error('Mirror failed', { description: e?.message || String(e) });
-                } finally {
-                  setMirrorRunning(false);
-                }
-              }}
-              disabled={mirrorRunning}
-              size="lg"
-              className="w-full"
-            >
-              Include Raw Harvest
+              Active Processed Only
             </Button>
           </div>
           {mirrorResult && (
             <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
-              <p>Processed: <span className="font-semibold">{mirrorResult.processed}</span></p>
+              {mirrorResult.totalProcessed !== undefined && (
+                <p>Total mirrored so far: <span className="font-semibold">{mirrorResult.totalProcessed}</span> (round {mirrorResult.rounds})</p>
+              )}
+              <p>Last batch processed: <span className="font-semibold">{mirrorResult.processed}</span></p>
               <p>Remaining candidates this run: <span className="font-semibold">{mirrorResult.remaining_candidates}</span></p>
-              <p className="text-xs text-muted-foreground">Re-run to continue. New crawls auto-mirror after vibe analysis completes.</p>
+              <p className="text-xs text-muted-foreground">~669 listings / ~4,123 images to mirror (~600 MB est.). New crawls auto-mirror after vibe analysis.</p>
             </div>
           )}
         </CardContent>
