@@ -15,6 +15,39 @@ const corsHeaders = {
 
 const MAX_ATTEMPTS = 5;
 const DEFAULT_BATCH = 4;
+const MIRROR_BUCKET = 'external-property-images';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+async function mirrorOne(supabase: any, url: string, externalId: string, idx: number): Promise<string> {
+  try {
+    if (!url || url.includes(`/${MIRROR_BUCKET}/`)) return url;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15000);
+    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 HaustoBot' } });
+    clearTimeout(t);
+    if (!res.ok) return url;
+    const ct = (res.headers.get('content-type') || 'image/jpeg').toLowerCase();
+    if (!ct.startsWith('image/')) return url;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (!buf.byteLength || buf.byteLength > MAX_IMAGE_BYTES) return url;
+    const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
+    const safeId = externalId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
+    const path = `${safeId}/${idx}.${ext}`;
+    const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, buf, { contentType: ct, upsert: true });
+    if (error) { console.warn('[mirror] upload failed:', error.message); return url; }
+    const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || url;
+  } catch (e) {
+    console.warn('[mirror] error:', String(e).substring(0, 200));
+    return url;
+  }
+}
+
+async function mirrorAll(supabase: any, urls: string[], externalId: string): Promise<string[]> {
+  const out: string[] = [];
+  for (let i = 0; i < urls.length; i++) out.push(await mirrorOne(supabase, urls[i], externalId, i));
+  return out;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -60,7 +93,7 @@ serve(async (req) => {
       try {
         const { data: prop } = await supabase
           .from('external_properties')
-          .select('id, title, images, vibe_analysis')
+          .select('id, title, images, vibe_analysis, external_id, source')
           .eq('id', job.property_id)
           .maybeSingle();
 
@@ -125,9 +158,14 @@ serve(async (req) => {
           image_analyses: analyses,
         };
 
+        // Mirror images to storage so they survive source-listing removal
+        const mirrorKey = `${prop.source || 'src'}-${prop.external_id || prop.id}`;
+        const mirroredImages = await mirrorAll(supabase, images, mirrorKey);
+
         const { error: updErr } = await supabase
           .from('external_properties')
           .update({
+            images: mirroredImages,
             vibe_analysis: aggregated,
             highlights: positionalHighlights,
             vibe_status: 'complete',
