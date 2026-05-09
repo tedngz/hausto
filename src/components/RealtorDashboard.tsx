@@ -107,13 +107,14 @@ export const RealtorDashboard = ({
 
   // Fetch crawled external listings for admin
   const { data: crawledListings = [], isLoading: isLoadingCrawled } = useQuery({
-    queryKey: ['crawled-listings'],
+    queryKey: ['crawled-listings', showRawHarvested],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
         .select('*')
+        .eq('raw_only', showRawHarvested)
         .order('crawled_at', { ascending: false })
-        .limit(200);
+        .limit(500);
       if (error) throw error;
       const listings = data || [];
 
