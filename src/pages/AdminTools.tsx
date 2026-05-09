@@ -86,6 +86,8 @@ const AdminTools = () => {
   const [isBatchReanalyzing, setIsBatchReanalyzing] = useState(false);
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
+  const [mirrorRunning, setMirrorRunning] = useState(false);
+  const [mirrorResult, setMirrorResult] = useState<any>(null);
 
   // Project-targeted crawl state
   const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
