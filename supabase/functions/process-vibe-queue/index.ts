@@ -158,9 +158,14 @@ serve(async (req) => {
           image_analyses: analyses,
         };
 
+        // Mirror images to storage so they survive source-listing removal
+        const mirrorKey = `${prop.source || 'src'}-${prop.external_id || prop.id}`;
+        const mirroredImages = await mirrorAll(supabase, images, mirrorKey);
+
         const { error: updErr } = await supabase
           .from('external_properties')
           .update({
+            images: mirroredImages,
             vibe_analysis: aggregated,
             highlights: positionalHighlights,
             vibe_status: 'complete',
