@@ -59,14 +59,15 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const batchSize = Math.min(Number(body.batchSize) || DEFAULT_BATCH, 25);
     const includeRaw = !!body.includeRaw;
+    const includeInactive = !!body.includeInactive;
 
     let q = adminClient
       .from('external_properties')
-      .select('id, external_id, source, images, raw_only')
-      .eq('is_active', true)
+      .select('id, external_id, source, images, raw_only, is_active')
       .order('crawled_at', { ascending: false })
-      .limit(batchSize * 4); // overfetch to filter
+      .limit(batchSize * 6); // overfetch to filter
     if (!includeRaw) q = q.eq('raw_only', false);
+    if (!includeInactive) q = q.eq('is_active', true);
 
     const { data: rows, error } = await q;
     if (error) throw error;
