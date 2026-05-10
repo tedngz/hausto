@@ -61,11 +61,15 @@ serve(async (req) => {
     const includeRaw = !!body.includeRaw;
     const includeInactive = !!body.includeInactive;
 
+    // Order by updated_at ASC so rows we just mirrored (which get bumped
+    // updated_at) sink to the back and unmirrored rows surface first.
+    // This acts as a self-advancing cursor across many invocations.
     let q = adminClient
       .from('external_properties')
-      .select('id, external_id, source, images, raw_only, is_active')
-      .order('crawled_at', { ascending: false })
-      .limit(batchSize * 6); // overfetch to filter
+      .select('id, external_id, source, images, raw_only, is_active, updated_at')
+      .not('images', 'is', null)
+      .order('updated_at', { ascending: true, nullsFirst: true })
+      .limit(batchSize * 10); // overfetch to filter out already-mirrored
     if (!includeRaw) q = q.eq('raw_only', false);
     if (!includeInactive) q = q.eq('is_active', true);
 
