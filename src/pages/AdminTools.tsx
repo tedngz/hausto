@@ -1624,7 +1624,8 @@ const AdminTools = () => {
                   setMirrorRunning(true);
                   let totalProcessed = 0;
                   let rounds = 0;
-                  const maxRounds = 200;
+                  let emptyStreak = 0;
+                  const maxRounds = 500;
                   while (rounds < maxRounds) {
                     rounds++;
                     const { data, error } = await supabase.functions.invoke('backfill-external-images', {
@@ -1634,21 +1635,34 @@ const AdminTools = () => {
                     const processed = Number(data?.processed ?? 0);
                     totalProcessed += processed;
                     setMirrorResult({ ...data, totalProcessed, rounds });
-                    if (processed === 0) break;
-                    await new Promise((r) => setTimeout(r, 500));
+                    // Stop after 2 consecutive empty batches (no remaining candidates)
+                    if (processed === 0) {
+                      emptyStreak++;
+                      if (emptyStreak >= 2) break;
+                    } else {
+                      emptyStreak = 0;
+                    }
+                    // Refresh status every 5 rounds to show live progress
+                    if (rounds % 5 === 0) loadMirrorStatus();
+                    await new Promise((r) => setTimeout(r, 400));
                   }
-                  toast.success(`Mirrored ${totalProcessed} listings across ${rounds} rounds`);
+                  await loadMirrorStatus();
+                  toast.success(`Mirror Remaining done — ${totalProcessed} listings across ${rounds} rounds`);
                 } catch (e: any) {
                   toast.error('Mirror failed', { description: e?.message || String(e) });
                 } finally {
                   setMirrorRunning(false);
                 }
               }}
-              disabled={mirrorRunning}
+              disabled={mirrorRunning || (mirrorStatus && mirrorStatus.remote_images === 0)}
               size="lg"
               className="w-full"
             >
-              {mirrorRunning ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring everything...</>) : (<><Sparkles className="mr-2 h-4 w-4" />Mirror Everything (raw + inactive)</>)}
+              {mirrorRunning ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mirroring remaining...</>
+              ) : (
+                <><Sparkles className="mr-2 h-4 w-4" />Mirror Remaining{mirrorStatus ? ` (${mirrorStatus.remote_images.toLocaleString()} images / ${mirrorStatus.rows_with_unmirrored} listings)` : ''}</>
+              )}
             </Button>
             <Button
               variant="outline"
