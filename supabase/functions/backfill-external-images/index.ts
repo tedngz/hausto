@@ -76,9 +76,23 @@ serve(async (req) => {
     const { data: rows, error } = await q;
     if (error) throw error;
 
-    const needsMirror = (rows || []).filter((r: any) =>
+    const allRows = rows || [];
+    const needsMirror = allRows.filter((r: any) =>
       Array.isArray(r.images) && r.images.some((u: string) => u && !u.includes(`/${MIRROR_BUCKET}/`))
     ).slice(0, batchSize);
+
+    // Push fully-mirrored overfetched rows to the back of the cursor so they
+    // don't keep occupying the front of the updated_at queue on later rounds.
+    const alreadyDoneIds = allRows
+      .filter((r: any) => !needsMirror.includes(r) && Array.isArray(r.images) && r.images.length > 0
+        && r.images.every((u: string) => u && u.includes(`/${MIRROR_BUCKET}/`)))
+      .map((r: any) => r.id);
+    if (alreadyDoneIds.length > 0) {
+      await adminClient
+        .from('external_properties')
+        .update({ updated_at: new Date().toISOString() })
+        .in('id', alreadyDoneIds);
+    }
 
     const results: any[] = [];
     for (const row of needsMirror) {
@@ -88,13 +102,23 @@ serve(async (req) => {
         mirrored.push(await mirrorOne(adminClient, row.images[i], key, i));
       }
       const changed = mirrored.some((u, i) => u !== row.images[i]);
-      if (changed) {
-        await adminClient.from('external_properties').update({ images: mirrored, updated_at: new Date().toISOString() }).eq('id', row.id);
-      }
+      // Always bump updated_at so the cursor advances even when every image
+      // upload fell back to the original URL (e.g. dead source CDN).
+      await adminClient
+        .from('external_properties')
+        .update(changed ? { images: mirrored, updated_at: new Date().toISOString() } : { updated_at: new Date().toISOString() })
+        .eq('id', row.id);
       results.push({ id: row.id, mirrored: mirrored.filter(u => u.includes(`/${MIRROR_BUCKET}/`)).length, total: mirrored.length });
     }
 
-    return new Response(JSON.stringify({ success: true, processed: results.length, remaining_candidates: Math.max(0, (rows?.length || 0) - results.length), results }), {
+    return new Response(JSON.stringify({
+      success: true,
+      processed: results.length,
+      scanned: allRows.length,
+      bumped_already_done: alreadyDoneIds.length,
+      remaining_candidates: Math.max(0, allRows.length - results.length - alreadyDoneIds.length),
+      results,
+    }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
