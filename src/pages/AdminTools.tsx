@@ -1567,6 +1567,56 @@ const AdminTools = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Mirror progress status */}
+          <div className="p-4 rounded-lg border bg-card space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="font-semibold text-sm">Mirror Progress</h4>
+              <Button size="sm" variant="ghost" onClick={loadMirrorStatus} disabled={mirrorStatusLoading}>
+                {mirrorStatusLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              </Button>
+            </div>
+            {!mirrorStatus && !mirrorStatusLoading && (
+              <p className="text-xs text-muted-foreground">No data yet.</p>
+            )}
+            {mirrorStatus && (
+              <>
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">Images mirrored</span>
+                    <span className="font-medium">{mirrorStatus.mirrored_images} / {mirrorStatus.total_images} ({mirrorStatus.mirrored_pct}%)</span>
+                  </div>
+                  <Progress value={mirrorStatus.mirrored_pct} className="h-2" />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="p-2 rounded bg-muted">
+                    <div className="text-muted-foreground">Listings w/ images</div>
+                    <div className="font-semibold text-sm">{mirrorStatus.rows_with_images}</div>
+                  </div>
+                  <div className="p-2 rounded bg-muted">
+                    <div className="text-muted-foreground">Active listings</div>
+                    <div className="font-semibold text-sm">{mirrorStatus.active_rows}</div>
+                  </div>
+                  <div className="p-2 rounded bg-muted">
+                    <div className="text-muted-foreground">Rows w/ remote URLs</div>
+                    <div className="font-semibold text-sm">{mirrorStatus.rows_with_unmirrored}</div>
+                  </div>
+                  <div className="p-2 rounded bg-muted">
+                    <div className="text-muted-foreground">Active rows pending</div>
+                    <div className={`font-semibold text-sm ${mirrorStatus.active_rows_with_unmirrored === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {mirrorStatus.active_rows_with_unmirrored}
+                    </div>
+                  </div>
+                </div>
+                {mirrorStatus.active_rows_with_unmirrored === 0 && mirrorStatus.remote_images > 0 && (
+                  <p className="text-xs text-emerald-600">All active listings fully mirrored. Remaining {mirrorStatus.remote_images} remote images are on inactive/raw rows.</p>
+                )}
+                {mirrorStatus.remote_images === 0 && (
+                  <p className="text-xs text-emerald-600">Every crawled image is mirrored to storage.</p>
+                )}
+              </>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-2">
             <Button
               onClick={async () => {
