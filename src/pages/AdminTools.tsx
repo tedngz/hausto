@@ -88,6 +88,23 @@ const AdminTools = () => {
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
   const [mirrorRunning, setMirrorRunning] = useState(false);
   const [mirrorResult, setMirrorResult] = useState<any>(null);
+  const [mirrorStatus, setMirrorStatus] = useState<any>(null);
+  const [mirrorStatusLoading, setMirrorStatusLoading] = useState(false);
+
+  const loadMirrorStatus = useCallback(async () => {
+    try {
+      setMirrorStatusLoading(true);
+      const { data, error } = await supabase.functions.invoke('mirror-status', { body: {} });
+      if (error) throw error;
+      setMirrorStatus(data?.totals || null);
+    } catch (e: any) {
+      toast.error('Status check failed', { description: e?.message || String(e) });
+    } finally {
+      setMirrorStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadMirrorStatus(); }, [loadMirrorStatus]);
 
   // Project-targeted crawl state
   const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
