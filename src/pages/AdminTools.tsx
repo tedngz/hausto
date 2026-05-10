@@ -1624,8 +1624,8 @@ const AdminTools = () => {
                   setMirrorRunning(true);
                   let totalProcessed = 0;
                   let rounds = 0;
-                  let emptyStreak = 0;
-                  const maxRounds = 500;
+                  let idleStreak = 0;
+                  const maxRounds = 1000;
                   while (rounds < maxRounds) {
                     rounds++;
                     const { data, error } = await supabase.functions.invoke('backfill-external-images', {
@@ -1633,18 +1633,19 @@ const AdminTools = () => {
                     });
                     if (error) throw error;
                     const processed = Number(data?.processed ?? 0);
+                    const bumped = Number(data?.bumped_already_done ?? 0);
                     totalProcessed += processed;
                     setMirrorResult({ ...data, totalProcessed, rounds });
-                    // Stop after 2 consecutive empty batches (no remaining candidates)
-                    if (processed === 0) {
-                      emptyStreak++;
-                      if (emptyStreak >= 2) break;
+                    // Truly done only when there's nothing left to mirror AND
+                    // nothing left to advance past (cursor exhausted).
+                    if (processed === 0 && bumped === 0) {
+                      idleStreak++;
+                      if (idleStreak >= 2) break;
                     } else {
-                      emptyStreak = 0;
+                      idleStreak = 0;
                     }
-                    // Refresh status every 5 rounds to show live progress
                     if (rounds % 5 === 0) loadMirrorStatus();
-                    await new Promise((r) => setTimeout(r, 400));
+                    await new Promise((r) => setTimeout(r, 250));
                   }
                   await loadMirrorStatus();
                   toast.success(`Mirror Remaining done — ${totalProcessed} listings across ${rounds} rounds`);
