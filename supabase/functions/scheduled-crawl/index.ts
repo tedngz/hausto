@@ -564,7 +564,13 @@ Deno.serve(async (req) => {
         frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(4320, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
         maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(10, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
       };
-      await redisSet(CONFIG_KEY, newConfig);
+      const saved = await redisSet(CONFIG_KEY, newConfig);
+      if (!saved) {
+        return new Response(JSON.stringify({ success: false, error: 'Crawl config storage is unavailable', config: currentConfig, storageError: lastRedisError }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       console.log('[scheduled-crawl] Config updated:', JSON.stringify(newConfig));
       return new Response(JSON.stringify({ success: true, config: newConfig }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -918,9 +924,10 @@ Deno.serve(async (req) => {
 
     // ===== RAW HARVEST status query =====
     if (body.action === 'raw-status') {
+      const config = await getConfig();
       const session = (await redisGet('crawl:raw:session')) || null;
       const projectsSession = (await redisGet('crawl:raw_proj:session')) || null;
-      return new Response(JSON.stringify({ success: true, session, projectsSession }), {
+      return new Response(JSON.stringify({ success: true, config, session, projectsSession }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
