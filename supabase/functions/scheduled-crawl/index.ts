@@ -738,6 +738,13 @@ Deno.serve(async (req) => {
 
     // ===== RAW HARVEST PROJECTS: target specific HCMC apartment complexes =====
     if (body.action === 'raw-harvest-projects') {
+      const cfgP = await getConfig();
+      if (cfgP.paused) {
+        console.log('[raw-harvest-projects] Paused via config. Stopping chain.');
+        return new Response(JSON.stringify({ success: true, message: 'Paused', paused: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       console.log('[scheduled-crawl] RAW HARVEST PROJECTS mode start');
       const RAW_PROJ_PREFIX = 'crawl:track:raw_proj';
       const RAW_PROJ_SESSION_KEY = 'crawl:raw_proj:session';
