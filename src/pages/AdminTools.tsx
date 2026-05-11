@@ -136,8 +136,9 @@ const AdminTools = () => {
         body: { action: 'get-config' },
       });
       if (error) throw error;
-      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number } | null;
+      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number; configStorageError?: string } | null;
     },
+    refetchInterval: 10000,
   });
 
   // Vibe queue depth (jobs not yet completed)
@@ -177,27 +178,34 @@ const AdminTools = () => {
 
   const [localFrequency, setLocalFrequency] = useState<number | null>(null);
   const [localMaxListings, setLocalMaxListings] = useState<number | null>(null);
+  const [localPausedOverride, setLocalPausedOverride] = useState<boolean | null>(null);
 
   // Sync local state when config loads
   const effectiveFrequency = localFrequency ?? crawlConfig?.frequencyMinutes ?? 240;
   const effectiveMaxListings = localMaxListings ?? crawlConfig?.maxListingsPerRun ?? 10;
-  const isPaused = crawlConfig?.paused ?? false;
+  const isPaused = localPausedOverride ?? crawlConfig?.paused ?? false;
+  const crawlConfigStorageError = crawlConfig?.configStorageError;
 
   const handleTogglePause = useCallback(async () => {
     setIsSavingConfig(true);
+    const nextPaused = !isPaused;
+    setLocalPausedOverride(nextPaused);
     try {
       const { data, error } = await supabase.functions.invoke('scheduled-crawl', {
-        body: { action: 'set-config', paused: !isPaused },
+        body: { action: 'set-config', paused: nextPaused },
       });
       if (error) throw error;
+      if (data?.success === false) throw new Error(data?.storageError || data?.error || 'Config was not saved');
       toast.success(data?.config?.paused ? 'Auto-crawl paused' : 'Auto-crawl resumed');
-      refetchConfig();
+      await refetchConfig();
+      setLocalPausedOverride(null);
     } catch (err: any) {
+      setLocalPausedOverride(crawlConfig?.paused ?? false);
       toast.error('Failed to update config', { description: err.message });
     } finally {
       setIsSavingConfig(false);
     }
-  }, [isPaused, refetchConfig]);
+  }, [crawlConfig?.paused, isPaused, refetchConfig]);
 
   const handleSaveConfig = useCallback(async () => {
     setIsSavingConfig(true);
@@ -1709,6 +1717,7 @@ const AdminTools = () => {
                 Auto-Crawl Schedule
                 {isPaused && <Badge variant="destructive" className="text-xs">Paused</Badge>}
                 {!isPaused && <Badge variant="default" className="text-xs bg-emerald-600">Active</Badge>}
+                {crawlConfigStorageError && <Badge variant="outline" className="text-xs">Storage unavailable</Badge>}
               </CardTitle>
               <CardDescription className="mt-1 text-xs md:text-sm">
                 Cron runs every 30 min. The function checks config and crawls the least-recently-crawled location.
@@ -1718,7 +1727,7 @@ const AdminTools = () => {
               variant={isPaused ? 'default' : 'destructive'}
               size="sm"
               onClick={handleTogglePause}
-              disabled={isSavingConfig}
+              disabled={isSavingConfig || !!crawlConfigStorageError}
               className="shrink-0 self-start"
             >
               {isSavingConfig ? (
@@ -1732,6 +1741,12 @@ const AdminTools = () => {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {crawlConfigStorageError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              Auto-crawl is fail-closed as paused because Upstash Redis config storage is unavailable: {crawlConfigStorageError}
+            </div>
+          )}
+
           {/* Crawl Settings */}
           <div className="border rounded-lg p-3 space-y-3">
             <p className="text-sm font-semibold flex items-center gap-1">
