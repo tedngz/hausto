@@ -124,20 +124,23 @@ async function qstashPublish(payload: Record<string, unknown>, delaySec = 5): Pr
         console.log(`[scheduled-crawl] QStash self-chain published: messageId=${data.messageId}`);
         return true;
       }
-      console.error('[scheduled-crawl] QStash publish failed, falling back to self-invoke:', data);
+      console.error('[scheduled-crawl] QStash publish failed. Not falling back to self-invoke because QSTASH_TOKEN is configured:', data);
+      return false;
     } catch (e) {
-      console.error('[scheduled-crawl] QStash publish error, falling back to self-invoke:', e);
+      console.error('[scheduled-crawl] QStash publish error. Not falling back to self-invoke because QSTASH_TOKEN is configured:', e);
+      return false;
     }
   } else {
     console.log('[scheduled-crawl] QSTASH_TOKEN not set, using self-invoke fallback');
+    return selfInvokeFallback(payload, delaySec);
   }
-  return selfInvokeFallback(payload, delaySec);
 }
 
 interface CrawlConfig {
   paused: boolean;
   frequencyMinutes: number;
   maxListingsPerRun: number;
+  configStorageError?: string;
 }
 
 const DEFAULT_CONFIG: CrawlConfig = {
@@ -147,6 +150,8 @@ const DEFAULT_CONFIG: CrawlConfig = {
 };
 
 // Redis helpers
+let lastRedisError: string | null = null;
+
 async function redisGet(key: string): Promise<any> {
   try {
     const res = await fetch(`${UPSTASH_REDIS_REST_URL}`, {
@@ -158,15 +163,21 @@ async function redisGet(key: string): Promise<any> {
       body: JSON.stringify(["GET", key]),
     });
     const data = await res.json();
+    if (data.error) {
+      lastRedisError = data.error;
+      console.error('[Redis GET error]', key, data.error);
+      return null;
+    }
     if (data.result === null || data.result === undefined) return null;
     try { return JSON.parse(data.result); } catch { return data.result; }
   } catch (e) {
+    lastRedisError = String(e);
     console.error('[Redis GET error]', key, e);
     return null;
   }
 }
 
-async function redisSet(key: string, value: any, exSeconds?: number): Promise<void> {
+async function redisSet(key: string, value: any, exSeconds?: number): Promise<boolean> {
   try {
     const cmd = exSeconds
       ? ["SETEX", key, String(exSeconds), JSON.stringify(value)]
@@ -181,13 +192,24 @@ async function redisSet(key: string, value: any, exSeconds?: number): Promise<vo
     });
     const data = await res.json();
     if (data.error) {
+      lastRedisError = data.error;
       console.error('[Redis SET error]', key, data.error);
+      return false;
     }
-  } catch (e) { console.error('[Redis SET error]', key, e); }
+    return true;
+  } catch (e) {
+    lastRedisError = String(e);
+    console.error('[Redis SET error]', key, e);
+    return false;
+  }
 }
 
 async function getConfig(): Promise<CrawlConfig> {
+  lastRedisError = null;
   const stored = await redisGet(CONFIG_KEY);
+  if (lastRedisError) {
+    return { ...DEFAULT_CONFIG, paused: true, configStorageError: lastRedisError };
+  }
   return stored ? { ...DEFAULT_CONFIG, ...stored } : DEFAULT_CONFIG;
 }
 
