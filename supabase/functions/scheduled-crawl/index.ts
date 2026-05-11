@@ -648,6 +648,13 @@ Deno.serve(async (req) => {
 
     // ===== RAW HARVEST: Use Firecrawl credits, skip OpenAI cost entirely =====
     if (body.action === 'raw-harvest') {
+      const cfg = await getConfig();
+      if (cfg.paused) {
+        console.log('[raw-harvest] Paused via config. Stopping chain.');
+        return new Response(JSON.stringify({ success: true, message: 'Paused', paused: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       console.log('[scheduled-crawl] RAW HARVEST mode start');
       const RAW_TRACK_PREFIX = 'crawl:track:raw';
       const RAW_SESSION_KEY = 'crawl:raw:session';
