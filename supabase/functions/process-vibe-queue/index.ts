@@ -18,6 +18,13 @@ const DEFAULT_BATCH = 4;
 const MIRROR_BUCKET = 'external-property-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+async function safeFolder(externalId: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(externalId));
+  const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const readable = externalId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
+  return `${readable}-${hex.substring(0, 16)}`;
+}
+
 async function mirrorOne(supabase: any, url: string, externalId: string, idx: number): Promise<string> {
   try {
     if (!url || url.includes(`/${MIRROR_BUCKET}/`)) return url;
@@ -31,8 +38,8 @@ async function mirrorOne(supabase: any, url: string, externalId: string, idx: nu
     const buf = new Uint8Array(await res.arrayBuffer());
     if (!buf.byteLength || buf.byteLength > MAX_IMAGE_BYTES) return url;
     const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
-    const safeId = externalId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
-    const path = `${safeId}/${idx}.${ext}`;
+    const folder = await safeFolder(externalId);
+    const path = `${folder}/${idx}.${ext}`;
     const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, buf, { contentType: ct, upsert: true });
     if (error) { console.warn('[mirror] upload failed:', error.message); return url; }
     const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
@@ -93,7 +100,7 @@ serve(async (req) => {
       try {
         const { data: prop } = await supabase
           .from('external_properties')
-          .select('id, title, images, vibe_analysis, external_id, source')
+          .select('id, title, images, vibe_analysis, external_id, source, raw_data')
           .eq('id', job.property_id)
           .maybeSingle();
 
@@ -162,6 +169,11 @@ serve(async (req) => {
         const mirrorKey = `${prop.source || 'src'}-${prop.external_id || prop.id}`;
         const mirroredImages = await mirrorAll(supabase, images, mirrorKey);
 
+        // Persist pre-mirror URLs so we can recover if storage is corrupted
+        const existingRaw = (prop as any).raw_data && typeof (prop as any).raw_data === 'object'
+          ? (prop as any).raw_data : {};
+        const updatedRaw = { ...existingRaw, original_image_urls: images };
+
         const { error: updErr } = await supabase
           .from('external_properties')
           .update({
@@ -170,6 +182,7 @@ serve(async (req) => {
             highlights: positionalHighlights,
             vibe_status: 'complete',
             is_active: true,
+            raw_data: updatedRaw,
             updated_at: new Date().toISOString(),
           })
           .eq('id', prop.id);

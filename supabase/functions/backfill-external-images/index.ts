@@ -14,6 +14,13 @@ const MIRROR_BUCKET = 'external-property-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_BATCH = 10;
 
+async function safeFolder(externalId: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(externalId));
+  const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const readable = externalId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
+  return `${readable}-${hex.substring(0, 16)}`;
+}
+
 async function mirrorOne(supabase: any, url: string, externalId: string, idx: number): Promise<string> {
   try {
     if (!url || url.includes(`/${MIRROR_BUCKET}/`)) return url;
@@ -27,8 +34,8 @@ async function mirrorOne(supabase: any, url: string, externalId: string, idx: nu
     const buf = new Uint8Array(await res.arrayBuffer());
     if (!buf.byteLength || buf.byteLength > MAX_IMAGE_BYTES) return url;
     const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
-    const safeId = externalId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
-    const path = `${safeId}/${idx}.${ext}`;
+    const folder = await safeFolder(externalId);
+    const path = `${folder}/${idx}.${ext}`;
     const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, buf, { contentType: ct, upsert: true });
     if (error) { console.warn('[backfill] upload failed:', error.message); return url; }
     const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
@@ -60,6 +67,80 @@ serve(async (req) => {
     const batchSize = Math.min(Number(body.batchSize) || DEFAULT_BATCH, 25);
     const includeRaw = !!body.includeRaw;
     const includeInactive = !!body.includeInactive;
+    const action = String(body.action || '').toLowerCase();
+
+    // ============================================================
+    // REPAIR MODE: detect collisions from the legacy truncated-key
+    // mirror scheme and reset affected rows.
+    //
+    // The old key format was `${source}-${external_id}` truncated to
+    // 80 chars, which collapsed many distinct listings to the same
+    // storage folder. New format ends with `-<16-hex>`.
+    // ============================================================
+    if (action === 'repair-collisions') {
+      const { data: allRows, error: scanErr } = await adminClient
+        .from('external_properties')
+        .select('id, external_id, source, images, raw_data, source_url')
+        .not('images', 'is', null)
+        .limit(2000);
+      if (scanErr) throw scanErr;
+
+      const HEX16 = /-[0-9a-f]{16}\/\d+\.[a-z]+$/i;
+      // Group by legacy folder (segment between bucket name and the next slash)
+      const byFolder = new Map<string, any[]>();
+      for (const r of (allRows || []) as any[]) {
+        const imgs: string[] = Array.isArray(r.images) ? r.images : [];
+        const legacy = imgs.find(u => u && u.includes(`/${MIRROR_BUCKET}/`) && !HEX16.test(u));
+        if (!legacy) continue;
+        const m = legacy.match(new RegExp(`/${MIRROR_BUCKET}/([^/]+)/`));
+        if (!m) continue;
+        const folder = m[1];
+        const arr = byFolder.get(folder) || [];
+        arr.push(r);
+        byFolder.set(folder, arr);
+      }
+
+      let restored = 0, cleared = 0, untouched = 0;
+      const collisionFolders: string[] = [];
+      for (const [folder, group] of byFolder.entries()) {
+        if (group.length < 2) { untouched += 1; continue; }
+        collisionFolders.push(folder);
+        for (const row of group) {
+          const orig = row.raw_data?.original_image_urls;
+          if (Array.isArray(orig) && orig.length > 0) {
+            await adminClient
+              .from('external_properties')
+              .update({ images: orig, updated_at: new Date().toISOString() })
+              .eq('id', row.id);
+            restored += 1;
+          } else {
+            // No originals to recover from — hide the listing and queue
+            // it for a fresh crawl so it doesn't keep showing wrong photos.
+            await adminClient
+              .from('external_properties')
+              .update({
+                images: [],
+                is_active: false,
+                vibe_status: 'pending',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', row.id);
+            cleared += 1;
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        mode: 'repair-collisions',
+        scanned: allRows?.length || 0,
+        collision_folders: collisionFolders.length,
+        rows_restored_from_raw_data: restored,
+        rows_cleared_for_recrawl: cleared,
+        non_colliding_legacy_rows: untouched,
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
 
     // Order by updated_at ASC so rows we just mirrored (which get bumped
     // updated_at) sink to the back and unmirrored rows surface first.
