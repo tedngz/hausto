@@ -1694,6 +1694,29 @@ const AdminTools = () => {
             >
               Active Processed Only
             </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!confirm('Repair listings whose mirrored images collided with other listings?\n\nThis will:\n• Restore images from raw_data.original_image_urls when available\n• Otherwise hide the listing and mark it for re-crawl')) return;
+                try {
+                  setMirrorRunning(true);
+                  const { data, error } = await supabase.functions.invoke('backfill-external-images', { body: { action: 'repair-collisions' } });
+                  if (error) throw error;
+                  setMirrorResult(data);
+                  toast.success(`Repair done — restored ${data?.rows_restored_from_raw_data ?? 0}, cleared ${data?.rows_cleared_for_recrawl ?? 0}`);
+                  await loadMirrorStatus();
+                } catch (e: any) {
+                  toast.error('Repair failed', { description: e?.message || String(e) });
+                } finally {
+                  setMirrorRunning(false);
+                }
+              }}
+              disabled={mirrorRunning}
+              size="lg"
+              className="w-full"
+            >
+              Repair Collisions
+            </Button>
           </div>
           {mirrorResult && (
             <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
