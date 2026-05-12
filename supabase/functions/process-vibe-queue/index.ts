@@ -169,6 +169,11 @@ serve(async (req) => {
         const mirrorKey = `${prop.source || 'src'}-${prop.external_id || prop.id}`;
         const mirroredImages = await mirrorAll(supabase, images, mirrorKey);
 
+        // Persist pre-mirror URLs so we can recover if storage is corrupted
+        const existingRaw = (prop as any).raw_data && typeof (prop as any).raw_data === 'object'
+          ? (prop as any).raw_data : {};
+        const updatedRaw = { ...existingRaw, original_image_urls: images };
+
         const { error: updErr } = await supabase
           .from('external_properties')
           .update({
@@ -177,6 +182,7 @@ serve(async (req) => {
             highlights: positionalHighlights,
             vibe_status: 'complete',
             is_active: true,
+            raw_data: updatedRaw,
             updated_at: new Date().toISOString(),
           })
           .eq('id', prop.id);
