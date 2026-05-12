@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, MapPin, Wand2, Eye, Sparkles, Loader2 } from 'lucide-react';
+import { X, Upload, MapPin, Wand2, Eye, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { useProperties, Property } from '@/hooks/useProperties';
