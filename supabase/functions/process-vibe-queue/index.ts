@@ -100,7 +100,7 @@ serve(async (req) => {
       try {
         const { data: prop } = await supabase
           .from('external_properties')
-          .select('id, title, images, vibe_analysis, external_id, source')
+          .select('id, title, images, vibe_analysis, external_id, source, raw_data')
           .eq('id', job.property_id)
           .maybeSingle();
 
