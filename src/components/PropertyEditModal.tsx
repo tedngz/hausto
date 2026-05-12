@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, Upload, MapPin, Wand2, Eye, Sparkles, Loader2 } from 'lucide-react';
+import { X, Upload, MapPin, Wand2, Eye, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 import { ImageHighlightEditor } from '@/components/ImageHighlightEditor';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
 import { useProperties, Property } from '@/hooks/useProperties';
@@ -60,6 +60,37 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
   const { currency, convertPrice } = useCurrency();
   const queryClient = useQueryClient();
   const [isSavingExternal, setIsSavingExternal] = useState(false);
+  const [isRecrawling, setIsRecrawling] = useState(false);
+
+  const handleRecrawlExternal = async () => {
+    if (!property?.id || isRecrawling) return;
+    if (!confirm('Re-scrape this listing from its source? This will overwrite the current title, description, images, amenities, and queue a fresh vibe analysis.')) return;
+    setIsRecrawling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('recrawl-external-listing', {
+        body: { id: property.id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast({
+        title: 'Recrawl complete',
+        description: `Saved ${(data as any)?.images_saved ?? 0} new images. Vibe analysis re-queued.`,
+      });
+      // Refresh data inside the modal and parent lists
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['external-properties'] });
+      onClose();
+    } catch (e: any) {
+      console.error('Recrawl failed:', e);
+      toast({
+        title: 'Recrawl failed',
+        description: e?.message || 'Could not recrawl this listing.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRecrawling(false);
+    }
+  };
 
   const styleOptions = ['Modern', 'Cozy', 'Industrial', 'Bohemian', 'Scandinavian', 'Minimalist', 
     'Contemporary', 'Traditional', 'Rustic', 'Luxury', 'Urban', 'Vintage'];
@@ -875,9 +906,26 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
             <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
             <p className="text-sm text-gray-600 hidden sm:block">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} className="shrink-0">
-            <X className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {isExternal && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRecrawlExternal}
+                disabled={isRecrawling}
+                title="Re-scrape title, description, images, and amenities from the source URL"
+              >
+                {isRecrawling ? (
+                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Recrawling…</>
+                ) : (
+                  <><RefreshCw className="w-4 h-4 mr-1" /> Recrawl from source</>
+                )}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
