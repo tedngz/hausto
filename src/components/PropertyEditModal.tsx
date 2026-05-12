@@ -906,9 +906,26 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
             <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{isExternal ? 'Edit External Listing' : 'Edit Property'}</h2>
             <p className="text-sm text-gray-600 hidden sm:block">{isExternal ? 'Update this crawled listing' : 'Update your property listing'}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} className="shrink-0">
-            <X className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {isExternal && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRecrawlExternal}
+                disabled={isRecrawling}
+                title="Re-scrape title, description, images, and amenities from the source URL"
+              >
+                {isRecrawling ? (
+                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Recrawling…</>
+                ) : (
+                  <><RefreshCw className="w-4 h-4 mr-1" /> Recrawl from source</>
+                )}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
