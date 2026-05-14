@@ -158,6 +158,7 @@ export const LandingPage = () => {
           </div>
         </div>
       </section>
+      </main>
 
       {/* Footer */}
       <footer className="bg-card border-t border-border py-8">
