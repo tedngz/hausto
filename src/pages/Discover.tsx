@@ -282,6 +282,8 @@ const Discover = () => {
           {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
         </main>
 
+        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
+
         <HaustoChat isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} userPreferences={userPreferences} userType={userType || 'renter'} />
 
         <PropertyUploadModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} />
