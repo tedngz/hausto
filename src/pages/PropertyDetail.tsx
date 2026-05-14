@@ -226,7 +226,7 @@ const PropertyDetail = () => {
               </CardContent>
             </Card>
           )}
-        </div>
+        </main>
 
         {showContactModal && (
           <ContactModal
