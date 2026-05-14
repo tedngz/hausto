@@ -26,8 +26,8 @@ export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onVi
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="p-2">
-          <MoreVertical className="w-4 h-4" />
+        <Button variant="ghost" size="sm" aria-label="Open user menu" className="p-2">
+          <MoreVertical className="w-4 h-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">

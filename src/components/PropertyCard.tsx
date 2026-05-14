@@ -156,8 +156,8 @@ export const PropertyCard = ({
 
         {/* Share Button Overlay */}
         <div className={`absolute top-3 z-10 ${hasDeleteButton ? 'right-12' : 'right-3'}`}>
-          <Button size="sm" variant="secondary" className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md w-8 h-8 p-0" onClick={handleShare}>
-            <Share2 className="w-4 h-4" />
+          <Button size="sm" variant="secondary" aria-label="Share property" className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md w-8 h-8 p-0" onClick={handleShare}>
+            <Share2 className="w-4 h-4" aria-hidden="true" />
           </Button>
         </div>
 

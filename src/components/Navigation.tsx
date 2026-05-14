@@ -52,27 +52,30 @@ export const Navigation = ({
                 variant={currentView === 'ai-chat' ? 'default' : 'ghost'}
                 size="icon"
                 onClick={() => setCurrentView('ai-chat')}
+                aria-label="AI chat"
                 className={`h-10 w-10 shrink-0 ${currentView === 'ai-chat' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Sparkles className="w-5 h-5" />
+                <Sparkles className="w-5 h-5" aria-hidden="true" />
               </Button>
               
               <Button
                 variant={currentView === 'swipe' ? 'default' : 'ghost'}
                 size="icon"
                 onClick={() => setCurrentView('swipe')}
+                aria-label="Swipe properties"
                 className={`h-10 w-10 shrink-0 ${currentView === 'swipe' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Search className="w-5 h-5" />
+                <Search className="w-5 h-5" aria-hidden="true" />
               </Button>
               
               <Button
                 variant={currentView === 'matches' ? 'default' : 'ghost'}
                 size="icon"
                 onClick={() => setCurrentView('matches')}
+                aria-label={`View matches${matchCount > 0 ? ` (${matchCount})` : ''}`}
                 className={`relative h-10 w-10 shrink-0 ${currentView === 'matches' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Heart className="w-5 h-5" />
+                <Heart className="w-5 h-5" aria-hidden="true" />
                 {matchCount > 0 && (
                   <Badge className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs h-4 min-w-4 flex items-center justify-center rounded-full">
                     {matchCount}
