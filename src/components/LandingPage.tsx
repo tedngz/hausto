@@ -48,8 +48,8 @@ export const LandingPage = () => {
                 <Button onClick={handleDiscover} variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground text-xs md:text-sm px-3 md:px-4">
                   Discover
                 </Button>
-                <Button onClick={handleSignOut} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground p-2 md:px-3">
-                  <LogOut className="h-4 w-4 md:mr-2" />
+                <Button onClick={handleSignOut} variant="ghost" size="sm" aria-label="Sign out" className="text-muted-foreground hover:text-foreground p-2 md:px-3">
+                  <LogOut className="h-4 w-4 md:mr-2" aria-hidden="true" />
                   <span className="hidden md:inline">Sign Out</span>
                 </Button>
               </> : <Button onClick={() => navigate('/auth')} variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground text-xs md:text-sm px-3 md:px-4">
@@ -60,6 +60,7 @@ export const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
+      <main>
       <section className="container mx-auto px-4 py-8 md:py-12 min-h-[calc(100vh-8rem)] flex items-center">
         <div className="text-center max-w-4xl mx-auto w-full">
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4 md:mb-6 leading-tight">
@@ -157,6 +158,7 @@ export const LandingPage = () => {
           </div>
         </div>
       </section>
+      </main>
 
       {/* Footer */}
       <footer className="bg-card border-t border-border py-8">

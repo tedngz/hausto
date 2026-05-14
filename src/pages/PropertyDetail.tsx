@@ -184,15 +184,18 @@ const PropertyDetail = () => {
         </Helmet>
       )}
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
-        <div className="container mx-auto px-4 py-8 max-w-3xl">
+        <main className="container mx-auto px-4 py-8 max-w-3xl">
           <Button
             variant="ghost"
             onClick={() => navigate('/')}
             className="mb-6"
+            aria-label="Go back to home"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+            <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
             Back
           </Button>
+
+          <h1 className="sr-only">{apartment.title} — {apartment.location}</h1>
 
           <PropertyCard
             apartment={apartment}
@@ -223,7 +226,7 @@ const PropertyDetail = () => {
               </CardContent>
             </Card>
           )}
-        </div>
+        </main>
 
         {showContactModal && (
           <ContactModal

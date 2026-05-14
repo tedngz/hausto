@@ -563,11 +563,11 @@ export const HomeAI = ({
         
         {/* History and New Chat buttons - positioned to avoid text overlap */}
         {user && <div className="absolute top-0 right-2 flex gap-2 z-10">
-            <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
-              <History className="h-4 w-4" />
+            <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" aria-label="Chat history" className="h-8 w-8 p-0 hover:bg-secondary/50">
+              <History className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <Button onClick={createNewChat} variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-secondary/50">
-              <Plus className="h-4 w-4" />
+            <Button onClick={createNewChat} variant="ghost" size="sm" aria-label="New chat" className="h-8 w-8 p-0 hover:bg-secondary/50">
+              <Plus className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>}
         
@@ -976,11 +976,11 @@ export const HomeAI = ({
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" className="h-8 w-8 p-0">
-              <Upload className="h-4 w-4" />
+            <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" aria-label="Upload image" className="h-8 w-8 p-0">
+              <Upload className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || !query.trim() && uploadedImages.length === 0} size="sm" className="h-8 w-8 p-0">
-              {isSendingMessage || isSearching ? <Send className="h-4 w-4" /> : <PlaneTakeoff className="h-4 w-4" />}
+            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || !query.trim() && uploadedImages.length === 0} size="sm" aria-label="Send message" className="h-8 w-8 p-0">
+              {isSendingMessage || isSearching ? <Send className="h-4 w-4" aria-hidden="true" /> : <PlaneTakeoff className="h-4 w-4" aria-hidden="true" />}
             </Button>
           </div>
         </div>
@@ -989,8 +989,8 @@ export const HomeAI = ({
         {uploadedImages.length > 0 && <div className="flex gap-2 flex-wrap animate-fade-in">
             {uploadedImages.map((image, index) => <div key={index} className="relative">
                 <img src={URL.createObjectURL(image)} alt={`Upload ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-border" />
-                <Button onClick={() => removeImage(index)} size="sm" variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full">
-                  <X className="h-3 w-3" />
+                <Button onClick={() => removeImage(index)} size="sm" variant="destructive" aria-label={`Remove image ${index + 1}`} className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full">
+                  <X className="h-3 w-3" aria-hidden="true" />
                 </Button>
               </div>)}
           </div>}

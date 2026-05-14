@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { OnboardingQuiz } from '@/components/OnboardingQuiz';
 import { SwipeInterface } from '@/components/SwipeInterface';
 import { MatchesView } from '@/components/MatchesView';
@@ -207,7 +208,16 @@ const Discover = () => {
     return null;
   }
   return <CurrencyProvider>
+      <Helmet>
+        <title>Discover Rentals — Hausto AI Property Search</title>
+        <meta name="description" content="Discover rental apartments in Vietnam. Chat with AI, swipe through curated listings, and match with homes that fit your vibe." />
+        <link rel="canonical" href="https://hausto.lovable.app/discover" />
+        <meta property="og:title" content="Discover Rentals on Hausto" />
+        <meta property="og:description" content="Chat with AI and swipe through curated rental listings in Vietnam." />
+        <meta property="og:url" content="https://hausto.lovable.app/discover" />
+      </Helmet>
       <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <h1 className="sr-only">Discover Rental Apartments in Vietnam with Hausto</h1>
         {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation
           currentView={currentView}
           setCurrentView={view => {
@@ -228,7 +238,7 @@ const Discover = () => {
 
         {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatches.length} onSwitchUserType={switchUserType} onOpenAIChat={() => setIsAIChatOpen(true)} onAddProperty={() => setIsUploadModalOpen(true)} />}
 
-        <div className="h-full overflow-y-auto pt-14">
+        <main className="h-full overflow-y-auto pt-14">
           {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-4">
               <h2 className="text-2xl font-bold mt-4 mb-8 text-center text-inherit">Describe Your Dream Home</h2>
             </div>}
@@ -270,7 +280,7 @@ const Discover = () => {
           {currentView === 'ai-chat' && userType && <HomeAI />}
 
           {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
-        </div>
+        </main>
 
         {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
 

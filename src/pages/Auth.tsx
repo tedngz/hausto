@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -296,12 +297,20 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <Helmet>
+        <title>Hausto — Sign In or Create an Account</title>
+        <meta name="description" content="Sign in to Hausto or create a free account to discover rental apartments in Vietnam with AI vibe matching." />
+        <link rel="canonical" href="https://hausto.lovable.app/auth" />
+        <meta property="og:title" content="Hausto — Sign In" />
+        <meta property="og:description" content="Sign in to Hausto to start matching with rental apartments in Vietnam." />
+        <meta property="og:url" content="https://hausto.lovable.app/auth" />
+      </Helmet>
+      <main className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-            Hausto
+            Hausto — {isRecoveryMode ? 'Reset Password' : 'Sign In'}
           </h1>
-          <p className="text-gray-600 mt-2">Find your perfect home match</p>
+          <p className="text-muted-foreground mt-2">Find your perfect home match</p>
         </div>
 
         <Card>
@@ -331,7 +340,7 @@ const Auth = () => {
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Toggle password visibility" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -418,7 +427,7 @@ const Auth = () => {
                           <button
                             type="button"
                             onClick={() => setShowSignInPassword(!showSignInPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label="Toggle password visibility" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                           >
                             {showSignInPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
@@ -556,7 +565,7 @@ const Auth = () => {
                       <button
                         type="button"
                         onClick={() => setShowSignUpPassword(!showSignUpPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Toggle password visibility" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {showSignUpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -576,7 +585,7 @@ const Auth = () => {
             )}
           </CardContent>
         </Card>
-      </div>
+      </main>
     </div>
   );
 };
