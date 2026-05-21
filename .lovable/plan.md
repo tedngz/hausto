@@ -1,52 +1,100 @@
-## Problem
+# Complex Explorer — v1 Plan
 
-Mirrored images are being **overwritten across listings** because the storage path key truncates away the unique part of the `external_id`.
+A new top-level route `/complexes` that delivers the "Complex-First" experience from the project knowledge: a curated directory of vetted luxury buildings, a rich detail view per complex, and a 3-step concierge lead form that captures qualified inquiries.
 
-In `mirrorOne` (used by both `backfill-external-images` and `process-vibe-queue`):
+## 1. Database (new tables)
 
-```ts
-const safeId = externalId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
-const path = `${safeId}/${idx}.${ext}`;  // upsert: true
+**`complexes`** — permanent building profiles (admin-editable, publicly readable)
+- `name`, `slug` (unique), `city` (`ho_chi_minh` | `hanoi`), `district`
+- `developer`, `management_company`, `year_completed`
+- `hero_image`, `gallery` (text[])
+- `tagline`, `description`
+- `pet_policy` (text), `amenities` (text[])
+- `average_rent_brackets` (jsonb, e.g. `{ "1br": {min, max}, "2br": {...}, "3br": {...} }`)
+- `insider_pros` (text[]), `insider_cons` (text[])
+- `commute_times` (jsonb, e.g. `{ "District 1": "15 min", "Airport": "25 min" }`)
+- `tags` (text[]) for sticky chips ("Pet Friendly", "Savills Managed", "Thu Thiem")
+- `latitude`, `longitude`
+- `is_published` (bool, default true)
+
+RLS: public SELECT where `is_published = true`; admin-only INSERT/UPDATE/DELETE via `has_role(auth.uid(), 'admin')`.
+
+**`complex_inquiries`** — concierge leads
+- `complex_id` (uuid, references complexes)
+- `user_id` (uuid, nullable — supports anonymous pre-arrival leads)
+- `full_name`, `email`, `phone` (nullable)
+- `target_move_in_date` (date)
+- `lease_duration_months` (int)
+- `budget_usd_min`, `budget_usd_max` (int)
+- `bedrooms_needed` (int)
+- `has_pets` (bool)
+- `additional_notes` (text)
+- `status` (`new` | `contacted` | `closed`, default `new`)
+
+RLS: anyone can INSERT (lead capture); only admins can SELECT/UPDATE.
+
+A seed migration inserts ~6 starter complexes across HCMC (Thu Thiem, D1, D2) and Hanoi (Tay Ho, Ba Dinh) so the page isn't empty on first load.
+
+## 2. Frontend
+
+**Routing** — add `/complexes` and `/complexes/:slug` in `src/App.tsx`.
+
+**`src/pages/Complexes.tsx`** — directory page
+- Editorial hero: "Find Your Home in Vietnam Before You Land. 100% Vetted Luxury Complexes."
+- Filter bar: City (HCMC / Hanoi), District (dynamic from data), Tag chips (Pet Friendly, Savills Managed, Furnished, etc.)
+- Responsive card grid: hero image, name, district, management chip, rent-from price, sticky benefit tags
+- Card click → detail page
+- SEO via Helmet (title, description, canonical, OG)
+- Semantic `<main>` + single `<h1>`
+
+**`src/pages/ComplexDetail.tsx`**
+- Hero image + gallery strip
+- Title block with district, developer, management, year completed
+- Tabs / stacked sections: Overview · Amenities · Insider Truths (pros/cons) · Price Index (table from `average_rent_brackets`) · Commute · Neighborhood
+- Floating right-side CTA card (sticky on desktop, fixed bottom on mobile): "Check Active Availability for My Move-in Date" → opens concierge modal
+- Pet policy callout, management/developer trust block
+- SEO: per-complex title/description/OG
+
+**`src/components/ConciergeCaptureModal.tsx`** — 3-step responsive modal
+1. **Trip basics** — target move-in date, lease duration (6/12/24+ months)
+2. **Home requirements** — bedrooms needed, budget range (USD slider), has pets toggle
+3. **Contact** — full name, email, phone (optional), additional notes
+- Progress indicator, back/next, validation per step
+- Submits to `complex_inquiries` via Supabase client (anon insert allowed)
+- Success state with confirmation copy and "We'll be in touch within 24h"
+
+**Landing page integration** — add a primary CTA on `LandingPage.tsx` linking to `/complexes` ("Explore Vetted Complexes"). Keep existing Discover flow untouched.
+
+**Sitemap** — add `/complexes` to `public/sitemap.xml`.
+
+## 3. Out of scope (per project knowledge)
+- No live scraping into this page
+- No room-by-room marketplace
+- No peer messaging
+- No short-term rental support
+
+## Technical details
+
+```text
+src/
+├── App.tsx                                 (+ 2 routes)
+├── pages/
+│   ├── Complexes.tsx                       (new)
+│   └── ComplexDetail.tsx                   (new)
+├── components/
+│   ├── ConciergeCaptureModal.tsx           (new)
+│   ├── ComplexCard.tsx                     (new)
+│   └── ComplexFilters.tsx                  (new)
+├── hooks/
+│   └── useComplexes.tsx                    (new — react-query wrappers)
+└── components/LandingPage.tsx              (+ CTA link)
+
+supabase/migrations/
+└── <ts>_create_complexes_and_inquiries.sql
 ```
 
-Nhatot uses **base64-encoded source URLs** as `external_id`. The shared "https://www.nhatot.com/thue-can-ho-chung-cu-quan-1-tp-ho-chi-minh/" prefix encodes to ~73 chars. After prepending `nhatot-`, truncation at 80 chars **chops off the listing ID entirely**, so every District-1 Nhatot listing writes to the same path. With `upsert: true`, the last mirror wins and earlier listings end up displaying somebody else's photos.
+Data layer: react-query with `['complexes', filters]` and `['complex', slug]` keys. Anonymous insert path for `complex_inquiries` (no auth required to submit a lead — matches pre-arrival expat persona).
 
-Confirmed: 8 District-1 Nhatot listings (including the one the user reported, `aac802b6...`) all share the exact same 80-char key.
+Design: editorial, premium tone — large hero typography, generous whitespace, muted neutrals + a single warm accent. Use existing semantic tokens in `index.css` / `tailwind.config.ts`; no hardcoded colors.
 
-## Fix
-
-### 1. Make the storage key collision-proof
-
-Replace the truncation-only scheme with a **hash-based** key that's both short and unique. In `supabase/functions/backfill-external-images/index.ts` and `supabase/functions/process-vibe-queue/index.ts`:
-
-```ts
-async function safeFolder(externalId: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(externalId));
-  const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  // Keep a short readable prefix for debugging, plus 16 hex chars of hash for uniqueness
-  const readable = externalId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
-  return `${readable}-${hex.substring(0, 16)}`;
-}
-```
-
-Path becomes `${safeFolder}/${idx}.${ext}`. Total length stays well under storage limits and is deterministic so re-runs still upsert into the same place per listing.
-
-### 2. Backfill / repair affected rows
-
-The damage is already on disk. One-shot repair:
-
-- Add a small admin action (button in `AdminTools.tsx` or a one-off SQL) that, for every row whose `images[]` points at the legacy `external-property-images/` paths, **clears `images` back to `raw_data.original_image_urls`** (when present) or to the source URLs we still have in `raw_data`, then re-runs `backfill-external-images` with the new keying.
-- For rows where we no longer have the original URLs stored, mark them for re-crawl (set `vibe_status='pending'` and re-enqueue) so the next crawl repopulates from source.
-
-If `raw_data.original_image_urls` was never persisted (the existing plan.md mentions storing it but the current `process-vibe-queue` does not), we additionally need to start saving the pre-mirror URLs into `raw_data.original_image_urls` going forward — a 2-line change in `process-vibe-queue` before the DB update.
-
-### 3. Verification
-
-After deploy + repair:
-- Re-query the user's example listing `aac802b6-9d12-4d2d-947b-4c90685c4fd9` and confirm its `images[]` paths contain a unique hash suffix.
-- Spot-check 3 of the 8 colliding listings to confirm each now resolves to its own distinct images matching its `source_url`.
-
-## Out of scope
-
-- No schema migration is required.
-- No change to crawl scheduling, Redis, or vibe analysis logic.
+After approval I'll run the migration first, then build the pages and modal.
