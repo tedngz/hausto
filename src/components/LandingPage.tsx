@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
 import AnimatedBackground from "@/components/AnimatedBackground";
@@ -74,6 +74,13 @@ export const LandingPage = () => {
           
           <div className="mb-4">
             <HomeAI />
+          </div>
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center items-center">
+            <Button asChild size="lg" variant="outline">
+              <Link to="/complexes">Explore vetted complexes →</Link>
+            </Button>
+            <span className="text-xs text-muted-foreground">For expats relocating to Vietnam</span>
           </div>
         </div>
       </section>
