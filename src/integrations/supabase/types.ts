@@ -173,6 +173,152 @@ export type Database = {
           },
         ]
       }
+      complex_inquiries: {
+        Row: {
+          additional_notes: string | null
+          bedrooms_needed: number
+          budget_usd_max: number
+          budget_usd_min: number
+          complex_id: string
+          created_at: string
+          email: string
+          full_name: string
+          has_pets: boolean
+          id: string
+          lease_duration_months: number
+          phone: string | null
+          status: string
+          target_move_in_date: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          additional_notes?: string | null
+          bedrooms_needed: number
+          budget_usd_max: number
+          budget_usd_min: number
+          complex_id: string
+          created_at?: string
+          email: string
+          full_name: string
+          has_pets?: boolean
+          id?: string
+          lease_duration_months: number
+          phone?: string | null
+          status?: string
+          target_move_in_date: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          additional_notes?: string | null
+          bedrooms_needed?: number
+          budget_usd_max?: number
+          budget_usd_min?: number
+          complex_id?: string
+          created_at?: string
+          email?: string
+          full_name?: string
+          has_pets?: boolean
+          id?: string
+          lease_duration_months?: number
+          phone?: string | null
+          status?: string
+          target_move_in_date?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complex_inquiries_complex_id_fkey"
+            columns: ["complex_id"]
+            isOneToOne: false
+            referencedRelation: "complexes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complexes: {
+        Row: {
+          amenities: string[] | null
+          average_rent_brackets: Json | null
+          city: string
+          commute_times: Json | null
+          created_at: string
+          description: string | null
+          developer: string | null
+          district: string
+          gallery: string[] | null
+          hero_image: string | null
+          id: string
+          insider_cons: string[] | null
+          insider_pros: string[] | null
+          is_published: boolean
+          latitude: number | null
+          longitude: number | null
+          management_company: string | null
+          name: string
+          pet_policy: string | null
+          slug: string
+          tagline: string | null
+          tags: string[] | null
+          updated_at: string
+          year_completed: number | null
+        }
+        Insert: {
+          amenities?: string[] | null
+          average_rent_brackets?: Json | null
+          city: string
+          commute_times?: Json | null
+          created_at?: string
+          description?: string | null
+          developer?: string | null
+          district: string
+          gallery?: string[] | null
+          hero_image?: string | null
+          id?: string
+          insider_cons?: string[] | null
+          insider_pros?: string[] | null
+          is_published?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          management_company?: string | null
+          name: string
+          pet_policy?: string | null
+          slug: string
+          tagline?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          year_completed?: number | null
+        }
+        Update: {
+          amenities?: string[] | null
+          average_rent_brackets?: Json | null
+          city?: string
+          commute_times?: Json | null
+          created_at?: string
+          description?: string | null
+          developer?: string | null
+          district?: string
+          gallery?: string[] | null
+          hero_image?: string | null
+          id?: string
+          insider_cons?: string[] | null
+          insider_pros?: string[] | null
+          is_published?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          management_company?: string | null
+          name?: string
+          pet_policy?: string | null
+          slug?: string
+          tagline?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          year_completed?: number | null
+        }
+        Relationships: []
+      }
       crawler_rejections: {
         Row: {
           id: string
