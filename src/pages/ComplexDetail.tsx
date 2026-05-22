@@ -41,7 +41,7 @@ export default function ComplexDetail() {
   const brackets = complex.average_rent_brackets ?? {};
 
   return (
-    <>
+    <CurrencyProvider>
       <Helmet>
         <title>{complex.name} — {complex.district}, {CITY_LABEL[complex.city]} | Hausto</title>
         <meta name="description" content={complex.tagline ?? `Vetted profile of ${complex.name} in ${complex.district}. Realistic rent ranges, amenities, pet policy, and concierge availability.`} />
