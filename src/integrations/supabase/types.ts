@@ -240,6 +240,7 @@ export type Database = {
       }
       complexes: {
         Row: {
+          aliases: string[]
           amenities: string[] | null
           average_rent_brackets: Json | null
           city: string
@@ -248,6 +249,7 @@ export type Database = {
           description: string | null
           developer: string | null
           district: string
+          district_code: string | null
           gallery: string[] | null
           hero_image: string | null
           id: string
@@ -266,6 +268,7 @@ export type Database = {
           year_completed: number | null
         }
         Insert: {
+          aliases?: string[]
           amenities?: string[] | null
           average_rent_brackets?: Json | null
           city: string
@@ -274,6 +277,7 @@ export type Database = {
           description?: string | null
           developer?: string | null
           district: string
+          district_code?: string | null
           gallery?: string[] | null
           hero_image?: string | null
           id?: string
@@ -292,6 +296,7 @@ export type Database = {
           year_completed?: number | null
         }
         Update: {
+          aliases?: string[]
           amenities?: string[] | null
           average_rent_brackets?: Json | null
           city?: string
@@ -300,6 +305,7 @@ export type Database = {
           description?: string | null
           developer?: string | null
           district?: string
+          district_code?: string | null
           gallery?: string[] | null
           hero_image?: string | null
           id?: string
