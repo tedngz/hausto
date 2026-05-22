@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Building2, CalendarCheck, Loader2, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { useComplex, CITY_LABEL } from '@/hooks/useComplexes';
+import { ArrowLeft, Building2, CalendarCheck, Home, Loader2, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { useComplex, useComplexListings, CITY_LABEL } from '@/hooks/useComplexes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ConciergeCaptureModal } from '@/components/ConciergeCaptureModal';
+import { PropertyCard } from '@/components/PropertyCard';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 
 const ROOM_LABEL: Record<string, string> = {
   studio: 'Studio', '1br': '1 Bedroom', '2br': '2 Bedroom', '3br': '3 Bedroom', '4br': '4 Bedroom',
