@@ -252,6 +252,6 @@ export default function ComplexDetail() {
           complexName={complex.name}
         />
       </main>
-    </>
+    </CurrencyProvider>
   );
 }
