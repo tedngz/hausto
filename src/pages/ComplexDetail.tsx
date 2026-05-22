@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Building2, CalendarCheck, Loader2, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { useComplex, CITY_LABEL } from '@/hooks/useComplexes';
+import { ArrowLeft, Building2, CalendarCheck, Home, Loader2, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { useComplex, useComplexListings, CITY_LABEL } from '@/hooks/useComplexes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ConciergeCaptureModal } from '@/components/ConciergeCaptureModal';
+import { PropertyCard } from '@/components/PropertyCard';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 
 const ROOM_LABEL: Record<string, string> = {
   studio: 'Studio', '1br': '1 Bedroom', '2br': '2 Bedroom', '3br': '3 Bedroom', '4br': '4 Bedroom',
@@ -15,6 +18,7 @@ const ROOM_LABEL: Record<string, string> = {
 export default function ComplexDetail() {
   const { slug } = useParams<{ slug: string }>();
   const { data: complex, isLoading } = useComplex(slug);
+  const { data: listings, isLoading: listingsLoading } = useComplexListings(complex);
   const [modalOpen, setModalOpen] = useState(false);
 
   if (isLoading) {
@@ -37,7 +41,7 @@ export default function ComplexDetail() {
   const brackets = complex.average_rent_brackets ?? {};
 
   return (
-    <>
+    <CurrencyProvider>
       <Helmet>
         <title>{complex.name} — {complex.district}, {CITY_LABEL[complex.city]} | Hausto</title>
         <meta name="description" content={complex.tagline ?? `Vetted profile of ${complex.name} in ${complex.district}. Realistic rent ranges, amenities, pet policy, and concierge availability.`} />
@@ -196,6 +200,47 @@ export default function ComplexDetail() {
                 </section>
               )}
 
+              {/* Live listings at this complex */}
+              <section>
+                <div className="flex items-end justify-between mb-4">
+                  <h2 className="font-serif text-2xl flex items-center gap-2">
+                    <Home className="h-5 w-5" aria-hidden="true" />
+                    Live listings at {complex.name}
+                  </h2>
+                  {!listingsLoading && listings && listings.length > 0 && (
+                    <Badge variant="secondary">{listings.length} active</Badge>
+                  )}
+                </div>
+
+                {listingsLoading ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Skeleton className="h-64 w-full" />
+                    <Skeleton className="h-64 w-full" />
+                  </div>
+                ) : listings && listings.length > 0 ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {listings.map((a) => (
+                      <PropertyCard
+                        key={a.id}
+                        apartment={a}
+                        showContactButton={false}
+                        hideVibeScore
+                        showRealtorInfo={false}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="p-6 bg-muted/30 text-center">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      No live listings at {complex.name} right now. Our concierge can alert vetted partner brokers holding inventory here.
+                    </p>
+                    <Button onClick={() => setModalOpen(true)} size="sm">
+                      Request availability
+                    </Button>
+                  </Card>
+                )}
+              </section>
+
               {/* Pet policy */}
               {complex.pet_policy && (
                 <section>
@@ -248,6 +293,6 @@ export default function ComplexDetail() {
           complexName={complex.name}
         />
       </main>
-    </>
+    </CurrencyProvider>
   );
 }
