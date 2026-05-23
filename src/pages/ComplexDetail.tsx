@@ -21,6 +21,7 @@ export default function ComplexDetail() {
   const { data: complex, isLoading } = useComplex(slug);
   const { data: listings, isLoading: listingsLoading } = useComplexListings(complex);
   const [modalOpen, setModalOpen] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   if (isLoading) {
     return (
