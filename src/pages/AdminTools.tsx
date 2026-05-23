@@ -932,7 +932,14 @@ const AdminTools = () => {
   return (
     <div className="container mx-auto px-3 py-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
 
-      <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl md:text-3xl font-bold">Admin Tools</h1>
+        <Button variant="outline" size="sm" onClick={() => navigate('/admin/complexes')}>
+          <Settings2 className="mr-1 h-4 w-4" /> Complex Catalog
+        </Button>
+      </div>
+
+
 
       {/* Crawl External Listings - moved to top */}
       <Card>
