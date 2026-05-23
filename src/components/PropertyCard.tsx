@@ -203,12 +203,16 @@ export const PropertyCard = ({
         <div className="mb-2">
           {/* Mobile: Title above vibe score */}
           <div className="block sm:hidden mb-3">
-            <h2 className={`text-xl font-semibold text-gray-900 ${showFullTitle ? '' : 'line-clamp-2'}`}>{displayTitle}</h2>
+            <h2 className="text-xl font-semibold text-gray-900">
+              <span className={showFullTitle ? '' : 'line-clamp-2'}>{displayTitle}</span>
+            </h2>
           </div>
           
           <div className="flex items-start justify-between mb-2">
             {/* Desktop: Title */}
-            <h2 className={`hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{displayTitle}</h2>
+            <h2 className="hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3">
+              <span className={showFullTitle ? '' : 'line-clamp-2'}>{displayTitle}</span>
+            </h2>
           </div>
         </div>
         
