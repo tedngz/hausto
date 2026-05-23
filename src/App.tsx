@@ -36,6 +36,7 @@ const App = () => (
             <Route path="/complexes" element={<Complexes />} />
             <Route path="/complexes/:slug" element={<ComplexDetail />} />
             <Route path="/admin-tools" element={<AdminTools />} />
+            <Route path="/admin/complexes" element={<AdminComplexes />} />
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
             <Route path="/subscription-cancel" element={<SubscriptionCancel />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
