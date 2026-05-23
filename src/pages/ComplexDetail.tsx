@@ -321,6 +321,15 @@ export default function ComplexDetail() {
           complexId={complex.id}
           complexName={complex.name}
         />
+
+        {/* Image lightbox */}
+        <Dialog open={!!lightbox} onOpenChange={(o) => !o && setLightbox(null)}>
+          <DialogContent className="max-w-5xl p-0 bg-background/95 border-0">
+            {lightbox && (
+              <img src={lightbox} alt={complex.name} className="w-full h-auto max-h-[85vh] object-contain rounded-lg" />
+            )}
+          </DialogContent>
+        </Dialog>
       </main>
     </CurrencyProvider>
   );
