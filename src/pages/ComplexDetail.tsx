@@ -111,11 +111,38 @@ export default function ComplexDetail() {
                 )}
               </div>
 
-              {/* Description */}
+              {/* Description / Environment & Vibe */}
               {complex.description && (
                 <section>
-                  <h2 className="font-serif text-2xl mb-3">Overview</h2>
-                  <p className="text-foreground/80 leading-relaxed">{complex.description}</p>
+                  <h2 className="font-serif text-2xl mb-3">Environment & vibe</h2>
+                  <p className="text-foreground/80 leading-relaxed whitespace-pre-line">{complex.description}</p>
+                </section>
+              )}
+
+              {/* Gallery — real photos from current rental listings */}
+              {complex.gallery && complex.gallery.length > 0 && (
+                <section>
+                  <div className="flex items-end justify-between mb-4">
+                    <h2 className="font-serif text-2xl">Inside {complex.name}</h2>
+                    <span className="text-xs text-muted-foreground">From current listings</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {complex.gallery.slice(0, 6).map((src, i) => (
+                      <button
+                        key={src + i}
+                        type="button"
+                        onClick={() => setLightbox(src)}
+                        className={`group relative overflow-hidden rounded-lg bg-muted ${i === 0 ? 'col-span-2 row-span-2 aspect-square md:aspect-[4/3]' : 'aspect-square'}`}
+                      >
+                        <img
+                          src={src}
+                          alt={`${complex.name} interior ${i + 1}`}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </section>
               )}
 
