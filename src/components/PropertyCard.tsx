@@ -32,6 +32,35 @@ interface PropertyCardProps {
   showRealtorInfo?: boolean;
   isOwnProperty?: boolean;
 }
+
+const normalizeRepeatedTitle = (title: string) => {
+  const clean = title.replace(/\s+/g, ' ').trim();
+  const normalize = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  const tokens = clean.split(' ');
+
+  for (let size = Math.floor(tokens.length / 2); size >= 2; size -= 1) {
+    for (let i = 0; i + size * 2 <= tokens.length; i += 1) {
+      const first = normalize(tokens.slice(i, i + size).join(' '));
+      const second = normalize(tokens.slice(i + size, i + size * 2).join(' '));
+      if (first && first === second) {
+        return [...tokens.slice(0, i + size), ...tokens.slice(i + size * 2)].join(' ');
+      }
+    }
+  }
+
+  const parts = clean.split(/\s+([|•·]|-{2,}|–|—)\s+/);
+  const seen = new Set<string>();
+  return parts.reduce<string[]>((acc, part) => {
+    const key = normalize(part);
+    if (key && !/^[|•·–—-]+$/.test(part)) {
+      if (seen.has(key)) return acc;
+      seen.add(key);
+    }
+    acc.push(part);
+    return acc;
+  }, []).join(' ').replace(/\s+([|•·–—-])\s*$/g, '').trim();
+};
+
 export const PropertyCard = ({
   apartment,
   userPreferences,
@@ -90,6 +119,13 @@ export const PropertyCard = ({
     formatPrice
   } = useCurrency();
   const displayLocation = useMemo(() => translateLocationToEnglish(apartment.location), [apartment.location]);
+  const displayTitle = useMemo(() => normalizeRepeatedTitle(apartment.title ?? ''), [apartment.title]);
+  const descriptionDuplicatesTitle = useMemo(() => {
+    const description = apartment.description?.trim().toLowerCase();
+    const rawTitle = (apartment.title ?? '').trim().toLowerCase();
+    const cleanedTitle = displayTitle.trim().toLowerCase();
+    return !!description && (description === rawTitle || description === cleanedTitle);
+  }, [apartment.description, apartment.title, displayTitle]);
 
   // Update internal image index when external index changes (for SwipeInterface)
   useEffect(() => {
@@ -167,12 +203,12 @@ export const PropertyCard = ({
         <div className="mb-2">
           {/* Mobile: Title above vibe score */}
           <div className="block sm:hidden mb-3">
-            <h2 className={`text-xl font-semibold text-gray-900 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
+            <h2 className={`text-xl font-semibold text-gray-900 ${showFullTitle ? '' : 'line-clamp-2'}`}>{displayTitle}</h2>
           </div>
           
           <div className="flex items-start justify-between mb-2">
             {/* Desktop: Title */}
-            <h2 className={`hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{apartment.title}</h2>
+            <h2 className={`hidden sm:block text-xl font-semibold text-gray-900 flex-1 mr-3 ${showFullTitle ? '' : 'line-clamp-2'}`}>{displayTitle}</h2>
           </div>
         </div>
         
@@ -207,7 +243,7 @@ export const PropertyCard = ({
             <PropertyAmenities amenities={apartment.amenities} compact />
           </div>}
 
-        {apartment.description && apartment.description.trim().toLowerCase() !== (apartment.title ?? '').trim().toLowerCase() && <div className="mb-4">
+        {apartment.description && !descriptionDuplicatesTitle && <div className="mb-4">
             <div className={`text-gray-700 text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
               {apartment.description}
             </div>
