@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ArrowLeft, Building2, CalendarCheck, Home, Loader2, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useComplex, useComplexListings, CITY_LABEL } from '@/hooks/useComplexes';
 import { Badge } from '@/components/ui/badge';
