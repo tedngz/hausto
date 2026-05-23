@@ -12,6 +12,7 @@ import Auth from "./pages/Auth";
 import PropertyDetail from "./pages/PropertyDetail";
 import NotFound from "./pages/NotFound";
 import AdminTools from "./pages/AdminTools";
+import AdminComplexes from "./pages/AdminComplexes";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import SubscriptionCancel from "./pages/SubscriptionCancel";
 import Complexes from "./pages/Complexes";
