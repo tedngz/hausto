@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ShieldAlert, Save, Search, ArrowLeft, RefreshCw } from "lucide-react";
+import { Loader2, ShieldAlert, Save, Search, ArrowLeft, RefreshCw, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { Complex, RentBracket } from "@/hooks/useComplexes";
 
@@ -25,6 +25,7 @@ interface FormState {
   developer: string;
   management_company: string;
   hero_image: string;
+  gallery: string[];
   brackets: Record<BracketKey, { min: string; max: string }>;
 }
 
@@ -36,6 +37,7 @@ function complexToForm(c: Complex): FormState {
     developer: c.developer ?? "",
     management_company: c.management_company ?? "",
     hero_image: c.hero_image ?? "",
+    gallery: c.gallery ?? [],
     brackets: BRACKET_KEYS.reduce((acc, k) => {
       acc[k] = {
         min: br[k]?.min != null ? String(br[k].min) : "",
