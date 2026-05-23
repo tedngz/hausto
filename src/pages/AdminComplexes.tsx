@@ -351,6 +351,110 @@ const AdminComplexes = () => {
                   )}
                 </div>
 
+                <div className="space-y-2">
+                  <Label>Inside Complex Gallery ({form.gallery.length})</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Images shown in the "Inside {selected.name}" section. First 6 are displayed; first image is featured.
+                  </p>
+                  {form.gallery.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+                      {form.gallery.map((src, i) => (
+                        <div
+                          key={src + i}
+                          className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
+                        >
+                          <img
+                            src={src}
+                            alt={`Gallery ${i + 1}`}
+                            className="h-full w-full object-cover"
+                            onError={(e) =>
+                              ((e.target as HTMLImageElement).style.opacity = "0.3")
+                            }
+                          />
+                          <div className="absolute left-1 top-1 rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-medium">
+                            #{i + 1}
+                          </div>
+                          <div className="absolute inset-x-1 bottom-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            {i > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                className="h-6 flex-1 px-1 text-xs"
+                                onClick={() => {
+                                  const g = [...form.gallery];
+                                  [g[i - 1], g[i]] = [g[i], g[i - 1]];
+                                  setForm({ ...form, gallery: g });
+                                }}
+                              >
+                                ←
+                              </Button>
+                            )}
+                            {i < form.gallery.length - 1 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                className="h-6 flex-1 px-1 text-xs"
+                                onClick={() => {
+                                  const g = [...form.gallery];
+                                  [g[i], g[i + 1]] = [g[i + 1], g[i]];
+                                  setForm({ ...form, gallery: g });
+                                }}
+                              >
+                                →
+                              </Button>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                gallery: form.gallery.filter((_, idx) => idx !== i),
+                              })
+                            }
+                            className="absolute right-1 top-1 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                            aria-label="Remove image"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input
+                      value={newGalleryUrl}
+                      onChange={(e) => setNewGalleryUrl(e.target.value)}
+                      placeholder="Paste image URL to add…"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const url = newGalleryUrl.trim();
+                          if (url) {
+                            setForm({ ...form, gallery: [...form.gallery, url] });
+                            setNewGalleryUrl("");
+                          }
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const url = newGalleryUrl.trim();
+                        if (url) {
+                          setForm({ ...form, gallery: [...form.gallery, url] });
+                          setNewGalleryUrl("");
+                        }
+                      }}
+                    >
+                      <Plus className="mr-1 h-4 w-4" /> Add
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <Label>Base Rent Brackets (VND/month)</Label>
                   <div className="space-y-2">
