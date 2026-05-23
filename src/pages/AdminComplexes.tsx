@@ -178,7 +178,7 @@ const AdminComplexes = () => {
 
       const { error } = await supabase
         .from("complexes")
-        .update(payload)
+        .update(payload as any)
         .eq("id", selected.id);
       if (error) throw error;
 
