@@ -146,32 +146,6 @@ export default function ComplexDetail() {
                 </section>
               )}
 
-              {/* Price index */}
-              {Object.keys(brackets).length > 0 && (
-                <section>
-                  <h2 className="font-serif text-2xl mb-4">Realistic rent index (USD / month)</h2>
-                  <Card className="overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="text-left px-4 py-3 font-medium">Unit type</th>
-                          <th className="text-right px-4 py-3 font-medium">Low</th>
-                          <th className="text-right px-4 py-3 font-medium">High</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(brackets).map(([k, v]) => (
-                          <tr key={k} className="border-t border-border/60">
-                            <td className="px-4 py-3 font-medium">{ROOM_LABEL[k] ?? k.toUpperCase()}</td>
-                            <td className="px-4 py-3 text-right">${v.min.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right">${v.max.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </Card>
-                </section>
-              )}
 
               {/* Amenities */}
               {complex.amenities && complex.amenities.length > 0 && (
@@ -211,6 +185,33 @@ export default function ComplexDetail() {
                       </Card>
                     )}
                   </div>
+                </section>
+              )}
+
+              {/* Price index */}
+              {Object.keys(brackets).length > 0 && (
+                <section>
+                  <h2 className="font-serif text-2xl mb-4">Realistic rent index (USD / month)</h2>
+                  <Card className="overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-4 py-3 font-medium">Unit type</th>
+                          <th className="text-right px-4 py-3 font-medium">Low</th>
+                          <th className="text-right px-4 py-3 font-medium">High</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(brackets).map(([k, v]) => (
+                          <tr key={k} className="border-t border-border/60">
+                            <td className="px-4 py-3 font-medium">{ROOM_LABEL[k] ?? k.toUpperCase()}</td>
+                            <td className="px-4 py-3 text-right">${v.min.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right">${v.max.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </Card>
                 </section>
               )}
 
