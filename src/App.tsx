@@ -12,6 +12,7 @@ import Auth from "./pages/Auth";
 import PropertyDetail from "./pages/PropertyDetail";
 import NotFound from "./pages/NotFound";
 import AdminTools from "./pages/AdminTools";
+import AdminComplexes from "./pages/AdminComplexes";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import SubscriptionCancel from "./pages/SubscriptionCancel";
 import Complexes from "./pages/Complexes";
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/complexes" element={<Complexes />} />
             <Route path="/complexes/:slug" element={<ComplexDetail />} />
             <Route path="/admin-tools" element={<AdminTools />} />
+            <Route path="/admin/complexes" element={<AdminComplexes />} />
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
             <Route path="/subscription-cancel" element={<SubscriptionCancel />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
