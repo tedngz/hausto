@@ -176,6 +176,7 @@ const AdminComplexes = () => {
         developer: form.developer.trim() || null,
         management_company: form.management_company.trim() || null,
         hero_image: form.hero_image.trim() || null,
+        gallery: form.gallery.map((s) => s.trim()).filter(Boolean),
         average_rent_brackets: brackets,
       };
 
