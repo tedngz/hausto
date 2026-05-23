@@ -89,6 +89,7 @@ const AdminComplexes = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [newGalleryUrl, setNewGalleryUrl] = useState("");
 
   const selected = useMemo(
     () => complexes?.find((c) => c.id === selectedId) ?? null,
