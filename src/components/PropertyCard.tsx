@@ -207,7 +207,7 @@ export const PropertyCard = ({
             <PropertyAmenities amenities={apartment.amenities} compact />
           </div>}
 
-        {apartment.description && <div className="mb-4">
+        {apartment.description && apartment.description.trim().toLowerCase() !== (apartment.title ?? '').trim().toLowerCase() && <div className="mb-4">
             <div className={`text-gray-700 text-sm leading-relaxed ${expandedDescription ? '' : 'line-clamp-3'}`}>
               {apartment.description}
             </div>
