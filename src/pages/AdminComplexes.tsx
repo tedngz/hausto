@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ShieldAlert, Save, Search, ArrowLeft, RefreshCw, X, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +20,8 @@ const BRACKET_LABEL: Record<BracketKey, string> = {
   "3br": "3 Bedroom",
 };
 
+interface CommuteRow { label: string; value: string }
+
 interface FormState {
   name: string;
   aliasesText: string;
@@ -27,10 +30,21 @@ interface FormState {
   hero_image: string;
   gallery: string[];
   brackets: Record<BracketKey, { min: string; max: string }>;
+  tags: string[];
+  tagline: string;
+  description: string;
+  pet_policy: string;
+  amenities: string[];
+  insider_pros: string[];
+  insider_cons: string[];
+  commute: CommuteRow[];
 }
 
 function complexToForm(c: Complex): FormState {
   const br = (c.average_rent_brackets ?? {}) as Record<string, RentBracket>;
+  const commute = c.commute_times
+    ? Object.entries(c.commute_times).map(([label, value]) => ({ label, value: String(value) }))
+    : [];
   return {
     name: c.name ?? "",
     aliasesText: (c.aliases ?? []).join(", "),
@@ -45,7 +59,120 @@ function complexToForm(c: Complex): FormState {
       };
       return acc;
     }, {} as FormState["brackets"]),
+    tags: c.tags ?? [],
+    tagline: c.tagline ?? "",
+    description: c.description ?? "",
+    pet_policy: c.pet_policy ?? "",
+    amenities: c.amenities ?? [],
+    insider_pros: c.insider_pros ?? [],
+    insider_cons: c.insider_cons ?? [],
+    commute,
   };
+}
+
+/** Editable list of short tag-like strings */
+function TagListEditor({
+  values,
+  onChange,
+  placeholder,
+}: {
+  values: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    onChange([...values, v]);
+    setDraft("");
+  };
+  return (
+    <div className="space-y-2">
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((v, i) => (
+            <span
+              key={v + i}
+              className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs"
+            >
+              {v}
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((_, idx) => idx !== i))}
+                aria-label={`Remove ${v}`}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={placeholder ?? "Add item…"}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={add}>
+          <Plus className="mr-1 h-4 w-4" /> Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Editable list of longer text bullets (insider pros/cons) */
+function BulletListEditor({
+  values,
+  onChange,
+  placeholder,
+}: {
+  values: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      {values.map((v, i) => (
+        <div key={i} className="flex gap-2">
+          <Textarea
+            value={v}
+            onChange={(e) => {
+              const next = [...values];
+              next[i] = e.target.value;
+              onChange(next);
+            }}
+            rows={2}
+            className="min-h-[60px]"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => onChange(values.filter((_, idx) => idx !== i))}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => onChange([...values, ""])}
+      >
+        <Plus className="mr-1 h-4 w-4" /> Add {placeholder ?? "bullet"}
+      </Button>
+    </div>
+  );
 }
 
 const AdminComplexes = () => {
@@ -96,14 +223,12 @@ const AdminComplexes = () => {
     [complexes, selectedId]
   );
 
-  // Auto-select first on load
   useEffect(() => {
     if (!selectedId && complexes && complexes.length > 0) {
       setSelectedId(complexes[0].id);
     }
   }, [complexes, selectedId]);
 
-  // Sync form whenever selection changes
   useEffect(() => {
     if (selected) setForm(complexToForm(selected));
   }, [selected]);
@@ -147,13 +272,11 @@ const AdminComplexes = () => {
     if (!selected || !form) return;
     setSaving(true);
     try {
-      // Parse aliases
       const aliases = form.aliasesText
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
 
-      // Parse brackets
       const brackets: Record<string, RentBracket> = {};
       for (const k of BRACKET_KEYS) {
         const minStr = form.brackets[k].min.trim();
@@ -170,6 +293,13 @@ const AdminComplexes = () => {
         brackets[k] = { min, max };
       }
 
+      const commute_times: Record<string, string> = {};
+      for (const row of form.commute) {
+        const label = row.label.trim();
+        const value = row.value.trim();
+        if (label && value) commute_times[label] = value;
+      }
+
       const payload = {
         name: form.name.trim(),
         aliases,
@@ -178,6 +308,14 @@ const AdminComplexes = () => {
         hero_image: form.hero_image.trim() || null,
         gallery: form.gallery.map((s) => s.trim()).filter(Boolean),
         average_rent_brackets: brackets,
+        tags: form.tags.map((s) => s.trim()).filter(Boolean),
+        tagline: form.tagline.trim() || null,
+        description: form.description.trim() || null,
+        pet_policy: form.pet_policy.trim() || null,
+        amenities: form.amenities.map((s) => s.trim()).filter(Boolean),
+        insider_pros: form.insider_pros.map((s) => s.trim()).filter(Boolean),
+        insider_cons: form.insider_cons.map((s) => s.trim()).filter(Boolean),
+        commute_times,
       };
 
       const { error } = await supabase
@@ -190,8 +328,6 @@ const AdminComplexes = () => {
         description: "Re-running listing matches…",
       });
 
-      // Re-run matching logic: invalidate all complex + complex-listings queries
-      // (matching is alias/name based via useComplexListings)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["complexes"] }),
         queryClient.invalidateQueries({ queryKey: ["complex"] }),
@@ -221,7 +357,6 @@ const AdminComplexes = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-[280px_1fr]">
-        {/* List */}
         <Card className="h-fit md:sticky md:top-4">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Complexes ({complexes?.length ?? 0})</CardTitle>
@@ -267,7 +402,6 @@ const AdminComplexes = () => {
           </CardContent>
         </Card>
 
-        {/* Editor */}
         <div>
           {!form || !selected ? (
             <Card>
@@ -280,7 +414,7 @@ const AdminComplexes = () => {
               <CardHeader>
                 <CardTitle>Edit: {selected.name}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-5">
+              <CardContent className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="name">Name</Label>
                   <Input
@@ -301,8 +435,7 @@ const AdminComplexes = () => {
                     placeholder="Vinhomes Central Park, VHCP, Landmark 81"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Aliases drive listing-to-complex matching. Add common short names &
-                    Vietnamese spellings.
+                    Aliases drive listing-to-complex matching.
                   </p>
                 </div>
 
@@ -329,6 +462,29 @@ const AdminComplexes = () => {
                   </div>
                 </div>
 
+                {/* Card highlights (tags) */}
+                <div className="space-y-2">
+                  <Label>Card Highlights (tags)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Shown as badges on the complex card &amp; at the top of the detail page. First 2 appear on cards.
+                  </p>
+                  <TagListEditor
+                    values={form.tags}
+                    onChange={(tags) => setForm({ ...form, tags })}
+                    placeholder="e.g. Pet Friendly, Savills Managed"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tagline">Tagline</Label>
+                  <Input
+                    id="tagline"
+                    value={form.tagline}
+                    onChange={(e) => setForm({ ...form, tagline: e.target.value })}
+                    placeholder="Short italicized line under the title"
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="hero">Hero Image URL</Label>
                   <Input
@@ -351,10 +507,25 @@ const AdminComplexes = () => {
                   )}
                 </div>
 
+                {/* Environment & vibe */}
+                <div className="space-y-2">
+                  <Label htmlFor="description">Environment &amp; vibe</Label>
+                  <Textarea
+                    id="description"
+                    rows={6}
+                    value={form.description}
+                    onChange={(e) =>
+                      setForm({ ...form, description: e.target.value })
+                    }
+                    placeholder="Long-form description of the complex, vibe, surroundings…"
+                  />
+                </div>
+
+                {/* Gallery */}
                 <div className="space-y-2">
                   <Label>Inside Complex Gallery ({form.gallery.length})</Label>
                   <p className="text-xs text-muted-foreground">
-                    Images shown in the "Inside {selected.name}" section. First 6 are displayed; first image is featured.
+                    First 6 are displayed; first image is featured.
                   </p>
                   {form.gallery.length > 0 && (
                     <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
@@ -455,8 +626,111 @@ const AdminComplexes = () => {
                   </div>
                 </div>
 
+                {/* Amenities */}
+                <div className="space-y-2">
+                  <Label>Amenities</Label>
+                  <TagListEditor
+                    values={form.amenities}
+                    onChange={(amenities) => setForm({ ...form, amenities })}
+                    placeholder="e.g. Infinity pool, 24/7 gym, Co-working lounge"
+                  />
+                </div>
+
+                {/* Insider truths */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Insider Strengths</Label>
+                    <BulletListEditor
+                      values={form.insider_pros}
+                      onChange={(insider_pros) => setForm({ ...form, insider_pros })}
+                      placeholder="strength"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Honest Flaws</Label>
+                    <BulletListEditor
+                      values={form.insider_cons}
+                      onChange={(insider_cons) => setForm({ ...form, insider_cons })}
+                      placeholder="flaw"
+                    />
+                  </div>
+                </div>
+
+                {/* Commute */}
+                <div className="space-y-2">
+                  <Label>Commute Times</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Label = destination (e.g. "District 1 CBD"). Value = travel time (e.g. "15 min by car").
+                  </p>
+                  <div className="space-y-2">
+                    {form.commute.map((row, i) => (
+                      <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                        <Input
+                          value={row.label}
+                          placeholder="Destination"
+                          onChange={(e) => {
+                            const next = [...form.commute];
+                            next[i] = { ...next[i], label: e.target.value };
+                            setForm({ ...form, commute: next });
+                          }}
+                        />
+                        <Input
+                          value={row.value}
+                          placeholder="Travel time"
+                          onChange={(e) => {
+                            const next = [...form.commute];
+                            next[i] = { ...next[i], value: e.target.value };
+                            setForm({ ...form, commute: next });
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              commute: form.commute.filter((_, idx) => idx !== i),
+                            })
+                          }
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          commute: [...form.commute, { label: "", value: "" }],
+                        })
+                      }
+                    >
+                      <Plus className="mr-1 h-4 w-4" /> Add destination
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Pet policy */}
+                <div className="space-y-2">
+                  <Label htmlFor="pet_policy">Pet Policy</Label>
+                  <Textarea
+                    id="pet_policy"
+                    rows={3}
+                    value={form.pet_policy}
+                    onChange={(e) =>
+                      setForm({ ...form, pet_policy: e.target.value })
+                    }
+                    placeholder="e.g. Cats allowed; small dogs under 10kg with deposit…"
+                  />
+                </div>
+
+                {/* Brackets */}
                 <div className="space-y-3">
-                  <Label>Base Rent Brackets (VND/month)</Label>
+                  <Label>Base Rent Brackets (USD/month)</Label>
                   <div className="space-y-2">
                     {BRACKET_KEYS.map((k) => (
                       <div
@@ -499,12 +773,9 @@ const AdminComplexes = () => {
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Stored as JSON. Use raw VND (e.g. 25000000 for 25M).
-                  </p>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 border-t pt-4">
+                <div className="sticky bottom-0 -mx-6 -mb-6 flex items-center justify-end gap-2 border-t bg-background/95 px-6 py-4 backdrop-blur">
                   <Button
                     variant="outline"
                     onClick={() => setForm(complexToForm(selected))}
@@ -518,7 +789,7 @@ const AdminComplexes = () => {
                     ) : (
                       <Save className="mr-1 h-4 w-4" />
                     )}
-                    Save & Re-match
+                    Save &amp; Re-match
                   </Button>
                 </div>
               </CardContent>
