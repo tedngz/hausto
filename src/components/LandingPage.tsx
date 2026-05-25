@@ -65,7 +65,7 @@ export const LandingPage = () => {
 
       {/* Hero Section */}
       <main>
-      <section className="container mx-auto px-4 py-8 md:py-12 min-h-[calc(100vh-8rem)] flex items-center">
+      <section className="container mx-auto px-4 py-8 md:py-12">
         <div className="text-center max-w-4xl mx-auto w-full">
           <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-4 md:mb-6">
             <span className="text-primary">Vibe Check</span>
