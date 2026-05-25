@@ -113,7 +113,7 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
                 <Heart className="h-8 w-8 text-primary animate-heartbeat" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">Vibe Match</h3>
+              <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">Vibe Match</h3>
               <p className="text-muted-foreground leading-relaxed">Our algorithm learns your preferences and finds properties that truly match your lifestyle and needs.</p>
             </CardContent>
           </Card>
@@ -123,7 +123,7 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
                 <Search className="h-8 w-8 text-primary animate-gentle-bob" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">Smart Search</h3>
+              <h3 className="text-2xl text-foreground mb-4 font-normal font-serif">Smart Search</h3>
               <p className="text-muted-foreground leading-relaxed">Ask AI and swipe through curated properties with detailed insights and vibe scores to find your perfect match.</p>
             </CardContent>
           </Card>
@@ -133,7 +133,7 @@ export const LandingPage = () => {
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors pulse-ring-wrapper">
                 <MessageSquare className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">Unified Listings</h3>
+              <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">Unified Listings</h3>
               <p className="text-muted-foreground leading-relaxed">Access curated property listings from multiple sources, all in one convenient place.</p>
             </CardContent>
           </Card>
@@ -165,7 +165,7 @@ export const LandingPage = () => {
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-card border border-border rounded-2xl p-12">
             <Building2 className="h-16 w-16 text-primary mx-auto mb-6" />
-            <h2 className="text-foreground mb-6 text-3xl font-normal">
+            <h2 className="text-foreground mb-6 text-3xl font-normal font-serif">
               Ready to find your dream home?
             </h2>
             <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">
