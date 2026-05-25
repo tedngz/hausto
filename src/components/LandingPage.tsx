@@ -16,6 +16,7 @@ export const LandingPage = () => {
   } = useAuth();
   const { data: complexes } = useComplexes();
   const notableComplexes = (complexes ?? []).slice(0, 6);
+  const handleSignOut = async () => {
     await signOut();
     // Force reload to reset any app state
     window.location.reload();
