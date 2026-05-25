@@ -165,7 +165,7 @@ export const LandingPage = () => {
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-card border border-border rounded-2xl p-12">
             <Building2 className="h-16 w-16 text-primary mx-auto mb-6" />
-            <h2 className="font-bold text-foreground mb-6 text-3xl">
+            <h2 className="text-foreground mb-6 text-3xl font-normal">
               Ready to Find Your Dream Home?
             </h2>
             <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">
