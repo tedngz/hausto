@@ -68,8 +68,8 @@ export const LandingPage = () => {
       <section className="container mx-auto px-4 py-8 md:py-12">
         <div className="text-center max-w-4xl mx-auto w-full">
           <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-4 md:mb-6">
-            <span className="text-primary">Vibe Check</span>
-            <span className="block">Your Next Home</span>
+            <span className="text-primary">Vibe check</span>
+            <span className="block">your next home</span>
           </h1>
           
           <p className="text-muted-foreground mb-6 md:mb-8 max-w-2xl mx-auto leading-relaxed text-base md:text-lg">
@@ -103,7 +103,7 @@ export const LandingPage = () => {
       {/* Features Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-foreground mb-4 font-serif text-4xl font-normal">Elevate Your Home Hunting Experience</h2>
+          <h2 className="text-foreground mb-4 font-serif text-4xl font-normal">Elevate your home hunting experience</h2>
           
         </div>
 
@@ -166,7 +166,7 @@ export const LandingPage = () => {
           <div className="bg-card border border-border rounded-2xl p-12">
             <Building2 className="h-16 w-16 text-primary mx-auto mb-6" />
             <h2 className="text-foreground mb-6 text-3xl font-normal">
-              Ready to Find Your Dream Home?
+              Ready to find your dream home?
             </h2>
             <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">
               Join thousands of renters who have found their perfect match. Start your journey today.
