@@ -5,6 +5,8 @@ import { useNavigate, Link } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
 import AnimatedBackground from "@/components/AnimatedBackground";
+import { useComplexes } from "@/hooks/useComplexes";
+import { ComplexCard } from "@/components/ComplexCard";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -12,6 +14,8 @@ export const LandingPage = () => {
     user,
     signOut
   } = useAuth();
+  const { data: complexes } = useComplexes();
+  const notableComplexes = (complexes ?? []).slice(0, 6);
   const handleSignOut = async () => {
     await signOut();
     // Force reload to reset any app state
@@ -61,9 +65,9 @@ export const LandingPage = () => {
 
       {/* Hero Section */}
       <main>
-      <section className="container mx-auto px-4 py-8 md:py-12 min-h-[calc(100vh-8rem)] flex items-center">
+      <section className="container mx-auto px-4 py-8 md:py-12">
         <div className="text-center max-w-4xl mx-auto w-full">
-          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4 md:mb-6 leading-tight">
+          <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-4 md:mb-6">
             <span className="text-primary">Vibe Check</span>
             <span className="block">Your Next Home</span>
           </h1>
@@ -76,7 +80,19 @@ export const LandingPage = () => {
             <HomeAI />
           </div>
 
-          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center items-center">
+          {notableComplexes.length > 0 && (
+            <div className="mt-12 text-left">
+              <div className="mb-6 text-center">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Notable Complexes</p>
+                <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Vetted homes our expats love</h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {notableComplexes.map((c) => <ComplexCard key={c.id} complex={c} />)}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center items-center">
             <Button asChild size="lg" variant="outline">
               <Link to="/complexes">Explore vetted complexes →</Link>
             </Button>
