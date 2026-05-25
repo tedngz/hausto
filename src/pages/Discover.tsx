@@ -240,11 +240,11 @@ const Discover = () => {
 
         <main className="h-full overflow-y-auto pt-14">
           {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-4">
-              <h2 className="text-2xl font-bold mt-4 mb-8 text-center text-inherit">Describe Your Dream Home</h2>
+              <h2 className="text-2xl mt-4 mb-8 text-center text-inherit font-serif font-normal">Describe Your Dream Home</h2>
             </div>}
           
           {currentView === 'swipe' && userType && <div className="container mx-auto px-4 pt-4">
-              <h2 className="text-2xl font-bold mt-4 mb-4 text-center text-inherit">Vibe & Find Your Home</h2>
+              <h2 className="text-2xl mt-4 mb-4 text-center text-inherit font-serif font-normal">Vibe & Find Your Home</h2>
             </div>}
         
           {!userType && <UserTypeSelector onSelect={handleUserTypeSelect} />}
