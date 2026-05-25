@@ -92,11 +92,10 @@ export const LandingPage = () => {
             </div>
           )}
 
-          <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center items-center">
+          <div className="mt-10 flex justify-center items-center">
             <Button asChild size="lg" variant="outline">
               <Link to="/complexes">Explore vetted complexes →</Link>
             </Button>
-            <span className="text-xs text-muted-foreground">For expats relocating to Vietnam</span>
           </div>
         </div>
       </section>
