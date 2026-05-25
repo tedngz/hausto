@@ -5,6 +5,8 @@ import { useNavigate, Link } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
 import AnimatedBackground from "@/components/AnimatedBackground";
+import { useComplexes } from "@/hooks/useComplexes";
+import { ComplexCard } from "@/components/ComplexCard";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
