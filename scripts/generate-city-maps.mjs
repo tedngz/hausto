@@ -109,10 +109,11 @@ async function generate(cityKey) {
   console.log(`  ways in: ${totalIn}`);
   for (const k of Object.keys(layers)) console.log(`  ${k}: ${layers[k].length}`);
 
-  // Cull tiny paths (noise)
-  for (const k of Object.keys(layers)) {
-    layers[k] = layers[k].filter(p => p.d.length > 30);
-  }
+  // Cull tiny / noisy paths
+  layers.parks = layers.parks.filter(p => p.closed && p.bboxArea >= 40);
+  layers.water = layers.water.filter(p => p.span >= 6);
+  layers.roads = layers.roads.filter(p => p.span >= 20);
+  for (const k of Object.keys(layers)) console.log(`  ${k} after cull: ${layers[k].length}`);
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="xMidYMid slice">
   <g class="parks" fill="#9CB89A" fill-opacity="0.18" stroke="none">
