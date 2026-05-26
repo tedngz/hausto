@@ -84,7 +84,7 @@ export const LandingPage = () => {
             <div className="mt-12 text-left">
               <div className="mb-6 text-center">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">​</p>
-                <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Vetted homes our expats love</h2>
+                <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Vetted homes renters love</h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {notableComplexes.map((c) => <ComplexCard key={c.id} complex={c} />)}
