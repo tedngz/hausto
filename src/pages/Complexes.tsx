@@ -65,6 +65,9 @@ export default function Complexes() {
                   <a href="#directory">Explore complexes</a>
                 </Button>
                 <Button asChild variant="outline" size="lg">
+                  <Link to="/map">View on map</Link>
+                </Button>
+                <Button asChild variant="ghost" size="lg">
                   <Link to="/">Back to home</Link>
                 </Button>
               </div>
