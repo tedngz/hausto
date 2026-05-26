@@ -62,39 +62,25 @@ export function ComplexMapCanvas({ complexes }: Props) {
 
       {/* Canvas */}
       <div className="relative w-full aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5">
-        {/* Abstract topo background */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox="0 0 1000 400"
-          fill="none"
-          preserveAspectRatio="none"
+        {/* Real OSM-derived city map */}
+        <img
+          src={`/maps/${city}.svg`}
+          alt=""
           aria-hidden
-        >
-          <path
-            d="M-50 220C120 210 280 340 450 310C620 280 750 380 950 350C1100 330 1100 400 1100 400"
-            stroke="#0D4F4A"
-            strokeWidth={24}
-            strokeLinecap="round"
-            opacity={0.1}
-          />
-          <path
-            d="M250 -50C300 100 180 250 350 350C520 450 680 380 780 550"
-            stroke="#0D4F4A"
-            strokeWidth={0.5}
-            opacity={0.15}
-          />
-          <circle cx="500" cy="200" r="180" stroke="#0D4F4A" strokeWidth="0.5" strokeDasharray="4 4" opacity={0.1} />
-          <circle cx="500" cy="200" r="300" stroke="#0D4F4A" strokeWidth="0.5" strokeDasharray="2 6" opacity={0.06} />
-        </svg>
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+        />
 
-        {/* Grid overlay */}
+        {/* Grid overlay for texture */}
         <div
-          className="absolute inset-0 pointer-events-none opacity-[0.04]"
+          className="absolute inset-0 pointer-events-none opacity-[0.05]"
           style={{
             backgroundImage: 'radial-gradient(#0D4F4A 1px, transparent 1px)',
             backgroundSize: '32px 32px',
           }}
         />
+
+        {/* Subtle vignette to keep edges editorial */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#F3F0E9]/40 via-transparent to-[#F3F0E9]/40" />
 
         {/* Pins layer with zoom transform */}
         <div
