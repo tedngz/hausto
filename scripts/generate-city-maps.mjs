@@ -74,15 +74,19 @@ function project(bbox, lat, lon) {
 
 function buildPath(geom, bbox) {
   const pts = geom.map(({ lat, lon }) => project(bbox, lat, lon));
-  // round + dedupe consecutive
-  const rounded = pts.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+  // round to 0 decimals + dedupe consecutive
+  const rounded = pts.map(([x, y]) => [Math.round(x), Math.round(y)]);
   const dedup = rounded.filter((p, i) => i === 0 || p[0] !== rounded[i-1][0] || p[1] !== rounded[i-1][1]);
   if (dedup.length < 2) return null;
   const closed = dedup.length > 3 &&
     dedup[0][0] === dedup[dedup.length-1][0] &&
     dedup[0][1] === dedup[dedup.length-1][1];
+  // bounding box for area estimation
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of dedup) { if (x<minX) minX=x; if (x>maxX) maxX=x; if (y<minY) minY=y; if (y>maxY) maxY=y; }
+  const bboxArea = (maxX - minX) * (maxY - minY);
   const d = 'M' + dedup.map(([x,y]) => `${x},${y}`).join('L') + (closed ? 'Z' : '');
-  return { d, closed };
+  return { d, closed, bboxArea, span: Math.max(maxX-minX, maxY-minY) };
 }
 
 async function generate(cityKey) {
