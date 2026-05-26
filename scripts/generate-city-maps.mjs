@@ -30,17 +30,29 @@ const ENDPOINTS = [
 async function fetchOverpass(query) {
   let lastErr;
   for (const url of ENDPOINTS) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        body: 'data=' + encodeURIComponent(query),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
-      if (!res.ok) throw new Error(`${url} -> ${res.status}`);
-      return await res.json();
-    } catch (e) {
-      console.warn('Overpass failed:', e.message);
-      lastErr = e;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          body: 'data=' + encodeURIComponent(query),
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+            'User-Agent': 'hausto-map-generator/1.0 (contact: dev@hausto.com)',
+          },
+        });
+        if (res.status === 429 || res.status === 504) {
+          console.warn(`  ${url} -> ${res.status}, retrying in ${(attempt+1)*5}s`);
+          await new Promise(r => setTimeout(r, (attempt+1) * 5000));
+          continue;
+        }
+        if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+        return await res.json();
+      } catch (e) {
+        console.warn('  Overpass failed:', e.message);
+        lastErr = e;
+        await new Promise(r => setTimeout(r, 2000));
+      }
     }
   }
   throw lastErr;
