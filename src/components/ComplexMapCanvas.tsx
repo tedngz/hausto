@@ -67,7 +67,8 @@ export function ComplexMapCanvas({ complexes }: Props) {
           src={`/maps/${city}.svg`}
           alt=""
           aria-hidden
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+          className="absolute inset-0 w-full h-full pointer-events-none select-none"
+          style={{ objectFit: 'fill' }}
         />
 
         {/* Grid overlay for texture */}
