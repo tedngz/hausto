@@ -17,6 +17,7 @@ import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import SubscriptionCancel from "./pages/SubscriptionCancel";
 import Complexes from "./pages/Complexes";
 import ComplexDetail from "./pages/ComplexDetail";
+import ComplexMap from "./pages/ComplexMap";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/property/:id" element={<PropertyDetail />} />
             <Route path="/complexes" element={<Complexes />} />
             <Route path="/complexes/:slug" element={<ComplexDetail />} />
+            <Route path="/map" element={<ComplexMap />} />
             <Route path="/admin-tools" element={<AdminTools />} />
             <Route path="/admin/complexes" element={<AdminComplexes />} />
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
