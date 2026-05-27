@@ -15,12 +15,44 @@ const CITY_LABEL: Record<City, string> = {
   hanoi: 'Hanoi',
 };
 
+// District labels with real coordinates (centroids of premium districts).
+type Label = { name: string; lat: number; lng: number; kind: 'district' | 'water' };
+
+const LABELS: Record<City, Label[]> = {
+  ho_chi_minh: [
+    { name: 'District 1', lat: 10.7769, lng: 106.7009, kind: 'district' },
+    { name: 'District 2 · Thao Dien', lat: 10.8030, lng: 106.7400, kind: 'district' },
+    { name: 'Thu Thiem', lat: 10.7720, lng: 106.7220, kind: 'district' },
+    { name: 'District 3', lat: 10.7820, lng: 106.6850, kind: 'district' },
+    { name: 'District 4', lat: 10.7590, lng: 106.7050, kind: 'district' },
+    { name: 'District 5', lat: 10.7540, lng: 106.6700, kind: 'district' },
+    { name: 'District 7 · PMH', lat: 10.7300, lng: 106.7220, kind: 'district' },
+    { name: 'Binh Thanh', lat: 10.8050, lng: 106.7000, kind: 'district' },
+    { name: 'Phu Nhuan', lat: 10.7950, lng: 106.6780, kind: 'district' },
+    { name: 'Saigon River', lat: 10.7850, lng: 106.7320, kind: 'water' },
+  ],
+  hanoi: [
+    { name: 'Hoan Kiem', lat: 21.0285, lng: 105.8520, kind: 'district' },
+    { name: 'Ba Dinh', lat: 21.0370, lng: 105.8290, kind: 'district' },
+    { name: 'Tay Ho', lat: 21.0700, lng: 105.8200, kind: 'district' },
+    { name: 'Dong Da', lat: 21.0120, lng: 105.8290, kind: 'district' },
+    { name: 'Hai Ba Trung', lat: 21.0040, lng: 105.8570, kind: 'district' },
+    { name: 'Cau Giay', lat: 21.0310, lng: 105.7960, kind: 'district' },
+    { name: 'West Lake', lat: 21.0580, lng: 105.8170, kind: 'water' },
+    { name: 'Hoan Kiem Lake', lat: 21.0290, lng: 105.8525, kind: 'water' },
+    { name: 'Red River', lat: 21.0500, lng: 105.8800, kind: 'water' },
+  ],
+};
+
 function project(lat: number, lng: number, city: City) {
   const b = BBOX[city];
   const x = ((lng - b.minLng) / (b.maxLng - b.minLng)) * 100;
-  // invert Y: north (higher lat) at top
   const y = (1 - (lat - b.minLat) / (b.maxLat - b.minLat)) * 100;
-  return { x: Math.max(4, Math.min(96, x)), y: Math.max(6, Math.min(94, y)) };
+  return { x, y };
+}
+
+function clampPct(p: { x: number; y: number }) {
+  return { x: Math.max(4, Math.min(96, p.x)), y: Math.max(6, Math.min(94, p.y)) };
 }
 
 function formatBracket(c: Complex): string | null {
@@ -45,8 +77,6 @@ export function ComplexMapCanvas({ complexes }: Props) {
     [complexes, city],
   );
 
-  const active = cityComplexes.find((c) => c.id === activeId) ?? null;
-
   return (
     <div className="w-full">
       {/* Header */}
@@ -62,36 +92,59 @@ export function ComplexMapCanvas({ complexes }: Props) {
 
       {/* Canvas */}
       <div className="relative w-full aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5">
-        {/* Real OSM-derived city map */}
-        <img
-          src={`/maps/${city}.svg`}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 w-full h-full pointer-events-none select-none"
-          style={{ objectFit: 'fill' }}
-        />
-
-        {/* Grid overlay for texture */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-[0.05]"
-          style={{
-            backgroundImage: 'radial-gradient(#0D4F4A 1px, transparent 1px)',
-            backgroundSize: '32px 32px',
-          }}
-        />
-
-        {/* Subtle vignette to keep edges editorial */}
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#F3F0E9]/40 via-transparent to-[#F3F0E9]/40" />
-
-        {/* Pins layer with zoom transform */}
+        {/* Zoomable map stage: scales the geography, labels, and pins together */}
         <div
           className="absolute inset-0 transition-transform duration-300 ease-out"
           style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
         >
+          {/* Real OSM-derived city map */}
+          <img
+            src={`/maps/${city}.svg`}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 w-full h-full pointer-events-none select-none"
+            style={{ objectFit: 'fill' }}
+          />
+
+          {/* Grid overlay for texture */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.05]"
+            style={{
+              backgroundImage: 'radial-gradient(#0D4F4A 1px, transparent 1px)',
+              backgroundSize: '32px 32px',
+            }}
+          />
+
+          {/* Place name labels */}
+          {LABELS[city].map((l) => {
+            const { x, y } = clampPct(project(l.lat, l.lng, city));
+            const isWater = l.kind === 'water';
+            return (
+              <span
+                key={l.name}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none whitespace-nowrap ${
+                  isWater
+                    ? 'text-[#0D4F4A]/55 italic font-serif text-[11px] tracking-wider'
+                    : 'text-[#0D4F4A]/70 font-semibold text-[9px] uppercase tracking-[0.18em]'
+                }`}
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  // counter-scale text so labels stay legible regardless of zoom
+                  transform: `translate(-50%, -50%) scale(${1 / zoom})`,
+                  textShadow: '0 1px 0 rgba(243,240,233,0.9), 0 0 6px rgba(243,240,233,0.9)',
+                }}
+              >
+                {l.name}
+              </span>
+            );
+          })}
+
+          {/* Pins */}
           {cityComplexes.map((c) => {
-            const { x, y } = project(c.latitude!, c.longitude!, city);
+            const { x, y } = clampPct(project(c.latitude!, c.longitude!, city));
             const isActive = c.id === activeId;
-            const flipUp = y > 55; // place card above pin if pin is in lower half
+            const flipUp = y > 55;
             const flipLeft = x > 70;
             const flipRight = x < 30;
             return (
@@ -101,23 +154,25 @@ export function ComplexMapCanvas({ complexes }: Props) {
                 onClick={() => setActiveId(isActive ? null : c.id)}
                 onMouseEnter={() => setActiveId(c.id)}
                 className="group absolute -translate-x-1/2 -translate-y-1/2 z-10"
-                style={{ left: `${x}%`, top: `${y}%` }}
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  // counter-scale pins so they stay a consistent size
+                  transform: `translate(-50%, -50%) scale(${1 / zoom})`,
+                }}
                 aria-label={c.name}
               >
                 {isActive ? (
-                  <>
-                    <span className="block w-4 h-4 bg-[#F28D63] rounded-full ring-4 ring-white shadow-lg animate-pulse" />
-                  </>
+                  <span className="block w-4 h-4 bg-[#F28D63] rounded-full ring-4 ring-white shadow-lg animate-pulse" />
                 ) : (
                   <span className="block w-2.5 h-2.5 bg-[#0D4F4A] rounded-full ring-2 ring-white shadow-md group-hover:bg-[#F28D63] transition-colors" />
                 )}
                 {!isActive && (
-                  <span className="absolute top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-[#0D4F4A]/60 whitespace-nowrap uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="absolute top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-[#0D4F4A]/70 whitespace-nowrap uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity">
                     {c.name}
                   </span>
                 )}
 
-                {/* Active mini card */}
                 {isActive && (
                   <div
                     onClick={(e) => e.stopPropagation()}
@@ -164,6 +219,9 @@ export function ComplexMapCanvas({ complexes }: Props) {
           })}
         </div>
 
+        {/* Subtle vignette to keep edges editorial (above stage, below controls) */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#F3F0E9]/40 via-transparent to-[#F3F0E9]/40 z-20" />
+
         {/* City toggle */}
         <div className="absolute bottom-6 left-6 z-40 flex bg-white/70 backdrop-blur-md rounded-full p-1 border border-[#0D4F4A]/10 shadow-sm">
           {(Object.keys(CITY_LABEL) as City[]).map((k) => (
@@ -173,6 +231,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
               onClick={() => {
                 setCity(k);
                 setActiveId(null);
+                setZoom(1);
               }}
               className={`px-4 py-1.5 text-[10px] font-bold rounded-full uppercase tracking-wider transition-colors ${
                 city === k
@@ -189,7 +248,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
         <div className="absolute bottom-6 right-6 z-40 flex flex-col space-y-1">
           <button
             type="button"
-            onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.25).toFixed(2)))}
+            onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
             className="w-8 h-8 flex items-center justify-center bg-white/80 backdrop-blur-sm border border-[#0D4F4A]/10 rounded-md text-[#0D4F4A] text-sm font-bold shadow-sm hover:bg-white"
             aria-label="Zoom in"
           >
