@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { Complex } from '@/hooks/useComplexes';
 
