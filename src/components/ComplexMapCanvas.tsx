@@ -71,6 +71,9 @@ export function ComplexMapCanvas({ complexes }: Props) {
   const [city, setCity] = useState<City>('ho_chi_minh');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const cityComplexes = useMemo(
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
