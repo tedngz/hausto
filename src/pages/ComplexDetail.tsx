@@ -120,6 +120,11 @@ export default function ComplexDetail() {
                 </section>
               )}
 
+              {/* Location map */}
+              <ComplexLocationMap complex={complex} />
+
+
+
               {/* Gallery — real photos from current rental listings */}
               {complex.gallery && complex.gallery.length > 0 && (
                 <section>
