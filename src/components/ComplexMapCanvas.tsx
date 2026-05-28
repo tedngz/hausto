@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Complex } from '@/hooks/useComplexes';
 
@@ -71,6 +71,10 @@ export function ComplexMapCanvas({ complexes }: Props) {
   const [city, setCity] = useState<City>('ho_chi_minh');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
+  const wasDraggedRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const cityComplexes = useMemo(
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
@@ -91,11 +95,43 @@ export function ComplexMapCanvas({ complexes }: Props) {
       </div>
 
       {/* Canvas */}
-      <div className="relative w-full aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5">
-        {/* Zoomable map stage: scales the geography, labels, and pins together */}
+      <div
+        className={`relative w-full aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5 touch-none ${
+          isDragging ? 'cursor-grabbing' : 'cursor-grab'
+        }`}
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest('[data-map-control]')) return;
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          dragRef.current = { startX: e.clientX, startY: e.clientY, origX: pan.x, origY: pan.y, moved: false };
+          setIsDragging(true);
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current;
+          if (!d) return;
+          const dx = e.clientX - d.startX;
+          const dy = e.clientY - d.startY;
+          if (!d.moved && Math.hypot(dx, dy) > 3) d.moved = true;
+          setPan({ x: d.origX + dx, y: d.origY + dy });
+        }}
+        onPointerUp={(e) => {
+          (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+          wasDraggedRef.current = !!dragRef.current?.moved;
+          dragRef.current = null;
+          setIsDragging(false);
+          if (wasDraggedRef.current) setTimeout(() => { wasDraggedRef.current = false; }, 0);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          setIsDragging(false);
+        }}
+      >
+        {/* Zoomable + pannable map stage */}
         <div
-          className="absolute inset-0 transition-transform duration-300 ease-out"
-          style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+          className={`absolute inset-0 ${isDragging ? '' : 'transition-transform duration-300 ease-out'}`}
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: 'center center',
+          }}
         >
           {/* Real OSM-derived city map */}
           <img
@@ -151,8 +187,11 @@ export function ComplexMapCanvas({ complexes }: Props) {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setActiveId(isActive ? null : c.id)}
-                onMouseEnter={() => setActiveId(c.id)}
+                onClick={() => {
+                  if (wasDraggedRef.current) return;
+                  setActiveId(isActive ? null : c.id);
+                }}
+                onMouseEnter={() => { if (!isDragging) setActiveId(c.id); }}
                 className="group absolute -translate-x-1/2 -translate-y-1/2 z-10"
                 style={{
                   left: `${x}%`,
@@ -223,7 +262,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#F3F0E9]/40 via-transparent to-[#F3F0E9]/40 z-20" />
 
         {/* City toggle */}
-        <div className="absolute bottom-6 left-6 z-40 flex bg-white/70 backdrop-blur-md rounded-full p-1 border border-[#0D4F4A]/10 shadow-sm">
+        <div data-map-control className="absolute bottom-6 left-6 z-40 flex bg-white/70 backdrop-blur-md rounded-full p-1 border border-[#0D4F4A]/10 shadow-sm">
           {(Object.keys(CITY_LABEL) as City[]).map((k) => (
             <button
               key={k}
@@ -232,6 +271,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
                 setCity(k);
                 setActiveId(null);
                 setZoom(1);
+                setPan({ x: 0, y: 0 });
               }}
               className={`px-4 py-1.5 text-[10px] font-bold rounded-full uppercase tracking-wider transition-colors ${
                 city === k
@@ -245,7 +285,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
         </div>
 
         {/* Zoom controls */}
-        <div className="absolute bottom-6 right-6 z-40 flex flex-col space-y-1">
+        <div data-map-control className="absolute bottom-6 right-6 z-40 flex flex-col space-y-1">
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
@@ -261,6 +301,14 @@ export function ComplexMapCanvas({ complexes }: Props) {
             aria-label="Zoom out"
           >
             −
+          </button>
+          <button
+            type="button"
+            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            className="w-8 h-8 flex items-center justify-center bg-white/80 backdrop-blur-sm border border-[#0D4F4A]/10 rounded-md text-[#0D4F4A] text-[9px] font-bold shadow-sm hover:bg-white uppercase tracking-wider"
+            aria-label="Reset view"
+          >
+            ⟲
           </button>
         </div>
 
