@@ -115,8 +115,10 @@ export function ComplexMapCanvas({ complexes }: Props) {
         }}
         onPointerUp={(e) => {
           (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+          wasDraggedRef.current = !!dragRef.current?.moved;
           dragRef.current = null;
           setIsDragging(false);
+          if (wasDraggedRef.current) setTimeout(() => { wasDraggedRef.current = false; }, 0);
         }}
         onPointerCancel={() => {
           dragRef.current = null;
