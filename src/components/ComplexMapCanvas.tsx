@@ -262,7 +262,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#F3F0E9]/40 via-transparent to-[#F3F0E9]/40 z-20" />
 
         {/* City toggle */}
-        <div className="absolute bottom-6 left-6 z-40 flex bg-white/70 backdrop-blur-md rounded-full p-1 border border-[#0D4F4A]/10 shadow-sm">
+        <div data-map-control className="absolute bottom-6 left-6 z-40 flex bg-white/70 backdrop-blur-md rounded-full p-1 border border-[#0D4F4A]/10 shadow-sm">
           {(Object.keys(CITY_LABEL) as City[]).map((k) => (
             <button
               key={k}
@@ -271,6 +271,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
                 setCity(k);
                 setActiveId(null);
                 setZoom(1);
+                setPan({ x: 0, y: 0 });
               }}
               className={`px-4 py-1.5 text-[10px] font-bold rounded-full uppercase tracking-wider transition-colors ${
                 city === k
@@ -284,7 +285,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
         </div>
 
         {/* Zoom controls */}
-        <div className="absolute bottom-6 right-6 z-40 flex flex-col space-y-1">
+        <div data-map-control className="absolute bottom-6 right-6 z-40 flex flex-col space-y-1">
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
@@ -300,6 +301,14 @@ export function ComplexMapCanvas({ complexes }: Props) {
             aria-label="Zoom out"
           >
             −
+          </button>
+          <button
+            type="button"
+            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            className="w-8 h-8 flex items-center justify-center bg-white/80 backdrop-blur-sm border border-[#0D4F4A]/10 rounded-md text-[#0D4F4A] text-[9px] font-bold shadow-sm hover:bg-white uppercase tracking-wider"
+            aria-label="Reset view"
+          >
+            ⟲
           </button>
         </div>
 
