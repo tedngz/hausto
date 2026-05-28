@@ -94,11 +94,41 @@ export function ComplexMapCanvas({ complexes }: Props) {
       </div>
 
       {/* Canvas */}
-      <div className="relative w-full aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5">
-        {/* Zoomable map stage: scales the geography, labels, and pins together */}
+      <div
+        className={`relative w-full aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5 touch-none ${
+          isDragging ? 'cursor-grabbing' : 'cursor-grab'
+        }`}
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest('[data-map-control]')) return;
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          dragRef.current = { startX: e.clientX, startY: e.clientY, origX: pan.x, origY: pan.y, moved: false };
+          setIsDragging(true);
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current;
+          if (!d) return;
+          const dx = e.clientX - d.startX;
+          const dy = e.clientY - d.startY;
+          if (!d.moved && Math.hypot(dx, dy) > 3) d.moved = true;
+          setPan({ x: d.origX + dx, y: d.origY + dy });
+        }}
+        onPointerUp={(e) => {
+          (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+          dragRef.current = null;
+          setIsDragging(false);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          setIsDragging(false);
+        }}
+      >
+        {/* Zoomable + pannable map stage */}
         <div
-          className="absolute inset-0 transition-transform duration-300 ease-out"
-          style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+          className={`absolute inset-0 ${isDragging ? '' : 'transition-transform duration-300 ease-out'}`}
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: 'center center',
+          }}
         >
           {/* Real OSM-derived city map */}
           <img
