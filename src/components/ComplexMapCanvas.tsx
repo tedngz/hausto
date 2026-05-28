@@ -187,8 +187,11 @@ export function ComplexMapCanvas({ complexes }: Props) {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setActiveId(isActive ? null : c.id)}
-                onMouseEnter={() => setActiveId(c.id)}
+                onClick={() => {
+                  if (wasDraggedRef.current) return;
+                  setActiveId(isActive ? null : c.id);
+                }}
+                onMouseEnter={() => { if (!isDragging) setActiveId(c.id); }}
                 className="group absolute -translate-x-1/2 -translate-y-1/2 z-10"
                 style={{
                   left: `${x}%`,
