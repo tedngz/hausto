@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConciergeCaptureModal } from '@/components/ConciergeCaptureModal';
 import { PropertyCard } from '@/components/PropertyCard';
+import { ComplexLocationMap } from '@/components/ComplexLocationMap';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 
 const ROOM_LABEL: Record<string, string> = {
@@ -118,6 +119,11 @@ export default function ComplexDetail() {
                   <p className="text-foreground/80 leading-relaxed whitespace-pre-line">{complex.description}</p>
                 </section>
               )}
+
+              {/* Location map */}
+              <ComplexLocationMap complex={complex} />
+
+
 
               {/* Gallery — real photos from current rental listings */}
               {complex.gallery && complex.gallery.length > 0 && (
