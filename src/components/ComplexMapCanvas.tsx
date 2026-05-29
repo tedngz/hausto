@@ -275,6 +275,43 @@ export function ComplexMapCanvas({ complexes }: Props) {
             }}
           />
 
+          {/* District borders — creative dashed outlines */}
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <defs>
+              <pattern id="districtFill" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.15" strokeOpacity="0.18" />
+              </pattern>
+            </defs>
+            {DISTRICTS[city].map((d) => {
+              const pts = d.points
+                .map(([lat, lng]) => {
+                  const p = project(lat, lng, city);
+                  return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+                })
+                .join(' ');
+              return (
+                <g key={d.name}>
+                  <polygon
+                    points={pts}
+                    fill="url(#districtFill)"
+                    stroke="#F28D63"
+                    strokeOpacity="0.5"
+                    strokeWidth={0.35 / zoom}
+                    strokeDasharray={`${0.9 / zoom} ${0.7 / zoom}`}
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              );
+            })}
+          </svg>
+
+
           {/* Place name labels */}
           {LABELS[city].map((l) => {
             const { x, y } = clampPct(project(l.lat, l.lng, city));
