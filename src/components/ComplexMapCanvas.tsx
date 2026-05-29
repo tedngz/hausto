@@ -301,8 +301,8 @@ export function ComplexMapCanvas({ complexes }: Props) {
                     fill="url(#districtFill)"
                     stroke="#F28D63"
                     strokeOpacity="0.5"
-                    strokeWidth={0.35 / zoom}
-                    strokeDasharray={`${0.9 / zoom} ${0.7 / zoom}`}
+                    strokeWidth={1.1}
+                    strokeDasharray="3 3"
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
                   />
