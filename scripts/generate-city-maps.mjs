@@ -11,13 +11,14 @@ const CITIES = {
 const VIEW_W = 1000;
 const VIEW_H = 700;
 
-const QUERY = (bbox) => `[out:json][timeout:90][bbox:${bbox.s},${bbox.w},${bbox.n},${bbox.e}];
+const QUERY = (bbox) => `[out:json][timeout:120][bbox:${bbox.s},${bbox.w},${bbox.n},${bbox.e}];
 (
   way["waterway"~"river|canal"];
   way["natural"="water"];
   way["highway"~"^(motorway|trunk|primary)$"];
   way["leisure"~"park|golf_course"];
   way["landuse"~"grass|recreation_ground|forest|cemetery"];
+  relation["boundary"="administrative"]["admin_level"="8"];
 );
 out geom;`;
 
