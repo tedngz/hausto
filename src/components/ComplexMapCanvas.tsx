@@ -5,8 +5,10 @@ import type { Complex } from '@/hooks/useComplexes';
 type City = 'ho_chi_minh' | 'hanoi';
 
 // Geographic bounding boxes (expanded to cover all vetted complexes incl. D9 & Tan Phu).
+// MUST match the bbox used in scripts/generate-city-maps.mjs so labels & pins
+// align with the underlying SVG geography.
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
-  ho_chi_minh: { minLat: 10.70, maxLat: 10.86, minLng: 106.60, maxLng: 106.86 },
+  ho_chi_minh: { minLat: 10.68, maxLat: 10.85, minLng: 106.62, maxLng: 106.83 },
   hanoi:       { minLat: 20.97, maxLat: 21.10, minLng: 105.74, maxLng: 105.93 },
 };
 
