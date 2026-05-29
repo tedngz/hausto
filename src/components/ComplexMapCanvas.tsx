@@ -5,8 +5,10 @@ import type { Complex } from '@/hooks/useComplexes';
 type City = 'ho_chi_minh' | 'hanoi';
 
 // Geographic bounding boxes (expanded to cover all vetted complexes incl. D9 & Tan Phu).
+// MUST match the bbox used in scripts/generate-city-maps.mjs so labels & pins
+// align with the underlying SVG geography.
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
-  ho_chi_minh: { minLat: 10.70, maxLat: 10.86, minLng: 106.60, maxLng: 106.86 },
+  ho_chi_minh: { minLat: 10.68, maxLat: 10.85, minLng: 106.62, maxLng: 106.83 },
   hanoi:       { minLat: 20.97, maxLat: 21.10, minLng: 105.74, maxLng: 105.93 },
 };
 
@@ -19,44 +21,71 @@ type Label = { name: string; lat: number; lng: number; kind: 'district' | 'water
 
 const LABELS: Record<City, Label[]> = {
   ho_chi_minh: [
-    // Districts
-    { name: 'District 1', lat: 10.7769, lng: 106.7009, kind: 'district' },
-    { name: 'District 2 · Thao Dien', lat: 10.8030, lng: 106.7400, kind: 'district' },
-    { name: 'Thu Thiem', lat: 10.7720, lng: 106.7220, kind: 'district' },
-    { name: 'District 3', lat: 10.7820, lng: 106.6850, kind: 'district' },
-    { name: 'District 4', lat: 10.7590, lng: 106.7050, kind: 'district' },
-    { name: 'District 5', lat: 10.7540, lng: 106.6700, kind: 'district' },
-    { name: 'District 7 · PMH', lat: 10.7300, lng: 106.7220, kind: 'district' },
-    { name: 'District 9 · Grand Park', lat: 10.8410, lng: 106.8380, kind: 'district' },
-    { name: 'Tan Phu', lat: 10.8000, lng: 106.6280, kind: 'district' },
-    { name: 'Binh Thanh', lat: 10.8050, lng: 106.7000, kind: 'district' },
-    { name: 'Phu Nhuan', lat: 10.7950, lng: 106.6780, kind: 'district' },
+    // Districts — centroids verified against OSM
+    { name: 'District 1', lat: 10.7757, lng: 106.7004, kind: 'district' },
+    { name: 'District 3', lat: 10.7847, lng: 106.6840, kind: 'district' },
+    { name: 'District 4', lat: 10.7578, lng: 106.7050, kind: 'district' },
+    { name: 'District 5', lat: 10.7540, lng: 106.6680, kind: 'district' },
+    { name: 'District 7 · PMH', lat: 10.7340, lng: 106.7220, kind: 'district' },
+    { name: 'Thao Dien', lat: 10.8050, lng: 106.7390, kind: 'district' },
+    { name: 'Thu Thiem', lat: 10.7770, lng: 106.7280, kind: 'district' },
+    { name: 'Grand Park', lat: 10.8415, lng: 106.8370, kind: 'district' },
+    { name: 'Tan Phu', lat: 10.7920, lng: 106.6280, kind: 'district' },
+    { name: 'Binh Thanh', lat: 10.8030, lng: 106.7070, kind: 'district' },
+    { name: 'Phu Nhuan', lat: 10.7960, lng: 106.6790, kind: 'district' },
     // Water
-    { name: 'Saigon River', lat: 10.7850, lng: 106.7320, kind: 'water' },
+    { name: 'Saigon River', lat: 10.7920, lng: 106.7470, kind: 'water' },
     // Landmarks
     { name: '◆ Ben Thanh Market', lat: 10.7725, lng: 106.6980, kind: 'landmark' },
     { name: '◆ Notre Dame Cathedral', lat: 10.7798, lng: 106.6990, kind: 'landmark' },
-    { name: '◆ Bitexco Tower', lat: 10.7720, lng: 106.7045, kind: 'landmark' },
-    { name: '◆ Landmark 81', lat: 10.7950, lng: 106.7218, kind: 'landmark' },
+    { name: '◆ Bitexco Tower', lat: 10.7717, lng: 106.7044, kind: 'landmark' },
+    { name: '◆ Landmark 81', lat: 10.7951, lng: 106.7218, kind: 'landmark' },
     { name: '◆ Tan Son Nhat Airport', lat: 10.8188, lng: 106.6519, kind: 'landmark' },
     { name: '◆ Crescent Lake', lat: 10.7295, lng: 106.7178, kind: 'landmark' },
-    { name: '◆ Saigon Zoo', lat: 10.7878, lng: 106.7050, kind: 'landmark' },
+    { name: '◆ Saigon Zoo', lat: 10.7878, lng: 106.7058, kind: 'landmark' },
   ],
   hanoi: [
-    { name: 'Hoan Kiem', lat: 21.0285, lng: 105.8520, kind: 'district' },
-    { name: 'Ba Dinh', lat: 21.0370, lng: 105.8290, kind: 'district' },
-    { name: 'Tay Ho', lat: 21.0700, lng: 105.8200, kind: 'district' },
-    { name: 'Dong Da', lat: 21.0120, lng: 105.8290, kind: 'district' },
-    { name: 'Hai Ba Trung', lat: 21.0040, lng: 105.8570, kind: 'district' },
-    { name: 'Cau Giay', lat: 21.0310, lng: 105.7960, kind: 'district' },
-    { name: 'West Lake', lat: 21.0580, lng: 105.8170, kind: 'water' },
+    { name: 'Hoan Kiem', lat: 21.0277, lng: 105.8520, kind: 'district' },
+    { name: 'Ba Dinh', lat: 21.0341, lng: 105.8240, kind: 'district' },
+    { name: 'Tay Ho', lat: 21.0680, lng: 105.8200, kind: 'district' },
+    { name: 'Dong Da', lat: 21.0125, lng: 105.8290, kind: 'district' },
+    { name: 'Hai Ba Trung', lat: 21.0050, lng: 105.8570, kind: 'district' },
+    { name: 'Cau Giay', lat: 21.0310, lng: 105.7990, kind: 'district' },
+    { name: 'West Lake', lat: 21.0610, lng: 105.8180, kind: 'water' },
     { name: 'Hoan Kiem Lake', lat: 21.0290, lng: 105.8525, kind: 'water' },
-    { name: 'Red River', lat: 21.0500, lng: 105.8800, kind: 'water' },
+    { name: 'Red River', lat: 21.0400, lng: 105.8870, kind: 'water' },
     { name: '◆ Old Quarter', lat: 21.0345, lng: 105.8500, kind: 'landmark' },
     { name: '◆ Opera House', lat: 21.0245, lng: 105.8579, kind: 'landmark' },
     { name: '◆ Lotte Center', lat: 21.0314, lng: 105.8120, kind: 'landmark' },
     { name: '◆ Temple of Literature', lat: 21.0227, lng: 105.8355, kind: 'landmark' },
-    { name: '◆ Noi Bai Airport', lat: 21.0970, lng: 105.8800, kind: 'landmark' },
+  ],
+};
+
+// Approximate district outlines (clockwise lat/lng polygons).
+// Hand-crafted to evoke borders; not surveyor-accurate.
+type DistrictShape = { name: string; points: [number, number][] };
+
+const DISTRICTS: Record<City, DistrictShape[]> = {
+  ho_chi_minh: [
+    { name: 'District 1', points: [[10.787,106.685],[10.790,106.708],[10.785,106.720],[10.770,106.722],[10.762,106.715],[10.760,106.700],[10.762,106.690]] },
+    { name: 'District 3', points: [[10.795,106.673],[10.795,106.692],[10.778,106.692],[10.770,106.682],[10.778,106.673]] },
+    { name: 'District 4', points: [[10.770,106.700],[10.770,106.715],[10.748,106.715],[10.745,106.703],[10.755,106.698]] },
+    { name: 'District 5', points: [[10.770,106.655],[10.770,106.683],[10.750,106.683],[10.748,106.658]] },
+    { name: 'District 7', points: [[10.748,106.700],[10.748,106.752],[10.715,106.755],[10.710,106.715],[10.728,106.700]] },
+    { name: 'District 2', points: [[10.820,106.720],[10.820,106.760],[10.795,106.765],[10.780,106.755],[10.785,106.730]] },
+    { name: 'Thu Thiem', points: [[10.788,106.715],[10.788,106.736],[10.762,106.736],[10.760,106.720]] },
+    { name: 'District 9', points: [[10.860,106.810],[10.860,106.860],[10.820,106.860],[10.815,106.815]] },
+    { name: 'Binh Thanh', points: [[10.820,106.685],[10.820,106.720],[10.790,106.720],[10.790,106.700],[10.798,106.685]] },
+    { name: 'Phu Nhuan', points: [[10.810,106.670],[10.810,106.692],[10.788,106.692],[10.790,106.670]] },
+    { name: 'Tan Phu', points: [[10.815,106.615],[10.815,106.648],[10.778,106.648],[10.778,106.615]] },
+  ],
+  hanoi: [
+    { name: 'Hoan Kiem', points: [[21.038,105.846],[21.038,105.862],[21.018,105.862],[21.018,105.846]] },
+    { name: 'Ba Dinh', points: [[21.048,105.812],[21.048,105.842],[21.025,105.842],[21.025,105.812]] },
+    { name: 'Tay Ho', points: [[21.085,105.798],[21.085,105.840],[21.048,105.840],[21.048,105.798]] },
+    { name: 'Dong Da', points: [[21.028,105.815],[21.028,105.845],[21.005,105.845],[21.005,105.815]] },
+    { name: 'Hai Ba Trung', points: [[21.018,105.848],[21.018,105.870],[20.988,105.870],[20.988,105.848]] },
+    { name: 'Cau Giay', points: [[21.045,105.782],[21.045,105.812],[21.015,105.812],[21.015,105.782]] },
   ],
 };
 
@@ -245,6 +274,43 @@ export function ComplexMapCanvas({ complexes }: Props) {
               backgroundSize: '32px 32px',
             }}
           />
+
+          {/* District borders — creative dashed outlines */}
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <defs>
+              <pattern id="districtFill" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.15" strokeOpacity="0.18" />
+              </pattern>
+            </defs>
+            {DISTRICTS[city].map((d) => {
+              const pts = d.points
+                .map(([lat, lng]) => {
+                  const p = project(lat, lng, city);
+                  return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+                })
+                .join(' ');
+              return (
+                <g key={d.name}>
+                  <polygon
+                    points={pts}
+                    fill="url(#districtFill)"
+                    stroke="#F28D63"
+                    strokeOpacity="0.5"
+                    strokeWidth={1.1}
+                    strokeDasharray="3 3"
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              );
+            })}
+          </svg>
+
 
           {/* Place name labels */}
           {LABELS[city].map((l) => {

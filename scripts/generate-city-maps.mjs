@@ -11,13 +11,14 @@ const CITIES = {
 const VIEW_W = 1000;
 const VIEW_H = 700;
 
-const QUERY = (bbox) => `[out:json][timeout:90][bbox:${bbox.s},${bbox.w},${bbox.n},${bbox.e}];
+const QUERY = (bbox) => `[out:json][timeout:120][bbox:${bbox.s},${bbox.w},${bbox.n},${bbox.e}];
 (
   way["waterway"~"river|canal"];
   way["natural"="water"];
   way["highway"~"^(motorway|trunk|primary)$"];
   way["leisure"~"park|golf_course"];
   way["landuse"~"grass|recreation_ground|forest|cemetery"];
+  relation["boundary"="administrative"]["admin_level"="8"];
 );
 out geom;`;
 
@@ -93,10 +94,18 @@ async function generate(cityKey) {
   const bbox = CITIES[cityKey];
   console.log(`\n→ ${cityKey}`);
   const data = await fetchOverpass(QUERY(bbox));
-  const layers = { parks: [], water: [], roads: [] };
+  const layers = { parks: [], water: [], roads: [], borders: [] };
   let totalIn = 0;
 
   for (const el of data.elements) {
+    if (el.type === 'relation' && el.tags?.boundary === 'administrative' && el.tags?.admin_level === '8') {
+      const outers = (el.members || []).filter(m => m.type === 'way' && m.role === 'outer' && m.geometry);
+      for (const m of outers) {
+        const path = buildPath(m.geometry, bbox);
+        if (path && path.span >= 4) layers.borders.push(path);
+      }
+      continue;
+    }
     if (el.type !== 'way' || !el.geometry) continue;
     totalIn++;
     const layer = classify(el.tags);
@@ -124,6 +133,9 @@ async function generate(cityKey) {
   </g>
   <g class="roads" fill="none" stroke="#0D4F4A" stroke-opacity="0.18" stroke-width="0.6" stroke-linejoin="round" stroke-linecap="round">
     ${layers.roads.map(p => `<path d="${p.d}"/>`).join('\n    ')}
+  </g>
+  <g class="borders" fill="none" stroke="#F28D63" stroke-opacity="0.55" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="3 3">
+    ${layers.borders.map(p => `<path d="${p.d}"/>`).join('\n    ')}
   </g>
 </svg>`;
 
