@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Complex } from '@/hooks/useComplexes';
+import cityDistrictsData from '@/data/cityDistricts.json';
 
 type City = 'ho_chi_minh' | 'hanoi';
 
-// Geographic bounding boxes (expanded to cover all vetted complexes incl. D9 & Tan Phu).
-// MUST match the bbox used in scripts/generate-city-maps.mjs so labels & pins
-// align with the underlying SVG geography.
+// Geographic bounding boxes — MUST match scripts/generate-city-maps.mjs.
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
   ho_chi_minh: { minLat: 10.68, maxLat: 10.85, minLng: 106.62, maxLng: 106.83 },
   hanoi:       { minLat: 20.97, maxLat: 21.10, minLng: 105.74, maxLng: 105.93 },
@@ -17,11 +16,10 @@ const CITY_LABEL: Record<City, string> = {
   hanoi: 'Hanoi',
 };
 
-type Label = { name: string; lat: number; lng: number; kind: 'district' | 'water' | 'landmark' };
+type Label = { name: string; lat: number; lng: number; kind: 'district' | 'water' };
 
 const LABELS: Record<City, Label[]> = {
   ho_chi_minh: [
-    // Districts — centroids verified against OSM
     { name: 'District 1', lat: 10.7757, lng: 106.7004, kind: 'district' },
     { name: 'District 3', lat: 10.7847, lng: 106.6840, kind: 'district' },
     { name: 'District 4', lat: 10.7578, lng: 106.7050, kind: 'district' },
@@ -33,16 +31,7 @@ const LABELS: Record<City, Label[]> = {
     { name: 'Tan Phu', lat: 10.7920, lng: 106.6280, kind: 'district' },
     { name: 'Binh Thanh', lat: 10.8030, lng: 106.7070, kind: 'district' },
     { name: 'Phu Nhuan', lat: 10.7960, lng: 106.6790, kind: 'district' },
-    // Water
     { name: 'Saigon River', lat: 10.7920, lng: 106.7470, kind: 'water' },
-    // Landmarks
-    { name: '◆ Ben Thanh Market', lat: 10.7725, lng: 106.6980, kind: 'landmark' },
-    { name: '◆ Notre Dame Cathedral', lat: 10.7798, lng: 106.6990, kind: 'landmark' },
-    { name: '◆ Bitexco Tower', lat: 10.7717, lng: 106.7044, kind: 'landmark' },
-    { name: '◆ Landmark 81', lat: 10.7951, lng: 106.7218, kind: 'landmark' },
-    { name: '◆ Tan Son Nhat Airport', lat: 10.8188, lng: 106.6519, kind: 'landmark' },
-    { name: '◆ Crescent Lake', lat: 10.7295, lng: 106.7178, kind: 'landmark' },
-    { name: '◆ Saigon Zoo', lat: 10.7878, lng: 106.7058, kind: 'landmark' },
   ],
   hanoi: [
     { name: 'Hoan Kiem', lat: 21.0277, lng: 105.8520, kind: 'district' },
@@ -54,40 +43,63 @@ const LABELS: Record<City, Label[]> = {
     { name: 'West Lake', lat: 21.0610, lng: 105.8180, kind: 'water' },
     { name: 'Hoan Kiem Lake', lat: 21.0290, lng: 105.8525, kind: 'water' },
     { name: 'Red River', lat: 21.0400, lng: 105.8870, kind: 'water' },
-    { name: '◆ Old Quarter', lat: 21.0345, lng: 105.8500, kind: 'landmark' },
-    { name: '◆ Opera House', lat: 21.0245, lng: 105.8579, kind: 'landmark' },
-    { name: '◆ Lotte Center', lat: 21.0314, lng: 105.8120, kind: 'landmark' },
-    { name: '◆ Temple of Literature', lat: 21.0227, lng: 105.8355, kind: 'landmark' },
   ],
 };
 
-// Approximate district outlines (clockwise lat/lng polygons).
-// Hand-crafted to evoke borders; not surveyor-accurate.
-type DistrictShape = { name: string; points: [number, number][] };
+// Landmark profiles — clickable pins with editorial mini-cards.
+type Landmark = { name: string; lat: number; lng: number; blurb: string; image: string; url?: string };
 
-const DISTRICTS: Record<City, DistrictShape[]> = {
+const LANDMARKS: Record<City, Landmark[]> = {
   ho_chi_minh: [
-    { name: 'District 1', points: [[10.787,106.685],[10.790,106.708],[10.785,106.720],[10.770,106.722],[10.762,106.715],[10.760,106.700],[10.762,106.690]] },
-    { name: 'District 3', points: [[10.795,106.673],[10.795,106.692],[10.778,106.692],[10.770,106.682],[10.778,106.673]] },
-    { name: 'District 4', points: [[10.770,106.700],[10.770,106.715],[10.748,106.715],[10.745,106.703],[10.755,106.698]] },
-    { name: 'District 5', points: [[10.770,106.655],[10.770,106.683],[10.750,106.683],[10.748,106.658]] },
-    { name: 'District 7', points: [[10.748,106.700],[10.748,106.752],[10.715,106.755],[10.710,106.715],[10.728,106.700]] },
-    { name: 'District 2', points: [[10.820,106.720],[10.820,106.760],[10.795,106.765],[10.780,106.755],[10.785,106.730]] },
-    { name: 'Thu Thiem', points: [[10.788,106.715],[10.788,106.736],[10.762,106.736],[10.760,106.720]] },
-    { name: 'District 9', points: [[10.860,106.810],[10.860,106.860],[10.820,106.860],[10.815,106.815]] },
-    { name: 'Binh Thanh', points: [[10.820,106.685],[10.820,106.720],[10.790,106.720],[10.790,106.700],[10.798,106.685]] },
-    { name: 'Phu Nhuan', points: [[10.810,106.670],[10.810,106.692],[10.788,106.692],[10.790,106.670]] },
-    { name: 'Tan Phu', points: [[10.815,106.615],[10.815,106.648],[10.778,106.648],[10.778,106.615]] },
+    { name: 'Ben Thanh Market', lat: 10.7725, lng: 106.6980,
+      blurb: 'The 1914 colonial-era market — Saigon\'s most iconic landmark, ringed by hawkers, street food and the new Metro Line 1 terminus.',
+      image: 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/B%E1%BA%BFn_Th%C3%A0nh_Market' },
+    { name: 'Notre-Dame Cathedral', lat: 10.7798, lng: 106.6990,
+      blurb: 'Twin red-brick spires built by French settlers in the 1880s. Anchors the postcard view of central District 1.',
+      image: 'https://images.unsplash.com/photo-1583417267826-aebc4d1542e1?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Saigon_Notre-Dame_Basilica' },
+    { name: 'Bitexco Financial Tower', lat: 10.7717, lng: 106.7044,
+      blurb: '262 m lotus-bud silhouette with a helipad sky deck. The original symbol of modern Saigon\'s skyline.',
+      image: 'https://images.unsplash.com/photo-1545569310-d6fb78a39d10?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Bitexco_Financial_Tower' },
+    { name: 'Landmark 81', lat: 10.7951, lng: 106.7218,
+      blurb: 'Vietnam\'s tallest building (461 m). Sits inside Vinhomes Central Park with riverside parks, mall and SkyView observation deck.',
+      image: 'https://images.unsplash.com/photo-1542621334-a254cf47733d?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Landmark_81' },
+    { name: 'Tan Son Nhat Airport', lat: 10.8188, lng: 106.6519,
+      blurb: 'Vietnam\'s busiest international gateway — 20–35 minutes from most central districts.',
+      image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Tan_Son_Nhat_International_Airport' },
+    { name: 'Crescent Lake', lat: 10.7295, lng: 106.7178,
+      blurb: 'Phu My Hung\'s entertainment heart — lakeside promenade, Starlight Bridge, international cafés and weekend night markets.',
+      image: 'https://images.unsplash.com/photo-1528127269322-539801943592?w=600&q=70' },
+    { name: 'Saigon Zoo & Botanical Garden', lat: 10.7878, lng: 106.7058,
+      blurb: '160-year-old gardens at the edge of District 1 — one of the oldest zoos in the world and a green lung for the centre.',
+      image: 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?w=600&q=70' },
   ],
   hanoi: [
-    { name: 'Hoan Kiem', points: [[21.038,105.846],[21.038,105.862],[21.018,105.862],[21.018,105.846]] },
-    { name: 'Ba Dinh', points: [[21.048,105.812],[21.048,105.842],[21.025,105.842],[21.025,105.812]] },
-    { name: 'Tay Ho', points: [[21.085,105.798],[21.085,105.840],[21.048,105.840],[21.048,105.798]] },
-    { name: 'Dong Da', points: [[21.028,105.815],[21.028,105.845],[21.005,105.845],[21.005,105.815]] },
-    { name: 'Hai Ba Trung', points: [[21.018,105.848],[21.018,105.870],[20.988,105.870],[20.988,105.848]] },
-    { name: 'Cau Giay', points: [[21.045,105.782],[21.045,105.812],[21.015,105.812],[21.015,105.782]] },
+    { name: 'Old Quarter', lat: 21.0345, lng: 105.8500,
+      blurb: '36 ancient guild streets — Hanoi\'s 1,000-year-old commercial soul of street pho, beer corners and lantern-lit alleys.',
+      image: 'https://images.unsplash.com/photo-1509030450996-dd1a26dda07a?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Old_Quarter,_Hanoi' },
+    { name: 'Hanoi Opera House', lat: 21.0245, lng: 105.8579,
+      blurb: 'Belle Époque opera built 1911 — the architectural flagship of French Hanoi, hosting symphonic and ballet seasons.',
+      image: 'https://images.unsplash.com/photo-1599283820107-1f57c3c0eb3a?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Hanoi_Opera_House' },
+    { name: 'Lotte Center Hanoi', lat: 21.0314, lng: 105.8120,
+      blurb: '272 m mixed-use tower with sky observatory, department store and one of the city\'s top hotel breakfasts.',
+      image: 'https://images.unsplash.com/photo-1545569310-d6fb78a39d10?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Lotte_Center_Hanoi' },
+    { name: 'Temple of Literature', lat: 21.0227, lng: 105.8355,
+      blurb: 'Vietnam\'s first national university (1070 AD). Five walled courtyards of pavilions, lotus ponds and stone stelae.',
+      image: 'https://images.unsplash.com/photo-1583330357807-fc8d3afa6e08?w=600&q=70',
+      url: 'https://en.wikipedia.org/wiki/Temple_of_Literature,_Hanoi' },
   ],
 };
+
+type DistrictData = Record<City, { name: string; rings: [number, number][][] }[]>;
+const DISTRICT_SHAPES = cityDistrictsData as DistrictData;
 
 function project(lat: number, lng: number, city: City) {
   const b = BBOX[city];
@@ -275,7 +287,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
             }}
           />
 
-          {/* District borders — creative dashed outlines */}
+          {/* District borders — real OSM admin polygons */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
             viewBox="0 0 100 100"
@@ -287,39 +299,38 @@ export function ComplexMapCanvas({ complexes }: Props) {
                 <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.15" strokeOpacity="0.18" />
               </pattern>
             </defs>
-            {DISTRICTS[city].map((d) => {
-              const pts = d.points
-                .map(([lat, lng]) => {
-                  const p = project(lat, lng, city);
-                  return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
-                })
-                .join(' ');
-              return (
-                <g key={d.name}>
+            {DISTRICT_SHAPES[city]?.map((d) =>
+              d.rings.map((ring, i) => {
+                const pts = ring
+                  .map(([lat, lng]) => {
+                    const p = project(lat, lng, city);
+                    return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+                  })
+                  .join(' ');
+                return (
                   <polygon
+                    key={`${d.name}-${i}`}
                     points={pts}
                     fill="url(#districtFill)"
                     stroke="#F28D63"
-                    strokeOpacity="0.5"
+                    strokeOpacity="0.55"
                     strokeWidth={1.1}
                     strokeDasharray="3 3"
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
                   />
-                </g>
-              );
-            })}
+                );
+              }),
+            )}
           </svg>
 
 
-          {/* Place name labels */}
+          {/* Place name labels (districts + water only) */}
           {LABELS[city].map((l) => {
             const { x, y } = clampPct(project(l.lat, l.lng, city));
             const className =
               l.kind === 'water'
                 ? 'text-[#0D4F4A]/55 italic font-serif text-[11px] tracking-wider'
-                : l.kind === 'landmark'
-                ? 'text-[#F28D63]/85 font-semibold text-[9px] tracking-wider'
                 : 'text-[#0D4F4A]/70 font-semibold text-[9px] uppercase tracking-[0.18em]';
             return (
               <span
@@ -336,6 +347,71 @@ export function ComplexMapCanvas({ complexes }: Props) {
               </span>
             );
           })}
+
+          {/* Landmark pins — clickable diamond markers with profile cards */}
+          {LANDMARKS[city].map((lm) => {
+            const { x, y } = clampPct(project(lm.lat, lm.lng, city));
+            const key = `lm-${lm.name}`;
+            const isActive = activeId === key;
+            const flipUp = y > 55;
+            const flipLeft = x > 70;
+            const flipRight = x < 30;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  if (wasDraggedRef.current) return;
+                  setActiveId(isActive ? null : key);
+                }}
+                onMouseEnter={() => { if (!isDragging) setActiveId(key); }}
+                className="group absolute -translate-x-1/2 -translate-y-1/2 z-[9]"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  transform: `translate(-50%, -50%) scale(${1 / zoom})`,
+                }}
+                aria-label={lm.name}
+              >
+                <span className={`block w-2.5 h-2.5 bg-[#F28D63] ring-2 ring-white shadow-md rotate-45 ${isActive ? 'scale-125' : ''} transition-transform`} />
+                {!isActive && (
+                  <span className="absolute top-4 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-[#F28D63]/85 whitespace-nowrap tracking-wider">
+                    {lm.name}
+                  </span>
+                )}
+                {isActive && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className={`absolute w-56 sm:w-64 bg-white/95 backdrop-blur-md rounded-lg shadow-2xl border border-[#F28D63]/20 overflow-hidden text-left z-30 ${
+                      flipUp ? 'bottom-6' : 'top-6'
+                    } ${flipLeft ? 'right-0' : flipRight ? 'left-0' : 'left-1/2 -translate-x-1/2'}`}
+                  >
+                    <img src={lm.image} alt={lm.name} loading="lazy" className="w-full h-24 sm:h-28 object-cover bg-[#0D4F4A]/5" />
+                    <div className="p-3 sm:p-4">
+                      <div className="flex items-center justify-between mb-1.5 gap-2">
+                        <h4 className="text-[#0D4F4A] font-serif text-sm sm:text-base leading-tight">{lm.name}</h4>
+                        <span className="text-[8px] font-bold text-[#F28D63] border border-[#F28D63]/30 px-1.5 py-0.5 rounded tracking-tighter shrink-0 uppercase">
+                          Landmark
+                        </span>
+                      </div>
+                      <p className="text-[#0D4F4A]/75 text-[11px] leading-relaxed">{lm.blurb}</p>
+                      {lm.url && (
+                        <a
+                          href={lm.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block mt-2 text-[10px] font-semibold text-[#F28D63] hover:underline tracking-wider uppercase"
+                        >
+                          Learn more →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+
 
           {/* Pins */}
           {cityComplexes.map((c) => {
