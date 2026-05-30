@@ -287,7 +287,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
             }}
           />
 
-          {/* District borders — creative dashed outlines */}
+          {/* District borders — real OSM admin polygons */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
             viewBox="0 0 100 100"
@@ -299,39 +299,38 @@ export function ComplexMapCanvas({ complexes }: Props) {
                 <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.15" strokeOpacity="0.18" />
               </pattern>
             </defs>
-            {DISTRICTS[city].map((d) => {
-              const pts = d.points
-                .map(([lat, lng]) => {
-                  const p = project(lat, lng, city);
-                  return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
-                })
-                .join(' ');
-              return (
-                <g key={d.name}>
+            {DISTRICT_SHAPES[city]?.map((d) =>
+              d.rings.map((ring, i) => {
+                const pts = ring
+                  .map(([lat, lng]) => {
+                    const p = project(lat, lng, city);
+                    return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+                  })
+                  .join(' ');
+                return (
                   <polygon
+                    key={`${d.name}-${i}`}
                     points={pts}
                     fill="url(#districtFill)"
                     stroke="#F28D63"
-                    strokeOpacity="0.5"
+                    strokeOpacity="0.55"
                     strokeWidth={1.1}
                     strokeDasharray="3 3"
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
                   />
-                </g>
-              );
-            })}
+                );
+              }),
+            )}
           </svg>
 
 
-          {/* Place name labels */}
+          {/* Place name labels (districts + water only) */}
           {LABELS[city].map((l) => {
             const { x, y } = clampPct(project(l.lat, l.lng, city));
             const className =
               l.kind === 'water'
                 ? 'text-[#0D4F4A]/55 italic font-serif text-[11px] tracking-wider'
-                : l.kind === 'landmark'
-                ? 'text-[#F28D63]/85 font-semibold text-[9px] tracking-wider'
                 : 'text-[#0D4F4A]/70 font-semibold text-[9px] uppercase tracking-[0.18em]';
             return (
               <span
@@ -348,6 +347,71 @@ export function ComplexMapCanvas({ complexes }: Props) {
               </span>
             );
           })}
+
+          {/* Landmark pins — clickable diamond markers with profile cards */}
+          {LANDMARKS[city].map((lm) => {
+            const { x, y } = clampPct(project(lm.lat, lm.lng, city));
+            const key = `lm-${lm.name}`;
+            const isActive = activeId === key;
+            const flipUp = y > 55;
+            const flipLeft = x > 70;
+            const flipRight = x < 30;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  if (wasDraggedRef.current) return;
+                  setActiveId(isActive ? null : key);
+                }}
+                onMouseEnter={() => { if (!isDragging) setActiveId(key); }}
+                className="group absolute -translate-x-1/2 -translate-y-1/2 z-[9]"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  transform: `translate(-50%, -50%) scale(${1 / zoom})`,
+                }}
+                aria-label={lm.name}
+              >
+                <span className={`block w-2.5 h-2.5 bg-[#F28D63] ring-2 ring-white shadow-md rotate-45 ${isActive ? 'scale-125' : ''} transition-transform`} />
+                {!isActive && (
+                  <span className="absolute top-4 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-[#F28D63]/85 whitespace-nowrap tracking-wider">
+                    {lm.name}
+                  </span>
+                )}
+                {isActive && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className={`absolute w-56 sm:w-64 bg-white/95 backdrop-blur-md rounded-lg shadow-2xl border border-[#F28D63]/20 overflow-hidden text-left z-30 ${
+                      flipUp ? 'bottom-6' : 'top-6'
+                    } ${flipLeft ? 'right-0' : flipRight ? 'left-0' : 'left-1/2 -translate-x-1/2'}`}
+                  >
+                    <img src={lm.image} alt={lm.name} loading="lazy" className="w-full h-24 sm:h-28 object-cover bg-[#0D4F4A]/5" />
+                    <div className="p-3 sm:p-4">
+                      <div className="flex items-center justify-between mb-1.5 gap-2">
+                        <h4 className="text-[#0D4F4A] font-serif text-sm sm:text-base leading-tight">{lm.name}</h4>
+                        <span className="text-[8px] font-bold text-[#F28D63] border border-[#F28D63]/30 px-1.5 py-0.5 rounded tracking-tighter shrink-0 uppercase">
+                          Landmark
+                        </span>
+                      </div>
+                      <p className="text-[#0D4F4A]/75 text-[11px] leading-relaxed">{lm.blurb}</p>
+                      {lm.url && (
+                        <a
+                          href={lm.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block mt-2 text-[10px] font-semibold text-[#F28D63] hover:underline tracking-wider uppercase"
+                        >
+                          Learn more →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+
 
           {/* Pins */}
           {cityComplexes.map((c) => {
