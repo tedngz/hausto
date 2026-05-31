@@ -351,7 +351,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden
-            style={{ pointerEvents: 'none' }}
+            style={{ pointerEvents: 'auto' }}
           >
             <defs>
               <pattern id="districtFill" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
@@ -375,6 +375,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
                 return (
                   <polygon
                     key={`${d.name}-${i}`}
+                    data-district-name={hasFacts ? d.name : undefined}
                     points={pts}
                     fill={isActive ? 'url(#districtFillActive)' : 'url(#districtFill)'}
                     stroke="#F28D63"
@@ -384,12 +385,8 @@ export function ComplexMapCanvas({ complexes }: Props) {
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
                     style={{ pointerEvents: hasFacts ? 'auto' : 'none', cursor: hasFacts ? 'pointer' : 'default' }}
-                    onClick={(e) => {
-                      if (wasDraggedRef.current) return;
-                      e.stopPropagation();
-                      setActiveDistrict((prev) => (prev === d.name ? null : d.name));
-                      setActiveId(null);
-                    }}
+                    onPointerUp={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
                   />
                 );
               });
