@@ -189,6 +189,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
   const pinchRef = useRef<{ startDist: number; startZoom: number; centerX: number; centerY: number; origPanX: number; origPanY: number } | null>(null);
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const wasDraggedRef = useRef(false);
+  const pendingDistrictRef = useRef<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const cityComplexes = useMemo(
@@ -219,6 +220,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-map-control]')) return;
+    pendingDistrictRef.current = (e.target as Element).closest<SVGElement>('[data-district-name]')?.dataset.districtName ?? null;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -273,6 +275,12 @@ export function ComplexMapCanvas({ complexes }: Props) {
     if (pointersRef.current.size < 2) pinchRef.current = null;
     if (pointersRef.current.size === 0) {
       wasDraggedRef.current = !!dragRef.current?.moved;
+      if (!wasDraggedRef.current && pendingDistrictRef.current) {
+        const districtName = pendingDistrictRef.current;
+        setActiveDistrict((prev) => (prev === districtName ? null : districtName));
+        setActiveId(null);
+      }
+      pendingDistrictRef.current = null;
       dragRef.current = null;
       setIsDragging(false);
       if (wasDraggedRef.current) setTimeout(() => { wasDraggedRef.current = false; }, 0);
