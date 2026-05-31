@@ -49,54 +49,103 @@ const LABELS: Record<City, Label[]> = {
 // Landmark profiles — clickable pins with editorial mini-cards.
 type Landmark = { name: string; lat: number; lng: number; blurb: string; image: string; url?: string };
 
+// Wikimedia Commons hot-link helper — always returns a 600px-wide JPG.
+const wm = (file: string) =>
+  `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=600`;
+
 const LANDMARKS: Record<City, Landmark[]> = {
   ho_chi_minh: [
     { name: 'Ben Thanh Market', lat: 10.7725, lng: 106.6980,
       blurb: 'The 1914 colonial-era market — Saigon\'s most iconic landmark, ringed by hawkers, street food and the new Metro Line 1 terminus.',
-      image: 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=600&q=70',
+      image: wm('Ben Thanh market 2.jpg'),
       url: 'https://en.wikipedia.org/wiki/B%E1%BA%BFn_Th%C3%A0nh_Market' },
     { name: 'Notre-Dame Cathedral', lat: 10.7798, lng: 106.6990,
       blurb: 'Twin red-brick spires built by French settlers in the 1880s. Anchors the postcard view of central District 1.',
-      image: 'https://images.unsplash.com/photo-1583417267826-aebc4d1542e1?w=600&q=70',
+      image: wm('Saigon Notre-Dame Basilica.jpg'),
       url: 'https://en.wikipedia.org/wiki/Saigon_Notre-Dame_Basilica' },
     { name: 'Bitexco Financial Tower', lat: 10.7717, lng: 106.7044,
       blurb: '262 m lotus-bud silhouette with a helipad sky deck. The original symbol of modern Saigon\'s skyline.',
-      image: 'https://images.unsplash.com/photo-1545569310-d6fb78a39d10?w=600&q=70',
+      image: wm('Bitexco Financial Tower, Ho Chi Minh City, Vietnam.jpg'),
       url: 'https://en.wikipedia.org/wiki/Bitexco_Financial_Tower' },
     { name: 'Landmark 81', lat: 10.7951, lng: 106.7218,
       blurb: 'Vietnam\'s tallest building (461 m). Sits inside Vinhomes Central Park with riverside parks, mall and SkyView observation deck.',
-      image: 'https://images.unsplash.com/photo-1542621334-a254cf47733d?w=600&q=70',
+      image: wm('Landmark 81 (32099609868).jpg'),
       url: 'https://en.wikipedia.org/wiki/Landmark_81' },
     { name: 'Tan Son Nhat Airport', lat: 10.8188, lng: 106.6519,
       blurb: 'Vietnam\'s busiest international gateway — 20–35 minutes from most central districts.',
-      image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600&q=70',
+      image: wm('Tan Son Nhat International Airport.jpg'),
       url: 'https://en.wikipedia.org/wiki/Tan_Son_Nhat_International_Airport' },
     { name: 'Crescent Lake', lat: 10.7295, lng: 106.7178,
       blurb: 'Phu My Hung\'s entertainment heart — lakeside promenade, Starlight Bridge, international cafés and weekend night markets.',
-      image: 'https://images.unsplash.com/photo-1528127269322-539801943592?w=600&q=70' },
+      image: wm('Phu My Hung, HCM City 1.jpg') },
     { name: 'Saigon Zoo & Botanical Garden', lat: 10.7878, lng: 106.7058,
       blurb: '160-year-old gardens at the edge of District 1 — one of the oldest zoos in the world and a green lung for the centre.',
-      image: 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?w=600&q=70' },
+      image: wm('Saigon zoo and botanical gardens, HCMC, Vietnam (23800870310).jpg') },
   ],
   hanoi: [
     { name: 'Old Quarter', lat: 21.0345, lng: 105.8500,
       blurb: '36 ancient guild streets — Hanoi\'s 1,000-year-old commercial soul of street pho, beer corners and lantern-lit alleys.',
-      image: 'https://images.unsplash.com/photo-1509030450996-dd1a26dda07a?w=600&q=70',
+      image: wm('Hanoi Night Market 1.jpg'),
       url: 'https://en.wikipedia.org/wiki/Old_Quarter,_Hanoi' },
     { name: 'Hanoi Opera House', lat: 21.0245, lng: 105.8579,
       blurb: 'Belle Époque opera built 1911 — the architectural flagship of French Hanoi, hosting symphonic and ballet seasons.',
-      image: 'https://images.unsplash.com/photo-1599283820107-1f57c3c0eb3a?w=600&q=70',
+      image: wm('Hanoi Opera House 2018.jpg'),
       url: 'https://en.wikipedia.org/wiki/Hanoi_Opera_House' },
     { name: 'Lotte Center Hanoi', lat: 21.0314, lng: 105.8120,
       blurb: '272 m mixed-use tower with sky observatory, department store and one of the city\'s top hotel breakfasts.',
-      image: 'https://images.unsplash.com/photo-1545569310-d6fb78a39d10?w=600&q=70',
+      image: wm('Lotte Center Hanoi.jpg'),
       url: 'https://en.wikipedia.org/wiki/Lotte_Center_Hanoi' },
     { name: 'Temple of Literature', lat: 21.0227, lng: 105.8355,
       blurb: 'Vietnam\'s first national university (1070 AD). Five walled courtyards of pavilions, lotus ponds and stone stelae.',
-      image: 'https://images.unsplash.com/photo-1583330357807-fc8d3afa6e08?w=600&q=70',
+      image: wm('Hanoi Temple of Literature.jpg'),
       url: 'https://en.wikipedia.org/wiki/Temple_of_Literature,_Hanoi' },
   ],
 };
+
+// Editorial district quick-facts — surfaced when an outline is clicked.
+type DistrictFact = {
+  population: string;
+  vibe: string;
+  bestAreas: string[];
+  blurb: string;
+};
+
+const DISTRICT_FACTS: Record<string, DistrictFact> = {
+  // Ho Chi Minh City
+  'District 1':    { population: '~142,000', vibe: 'Central, cosmopolitan, walkable', bestAreas: ['Le Thanh Ton', 'Dong Khoi', 'Nguyen Hue'], blurb: 'Saigon\'s historic & financial core. Embassies, five-stars, the Japanese & Korean quarters, and the new Metro Line 1 terminus.' },
+  'District 3':    { population: '~190,000', vibe: 'Leafy, French-colonial, café culture', bestAreas: ['Turtle Lake', 'Vo Thi Sau', 'Tu Xuong'], blurb: 'Old villas, boutique cafés and the rom-com Saigon expats fall for. Quiet but a 5-minute Grab from D1.' },
+  'District 4':    { population: '~175,000', vibe: 'Compact, foodie, riverside', bestAreas: ['Hoang Dieu', 'Khanh Hoi'], blurb: 'Vietnam\'s densest district. Stellar street-seafood corridor and rising luxury riverside high-rises.' },
+  'District 5':    { population: '~160,000', vibe: 'Chinatown energy, traditional', bestAreas: ['Cholon', 'Tran Hung Dao'], blurb: 'Saigon\'s historic Chinatown — pagodas, herbal-medicine markets and some of the best Cantonese in Vietnam.' },
+  'District 7':    { population: '~365,000', vibe: 'Master-planned, family-first, expat hub', bestAreas: ['Phu My Hung', 'Crescent Lake', 'Sky Garden'], blurb: 'The original expat enclave — international schools, wide boulevards, Korean & Japanese supermarkets and lakeside running paths.' },
+  'District 10':   { population: '~240,000', vibe: 'Local middle-class, sports & shopping', bestAreas: ['3/2 Boulevard', 'Su Van Hanh'], blurb: 'Vietnamese family neighbourhoods, Van Hanh Mall, big hospitals, indoor sports centres.' },
+  'District 11':   { population: '~210,000', vibe: 'Working-class, street-food rich', bestAreas: ['Dam Sen', 'Lac Long Quan'], blurb: 'Home to Dam Sen water park and one of Saigon\'s densest hawker scenes.' },
+  'Binh Thanh':    { population: '~500,000', vibe: 'Hyper-growth, riverside towers', bestAreas: ['Vinhomes Central Park', 'Landmark 81', 'Thao Dien-side'], blurb: 'Anchored by Landmark 81 & Vinhomes Central Park. The fastest-rising luxury riverside corridor in Saigon.' },
+  'Phu Nhuan':     { population: '~165,000', vibe: 'Mid-luxe local, leafy lanes', bestAreas: ['Phan Xich Long', 'Truong Sa canal'], blurb: 'Phan Xich Long food street, canal-side runs and quietly stylish boutiques. A locals-meet-creatives sweet spot.' },
+  'Tan Binh':      { population: '~470,000', vibe: 'Airport-adjacent, convenient', bestAreas: ['Bay Hien', 'Hoang Hoa Tham'], blurb: 'Wraps around Tan Son Nhat airport. Strong Vietnamese-Chinese community and Vietnam\'s biggest Catholic enclave.' },
+  'Tan Phu':       { population: '~485,000', vibe: 'Suburban, family-focused', bestAreas: ['Aeon Tan Phu', 'Tay Thanh'], blurb: 'Mid-rise Vietnamese suburbia anchored by AEON Mall — comfortable, calm, and well-served.' },
+  'Go Vap':        { population: '~680,000', vibe: 'Young, residential, affordable', bestAreas: ['Quang Trung', 'Pham Van Dong'], blurb: 'Big student & young-family district — affordable rents and a fast-growing café scene along Pham Van Dong.' },
+  'Binh Tan':      { population: '~785,000', vibe: 'Industrial, sprawling, value', bestAreas: ['Aeon Binh Tan', 'Ten Lua'], blurb: 'The western gateway — factories, Aeon Mall and an emerging Korean community.' },
+  'District 6':    { population: '~250,000', vibe: 'Old Chinatown, market-driven', bestAreas: ['Binh Tay Market', 'Phu Lam'], blurb: 'Home of Binh Tay wholesale market — the original heart of Cholon trading.' },
+  'District 8':    { population: '~430,000', vibe: 'Canal-laced, in-transition', bestAreas: ['Pham The Hien', 'Chanh Hung'], blurb: 'A grid of canals and lively local markets, with affordable rents and rapid new-build activity.' },
+  'District 12':   { population: '~620,000', vibe: 'Outer-ring, riverside green', bestAreas: ['An Phu Dong', 'Thanh Loc'], blurb: 'Saigon\'s northern edge along the river — quiet villa lanes, low-rise master plans and weekend cafés.' },
+
+  // Hanoi
+  'Hoan Kiem':     { population: '~135,000', vibe: 'Historic core, lake & Old Quarter', bestAreas: ['Old Quarter', 'French Quarter', 'Trang Tien'], blurb: 'The thousand-year heart of Hanoi: Hoan Kiem Lake, the 36 guild streets and the colonial Opera House quarter.' },
+  'Ba Dinh':       { population: '~225,000', vibe: 'Government, embassy, boulevards', bestAreas: ['Truc Bach', 'Ngoc Ha', 'Giang Vo'], blurb: 'Embassies, the Presidential Palace and West-Lake-fringe villas. Quiet diplomatic prestige.' },
+  'Tay Ho':        { population: '~165,000', vibe: 'Expat lakeside, brunch & yoga', bestAreas: ['Quang An', 'Xuan Dieu', 'Tay Ho Peninsula'], blurb: 'Hanoi\'s defining expat district — West Lake views, international restaurants, yoga studios and Sunday brunches.' },
+  'Dong Da':       { population: '~370,000', vibe: 'Dense local, university belt', bestAreas: ['Lang Ha', 'Hoang Cau'], blurb: 'Hanoi\'s most populated district — universities, hospitals and a thick layer of authentic street food.' },
+  'Hai Ba Trung':  { population: '~315,000', vibe: 'Local-modern, Vincom-anchored', bestAreas: ['Times City', 'Vincom Ba Trieu'], blurb: 'Anchored by Times City — schools, hospitals and mid-luxe Vinhomes towers within walking distance of Hoan Kiem.' },
+  'Cau Giay':      { population: '~290,000', vibe: 'New-business, Korean expats', bestAreas: ['Trung Hoa', 'Yen Hoa', 'Cau Giay Park'], blurb: 'Hanoi\'s newer office & business district — a strong Korean expat community, modern apartments and good parks.' },
+  'Thanh Xuan':    { population: '~290,000', vibe: 'Mid-luxe, growing high-rises', bestAreas: ['Royal City', 'Nguyen Trai'], blurb: 'Home to Royal City\'s underground megamall and a long spine of new mid-luxe towers.' },
+  'Long Bien':     { population: '~340,000', vibe: 'East-bank, master-planned green', bestAreas: ['Vinhomes Riverside', 'Ngoc Thuy'], blurb: 'Across the Red River — leafy villa estates like Vinhomes Riverside and easy airport access.' },
+  'Hoang Mai':     { population: '~535,000', vibe: 'South-Hanoi value, Times City overflow', bestAreas: ['Linh Dam', 'Vinh Tuy'], blurb: 'Big lakes, affordable family towers and a fast-growing dining scene around Linh Dam peninsula.' },
+};
+
+function centroidOfRings(rings: [number, number][][]): [number, number] {
+  let sx = 0, sy = 0, n = 0;
+  for (const r of rings) for (const [lat, lng] of r) { sx += lng; sy += lat; n++; }
+  return [sy / n, sx / n];
+}
 
 type DistrictData = Record<City, { name: string; rings: [number, number][][] }[]>;
 const DISTRICT_SHAPES = cityDistrictsData as DistrictData;
