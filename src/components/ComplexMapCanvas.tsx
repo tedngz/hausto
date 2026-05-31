@@ -632,6 +632,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
               onClick={() => {
                 setCity(k);
                 setActiveId(null);
+                setActiveDistrict(null);
                 setZoom(1);
                 setPan({ x: 0, y: 0 });
               }}
