@@ -179,6 +179,7 @@ interface Props {
 export function ComplexMapCanvas({ complexes }: Props) {
   const [city, setCity] = useState<City>('ho_chi_minh');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement | null>(null);
