@@ -161,6 +161,21 @@ function clampPct(p: { x: number; y: number }) {
   return { x: Math.max(2, Math.min(98, p.x)), y: Math.max(3, Math.min(97, p.y)) };
 }
 
+function pointInRing(point: { x: number; y: number }, ring: [number, number][], city: City) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = project(ring[i][0], ring[i][1], city);
+    const b = project(ring[j][0], ring[j][1], city);
+    const intersects = a.y > point.y !== b.y > point.y && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function districtAtPoint(point: { x: number; y: number }, city: City) {
+  return DISTRICT_SHAPES[city]?.find((d) => DISTRICT_FACTS[d.name] && d.rings.some((ring) => pointInRing(point, ring, city)))?.name ?? null;
+}
+
 function formatBracket(c: Complex): string | null {
   const b = c.average_rent_brackets;
   if (!b) return null;
