@@ -677,7 +677,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
 
         {/* Hint */}
         <div data-map-control className="absolute top-3 right-3 sm:top-4 sm:right-4 z-40 bg-white/70 backdrop-blur-sm rounded-full px-2.5 py-1 text-[9px] uppercase tracking-wider text-[#0D4F4A]/60 hidden sm:block">
-          Scroll to zoom · Drag to pan
+          Scroll · Drag · Tap a district
         </div>
         <div data-map-control className="absolute top-3 right-3 z-40 bg-white/70 backdrop-blur-sm rounded-full px-2.5 py-1 text-[9px] uppercase tracking-wider text-[#0D4F4A]/60 sm:hidden">
           Pinch · Drag
