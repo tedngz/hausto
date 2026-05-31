@@ -233,9 +233,18 @@ export function ComplexMapCanvas({ complexes }: Props) {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
+  const getMapPoint = (e: React.PointerEvent) => {
+    const el = containerRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const localX = (e.clientX - rect.left - rect.width / 2 - pan.x) / zoom + rect.width / 2;
+    const localY = (e.clientY - rect.top - rect.height / 2 - pan.y) / zoom + rect.height / 2;
+    return { x: (localX / rect.width) * 100, y: (localY / rect.height) * 100 };
+  };
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-map-control]')) return;
-    pendingDistrictRef.current = (e.target as Element).closest<SVGElement>('[data-district-name]')?.dataset.districtName ?? null;
+    pendingDistrictRef.current = districtAtPoint(getMapPoint(e) ?? { x: -1, y: -1 }, city);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
