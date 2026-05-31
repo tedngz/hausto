@@ -161,6 +161,21 @@ function clampPct(p: { x: number; y: number }) {
   return { x: Math.max(2, Math.min(98, p.x)), y: Math.max(3, Math.min(97, p.y)) };
 }
 
+function pointInRing(point: { x: number; y: number }, ring: [number, number][], city: City) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = project(ring[i][0], ring[i][1], city);
+    const b = project(ring[j][0], ring[j][1], city);
+    const intersects = a.y > point.y !== b.y > point.y && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function districtAtPoint(point: { x: number; y: number }, city: City) {
+  return DISTRICT_SHAPES[city]?.find((d) => DISTRICT_FACTS[d.name] && d.rings.some((ring) => pointInRing(point, ring, city)))?.name ?? null;
+}
+
 function formatBracket(c: Complex): string | null {
   const b = c.average_rent_brackets;
   if (!b) return null;
@@ -189,6 +204,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
   const pinchRef = useRef<{ startDist: number; startZoom: number; centerX: number; centerY: number; origPanX: number; origPanY: number } | null>(null);
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const wasDraggedRef = useRef(false);
+  const pendingDistrictRef = useRef<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const cityComplexes = useMemo(
@@ -217,8 +233,18 @@ export function ComplexMapCanvas({ complexes }: Props) {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
+  const getMapPoint = (e: React.PointerEvent) => {
+    const el = containerRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const localX = (e.clientX - rect.left - rect.width / 2 - pan.x) / zoom + rect.width / 2;
+    const localY = (e.clientY - rect.top - rect.height / 2 - pan.y) / zoom + rect.height / 2;
+    return { x: (localX / rect.width) * 100, y: (localY / rect.height) * 100 };
+  };
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-map-control]')) return;
+    pendingDistrictRef.current = districtAtPoint(getMapPoint(e) ?? { x: -1, y: -1 }, city);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -273,6 +299,12 @@ export function ComplexMapCanvas({ complexes }: Props) {
     if (pointersRef.current.size < 2) pinchRef.current = null;
     if (pointersRef.current.size === 0) {
       wasDraggedRef.current = !!dragRef.current?.moved;
+      if (!wasDraggedRef.current && pendingDistrictRef.current) {
+        const districtName = pendingDistrictRef.current;
+        setActiveDistrict((prev) => (prev === districtName ? null : districtName));
+        setActiveId(null);
+      }
+      pendingDistrictRef.current = null;
       dragRef.current = null;
       setIsDragging(false);
       if (wasDraggedRef.current) setTimeout(() => { wasDraggedRef.current = false; }, 0);
@@ -343,7 +375,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden
-            style={{ pointerEvents: 'none' }}
+            style={{ pointerEvents: 'auto' }}
           >
             <defs>
               <pattern id="districtFill" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
@@ -367,6 +399,7 @@ export function ComplexMapCanvas({ complexes }: Props) {
                 return (
                   <polygon
                     key={`${d.name}-${i}`}
+                    data-district-name={hasFacts ? d.name : undefined}
                     points={pts}
                     fill={isActive ? 'url(#districtFillActive)' : 'url(#districtFill)'}
                     stroke="#F28D63"
@@ -376,12 +409,8 @@ export function ComplexMapCanvas({ complexes }: Props) {
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
                     style={{ pointerEvents: hasFacts ? 'auto' : 'none', cursor: hasFacts ? 'pointer' : 'default' }}
-                    onClick={(e) => {
-                      if (wasDraggedRef.current) return;
-                      e.stopPropagation();
-                      setActiveDistrict((prev) => (prev === d.name ? null : d.name));
-                      setActiveId(null);
-                    }}
+                    onPointerUp={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
                   />
                 );
               });
