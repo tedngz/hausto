@@ -337,20 +337,27 @@ export function ComplexMapCanvas({ complexes }: Props) {
             }}
           />
 
-          {/* District borders — real OSM admin polygons */}
+          {/* District borders — real OSM admin polygons (clickable for quick facts) */}
           <svg
-            className="absolute inset-0 w-full h-full pointer-events-none"
+            className="absolute inset-0 w-full h-full"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden
+            style={{ pointerEvents: 'none' }}
           >
             <defs>
               <pattern id="districtFill" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
                 <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.15" strokeOpacity="0.18" />
               </pattern>
+              <pattern id="districtFillActive" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
+                <rect width="2" height="2" fill="#F28D63" fillOpacity="0.12" />
+                <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.25" strokeOpacity="0.4" />
+              </pattern>
             </defs>
-            {DISTRICT_SHAPES[city]?.map((d) =>
-              d.rings.map((ring, i) => {
+            {DISTRICT_SHAPES[city]?.map((d) => {
+              const hasFacts = !!DISTRICT_FACTS[d.name];
+              const isActive = activeDistrict === d.name;
+              return d.rings.map((ring, i) => {
                 const pts = ring
                   .map(([lat, lng]) => {
                     const p = project(lat, lng, city);
@@ -361,18 +368,87 @@ export function ComplexMapCanvas({ complexes }: Props) {
                   <polygon
                     key={`${d.name}-${i}`}
                     points={pts}
-                    fill="url(#districtFill)"
+                    fill={isActive ? 'url(#districtFillActive)' : 'url(#districtFill)'}
                     stroke="#F28D63"
-                    strokeOpacity="0.55"
-                    strokeWidth={1.1}
-                    strokeDasharray="3 3"
+                    strokeOpacity={isActive ? 0.95 : 0.55}
+                    strokeWidth={isActive ? 1.6 : 1.1}
+                    strokeDasharray={isActive ? '0' : '3 3'}
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
+                    style={{ pointerEvents: hasFacts ? 'auto' : 'none', cursor: hasFacts ? 'pointer' : 'default' }}
+                    onClick={(e) => {
+                      if (wasDraggedRef.current) return;
+                      e.stopPropagation();
+                      setActiveDistrict((prev) => (prev === d.name ? null : d.name));
+                      setActiveId(null);
+                    }}
                   />
                 );
-              }),
-            )}
+              });
+            })}
           </svg>
+
+          {/* District quick-facts overlay card */}
+          {activeDistrict && DISTRICT_FACTS[activeDistrict] && (() => {
+            const shape = DISTRICT_SHAPES[city]?.find((d) => d.name === activeDistrict);
+            if (!shape) return null;
+            const [clat, clng] = centroidOfRings(shape.rings);
+            const { x, y } = clampPct(project(clat, clng, city));
+            const f = DISTRICT_FACTS[activeDistrict];
+            const flipUp = y > 55;
+            return (
+              <div
+                className="absolute z-[25] -translate-x-1/2"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  transform: `translate(-50%, ${flipUp ? '-110%' : '10%'}) scale(${1 / zoom})`,
+                  transformOrigin: flipUp ? 'bottom center' : 'top center',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="w-64 sm:w-72 bg-white/95 backdrop-blur-md rounded-lg shadow-2xl border border-[#F28D63]/30 overflow-hidden text-left">
+                  <div className="px-4 pt-3 pb-2 border-b border-[#F28D63]/15 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[8px] font-bold text-[#F28D63] uppercase tracking-[0.18em]">District</p>
+                      <h4 className="text-[#0D4F4A] font-serif text-base leading-tight mt-0.5">{activeDistrict}</h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDistrict(null)}
+                      className="text-[#0D4F4A]/40 hover:text-[#0D4F4A] text-base leading-none"
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <p className="text-[#0D4F4A]/75 text-[11px] leading-relaxed">{f.blurb}</p>
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <p className="text-[8px] font-bold text-[#0D4F4A]/45 uppercase tracking-wider mb-0.5">Population</p>
+                        <p className="text-[#0D4F4A] text-[11px] font-semibold">{f.population}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-bold text-[#0D4F4A]/45 uppercase tracking-wider mb-0.5">Vibe</p>
+                        <p className="text-[#0D4F4A] text-[11px] font-semibold leading-tight">{f.vibe}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-bold text-[#0D4F4A]/45 uppercase tracking-wider mb-1.5">Best areas</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {f.bestAreas.map((a) => (
+                          <span key={a} className="text-[10px] text-[#0D4F4A] bg-[#F28D63]/10 border border-[#F28D63]/25 px-2 py-0.5 rounded-full">
+                            {a}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
 
           {/* Place name labels (districts + water only) */}
