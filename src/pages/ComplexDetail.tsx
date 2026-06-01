@@ -122,8 +122,18 @@ export default function ComplexDetail() {
                 </section>
               )}
 
-              {/* Location map */}
-              <ComplexLocationMap complex={complex} />
+              {/* Location map — full interactive canvas focused on this complex */}
+              <section>
+                <div className="flex items-end justify-between mb-4">
+                  <h2 className="font-serif text-2xl">Location</h2>
+                </div>
+                <ComplexMapCanvas
+                  complexes={allComplexes ?? [complex]}
+                  focusComplexId={complex.id}
+                  hideHeader
+                />
+              </section>
+
 
 
 
