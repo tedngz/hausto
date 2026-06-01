@@ -354,15 +354,17 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="text-center mb-6 md:mb-10 space-y-2 md:space-y-3 px-2">
-        <span className="text-[#F28D63] font-semibold tracking-[0.2em] uppercase text-[10px]">
-          Curated Residences
-        </span>
-        <h2 className="text-3xl md:text-5xl text-[#0D4F4A] font-serif font-normal leading-tight">
-          The Luxury Map of <em className="italic">{CITY_LABEL[city]}</em>
-        </h2>
-        <div className="w-12 h-px bg-[#0D4F4A]/20 mx-auto mt-3 md:mt-4" />
-      </div>
+      {!hideHeader && (
+        <div className="text-center mb-6 md:mb-10 space-y-2 md:space-y-3 px-2">
+          <span className="text-[#F28D63] font-semibold tracking-[0.2em] uppercase text-[10px]">
+            Curated Residences
+          </span>
+          <h2 className="text-3xl md:text-5xl text-[#0D4F4A] font-serif font-normal leading-tight">
+            The Luxury Map of <em className="italic">{CITY_LABEL[city]}</em>
+          </h2>
+          <div className="w-12 h-px bg-[#0D4F4A]/20 mx-auto mt-3 md:mt-4" />
+        </div>
+      )}
 
       {/* Canvas */}
       <div
