@@ -248,6 +248,18 @@ export default function ComplexDetail() {
                 </section>
               )}
 
+              {complex.pet_policy && (
+                <section>
+                  <Card className="p-5 bg-muted/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <PawPrint className="h-4 w-4" aria-hidden="true" />
+                      <span className="font-medium">Pet policy</span>
+                    </div>
+                    <p className="text-sm text-foreground/80">{complex.pet_policy}</p>
+                  </Card>
+                </section>
+              )}
+
               {/* Live listings at this complex */}
               <section>
                 <div className="flex items-end justify-between mb-4">
@@ -288,19 +300,6 @@ export default function ComplexDetail() {
                   </Card>
                 )}
               </section>
-
-              {/* Pet policy */}
-              {complex.pet_policy && (
-                <section>
-                  <Card className="p-5 bg-muted/30">
-                    <div className="flex items-center gap-2 mb-2">
-                      <PawPrint className="h-4 w-4" aria-hidden="true" />
-                      <span className="font-medium">Pet policy</span>
-                    </div>
-                    <p className="text-sm text-foreground/80">{complex.pet_policy}</p>
-                  </Card>
-                </section>
-              )}
             </div>
 
             {/* Sticky CTA */}
