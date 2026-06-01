@@ -10,7 +10,8 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConciergeCaptureModal } from '@/components/ConciergeCaptureModal';
 import { PropertyCard } from '@/components/PropertyCard';
-import { ComplexLocationMap } from '@/components/ComplexLocationMap';
+import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
+import { useComplexes } from '@/hooks/useComplexes';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 
 const ROOM_LABEL: Record<string, string> = {
