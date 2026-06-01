@@ -248,48 +248,6 @@ export default function ComplexDetail() {
                 </section>
               )}
 
-              {/* Live listings at this complex */}
-              <section>
-                <div className="flex items-end justify-between mb-4">
-                  <h2 className="font-serif text-2xl flex items-center gap-2">
-                    <Home className="h-5 w-5" aria-hidden="true" />
-                    Live listings at {complex.name}
-                  </h2>
-                  {!listingsLoading && listings && listings.length > 0 && (
-                    <Badge variant="secondary">{listings.length} active</Badge>
-                  )}
-                </div>
-
-                {listingsLoading ? (
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <Skeleton className="h-64 w-full" />
-                    <Skeleton className="h-64 w-full" />
-                  </div>
-                ) : listings && listings.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {listings.map((a) => (
-                      <PropertyCard
-                        key={a.id}
-                        apartment={a}
-                        showContactButton={false}
-                        hideVibeScore
-                        showRealtorInfo={false}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <Card className="p-6 bg-muted/30 text-center">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      No live listings at {complex.name} right now. Our concierge can alert vetted partner brokers holding inventory here.
-                    </p>
-                    <Button onClick={() => setModalOpen(true)} size="sm">
-                      Request availability
-                    </Button>
-                  </Card>
-                )}
-              </section>
-
-              {/* Pet policy */}
               {complex.pet_policy && (
                 <section>
                   <Card className="p-5 bg-muted/30">
