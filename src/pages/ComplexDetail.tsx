@@ -130,7 +130,7 @@ export default function ComplexDetail() {
                 <section>
                   <div className="flex items-end justify-between mb-4">
                     <h2 className="font-serif text-2xl">Inside {complex.name}</h2>
-                    <span className="text-xs text-muted-foreground">From current listings</span>
+                    <span className="text-xs text-muted-foreground">​</span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {complex.gallery.slice(0, 6).map((src, i) => (
