@@ -54,7 +54,7 @@ export default function Complexes() {
                 Complex Explorer · For pre-arrival expats
               </p>
               <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight">
-                Find your home in Vietnam <em className="text-primary not-italic">before</em> you land.
+                Your insider guide to <em className="text-primary not-italic">premium</em> Vietnam rentals.
               </h1>
               <p className="mt-6 text-lg text-muted-foreground max-w-2xl">
                 100% vetted luxury complexes. Zero ghost listings. Permanent building profiles with realistic rent ranges,
