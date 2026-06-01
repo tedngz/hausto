@@ -781,7 +781,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
       </div>
 
       <p className="mt-4 text-center text-[10px] text-[#0D4F4A]/30 tracking-wider">
-        Geography © OpenStreetMap contributors
+        ​
       </p>
     </div>
   );
