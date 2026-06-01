@@ -138,7 +138,7 @@ export default function ComplexDetail() {
                         key={src + i}
                         type="button"
                         onClick={() => setLightbox(src)}
-                        className={`group relative overflow-hidden rounded-lg bg-muted ${i === 0 ? 'col-span-2 row-span-2 aspect-square md:aspect-[4/3]' : 'aspect-square'}`}
+                        className={`group relative overflow-hidden rounded-lg bg-muted ${i === 0 ? 'col-span-2 row-span-2 aspect-square' : 'aspect-square'}`}
                       >
                         <img
                           src={src}
