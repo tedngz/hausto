@@ -10,7 +10,8 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConciergeCaptureModal } from '@/components/ConciergeCaptureModal';
 import { PropertyCard } from '@/components/PropertyCard';
-import { ComplexLocationMap } from '@/components/ComplexLocationMap';
+import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
+import { useComplexes } from '@/hooks/useComplexes';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 
 const ROOM_LABEL: Record<string, string> = {
@@ -20,6 +21,7 @@ const ROOM_LABEL: Record<string, string> = {
 export default function ComplexDetail() {
   const { slug } = useParams<{ slug: string }>();
   const { data: complex, isLoading } = useComplex(slug);
+  const { data: allComplexes } = useComplexes();
   const { data: listings, isLoading: listingsLoading } = useComplexListings(complex);
   const [modalOpen, setModalOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -120,8 +122,18 @@ export default function ComplexDetail() {
                 </section>
               )}
 
-              {/* Location map */}
-              <ComplexLocationMap complex={complex} />
+              {/* Location map — full interactive canvas focused on this complex */}
+              <section>
+                <div className="flex items-end justify-between mb-4">
+                  <h2 className="font-serif text-2xl">Location</h2>
+                </div>
+                <ComplexMapCanvas
+                  complexes={allComplexes ?? [complex]}
+                  focusComplexId={complex.id}
+                  hideHeader
+                />
+              </section>
+
 
 
 
