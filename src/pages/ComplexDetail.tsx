@@ -21,6 +21,7 @@ const ROOM_LABEL: Record<string, string> = {
 export default function ComplexDetail() {
   const { slug } = useParams<{ slug: string }>();
   const { data: complex, isLoading } = useComplex(slug);
+  const { data: allComplexes } = useComplexes();
   const { data: listings, isLoading: listingsLoading } = useComplexListings(complex);
   const [modalOpen, setModalOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
