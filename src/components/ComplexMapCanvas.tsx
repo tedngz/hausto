@@ -189,13 +189,20 @@ const MAX_ZOOM = 4;
 
 interface Props {
   complexes: Complex[];
+  focusComplexId?: string;
+  hideHeader?: boolean;
 }
 
-export function ComplexMapCanvas({ complexes }: Props) {
-  const [city, setCity] = useState<City>('ho_chi_minh');
-  const [activeId, setActiveId] = useState<string | null>(null);
+export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Props) {
+  const focusComplex = useMemo(
+    () => (focusComplexId ? complexes.find((c) => c.id === focusComplexId) : undefined),
+    [complexes, focusComplexId],
+  );
+  const initialCity: City = (focusComplex?.city as City) ?? 'ho_chi_minh';
+  const [city, setCity] = useState<City>(initialCity);
+  const [activeId, setActiveId] = useState<string | null>(focusComplexId ?? null);
   const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(focusComplex ? 2.5 : 1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Tracks one-finger drag or mouse drag
@@ -211,6 +218,30 @@ export function ComplexMapCanvas({ complexes }: Props) {
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
     [complexes, city],
   );
+
+  // Center on the focused complex once the container has measured.
+  useEffect(() => {
+    if (!focusComplex || focusComplex.latitude == null || focusComplex.longitude == null) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const targetZoom = 2.5;
+    const recenter = () => {
+      const rect = el.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const p = project(focusComplex.latitude!, focusComplex.longitude!, focusComplex.city as City);
+      const panX = (rect.width / 2 - (rect.width * p.x) / 100) * targetZoom;
+      const panY = (rect.height / 2 - (rect.height * p.y) / 100) * targetZoom;
+      setCity(focusComplex.city as City);
+      setZoom(targetZoom);
+      setPan({ x: panX, y: panY });
+      setActiveId(focusComplex.id);
+    };
+    recenter();
+    const ro = new ResizeObserver(recenter);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusComplex?.id]);
 
   // Wheel zoom — attach as non-passive so we can preventDefault.
   useEffect(() => {
