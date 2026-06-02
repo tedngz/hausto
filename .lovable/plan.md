@@ -1,43 +1,35 @@
-## Plan: Real city shapes for `/map`
+## Goal
+Make the property location map (the small modal map shown from a property card) feel premium and editorial — less "Google Maps", more Hausto.
 
-### Approach
-Pre-bake one SVG per city from OpenStreetMap data, served as static assets. The existing `ComplexMapCanvas` keeps its pin/card layer; only the background swaps from abstract paths to the real city geometry. Pins still project from real lat/lng onto the same bbox the SVG was generated for, so they land in their correct neighborhoods.
+## Scope
+Only `src/components/MapViewModal.tsx`. No logic changes — same modal, same data, same lat/lng marker.
 
-### One-time generation script
-`scripts/generate-city-maps.mjs` (run by me, not at runtime):
-1. Query Overpass API for each city's bbox:
-   - **HCMC bbox**: 10.68–10.85 lat, 106.62–106.83 lng
-   - **Hanoi bbox**: 20.97–21.10 lat, 105.74–105.93 lng
-2. Pull four layers per city:
-   - District boundaries (`admin_level=8`, `boundary=administrative`)
-   - Waterways (`natural=water`, `waterway=river|canal`)
-   - Major roads (`highway=motorway|trunk|primary`)
-   - Parks/green (`leisure=park`, `landuse=grass|recreation_ground`, `leisure=golf_course`)
-3. Convert with `osmtogeojson`, simplify with `@turf/simplify` (tolerance ~0.0003), project to a 1000×700 viewBox using equirectangular projection bound to the bbox.
-4. Emit `public/maps/ho_chi_minh.svg` and `public/maps/hanoi.svg`, each with grouped `<g>` layers (`parks`, `water`, `roads`, `districts`) using `currentColor` + opacity classes so brand colors come from CSS.
+## Changes
 
-Expected size ~80–200 KB per city after simplification.
+1. **Swap tile layer to a minimal monochrome basemap**
+   - Replace the default colorful OpenStreetMap tiles with CARTO Positron (free, no key, OSM-attributed): `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png`.
+   - Result: soft grey/white streets, muted labels, no clashing reds/greens — matches Hausto's editorial palette.
+   - Keep proper attribution (© OpenStreetMap, © CARTO) per their terms.
 
-### Runtime changes (`ComplexMapCanvas.tsx`)
-- Remove abstract `<path>`/`<circle>` background.
-- Add `<img src="/maps/{city}.svg" />` (or inline-fetch + dangerouslySetInnerHTML if we want to retheme strokes via CSS) absolutely positioned to fill the canvas, with `preserveAspectRatio="xMidYMid slice"`.
-- Keep the radial dot grid overlay for texture.
-- Same bbox constants drive both the SVG projection (at generation time) and the pin projection (at runtime), so they stay aligned.
-- Optional: small "© OpenStreetMap" attribution in the legend (OSM license requirement).
+2. **Custom marker instead of default blue pin**
+   - Drop the Leaflet default icon (and its CDN icon URLs). Use `L.divIcon` with a small branded pin: a primary-colored dot with a soft ring/pulse, rendered via inline HTML + tailwind-ish inline styles using the project's primary color (`#0D4F4A`).
+   - Cleaner silhouette, no shadow PNG.
 
-### Styling
-Within each SVG, layer strokes/fills use semantic CSS variables so they tint with the theme:
-- Districts: `#0D4F4A` stroke at 12% opacity, no fill
-- Water: `#0D4F4A` fill at 10% opacity
-- Roads: `#0D4F4A` stroke at 8% opacity, 0.5px
-- Parks: `#9CB89A`-ish muted sage fill at 18% opacity
+3. **Refined map chrome**
+   - Hide the default zoom control (`zoomControl: false`) or restyle to bottom-right, smaller.
+   - Disable scroll-wheel zoom on initial load to feel calmer; keep drag + double-click zoom.
+   - Add subtle inner border-radius + ring via wrapper (`rounded-b-lg overflow-hidden ring-1 ring-border/40`).
+   - Slightly taller (380px) for better composition.
 
-### Out of scope
-- District labels (can add later if desired)
-- Live OSM fetching at runtime (static is faster + works offline)
-- Tile-based maps
+4. **Tighter dialog header**
+   - Keep title + location description, but reduce vertical padding so the map dominates.
 
-### Files touched
-- New: `scripts/generate-city-maps.mjs`, `public/maps/ho_chi_minh.svg`, `public/maps/hanoi.svg`
-- Edit: `src/components/ComplexMapCanvas.tsx` (swap background + add attribution)
-- Edit: `package.json` (devDeps: `osmtogeojson`, `@turf/simplify`; one-off run, not in build pipeline)
+## Out of scope
+- No changes to the larger `ComplexMapCanvas` (already styled).
+- No new dependencies — Leaflet + CARTO tiles only.
+- No marker clustering or extra POIs.
+
+## Technical notes
+- CARTO Positron is free for commercial use with attribution; no API key.
+- `divIcon` HTML: a 14px primary dot inside a 32px translucent ring, centered via `iconAnchor: [16,16]`.
+- Attribution string: `© <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://carto.com/attributions">CARTO</a>`.
