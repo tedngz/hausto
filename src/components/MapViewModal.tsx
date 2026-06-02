@@ -118,8 +118,8 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
         </DialogHeader>
         <div
           ref={mapRef}
-          className="w-full"
-          style={{ height: '350px', minHeight: '350px', position: 'relative', zIndex: 1 }}
+          className="w-full rounded-b-lg overflow-hidden ring-1 ring-border/40"
+          style={{ height: '380px', minHeight: '380px', position: 'relative', zIndex: 1, background: '#f5f3ee' }}
         />
       </DialogContent>
     </Dialog>
