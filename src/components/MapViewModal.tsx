@@ -45,13 +45,6 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
 
       if (cancelled || !mapRef.current) return;
 
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-      });
-
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -60,15 +53,34 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
       const map = L.map(mapRef.current, {
         center: [latitude, longitude],
         zoom: 15,
-        zoomControl: true,
+        zoomControl: false,
+        scrollWheelZoom: false,
+        attributionControl: true,
       });
       mapInstanceRef.current = map;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20,
       }).addTo(map);
 
-      L.marker([latitude, longitude]).addTo(map);
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      const pinIcon = L.divIcon({
+        className: 'hausto-pin',
+        html: `
+          <span style="position:relative;display:block;width:32px;height:32px;">
+            <span style="position:absolute;inset:0;border-radius:9999px;background:rgba(13,79,74,0.18);animation:haustoPulse 2.4s ease-out infinite;"></span>
+            <span style="position:absolute;top:50%;left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:9999px;background:#0D4F4A;box-shadow:0 0 0 3px #fff, 0 4px 10px rgba(13,79,74,0.35);"></span>
+          </span>
+          <style>@keyframes haustoPulse{0%{transform:scale(0.6);opacity:0.7}100%{transform:scale(1.6);opacity:0}}</style>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+
+      L.marker([latitude, longitude], { icon: pinIcon }).addTo(map);
 
       for (const delay of [0, 100, 250, 500, 1000]) {
         setTimeout(() => {
