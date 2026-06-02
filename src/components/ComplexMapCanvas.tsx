@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import type { Complex } from '@/hooks/useComplexes';
 import cityDistrictsData from '@/data/cityDistricts.json';
 
 type City = 'ho_chi_minh' | 'hanoi';
 
-// Geographic bounding boxes — MUST match scripts/generate-city-maps.mjs.
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
   ho_chi_minh: { minLat: 10.68, maxLat: 10.85, minLng: 106.62, maxLng: 106.83 },
   hanoi:       { minLat: 20.97, maxLat: 21.10, minLng: 105.74, maxLng: 105.93 },
@@ -46,10 +45,8 @@ const LABELS: Record<City, Label[]> = {
   ],
 };
 
-// Landmark profiles — clickable pins with editorial mini-cards.
 type Landmark = { name: string; lat: number; lng: number; blurb: string; image: string; url?: string };
 
-// Wikimedia Commons hot-link helper — always returns a 600px-wide JPG.
 const wm = (file: string) =>
   `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=600`;
 
@@ -102,7 +99,6 @@ const LANDMARKS: Record<City, Landmark[]> = {
   ],
 };
 
-// Editorial district quick-facts — surfaced when an outline is clicked.
 type DistrictFact = {
   population: string;
   vibe: string;
@@ -111,7 +107,6 @@ type DistrictFact = {
 };
 
 const DISTRICT_FACTS: Record<string, DistrictFact> = {
-  // Ho Chi Minh City
   'District 1':    { population: '~142,000', vibe: 'Central, cosmopolitan, walkable', bestAreas: ['Le Thanh Ton', 'Dong Khoi', 'Nguyen Hue'], blurb: 'Saigon\'s historic & financial core. Embassies, five-stars, the Japanese & Korean quarters, and the new Metro Line 1 terminus.' },
   'District 3':    { population: '~190,000', vibe: 'Leafy, French-colonial, café culture', bestAreas: ['Turtle Lake', 'Vo Thi Sau', 'Tu Xuong'], blurb: 'Old villas, boutique cafés and the rom-com Saigon expats fall for. Quiet but a 5-minute Grab from D1.' },
   'District 4':    { population: '~175,000', vibe: 'Compact, foodie, riverside', bestAreas: ['Hoang Dieu', 'Khanh Hoi'], blurb: 'Vietnam\'s densest district. Stellar street-seafood corridor and rising luxury riverside high-rises.' },
@@ -129,7 +124,6 @@ const DISTRICT_FACTS: Record<string, DistrictFact> = {
   'District 8':    { population: '~430,000', vibe: 'Canal-laced, in-transition', bestAreas: ['Pham The Hien', 'Chanh Hung'], blurb: 'A grid of canals and lively local markets, with affordable rents and rapid new-build activity.' },
   'District 12':   { population: '~620,000', vibe: 'Outer-ring, riverside green', bestAreas: ['An Phu Dong', 'Thanh Loc'], blurb: 'Saigon\'s northern edge along the river — quiet villa lanes, low-rise master plans and weekend cafés.' },
 
-  // Hanoi
   'Hoan Kiem':     { population: '~135,000', vibe: 'Historic core, lake & Old Quarter', bestAreas: ['Old Quarter', 'French Quarter', 'Trang Tien'], blurb: 'The thousand-year heart of Hanoi: Hoan Kiem Lake, the 36 guild streets and the colonial Opera House quarter.' },
   'Ba Dinh':       { population: '~225,000', vibe: 'Government, embassy, boulevards', bestAreas: ['Truc Bach', 'Ngoc Ha', 'Giang Vo'], blurb: 'Embassies, the Presidential Palace and West-Lake-fringe villas. Quiet diplomatic prestige.' },
   'Tay Ho':        { population: '~165,000', vibe: 'Expat lakeside, brunch & yoga', bestAreas: ['Quang An', 'Xuan Dieu', 'Tay Ho Peninsula'], blurb: 'Hanoi\'s defining expat district — West Lake views, international restaurants, yoga studios and Sunday brunches.' },
@@ -150,32 +144,6 @@ function centroidOfRings(rings: [number, number][][]): [number, number] {
 type DistrictData = Record<City, { name: string; rings: [number, number][][] }[]>;
 const DISTRICT_SHAPES = cityDistrictsData as DistrictData;
 
-function project(lat: number, lng: number, city: City) {
-  const b = BBOX[city];
-  const x = ((lng - b.minLng) / (b.maxLng - b.minLng)) * 100;
-  const y = (1 - (lat - b.minLat) / (b.maxLat - b.minLat)) * 100;
-  return { x, y };
-}
-
-function clampPct(p: { x: number; y: number }) {
-  return { x: Math.max(2, Math.min(98, p.x)), y: Math.max(3, Math.min(97, p.y)) };
-}
-
-function pointInRing(point: { x: number; y: number }, ring: [number, number][], city: City) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = project(ring[i][0], ring[i][1], city);
-    const b = project(ring[j][0], ring[j][1], city);
-    const intersects = a.y > point.y !== b.y > point.y && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function districtAtPoint(point: { x: number; y: number }, city: City) {
-  return DISTRICT_SHAPES[city]?.find((d) => DISTRICT_FACTS[d.name] && d.rings.some((ring) => pointInRing(point, ring, city)))?.name ?? null;
-}
-
 function formatBracket(c: Complex): string | null {
   const b = c.average_rent_brackets;
   if (!b) return null;
@@ -184,8 +152,9 @@ function formatBracket(c: Complex): string | null {
   return `$${pick.min.toLocaleString()} — $${pick.max.toLocaleString()}`;
 }
 
-const MIN_ZOOM = 0.75;
-const MAX_ZOOM = 4;
+function esc(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
+}
 
 interface Props {
   complexes: Complex[];
@@ -194,166 +163,233 @@ interface Props {
 }
 
 export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Props) {
+  const navigate = useNavigate();
   const focusComplex = useMemo(
     () => (focusComplexId ? complexes.find((c) => c.id === focusComplexId) : undefined),
     [complexes, focusComplexId],
   );
   const initialCity: City = (focusComplex?.city as City) ?? 'ho_chi_minh';
   const [city, setCity] = useState<City>(initialCity);
-  const [activeId, setActiveId] = useState<string | null>(focusComplexId ?? null);
-  const [activeDistrict, setActiveDistrict] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(focusComplex ? 2.5 : 1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  // Tracks one-finger drag or mouse drag
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
-  // Tracks 2-finger pinch
-  const pinchRef = useRef<{ startDist: number; startZoom: number; centerX: number; centerY: number; origPanX: number; origPanY: number } | null>(null);
-  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const wasDraggedRef = useRef(false);
-  const pendingDistrictRef = useRef<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+
+  const mapElRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const overlaysRef = useRef<any>(null); // L.layerGroup for districts/labels/landmarks/complexes
 
   const cityComplexes = useMemo(
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
     [complexes, city],
   );
 
-  // Center on the focused complex once the container has measured.
+  // Mount map once
   useEffect(() => {
-    if (!focusComplex || focusComplex.latitude == null || focusComplex.longitude == null) return;
-    const el = containerRef.current;
-    if (!el) return;
-    const targetZoom = 2.5;
-    const recenter = () => {
-      const rect = el.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      const p = project(focusComplex.latitude!, focusComplex.longitude!, focusComplex.city as City);
-      const panX = (rect.width / 2 - (rect.width * p.x) / 100) * targetZoom;
-      const panY = (rect.height / 2 - (rect.height * p.y) / 100) * targetZoom;
-      setCity(focusComplex.city as City);
-      setZoom(targetZoom);
-      setPan({ x: panX, y: panY });
-      setActiveId(focusComplex.id);
-    };
-    recenter();
-    const ro = new ResizeObserver(recenter);
-    ro.observe(el);
-    return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusComplex?.id]);
+    if (!mapElRef.current || mapRef.current) return;
+    let cancelled = false;
+    (async () => {
+      const L = await import('leaflet');
+      await import('leaflet/dist/leaflet.css');
+      if (cancelled || !mapElRef.current) return;
 
-  // Wheel zoom — attach as non-passive so we can preventDefault.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      const cx = e.clientX - rect.left - rect.width / 2;
-      const cy = e.clientY - rect.top - rect.height / 2;
-      const delta = -e.deltaY * 0.0015;
-      setZoom((prevZoom) => {
-        const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, +(prevZoom * (1 + delta)).toFixed(3)));
-        const k = next / prevZoom;
-        setPan((p) => ({ x: cx - (cx - p.x) * k, y: cy - (cy - p.y) * k }));
-        return next;
+      const map = L.map(mapElRef.current, {
+        zoomControl: false,
+        scrollWheelZoom: true,
+        attributionControl: true,
       });
+      mapRef.current = map;
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+      }).addTo(map);
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+      overlaysRef.current = L.layerGroup().addTo(map);
+
+      // initial view
+      const b = BBOX[initialCity];
+      map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
+
+      // Delegated navigation for popup links
+      map.on('popupopen', (e: any) => {
+        const root: HTMLElement = e.popup.getElement();
+        const link = root?.querySelector<HTMLElement>('[data-navigate]');
+        if (link) {
+          link.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            navigate(link.getAttribute('data-navigate')!);
+            map.closePopup();
+          });
+        }
+      });
+
+      setTimeout(() => map.invalidateSize(), 0);
+      setTimeout(() => map.invalidateSize(), 250);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const getMapPoint = (e: React.PointerEvent) => {
-    const el = containerRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const localX = (e.clientX - rect.left - rect.width / 2 - pan.x) / zoom + rect.width / 2;
-    const localY = (e.clientY - rect.top - rect.height / 2 - pan.y) / zoom + rect.height / 2;
-    return { x: (localX / rect.width) * 100, y: (localY / rect.height) * 100 };
-  };
+  // Rebuild overlays when city or complexes change
+  useEffect(() => {
+    const map = mapRef.current;
+    const group = overlaysRef.current;
+    if (!map || !group) return;
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('[data-map-control]')) return;
-    pendingDistrictRef.current = districtAtPoint(getMapPoint(e) ?? { x: -1, y: -1 }, city);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    (async () => {
+      const L = await import('leaflet');
+      group.clearLayers();
 
-    if (pointersRef.current.size === 2) {
-      // start pinch
-      const pts = Array.from(pointersRef.current.values());
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const midX = (pts[0].x + pts[1].x) / 2 - rect.left - rect.width / 2;
-      const midY = (pts[0].y + pts[1].y) / 2 - rect.top - rect.height / 2;
-      pinchRef.current = {
-        startDist: dist,
-        startZoom: zoom,
-        centerX: midX,
-        centerY: midY,
-        origPanX: pan.x,
-        origPanY: pan.y,
-      };
-      dragRef.current = null;
-    } else {
-      dragRef.current = { startX: e.clientX, startY: e.clientY, origX: pan.x, origY: pan.y, moved: false };
-      setIsDragging(true);
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!pointersRef.current.has(e.pointerId)) return;
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (pinchRef.current && pointersRef.current.size === 2) {
-      const pts = Array.from(pointersRef.current.values());
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      const { startDist, startZoom, centerX, centerY, origPanX, origPanY } = pinchRef.current;
-      const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, startZoom * (dist / startDist)));
-      const k = nextZoom / startZoom;
-      setZoom(+nextZoom.toFixed(3));
-      setPan({ x: centerX - (centerX - origPanX) * k, y: centerY - (centerY - origPanY) * k });
-      return;
-    }
-
-    const d = dragRef.current;
-    if (!d) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
-    if (!d.moved && Math.hypot(dx, dy) > 3) d.moved = true;
-    setPan({ x: d.origX + dx, y: d.origY + dy });
-  };
-
-  const endPointer = (e: React.PointerEvent) => {
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-    pointersRef.current.delete(e.pointerId);
-    if (pointersRef.current.size < 2) pinchRef.current = null;
-    if (pointersRef.current.size === 0) {
-      wasDraggedRef.current = !!dragRef.current?.moved;
-      if (!wasDraggedRef.current && pendingDistrictRef.current) {
-        const districtName = pendingDistrictRef.current;
-        setActiveDistrict((prev) => (prev === districtName ? null : districtName));
-        setActiveId(null);
+      // Recenter on city
+      const b = BBOX[city];
+      if (focusComplex && focusComplex.city === city && focusComplex.latitude != null) {
+        map.setView([focusComplex.latitude, focusComplex.longitude!], 16);
+      } else {
+        map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
       }
-      pendingDistrictRef.current = null;
-      dragRef.current = null;
-      setIsDragging(false);
-      if (wasDraggedRef.current) setTimeout(() => { wasDraggedRef.current = false; }, 0);
-    }
-  };
 
-  const zoomAtCenter = (factor: number) => {
-    setZoom((prev) => {
-      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, +(prev * factor).toFixed(3)));
-      const k = next / prev;
-      setPan((p) => ({ x: p.x * k, y: p.y * k }));
-      return next;
-    });
-  };
+      // District polygons
+      DISTRICT_SHAPES[city]?.forEach((d) => {
+        const hasFacts = !!DISTRICT_FACTS[d.name];
+        d.rings.forEach((ring) => {
+          const poly = L.polygon(ring as any, {
+            color: '#F28D63',
+            weight: 1.1,
+            opacity: 0.55,
+            dashArray: '4 4',
+            fillColor: '#F28D63',
+            fillOpacity: 0.05,
+            interactive: hasFacts,
+          });
+          if (hasFacts) {
+            const f = DISTRICT_FACTS[d.name];
+            const html = `
+              <div class="hausto-popup-card" style="width:260px;">
+                <div style="padding:10px 14px 8px;border-bottom:1px solid rgba(242,141,99,0.15);">
+                  <p style="font-size:8px;font-weight:700;color:#F28D63;text-transform:uppercase;letter-spacing:0.18em;margin:0;">District</p>
+                  <h4 style="font-family:Georgia,serif;color:#0D4F4A;font-size:16px;line-height:1.15;margin:2px 0 0;">${esc(d.name)}</h4>
+                </div>
+                <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px;">
+                  <p style="color:rgba(13,79,74,0.75);font-size:11px;line-height:1.5;margin:0;">${esc(f.blurb)}</p>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div>
+                      <p style="font-size:8px;font-weight:700;color:rgba(13,79,74,0.45);text-transform:uppercase;letter-spacing:0.08em;margin:0 0 2px;">Population</p>
+                      <p style="color:#0D4F4A;font-size:11px;font-weight:600;margin:0;">${esc(f.population)}</p>
+                    </div>
+                    <div>
+                      <p style="font-size:8px;font-weight:700;color:rgba(13,79,74,0.45);text-transform:uppercase;letter-spacing:0.08em;margin:0 0 2px;">Vibe</p>
+                      <p style="color:#0D4F4A;font-size:11px;font-weight:600;line-height:1.2;margin:0;">${esc(f.vibe)}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p style="font-size:8px;font-weight:700;color:rgba(13,79,74,0.45);text-transform:uppercase;letter-spacing:0.08em;margin:0 0 6px;">Best areas</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                      ${f.bestAreas.map((a) => `<span style="font-size:10px;color:#0D4F4A;background:rgba(242,141,99,0.1);border:1px solid rgba(242,141,99,0.25);padding:2px 8px;border-radius:999px;">${esc(a)}</span>`).join('')}
+                    </div>
+                  </div>
+                </div>
+              </div>`;
+            const [clat, clng] = centroidOfRings(d.rings);
+            poly.bindPopup(html, { maxWidth: 280, className: 'hausto-popup', autoPan: true });
+            poly.on('mouseover', () => poly.setStyle({ fillOpacity: 0.14, weight: 1.6, opacity: 0.9, dashArray: '0' }));
+            poly.on('mouseout', () => poly.setStyle({ fillOpacity: 0.05, weight: 1.1, opacity: 0.55, dashArray: '4 4' }));
+            poly.on('click', () => poly.openPopup([clat, clng] as any));
+          }
+          group.addLayer(poly);
+        });
+      });
+
+      // Place labels (districts + water)
+      LABELS[city].forEach((l) => {
+        const isWater = l.kind === 'water';
+        const cls = isWater
+          ? 'font-family:Georgia,serif;font-style:italic;color:rgba(13,79,74,0.55);font-size:11px;letter-spacing:0.05em;'
+          : 'font-weight:600;color:rgba(13,79,74,0.7);font-size:9px;text-transform:uppercase;letter-spacing:0.18em;';
+        const icon = L.divIcon({
+          className: 'hausto-label',
+          html: `<span style="${cls}white-space:nowrap;text-shadow:0 1px 0 rgba(255,255,255,0.9),0 0 6px rgba(255,255,255,0.9);">${esc(l.name)}</span>`,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        });
+        L.marker([l.lat, l.lng], { icon, interactive: false, keyboard: false }).addTo(group);
+      });
+
+      // Landmark pins
+      LANDMARKS[city].forEach((lm) => {
+        const icon = L.divIcon({
+          className: 'hausto-landmark',
+          html: `
+            <span style="position:relative;display:block;width:24px;height:24px;">
+              <span style="position:absolute;top:50%;left:50%;width:10px;height:10px;margin:-5px 0 0 -5px;background:#F28D63;transform:rotate(45deg);box-shadow:0 0 0 2px #fff,0 2px 6px rgba(13,79,74,0.25);"></span>
+            </span>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
+        const marker = L.marker([lm.lat, lm.lng], { icon, title: lm.name });
+        const html = `
+          <div class="hausto-popup-card" style="width:240px;">
+            <img src="${esc(lm.image)}" alt="${esc(lm.name)}" loading="lazy" style="width:100%;height:104px;object-fit:cover;background:rgba(13,79,74,0.05);display:block;" />
+            <div style="padding:10px 12px 12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+                <h4 style="font-family:Georgia,serif;color:#0D4F4A;font-size:14px;line-height:1.15;margin:0;">${esc(lm.name)}</h4>
+                <span style="font-size:8px;font-weight:700;color:#F28D63;border:1px solid rgba(242,141,99,0.3);padding:2px 6px;border-radius:3px;letter-spacing:-0.02em;text-transform:uppercase;flex-shrink:0;">Landmark</span>
+              </div>
+              <p style="color:rgba(13,79,74,0.75);font-size:11px;line-height:1.5;margin:0;">${esc(lm.blurb)}</p>
+              ${lm.url ? `<a href="${esc(lm.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;font-size:10px;font-weight:600;color:#F28D63;text-decoration:none;letter-spacing:0.05em;text-transform:uppercase;">Learn more →</a>` : ''}
+            </div>
+          </div>`;
+        marker.bindPopup(html, { maxWidth: 260, className: 'hausto-popup', autoPan: true });
+        group.addLayer(marker);
+      });
+
+      // Complex pins
+      cityComplexes.forEach((c) => {
+        const isFocus = focusComplex?.id === c.id;
+        const html = isFocus
+          ? `<span style="position:relative;display:block;width:32px;height:32px;">
+               <span style="position:absolute;inset:0;border-radius:9999px;background:rgba(242,141,99,0.22);animation:haustoPulse 2.4s ease-out infinite;"></span>
+               <span style="position:absolute;top:50%;left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:9999px;background:#F28D63;box-shadow:0 0 0 3px #fff,0 4px 10px rgba(242,141,99,0.4);"></span>
+             </span>`
+          : `<span style="display:block;width:12px;height:12px;border-radius:9999px;background:#0D4F4A;box-shadow:0 0 0 2px #fff,0 2px 4px rgba(13,79,74,0.3);"></span>`;
+        const icon = L.divIcon({
+          className: 'hausto-complex',
+          html,
+          iconSize: isFocus ? [32, 32] : [12, 12],
+          iconAnchor: isFocus ? [16, 16] : [6, 6],
+        });
+        const marker = L.marker([c.latitude!, c.longitude!], { icon, title: c.name });
+        const bracket = formatBracket(c);
+        const premium = c.tags?.includes('luxury');
+        const popupHtml = `
+          <div class="hausto-popup-card" style="width:240px;">
+            ${c.hero_image ? `<img src="${esc(c.hero_image)}" alt="${esc(c.name)}" loading="lazy" style="width:100%;height:104px;object-fit:cover;background:rgba(13,79,74,0.05);display:block;" />` : ''}
+            <div style="padding:10px 12px 12px;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;">
+                <a href="/complexes/${esc(c.slug)}" data-navigate="/complexes/${esc(c.slug)}" style="font-family:Georgia,serif;font-weight:700;color:#0D4F4A;font-size:14px;line-height:1.15;text-decoration:none;cursor:pointer;">${esc(c.name)}</a>
+                ${premium ? `<span style="font-size:9px;font-weight:700;color:#F28D63;border:1px solid rgba(242,141,99,0.3);padding:2px 6px;border-radius:3px;letter-spacing:-0.02em;flex-shrink:0;">PREMIUM</span>` : ''}
+              </div>
+              <p style="color:rgba(13,79,74,0.6);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;">${esc(c.district)}</p>
+              ${bracket ? `<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;border-top:1px solid rgba(13,79,74,0.05);">
+                <span style="color:#0D4F4A;font-size:12px;font-weight:600;">${esc(bracket)}</span>
+                <span style="color:rgba(13,79,74,0.4);font-size:9px;">USD/mo</span>
+              </div>` : ''}
+            </div>
+          </div>`;
+        marker.bindPopup(popupHtml, { maxWidth: 260, className: 'hausto-popup', autoPan: true });
+        if (isFocus) setTimeout(() => marker.openPopup(), 300);
+        group.addLayer(marker);
+      });
+    })();
+  }, [city, cityComplexes, focusComplex]);
 
   return (
     <div className="w-full">
-      {/* Header */}
       {!hideHeader && (
         <div className="text-center mb-6 md:mb-10 space-y-2 md:space-y-3 px-2">
           <span className="text-[#F28D63] font-semibold tracking-[0.2em] uppercase text-[10px]">
@@ -366,338 +402,25 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
         </div>
       )}
 
-      {/* Canvas */}
-      <div
-        ref={containerRef}
-        className={`relative w-full aspect-[4/5] sm:aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5 touch-none ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endPointer}
-        onPointerCancel={endPointer}
-      >
-        {/* Zoomable + pannable map stage */}
-        <div
-          className={`absolute inset-0 ${isDragging || pinchRef.current ? '' : 'transition-transform duration-200 ease-out'}`}
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: 'center center',
-          }}
-        >
-          <img
-            src={`/maps/${city}.svg`}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 w-full h-full pointer-events-none select-none"
-            style={{ objectFit: 'fill' }}
-          />
+      <style>{`
+        @keyframes haustoPulse { 0%{transform:scale(0.6);opacity:0.7} 100%{transform:scale(1.6);opacity:0} }
+        .hausto-popup .leaflet-popup-content-wrapper { padding:0; border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(13,79,74,0.18); border:1px solid rgba(13,79,74,0.08); background:rgba(255,255,255,0.97); backdrop-filter:blur(8px); }
+        .hausto-popup .leaflet-popup-content { margin:0; width:auto !important; }
+        .hausto-popup .leaflet-popup-tip { background:rgba(255,255,255,0.97); }
+        .hausto-label { background:transparent !important; border:none !important; pointer-events:none; }
+        .hausto-landmark, .hausto-complex { background:transparent !important; border:none !important; }
+      `}</style>
 
-          {/* Grid overlay for texture */}
-          <div
-            className="absolute inset-0 pointer-events-none opacity-[0.05]"
-            style={{
-              backgroundImage: 'radial-gradient(#0D4F4A 1px, transparent 1px)',
-              backgroundSize: '32px 32px',
-            }}
-          />
-
-          {/* District borders — real OSM admin polygons (clickable for quick facts) */}
-          <svg
-            className="absolute inset-0 w-full h-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden
-            style={{ pointerEvents: 'auto' }}
-          >
-            <defs>
-              <pattern id="districtFill" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
-                <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.15" strokeOpacity="0.18" />
-              </pattern>
-              <pattern id="districtFillActive" patternUnits="userSpaceOnUse" width="2" height="2" patternTransform="rotate(45)">
-                <rect width="2" height="2" fill="#F28D63" fillOpacity="0.12" />
-                <line x1="0" y1="0" x2="0" y2="2" stroke="#F28D63" strokeWidth="0.25" strokeOpacity="0.4" />
-              </pattern>
-            </defs>
-            {DISTRICT_SHAPES[city]?.map((d) => {
-              const hasFacts = !!DISTRICT_FACTS[d.name];
-              const isActive = activeDistrict === d.name;
-              return d.rings.map((ring, i) => {
-                const pts = ring
-                  .map(([lat, lng]) => {
-                    const p = project(lat, lng, city);
-                    return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
-                  })
-                  .join(' ');
-                return (
-                  <polygon
-                    key={`${d.name}-${i}`}
-                    data-district-name={hasFacts ? d.name : undefined}
-                    points={pts}
-                    fill={isActive ? 'url(#districtFillActive)' : 'url(#districtFill)'}
-                    stroke="#F28D63"
-                    strokeOpacity={isActive ? 0.95 : 0.55}
-                    strokeWidth={isActive ? 1.6 : 1.1}
-                    strokeDasharray={isActive ? '0' : '3 3'}
-                    strokeLinejoin="round"
-                    vectorEffect="non-scaling-stroke"
-                    style={{ pointerEvents: hasFacts ? 'auto' : 'none', cursor: hasFacts ? 'pointer' : 'default' }}
-                    onPointerUp={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                );
-              });
-            })}
-          </svg>
-
-          {/* District quick-facts overlay card */}
-          {activeDistrict && DISTRICT_FACTS[activeDistrict] && (() => {
-            const shape = DISTRICT_SHAPES[city]?.find((d) => d.name === activeDistrict);
-            if (!shape) return null;
-            const [clat, clng] = centroidOfRings(shape.rings);
-            const { x, y } = clampPct(project(clat, clng, city));
-            const f = DISTRICT_FACTS[activeDistrict];
-            const flipUp = y > 55;
-            return (
-              <div
-                className="absolute z-[25] -translate-x-1/2"
-                style={{
-                  left: `${x}%`,
-                  top: `${y}%`,
-                  transform: `translate(-50%, ${flipUp ? '-110%' : '10%'}) scale(${1 / zoom})`,
-                  transformOrigin: flipUp ? 'bottom center' : 'top center',
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="w-64 sm:w-72 bg-white/95 backdrop-blur-md rounded-lg shadow-2xl border border-[#F28D63]/30 overflow-hidden text-left">
-                  <div className="px-4 pt-3 pb-2 border-b border-[#F28D63]/15 flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-[8px] font-bold text-[#F28D63] uppercase tracking-[0.18em]">District</p>
-                      <h4 className="text-[#0D4F4A] font-serif text-base leading-tight mt-0.5">{activeDistrict}</h4>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveDistrict(null)}
-                      className="text-[#0D4F4A]/40 hover:text-[#0D4F4A] text-base leading-none"
-                      aria-label="Close"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="p-4 space-y-3">
-                    <p className="text-[#0D4F4A]/75 text-[11px] leading-relaxed">{f.blurb}</p>
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div>
-                        <p className="text-[8px] font-bold text-[#0D4F4A]/45 uppercase tracking-wider mb-0.5">Population</p>
-                        <p className="text-[#0D4F4A] text-[11px] font-semibold">{f.population}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-bold text-[#0D4F4A]/45 uppercase tracking-wider mb-0.5">Vibe</p>
-                        <p className="text-[#0D4F4A] text-[11px] font-semibold leading-tight">{f.vibe}</p>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[8px] font-bold text-[#0D4F4A]/45 uppercase tracking-wider mb-1.5">Best areas</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {f.bestAreas.map((a) => (
-                          <span key={a} className="text-[10px] text-[#0D4F4A] bg-[#F28D63]/10 border border-[#F28D63]/25 px-2 py-0.5 rounded-full">
-                            {a}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-
-          {/* Place name labels (districts + water only) */}
-          {LABELS[city].map((l) => {
-            const { x, y } = clampPct(project(l.lat, l.lng, city));
-            const className =
-              l.kind === 'water'
-                ? 'text-[#0D4F4A]/55 italic font-serif text-[11px] tracking-wider'
-                : 'text-[#0D4F4A]/70 font-semibold text-[9px] uppercase tracking-[0.18em]';
-            return (
-              <span
-                key={l.name}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none whitespace-nowrap ${className}`}
-                style={{
-                  left: `${x}%`,
-                  top: `${y}%`,
-                  transform: `translate(-50%, -50%) scale(${1 / zoom})`,
-                  textShadow: '0 1px 0 rgba(243,240,233,0.9), 0 0 6px rgba(243,240,233,0.9)',
-                }}
-              >
-                {l.name}
-              </span>
-            );
-          })}
-
-          {/* Landmark pins — clickable diamond markers with profile cards */}
-          {LANDMARKS[city].map((lm) => {
-            const { x, y } = clampPct(project(lm.lat, lm.lng, city));
-            const key = `lm-${lm.name}`;
-            const isActive = activeId === key;
-            const flipUp = y > 55;
-            const flipLeft = x > 70;
-            const flipRight = x < 30;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  if (wasDraggedRef.current) return;
-                  setActiveId(isActive ? null : key);
-                }}
-                onMouseEnter={() => { if (!isDragging) setActiveId(key); }}
-                className="group absolute -translate-x-1/2 -translate-y-1/2 z-[9]"
-                style={{
-                  left: `${x}%`,
-                  top: `${y}%`,
-                  transform: `translate(-50%, -50%) scale(${1 / zoom})`,
-                }}
-                aria-label={lm.name}
-              >
-                <span className={`block w-2.5 h-2.5 bg-[#F28D63] ring-2 ring-white shadow-md rotate-45 ${isActive ? 'scale-125' : ''} transition-transform`} />
-                {!isActive && (
-                  <span className="absolute top-4 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-[#F28D63]/85 whitespace-nowrap tracking-wider">
-                    {lm.name}
-                  </span>
-                )}
-                {isActive && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className={`absolute w-56 sm:w-64 bg-white/95 backdrop-blur-md rounded-lg shadow-2xl border border-[#F28D63]/20 overflow-hidden text-left z-30 ${
-                      flipUp ? 'bottom-6' : 'top-6'
-                    } ${flipLeft ? 'right-0' : flipRight ? 'left-0' : 'left-1/2 -translate-x-1/2'}`}
-                  >
-                    <img src={lm.image} alt={lm.name} loading="lazy" className="w-full h-24 sm:h-28 object-cover bg-[#0D4F4A]/5" />
-                    <div className="p-3 sm:p-4">
-                      <div className="flex items-center justify-between mb-1.5 gap-2">
-                        <h4 className="text-[#0D4F4A] font-serif text-sm sm:text-base leading-tight">{lm.name}</h4>
-                        <span className="text-[8px] font-bold text-[#F28D63] border border-[#F28D63]/30 px-1.5 py-0.5 rounded tracking-tighter shrink-0 uppercase">
-                          Landmark
-                        </span>
-                      </div>
-                      <p className="text-[#0D4F4A]/75 text-[11px] leading-relaxed">{lm.blurb}</p>
-                      {lm.url && (
-                        <a
-                          href={lm.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-block mt-2 text-[10px] font-semibold text-[#F28D63] hover:underline tracking-wider uppercase"
-                        >
-                          Learn more →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </button>
-            );
-          })}
-
-
-          {/* Pins */}
-          {cityComplexes.map((c) => {
-            const { x, y } = clampPct(project(c.latitude!, c.longitude!, city));
-            const isActive = c.id === activeId;
-            const flipUp = y > 55;
-            const flipLeft = x > 70;
-            const flipRight = x < 30;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => {
-                  if (wasDraggedRef.current) return;
-                  setActiveId(isActive ? null : c.id);
-                }}
-                onMouseEnter={() => { if (!isDragging) setActiveId(c.id); }}
-                className="group absolute -translate-x-1/2 -translate-y-1/2 z-10"
-                style={{
-                  left: `${x}%`,
-                  top: `${y}%`,
-                  transform: `translate(-50%, -50%) scale(${1 / zoom})`,
-                }}
-                aria-label={c.name}
-              >
-                {isActive ? (
-                  <span className="block w-4 h-4 bg-[#F28D63] rounded-full ring-4 ring-white shadow-lg animate-pulse" />
-                ) : (
-                  <span className="block w-2.5 h-2.5 bg-[#0D4F4A] rounded-full ring-2 ring-white shadow-md group-hover:bg-[#F28D63] transition-colors" />
-                )}
-                {!isActive && (
-                  <span className="absolute top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-[#0D4F4A]/70 whitespace-nowrap uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity">
-                    {c.name}
-                  </span>
-                )}
-
-                {isActive && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className={`absolute w-56 sm:w-64 bg-white/95 backdrop-blur-md rounded-lg shadow-2xl border border-[#0D4F4A]/10 overflow-hidden text-left z-30 ${
-                      flipUp ? 'bottom-7' : 'top-7'
-                    } ${flipLeft ? 'right-0' : flipRight ? 'left-0' : 'left-1/2 -translate-x-1/2'}`}
-                  >
-                    {c.hero_image && (
-                      <img
-                        src={c.hero_image}
-                        alt={c.name}
-                        className="w-full h-24 sm:h-28 object-cover bg-[#0D4F4A]/5"
-                        loading="lazy"
-                      />
-                    )}
-                    <div className="p-3 sm:p-4">
-                      <div className="flex justify-between items-start mb-2 gap-2">
-                        <Link
-                          to={`/complexes/${c.slug}`}
-                          className="text-[#0D4F4A] font-serif font-bold text-sm sm:text-base leading-tight hover:text-[#F28D63] transition-colors"
-                        >
-                          {c.name}
-                        </Link>
-                        {c.tags?.includes('luxury') && (
-                          <span className="text-[9px] font-bold text-[#F28D63] border border-[#F28D63]/30 px-1.5 py-0.5 rounded tracking-tighter shrink-0">
-                            PREMIUM
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[#0D4F4A]/60 text-[10px] font-medium uppercase tracking-wider mb-3">
-                        {c.district}
-                      </p>
-                      {formatBracket(c) && (
-                        <div className="flex justify-between items-baseline pt-2 border-t border-[#0D4F4A]/5">
-                          <span className="text-[#0D4F4A] text-xs font-semibold">{formatBracket(c)}</span>
-                          <span className="text-[#0D4F4A]/40 text-[9px]">USD/mo</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Vignette */}
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-[#F3F0E9]/40 via-transparent to-[#F3F0E9]/40 z-20" />
+      <div className="relative w-full aspect-[4/5] sm:aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5">
+        <div ref={mapElRef} className="absolute inset-0" style={{ zIndex: 1 }} />
 
         {/* City toggle */}
-        <div data-map-control className="absolute bottom-3 left-3 sm:bottom-6 sm:left-6 z-40 flex bg-white/80 backdrop-blur-md rounded-full p-1 border border-[#0D4F4A]/10 shadow-sm">
+        <div className="absolute bottom-3 left-3 sm:bottom-6 sm:left-6 z-[500] flex bg-white/85 backdrop-blur-md rounded-full p-1 border border-[#0D4F4A]/10 shadow-sm">
           {(Object.keys(CITY_LABEL) as City[]).map((k) => (
             <button
               key={k}
               type="button"
-              onClick={() => {
-                setCity(k);
-                setActiveId(null);
-                setActiveDistrict(null);
-                setZoom(1);
-                setPan({ x: 0, y: 0 });
-              }}
+              onClick={() => setCity(k)}
               className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold rounded-full uppercase tracking-wider transition-colors ${
                 city === k
                   ? 'bg-white text-[#0D4F4A] shadow-sm'
@@ -709,44 +432,13 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
           ))}
         </div>
 
-        {/* Zoom controls */}
-        <div data-map-control className="absolute bottom-3 right-3 sm:bottom-6 sm:right-6 z-40 flex flex-col space-y-1">
-          <button
-            type="button"
-            onClick={() => zoomAtCenter(1.25)}
-            className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center bg-white/85 backdrop-blur-sm border border-[#0D4F4A]/10 rounded-md text-[#0D4F4A] text-base sm:text-sm font-bold shadow-sm hover:bg-white"
-            aria-label="Zoom in"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={() => zoomAtCenter(0.8)}
-            className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center bg-white/85 backdrop-blur-sm border border-[#0D4F4A]/10 rounded-md text-[#0D4F4A] text-base sm:text-sm font-bold shadow-sm hover:bg-white"
-            aria-label="Zoom out"
-          >
-            −
-          </button>
-          <button
-            type="button"
-            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-            className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center bg-white/85 backdrop-blur-sm border border-[#0D4F4A]/10 rounded-md text-[#0D4F4A] text-[10px] sm:text-[9px] font-bold shadow-sm hover:bg-white uppercase tracking-wider"
-            aria-label="Reset view"
-          >
-            ⟲
-          </button>
-        </div>
-
         {/* Hint */}
-        <div data-map-control className="absolute top-3 right-3 sm:top-4 sm:right-4 z-40 bg-white/70 backdrop-blur-sm rounded-full px-2.5 py-1 text-[9px] uppercase tracking-wider text-[#0D4F4A]/60 hidden sm:block">
-          Scroll · Drag · Tap a district
-        </div>
-        <div data-map-control className="absolute top-3 right-3 z-40 bg-white/70 backdrop-blur-sm rounded-full px-2.5 py-1 text-[9px] uppercase tracking-wider text-[#0D4F4A]/60 sm:hidden">
-          Pinch · Drag
+        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-[500] bg-white/75 backdrop-blur-sm rounded-full px-2.5 py-1 text-[9px] uppercase tracking-wider text-[#0D4F4A]/60 pointer-events-none">
+          Scroll · Drag · Tap
         </div>
 
         {cityComplexes.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-[#0D4F4A]/50 text-sm">
+          <div className="absolute inset-0 flex items-center justify-center text-[#0D4F4A]/50 text-sm pointer-events-none z-[400]">
             No mapped complexes in {CITY_LABEL[city]} yet.
           </div>
         )}
@@ -773,16 +465,12 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
           </span>
         </div>
         <div className="flex items-center space-x-2">
-          <div className="w-6 h-px bg-[#0D4F4A]/20" />
+          <div className="w-6 h-px bg-[#F28D63]/40" style={{ borderTop: '1px dashed #F28D63' }} />
           <span className="text-[#0D4F4A]/50 text-[10px] uppercase font-semibold tracking-widest">
-            Primary waterways
+            District borders
           </span>
         </div>
       </div>
-
-      <p className="mt-4 text-center text-[10px] text-[#0D4F4A]/30 tracking-wider">
-        ​
-      </p>
     </div>
   );
 }
