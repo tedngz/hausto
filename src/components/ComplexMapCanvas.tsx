@@ -6,7 +6,7 @@ import cityDistrictsData from '@/data/cityDistricts.json';
 type City = 'ho_chi_minh' | 'hanoi';
 
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
-  ho_chi_minh: { minLat: 10.68, maxLat: 10.85, minLng: 106.62, maxLng: 106.83 },
+  ho_chi_minh: { minLat: 10.68, maxLat: 10.90, minLng: 106.60, maxLng: 106.88 },
   hanoi:       { minLat: 20.97, maxLat: 21.10, minLng: 105.74, maxLng: 105.93 },
 };
 
@@ -27,6 +27,7 @@ const LABELS: Record<City, Label[]> = {
     { name: 'Thao Dien', lat: 10.8050, lng: 106.7390, kind: 'district' },
     { name: 'Thu Thiem', lat: 10.7770, lng: 106.7280, kind: 'district' },
     { name: 'Grand Park', lat: 10.8415, lng: 106.8370, kind: 'district' },
+    { name: 'Thu Duc City', lat: 10.8520, lng: 106.7720, kind: 'district' },
     { name: 'Tan Phu', lat: 10.7920, lng: 106.6280, kind: 'district' },
     { name: 'Binh Thanh', lat: 10.8030, lng: 106.7070, kind: 'district' },
     { name: 'Phu Nhuan', lat: 10.7960, lng: 106.6790, kind: 'district' },
@@ -78,6 +79,17 @@ const LANDMARKS: Record<City, Landmark[]> = {
     { name: 'Saigon Zoo & Botanical Garden', lat: 10.7878, lng: 106.7058,
       blurb: '160-year-old gardens at the edge of District 1 — one of the oldest zoos in the world and a green lung for the centre.',
       image: wm('Saigon zoo and botanical gardens, HCMC, Vietnam (23800870310).jpg') },
+    { name: 'Vinhomes Grand Park', lat: 10.8415, lng: 106.8410,
+      blurb: 'Vingroup\'s 271-hectare master-planned city in eastern Thu Duc — central park, international schools, malls and tens of thousands of new apartments.',
+      image: wm('Vinhomes Grand Park - panoramio.jpg'),
+      url: 'https://en.wikipedia.org/wiki/Vinhomes_Grand_Park' },
+    { name: 'Suoi Tien Theme Park', lat: 10.8635, lng: 106.8030,
+      blurb: 'Vietnam\'s most beloved Buddhist-themed amusement park and the eastern terminus of Metro Line 1.',
+      image: wm('Suối Tiên Theme Park entrance.jpg'),
+      url: 'https://en.wikipedia.org/wiki/Su%E1%BB%91i_Ti%C3%AAn_Theme_Park' },
+    { name: 'VNU Ho Chi Minh City', lat: 10.8700, lng: 106.7990,
+      blurb: 'Vietnam National University\'s sprawling 643-hectare Thu Duc campus — the country\'s largest higher-education hub.',
+      image: wm('VNU-HCM Campus.jpg') },
   ],
   hanoi: [
     { name: 'Old Quarter', lat: 21.0345, lng: 105.8500,
@@ -123,6 +135,7 @@ const DISTRICT_FACTS: Record<string, DistrictFact> = {
   'District 6':    { population: '~250,000', vibe: 'Old Chinatown, market-driven', bestAreas: ['Binh Tay Market', 'Phu Lam'], blurb: 'Home of Binh Tay wholesale market — the original heart of Cholon trading.' },
   'District 8':    { population: '~430,000', vibe: 'Canal-laced, in-transition', bestAreas: ['Pham The Hien', 'Chanh Hung'], blurb: 'A grid of canals and lively local markets, with affordable rents and rapid new-build activity.' },
   'District 12':   { population: '~620,000', vibe: 'Outer-ring, riverside green', bestAreas: ['An Phu Dong', 'Thanh Loc'], blurb: 'Saigon\'s northern edge along the river — quiet villa lanes, low-rise master plans and weekend cafés.' },
+  'Thu Duc':       { population: '~1,200,000', vibe: 'Saigon\'s new eastern city — expat enclaves & master plans', bestAreas: ['Thao Dien', 'Thu Thiem', 'An Phu', 'Vinhomes Grand Park'], blurb: 'A merged "city-within-a-city" formed in 2021 from Districts 2, 9 & old Thu Duc. Home to Thao Dien\'s expat heart, Thu Thiem\'s new financial CBD, Metro Line 1 and Vietnam\'s biggest master-planned developments.' },
 
   'Hoan Kiem':     { population: '~135,000', vibe: 'Historic core, lake & Old Quarter', bestAreas: ['Old Quarter', 'French Quarter', 'Trang Tien'], blurb: 'The thousand-year heart of Hanoi: Hoan Kiem Lake, the 36 guild streets and the colonial Opera House quarter.' },
   'Ba Dinh':       { population: '~225,000', vibe: 'Government, embassy, boulevards', bestAreas: ['Truc Bach', 'Ngoc Ha', 'Giang Vo'], blurb: 'Embassies, the Presidential Palace and West-Lake-fringe villas. Quiet diplomatic prestige.' },
