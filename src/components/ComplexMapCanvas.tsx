@@ -27,6 +27,7 @@ const LABELS: Record<City, Label[]> = {
     { name: 'Thao Dien', lat: 10.8050, lng: 106.7390, kind: 'district' },
     { name: 'Thu Thiem', lat: 10.7770, lng: 106.7280, kind: 'district' },
     { name: 'Grand Park', lat: 10.8415, lng: 106.8370, kind: 'district' },
+    { name: 'Thu Duc City', lat: 10.8520, lng: 106.7720, kind: 'district' },
     { name: 'Tan Phu', lat: 10.7920, lng: 106.6280, kind: 'district' },
     { name: 'Binh Thanh', lat: 10.8030, lng: 106.7070, kind: 'district' },
     { name: 'Phu Nhuan', lat: 10.7960, lng: 106.6790, kind: 'district' },
