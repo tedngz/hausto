@@ -6,7 +6,7 @@ import cityDistrictsData from '@/data/cityDistricts.json';
 type City = 'ho_chi_minh' | 'hanoi';
 
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
-  ho_chi_minh: { minLat: 10.68, maxLat: 10.85, minLng: 106.62, maxLng: 106.83 },
+  ho_chi_minh: { minLat: 10.68, maxLat: 10.90, minLng: 106.60, maxLng: 106.88 },
   hanoi:       { minLat: 20.97, maxLat: 21.10, minLng: 105.74, maxLng: 105.93 },
 };
 
