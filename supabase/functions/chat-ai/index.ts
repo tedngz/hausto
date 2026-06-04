@@ -1948,6 +1948,12 @@ Pick 1-3 styles and 1-2 colors that best match.`
     const likesBlock = accContext.likes.length > 0
       ? `\n💚 USER REACTED POSITIVELY TO:\n${accContext.likes.map(l => `• ${l}`).join('\n')}\nLean into these signals when ranking.`
       : '';
+    // Wait at most 800ms for the parallel summary; otherwise skip it this turn.
+    const conversationSummary = await Promise.race([
+      summaryPromise,
+      new Promise<string>(resolve => setTimeout(() => resolve(''), 800)),
+    ]);
+    if (conversationSummary) console.log('[Summary] Generated', conversationSummary.length, 'chars');
     const summaryBlock = conversationSummary
       ? `\n🧠 EARLIER CONVERSATION SUMMARY:\n${conversationSummary}\n`
       : '';
