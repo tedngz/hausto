@@ -274,11 +274,28 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
 
       // Recenter on city
       const b = BBOX[city];
-      if (focusComplex && focusComplex.city === city && focusComplex.latitude != null) {
+      if (focusLatLng) {
+        map.setView([focusLatLng.lat, focusLatLng.lng], 15);
+      } else if (focusComplex && focusComplex.city === city && focusComplex.latitude != null) {
         map.setView([focusComplex.latitude, focusComplex.longitude!], 16);
       } else {
         map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
       }
+
+      // Focus pin (for property modal use)
+      if (focusLatLng) {
+        const pinIcon = L.divIcon({
+          className: 'hausto-complex',
+          html: `<span style="position:relative;display:block;width:32px;height:32px;">
+            <span style="position:absolute;inset:0;border-radius:9999px;background:rgba(13,79,74,0.18);animation:haustoPulse 2.4s ease-out infinite;"></span>
+            <span style="position:absolute;top:50%;left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:9999px;background:#0D4F4A;box-shadow:0 0 0 3px #fff, 0 4px 10px rgba(13,79,74,0.35);"></span>
+          </span>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+        group.addLayer(L.marker([focusLatLng.lat, focusLatLng.lng], { icon: pinIcon, interactive: false }));
+      }
+
 
       // District polygons
       DISTRICT_SHAPES[city]?.forEach((d) => {
