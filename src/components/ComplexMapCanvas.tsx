@@ -429,7 +429,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         group.addLayer(marker);
       });
     })();
-  }, [city, cityComplexes, focusComplex]);
+  }, [city, cityComplexes, focusComplex, focusLatLng?.lat, focusLatLng?.lng]);
 
   return (
     <div className="w-full">
