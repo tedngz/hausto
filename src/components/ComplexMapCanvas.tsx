@@ -213,12 +213,12 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       const map = L.map(mapElRef.current, {
         zoomControl: false,
         scrollWheelZoom: true,
-        attributionControl: true,
+        attributionControl: false,
       });
       mapRef.current = map;
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://carto.com/attributions">CARTO</a>',
+        attribution: '',
         subdomains: 'abcd',
         maxZoom: 19,
       }).addTo(map);
@@ -227,8 +227,13 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       overlaysRef.current = L.layerGroup().addTo(map);
 
       // initial view
-      const b = BBOX[initialCity];
-      map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
+      if (focusLatLng) {
+        map.setView([focusLatLng.lat, focusLatLng.lng], 15);
+      } else {
+        const b = BBOX[initialCity];
+        map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
+      }
+
 
       // Delegated navigation for popup links
       map.on('popupopen', (e: any) => {
