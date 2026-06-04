@@ -173,16 +173,22 @@ function esc(s: string) {
 interface Props {
   complexes: Complex[];
   focusComplexId?: string;
+  focusLatLng?: { lat: number; lng: number; label?: string };
   hideHeader?: boolean;
+  hideChrome?: boolean;
+  initialCityOverride?: City;
 }
 
-export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Props) {
+export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideHeader, hideChrome, initialCityOverride }: Props) {
   const navigate = useNavigate();
   const focusComplex = useMemo(
     () => (focusComplexId ? complexes.find((c) => c.id === focusComplexId) : undefined),
     [complexes, focusComplexId],
   );
-  const initialCity: City = (focusComplex?.city as City) ?? 'ho_chi_minh';
+  const inferredCity: City = focusLatLng
+    ? (focusLatLng.lat > 18 ? 'hanoi' : 'ho_chi_minh')
+    : ((focusComplex?.city as City) ?? 'ho_chi_minh');
+  const initialCity: City = initialCityOverride ?? inferredCity;
   const [city, setCity] = useState<City>(initialCity);
 
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -193,6 +199,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
     [complexes, city],
   );
+
 
   // Mount map once
   useEffect(() => {
