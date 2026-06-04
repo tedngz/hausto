@@ -65,6 +65,8 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
         maxZoom: 20,
       }).addTo(map);
 
+      map.attributionControl.setPrefix(false);
+
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
       const pinIcon = L.divIcon({
