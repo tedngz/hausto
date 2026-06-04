@@ -1681,13 +1681,12 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     // Build accumulated context from conversation history
     const accContext = buildAccumulatedContext(chatHistory, message);
 
-    // Compute a compact conversation summary when history is long, so the model
-    // keeps long-term context without flooding the prompt with raw transcript.
-    let conversationSummary = '';
-    if (chatHistory.length > 20) {
-      conversationSummary = await summarizeConversation(chatHistory.slice(0, -20));
-      if (conversationSummary) console.log('[Summary] Generated', conversationSummary.length, 'chars');
-    }
+    // Kick off conversation summary in PARALLEL (don't block the main AI call).
+    // We only consume the summary if it resolves quickly; otherwise we skip it
+    // for this turn — long-term context is still preserved by accContext.
+    const summaryPromise: Promise<string> = chatHistory.length > 20
+      ? summarizeConversation(chatHistory.slice(0, -20)).catch(() => '')
+      : Promise.resolve('');
     
     // ========== IMAGE STYLE DETECTION ==========
     // If user uploaded reference images, analyze them to detect styles/vibes
