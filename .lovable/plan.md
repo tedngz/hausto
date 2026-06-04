@@ -1,45 +1,51 @@
 ## Goal
-Give the Luxury Map (`ComplexMapCanvas`, used on `/map` and on the complex detail page) the same clean monochrome basemap and branded pin look as the property `MapViewModal`, while preserving every existing piece: district outlines, district quick-facts card, place labels, landmark pins + profile cards, complex pins + profile cards, city toggle, zoom controls, pinch/drag, focus-on-complex behavior.
+Make the Discover AI chat feel as responsive as ChatGPT/Gemini — first words on screen within ~0.5–1s instead of a 5–15s blank "loading" wait — while keeping cost the same or lower.
 
-## Approach
-Replace only the basemap rendering layer. Keep all overlay React UI (popover cards, district cards, labels) and all data (LABELS, LANDMARKS, DISTRICT_SHAPES, DISTRICT_FACTS, complexes) exactly as is.
+## Where the latency comes from today
+`supabase/functions/chat-ai/index.ts` (renter mode) calls **OpenAI `gpt-5` with `reasoning_effort: 'medium'`**, then waits for the full response (up to 4000 tokens), then returns one JSON blob. The client (`useHomeAI`) uses `supabase.functions.invoke('chat-ai', ...)` which buffers the entire response. On top of that, when chat history is long it makes a **second sequential AI call** to summarize history *before* the main call (`await summarizeConversation`). Net: 5–15s of silence per message.
 
-### What changes
-1. **Drop the custom transform stage** (`translate/scale` on a `<div>` wrapping `/maps/{city}.svg`) and the manual pan/zoom/pinch/wheel handlers.
-2. **Mount a Leaflet map** in the existing container (same `aspect-[4/5] sm:aspect-[16/10] lg:aspect-[21/9]`, same rounded shell, same `#F3F0E9` fallback bg).
-   - Tile layer: CARTO Positron `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png` (subdomains `abcd`, OSM+CARTO attribution).
-   - `zoomControl: false` then `L.control.zoom({ position: 'bottomright' })`.
-   - `scrollWheelZoom: true` (keep desktop wheel zoom), `touchZoom: true`, `dragging: true` — Leaflet handles all pan/pinch.
-3. **City bounds + focus**:
-   - When `city` changes: `map.fitBounds([[minLat,minLng],[maxLat,maxLng]], { padding: [20,20] })` using existing `BBOX`.
-   - When `focusComplexId` provided: `map.setView([lat,lng], 16)`.
-4. **District polygons → Leaflet**:
-   - For each shape in `DISTRICT_SHAPES[city]`, render `L.polygon(rings)` with stroke `#F28D63` (dashed when inactive, solid+thicker when active) and a very light fill (`#F28D63` @ 0.06 inactive, 0.14 active).
-   - `click` → toggle `activeDistrict`. Keep diagonal-hatch feel via SVG `fillPattern` is overkill on Leaflet; use a clean translucent fill instead — cleaner and matches the new sleeker look.
-5. **Place labels (districts + water)**:
-   - Render each as a Leaflet `divIcon` marker (non-interactive) with the existing typography classes. Positioning automatically follows pan/zoom.
-6. **Landmark pins**:
-   - `divIcon` with the orange diamond mark + tiny label below.
-   - On click, set `activeId = 'lm-${name}'` — pop the existing profile card in a Leaflet `popup` (custom-classed for the same white/95 backdrop, shadow, image, blurb, "Learn more" link).
-7. **Complex pins**:
-   - `divIcon`: small `#0D4F4A` dot in white ring; active state = larger pulsing `#F28D63` dot (reuse the `haustoPulse` keyframes from `MapViewModal`).
-   - On click, open a Leaflet `popup` rendered via React portal containing the existing card (hero image, name → `Link to /complexes/:slug`, PREMIUM tag, price bracket, tags, "View profile" CTA).
-8. **District quick-facts card**:
-   - Render as a Leaflet popup anchored at the polygon centroid (use existing `centroidOfRings`), styled identically to today's card.
-9. **City switcher + any header chrome**: untouched — they live above the canvas.
-10. **Cleanup**: remove `zoom`, `pan`, `pinchRef`, `dragRef`, `wasDraggedRef`, wheel-listener `useEffect`, the `transform`-applied stage div, the static `/maps/{city}.svg` `<img>`, the radial-dot texture overlay, the SVG `<polygon>`/`<defs>` block, and the manual `clampPct`/zoom-scale logic for labels and pins. Keep helpers actually still needed (`project` no longer needed; `centroidOfRings`, `BBOX`, `LABELS`, `LANDMARKS`, `DISTRICT_SHAPES`, `DISTRICT_FACTS`, `formatBracket` all stay).
+## Four changes, biggest impact first
 
-### Visual result
-Soft grey/white CARTO streets underneath, dashed orange district outlines with a subtle wash, identical labels/landmark/complex pins and cards — same editorial feel, but legible real streets, real river, snappier interaction.
+### 1. Switch the primary model to Lovable AI Gateway / Gemini Flash
+- Replace the `gpt-5` (reasoning) call in `chat-ai/index.ts` renter mode with `google/gemini-3-flash-preview` via `https://ai.gateway.lovable.dev/v1/chat/completions` using `LOVABLE_API_KEY`.
+- Drop `reasoning_effort` (not applicable) and lower `max_tokens` from 4000 → 1500. The model already returns structured JSON via the existing system prompt — no reasoning model needed for that.
+- Realtor mode already uses gemini-2.5-flash, leave it.
+- Effect: ~3–5× faster time-to-first-token, and Gemini Flash is materially **cheaper per token** than gpt-5 → **net cost goes down**, not up.
+
+### 2. Stream the response (SSE) end-to-end
+- In the edge function, set `stream: true` on the Gateway call and pipe `response.body` straight back to the client with `Content-Type: text/event-stream` (same pattern the codebase already uses for other streaming functions; see the AI-gateway streaming reference).
+- Tweak the renter system prompt to emit the human-readable `summary` text **first** as plain prose, then the `{"results": [...], "totalMatches": N}` JSON block. That way tokens that show up first are already useful prose.
+- Client (`useHomeAI` + `HomeAI.tsx`): replace `supabase.functions.invoke('chat-ai', ...)` with a direct `fetch` to `${VITE_SUPABASE_URL}/functions/v1/chat-ai` carrying the publishable key, then read the SSE stream line-by-line and append text into the assistant message as it arrives (standard pattern from `connecting-to-ai-models`).
+- When the stream finishes, run the existing JSON-extraction + `validateAndFixAIResults` logic on the accumulated text and swap the streamed-prose bubble for the final property-cards UI.
+- Persisting to `chat_messages` moves to the end of the stream (assemble full text server-side as we forward, write once on `[DONE]`). No extra DB writes.
+- Effect: first token visible in ~300–800ms; perceived speed matches ChatGPT/Gemini.
+
+### 3. Stop blocking on the conversation summary
+- Currently: `await summarizeConversation(...)` happens **before** the main model call when history > 20 turns, adding 1–2s of dead time.
+- Change: fire the summary call with `Promise.all([summarizeConversation(...), buildPropertyContext(...)])` so it overlaps with property scoring; if it's still not ready by the time we build the main prompt, skip it for this turn and persist the summary into the conversation row for the next turn to use.
+- Effect: 1–2s saved on long conversations, zero quality loss after the first long-history turn.
+
+### 4. Trim the prompt
+- Reduce `chatHistory.slice(-20)` → `chatHistory.slice(-10)` in the renter-mode message assembly. The accumulated-context block + summary already carry long-term memory; raw turns past 10 add tokens (and latency) for marginal benefit.
+- Effect: smaller prompt → faster TTFT + lower input-token cost.
+
+## What stays the same
+- All existing pre-scoring, location knowledge, validation, fallback, deduping, persistence, usage tracking.
+- Realtor mode unchanged.
+- Image style analysis path unchanged (only runs when user uploads reference images).
+- Database schema unchanged.
+
+## Files touched
+- `supabase/functions/chat-ai/index.ts` — switch model + stream + parallelize summary + trim history + tweak prompt ordering (summary text first, JSON last).
+- `src/hooks/useHomeAI.tsx` — replace `functions.invoke` with streaming `fetch`, expose progressive `streamingText` to the UI.
+- `src/components/HomeAI.tsx` — render the in-flight assistant message from `streamingText` (text appears as it streams), then swap to the property-cards view when the JSON block is parsed at stream end.
+
+## Cost impact
+- Gemini Flash is cheaper than gpt-5 per input + output token, and we drop reasoning tokens entirely → expected **~40–70% cheaper per chat turn**.
+- Streaming itself adds zero cost.
+- Shorter history window and lower max_tokens cap further reduce token usage.
 
 ## Out of scope
-- No changes to `/maps/*.svg` assets (just unused after this — can stay).
-- No data changes: same complexes, landmarks, districts, facts.
-- No changes to header copy, city tabs, or page wrappers (`ComplexMap.tsx`, `ComplexDetail.tsx`).
-- No new dependencies (Leaflet + CSS already used by `MapViewModal`).
-
-## Technical notes
-- Component still owns `city`, `activeId`, `activeDistrict` React state; Leaflet is treated as a render target managed in a `useEffect` keyed on `city` and on `complexes` length, with a separate effect to update active styles without rebuilding markers.
-- For React-rich popups (landmark/complex/district cards), render the JSX into a detached DOM node via `createRoot` and pass that node to `L.popup().setContent(node)` — same pattern many Leaflet-React integrations use, avoids pulling in `react-leaflet`.
-- Keep `popupAnchor` tuned so cards don't cover the pin.
-- Mobile: Leaflet's built-in `tap` + pinch replaces the custom pointer logic — fewer bugs, better feel.
+- Realtor proactive AI (`proactive-ai-reply`, `hausto-ai-assist`) — not what shows up in the Discover/Home chat the user is asking about.
+- Switching providers for image style analysis (separate hop, only runs on image uploads).
+- Caching of repeated queries (could come later if needed).
