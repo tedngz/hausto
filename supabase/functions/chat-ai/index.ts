@@ -2101,9 +2101,11 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 
 Maximum ${maxResults} properties in results.`;
 
-    // Call Lovable AI Gateway with the enhanced prompt
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+    // Call Lovable AI Gateway with Gemini Flash — much faster TTFT and cheaper
+    // per-token than gpt-5 reasoning, while still returning the structured JSON
+    // the downstream validator expects.
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
     // Build messages with history - include images as multimodal content if present
     const userMessageContent: any = validImages.length > 0
@@ -2113,51 +2115,50 @@ Maximum ${maxResults} properties in results.`;
         ]
       : message;
 
+    // Keep only last 10 turns of raw transcript — accContext + summary already
+    // carry long-term memory, and a shorter prompt is faster + cheaper.
     const messagesWithHistory = [
       { role: 'system', content: systemPrompt },
-      ...chatHistory.slice(-20).map(msg => ({ role: msg.role, content: msg.content })),
+      ...chatHistory.slice(-10).map(msg => ({ role: msg.role, content: msg.content })),
       { role: 'user', content: userMessageContent }
     ];
 
-    // Pick reasoning depth: higher for new searches / complex queries, lower for short follow-ups.
-    const isShortFollowUp = isComparisonQuery && message.length < 80;
-    const reasoningEffort = isShortFollowUp ? 'low' : 'medium';
-    console.log(`[AI] Calling OpenAI gpt-5 (reasoning_effort=${reasoningEffort}, history=${Math.min(chatHistory.length, 20)} turns)`);
+    const t0 = Date.now();
+    console.log(`[AI] Calling Lovable AI Gateway (gemini-3-flash-preview, history=${Math.min(chatHistory.length, 10)} turns)`);
 
-    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5',
+        model: 'google/gemini-3-flash-preview',
         messages: messagesWithHistory,
-        max_completion_tokens: 4000,
-        reasoning_effort: reasoningEffort,
+        max_tokens: 1500,
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('[AI] OpenAI API error:', aiResponse.status, errorText);
-      
-      // Handle rate limits
+      console.error('[AI] Lovable AI Gateway error:', aiResponse.status, errorText);
+
       if (aiResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
         );
       }
-      if (aiResponse.status === 401) {
+      if (aiResponse.status === 402) {
         return new Response(
-          JSON.stringify({ error: 'OpenAI authentication failed. Please check API key.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+          JSON.stringify({ error: 'AI credits exhausted. Please add credits to your workspace.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
         );
       }
-      
+
       throw new Error(`AI service error: ${aiResponse.status}`);
     }
+    console.log(`[AI] Gateway responded in ${Date.now() - t0}ms`);
 
     const aiData = await aiResponse.json();
     let responseContent = aiData.choices[0].message.content || '';
