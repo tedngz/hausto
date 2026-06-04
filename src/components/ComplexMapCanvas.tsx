@@ -173,16 +173,22 @@ function esc(s: string) {
 interface Props {
   complexes: Complex[];
   focusComplexId?: string;
+  focusLatLng?: { lat: number; lng: number; label?: string };
   hideHeader?: boolean;
+  hideChrome?: boolean;
+  initialCityOverride?: City;
 }
 
-export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Props) {
+export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideHeader, hideChrome, initialCityOverride }: Props) {
   const navigate = useNavigate();
   const focusComplex = useMemo(
     () => (focusComplexId ? complexes.find((c) => c.id === focusComplexId) : undefined),
     [complexes, focusComplexId],
   );
-  const initialCity: City = (focusComplex?.city as City) ?? 'ho_chi_minh';
+  const inferredCity: City = focusLatLng
+    ? (focusLatLng.lat > 18 ? 'hanoi' : 'ho_chi_minh')
+    : ((focusComplex?.city as City) ?? 'ho_chi_minh');
+  const initialCity: City = initialCityOverride ?? inferredCity;
   const [city, setCity] = useState<City>(initialCity);
 
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -193,6 +199,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
     [complexes, city],
   );
+
 
   // Mount map once
   useEffect(() => {
@@ -206,12 +213,12 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
       const map = L.map(mapElRef.current, {
         zoomControl: false,
         scrollWheelZoom: true,
-        attributionControl: true,
+        attributionControl: false,
       });
       mapRef.current = map;
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> · <a href="https://carto.com/attributions">CARTO</a>',
+        attribution: '',
         subdomains: 'abcd',
         maxZoom: 19,
       }).addTo(map);
@@ -220,8 +227,13 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
       overlaysRef.current = L.layerGroup().addTo(map);
 
       // initial view
-      const b = BBOX[initialCity];
-      map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
+      if (focusLatLng) {
+        map.setView([focusLatLng.lat, focusLatLng.lng], 15);
+      } else {
+        const b = BBOX[initialCity];
+        map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
+      }
+
 
       // Delegated navigation for popup links
       map.on('popupopen', (e: any) => {
@@ -262,11 +274,28 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
 
       // Recenter on city
       const b = BBOX[city];
-      if (focusComplex && focusComplex.city === city && focusComplex.latitude != null) {
+      if (focusLatLng) {
+        map.setView([focusLatLng.lat, focusLatLng.lng], 15);
+      } else if (focusComplex && focusComplex.city === city && focusComplex.latitude != null) {
         map.setView([focusComplex.latitude, focusComplex.longitude!], 16);
       } else {
         map.fitBounds([[b.minLat, b.minLng], [b.maxLat, b.maxLng]], { padding: [20, 20] });
       }
+
+      // Focus pin (for property modal use)
+      if (focusLatLng) {
+        const pinIcon = L.divIcon({
+          className: 'hausto-complex',
+          html: `<span style="position:relative;display:block;width:32px;height:32px;">
+            <span style="position:absolute;inset:0;border-radius:9999px;background:rgba(13,79,74,0.18);animation:haustoPulse 2.4s ease-out infinite;"></span>
+            <span style="position:absolute;top:50%;left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:9999px;background:#0D4F4A;box-shadow:0 0 0 3px #fff, 0 4px 10px rgba(13,79,74,0.35);"></span>
+          </span>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+        group.addLayer(L.marker([focusLatLng.lat, focusLatLng.lng], { icon: pinIcon, interactive: false }));
+      }
+
 
       // District polygons
       DISTRICT_SHAPES[city]?.forEach((d) => {
@@ -400,7 +429,27 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
         group.addLayer(marker);
       });
     })();
-  }, [city, cityComplexes, focusComplex]);
+  }, [city, cityComplexes, focusComplex, focusLatLng?.lat, focusLatLng?.lng]);
+
+  const styleBlock = (
+    <style>{`
+      @keyframes haustoPulse { 0%{transform:scale(0.6);opacity:0.7} 100%{transform:scale(1.6);opacity:0} }
+      .hausto-popup .leaflet-popup-content-wrapper { padding:0; border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(13,79,74,0.18); border:1px solid rgba(13,79,74,0.08); background:rgba(255,255,255,0.97); backdrop-filter:blur(8px); }
+      .hausto-popup .leaflet-popup-content { margin:0; width:auto !important; }
+      .hausto-popup .leaflet-popup-tip { background:rgba(255,255,255,0.97); }
+      .hausto-label { background:transparent !important; border:none !important; pointer-events:none; }
+      .hausto-landmark, .hausto-complex { background:transparent !important; border:none !important; }
+    `}</style>
+  );
+
+  if (hideChrome) {
+    return (
+      <div className="relative w-full h-full">
+        {styleBlock}
+        <div ref={mapElRef} className="absolute inset-0" style={{ zIndex: 1, background: '#F3F0E9' }} />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -416,14 +465,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
         </div>
       )}
 
-      <style>{`
-        @keyframes haustoPulse { 0%{transform:scale(0.6);opacity:0.7} 100%{transform:scale(1.6);opacity:0} }
-        .hausto-popup .leaflet-popup-content-wrapper { padding:0; border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(13,79,74,0.18); border:1px solid rgba(13,79,74,0.08); background:rgba(255,255,255,0.97); backdrop-filter:blur(8px); }
-        .hausto-popup .leaflet-popup-content { margin:0; width:auto !important; }
-        .hausto-popup .leaflet-popup-tip { background:rgba(255,255,255,0.97); }
-        .hausto-label { background:transparent !important; border:none !important; pointer-events:none; }
-        .hausto-landmark, .hausto-complex { background:transparent !important; border:none !important; }
-      `}</style>
+      {styleBlock}
 
       <div className="relative w-full aspect-[4/5] sm:aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5">
         <div ref={mapElRef} className="absolute inset-0" style={{ zIndex: 1 }} />
@@ -457,6 +499,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, hideHeader }: Prop
           </div>
         )}
       </div>
+
 
       {/* Legend */}
       <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-x-6 gap-y-3 sm:gap-x-10 sm:gap-y-4 px-2">
