@@ -431,6 +431,26 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
     })();
   }, [city, cityComplexes, focusComplex, focusLatLng?.lat, focusLatLng?.lng]);
 
+  const styleBlock = (
+    <style>{`
+      @keyframes haustoPulse { 0%{transform:scale(0.6);opacity:0.7} 100%{transform:scale(1.6);opacity:0} }
+      .hausto-popup .leaflet-popup-content-wrapper { padding:0; border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(13,79,74,0.18); border:1px solid rgba(13,79,74,0.08); background:rgba(255,255,255,0.97); backdrop-filter:blur(8px); }
+      .hausto-popup .leaflet-popup-content { margin:0; width:auto !important; }
+      .hausto-popup .leaflet-popup-tip { background:rgba(255,255,255,0.97); }
+      .hausto-label { background:transparent !important; border:none !important; pointer-events:none; }
+      .hausto-landmark, .hausto-complex { background:transparent !important; border:none !important; }
+    `}</style>
+  );
+
+  if (hideChrome) {
+    return (
+      <div className="relative w-full h-full">
+        {styleBlock}
+        <div ref={mapElRef} className="absolute inset-0" style={{ zIndex: 1, background: '#F3F0E9' }} />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       {!hideHeader && (
@@ -445,14 +465,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         </div>
       )}
 
-      <style>{`
-        @keyframes haustoPulse { 0%{transform:scale(0.6);opacity:0.7} 100%{transform:scale(1.6);opacity:0} }
-        .hausto-popup .leaflet-popup-content-wrapper { padding:0; border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(13,79,74,0.18); border:1px solid rgba(13,79,74,0.08); background:rgba(255,255,255,0.97); backdrop-filter:blur(8px); }
-        .hausto-popup .leaflet-popup-content { margin:0; width:auto !important; }
-        .hausto-popup .leaflet-popup-tip { background:rgba(255,255,255,0.97); }
-        .hausto-label { background:transparent !important; border:none !important; pointer-events:none; }
-        .hausto-landmark, .hausto-complex { background:transparent !important; border:none !important; }
-      `}</style>
+      {styleBlock}
 
       <div className="relative w-full aspect-[4/5] sm:aspect-[16/10] lg:aspect-[21/9] bg-[#F3F0E9] rounded-2xl border border-[#0D4F4A]/5 overflow-hidden shadow-2xl shadow-[#0D4F4A]/5">
         <div ref={mapElRef} className="absolute inset-0" style={{ zIndex: 1 }} />
@@ -486,6 +499,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
           </div>
         )}
       </div>
+
 
       {/* Legend */}
       <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-x-6 gap-y-3 sm:gap-x-10 sm:gap-y-4 px-2">
