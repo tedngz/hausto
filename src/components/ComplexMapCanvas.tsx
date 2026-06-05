@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { LatLngExpression, LayerGroup, Map as LeafletMap, Marker, PopupEvent } from 'leaflet';
 import type { Complex } from '@/hooks/useComplexes';
 import cityDistrictsData from '@/data/cityDistricts.json';
 
@@ -190,10 +191,11 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
     : ((focusComplex?.city as City) ?? 'ho_chi_minh');
   const initialCity: City = initialCityOverride ?? inferredCity;
   const [city, setCity] = useState<City>(initialCity);
+  const [mapReady, setMapReady] = useState(false);
 
   const mapElRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const overlaysRef = useRef<any>(null); // L.layerGroup for districts/labels/landmarks/complexes
+  const mapRef = useRef<(LeafletMap & { __ro?: ResizeObserver }) | null>(null);
+  const overlaysRef = useRef<LayerGroup | null>(null); // L.layerGroup for districts/labels/landmarks/complexes
 
   const cityComplexes = useMemo(
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
@@ -210,11 +212,18 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       await import('leaflet/dist/leaflet.css');
       if (cancelled || !mapElRef.current) return;
 
+      for (let i = 0; i < 60 && !cancelled; i += 1) {
+        const el = mapElRef.current;
+        if (el && el.clientWidth > 0 && el.clientHeight > 0) break;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+      if (cancelled || !mapElRef.current) return;
+
       const map = L.map(mapElRef.current, {
         zoomControl: false,
         scrollWheelZoom: true,
         attributionControl: false,
-      });
+      }) as LeafletMap & { __ro?: ResizeObserver };
       mapRef.current = map;
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -236,8 +245,8 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
 
 
       // Delegated navigation for popup links
-      map.on('popupopen', (e: any) => {
-        const root: HTMLElement = e.popup.getElement();
+      map.on('popupopen', (e: PopupEvent) => {
+        const root = e.popup.getElement();
         const link = root?.querySelector<HTMLElement>('[data-navigate]');
         if (link) {
           link.addEventListener('click', (ev) => {
@@ -256,15 +265,16 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       if (mapElRef.current && typeof ResizeObserver !== 'undefined') {
         const ro = new ResizeObserver(() => invalidate());
         ro.observe(mapElRef.current);
-        (map as any).__ro = ro;
+        map.__ro = ro;
       }
+      setMapReady(true);
     })();
 
     return () => {
       cancelled = true;
+      setMapReady(false);
       if (mapRef.current) {
-        const ro = (mapRef.current as any).__ro as ResizeObserver | undefined;
-        ro?.disconnect();
+        mapRef.current.__ro?.disconnect();
         mapRef.current.remove();
         mapRef.current = null;
       }
@@ -276,11 +286,19 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
   useEffect(() => {
     const map = mapRef.current;
     const group = overlaysRef.current;
-    if (!map || !group) return;
+    if (!mapReady || !map || !group) return;
 
     (async () => {
       const L = await import('leaflet');
       group.clearLayers();
+
+      const refreshMap = () => {
+        const el = mapElRef.current;
+        if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
+        map.invalidateSize(false);
+      };
+
+      [0, 80, 180, 360, 720, 1200].forEach((ms) => window.setTimeout(refreshMap, ms));
 
       // Recenter on city
       const b = BBOX[city];
@@ -293,6 +311,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       }
 
       // Focus pin (for property modal use)
+      let focusMarker: Marker | null = null;
       if (focusLatLng) {
         const pinIcon = L.divIcon({
           className: 'hausto-complex',
@@ -303,7 +322,8 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
           iconSize: [32, 32],
           iconAnchor: [16, 16],
         });
-        group.addLayer(L.marker([focusLatLng.lat, focusLatLng.lng], { icon: pinIcon, interactive: false }));
+        focusMarker = L.marker([focusLatLng.lat, focusLatLng.lng], { icon: pinIcon, interactive: false, zIndexOffset: 1000 });
+        group.addLayer(focusMarker);
       }
 
 
@@ -311,7 +331,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       DISTRICT_SHAPES[city]?.forEach((d) => {
         const hasFacts = !!DISTRICT_FACTS[d.name];
         d.rings.forEach((ring) => {
-          const poly = L.polygon(ring as any, {
+          const poly = L.polygon(ring as LatLngExpression[], {
             color: '#F28D63',
             weight: 1.1,
             opacity: 0.55,
@@ -352,7 +372,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
             poly.bindPopup(html, { maxWidth: 280, className: 'hausto-popup', autoPan: true });
             poly.on('mouseover', () => poly.setStyle({ fillOpacity: 0.14, weight: 1.6, opacity: 0.9, dashArray: '0' }));
             poly.on('mouseout', () => poly.setStyle({ fillOpacity: 0.05, weight: 1.1, opacity: 0.55, dashArray: '4 4' }));
-            poly.on('click', () => poly.openPopup([clat, clng] as any));
+            poly.on('click', () => poly.openPopup([clat, clng] as LatLngExpression));
           }
           group.addLayer(poly);
         });
@@ -438,8 +458,18 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         if (isFocus) setTimeout(() => marker.openPopup(), 300);
         group.addLayer(marker);
       });
+
+      const refitFocus = () => {
+        refreshMap();
+        if (!focusLatLng) return;
+        map.setView([focusLatLng.lat, focusLatLng.lng], 15, { animate: false });
+        focusMarker?.setLatLng([focusLatLng.lat, focusLatLng.lng]);
+        focusMarker?.setZIndexOffset(1000);
+      };
+
+      [0, 120, 300, 650, 1100].forEach((ms) => window.setTimeout(refitFocus, ms));
     })();
-  }, [city, cityComplexes, focusComplex, focusLatLng?.lat, focusLatLng?.lng]);
+  }, [city, cityComplexes, focusComplex, focusLatLng, mapReady]);
 
   const styleBlock = (
     <style>{`
