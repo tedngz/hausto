@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { LatLngExpression, LayerGroup, Map as LeafletMap, Marker, PopupEvent } from 'leaflet';
 import type { Complex } from '@/hooks/useComplexes';
 import cityDistrictsData from '@/data/cityDistricts.json';
 
@@ -193,8 +194,8 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
   const [mapReady, setMapReady] = useState(false);
 
   const mapElRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const overlaysRef = useRef<any>(null); // L.layerGroup for districts/labels/landmarks/complexes
+  const mapRef = useRef<(LeafletMap & { __ro?: ResizeObserver }) | null>(null);
+  const overlaysRef = useRef<LayerGroup | null>(null); // L.layerGroup for districts/labels/landmarks/complexes
 
   const cityComplexes = useMemo(
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
@@ -244,8 +245,8 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
 
 
       // Delegated navigation for popup links
-      map.on('popupopen', (e: any) => {
-        const root: HTMLElement = e.popup.getElement();
+      map.on('popupopen', (e: PopupEvent) => {
+        const root = e.popup.getElement();
         const link = root?.querySelector<HTMLElement>('[data-navigate]');
         if (link) {
           link.addEventListener('click', (ev) => {
@@ -264,7 +265,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       if (mapElRef.current && typeof ResizeObserver !== 'undefined') {
         const ro = new ResizeObserver(() => invalidate());
         ro.observe(mapElRef.current);
-        (map as any).__ro = ro;
+        map.__ro = ro;
       }
       setMapReady(true);
     })();
@@ -273,8 +274,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       cancelled = true;
       setMapReady(false);
       if (mapRef.current) {
-        const ro = (mapRef.current as any).__ro as ResizeObserver | undefined;
-        ro?.disconnect();
+        mapRef.current.__ro?.disconnect();
         mapRef.current.remove();
         mapRef.current = null;
       }
