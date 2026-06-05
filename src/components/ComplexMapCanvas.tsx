@@ -286,11 +286,19 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
   useEffect(() => {
     const map = mapRef.current;
     const group = overlaysRef.current;
-    if (!map || !group) return;
+    if (!mapReady || !map || !group) return;
 
     (async () => {
       const L = await import('leaflet');
       group.clearLayers();
+
+      const refreshMap = () => {
+        const el = mapElRef.current;
+        if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
+        map.invalidateSize(false);
+      };
+
+      [0, 80, 180, 360, 720, 1200].forEach((ms) => window.setTimeout(refreshMap, ms));
 
       // Recenter on city
       const b = BBOX[city];
@@ -303,6 +311,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       }
 
       // Focus pin (for property modal use)
+      let focusMarker: any = null;
       if (focusLatLng) {
         const pinIcon = L.divIcon({
           className: 'hausto-complex',
@@ -313,7 +322,8 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
           iconSize: [32, 32],
           iconAnchor: [16, 16],
         });
-        group.addLayer(L.marker([focusLatLng.lat, focusLatLng.lng], { icon: pinIcon, interactive: false }));
+        focusMarker = L.marker([focusLatLng.lat, focusLatLng.lng], { icon: pinIcon, interactive: false, zIndexOffset: 1000 });
+        group.addLayer(focusMarker);
       }
 
 
@@ -448,8 +458,18 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         if (isFocus) setTimeout(() => marker.openPopup(), 300);
         group.addLayer(marker);
       });
+
+      const refitFocus = () => {
+        refreshMap();
+        if (!focusLatLng) return;
+        map.setView([focusLatLng.lat, focusLatLng.lng], 15, { animate: false });
+        focusMarker?.setLatLng([focusLatLng.lat, focusLatLng.lng]);
+        focusMarker?.bringToFront?.();
+      };
+
+      [0, 120, 300, 650, 1100].forEach((ms) => window.setTimeout(refitFocus, ms));
     })();
-  }, [city, cityComplexes, focusComplex, focusLatLng?.lat, focusLatLng?.lng]);
+  }, [city, cityComplexes, focusComplex, focusLatLng?.lat, focusLatLng?.lng, mapReady]);
 
   const styleBlock = (
     <style>{`
