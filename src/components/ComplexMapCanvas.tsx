@@ -464,7 +464,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         if (!focusLatLng) return;
         map.setView([focusLatLng.lat, focusLatLng.lng], 15, { animate: false });
         focusMarker?.setLatLng([focusLatLng.lat, focusLatLng.lng]);
-        focusMarker?.bringToFront?.();
+        focusMarker?.setZIndexOffset(1000);
       };
 
       [0, 120, 300, 650, 1100].forEach((ms) => window.setTimeout(refitFocus, ms));
