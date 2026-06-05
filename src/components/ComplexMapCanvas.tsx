@@ -248,13 +248,23 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         }
       });
 
-      setTimeout(() => map.invalidateSize(), 0);
-      setTimeout(() => map.invalidateSize(), 250);
+      // Repeatedly invalidate size to handle dialog open animations / late layout
+      const invalidate = () => map.invalidateSize();
+      [0, 100, 300, 600, 1000].forEach((ms) => setTimeout(invalidate, ms));
+
+      // Observe container resize (covers dialog mount + responsive changes)
+      if (mapElRef.current && typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => invalidate());
+        ro.observe(mapElRef.current);
+        (map as any).__ro = ro;
+      }
     })();
 
     return () => {
       cancelled = true;
       if (mapRef.current) {
+        const ro = (mapRef.current as any).__ro as ResizeObserver | undefined;
+        ro?.disconnect();
         mapRef.current.remove();
         mapRef.current = null;
       }
