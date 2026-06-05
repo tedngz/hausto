@@ -190,6 +190,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
     : ((focusComplex?.city as City) ?? 'ho_chi_minh');
   const initialCity: City = initialCityOverride ?? inferredCity;
   const [city, setCity] = useState<City>(initialCity);
+  const [mapReady, setMapReady] = useState(false);
 
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -208,6 +209,13 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
     (async () => {
       const L = await import('leaflet');
       await import('leaflet/dist/leaflet.css');
+      if (cancelled || !mapElRef.current) return;
+
+      for (let i = 0; i < 60 && !cancelled; i += 1) {
+        const el = mapElRef.current;
+        if (el && el.clientWidth > 0 && el.clientHeight > 0) break;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
       if (cancelled || !mapElRef.current) return;
 
       const map = L.map(mapElRef.current, {
@@ -258,10 +266,12 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         ro.observe(mapElRef.current);
         (map as any).__ro = ro;
       }
+      setMapReady(true);
     })();
 
     return () => {
       cancelled = true;
+      setMapReady(false);
       if (mapRef.current) {
         const ro = (mapRef.current as any).__ro as ResizeObserver | undefined;
         ro?.disconnect();
