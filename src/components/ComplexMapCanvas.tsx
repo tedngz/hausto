@@ -311,7 +311,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       }
 
       // Focus pin (for property modal use)
-      let focusMarker: any = null;
+      let focusMarker: Marker | null = null;
       if (focusLatLng) {
         const pinIcon = L.divIcon({
           className: 'hausto-complex',
@@ -331,7 +331,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       DISTRICT_SHAPES[city]?.forEach((d) => {
         const hasFacts = !!DISTRICT_FACTS[d.name];
         d.rings.forEach((ring) => {
-          const poly = L.polygon(ring as any, {
+          const poly = L.polygon(ring as LatLngExpression[], {
             color: '#F28D63',
             weight: 1.1,
             opacity: 0.55,
@@ -372,7 +372,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
             poly.bindPopup(html, { maxWidth: 280, className: 'hausto-popup', autoPan: true });
             poly.on('mouseover', () => poly.setStyle({ fillOpacity: 0.14, weight: 1.6, opacity: 0.9, dashArray: '0' }));
             poly.on('mouseout', () => poly.setStyle({ fillOpacity: 0.05, weight: 1.1, opacity: 0.55, dashArray: '4 4' }));
-            poly.on('click', () => poly.openPopup([clat, clng] as any));
+            poly.on('click', () => poly.openPopup([clat, clng] as LatLngExpression));
           }
           group.addLayer(poly);
         });
@@ -469,7 +469,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
 
       [0, 120, 300, 650, 1100].forEach((ms) => window.setTimeout(refitFocus, ms));
     })();
-  }, [city, cityComplexes, focusComplex, focusLatLng?.lat, focusLatLng?.lng, mapReady]);
+  }, [city, cityComplexes, focusComplex, focusLatLng, mapReady]);
 
   const styleBlock = (
     <style>{`
