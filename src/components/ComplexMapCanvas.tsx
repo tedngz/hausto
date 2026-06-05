@@ -223,7 +223,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         zoomControl: false,
         scrollWheelZoom: true,
         attributionControl: false,
-      });
+      }) as LeafletMap & { __ro?: ResizeObserver };
       mapRef.current = map;
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
