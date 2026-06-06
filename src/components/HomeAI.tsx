@@ -26,6 +26,7 @@ import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { format } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { AIBlocks } from '@/components/ai-blocks/AIBlocks';
 interface PropertyMatch {
   id: string;
   title: string;
