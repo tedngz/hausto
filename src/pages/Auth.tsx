@@ -307,7 +307,7 @@ const Auth = () => {
       </Helmet>
       <main className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent pb-1">
             Hausto - {isRecoveryMode ? 'Reset Password' : 'Sign In'}
           </h1>
           <p className="text-muted-foreground mt-2">Find your perfect home match</p>
