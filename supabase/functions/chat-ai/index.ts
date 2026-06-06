@@ -1989,11 +1989,71 @@ ${scoredPreviousProperties.map((p, i) => `
 `
       : '';
 
+    // ========== KNOWLEDGE BLOCKS for richer answers (complex/district/distance) ==========
+    const lowerMsg = (message || '').toLowerCase();
+
+    // Static neighborhood distance table — model must use ONLY these values.
+    const KNOWN_DISTANCES: Array<{ from: string; to: string; km: number; driveMinutes: number; bikeMinutes: number; notes?: string }> = [
+      // HCMC
+      { from: 'Thao Dien', to: 'District 1', km: 7,  driveMinutes: 20, bikeMinutes: 25, notes: 'Via Saigon Bridge; heavy at rush hour' },
+      { from: 'Thao Dien', to: 'Thu Thiem', km: 4,  driveMinutes: 12, bikeMinutes: 15 },
+      { from: 'Thu Thiem', to: 'District 1', km: 2,  driveMinutes: 8,  bikeMinutes: 10, notes: 'Across Thu Thiem Tunnel' },
+      { from: 'Phu My Hung', to: 'District 1', km: 8, driveMinutes: 25, bikeMinutes: 30, notes: 'Via Nguyen Van Linh / Khanh Hoi' },
+      { from: 'Binh Thanh', to: 'District 1', km: 4, driveMinutes: 15, bikeMinutes: 18 },
+      { from: 'District 3', to: 'District 1', km: 3, driveMinutes: 10, bikeMinutes: 12 },
+      { from: 'District 7', to: 'District 1', km: 8, driveMinutes: 25, bikeMinutes: 30 },
+      { from: 'Thu Duc', to: 'District 1', km: 14, driveMinutes: 35, bikeMinutes: 45 },
+      // Hanoi
+      { from: 'Tay Ho', to: 'Hoan Kiem', km: 4, driveMinutes: 15, bikeMinutes: 18 },
+      { from: 'Cau Giay', to: 'Hoan Kiem', km: 7, driveMinutes: 22, bikeMinutes: 28 },
+      { from: 'Nam Tu Liem', to: 'Hoan Kiem', km: 12, driveMinutes: 30, bikeMinutes: 40 },
+      { from: 'Ba Dinh', to: 'Hoan Kiem', km: 3, driveMinutes: 10, bikeMinutes: 12 },
+      { from: 'Long Bien', to: 'Hoan Kiem', km: 5, driveMinutes: 18, bikeMinutes: 20, notes: 'Across Chuong Duong Bridge' },
+    ];
+
+    // Best-effort lookup of complexes the user named.
+    let knownComplexes: any[] = [];
+    try {
+      const { data: cxList } = await supabase
+        .from('complexes')
+        .select('id, slug, name, city, district, developer, management_company, year_completed, pet_policy, amenities, average_rent_brackets, insider_pros, insider_cons, commute_times, aliases, tags')
+        .eq('is_published', true)
+        .limit(80);
+      if (cxList && cxList.length > 0) {
+        knownComplexes = cxList.filter((c: any) => {
+          const nameLc = (c.name || '').toLowerCase();
+          const aliases = Array.isArray(c.aliases) ? c.aliases.map((a: string) => (a || '').toLowerCase()) : [];
+          return (nameLc && lowerMsg.includes(nameLc)) ||
+                 aliases.some((a: string) => a && lowerMsg.includes(a));
+        }).slice(0, 3);
+      }
+    } catch (e) {
+      console.log('[Knowledge] complexes lookup skipped:', (e as Error).message);
+    }
+
+    const knownComplexesBlock = knownComplexes.length > 0
+      ? `\n🏢 KNOWN COMPLEXES MATCHING THE USER'S MESSAGE (use these verbatim; do NOT invent fields):\n${knownComplexes.map((c: any) => `- name: ${c.name}
+  city: ${c.city}
+  district: ${c.district}
+  developer: ${c.developer || 'unknown'}
+  management: ${c.management_company || 'unknown'}
+  year_completed: ${c.year_completed || 'unknown'}
+  pet_policy: ${c.pet_policy || 'unknown'}
+  amenities: ${(c.amenities || []).slice(0, 12).join(', ') || 'unknown'}
+  rent_brackets_usd: ${c.average_rent_brackets ? JSON.stringify(c.average_rent_brackets) : 'unknown'}
+  insider_pros: ${(c.insider_pros || []).join(' | ') || 'unknown'}
+  insider_cons: ${(c.insider_cons || []).join(' | ') || 'unknown'}
+  commute_times: ${c.commute_times ? JSON.stringify(c.commute_times) : 'unknown'}`).join('\n\n')}\n`
+      : '';
+
+    const knownDistancesBlock = `\n📐 KNOWN NEIGHBORHOOD DISTANCES (use ONLY for pairs in this table; omit km/minutes for anything not listed):\n${KNOWN_DISTANCES.map(d => `- ${d.from} ↔ ${d.to}: ${d.km}km, ~${d.driveMinutes}min drive, ~${d.bikeMinutes}min motorbike${d.notes ? ` (${d.notes})` : ''}`).join('\n')}\n`;
+
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
 ${rejectionsBlock}${likesBlock}${summaryBlock}${locationNote}
+${knownComplexesBlock}${knownDistancesBlock}
 ${previousPropertiesSection}
 🪜 BEFORE YOU RESPOND, REASON THROUGH:
 1. Is this a NEW search or a FOLLOW-UP about properties already shown? (Check PREVIOUSLY SUGGESTED PROPERTIES section.)
