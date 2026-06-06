@@ -638,6 +638,8 @@ export const HomeAI = ({
                   const innerParsed = JSON.parse(parsed.response);
                   if (innerParsed.results && Array.isArray(innerParsed.results)) {
                     searchResults = innerParsed;
+                  } else if (innerParsed.blocks && Array.isArray(innerParsed.blocks)) {
+                    searchResults = { results: [], summary: innerParsed.summary || '', totalMatches: 0, blocks: innerParsed.blocks };
                   } else {
                     displayContent = parsed.response;
                   }
@@ -647,13 +649,15 @@ export const HomeAI = ({
               } else if (parsed.results && Array.isArray(parsed.results)) {
                 // Direct JSON with results
                 searchResults = parsed;
+              } else if (parsed.blocks && Array.isArray(parsed.blocks)) {
+                searchResults = { results: [], summary: parsed.summary || '', totalMatches: 0, blocks: parsed.blocks };
               }
             } catch (e) {
               // Not JSON, treat as regular text
               // Clean up any JSON artifacts that might be visible
-              if (message.content.includes('{"results":') || message.content.includes('"summary":')) {
+              if (message.content.includes('{"results":') || message.content.includes('"summary":') || message.content.includes('"blocks":')) {
                 // Try one more time to extract JSON from the message
-                const jsonMatch = message.content.match(/\{[\s\S]*"results"[\s\S]*\}/);
+                const jsonMatch = message.content.match(/\{[\s\S]*"(results|blocks)"[\s\S]*\}/);
                 if (jsonMatch) {
                   try {
                     const extracted = JSON.parse(jsonMatch[0]);
