@@ -2124,32 +2124,65 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    
    **AMENITY ACCURACY**: Check the property's full amenities list, description, title, AND highlights before saying a property does or doesn't have something. A property is considered furnished if "Furnished" or "Fully Furnished" appears anywhere in the amenities, highlights, or description, OR if the property has multiple furniture items (e.g., Bed, Sofa, Wardrobe, Desk, Table, Chair) in its amenities list. Never say a property is "not furnished" when it clearly has furniture amenities listed.
 
-9. **JSON RESPONSE FORMAT** (REQUIRED for any property search):
-{
-  "results": [
-    {
-      "id": "exact-property-id-from-above",
-      "title": "Property title",
-      "location": "Exact location",
-      "price": 12000000,
-      "size": "45m²",
-      "vibe": "Modern, Cozy",
-      "description": "Brief description",
-      "highlights": ["Modern", "Balcony"],
-      "images": ["copy-exact-urls-from-property-data"],
-      "matchScore": 85,
-      "matchReason": "Natural reason explaining why this matches, mentioning location honestly",
-      "realtor_id": "exact-realtor-id-from-above",
-      "isExternal": false,
-      "source": null,
-      "sourceUrl": null
-    }
-  ],
-  "summary": "Detailed explanation: e.g., 'I searched for cozy apartments in Thao Dien area under 15M VND. I found X properties matching your criteria - Y are directly in Thao Dien, and Z are in nearby District 2 areas. Here are my top recommendations sorted by how closely they match your needs:'",
-  "totalMatches": 3
-}
+9. **JSON RESPONSE FORMAT** — Always return ONE JSON object. Pick the right shape based on the user's intent:
 
-10. **FOR CONVERSATIONAL QUERIES**: If the user is NOT searching (asking advice, comparing trade-offs, asking neighborhood questions), respond conversationally without the JSON block — but still reference earlier turns and previously suggested properties when relevant.
+   A. SHOPPING / SEARCH intent (user wants apartments) → include "results" with property cards AND optional "blocks" for extra context (advice, complex info, etc.):
+   {
+     "results": [
+       {
+         "id": "exact-property-id-from-above",
+         "title": "Property title",
+         "location": "Exact location",
+         "price": 12000000,
+         "size": "45m²",
+         "vibe": "Modern, Cozy",
+         "description": "Brief description",
+         "highlights": ["Modern", "Balcony"],
+         "images": ["copy-exact-urls-from-property-data"],
+         "matchScore": 85,
+         "matchReason": "Natural reason explaining why this matches, mentioning location honestly",
+         "realtor_id": "exact-realtor-id-from-above",
+         "isExternal": false,
+         "source": null,
+         "sourceUrl": null
+       }
+     ],
+     "summary": "Short prose intro for the listings (e.g., 'Here are 3 cozy Thao Dien apartments under 15M VND').",
+     "totalMatches": 3,
+     "blocks": [ /* optional — see B for block types */ ]
+   }
+
+   B. INFO intent (user asks about a complex, district, distance, or wants advice — NOT shopping) → return "blocks" only, omit "results":
+   {
+     "blocks": [
+       { "type": "text",     "body": "Plain-text advice or answer, 2–5 sentences." },
+       { "type": "complex",  "name": "Masteri Thao Dien", "city": "ho chi minh", "district": "Thao Dien",
+                             "developer": "Masterise Homes", "management": "Savills",
+                             "yearCompleted": 2018, "petPolicy": "Cats allowed, no dogs",
+                             "amenities": ["Pool","Gym","Sky garden"],
+                             "rentRanges": [{ "bedrooms":"1BR","minUsd":900,"maxUsd":1400 }],
+                             "insiderNotes": "Riverside views from north tower; weekday traffic on Xa lo Ha Noi.",
+                             "commute": [{ "to":"District 1","minutes":20 }] },
+       { "type": "district", "city": "ho chi minh", "district": "District 2 / Thao Dien",
+                             "vibe": "Leafy expat enclave with international schools and riverside dining.",
+                             "bestFor": ["families","long-stay expats","walkable cafes"],
+                             "tradeoffs": ["heavy bridge traffic to D1","premium pricing"],
+                             "notableComplexes": ["Masteri Thao Dien","The Estella","The Vista"] },
+       { "type": "distance", "from": "Thao Dien", "to": "District 1",
+                             "km": 7, "driveMinutes": 20, "bikeMinutes": 25,
+                             "notes": "Via Saigon Bridge; rush hour can double this." },
+       { "type": "followups","suggestions": ["Show me 1BR under 15M in Thao Dien","Compare Thao Dien vs Phu My Hung"] }
+     ]
+   }
+
+   Rules for blocks:
+   - Use the "complex" / "distance" blocks ONLY when the matching fact is in KNOWN COMPLEXES or KNOWN NEIGHBORHOOD DISTANCES above (or in the LOCATION KNOWLEDGE section). Omit any field you cannot support — NEVER invent year_completed, prices, or commute minutes.
+   - "district" blocks may use the LOCATION KNOWLEDGE section and general knowledge of HCMC/Hanoi neighborhoods, but keep claims conservative.
+   - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them.
+   - You may MIX A and B: a shopping turn can also carry a "text" block ("Heads up: under 15M in D1 is rare — these are mostly studios") or a "followups" block.
+   - If you only have a quick conversational reply (clarifying question, simple advice), return { "blocks": [ { "type": "text", "body": "..." } ] } with no "results".
+
+10. **WHEN to use which intent**: shopping → user says "show me", "find", "any 2BR", uploads images, gives budget/area/feature filters. Info → user asks "tell me about X", "what's it like in Y", "how far is A from B", "should I pick X or Y", "is X pet friendly". Mixed → "show me 2BRs in Thao Dien and tell me about the area" → include both results and blocks.
 
 11. **LOCATION KNOWLEDGE**:
    - HCMC Center: District 1, 3 (premium, walkable, expensive ~15-40M)
