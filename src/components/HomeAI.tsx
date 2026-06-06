@@ -663,6 +663,8 @@ export const HomeAI = ({
                     const extracted = JSON.parse(jsonMatch[0]);
                     if (extracted.results && Array.isArray(extracted.results)) {
                       searchResults = extracted;
+                    } else if (extracted.blocks && Array.isArray(extracted.blocks)) {
+                      searchResults = { results: [], summary: extracted.summary || '', totalMatches: 0, blocks: extracted.blocks };
                     }
                   } catch {
                     displayContent = "I found some properties that match your preferences! Let me show you the results.";
@@ -678,6 +680,8 @@ export const HomeAI = ({
                       {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                           <p className="text-sm text-left">{searchResults.summary}</p>
                         </div>}
+                      <AIBlocks blocks={searchResults.blocks} onFollowup={(s) => handleSearch(s)} />
+                      
                       
                            {searchResults.results.length > 0 && <div className="space-y-3">
                              {searchResults.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" onClick={() => handlePropertyClick(property)}>
