@@ -6,7 +6,7 @@ const Index = () => {
   return (
     <CurrencyProvider>
       <Helmet>
-        <title>Hausto — AI-Powered Property Discovery in Vietnam</title>
+        <title>Hausto - Rental vibe check</title>
         <meta name="description" content="Find rental apartments in Ho Chi Minh City, Hanoi, and Da Nang with AI vibe matching. Swipe to discover homes that match your style." />
         <link rel="canonical" href="https://hausto.lovable.app/" />
         <meta property="og:title" content="Hausto — AI-Powered Property Discovery in Vietnam" />
