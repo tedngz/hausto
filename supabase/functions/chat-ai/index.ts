@@ -2262,14 +2262,16 @@ Maximum ${maxResults} properties in results.`;
     responseContent = normalizeAiResponse(responseContent);
     
     // Try to extract JSON from the response if it contains JSON-like content
-    let extractedJson = null;
-    
+    let extractedJson: any = null;
+
     // First try direct parse
     try {
       extractedJson = JSON.parse(responseContent);
     } catch {
-      // Try to find JSON within the text
-      const jsonMatch = responseContent.match(/\{[\s\S]*"results"\s*:\s*\[[\s\S]*\][\s\S]*\}/);
+      // Try to find JSON within the text — match either a results-bearing or blocks-bearing object
+      const jsonMatch =
+        responseContent.match(/\{[\s\S]*"results"\s*:\s*\[[\s\S]*\][\s\S]*\}/) ||
+        responseContent.match(/\{[\s\S]*"blocks"\s*:\s*\[[\s\S]*\][\s\S]*\}/);
       if (jsonMatch) {
         try {
           extractedJson = JSON.parse(jsonMatch[0]);
@@ -2280,23 +2282,83 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
+    // Sanitize blocks (best-effort): keep only known types and required fields.
+    function sanitizeBlocks(raw: any): any[] | undefined {
+      if (!Array.isArray(raw)) return undefined;
+      const allowed = new Set(['text', 'complex', 'district', 'distance', 'followups']);
+      const clipStr = (s: any, n = 600) => (typeof s === 'string' ? s.slice(0, n) : undefined);
+      const clean = raw
+        .filter((b: any) => b && typeof b === 'object' && allowed.has(b.type))
+        .map((b: any) => {
+          if (b.type === 'text') return { type: 'text', body: clipStr(b.body, 1200) || '' };
+          if (b.type === 'followups') {
+            const s = Array.isArray(b.suggestions) ? b.suggestions.filter((x: any) => typeof x === 'string').slice(0, 4).map((x: string) => x.slice(0, 120)) : [];
+            return s.length ? { type: 'followups', suggestions: s } : null;
+          }
+          if (b.type === 'complex') {
+            return {
+              type: 'complex',
+              name: clipStr(b.name, 120) || '',
+              city: clipStr(b.city, 60),
+              district: clipStr(b.district, 60),
+              developer: clipStr(b.developer, 120),
+              management: clipStr(b.management, 120),
+              yearCompleted: typeof b.yearCompleted === 'number' ? b.yearCompleted : undefined,
+              petPolicy: clipStr(b.petPolicy, 200),
+              amenities: Array.isArray(b.amenities) ? b.amenities.filter((x: any) => typeof x === 'string').slice(0, 12).map((x: string) => x.slice(0, 60)) : undefined,
+              rentRanges: Array.isArray(b.rentRanges) ? b.rentRanges.slice(0, 6).filter((r: any) => r && typeof r === 'object').map((r: any) => ({
+                bedrooms: clipStr(r.bedrooms, 20) || '',
+                minUsd: Number(r.minUsd) || 0,
+                maxUsd: Number(r.maxUsd) || 0,
+              })) : undefined,
+              insiderNotes: clipStr(b.insiderNotes, 600),
+              commute: Array.isArray(b.commute) ? b.commute.slice(0, 6).filter((c: any) => c && typeof c === 'object').map((c: any) => ({
+                to: clipStr(c.to, 80) || '',
+                minutes: Number(c.minutes) || 0,
+              })) : undefined,
+            };
+          }
+          if (b.type === 'district') {
+            return {
+              type: 'district',
+              city: clipStr(b.city, 60),
+              district: clipStr(b.district, 80) || '',
+              vibe: clipStr(b.vibe, 400) || '',
+              bestFor: Array.isArray(b.bestFor) ? b.bestFor.filter((x: any) => typeof x === 'string').slice(0, 6).map((x: string) => x.slice(0, 80)) : undefined,
+              tradeoffs: Array.isArray(b.tradeoffs) ? b.tradeoffs.filter((x: any) => typeof x === 'string').slice(0, 6).map((x: string) => x.slice(0, 80)) : undefined,
+              notableComplexes: Array.isArray(b.notableComplexes) ? b.notableComplexes.filter((x: any) => typeof x === 'string').slice(0, 8).map((x: string) => x.slice(0, 80)) : undefined,
+            };
+          }
+          if (b.type === 'distance') {
+            return {
+              type: 'distance',
+              from: clipStr(b.from, 60) || '',
+              to: clipStr(b.to, 60) || '',
+              km: typeof b.km === 'number' ? b.km : undefined,
+              driveMinutes: typeof b.driveMinutes === 'number' ? b.driveMinutes : undefined,
+              bikeMinutes: typeof b.bikeMinutes === 'number' ? b.bikeMinutes : undefined,
+              notes: clipStr(b.notes, 200),
+            };
+          }
+          return null;
+        })
+        .filter(Boolean) as any[];
+      return clean.length ? clean : undefined;
+    }
+    const sanitizedBlocks = extractedJson ? sanitizeBlocks(extractedJson.blocks) : undefined;
+
     // ========== POST-PROCESSING VALIDATION ==========
-    let searchData = null;
+    let searchData: any = null;
     let usedFallback = false;
-    
+
     if (extractedJson && extractedJson.results && Array.isArray(extractedJson.results)) {
       console.log(`[Validation] AI returned ${extractedJson.results.length} results, validating...`);
-      
-      // Validate and fix AI results
       const validatedResults = validateAndFixAIResults(extractedJson.results, scoredProperties, accContext);
-      
       console.log(`[Validation] ${validatedResults.length} results passed validation`);
-      
-      // Update the response with validated results
       extractedJson.results = validatedResults;
       extractedJson.totalMatches = validatedResults.length;
-      
-      // If AI returned results that all got filtered out, provide fallback
+      if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
+
       if (validatedResults.length === 0 && topProperties.length > 0) {
         console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
         usedFallback = true;
@@ -2304,7 +2366,14 @@ Maximum ${maxResults} properties in results.`;
         searchData = extractedJson;
         responseContent = JSON.stringify(extractedJson);
       }
+    } else if (extractedJson && sanitizedBlocks && sanitizedBlocks.length > 0) {
+      // Info-only response — no listings, just blocks.
+      console.log(`[AI] Blocks-only response with ${sanitizedBlocks.length} blocks`);
+      const infoOnly = { results: [], summary: '', totalMatches: 0, blocks: sanitizedBlocks };
+      searchData = infoOnly;
+      responseContent = JSON.stringify(infoOnly);
     }
+
     
     // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
     if (!searchData && topProperties.length > 0) {
