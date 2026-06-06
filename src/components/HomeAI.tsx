@@ -57,6 +57,7 @@ interface SearchResult {
   results: PropertyMatch[];
   summary: string;
   totalMatches: number;
+  blocks?: import('@/components/ai-blocks/AIBlocks').AIBlock[];
 }
 interface HomeAIProps {
   userPreferences?: UserPreferences;
