@@ -1,0 +1,287 @@
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Building2, MapPin, Route, Lightbulb, ArrowRight } from 'lucide-react';
+
+export type AIBlock =
+  | { type: 'text'; body: string }
+  | {
+      type: 'complex';
+      name: string;
+      city?: string;
+      district?: string;
+      developer?: string;
+      management?: string;
+      yearCompleted?: number;
+      petPolicy?: string;
+      amenities?: string[];
+      rentRanges?: { bedrooms: string; minUsd: number; maxUsd: number }[];
+      insiderNotes?: string;
+      commute?: { to: string; minutes: number }[];
+    }
+  | {
+      type: 'district';
+      city?: string;
+      district: string;
+      vibe: string;
+      bestFor?: string[];
+      tradeoffs?: string[];
+      notableComplexes?: string[];
+    }
+  | {
+      type: 'distance';
+      from: string;
+      to: string;
+      km?: number;
+      driveMinutes?: number;
+      bikeMinutes?: number;
+      notes?: string;
+    }
+  | { type: 'followups'; suggestions: string[] };
+
+interface AIBlocksProps {
+  blocks?: AIBlock[] | null;
+  onFollowup?: (suggestion: string) => void;
+}
+
+export const AIBlocks = ({ blocks, onFollowup }: AIBlocksProps) => {
+  if (!blocks || blocks.length === 0) return null;
+  return (
+    <div className="w-full space-y-3">
+      {blocks.map((block, i) => {
+        switch (block.type) {
+          case 'text':
+            return (
+              <div
+                key={i}
+                className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit"
+              >
+                <p className="text-sm whitespace-pre-wrap text-left">{block.body}</p>
+              </div>
+            );
+
+          case 'complex':
+            return (
+              <Card key={i} className="border-border">
+                <CardContent className="p-4 space-y-3 text-left">
+                  <div className="flex items-start gap-2">
+                    <Building2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-base font-serif text-foreground">{block.name}</h4>
+                      {(block.district || block.city) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[block.district, block.city].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {block.developer && (
+                      <div>
+                        <span className="text-muted-foreground">Developer: </span>
+                        <span className="text-foreground">{block.developer}</span>
+                      </div>
+                    )}
+                    {block.management && (
+                      <div>
+                        <span className="text-muted-foreground">Managed by: </span>
+                        <span className="text-foreground">{block.management}</span>
+                      </div>
+                    )}
+                    {block.yearCompleted && (
+                      <div>
+                        <span className="text-muted-foreground">Built: </span>
+                        <span className="text-foreground">{block.yearCompleted}</span>
+                      </div>
+                    )}
+                    {block.petPolicy && (
+                      <div>
+                        <span className="text-muted-foreground">Pets: </span>
+                        <span className="text-foreground">{block.petPolicy}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {block.amenities && block.amenities.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {block.amenities.map((a, j) => (
+                        <Badge key={j} variant="outline" className="text-xs">
+                          {a}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {block.rentRanges && block.rentRanges.length > 0 && (
+                    <div className="border-t border-border pt-2">
+                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">
+                        Typical rents (USD/mo)
+                      </p>
+                      <div className="space-y-1">
+                        {block.rentRanges.map((r, j) => (
+                          <div key={j} className="flex justify-between text-xs">
+                            <span className="text-foreground">{r.bedrooms}</span>
+                            <span className="text-muted-foreground">
+                              ${r.minUsd.toLocaleString()} – ${r.maxUsd.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {block.commute && block.commute.length > 0 && (
+                    <div className="border-t border-border pt-2">
+                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">
+                        Commute
+                      </p>
+                      <div className="space-y-1">
+                        {block.commute.map((c, j) => (
+                          <div key={j} className="flex items-center gap-2 text-xs text-foreground">
+                            <Route className="h-3 w-3 text-muted-foreground" />
+                            <span>
+                              To {c.to}: ~{c.minutes} min
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {block.insiderNotes && (
+                    <div className="border-t border-border pt-2 flex gap-2">
+                      <Lightbulb className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-foreground italic">{block.insiderNotes}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+
+          case 'district':
+            return (
+              <Card key={i} className="border-border">
+                <CardContent className="p-4 space-y-3 text-left">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-base font-serif text-foreground">{block.district}</h4>
+                      {block.city && (
+                        <p className="text-xs text-muted-foreground capitalize">{block.city}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {block.vibe && <p className="text-sm text-foreground">{block.vibe}</p>}
+
+                  {(block.bestFor?.length || block.tradeoffs?.length) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {block.bestFor && block.bestFor.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-muted-foreground mb-1">Best for</p>
+                          <ul className="space-y-0.5">
+                            {block.bestFor.map((b, j) => (
+                              <li key={j} className="text-foreground">• {b}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {block.tradeoffs && block.tradeoffs.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-muted-foreground mb-1">Trade-offs</p>
+                          <ul className="space-y-0.5">
+                            {block.tradeoffs.map((t, j) => (
+                              <li key={j} className="text-foreground">• {t}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {block.notableComplexes && block.notableComplexes.length > 0 && (
+                    <div className="border-t border-border pt-2">
+                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">
+                        Notable complexes
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {block.notableComplexes.map((c, j) => (
+                          <Badge
+                            key={j}
+                            variant="secondary"
+                            className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                            onClick={() => onFollowup?.(`Tell me about ${c}`)}
+                          >
+                            {c}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+
+          case 'distance':
+            return (
+              <Card key={i} className="border-border">
+                <CardContent className="p-4 text-left">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Route className="h-5 w-5 text-primary flex-shrink-0" />
+                    <div className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <span>{block.from}</span>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <span>{block.to}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs text-foreground">
+                    {typeof block.km === 'number' && (
+                      <span>
+                        <span className="text-muted-foreground">Distance: </span>
+                        {block.km} km
+                      </span>
+                    )}
+                    {typeof block.driveMinutes === 'number' && (
+                      <span>
+                        <span className="text-muted-foreground">Drive: </span>~{block.driveMinutes} min
+                      </span>
+                    )}
+                    {typeof block.bikeMinutes === 'number' && (
+                      <span>
+                        <span className="text-muted-foreground">Motorbike: </span>~{block.bikeMinutes} min
+                      </span>
+                    )}
+                  </div>
+                  {block.notes && (
+                    <p className="text-xs text-muted-foreground italic mt-2">{block.notes}</p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+
+          case 'followups':
+            if (!block.suggestions?.length) return null;
+            return (
+              <div key={i} className="flex flex-wrap gap-2">
+                {block.suggestions.map((s, j) => (
+                  <Button
+                    key={j}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-auto py-1.5 px-3 rounded-full"
+                    onClick={() => onFollowup?.(s)}
+                  >
+                    {s}
+                  </Button>
+                ))}
+              </div>
+            );
+
+          default:
+            return null;
+        }
+      })}
+    </div>
+  );
+};
