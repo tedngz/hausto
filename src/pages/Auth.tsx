@@ -298,17 +298,17 @@ const Auth = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center p-4">
       <Helmet>
-        <title>Hausto — Sign In or Create an Account</title>
+        <title>Hausto - Sign In or Create an Account</title>
         <meta name="description" content="Sign in to Hausto or create a free account to discover rental apartments in Vietnam with AI vibe matching." />
         <link rel="canonical" href="https://hausto.lovable.app/auth" />
-        <meta property="og:title" content="Hausto — Sign In" />
+        <meta property="og:title" content="Hausto - Sign In" />
         <meta property="og:description" content="Sign in to Hausto to start matching with rental apartments in Vietnam." />
         <meta property="og:url" content="https://hausto.lovable.app/auth" />
       </Helmet>
       <main className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-            Hausto — {isRecoveryMode ? 'Reset Password' : 'Sign In'}
+            Hausto - {isRecoveryMode ? 'Reset Password' : 'Sign In'}
           </h1>
           <p className="text-muted-foreground mt-2">Find your perfect home match</p>
         </div>
