@@ -1989,11 +1989,71 @@ ${scoredPreviousProperties.map((p, i) => `
 `
       : '';
 
+    // ========== KNOWLEDGE BLOCKS for richer answers (complex/district/distance) ==========
+    const lowerMsg = (message || '').toLowerCase();
+
+    // Static neighborhood distance table — model must use ONLY these values.
+    const KNOWN_DISTANCES: Array<{ from: string; to: string; km: number; driveMinutes: number; bikeMinutes: number; notes?: string }> = [
+      // HCMC
+      { from: 'Thao Dien', to: 'District 1', km: 7,  driveMinutes: 20, bikeMinutes: 25, notes: 'Via Saigon Bridge; heavy at rush hour' },
+      { from: 'Thao Dien', to: 'Thu Thiem', km: 4,  driveMinutes: 12, bikeMinutes: 15 },
+      { from: 'Thu Thiem', to: 'District 1', km: 2,  driveMinutes: 8,  bikeMinutes: 10, notes: 'Across Thu Thiem Tunnel' },
+      { from: 'Phu My Hung', to: 'District 1', km: 8, driveMinutes: 25, bikeMinutes: 30, notes: 'Via Nguyen Van Linh / Khanh Hoi' },
+      { from: 'Binh Thanh', to: 'District 1', km: 4, driveMinutes: 15, bikeMinutes: 18 },
+      { from: 'District 3', to: 'District 1', km: 3, driveMinutes: 10, bikeMinutes: 12 },
+      { from: 'District 7', to: 'District 1', km: 8, driveMinutes: 25, bikeMinutes: 30 },
+      { from: 'Thu Duc', to: 'District 1', km: 14, driveMinutes: 35, bikeMinutes: 45 },
+      // Hanoi
+      { from: 'Tay Ho', to: 'Hoan Kiem', km: 4, driveMinutes: 15, bikeMinutes: 18 },
+      { from: 'Cau Giay', to: 'Hoan Kiem', km: 7, driveMinutes: 22, bikeMinutes: 28 },
+      { from: 'Nam Tu Liem', to: 'Hoan Kiem', km: 12, driveMinutes: 30, bikeMinutes: 40 },
+      { from: 'Ba Dinh', to: 'Hoan Kiem', km: 3, driveMinutes: 10, bikeMinutes: 12 },
+      { from: 'Long Bien', to: 'Hoan Kiem', km: 5, driveMinutes: 18, bikeMinutes: 20, notes: 'Across Chuong Duong Bridge' },
+    ];
+
+    // Best-effort lookup of complexes the user named.
+    let knownComplexes: any[] = [];
+    try {
+      const { data: cxList } = await supabase
+        .from('complexes')
+        .select('id, slug, name, city, district, developer, management_company, year_completed, pet_policy, amenities, average_rent_brackets, insider_pros, insider_cons, commute_times, aliases, tags')
+        .eq('is_published', true)
+        .limit(80);
+      if (cxList && cxList.length > 0) {
+        knownComplexes = cxList.filter((c: any) => {
+          const nameLc = (c.name || '').toLowerCase();
+          const aliases = Array.isArray(c.aliases) ? c.aliases.map((a: string) => (a || '').toLowerCase()) : [];
+          return (nameLc && lowerMsg.includes(nameLc)) ||
+                 aliases.some((a: string) => a && lowerMsg.includes(a));
+        }).slice(0, 3);
+      }
+    } catch (e) {
+      console.log('[Knowledge] complexes lookup skipped:', (e as Error).message);
+    }
+
+    const knownComplexesBlock = knownComplexes.length > 0
+      ? `\n🏢 KNOWN COMPLEXES MATCHING THE USER'S MESSAGE (use these verbatim; do NOT invent fields):\n${knownComplexes.map((c: any) => `- name: ${c.name}
+  city: ${c.city}
+  district: ${c.district}
+  developer: ${c.developer || 'unknown'}
+  management: ${c.management_company || 'unknown'}
+  year_completed: ${c.year_completed || 'unknown'}
+  pet_policy: ${c.pet_policy || 'unknown'}
+  amenities: ${(c.amenities || []).slice(0, 12).join(', ') || 'unknown'}
+  rent_brackets_usd: ${c.average_rent_brackets ? JSON.stringify(c.average_rent_brackets) : 'unknown'}
+  insider_pros: ${(c.insider_pros || []).join(' | ') || 'unknown'}
+  insider_cons: ${(c.insider_cons || []).join(' | ') || 'unknown'}
+  commute_times: ${c.commute_times ? JSON.stringify(c.commute_times) : 'unknown'}`).join('\n\n')}\n`
+      : '';
+
+    const knownDistancesBlock = `\n📐 KNOWN NEIGHBORHOOD DISTANCES (use ONLY for pairs in this table; omit km/minutes for anything not listed):\n${KNOWN_DISTANCES.map(d => `- ${d.from} ↔ ${d.to}: ${d.km}km, ~${d.driveMinutes}min drive, ~${d.bikeMinutes}min motorbike${d.notes ? ` (${d.notes})` : ''}`).join('\n')}\n`;
+
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
 ${rejectionsBlock}${likesBlock}${summaryBlock}${locationNote}
+${knownComplexesBlock}${knownDistancesBlock}
 ${previousPropertiesSection}
 🪜 BEFORE YOU RESPOND, REASON THROUGH:
 1. Is this a NEW search or a FOLLOW-UP about properties already shown? (Check PREVIOUSLY SUGGESTED PROPERTIES section.)
@@ -2064,32 +2124,65 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    
    **AMENITY ACCURACY**: Check the property's full amenities list, description, title, AND highlights before saying a property does or doesn't have something. A property is considered furnished if "Furnished" or "Fully Furnished" appears anywhere in the amenities, highlights, or description, OR if the property has multiple furniture items (e.g., Bed, Sofa, Wardrobe, Desk, Table, Chair) in its amenities list. Never say a property is "not furnished" when it clearly has furniture amenities listed.
 
-9. **JSON RESPONSE FORMAT** (REQUIRED for any property search):
-{
-  "results": [
-    {
-      "id": "exact-property-id-from-above",
-      "title": "Property title",
-      "location": "Exact location",
-      "price": 12000000,
-      "size": "45m²",
-      "vibe": "Modern, Cozy",
-      "description": "Brief description",
-      "highlights": ["Modern", "Balcony"],
-      "images": ["copy-exact-urls-from-property-data"],
-      "matchScore": 85,
-      "matchReason": "Natural reason explaining why this matches, mentioning location honestly",
-      "realtor_id": "exact-realtor-id-from-above",
-      "isExternal": false,
-      "source": null,
-      "sourceUrl": null
-    }
-  ],
-  "summary": "Detailed explanation: e.g., 'I searched for cozy apartments in Thao Dien area under 15M VND. I found X properties matching your criteria - Y are directly in Thao Dien, and Z are in nearby District 2 areas. Here are my top recommendations sorted by how closely they match your needs:'",
-  "totalMatches": 3
-}
+9. **JSON RESPONSE FORMAT** — Always return ONE JSON object. Pick the right shape based on the user's intent:
 
-10. **FOR CONVERSATIONAL QUERIES**: If the user is NOT searching (asking advice, comparing trade-offs, asking neighborhood questions), respond conversationally without the JSON block — but still reference earlier turns and previously suggested properties when relevant.
+   A. SHOPPING / SEARCH intent (user wants apartments) → include "results" with property cards AND optional "blocks" for extra context (advice, complex info, etc.):
+   {
+     "results": [
+       {
+         "id": "exact-property-id-from-above",
+         "title": "Property title",
+         "location": "Exact location",
+         "price": 12000000,
+         "size": "45m²",
+         "vibe": "Modern, Cozy",
+         "description": "Brief description",
+         "highlights": ["Modern", "Balcony"],
+         "images": ["copy-exact-urls-from-property-data"],
+         "matchScore": 85,
+         "matchReason": "Natural reason explaining why this matches, mentioning location honestly",
+         "realtor_id": "exact-realtor-id-from-above",
+         "isExternal": false,
+         "source": null,
+         "sourceUrl": null
+       }
+     ],
+     "summary": "Short prose intro for the listings (e.g., 'Here are 3 cozy Thao Dien apartments under 15M VND').",
+     "totalMatches": 3,
+     "blocks": [ /* optional — see B for block types */ ]
+   }
+
+   B. INFO intent (user asks about a complex, district, distance, or wants advice — NOT shopping) → return "blocks" only, omit "results":
+   {
+     "blocks": [
+       { "type": "text",     "body": "Plain-text advice or answer, 2–5 sentences." },
+       { "type": "complex",  "name": "Masteri Thao Dien", "city": "ho chi minh", "district": "Thao Dien",
+                             "developer": "Masterise Homes", "management": "Savills",
+                             "yearCompleted": 2018, "petPolicy": "Cats allowed, no dogs",
+                             "amenities": ["Pool","Gym","Sky garden"],
+                             "rentRanges": [{ "bedrooms":"1BR","minUsd":900,"maxUsd":1400 }],
+                             "insiderNotes": "Riverside views from north tower; weekday traffic on Xa lo Ha Noi.",
+                             "commute": [{ "to":"District 1","minutes":20 }] },
+       { "type": "district", "city": "ho chi minh", "district": "District 2 / Thao Dien",
+                             "vibe": "Leafy expat enclave with international schools and riverside dining.",
+                             "bestFor": ["families","long-stay expats","walkable cafes"],
+                             "tradeoffs": ["heavy bridge traffic to D1","premium pricing"],
+                             "notableComplexes": ["Masteri Thao Dien","The Estella","The Vista"] },
+       { "type": "distance", "from": "Thao Dien", "to": "District 1",
+                             "km": 7, "driveMinutes": 20, "bikeMinutes": 25,
+                             "notes": "Via Saigon Bridge; rush hour can double this." },
+       { "type": "followups","suggestions": ["Show me 1BR under 15M in Thao Dien","Compare Thao Dien vs Phu My Hung"] }
+     ]
+   }
+
+   Rules for blocks:
+   - Use the "complex" / "distance" blocks ONLY when the matching fact is in KNOWN COMPLEXES or KNOWN NEIGHBORHOOD DISTANCES above (or in the LOCATION KNOWLEDGE section). Omit any field you cannot support — NEVER invent year_completed, prices, or commute minutes.
+   - "district" blocks may use the LOCATION KNOWLEDGE section and general knowledge of HCMC/Hanoi neighborhoods, but keep claims conservative.
+   - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them.
+   - You may MIX A and B: a shopping turn can also carry a "text" block ("Heads up: under 15M in D1 is rare — these are mostly studios") or a "followups" block.
+   - If you only have a quick conversational reply (clarifying question, simple advice), return { "blocks": [ { "type": "text", "body": "..." } ] } with no "results".
+
+10. **WHEN to use which intent**: shopping → user says "show me", "find", "any 2BR", uploads images, gives budget/area/feature filters. Info → user asks "tell me about X", "what's it like in Y", "how far is A from B", "should I pick X or Y", "is X pet friendly". Mixed → "show me 2BRs in Thao Dien and tell me about the area" → include both results and blocks.
 
 11. **LOCATION KNOWLEDGE**:
    - HCMC Center: District 1, 3 (premium, walkable, expensive ~15-40M)
@@ -2169,14 +2262,16 @@ Maximum ${maxResults} properties in results.`;
     responseContent = normalizeAiResponse(responseContent);
     
     // Try to extract JSON from the response if it contains JSON-like content
-    let extractedJson = null;
-    
+    let extractedJson: any = null;
+
     // First try direct parse
     try {
       extractedJson = JSON.parse(responseContent);
     } catch {
-      // Try to find JSON within the text
-      const jsonMatch = responseContent.match(/\{[\s\S]*"results"\s*:\s*\[[\s\S]*\][\s\S]*\}/);
+      // Try to find JSON within the text — match either a results-bearing or blocks-bearing object
+      const jsonMatch =
+        responseContent.match(/\{[\s\S]*"results"\s*:\s*\[[\s\S]*\][\s\S]*\}/) ||
+        responseContent.match(/\{[\s\S]*"blocks"\s*:\s*\[[\s\S]*\][\s\S]*\}/);
       if (jsonMatch) {
         try {
           extractedJson = JSON.parse(jsonMatch[0]);
@@ -2187,23 +2282,83 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
+    // Sanitize blocks (best-effort): keep only known types and required fields.
+    function sanitizeBlocks(raw: any): any[] | undefined {
+      if (!Array.isArray(raw)) return undefined;
+      const allowed = new Set(['text', 'complex', 'district', 'distance', 'followups']);
+      const clipStr = (s: any, n = 600) => (typeof s === 'string' ? s.slice(0, n) : undefined);
+      const clean = raw
+        .filter((b: any) => b && typeof b === 'object' && allowed.has(b.type))
+        .map((b: any) => {
+          if (b.type === 'text') return { type: 'text', body: clipStr(b.body, 1200) || '' };
+          if (b.type === 'followups') {
+            const s = Array.isArray(b.suggestions) ? b.suggestions.filter((x: any) => typeof x === 'string').slice(0, 4).map((x: string) => x.slice(0, 120)) : [];
+            return s.length ? { type: 'followups', suggestions: s } : null;
+          }
+          if (b.type === 'complex') {
+            return {
+              type: 'complex',
+              name: clipStr(b.name, 120) || '',
+              city: clipStr(b.city, 60),
+              district: clipStr(b.district, 60),
+              developer: clipStr(b.developer, 120),
+              management: clipStr(b.management, 120),
+              yearCompleted: typeof b.yearCompleted === 'number' ? b.yearCompleted : undefined,
+              petPolicy: clipStr(b.petPolicy, 200),
+              amenities: Array.isArray(b.amenities) ? b.amenities.filter((x: any) => typeof x === 'string').slice(0, 12).map((x: string) => x.slice(0, 60)) : undefined,
+              rentRanges: Array.isArray(b.rentRanges) ? b.rentRanges.slice(0, 6).filter((r: any) => r && typeof r === 'object').map((r: any) => ({
+                bedrooms: clipStr(r.bedrooms, 20) || '',
+                minUsd: Number(r.minUsd) || 0,
+                maxUsd: Number(r.maxUsd) || 0,
+              })) : undefined,
+              insiderNotes: clipStr(b.insiderNotes, 600),
+              commute: Array.isArray(b.commute) ? b.commute.slice(0, 6).filter((c: any) => c && typeof c === 'object').map((c: any) => ({
+                to: clipStr(c.to, 80) || '',
+                minutes: Number(c.minutes) || 0,
+              })) : undefined,
+            };
+          }
+          if (b.type === 'district') {
+            return {
+              type: 'district',
+              city: clipStr(b.city, 60),
+              district: clipStr(b.district, 80) || '',
+              vibe: clipStr(b.vibe, 400) || '',
+              bestFor: Array.isArray(b.bestFor) ? b.bestFor.filter((x: any) => typeof x === 'string').slice(0, 6).map((x: string) => x.slice(0, 80)) : undefined,
+              tradeoffs: Array.isArray(b.tradeoffs) ? b.tradeoffs.filter((x: any) => typeof x === 'string').slice(0, 6).map((x: string) => x.slice(0, 80)) : undefined,
+              notableComplexes: Array.isArray(b.notableComplexes) ? b.notableComplexes.filter((x: any) => typeof x === 'string').slice(0, 8).map((x: string) => x.slice(0, 80)) : undefined,
+            };
+          }
+          if (b.type === 'distance') {
+            return {
+              type: 'distance',
+              from: clipStr(b.from, 60) || '',
+              to: clipStr(b.to, 60) || '',
+              km: typeof b.km === 'number' ? b.km : undefined,
+              driveMinutes: typeof b.driveMinutes === 'number' ? b.driveMinutes : undefined,
+              bikeMinutes: typeof b.bikeMinutes === 'number' ? b.bikeMinutes : undefined,
+              notes: clipStr(b.notes, 200),
+            };
+          }
+          return null;
+        })
+        .filter(Boolean) as any[];
+      return clean.length ? clean : undefined;
+    }
+    const sanitizedBlocks = extractedJson ? sanitizeBlocks(extractedJson.blocks) : undefined;
+
     // ========== POST-PROCESSING VALIDATION ==========
-    let searchData = null;
+    let searchData: any = null;
     let usedFallback = false;
-    
+
     if (extractedJson && extractedJson.results && Array.isArray(extractedJson.results)) {
       console.log(`[Validation] AI returned ${extractedJson.results.length} results, validating...`);
-      
-      // Validate and fix AI results
       const validatedResults = validateAndFixAIResults(extractedJson.results, scoredProperties, accContext);
-      
       console.log(`[Validation] ${validatedResults.length} results passed validation`);
-      
-      // Update the response with validated results
       extractedJson.results = validatedResults;
       extractedJson.totalMatches = validatedResults.length;
-      
-      // If AI returned results that all got filtered out, provide fallback
+      if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
+
       if (validatedResults.length === 0 && topProperties.length > 0) {
         console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
         usedFallback = true;
@@ -2211,7 +2366,14 @@ Maximum ${maxResults} properties in results.`;
         searchData = extractedJson;
         responseContent = JSON.stringify(extractedJson);
       }
+    } else if (extractedJson && sanitizedBlocks && sanitizedBlocks.length > 0) {
+      // Info-only response — no listings, just blocks.
+      console.log(`[AI] Blocks-only response with ${sanitizedBlocks.length} blocks`);
+      const infoOnly = { results: [], summary: '', totalMatches: 0, blocks: sanitizedBlocks };
+      searchData = infoOnly;
+      responseContent = JSON.stringify(infoOnly);
     }
+
     
     // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
     if (!searchData && topProperties.length > 0) {

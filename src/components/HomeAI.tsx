@@ -26,6 +26,7 @@ import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { format } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { AIBlocks } from '@/components/ai-blocks/AIBlocks';
 interface PropertyMatch {
   id: string;
   title: string;
@@ -57,6 +58,7 @@ interface SearchResult {
   results: PropertyMatch[];
   summary: string;
   totalMatches: number;
+  blocks?: import('@/components/ai-blocks/AIBlocks').AIBlock[];
 }
 interface HomeAIProps {
   userPreferences?: UserPreferences;
@@ -480,12 +482,19 @@ export const HomeAI = ({
         }
 
         // Parse AI response to extract search results
-        let searchResults = null;
+        let searchResults: SearchResult | null = null;
         if (response.data?.response) {
           try {
             const parsed = JSON.parse(response.data.response);
             if (parsed.results && Array.isArray(parsed.results)) {
               searchResults = parsed;
+            } else if (parsed.blocks && Array.isArray(parsed.blocks)) {
+              searchResults = {
+                results: [],
+                summary: parsed.summary || '',
+                totalMatches: 0,
+                blocks: parsed.blocks,
+              };
             }
           } catch (e) {
             // If not JSON, treat as text response
@@ -629,6 +638,8 @@ export const HomeAI = ({
                   const innerParsed = JSON.parse(parsed.response);
                   if (innerParsed.results && Array.isArray(innerParsed.results)) {
                     searchResults = innerParsed;
+                  } else if (innerParsed.blocks && Array.isArray(innerParsed.blocks)) {
+                    searchResults = { results: [], summary: innerParsed.summary || '', totalMatches: 0, blocks: innerParsed.blocks };
                   } else {
                     displayContent = parsed.response;
                   }
@@ -638,18 +649,22 @@ export const HomeAI = ({
               } else if (parsed.results && Array.isArray(parsed.results)) {
                 // Direct JSON with results
                 searchResults = parsed;
+              } else if (parsed.blocks && Array.isArray(parsed.blocks)) {
+                searchResults = { results: [], summary: parsed.summary || '', totalMatches: 0, blocks: parsed.blocks };
               }
             } catch (e) {
               // Not JSON, treat as regular text
               // Clean up any JSON artifacts that might be visible
-              if (message.content.includes('{"results":') || message.content.includes('"summary":')) {
+              if (message.content.includes('{"results":') || message.content.includes('"summary":') || message.content.includes('"blocks":')) {
                 // Try one more time to extract JSON from the message
-                const jsonMatch = message.content.match(/\{[\s\S]*"results"[\s\S]*\}/);
+                const jsonMatch = message.content.match(/\{[\s\S]*"(results|blocks)"[\s\S]*\}/);
                 if (jsonMatch) {
                   try {
                     const extracted = JSON.parse(jsonMatch[0]);
                     if (extracted.results && Array.isArray(extracted.results)) {
                       searchResults = extracted;
+                    } else if (extracted.blocks && Array.isArray(extracted.blocks)) {
+                      searchResults = { results: [], summary: extracted.summary || '', totalMatches: 0, blocks: extracted.blocks };
                     }
                   } catch {
                     displayContent = "I found some properties that match your preferences! Let me show you the results.";
@@ -665,6 +680,8 @@ export const HomeAI = ({
                       {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                           <p className="text-sm text-left">{searchResults.summary}</p>
                         </div>}
+                      <AIBlocks blocks={searchResults.blocks} onFollowup={(s) => handleSearch(s)} />
+                      
                       
                            {searchResults.results.length > 0 && <div className="space-y-3">
                              {searchResults.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" onClick={() => handlePropertyClick(property)}>
@@ -827,6 +844,8 @@ export const HomeAI = ({
               {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                   <p className="text-sm text-left">{searchResults.summary}</p>
                 </div>}
+              <AIBlocks blocks={searchResults.blocks} onFollowup={(s) => handleSearch(s)} />
+              
               
               {searchResults.results.length > 0 && <div className="space-y-3">
                   {searchResults.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" onClick={() => handlePropertyClick(property)}>
