@@ -482,12 +482,19 @@ export const HomeAI = ({
         }
 
         // Parse AI response to extract search results
-        let searchResults = null;
+        let searchResults: SearchResult | null = null;
         if (response.data?.response) {
           try {
             const parsed = JSON.parse(response.data.response);
             if (parsed.results && Array.isArray(parsed.results)) {
               searchResults = parsed;
+            } else if (parsed.blocks && Array.isArray(parsed.blocks)) {
+              searchResults = {
+                results: [],
+                summary: parsed.summary || '',
+                totalMatches: 0,
+                blocks: parsed.blocks,
+              };
             }
           } catch (e) {
             // If not JSON, treat as text response
