@@ -1,7 +1,20 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building2, MapPin, Route, Lightbulb, ArrowRight } from 'lucide-react';
+import { Building2, MapPin, Route, Lightbulb, ArrowRight, Search, MessageCircle } from 'lucide-react';
+
+// Parse "[Search] ..." or "[Ask] ..." prefix from an AI follow-up suggestion.
+// Defaults to "ask" when no tag is present so the chip still works.
+function parseFollowup(raw: string): { intent: 'search' | 'ask'; label: string; clean: string } {
+  const trimmed = (raw || '').trim();
+  const m = trimmed.match(/^\[(search|ask)\]\s*(.+)$/i);
+  if (m) {
+    const intent = m[1].toLowerCase() === 'search' ? 'search' : 'ask';
+    const clean = m[2].trim();
+    return { intent, label: clean, clean };
+  }
+  return { intent: 'ask', label: trimmed, clean: trimmed };
+}
 
 export type AIBlock =
   | { type: 'text'; body: string }
