@@ -371,8 +371,35 @@ export const HomeAI = ({
     }
   };
 
-  const handleSearch = async (searchQuery?: string) => {
+  const handleFollowup = (suggestion: string) => {
+    if (!suggestion?.trim()) return;
+    // For anonymous users, inject prior assistant context so the follow-up
+    // doesn't lose the blocks context (logged-in users get it via history).
+    let augmented = suggestion;
+    if (!user && searchResults) {
+      const ctxParts: string[] = [];
+      if (searchResults.summary) ctxParts.push(searchResults.summary);
+      const blockHints = (searchResults.blocks || [])
+        .map((b: any) => {
+          if (b?.type === 'complex' && b.name) return `complex ${b.name}`;
+          if (b?.type === 'district' && b.district) return `district ${b.district}`;
+          if (b?.type === 'distance' && b.from && b.to) return `${b.from}→${b.to}`;
+          return null;
+        })
+        .filter(Boolean)
+        .slice(0, 4)
+        .join(', ');
+      if (blockHints) ctxParts.push(`Previously discussed: ${blockHints}.`);
+      if (ctxParts.length > 0) {
+        augmented = `[Context: ${ctxParts.join(' ')}]\nFollow-up: ${suggestion}`;
+      }
+    }
+    handleSearch(augmented, { isFollowup: true });
+  };
+
+  const handleSearch = async (searchQuery?: string, options?: { isFollowup?: boolean }) => {
     const queryToUse = searchQuery || query;
+    const isFollowup = !!options?.isFollowup;
 
     // Prevent new messages while AI is processing for both user types
     if (isSendingMessage || isSearching) {
@@ -389,8 +416,8 @@ export const HomeAI = ({
       return;
     }
 
-    // For anonymous users, limit to a single search
-    if (!user && hasSearched) {
+    // For anonymous users, limit to a single search — but always allow follow-ups
+    if (!user && hasSearched && !isFollowup) {
       return;
     }
     if (!queryToUse.trim() && uploadedImages.length === 0) {
