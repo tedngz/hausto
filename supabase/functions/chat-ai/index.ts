@@ -2172,14 +2172,17 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
        { "type": "distance", "from": "Thao Dien", "to": "District 1",
                              "km": 7, "driveMinutes": 20, "bikeMinutes": 25,
                              "notes": "Via Saigon Bridge; rush hour can double this." },
-       { "type": "followups","suggestions": ["Show me 1BR under 15M in Thao Dien","Compare Thao Dien vs Phu My Hung"] }
+        { "type": "followups","suggestions": ["[Search] 1BR under 15M in Thao Dien","[Ask] Compare Thao Dien vs Phu My Hung for families"] }
      ]
    }
 
    Rules for blocks:
    - Use the "complex" / "distance" blocks ONLY when the matching fact is in KNOWN COMPLEXES or KNOWN NEIGHBORHOOD DISTANCES above (or in the LOCATION KNOWLEDGE section). Omit any field you cannot support — NEVER invent year_completed, prices, or commute minutes.
    - "district" blocks may use the LOCATION KNOWLEDGE section and general knowledge of HCMC/Hanoi neighborhoods, but keep claims conservative.
-   - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them.
+   - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them. EVERY suggestion MUST begin with one of these intent tags so the UI can render the right icon:
+       • "[Search] ..." — tapping will fetch property listings (filters, budgets, bedrooms, specific complexes, "show me", "find").
+       • "[Ask] ..." — tapping returns advice/info only (district comparisons, pet policy, commute, "tell me about", "is X good for Y").
+     Examples: "[Search] 2BR in Phu My Hung under 20M", "[Ask] How far is Thao Dien from District 1?", "[Ask] Pros and cons of Masteri Thao Dien".
    - You may MIX A and B: a shopping turn can also carry a "text" block ("Heads up: under 15M in D1 is rare — these are mostly studios") or a "followups" block.
    - If you only have a quick conversational reply (clarifying question, simple advice), return { "blocks": [ { "type": "text", "body": "..." } ] } with no "results".
 
