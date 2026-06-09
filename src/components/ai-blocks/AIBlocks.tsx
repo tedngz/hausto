@@ -277,17 +277,29 @@ export const AIBlocks = ({ blocks, onFollowup }: AIBlocksProps) => {
             if (!block.suggestions?.length) return null;
             return (
               <div key={i} className="flex flex-wrap gap-2">
-                {block.suggestions.map((s, j) => (
-                  <Button
-                    key={j}
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-auto py-1.5 px-3 rounded-full"
-                    onClick={() => onFollowup?.(s)}
-                  >
-                    {s}
-                  </Button>
-                ))}
+                {block.suggestions.map((s, j) => {
+                  const { intent, label, clean } = parseFollowup(s);
+                  const isSearch = intent === 'search';
+                  const Icon = isSearch ? Search : MessageCircle;
+                  return (
+                    <Button
+                      key={j}
+                      variant="outline"
+                      size="sm"
+                      title={isSearch ? 'Find listings' : 'Get advice'}
+                      className={
+                        'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 ' +
+                        (isSearch
+                          ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
+                          : 'border-border text-foreground hover:bg-secondary')
+                      }
+                      onClick={() => onFollowup?.(clean)}
+                    >
+                      <Icon className="h-3 w-3" />
+                      <span>{label}</span>
+                    </Button>
+                  );
+                })}
               </div>
             );
 
