@@ -919,10 +919,11 @@ function detectComparisonQuery(message: string): boolean {
     /have (a |the )?(sofa|balcony|pool|gym|parking|tv|tivi|kitchen|washing|air con)/i,
     /has (a |the )?(sofa|balcony|pool|gym|parking|tv|tivi|kitchen|washing|air con)/i,
     /(any|which).*(tv|tivi|sofa|balcony|pool|gym|parking)/i,
-    // Comparison requests
-    /what about/i,
-    /how about the/i,
-    /compare/i,
+    // Comparison requests — ONLY when referring to previously shown listings.
+    // Plain "compare X vs Y" (e.g. district vs district) is an info question and
+    // must go through the normal AI flow so it can return advice blocks.
+    /compare (these|them|the (first|second|third|last|listings?|options?|properties|results|ones?))/i,
+    /how about the (first|second|third|last|one|listing|property)/i,
     /between these/i,
     /among these/i,
     // Filtering requests
