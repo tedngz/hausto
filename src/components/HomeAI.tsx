@@ -707,7 +707,7 @@ export const HomeAI = ({
                       {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                           <p className="text-sm text-left">{searchResults.summary}</p>
                         </div>}
-                      <AIBlocks blocks={searchResults.blocks} onFollowup={(s) => handleSearch(s)} />
+                      <AIBlocks blocks={searchResults.blocks} onFollowup={handleFollowup} />
                       
                       
                            {searchResults.results.length > 0 && <div className="space-y-3">
@@ -871,7 +871,7 @@ export const HomeAI = ({
               {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
                   <p className="text-sm text-left">{searchResults.summary}</p>
                 </div>}
-              <AIBlocks blocks={searchResults.blocks} onFollowup={(s) => handleSearch(s)} />
+              <AIBlocks blocks={searchResults.blocks} onFollowup={handleFollowup} />
               
               
               {searchResults.results.length > 0 && <div className="space-y-3">
