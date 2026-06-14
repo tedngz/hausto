@@ -21,11 +21,14 @@ import { UsageMeter } from '@/components/UsageMeter';
 import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { Loader2 } from 'lucide-react';
 import { UserPreferences, Apartment, Match } from '@/types';
+import { useUserRoles } from '@/hooks/useUserRoles';
+import { toast } from 'sonner';
 const Discover = () => {
   const {
     user,
     loading
   } = useAuth();
+  const { isRealtor, isLoading: rolesLoading } = useUserRoles();
   const location = useLocation();
   const navigate = useNavigate();
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
@@ -47,45 +50,29 @@ const Discover = () => {
 
   // Load saved preferences from localStorage and default to renter
   useEffect(() => {
-    if (user) {
-      const savedUserType = localStorage.getItem(`userType_${user.id}`);
-      const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
+    if (!user || rolesLoading) return;
+    const savedUserType = localStorage.getItem(`userType_${user.id}`);
+    const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
 
-      if (savedUserType) {
-        setUserType(savedUserType as 'renter' | 'realtor');
-        if (savedUserType === 'realtor') {
-          setCurrentView('dashboard');
-        } else if (savedPreferences) {
-          try {
-            const preferences = JSON.parse(savedPreferences);
-            setUserPreferences(preferences);
-            setCurrentView('ai-chat');
-          } catch (error) {
-            console.error('Error parsing saved preferences:', error);
-            setCurrentView('ai-chat');
-          }
-        } else {
-          setCurrentView('ai-chat');
-        }
-      } else {
-        // Default to renter for new users
-        setUserType('renter');
-        localStorage.setItem(`userType_${user.id}`, 'renter');
-        if (savedPreferences) {
-          try {
-            const preferences = JSON.parse(savedPreferences);
-            setUserPreferences(preferences);
-            setCurrentView('ai-chat');
-          } catch (error) {
-            console.error('Error parsing saved preferences:', error);
-            setCurrentView('ai-chat');
-          }
-        } else {
-          setCurrentView('ai-chat');
-        }
+    // Force renter if stored type is realtor but role missing
+    const effectiveType: 'renter' | 'realtor' =
+      savedUserType === 'realtor' && isRealtor ? 'realtor' : 'renter';
+    setUserType(effectiveType);
+    localStorage.setItem(`userType_${user.id}`, effectiveType);
+
+    if (effectiveType === 'realtor') {
+      setCurrentView('dashboard');
+    } else if (savedPreferences) {
+      try {
+        setUserPreferences(JSON.parse(savedPreferences));
+      } catch (error) {
+        console.error('Error parsing saved preferences:', error);
       }
+      setCurrentView('ai-chat');
+    } else {
+      setCurrentView('ai-chat');
     }
-  }, [user]);
+  }, [user, rolesLoading, isRealtor]);
   useEffect(() => {
     // Listen for AI chat opening event from SwipeInterface
     const handleOpenAIChat = () => {
@@ -111,6 +98,13 @@ const Discover = () => {
     };
   }, []);
   const handleUserTypeSelect = (type: 'renter' | 'realtor') => {
+    if (type === 'realtor' && !isRealtor) {
+      toast.info('Realtor access required', {
+        description: 'Submit an application to get realtor access.',
+      });
+      navigate('/realtor/apply');
+      return;
+    }
     setUserType(type);
     if (user) {
       localStorage.setItem(`userType_${user.id}`, type);
@@ -118,7 +112,6 @@ const Discover = () => {
     if (type === 'realtor') {
       setCurrentView('dashboard');
     } else {
-      // Auto skip to ai-chat if user has completed quiz before
       if (user) {
         const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
         if (savedPreferences) {
@@ -171,6 +164,13 @@ const Discover = () => {
   };
   const switchUserType = () => {
     const newType = userType === 'renter' ? 'realtor' : 'renter';
+    if (newType === 'realtor' && !isRealtor) {
+      toast.info('Realtor access required', {
+        description: 'Submit an application to get realtor access.',
+      });
+      navigate('/realtor/apply');
+      return;
+    }
     setUserType(newType);
     if (user) {
       localStorage.setItem(`userType_${user.id}`, newType);

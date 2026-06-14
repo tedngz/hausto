@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject } from "@/data/hcmcApartmentProjects";
+import { RealtorApplicationsPanel } from "@/components/admin/RealtorApplicationsPanel";
 
 function getTimeAgo(timestamp: string): string {
   const diff = Date.now() - new Date(timestamp).getTime();
@@ -939,6 +940,8 @@ const AdminTools = () => {
         </Button>
       </div>
 
+
+      <RealtorApplicationsPanel />
 
 
       {/* Crawl External Listings - moved to top */}
