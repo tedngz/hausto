@@ -190,6 +190,9 @@ export const LandingPage = () => {
             <span className="text-lg font-semibold text-foreground">Hausto</span>
           </div>
           <p className="text-center text-muted-foreground mt-2">© 2025 Hausto. All rights reserved.</p>
+          <p className="text-center text-muted-foreground mt-1">
+            <a href="mailto:hello@hausto.com" className="hover:text-foreground transition-colors">hello@hausto.com</a>
+          </p>
         </div>
       </footer>
     </div>;
