@@ -907,6 +907,72 @@ export type Database = {
         }
         Relationships: []
       }
+      realtor_applications: {
+        Row: {
+          admin_notes: string | null
+          bio: string
+          city: string
+          company: string | null
+          created_at: string
+          districts: string[]
+          email: string
+          full_name: string
+          id: string
+          phone: string
+          properties_count: number
+          reviewed_at: string | null
+          reviewed_by: string | null
+          role_type: string
+          status: string
+          updated_at: string
+          user_id: string
+          website_or_listing_url: string | null
+          years_experience: number
+        }
+        Insert: {
+          admin_notes?: string | null
+          bio: string
+          city: string
+          company?: string | null
+          created_at?: string
+          districts?: string[]
+          email: string
+          full_name: string
+          id?: string
+          phone: string
+          properties_count?: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          role_type: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          website_or_listing_url?: string | null
+          years_experience?: number
+        }
+        Update: {
+          admin_notes?: string | null
+          bio?: string
+          city?: string
+          company?: string | null
+          created_at?: string
+          districts?: string[]
+          email?: string
+          full_name?: string
+          id?: string
+          phone?: string
+          properties_count?: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          role_type?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          website_or_listing_url?: string | null
+          years_experience?: number
+        }
+        Relationships: []
+      }
       security_audit_log: {
         Row: {
           action: string
@@ -1265,7 +1331,7 @@ export type Database = {
       validate_phone: { Args: { phone_input: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "realtor"
       fast_track_status:
         | "pending"
         | "in_progress"
@@ -1399,7 +1465,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "realtor"],
       fast_track_status: [
         "pending",
         "in_progress",
