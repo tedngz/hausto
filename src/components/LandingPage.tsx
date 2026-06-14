@@ -160,22 +160,22 @@ export const LandingPage = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* Realtor CTA Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-card border border-border rounded-2xl p-12">
             <Building2 className="h-16 w-16 text-primary mx-auto mb-6" />
             <h2 className="text-foreground mb-6 text-3xl font-normal font-serif">
-              Ready to find your dream home?
+              List your properties on Hausto
             </h2>
             <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">
-              Join thousands of renters who have found their perfect match. Start your journey today.
+              Vetted brokers and owners only. Apply to access our renter network, AI-matched leads, and the realtor dashboard.
             </p>
             <div className="flex justify-center">
-            <Button onClick={user ? handleDiscover : handleGetStarted} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto">
-              {user ? "Start Browsing" : "Start Matching Now"}
-              <ArrowRight className="ml-2 h-6 w-6" />
-            </Button>
+              <Button onClick={() => navigate('/realtor/apply')} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto">
+                Apply as a realtor
+                <ArrowRight className="ml-2 h-6 w-6" />
+              </Button>
             </div>
           </div>
         </div>

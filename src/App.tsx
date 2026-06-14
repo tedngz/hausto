@@ -18,6 +18,7 @@ import SubscriptionCancel from "./pages/SubscriptionCancel";
 import Complexes from "./pages/Complexes";
 import ComplexDetail from "./pages/ComplexDetail";
 import ComplexMap from "./pages/ComplexMap";
+import RealtorApply from "./pages/RealtorApply";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/map" element={<ComplexMap />} />
             <Route path="/admin-tools" element={<AdminTools />} />
             <Route path="/admin/complexes" element={<AdminComplexes />} />
+            <Route path="/realtor/apply" element={<RealtorApply />} />
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
             <Route path="/subscription-cancel" element={<SubscriptionCancel />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

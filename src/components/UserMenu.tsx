@@ -1,11 +1,10 @@
-
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreVertical, RotateCcw, LogOut, User, Building2, Home } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
+import { useUserRoles } from '@/hooks/useUserRoles';
 
 interface UserMenuProps {
   userType: 'renter' | 'realtor';
@@ -17,6 +16,7 @@ interface UserMenuProps {
 export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onViewProfile }: UserMenuProps) => {
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const { isRealtor } = useUserRoles();
 
   const handleSignOut = async () => {
     await signOut();
@@ -30,7 +30,7 @@ export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onVi
           <MoreVertical className="w-4 h-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+      <DropdownMenuContent align="end" className="w-52">
         <div className="px-2 py-1">
           <CurrencyDropdown />
         </div>
@@ -53,19 +53,22 @@ export const UserMenu = ({ userType, onSwitchUserType, onRestartOnboarding, onVi
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem onClick={onSwitchUserType}>
-          {userType === 'renter' ? (
-            <>
-              <Building2 className="w-4 h-4 mr-2" />
-              Switch to Realtor
-            </>
-          ) : (
-            <>
-              <Home className="w-4 h-4 mr-2" />
-              Switch to Renter
-            </>
-          )}
-        </DropdownMenuItem>
+        {userType === 'realtor' ? (
+          <DropdownMenuItem onClick={onSwitchUserType}>
+            <Home className="w-4 h-4 mr-2" />
+            Switch to Renter
+          </DropdownMenuItem>
+        ) : isRealtor ? (
+          <DropdownMenuItem onClick={onSwitchUserType}>
+            <Building2 className="w-4 h-4 mr-2" />
+            Switch to Realtor
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={() => navigate('/realtor/apply')}>
+            <Building2 className="w-4 h-4 mr-2" />
+            Apply as Realtor
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>
           <LogOut className="w-4 h-4 mr-2" />
