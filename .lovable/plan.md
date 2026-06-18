@@ -1,74 +1,29 @@
-# Realtor Onboarding & Approval Flow
+## Goal
+Revert every edge function that currently uses Lovable AI Gateway / Gemini models back to direct OpenAI API calls, using the existing `OPENAI_API_KEY` secret (already configured).
 
-## 1. Repurpose the landing CTA section
-File: `src/components/LandingPage.tsx` (the "Ready to find your dream home?" card).
+## Model mapping
+- `google/gemini-3-flash-preview` → `gpt-4o-mini`
+- `google/gemini-2.5-flash` → `gpt-4o-mini`
+- (Vision-capable calls stay on `gpt-4o-mini`, which supports image inputs.)
 
-Rewrite into a realtor-recruitment block:
-- Heading: "List your properties on Hausto"
-- Sub: "Vetted brokers and owners only. Apply to access our renter network and dashboard."
-- Button: "Apply as a realtor →" → navigates to `/realtor/apply`
-- Icon: keep building icon (already fits)
+## Files to update
 
-Renter conversion is already handled by the hero/HomeAI above, so the duplicate renter CTA is removed.
+1. **`supabase/functions/chat-ai/index.ts`** — 3 call sites (lines ~869, ~1638, ~2204). Replace gateway URL `https://ai.gateway.lovable.dev/v1/chat/completions` with `https://api.openai.com/v1/chat/completions`, swap `LOVABLE_API_KEY` → `OPENAI_API_KEY`, and update model strings.
 
-## 2. Database (new migration)
+2. **`supabase/functions/hausto-ai-assist/index.ts`** — 1 call site (~line 174). Same swap.
 
-Extend `app_role` enum with `realtor`:
-```sql
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'realtor';
-```
+3. **`supabase/functions/scrape-marketplace/index.ts`** — Remove Lovable gateway branch; always use OpenAI when an `OPENAI_API_KEY` is present. Update the `if (LOVABLE_API_KEY)` block and the two guard checks.
 
-New table `public.realtor_applications`:
-- `id uuid pk`
-- `user_id uuid references auth.users(id) on delete cascade` (unique)
-- `full_name text`, `company text`, `phone text`, `email text`
-- `role_type text check in ('agent','owner','agency')`
-- `city text`, `districts text[]`
-- `years_experience int`
-- `properties_count int`
-- `website_or_listing_url text`
-- `bio text`
-- `status text default 'pending' check in ('pending','approved','rejected')`
-- `admin_notes text`
-- `reviewed_by uuid`, `reviewed_at timestamptz`
-- `created_at`, `updated_at`
+4. **`supabase/functions/crawl-external-properties/index.ts`** — Drop Lovable fallback; require `OPENAI_API_KEY`. Simplify the `apiKey`/`model` selection to OpenAI only.
 
-GRANTs + RLS:
-- `authenticated`: insert own row, select own row, update own row only while `status = 'pending'`
-- Admins (via `has_role(auth.uid(),'admin')`): select/update all
-- `service_role`: all
+5. **`supabase/functions/recrawl-external-listing/index.ts`** — Same: drop `useGateway` branching, always call OpenAI with `gpt-4o-mini`.
 
-Trigger on UPDATE: when `status` transitions to `'approved'`, insert `(user_id,'realtor')` into `public.user_roles` (ON CONFLICT DO NOTHING) and stamp `reviewed_at`.
+## Out of scope
+- `generate-property-embedding` and `batch-generate-embeddings` already use OpenAI — no change.
+- `analyze-vibe` already uses OpenAI — no change.
+- No DB migrations.
+- No frontend changes.
+- `LOVABLE_API_KEY` secret stays in place (used by other potential features); we just stop calling it from these functions.
 
-## 3. New realtor application page
-`src/pages/RealtorApply.tsx` + route `/realtor/apply` in `App.tsx`.
-
-- Requires auth; if logged-out, redirect to `/auth` with returnTo.
-- If the user already has an application, show its status (Pending / Approved / Rejected with notes) instead of the form.
-- If approved, show a "Go to dashboard" button → `/discover` (with `userType=realtor` set).
-- Validates inputs with zod, submits insert into `realtor_applications`.
-
-## 4. Gate realtor access everywhere
-Create `src/hooks/useUserRoles.tsx` that loads the current user's roles from `user_roles`.
-
-- `src/components/UserTypeSelector.tsx`: only show the "I'm a Realtor" card when `roles.includes('realtor')`. Otherwise replace with a small "Are you a realtor? Apply here" link to `/realtor/apply`.
-- `src/pages/Discover.tsx` `handleUserTypeSelect` / `switchUserType`: block switching to `realtor` unless the role exists; if not, route to `/realtor/apply`.
-- On initial load, if localStorage says `realtor` but role is missing, force back to `renter`.
-- `RealtorNavigation` "Switch to Renter" stays; renter `UserMenu` "Switch to Realtor" item is hidden unless approved.
-
-## 5. Admin review UI
-Extend `src/pages/AdminTools.tsx` with a "Realtor Applications" panel (admin-gated via `has_role`):
-- Table of pending applications with all submitted fields
-- Approve / Reject buttons → update `status` (+ optional `admin_notes`)
-- Filter tabs: Pending / Approved / Rejected
-- Approval relies on the DB trigger to grant the role; UI just updates status.
-
-## 6. Out of scope
-- No email notifications on approval (can be added later via edge function).
-- No edit/resubmit flow for rejected applications in v1 — applicant sees rejection + notes only.
-- No realtor-specific public profile changes.
-
-## Technical notes
-- One migration handles the enum addition, table, grants, RLS, and the approval trigger.
-- The enum `ALTER TYPE ... ADD VALUE` must be committed before the trigger references `'realtor'`; split into two migration files if Postgres complains.
-- Frontend reads roles via a single `useUserRoles` hook cached with react-query so gating is consistent across pages.
+## Verification
+After edits, tail-check each file with `rg "LOVABLE_API_KEY|gemini|ai.gateway.lovable"` to confirm zero remaining references in the five functions.
