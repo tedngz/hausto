@@ -866,20 +866,20 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
 async function summarizeConversation(
   chatHistory: Array<{role: string, content: string}>
 ): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY || chatHistory.length === 0) return '';
+  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+  if (!OPENAI_API_KEY || chatHistory.length === 0) return '';
   try {
     const transcript = chatHistory
       .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 400)}`)
       .join('\n');
-    const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -1635,17 +1635,17 @@ Feature Tags: High Ceilings, Natural Light, Open Plan, Walk-in Closet, En-suite 
 
 When analyzing property images, ONLY use tags from the standard list above.`;
 
-      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-      if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+      if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
 
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: message }
@@ -1656,7 +1656,7 @@ When analyzing property images, ONLY use tags from the standard list above.`;
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Lovable AI error:', response.status, errorText);
+        console.error('OpenAI error:', response.status, errorText);
         throw new Error(`AI service error: ${response.status}`);
       }
 
@@ -2198,11 +2198,9 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
 
 Maximum ${maxResults} properties in results.`;
 
-    // Call Lovable AI Gateway with Gemini Flash — much faster TTFT and cheaper
-    // per-token than gpt-5 reasoning, while still returning the structured JSON
-    // the downstream validator expects.
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+    // Call OpenAI directly with gpt-4o-mini.
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
 
     // Build messages with history - include images as multimodal content if present
     const userMessageContent: any = validImages.length > 0
@@ -2221,16 +2219,16 @@ Maximum ${maxResults} properties in results.`;
     ];
 
     const t0 = Date.now();
-    console.log(`[AI] Calling Lovable AI Gateway (gemini-3-flash-preview, history=${Math.min(chatHistory.length, 10)} turns)`);
+    console.log(`[AI] Calling OpenAI (gpt-4o-mini, history=${Math.min(chatHistory.length, 10)} turns)`);
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'gpt-4o-mini',
         messages: messagesWithHistory,
         max_tokens: 1500,
       }),
@@ -2238,7 +2236,7 @@ Maximum ${maxResults} properties in results.`;
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('[AI] Lovable AI Gateway error:', aiResponse.status, errorText);
+      console.error('[AI] OpenAI error:', aiResponse.status, errorText);
 
       if (aiResponse.status === 429) {
         return new Response(
@@ -2246,16 +2244,10 @@ Maximum ${maxResults} properties in results.`;
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
         );
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'AI credits exhausted. Please add credits to your workspace.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
-        );
-      }
 
       throw new Error(`AI service error: ${aiResponse.status}`);
     }
-    console.log(`[AI] Gateway responded in ${Date.now() - t0}ms`);
+    console.log(`[AI] OpenAI responded in ${Date.now() - t0}ms`);
 
     const aiData = await aiResponse.json();
     let responseContent = aiData.choices[0].message.content || '';

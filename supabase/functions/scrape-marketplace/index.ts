@@ -9,8 +9,6 @@ const corsHeaders = {
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -144,32 +142,6 @@ async function callAI(messages: { role: string; content: any }[], maxTokens: num
       console.warn('[callAI] OpenAI error:', response.status, await response.text());
     } catch (e) {
       console.warn('[callAI] OpenAI failed:', e);
-    }
-  }
-  
-  // Fallback to Lovable Gateway with Gemini 2.5 Flash
-  if (LOVABLE_API_KEY) {
-    try {
-      const response = await fetch(AI_GATEWAY_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages,
-          max_tokens: maxTokens,
-          temperature,
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return data.choices?.[0]?.message?.content || null;
-      }
-      console.warn('[callAI] Gateway error:', response.status);
-    } catch (e) {
-      console.warn('[callAI] Gateway failed:', e);
     }
   }
   
@@ -870,7 +842,7 @@ async function extractListingUrls(
   console.log(`[Phase 1] Found ${unique.length} unique listing URLs from link extraction`);
   
   // If regex didn't find enough, use AI to extract URLs from markdown (skipped in raw mode)
-  if (!skipAi && unique.length < 3 && (LOVABLE_API_KEY || OPENAI_API_KEY)) {
+  if (!skipAi && unique.length < 3 && OPENAI_API_KEY) {
     console.log(`[Phase 1] Using AI fallback to find listing URLs...`);
     try {
       const content = await callAI(
@@ -1420,7 +1392,7 @@ serve(async (req) => {
     
     console.log(`[scrape-marketplace] Request:`, JSON.stringify({ marketplace, query, location, maxResults: effectiveMaxResults, pages: effectivePagesToScrape }));
 
-    if (!rawMode && !LOVABLE_API_KEY && !OPENAI_API_KEY) throw new Error('No AI API key configured (LOVABLE_API_KEY or OPENAI_API_KEY)');
+    if (!rawMode && !OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
 
     // Check cache (skipped in raw mode — always fetch fresh to maximize Firecrawl harvest)
     const cacheKey = `marketplace:v2:${marketplace}:${query}:${location || 'all'}`;
