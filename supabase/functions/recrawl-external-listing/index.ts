@@ -12,9 +12,7 @@ const corsHeaders = {
 };
 
 const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
 // ─── HTTP helpers ───────────────────────────────────────────────
 async function directFetch(url: string): Promise<string> {
@@ -92,15 +90,11 @@ function detectMarketplace(source: string, url: string): string {
 }
 
 async function callAI(messages: any[], maxTokens = 2500): Promise<string | null> {
-  const useGateway = !!LOVABLE_API_KEY;
-  const url = useGateway ? AI_GATEWAY_URL : 'https://api.openai.com/v1/chat/completions';
-  const key = useGateway ? LOVABLE_API_KEY : OPENAI_API_KEY;
-  if (!key) throw new Error('No AI API key configured');
-  const model = useGateway ? 'google/gemini-2.5-flash' : 'gpt-4o-mini';
-  const res = await fetch(url, {
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, messages, max_completion_tokens: maxTokens, temperature: 0.2 }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+    body: JSON.stringify({ model: 'gpt-4o-mini', messages, max_completion_tokens: maxTokens, temperature: 0.2 }),
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) {

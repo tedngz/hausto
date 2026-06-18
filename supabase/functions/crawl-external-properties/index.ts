@@ -10,8 +10,6 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
 // Popular locations to crawl periodically
 const POPULAR_LOCATIONS: Record<string, string[]> = {
@@ -229,9 +227,9 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
   highlights: string[];
   amenities: string[];
 } | null> {
-  if (!OPENAI_API_KEY && !LOVABLE_API_KEY) {
+  if (!OPENAI_API_KEY) {
     if (!images || images.length === 0) return null;
-    console.warn('[vibe-analysis] No AI API key configured');
+    console.warn('[vibe-analysis] OPENAI_API_KEY not configured');
     return null;
   }
   if (!images || images.length === 0) return null;
@@ -289,10 +287,9 @@ async function analyzePropertyImagesVibe(images: string[]): Promise<{
     
     if (imageContent.length === 0) return null;
     
-    // Prefer OpenAI, fallback to Lovable Gateway
-    const apiUrl = OPENAI_API_KEY ? 'https://api.openai.com/v1/chat/completions' : AI_GATEWAY_URL;
-    const apiKey = OPENAI_API_KEY || LOVABLE_API_KEY;
-    const model = OPENAI_API_KEY ? 'gpt-4o-mini' : 'google/gemini-2.5-flash';
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
+    const apiKey = OPENAI_API_KEY;
+    const model = 'gpt-4o-mini';
     
     const response = await fetch(apiUrl, {
       method: 'POST',
