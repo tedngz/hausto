@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeFunction } from '@/integrations/supabase/functions-client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
@@ -167,9 +168,9 @@ export const useHomeAI = () => {
 
       // Call edge function for AI response with enhanced context
       console.log('About to invoke chat-ai function...');
-      const { data, error } = await supabase.functions.invoke('chat-ai', {
-        body: { 
-          message, 
+      const { data, error } = await invokeFunction<any>('chat-ai', {
+        body: {
+          message,
           conversationId: actualConversationId,
           userType,
           userPreferences,
