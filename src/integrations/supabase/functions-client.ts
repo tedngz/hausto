@@ -38,7 +38,7 @@ function getFunctionsClient(): SupabaseClient {
 export async function invokeFunction<T = unknown>(
   name: string,
   options: { body?: unknown; headers?: Record<string, string> } = {},
-): Promise<{ data: T | null; error: Error | null }> {
+): Promise<{ data: T | null; error: any }> {
   const client = getFunctionsClient();
   const headers: Record<string, string> = { ...(options.headers ?? {}) };
 
