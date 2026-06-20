@@ -1375,10 +1375,18 @@ serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase env and clients early
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    // Cross-project: function may run on a different Supabase project than the
+    // database/auth. See ../_shared/db-client.ts.
+    const {
+      getDbUrl,
+      getDbServiceRoleKey,
+      getDbAnonKey,
+      getDbPublishableKey,
+    } = await import("../_shared/db-client.ts");
+    const supabaseUrl = getDbUrl();
+    const supabaseServiceKey = getDbServiceRoleKey();
+    const supabaseAnonKey = getDbAnonKey();
+    const supabasePublishableKey = getDbPublishableKey();
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -1389,11 +1397,10 @@ serve(async (req) => {
 
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
-      
+
       // Skip if the token is just the anon/publishable key (not a user JWT)
-      const isAnonKey = token === supabaseAnonKey || 
-                        token === Deno.env.get('SUPABASE_PUBLISHABLE_KEY');
-      
+      const isAnonKey = token === supabaseAnonKey || token === supabasePublishableKey;
+
       if (!isAnonKey && token.length > 100) {
         // SECURITY: verify JWT signature with Supabase auth instead of trusting client-decoded payload
         try {

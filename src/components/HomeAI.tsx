@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeFunction } from '@/integrations/supabase/functions-client';
 import { ExternalPropertyBadge } from '@/components/ExternalPropertyBadge';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -485,7 +486,7 @@ export const HomeAI = ({
           // Anonymous users don't have saved preferences
           propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
         };
-        const response = await supabase.functions.invoke('chat-ai', {
+        const response = await invokeFunction<any>('chat-ai', {
           body: messageData
         });
         if (response.error) {
