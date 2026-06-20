@@ -21,7 +21,7 @@ const FN_KEY = import.meta.env.VITE_FUNCTIONS_SUPABASE_ANON_KEY as string | unde
 let _functionsClient: SupabaseClient | null = null;
 
 function getFunctionsClient(): SupabaseClient {
-  if (!FN_URL || !FN_KEY) return mainClient;
+  if (!FN_URL || !FN_KEY) return mainClient as unknown as SupabaseClient;
   if (!_functionsClient) {
     _functionsClient = createClient(FN_URL, FN_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
