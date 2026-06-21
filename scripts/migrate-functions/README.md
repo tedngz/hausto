@@ -18,9 +18,20 @@ Lovable-managed project (`gbgrwjdmytaksrztcyzs`).
 
 Run this once. It uses the Supabase CLI you already have installed.
 
+**macOS / Linux / Git Bash / WSL:**
+
 ```bash
 cd scripts/migrate-functions
 ./set-new-project-secrets.sh joxxcvxbsjedzkfpmkfc
+```
+
+**Windows PowerShell:**
+
+```powershell
+cd scripts\migrate-functions
+# Once per session if execution policy blocks scripts:
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\set-new-project-secrets.ps1 joxxcvxbsjedzkfpmkfc
 ```
 
 The script will prompt you for each secret value. You need to have ready:
@@ -36,12 +47,21 @@ The script will prompt you for each secret value. You need to have ready:
 
 ### 2. Deploy chat-ai to the new project
 
+**macOS / Linux / Git Bash / WSL:**
+
 ```bash
 ./deploy.sh joxxcvxbsjedzkfpmkfc chat-ai
 ```
 
+**Windows PowerShell:**
+
+```powershell
+.\deploy.ps1 joxxcvxbsjedzkfpmkfc chat-ai
+```
+
 The function deploys with `--no-verify-jwt` because the function does its own
 JWT verification against the Lovable auth (see code in `chat-ai/index.ts`).
+
 
 ### 3. Point the frontend at the new project for chat-ai
 
