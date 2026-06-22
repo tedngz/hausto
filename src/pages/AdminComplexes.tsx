@@ -503,15 +503,50 @@ const AdminComplexes = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="hero">Hero Image URL</Label>
-                  <Input
-                    id="hero"
-                    value={form.hero_image}
-                    onChange={(e) =>
-                      setForm({ ...form, hero_image: e.target.value })
-                    }
-                    placeholder="https://…"
-                  />
+                  <Label htmlFor="hero">Hero Image</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="hero"
+                      value={form.hero_image}
+                      onChange={(e) =>
+                        setForm({ ...form, hero_image: e.target.value })
+                      }
+                      placeholder="Paste image URL or upload…"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={uploadingHero}
+                      onClick={() => document.getElementById("hero-file")?.click()}
+                    >
+                      {uploadingHero ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <><Upload className="mr-1 h-4 w-4" /> Upload</>
+                      )}
+                    </Button>
+                    <input
+                      id="hero-file"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        setUploadingHero(true);
+                        try {
+                          const url = await uploadImage(file);
+                          setForm((f) => (f ? { ...f, hero_image: url } : f));
+                          toast.success("Hero image uploaded");
+                        } catch (err: any) {
+                          toast.error("Upload failed", { description: err?.message || String(err) });
+                        } finally {
+                          setUploadingHero(false);
+                        }
+                      }}
+                    />
+                  </div>
                   {form.hero_image && (
                     <img
                       src={form.hero_image}
