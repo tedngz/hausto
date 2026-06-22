@@ -217,6 +217,23 @@ const AdminComplexes = () => {
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [newGalleryUrl, setNewGalleryUrl] = useState("");
+  const [uploadingHero, setUploadingHero] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
+  const uploadImage = async (file: File): Promise<string> => {
+    if (!user?.id) throw new Error("Not authenticated");
+    if (!selected?.id) throw new Error("No complex selected");
+    if (!file.type.startsWith("image/")) throw new Error("File must be an image");
+    if (file.size > 10 * 1024 * 1024) throw new Error("Image must be under 10MB");
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${user.id}/complexes/${selected.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await supabase.storage
+      .from("property-images")
+      .upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
+    if (error) throw error;
+    const { data } = supabase.storage.from("property-images").getPublicUrl(path);
+    return data.publicUrl;
+  };
 
   const selected = useMemo(
     () => complexes?.find((c) => c.id === selectedId) ?? null,
