@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ShieldAlert, Save, Search, ArrowLeft, RefreshCw, X, Plus } from "lucide-react";
+import { Loader2, ShieldAlert, Save, Search, ArrowLeft, RefreshCw, X, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { Complex, RentBracket } from "@/hooks/useComplexes";
 
@@ -217,6 +217,23 @@ const AdminComplexes = () => {
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [newGalleryUrl, setNewGalleryUrl] = useState("");
+  const [uploadingHero, setUploadingHero] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
+  const uploadImage = async (file: File): Promise<string> => {
+    if (!user?.id) throw new Error("Not authenticated");
+    if (!selected?.id) throw new Error("No complex selected");
+    if (!file.type.startsWith("image/")) throw new Error("File must be an image");
+    if (file.size > 10 * 1024 * 1024) throw new Error("Image must be under 10MB");
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${user.id}/complexes/${selected.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await supabase.storage
+      .from("property-images")
+      .upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
+    if (error) throw error;
+    const { data } = supabase.storage.from("property-images").getPublicUrl(path);
+    return data.publicUrl;
+  };
 
   const selected = useMemo(
     () => complexes?.find((c) => c.id === selectedId) ?? null,
@@ -486,15 +503,50 @@ const AdminComplexes = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="hero">Hero Image URL</Label>
-                  <Input
-                    id="hero"
-                    value={form.hero_image}
-                    onChange={(e) =>
-                      setForm({ ...form, hero_image: e.target.value })
-                    }
-                    placeholder="https://…"
-                  />
+                  <Label htmlFor="hero">Hero Image</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="hero"
+                      value={form.hero_image}
+                      onChange={(e) =>
+                        setForm({ ...form, hero_image: e.target.value })
+                      }
+                      placeholder="Paste image URL or upload…"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={uploadingHero}
+                      onClick={() => document.getElementById("hero-file")?.click()}
+                    >
+                      {uploadingHero ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <><Upload className="mr-1 h-4 w-4" /> Upload</>
+                      )}
+                    </Button>
+                    <input
+                      id="hero-file"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        setUploadingHero(true);
+                        try {
+                          const url = await uploadImage(file);
+                          setForm((f) => (f ? { ...f, hero_image: url } : f));
+                          toast.success("Hero image uploaded");
+                        } catch (err: any) {
+                          toast.error("Upload failed", { description: err?.message || String(err) });
+                        } finally {
+                          setUploadingHero(false);
+                        }
+                      }}
+                    />
+                  </div>
                   {form.hero_image && (
                     <img
                       src={form.hero_image}
@@ -623,6 +675,43 @@ const AdminComplexes = () => {
                     >
                       <Plus className="mr-1 h-4 w-4" /> Add
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={uploadingGallery}
+                      onClick={() => document.getElementById("gallery-file")?.click()}
+                    >
+                      {uploadingGallery ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <><Upload className="mr-1 h-4 w-4" /> Upload</>
+                      )}
+                    </Button>
+                    <input
+                      id="gallery-file"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        e.target.value = "";
+                        if (files.length === 0) return;
+                        setUploadingGallery(true);
+                        try {
+                          const urls: string[] = [];
+                          for (const file of files) {
+                            urls.push(await uploadImage(file));
+                          }
+                          setForm((f) => (f ? { ...f, gallery: [...f.gallery, ...urls] } : f));
+                          toast.success(`Uploaded ${urls.length} image${urls.length > 1 ? "s" : ""}`);
+                        } catch (err: any) {
+                          toast.error("Upload failed", { description: err?.message || String(err) });
+                        } finally {
+                          setUploadingGallery(false);
+                        }
+                      }}
+                    />
                   </div>
                 </div>
 
