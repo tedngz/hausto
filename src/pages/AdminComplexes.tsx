@@ -675,6 +675,43 @@ const AdminComplexes = () => {
                     >
                       <Plus className="mr-1 h-4 w-4" /> Add
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={uploadingGallery}
+                      onClick={() => document.getElementById("gallery-file")?.click()}
+                    >
+                      {uploadingGallery ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <><Upload className="mr-1 h-4 w-4" /> Upload</>
+                      )}
+                    </Button>
+                    <input
+                      id="gallery-file"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        e.target.value = "";
+                        if (files.length === 0) return;
+                        setUploadingGallery(true);
+                        try {
+                          const urls: string[] = [];
+                          for (const file of files) {
+                            urls.push(await uploadImage(file));
+                          }
+                          setForm((f) => (f ? { ...f, gallery: [...f.gallery, ...urls] } : f));
+                          toast.success(`Uploaded ${urls.length} image${urls.length > 1 ? "s" : ""}`);
+                        } catch (err: any) {
+                          toast.error("Upload failed", { description: err?.message || String(err) });
+                        } finally {
+                          setUploadingGallery(false);
+                        }
+                      }}
+                    />
                   </div>
                 </div>
 
