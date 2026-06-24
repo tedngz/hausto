@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { Redis } from "https://esm.sh/@upstash/redis@latest";
+import { detectLifestyleIntent, findRelevantKB, formatKBBlock } from "../_shared/lifestyle-kb.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2056,12 +2057,28 @@ ${scoredPreviousProperties.map((p, i) => `
 
     const knownDistancesBlock = `\n📐 KNOWN NEIGHBORHOOD DISTANCES (use ONLY for pairs in this table; omit km/minutes for anything not listed):\n${KNOWN_DISTANCES.map(d => `- ${d.from} ↔ ${d.to}: ${d.km}km, ~${d.driveMinutes}min drive, ~${d.bikeMinutes}min motorbike${d.notes ? ` (${d.notes})` : ''}`).join('\n')}\n`;
 
+    // ========== LIFESTYLE INTENT + KB LOOKUP ==========
+    const intent = detectLifestyleIntent(message);
+    const kbLookup = (intent.isLifestyle || intent.isMixed)
+      ? findRelevantKB(message, accContext as any)
+      : { cityEntries: [], districtEntries: [] };
+    const lifestyleKBBlock = formatKBBlock(kbLookup);
+    console.log(
+      `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} ` +
+      `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
+    );
+
+    // On pure lifestyle turns, drop the property block from the prompt to save
+    // tokens and prevent the model from forcing listings into the answer.
+    const promptProperties = intent.isLifestyle ? [] : topProperties;
+
+
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
 ${rejectionsBlock}${likesBlock}${summaryBlock}${locationNote}
-${knownComplexesBlock}${knownDistancesBlock}
+${knownComplexesBlock}${knownDistancesBlock}${lifestyleKBBlock}
 ${previousPropertiesSection}
 🪜 BEFORE YOU RESPOND, REASON THROUGH:
 1. Is this a NEW search or a FOLLOW-UP about properties already shown? (Check PREVIOUSLY SUGGESTED PROPERTIES section.)
@@ -2069,9 +2086,12 @@ ${previousPropertiesSection}
 3. Are there positive signals (likes) I should weight higher?
 4. Is there an open question or ambiguity I should clarify briefly before listing properties?
 5. Does my final ordering respect the priority list below and the user's stated preferences?
+6. Is the user actually shopping, or asking a LIFESTYLE / INFO question (vibe, cost of living, best area for X, safety, schools, commute, "tell me about")? If the latter, answer from LIFESTYLE KNOWLEDGE in prose blocks — do NOT return "results".
 
-📊 AVAILABLE PROPERTIES (${topProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
-${topProperties.length > 0 ? topProperties.map((p, i) => `
+${intent.isLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. End with 2–4 followups mixing one "[Ask]" (go deeper) and one "[Search]" (offer to convert to listings when ready).` : ''}
+
+📊 AVAILABLE PROPERTIES (${promptProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
+${promptProperties.length > 0 ? promptProperties.map((p, i) => `
 [${i+1}] ${p.matchReasons.some(r => r.includes('exactly')) ? '⭐ EXACT MATCH' : '📍 NEARBY'} ${p.title}
    ID: ${p.id}
    Location: ${p.location} (${p.locationTier})
@@ -2083,7 +2103,8 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : 'No properties currently match these criteria in our database.'}
+`).join('\n') : (intent.isLifestyle ? '(Skipped — lifestyle/info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
+
 
 🧠 CRITICAL INSTRUCTIONS:
 
