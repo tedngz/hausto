@@ -2057,6 +2057,22 @@ ${scoredPreviousProperties.map((p, i) => `
 
     const knownDistancesBlock = `\n📐 KNOWN NEIGHBORHOOD DISTANCES (use ONLY for pairs in this table; omit km/minutes for anything not listed):\n${KNOWN_DISTANCES.map(d => `- ${d.from} ↔ ${d.to}: ${d.km}km, ~${d.driveMinutes}min drive, ~${d.bikeMinutes}min motorbike${d.notes ? ` (${d.notes})` : ''}`).join('\n')}\n`;
 
+    // ========== LIFESTYLE INTENT + KB LOOKUP ==========
+    const intent = detectLifestyleIntent(message);
+    const kbLookup = (intent.isLifestyle || intent.isMixed)
+      ? findRelevantKB(message, accContext as any)
+      : { cityEntries: [], districtEntries: [] };
+    const lifestyleKBBlock = formatKBBlock(kbLookup);
+    console.log(
+      `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} ` +
+      `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
+    );
+
+    // On pure lifestyle turns, drop the property block from the prompt to save
+    // tokens and prevent the model from forcing listings into the answer.
+    const promptProperties = intent.isLifestyle ? [] : topProperties;
+
+
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
