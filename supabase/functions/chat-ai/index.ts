@@ -2111,7 +2111,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : (intent.isLifestyle ? '(Skipped — lifestyle/info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
+`).join('\n') : (isPureLifestyle ? '(Skipped — lifestyle/info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
 
 
 🧠 CRITICAL INSTRUCTIONS:
