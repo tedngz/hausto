@@ -2056,8 +2056,8 @@ ${scoredPreviousProperties.map((p, i) => `
 
     // ========== LIFESTYLE INTENT + KB LOOKUP ==========
     const intent = detectLifestyleIntent(message);
-    const shoppingOverride = hasShoppingKeyword(message) || topProperties.length > 0;
-    // Pure-lifestyle ONLY when detector says so AND there's no shopping keyword or candidates
+    const shoppingOverride = hasShoppingKeyword(message);
+    // Pure-lifestyle ONLY when detector says so AND there's no shopping keyword
     const isPureLifestyle = intent.isLifestyle && !shoppingOverride;
     
     if (shoppingOverride && intent.isLifestyle) {
