@@ -1696,7 +1696,16 @@ When analyzing property images, ONLY use tags from the standard list above.`;
         });
       }
 
-      return new Response(JSON.stringify({ response: aiResponse }), {
+      return new Response(JSON.stringify({ 
+        response: aiResponse,
+        _debug: {
+          intent,
+          shoppingOverride,
+          isPureLifestyle,
+          promptPropertiesLength: promptProperties.length,
+          chatHistoryRoles: chatHistory.map(m => m.role)
+        }
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       });
@@ -2423,7 +2432,7 @@ Maximum ${maxResults} properties in results.`;
     let searchData: any = null;
     let usedFallback = false;
 
-    if (extractedJson && extractedJson.results && Array.isArray(extractedJson.results)) {
+    if (extractedJson && Array.isArray(extractedJson.results) && extractedJson.results.length > 0) {
       console.log(`[Validation] AI returned ${extractedJson.results.length} results, validating...`);
       const validatedResults = validateAndFixAIResults(extractedJson.results, scoredProperties, accContext);
       console.log(`[Validation] ${validatedResults.length} results passed validation`);
@@ -2431,7 +2440,7 @@ Maximum ${maxResults} properties in results.`;
       extractedJson.totalMatches = validatedResults.length;
       if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
 
-      if (validatedResults.length === 0 && topProperties.length > 0) {
+      if (validatedResults.length === 0 && topProperties.length > 0 && !isPureLifestyle) {
         console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
         usedFallback = true;
       } else {
@@ -2448,7 +2457,7 @@ Maximum ${maxResults} properties in results.`;
 
     
     // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
-    if (!searchData && topProperties.length > 0) {
+    if (!searchData && topProperties.length > 0 && !isPureLifestyle) {
       console.log('[Fallback] Generating results from pre-scored properties');
       usedFallback = true;
       
