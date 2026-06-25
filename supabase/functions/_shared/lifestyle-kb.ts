@@ -489,7 +489,7 @@ const LIFESTYLE_TRIGGERS = [
   'best place to live', 'best area to live', 'where should i live', 'where to live',
   'best neighborhood', 'best district', 'good for families', 'good for kids',
   'is it safe', 'how safe', 'cost of living', 'how much does it cost', 'how expensive',
-  "what's the vibe", 'what is the vibe', 'what is it like', "what's it like",
+  "what's the vibe", 'what is the vibe', 'the vibe', 'vibe in', 'vibe of', 'what is it like', "what's it like",
   'tell me about', 'describe the', 'pros and cons', 'pros & cons',
   ' vs ', ' versus ', 'compare ',
   'food scene', 'nightlife scene', 'restaurant scene',
