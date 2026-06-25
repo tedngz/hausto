@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { Redis } from "https://esm.sh/@upstash/redis@latest";
-import { detectLifestyleIntent, findRelevantKB, formatKBBlock } from "../_shared/lifestyle-kb.ts";
+import { detectLifestyleIntent, findRelevantKB, formatKBBlock, hasShoppingKeyword } from "../_shared/lifestyle-kb.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2059,28 +2059,27 @@ ${scoredPreviousProperties.map((p, i) => `
 
     // ========== LIFESTYLE INTENT + KB LOOKUP ==========
     const intent = detectLifestyleIntent(message);
+    const shoppingOverride = hasShoppingKeyword(message) || topProperties.length > 0;
+    // Pure-lifestyle ONLY when detector says so AND there's no shopping keyword or candidates
+    const isPureLifestyle = intent.isLifestyle && !shoppingOverride;
     
-    // Belt-and-braces shopping override
-    const hasShoppingKeywords = /\b(apartment|apartments|rent|studio|bedroom|flat|condo)\b/.test(lowerMsg) || /\b\d+\s*br\b/.test(lowerMsg);
-    const isShoppingOverride = hasShoppingKeywords || topProperties.length > 0;
-    
-    if (isShoppingOverride && intent.isLifestyle) {
-      intent.isLifestyle = false;
+    if (shoppingOverride && intent.isLifestyle) {
       intent.isMixed = true;
     }
 
-    const kbLookup = (intent.isLifestyle || intent.isMixed)
+    const kbLookup = (isPureLifestyle || intent.isMixed)
       ? findRelevantKB(message, accContext as any)
       : { cityEntries: [], districtEntries: [] };
     const lifestyleKBBlock = formatKBBlock(kbLookup);
     console.log(
-      `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} override=${isShoppingOverride} ` +
+      `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} ` +
+      `shoppingOverride=${shoppingOverride} pureLifestyle=${isPureLifestyle} ` +
       `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
     );
 
     // On pure lifestyle turns, drop the property block from the prompt to save
     // tokens and prevent the model from forcing listings into the answer.
-    const promptProperties = (intent.isLifestyle && !intent.isMixed) ? [] : topProperties;
+    const promptProperties = isPureLifestyle ? [] : topProperties;
 
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
@@ -2098,8 +2097,9 @@ ${previousPropertiesSection}
 5. Does my final ordering respect the priority list below and the user's stated preferences?
 6. Is the user actually shopping, or asking a LIFESTYLE / INFO question (vibe, cost of living, best area for X, safety, schools, commute, "tell me about")? If the latter, answer from LIFESTYLE KNOWLEDGE in prose blocks — do NOT return "results".
 
-${intent.isLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. End with 2–4 followups mixing one "[Ask]" (go deeper) and one "[Search]" (offer to convert to listings when ready).` : ''}
-${intent.isMixed ? `🔀 MIXED TURN — answer the lifestyle question briefly in a \`text\` block AND include the matching listings in \`results\`. Both are required.` : ''}
+${isPureLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. End with 2–4 followups mixing one "[Ask]" (go deeper) and one "[Search]" (offer to convert to listings when ready).` : ''}
+${intent.isMixed ? `🔀 MIXED TURN — The user wants BOTH lifestyle context AND listings. You MUST return a "results" array with matching property cards AND a "blocks" array with a short "text" block (2–4 sentences of lifestyle/area context grounded in LIFESTYLE KNOWLEDGE above). Both are required — do not omit "results".` : ''}
+${!isPureLifestyle && !intent.isMixed && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
 
 📊 AVAILABLE PROPERTIES (${promptProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
@@ -2114,7 +2114,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : (intent.isLifestyle ? '(Skipped — lifestyle/info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
+`).join('\n') : (isPureLifestyle ? '(Skipped — lifestyle/info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
 
 
 🧠 CRITICAL INSTRUCTIONS:
@@ -2166,7 +2166,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
 
 9. **JSON RESPONSE FORMAT** — Always return ONE JSON object. Pick the right shape based on the user's intent:
 
-   **DEFAULT TO SHOPPING.** If property candidates are provided below and the user has not explicitly said "just tell me / don't show listings", you MUST include \`results\`. Omit \`results\` only on pure info turns where no candidates are supplied.
+   ⚠️ **DEFAULT TO SHOPPING.** If property candidates are listed in AVAILABLE PROPERTIES above (count > 0) and the user has not explicitly said "just tell me / don't show listings / no listings", you MUST include a "results" array with those property cards. Omit "results" ONLY on pure info turns where AVAILABLE PROPERTIES is empty/skipped.
 
    A. SHOPPING / SEARCH intent (user wants apartments) → include "results" with property cards AND optional "blocks" for extra context (advice, complex info, etc.):
    {
