@@ -481,25 +481,43 @@ function stripAccents(s: string): string {
  * Detect whether a user turn is a "lifestyle" question (info/advice) rather
  * than a shopping query. Used by chat-ai to skip the heavy property block.
  */
+// Multi-word phrases that unambiguously request info/advice (NOT listings).
+// Keep these specific — bare words like "safe" or "schools" fire on normal
+// shopping turns ("safe 2BR near international school") and would suppress
+// property cards.
 const LIFESTYLE_TRIGGERS = [
   'best place to live', 'best area to live', 'where should i live', 'where to live',
   'best neighborhood', 'best district', 'good for families', 'good for kids',
-  'safe', 'safety', 'cost of living', 'how much does it cost', 'how expensive',
-  'vibe', 'what is it like', "what's it like", 'tell me about', 'describe',
-  'compare', 'vs ', ' versus ', 'pros and cons', 'pros & cons',
-  'expat', 'expats', 'foreigner', 'international school', 'schools',
-  'commute', 'how far', 'distance from', 'food scene', 'restaurants',
-  'nightlife', 'cafe', 'walkable', 'transportation',
-  'pet friendly', 'pet policy', 'family friendly', 'family-friendly',
+  'is it safe', 'how safe', 'cost of living', 'how much does it cost', 'how expensive',
+  "what's the vibe", 'what is the vibe', 'what is it like', "what's it like",
+  'tell me about', 'describe the', 'pros and cons', 'pros & cons',
+  ' vs ', ' versus ', 'compare ',
+  'food scene', 'nightlife scene', 'restaurant scene',
   'recommend an area', 'recommend a district', 'which area', 'which district',
   'should i pick', 'should i choose', 'should i live',
+  'overview of', 'guide to', 'living in',
 ];
 
+// Phrases that signal the user wants actual listings.
 const SHOPPING_TRIGGERS = [
-  'show me', 'find me', 'looking for', 'i want', 'i need',
+  'show me', 'find me', 'looking for', 'i want', 'i need', 'i\'m looking',
   'under ', 'less than ', 'below ', 'budget',
-  'available', 'listings', 'apartments for rent', 'show properties',
+  'available', 'listings', 'listing', 'apartments for rent', 'show properties',
+  'apartment', 'apartments', 'flat', 'flats', 'condo', 'condos', 'studio',
+  'place to rent', 'places to rent', 'for rent', 'rent in', 'rent a',
+  'something in', 'options in', 'units in', 'available in',
+  'any 2br', 'any 3br', 'any 1br', 'any studio',
+  'show me a', 'do you have', 'got any',
 ];
+
+// Hard override — if any of these appear, the user is clearly shopping and
+// must never have property results suppressed.
+const SHOPPING_KEYWORD_RE =
+  /\b(apartment|apartments|flat|flats|condo|condos|studio|listing|listings|for rent|rent in|rent a|\d+\s*br|\d+\s*bedroom|bedrooms?)\b/i;
+
+export function hasShoppingKeyword(message: string): boolean {
+  return SHOPPING_KEYWORD_RE.test(stripAccents(message || ''));
+}
 
 export function detectLifestyleIntent(message: string): {
   isLifestyle: boolean;
@@ -513,8 +531,9 @@ export function detectLifestyleIntent(message: string): {
     /\b\d+\s*(br|bedroom|phong ngu)\b/.test(lc) ||
     /\b\d+\s*(m|million|tr|trieu)\b/.test(lc) ||
     /\$\s*\d/.test(lc);
-  const shoppingSignal = hasShopping || hasShoppingNumeric;
+  const shoppingSignal = hasShopping || hasShoppingNumeric || SHOPPING_KEYWORD_RE.test(lc);
   return {
+    // Pure lifestyle ONLY when there's no shopping signal at all.
     isLifestyle: hasLifestyle && !shoppingSignal,
     isMixed: hasLifestyle && shoppingSignal,
   };
