@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+const body = `**Followups:**\r\n- [Ask] What are the best areas for families in HCMC?\r\n- [Ask] How does the cost of living compare to other cities in Vietnam?\r\n- [Search] What is the rent for a 2-bedroom apartment in Thao Dien?`;
+
+let extractedFollowups = [];
+const followupRegex = /(?:^|\n)-?\s*(\[(?:Ask|Search)\][^\n]+)/gi;
+let match;
+while ((match = followupRegex.exec(body)) !== null) {
+  extractedFollowups.push(match[1].trim());
+}
+
+let newBody = body;
+newBody = newBody.replace(/(?:^|\n)-?\s*\[(?:Ask|Search)\].*/gi, '');
+// Let's also replace "**Followups:**" explicitly since it's common.
+newBody = newBody.replace(/(?:^|\n)[^\w\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|options?|questions?)[^\n]*$/gi, '');
+
+document.write("Extracted: " + JSON.stringify(extractedFollowups) + "<br>");
+document.write("New Body: " + JSON.stringify(newBody));
+</script>
+</body>
+</html>
