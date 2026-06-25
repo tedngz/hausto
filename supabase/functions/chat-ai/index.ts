@@ -1510,8 +1510,8 @@ serve(async (req) => {
       supabase
         .from('properties')
         .select('*')
-        .eq('is_active', true)
-        .gte('last_activated_at', tenDaysAgo.toISOString()),
+        .eq('is_active', true),
+        // .gte('last_activated_at', tenDaysAgo.toISOString()),
       supabase
         .from('external_properties')
         .select('*')
