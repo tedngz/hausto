@@ -133,7 +133,7 @@ const HCM_ROADS: Record<string, string> = {
 const LOCATION_DATA = {
   hcm: {
     name: 'Ho Chi Minh City',
-    aliases: ['ho chi minh', 'hcm', 'saigon', 'sài gòn', 'sai gon', 'hồ chí minh', 'tp.hcm', 'tphcm'],
+    aliases: ['ho chi minh', 'hcm', 'hcmc', 'saigon', 'sài gòn', 'sai gon', 'hồ chí minh', 'tp.hcm', 'tphcm'],
     districts: {
       center: {
         names: ['d1', 'district 1', 'quan 1', 'quận 1', 'q1', 'd3', 'district 3', 'quan 3', 'quận 3', 'q3'],
