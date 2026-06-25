@@ -19,7 +19,7 @@ const redis = new Redis({
 function matchesWord(text: string, term: string): boolean {
   // Escape regex special characters in the term
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(?:^|[\\s,./;:\\-()\\[\\]])${escaped}(?=$|[\\s,./;:\\-()\\[\\]])`, 'i');
+  const regex = new RegExp(`(?:^|[\\s,./;:\\-()\\[\\]\\?!"'])${escaped}(?=$|[\\s,./;:\\-()\\[\\]\\?!"'])`, 'i');
   return regex.test(text);
 }
 
