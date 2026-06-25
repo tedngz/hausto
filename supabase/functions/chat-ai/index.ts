@@ -2368,13 +2368,28 @@ Maximum ${maxResults} properties in results.`;
       if (!Array.isArray(raw)) return undefined;
       const allowed = new Set(['text', 'complex', 'district', 'distance', 'followups']);
       const clipStr = (s: any, n = 600) => (typeof s === 'string' ? s.slice(0, n) : undefined);
+      
+      const extractedFollowups: string[] = [];
+
       const clean = raw
         .filter((b: any) => b && typeof b === 'object' && allowed.has(b.type))
         .map((b: any) => {
-          if (b.type === 'text') return { type: 'text', body: clipStr(b.body, 1200) || '' };
+          if (b.type === 'text') {
+            let body = clipStr(b.body, 1200) || '';
+            const followupRegex = /(?:^|\n)-?\s*(\[(?:Ask|Search)\][^\n]+)/gi;
+            let match;
+            while ((match = followupRegex.exec(body)) !== null) {
+              extractedFollowups.push(match[1].trim());
+            }
+            body = body.replace(/(?:^|\n)-?\s*\[(?:Ask|Search)\].*/gi, '');
+            body = body.replace(/(?:^|\n)(?:Here are some|Some|These are some)?\s*(?:follow-?up(?:s| options)?)(?:[^.\n]*)(?::|\.)?\s*$/gi, '');
+            body = body.replace(/(?:^|\n)If you have specific interests or activities in mind, feel free to ask!\s*$/i, '');
+            return { type: 'text', body: body.trim() };
+          }
           if (b.type === 'followups') {
             const s = Array.isArray(b.suggestions) ? b.suggestions.filter((x: any) => typeof x === 'string').slice(0, 4).map((x: string) => x.slice(0, 120)) : [];
-            return s.length ? { type: 'followups', suggestions: s } : null;
+            extractedFollowups.push(...s);
+            return null; // Will consolidate at the end
           }
           if (b.type === 'complex') {
             return {
@@ -2424,7 +2439,16 @@ Maximum ${maxResults} properties in results.`;
           return null;
         })
         .filter(Boolean) as any[];
-      return clean.length ? clean : undefined;
+        
+      const finalClean = clean.filter((b: any) => b.type !== 'text' || b.body.length > 0);
+      
+      if (extractedFollowups.length > 0) {
+        // Remove duplicates just in case
+        const uniqueFollowups = Array.from(new Set(extractedFollowups)).slice(0, 4);
+        finalClean.push({ type: 'followups', suggestions: uniqueFollowups });
+      }
+
+      return finalClean.length ? finalClean : undefined;
     }
     const sanitizedBlocks = extractedJson ? sanitizeBlocks(extractedJson.blocks) : undefined;
 
