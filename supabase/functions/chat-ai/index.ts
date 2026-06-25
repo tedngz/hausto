@@ -2059,18 +2059,24 @@ ${scoredPreviousProperties.map((p, i) => `
 
     // ========== LIFESTYLE INTENT + KB LOOKUP ==========
     const intent = detectLifestyleIntent(message);
-    const kbLookup = (intent.isLifestyle || intent.isMixed)
+    const shoppingOverride = hasShoppingKeyword(message);
+    // Pure-lifestyle ONLY when detector says so AND there's no shopping keyword
+    // anywhere in the message. Belt-and-braces against the model dropping cards
+    // on real listing queries.
+    const isPureLifestyle = intent.isLifestyle && !shoppingOverride;
+    const kbLookup = (isPureLifestyle || intent.isMixed)
       ? findRelevantKB(message, accContext as any)
       : { cityEntries: [], districtEntries: [] };
     const lifestyleKBBlock = formatKBBlock(kbLookup);
     console.log(
       `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} ` +
+      `shoppingOverride=${shoppingOverride} pureLifestyle=${isPureLifestyle} ` +
       `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
     );
 
     // On pure lifestyle turns, drop the property block from the prompt to save
     // tokens and prevent the model from forcing listings into the answer.
-    const promptProperties = intent.isLifestyle ? [] : topProperties;
+    const promptProperties = isPureLifestyle ? [] : topProperties;
 
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
@@ -2088,7 +2094,9 @@ ${previousPropertiesSection}
 5. Does my final ordering respect the priority list below and the user's stated preferences?
 6. Is the user actually shopping, or asking a LIFESTYLE / INFO question (vibe, cost of living, best area for X, safety, schools, commute, "tell me about")? If the latter, answer from LIFESTYLE KNOWLEDGE in prose blocks — do NOT return "results".
 
-${intent.isLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. End with 2–4 followups mixing one "[Ask]" (go deeper) and one "[Search]" (offer to convert to listings when ready).` : ''}
+${isPureLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. End with 2–4 followups mixing one "[Ask]" (go deeper) and one "[Search]" (offer to convert to listings when ready).` : ''}
+${intent.isMixed ? `🔀 MIXED TURN — The user wants BOTH lifestyle context AND listings. You MUST return a "results" array with matching property cards AND a "blocks" array with a short "text" block (2–4 sentences of lifestyle/area context grounded in LIFESTYLE KNOWLEDGE above). Both are required — do not omit "results".` : ''}
+${!isPureLifestyle && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
 
 📊 AVAILABLE PROPERTIES (${promptProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
