@@ -482,23 +482,19 @@ function stripAccents(s: string): string {
  * than a shopping query. Used by chat-ai to skip the heavy property block.
  */
 const LIFESTYLE_TRIGGERS = [
-  'best place to live', 'best area to live', 'where should i live', 'where to live',
-  'best neighborhood', 'best district', 'good for families', 'good for kids',
-  'safe', 'safety', 'cost of living', 'how much does it cost', 'how expensive',
-  'vibe', 'what is it like', "what's it like", 'tell me about', 'describe',
-  'compare', 'vs ', ' versus ', 'pros and cons', 'pros & cons',
-  'expat', 'expats', 'foreigner', 'international school', 'schools',
-  'commute', 'how far', 'distance from', 'food scene', 'restaurants',
-  'nightlife', 'cafe', 'walkable', 'transportation',
-  'pet friendly', 'pet policy', 'family friendly', 'family-friendly',
-  'recommend an area', 'recommend a district', 'which area', 'which district',
-  'should i pick', 'should i choose', 'should i live',
+  'best place to live', 'where should i live', 'tell me about', 'what is it like',
+  "what's it like", 'cost of living', 'pros and cons', 'pros & cons', 'vs', 'versus',
+  'recommend an area', 'recommend a district', 'good for families', 'good for kids',
+  'is it safe', 'how safe', 'food scene', 'nightlife scene',
 ];
 
 const SHOPPING_TRIGGERS = [
   'show me', 'find me', 'looking for', 'i want', 'i need',
   'under ', 'less than ', 'below ', 'budget',
   'available', 'listings', 'apartments for rent', 'show properties',
+  'apartment', 'apartments', 'flat', 'condo', 'studio', 'place to rent',
+  'for rent', 'rent in', 'rent a', 'any 2br', 'any 3br', 'something in',
+  'options in', 'units in', 'available in',
 ];
 
 export function detectLifestyleIntent(message: string): {
@@ -513,10 +509,16 @@ export function detectLifestyleIntent(message: string): {
     /\b\d+\s*(br|bedroom|phong ngu)\b/.test(lc) ||
     /\b\d+\s*(m|million|tr|trieu)\b/.test(lc) ||
     /\$\s*\d/.test(lc);
+  
   const shoppingSignal = hasShopping || hasShoppingNumeric;
+  const hasApartmentKeyword = /\b(apartment|rent|studio|\d+\s*br|bedroom)\b/.test(lc);
+
+  const isMixed = hasLifestyle && shoppingSignal;
+  const isLifestyle = hasLifestyle && !shoppingSignal && !hasApartmentKeyword;
+
   return {
-    isLifestyle: hasLifestyle && !shoppingSignal,
-    isMixed: hasLifestyle && shoppingSignal,
+    isLifestyle,
+    isMixed,
   };
 }
 

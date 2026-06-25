@@ -2059,18 +2059,28 @@ ${scoredPreviousProperties.map((p, i) => `
 
     // ========== LIFESTYLE INTENT + KB LOOKUP ==========
     const intent = detectLifestyleIntent(message);
+    
+    // Belt-and-braces shopping override
+    const hasShoppingKeywords = /\b(apartment|apartments|rent|studio|bedroom|flat|condo)\b/.test(lowerMsg) || /\b\d+\s*br\b/.test(lowerMsg);
+    const isShoppingOverride = hasShoppingKeywords || topProperties.length > 0;
+    
+    if (isShoppingOverride && intent.isLifestyle) {
+      intent.isLifestyle = false;
+      intent.isMixed = true;
+    }
+
     const kbLookup = (intent.isLifestyle || intent.isMixed)
       ? findRelevantKB(message, accContext as any)
       : { cityEntries: [], districtEntries: [] };
     const lifestyleKBBlock = formatKBBlock(kbLookup);
     console.log(
-      `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} ` +
+      `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} override=${isShoppingOverride} ` +
       `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
     );
 
     // On pure lifestyle turns, drop the property block from the prompt to save
     // tokens and prevent the model from forcing listings into the answer.
-    const promptProperties = intent.isLifestyle ? [] : topProperties;
+    const promptProperties = (intent.isLifestyle && !intent.isMixed) ? [] : topProperties;
 
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
@@ -2089,6 +2099,7 @@ ${previousPropertiesSection}
 6. Is the user actually shopping, or asking a LIFESTYLE / INFO question (vibe, cost of living, best area for X, safety, schools, commute, "tell me about")? If the latter, answer from LIFESTYLE KNOWLEDGE in prose blocks — do NOT return "results".
 
 ${intent.isLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. End with 2–4 followups mixing one "[Ask]" (go deeper) and one "[Search]" (offer to convert to listings when ready).` : ''}
+${intent.isMixed ? `🔀 MIXED TURN — answer the lifestyle question briefly in a \`text\` block AND include the matching listings in \`results\`. Both are required.` : ''}
 
 📊 AVAILABLE PROPERTIES (${promptProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
@@ -2154,6 +2165,8 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    **AMENITY ACCURACY**: Check the property's full amenities list, description, title, AND highlights before saying a property does or doesn't have something. A property is considered furnished if "Furnished" or "Fully Furnished" appears anywhere in the amenities, highlights, or description, OR if the property has multiple furniture items (e.g., Bed, Sofa, Wardrobe, Desk, Table, Chair) in its amenities list. Never say a property is "not furnished" when it clearly has furniture amenities listed.
 
 9. **JSON RESPONSE FORMAT** — Always return ONE JSON object. Pick the right shape based on the user's intent:
+
+   **DEFAULT TO SHOPPING.** If property candidates are provided below and the user has not explicitly said "just tell me / don't show listings", you MUST include \`results\`. Omit \`results\` only on pure info turns where no candidates are supplied.
 
    A. SHOPPING / SEARCH intent (user wants apartments) → include "results" with property cards AND optional "blocks" for extra context (advice, complex info, etc.):
    {
