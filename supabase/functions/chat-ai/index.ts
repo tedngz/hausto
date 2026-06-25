@@ -1628,6 +1628,26 @@ serve(async (req) => {
     // Detect if user is asking to compare/filter previous results
     const isComparisonQuery = detectComparisonQuery(message.toLowerCase());
 
+    const sanitizedChatHistory = chatHistory.map(msg => {
+      if (msg.role === 'assistant') {
+        try {
+          const parsed = JSON.parse(msg.content);
+          if (parsed.results) {
+            return {
+              role: 'assistant',
+              content: JSON.stringify({
+                blocks: parsed.blocks || [],
+                _system_note: "[Results omitted to save tokens. They are stored in DB.]"
+              })
+            };
+          }
+        } catch (e) {
+          // Ignored
+        }
+      }
+      return msg;
+    });
+
     // ========== REALTOR MODE ==========
     if (userType === 'realtor') {
       const systemPrompt = `You are Hausto AI, a helpful assistant for real estate professionals. You help realtors create compelling property descriptions, titles, and marketing content.
@@ -2252,7 +2272,25 @@ Maximum ${maxResults} properties in results.`;
     // carry long-term memory, and a shorter prompt is faster + cheaper.
     const messagesWithHistory = [
       { role: 'system', content: systemPrompt },
-      ...chatHistory.slice(-10).map(msg => ({ role: msg.role, content: msg.content })),
+      ...chatHistory.slice(-10).map(msg => {
+        if (msg.role === 'assistant') {
+          try {
+            const parsed = JSON.parse(msg.content);
+            if (parsed.results) {
+              return {
+                role: 'assistant',
+                content: JSON.stringify({
+                  blocks: parsed.blocks || [],
+                  _system_note: "[Results omitted to save tokens. They are stored in DB.]"
+                })
+              };
+            }
+          } catch (e) {
+            // Ignored
+          }
+        }
+        return { role: msg.role, content: msg.content };
+      }),
       { role: 'user', content: userMessageContent }
     ];
 
