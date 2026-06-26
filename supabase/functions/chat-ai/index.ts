@@ -2539,8 +2539,41 @@ Maximum ${maxResults} properties in results.`;
     }
     
     // If still no search data and no properties, keep the AI's conversational response
+    // BUT first check if plain-text response contains embedded followups we can extract
     if (!searchData) {
-      console.log('[Response] No properties to show, using conversational response');
+      console.log('[Response] No properties to show, checking plain text for embedded followups');
+      const plainText = responseContent;
+      const followupExtract: string[] = [];
+      const fupRe = /^\s*-?\s*(\[(?:Ask|Search)\][^\r\n]+)/gim;
+      let fupMatch;
+      while ((fupMatch = fupRe.exec(plainText)) !== null) {
+        followupExtract.push(fupMatch[1].trim());
+      }
+      if (followupExtract.length > 0) {
+        // Strip the followup lines and their header from the text body
+        let cleanBody = plainText;
+        cleanBody = cleanBody.replace(/^\s*-?\s*\[(?:Ask|Search)\][^\n]*\n?/gim, '');
+        cleanBody = cleanBody.replace(/^[^\w\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|options?|questions?|suggestions?)[^\n]*:?\s*\n?/gim, '');
+        cleanBody = cleanBody.replace(/^#+\s*(?:follow-?ups?|suggestions?)[^\n]*\n?/gim, '');
+        cleanBody = cleanBody.replace(/\*\*/g, '');
+        cleanBody = cleanBody.replace(/^If you have specific (?:needs|interests)[^\n]*\n?/gim, '');
+        cleanBody = cleanBody.trim();
+
+        const blocks: any[] = [];
+        if (cleanBody.length > 0) {
+          blocks.push({ type: 'text', body: cleanBody });
+        }
+        const uniqueFollowups = Array.from(new Set(followupExtract)).slice(0, 4);
+        blocks.push({ type: 'followups', suggestions: uniqueFollowups });
+
+        searchData = { results: [], summary: '', totalMatches: 0, blocks };
+        responseContent = JSON.stringify(searchData);
+        console.log(`[Response] Extracted ${uniqueFollowups.length} followups from plain text, converted to blocks`);
+      } else {
+        // Still plain text with no followups — strip markdown bold markers
+        responseContent = responseContent.replace(/\*\*/g, '');
+        console.log('[Response] Pure conversational response, no followups found');
+      }
     }
 
     // Save response to database
