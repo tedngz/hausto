@@ -2376,14 +2376,15 @@ Maximum ${maxResults} properties in results.`;
         .map((b: any) => {
           if (b.type === 'text') {
             let body = clipStr(b.body, 1200) || '';
-            const followupRegex = /^-?\s*(\[(?:Ask|Search)\][^\r\n]+)/gim;
+            const followupRegex = /^\s*-?\s*(\[(?:Ask|Search)\][^\r\n]+)/gim;
             let match;
             while ((match = followupRegex.exec(body)) !== null) {
               extractedFollowups.push(match[1].trim());
             }
-            body = body.replace(/^-?\s*\[(?:Ask|Search)\].*$/gim, '');
-            body = body.replace(/^[^\w\r\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|options?|questions?)[^\r\n]*$/gim, '');
+            body = body.replace(/^\s*-?\s*\[(?:Ask|Search)\].*$/gim, '');
+            body = body.replace(/^[^\w\r\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|options?|questions?|suggestions?)[^\r\n]*$/gim, '');
             body = body.replace(/^If you have specific interests or activities in mind, feel free to ask!\s*$/gim, '');
+            body = body.replace(/\*\*/g, '');
             return { type: 'text', body: body.trim() };
           }
           if (b.type === 'followups') {
