@@ -637,7 +637,7 @@ export const HomeAI = ({
         </Card>}
 
       {/* Chat Messages for Signed In Users */}
-      {user && <div className="space-y-4 mb-4 mt-6 max-h-96 overflow-y-auto my-[30px]">
+      {user && <div className="space-y-4 mb-4 mt-6 max-h-96 overflow-y-auto my-[50px]">
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-fade-in">
