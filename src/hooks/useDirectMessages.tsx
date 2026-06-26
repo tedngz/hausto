@@ -222,8 +222,9 @@ export const useDirectMessages = () => {
   useEffect(() => {
     if (!user?.id) return;
 
+    const channelId = `match-conversations-changes-${user.id}-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel('match-conversations-changes')
+      .channel(channelId)
       .on(
         'postgres_changes',
         {
@@ -281,8 +282,9 @@ export const useDirectMessages = () => {
   useEffect(() => {
     if (!currentConversationId || !user?.id) return;
 
+    const channelId = `direct-messages-${currentConversationId}-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel(`direct-messages-${currentConversationId}`)
+      .channel(channelId)
       .on(
         'postgres_changes',
         {
