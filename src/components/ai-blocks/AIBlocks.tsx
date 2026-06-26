@@ -60,7 +60,7 @@ interface AIBlocksProps {
 export const AIBlocks = ({ blocks, onFollowup }: AIBlocksProps) => {
   if (!blocks || blocks.length === 0) return null;
   return (
-    <div className="w-full space-y-3">
+    <div className="w-full space-y-5">
       {blocks.map((block, i) => {
         switch (block.type) {
           case 'text':
