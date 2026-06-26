@@ -27,19 +27,19 @@ export const MapViewModal = ({ isOpen, onClose, latitude, longitude, title, loca
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden" style={{ zIndex: 60 }}>
-        <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <MapPin className="w-5 h-5 text-primary" />
-            {location}
+      <DialogContent className="w-[95vw] sm:max-w-[600px] p-0 overflow-hidden rounded-2xl" style={{ zIndex: 60 }}>
+        <DialogHeader className="p-4 sm:p-5 pb-2 text-left">
+          <DialogTitle className="flex items-start sm:items-center gap-2 text-base sm:text-lg pr-6">
+            <MapPin className="w-5 h-5 text-primary flex-shrink-0 mt-0.5 sm:mt-0" />
+            <span className="leading-tight">{location}</span>
           </DialogTitle>
           {locationDesc && (
-            <p className="text-sm text-muted-foreground leading-relaxed">{locationDesc}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed pt-1 pr-4">{locationDesc}</p>
           )}
         </DialogHeader>
         <div
-          className="w-full rounded-b-lg overflow-hidden ring-1 ring-border/40"
-          style={{ height: '420px', minHeight: '420px', position: 'relative', zIndex: 1, background: '#f5f3ee' }}
+          className="w-full rounded-b-2xl overflow-hidden ring-1 ring-border/40"
+          style={{ height: '50vh', minHeight: '350px', maxHeight: '500px', position: 'relative', zIndex: 1, background: '#f5f3ee' }}
         >
           {isOpen && (
             <ComplexMapCanvas

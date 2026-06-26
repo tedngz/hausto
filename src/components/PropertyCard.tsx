@@ -180,7 +180,7 @@ export const PropertyCard = ({
     activity: 'border-secondary/30 bg-secondary/10'
   };
   return <Card className={`glass-card overflow-hidden group/card transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${className}`}>
-      <div className="relative aspect-[4/3] sm:aspect-[16/9] w-full">
+      <div className="relative aspect-[4/3] sm:aspect-[16/9] w-full overflow-hidden">
         <img src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'} alt={`${apartment.title} - Image ${currentImageIndex + 1}`} className="w-full h-full object-cover cursor-pointer transition-transform duration-700 group-hover/card:scale-105" onClick={() => setIsImageModalOpen(true)} />
         
         {/* Dark gradient scrim for text readability */}
