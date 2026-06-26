@@ -321,8 +321,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
   useEffect(() => {
     if (!isOpen || !property?.id || isExternal) return;
 
+    const channelId = `property-updates-${property.id}-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel(`property-updates-${property.id}`)
+      .channel(channelId)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'properties', filter: `id=eq.${property.id}` },

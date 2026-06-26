@@ -183,8 +183,9 @@ export const useProperties = () => {
 
   // Realtime: refresh properties when backend updates happen (e.g., re-analyze)
   useEffect(() => {
+    const channelId = `properties-updates-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel('properties-updates')
+      .channel(channelId)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'properties' }, () => {
         queryClient.invalidateQueries({ queryKey: ['properties'] });
         queryClient.invalidateQueries({ queryKey: ['realtor-properties', user?.id] });
