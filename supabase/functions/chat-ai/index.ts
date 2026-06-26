@@ -2191,7 +2191,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
 
    ⚠️ **DEFAULT TO SHOPPING.** If property candidates are listed in AVAILABLE PROPERTIES above (count > 0) and the user has not explicitly said "just tell me / don't show listings / no listings", you MUST include a "results" array with those property cards. Omit "results" ONLY on pure info turns where AVAILABLE PROPERTIES is empty/skipped.
 
-   A. SHOPPING / SEARCH intent (user wants apartments) → include "results" with property cards AND optional "blocks" for extra context (advice, complex info, etc.):
+   A. SHOPPING / SEARCH intent (user wants apartments) → include "results" with property cards AND "blocks" with followups (and optional text/info):
    {
      "results": [
        {
@@ -2201,20 +2201,16 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
      ],
      "summary": "Short prose intro for the listings (e.g., 'Here are 3 cozy Thao Dien apartments under 15M VND').",
      "totalMatches": 3,
-     "blocks": [ /* optional — see B for block types */ ]
+     "blocks": [ { "type": "followups", "suggestions": ["[Search] Same area under 12M", "[Ask] What is Binh Thanh like?", "[Search] 2BR with balcony in Binh Thanh"] } ]
    }
 
-   B. INFO intent (user asks about a complex, district, distance, or wants advice — NOT shopping) → return "blocks" only, omit "results":
+   B. INFO intent (user asks about a complex, district, distance, or wants advice — NOT shopping) → return "blocks" only (MUST include "text" and "followups"), omit "results":
    {
      "blocks": [
        { "type": "text",     "body": "Plain-text advice or answer, 2–5 sentences." },
        { "type": "complex",  "name": "Masteri Thao Dien", "city": "ho chi minh", "district": "Thao Dien",
                              "developer": "Masterise Homes", "management": "Savills",
-                             "yearCompleted": 2018, "petPolicy": "Cats allowed, no dogs",
-                             "amenities": ["Pool","Gym","Sky garden"],
-                             "rentRanges": [{ "bedrooms":"1BR","minUsd":900,"maxUsd":1400 }],
-                             "insiderNotes": "Riverside views from north tower; weekday traffic on Xa lo Ha Noi.",
-                             "commute": [{ "to":"District 1","minutes":20 }] },
+                             "yearCompleted": 2018, "petPolicy": "Cats allowed, no dogs" },
        { "type": "district", "city": "ho chi minh", "district": "District 2 / Thao Dien",
                              "vibe": "Leafy expat enclave with international schools and riverside dining.",
                              "bestFor": ["families","long-stay expats","walkable cafes"],
@@ -2223,7 +2219,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
        { "type": "distance", "from": "Thao Dien", "to": "District 1",
                              "km": 7, "driveMinutes": 20, "bikeMinutes": 25,
                              "notes": "Via Saigon Bridge; rush hour can double this." },
-        { "type": "followups","suggestions": ["[Search] 1BR under 15M in Thao Dien","[Ask] Compare Thao Dien vs Phu My Hung for families"] }
+       { "type": "followups","suggestions": ["[Search] 1BR under 15M in Thao Dien","[Ask] Compare Thao Dien vs Phu My Hung for families"] }
      ]
    }
 
@@ -2233,9 +2229,9 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them. You MUST put them in a separate block of type "followups", NEVER inside the "text" body. EVERY suggestion MUST begin with one of these intent tags so the UI can render the right icon:
        • "[Search] ..." — tapping will fetch property listings (filters, budgets, bedrooms, specific complexes, "show me", "find").
        • "[Ask] ..." — tapping returns advice/info only (district comparisons, pet policy, commute, "tell me about", "is X good for Y").
-     Examples: "[Search] 2BR in Phu My Hung under 20M", "[Ask] How far is Thao Dien from District 1?", "[Ask] Pros and cons of Masteri Thao Dien".
+   - **ALWAYS include a "followups" block** — on EVERY response, whether shopping or info. For shopping turns, suggest refinements like narrowing budget, different bedroom count, nearby districts, or asking about a neighborhood. For info turns, mix [Ask] and [Search] suggestions.
    - You may MIX A and B: a shopping turn can also carry a "text" block ("Heads up: under 15M in D1 is rare — these are mostly studios") or a "followups" block.
-   - If you only have a quick conversational reply (clarifying question, simple advice), return { "blocks": [ { "type": "text", "body": "..." } ] } with no "results".
+   - If you only have a quick conversational reply (clarifying question, simple advice), return { "blocks": [ { "type": "text", "body": "..." }, { "type": "followups", "suggestions": ["[Search] ...", "[Ask] ..."] } ] } with no "results".
 
 10. **WHEN to use which intent**: shopping → user says "show me", "find", "any 2BR", uploads images, gives budget/area/feature filters. Info → user asks "tell me about X", "what's it like in Y", "how far is A from B", "should I pick X or Y", "is X pet friendly". Mixed → "show me 2BRs in Thao Dien and tell me about the area" → include both results and blocks.
 
