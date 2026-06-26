@@ -1701,14 +1701,7 @@ When analyzing property images, ONLY use tags from the standard list above.`;
       }
 
       return new Response(JSON.stringify({ 
-        response: aiResponse,
-        _debug: {
-          intent,
-          shoppingOverride,
-          isPureLifestyle,
-          promptPropertiesLength: promptProperties.length,
-          chatHistoryRoles: chatHistory.map(m => m.role)
-        }
+        response: aiResponse
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
