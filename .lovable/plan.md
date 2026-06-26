@@ -1,39 +1,44 @@
-# Plan: Add PowerShell migration scripts
+# Fix: Chat AI not returning property cards on listing queries
 
-The existing `.sh` scripts can't run in Windows PowerShell. I'll add `.ps1` equivalents alongside them so you can run the migration natively on Windows.
+## Root cause
 
-## Files to create
+In `supabase/functions/_shared/lifestyle-kb.ts`, `detectLifestyleIntent` is too greedy. `LIFESTYLE_TRIGGERS` contains short generic words (`safe`, `safety`, `expat`, `schools`, `commute`, `cafe`, `walkable`, `transportation`, `pet friendly`, `vibe`, `tell me about`) that fire on perfectly normal shopping turns like "safe 2BR for expats near international school in D2". `SHOPPING_TRIGGERS` is narrow (mostly "show me / find me / under X"), so many real shopping phrasings ("apartment in Thao Dien", "rent in D7", "2 bedroom in An Phu") don't register as shopping.
 
-1. **`scripts/migrate-functions/set-new-project-secrets.ps1`**
-   - Prompts (secure input) for each of the 6 secrets: `LOVABLE_DB_URL`, `LOVABLE_DB_SERVICE_ROLE_KEY`, `LOVABLE_DB_ANON_KEY`, `OPENAI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
-   - Empty input = skip that secret
-   - Calls `supabase secrets set --project-ref <ref> NAME=VALUE` for each
+Result: `isLifestyle=true` → `chat-ai/index.ts` line 2073 strips `topProperties` from the prompt AND line 2091 instructs the model "DO NOT return a results array". The model dutifully answers in prose, no cards.
 
-2. **`scripts/migrate-functions/deploy.ps1`**
-   - Deploys one or more functions with `--no-verify-jwt`
-   - Same args as the bash version: `.\deploy.ps1 <project-ref> <function-name> [...]`
+Secondary: even on `isMixed` turns the model often follows the generic "INFO → blocks only" rule in section 2156, because nothing in the prompt forces it to include `results` when listings exist.
 
-3. **Update `scripts/migrate-functions/README.md`**
-   - Add a Windows/PowerShell section showing the `.ps1` commands
+## Changes
 
-## Prerequisites you need on your machine
+### 1. `supabase/functions/_shared/lifestyle-kb.ts`
 
-- **Supabase CLI**: your screenshot shows `supabasecd` (typo). Install with `scoop install supabase` (correct name) or `npm i -g supabase`. Verify with `supabase --version`.
-- **The repo cloned locally** at e.g. `C:\Users\tedng\hausto\`. The scripts I created live in the Lovable sandbox — you need to pull the latest commits from GitHub first so `scripts/migrate-functions/` exists on disk.
-- **You must `cd` into the repo** before running the scripts, e.g. `cd C:\Users\tedng\hausto\scripts\migrate-functions`.
+- Tighten `LIFESTYLE_TRIGGERS`: keep only multi-word phrases that unambiguously request info ("best place to live", "where should i live", "tell me about", "what is it like", "cost of living", "pros and cons", "vs", "versus", "recommend an area / district", "good for families/kids", "is it safe", "how safe", "food scene", "nightlife scene"). Drop bare words.
+- Expand `SHOPPING_TRIGGERS` to cover natural listing phrasings: `apartment`, `apartments`, `flat`, `condo`, `studio`, `place to rent`, `for rent`, `rent in`, `rent a`, `any 2br/3br`, `something in`, `options in`, `units in`, `available in`.
+- Add an override: if the message contains a clear apartment/listing keyword (`apartment`, `rent`, `studio`, `\d+\s*br`, `bedroom`), force `isLifestyle=false`. Mixed stays mixed.
 
-## How you'll run it (after the plan is built)
+### 2. `supabase/functions/chat-ai/index.ts`
 
-```powershell
-cd C:\Users\tedng\<your-repo>\scripts\migrate-functions
-supabase login
-.\set-new-project-secrets.ps1 joxxcvxbsjedzkfpmkfc
-.\deploy.ps1 joxxcvxbsjedzkfpmkfc chat-ai
-```
+- Around line 2073, keep `promptProperties` populated whenever `isMixed` OR shopping-keyword override is true (already covered by tighter detection, but add a belt-and-braces check on `topProperties.length > 0` and an explicit shopping-keyword regex).
+- Around line 2091, add a new branch for `isMixed`: 
 
-If PowerShell blocks script execution, run once per session:
-`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
+  > 🔀 MIXED TURN — answer the lifestyle question briefly in a `text` block AND include the matching listings in `results`. Both are required.
+
+- In the JSON FORMAT section (≈line 2156), prepend a hard rule:
+
+  > **DEFAULT TO SHOPPING.** If property candidates are provided below and the user has not explicitly said "just tell me / don't show listings", you MUST include `results`. Omit `results` only on pure info turns where no candidates are supplied.
+
+- Update log line 2067 to also print whether shopping override fired, for future debugging.
+
+### 3. Validation
+
+After edits, in build mode:
+- Deploy `chat-ai`.
+- `curl_edge_functions` with sample bodies:
+  - "2BR in Thao Dien under 25M" → expect `results.length > 0`.
+  - "safe apartment for expats near international school in D2" → expect `results.length > 0`.
+  - "tell me about Thao Dien" → expect `blocks` only, no `results`.
+  - "show me 2BRs in Thao Dien and tell me about the area" → expect both.
 
 ## Out of scope
-- No changes to the bash scripts, edge functions, or frontend.
-- No changes to `.env` — that's still a manual paste of the new project's URL + anon key once deploy succeeds.
+
+No UI changes, no DB changes, no changes to the lifestyle KB content itself — only the intent classifier and prompt wiring.

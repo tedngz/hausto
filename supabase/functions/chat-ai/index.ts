@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { Redis } from "https://esm.sh/@upstash/redis@latest";
+import { detectLifestyleIntent, findRelevantKB, formatKBBlock, hasShoppingKeyword } from "../_shared/lifestyle-kb.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,7 +19,7 @@ const redis = new Redis({
 function matchesWord(text: string, term: string): boolean {
   // Escape regex special characters in the term
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(?:^|[\\s,./;:\\-()\\[\\]])${escaped}(?=$|[\\s,./;:\\-()\\[\\]])`, 'i');
+  const regex = new RegExp(`(?:^|[\\s,./;:\\-()\\[\\]\\?!"'])${escaped}(?=$|[\\s,./;:\\-()\\[\\]\\?!"'])`, 'i');
   return regex.test(text);
 }
 
@@ -132,7 +133,7 @@ const HCM_ROADS: Record<string, string> = {
 const LOCATION_DATA = {
   hcm: {
     name: 'Ho Chi Minh City',
-    aliases: ['ho chi minh', 'hcm', 'saigon', 'sài gòn', 'sai gon', 'hồ chí minh', 'tp.hcm', 'tphcm'],
+    aliases: ['ho chi minh', 'hcm', 'hcmc', 'saigon', 'sài gòn', 'sai gon', 'hồ chí minh', 'tp.hcm', 'tphcm'],
     districts: {
       center: {
         names: ['d1', 'district 1', 'quan 1', 'quận 1', 'q1', 'd3', 'district 3', 'quan 3', 'quận 3', 'q3'],
@@ -1036,10 +1037,7 @@ function filterAndScoreProperties(
       if (isOtherCity) continue; // Skip properties from wrong city
     }
     
-    // 2. Must have amenities (from any source)
-    if (amenities.length === 0) continue;
-    
-    // 3. Bedroom count (STRICT) — if user specified a bedroom count, only keep matching properties.
+    // 2. Bedroom count (STRICT) — if user specified a bedroom count, only keep matching properties.
     // Properties with no `rooms` data are also filtered out to avoid mismatched results.
     if (context.bedrooms) {
       if (!propertyMatchesBedrooms(p.rooms, context.bedrooms)) {
@@ -1512,8 +1510,8 @@ serve(async (req) => {
       supabase
         .from('properties')
         .select('*')
-        .eq('is_active', true)
-        .gte('last_activated_at', tenDaysAgo.toISOString()),
+        .eq('is_active', true),
+        // .gte('last_activated_at', tenDaysAgo.toISOString()),
       supabase
         .from('external_properties')
         .select('*')
@@ -1630,6 +1628,26 @@ serve(async (req) => {
     // Detect if user is asking to compare/filter previous results
     const isComparisonQuery = detectComparisonQuery(message.toLowerCase());
 
+    const sanitizedChatHistory = chatHistory.map(msg => {
+      if (msg.role === 'assistant') {
+        try {
+          const parsed = JSON.parse(msg.content);
+          if (parsed.results) {
+            return {
+              role: 'assistant',
+              content: JSON.stringify({
+                blocks: parsed.blocks || [],
+                _system_note: "[Results omitted to save tokens. They are stored in DB.]"
+              })
+            };
+          }
+        } catch (e) {
+          // Ignored
+        }
+      }
+      return msg;
+    });
+
     // ========== REALTOR MODE ==========
     if (userType === 'realtor') {
       const systemPrompt = `You are Hausto AI, a helpful assistant for real estate professionals. You help realtors create compelling property descriptions, titles, and marketing content.
@@ -1678,7 +1696,16 @@ When analyzing property images, ONLY use tags from the standard list above.`;
         });
       }
 
-      return new Response(JSON.stringify({ response: aiResponse }), {
+      return new Response(JSON.stringify({ 
+        response: aiResponse,
+        _debug: {
+          intent,
+          shoppingOverride,
+          isPureLifestyle,
+          promptPropertiesLength: promptProperties.length,
+          chatHistoryRoles: chatHistory.map(m => m.role)
+        }
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       });
@@ -2056,12 +2083,37 @@ ${scoredPreviousProperties.map((p, i) => `
 
     const knownDistancesBlock = `\n📐 KNOWN NEIGHBORHOOD DISTANCES (use ONLY for pairs in this table; omit km/minutes for anything not listed):\n${KNOWN_DISTANCES.map(d => `- ${d.from} ↔ ${d.to}: ${d.km}km, ~${d.driveMinutes}min drive, ~${d.bikeMinutes}min motorbike${d.notes ? ` (${d.notes})` : ''}`).join('\n')}\n`;
 
+    // ========== LIFESTYLE INTENT + KB LOOKUP ==========
+    const intent = detectLifestyleIntent(message);
+    const shoppingOverride = hasShoppingKeyword(message);
+    // Pure-lifestyle ONLY when detector says so AND there's no shopping keyword
+    const isPureLifestyle = intent.isLifestyle && !shoppingOverride;
+    
+    if (shoppingOverride && intent.isLifestyle) {
+      intent.isMixed = true;
+    }
+
+    const kbLookup = (isPureLifestyle || intent.isMixed)
+      ? findRelevantKB(message, accContext as any)
+      : { cityEntries: [], districtEntries: [] };
+    const lifestyleKBBlock = formatKBBlock(kbLookup);
+    console.log(
+      `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} ` +
+      `shoppingOverride=${shoppingOverride} pureLifestyle=${isPureLifestyle} ` +
+      `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
+    );
+
+    // On pure lifestyle turns, drop the property block from the prompt to save
+    // tokens and prevent the model from forcing listings into the answer.
+    const promptProperties = isPureLifestyle ? [] : topProperties;
+
+
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
 ${rejectionsBlock}${likesBlock}${summaryBlock}${locationNote}
-${knownComplexesBlock}${knownDistancesBlock}
+${knownComplexesBlock}${knownDistancesBlock}${lifestyleKBBlock}
 ${previousPropertiesSection}
 🪜 BEFORE YOU RESPOND, REASON THROUGH:
 1. Is this a NEW search or a FOLLOW-UP about properties already shown? (Check PREVIOUSLY SUGGESTED PROPERTIES section.)
@@ -2069,9 +2121,14 @@ ${previousPropertiesSection}
 3. Are there positive signals (likes) I should weight higher?
 4. Is there an open question or ambiguity I should clarify briefly before listing properties?
 5. Does my final ordering respect the priority list below and the user's stated preferences?
+6. Is the user actually shopping, or asking a LIFESTYLE / INFO question (vibe, cost of living, best area for X, safety, schools, commute, "tell me about")? If the latter, answer from LIFESTYLE KNOWLEDGE in prose blocks — do NOT return "results".
 
-📊 AVAILABLE PROPERTIES (${topProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
-${topProperties.length > 0 ? topProperties.map((p, i) => `
+${isPureLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. You MUST include a separate block of type "followups" containing 2–4 suggestions mixing "[Ask]" and "[Search]". DO NOT put these suggestions inside the "text" block body.` : ''}
+${intent.isMixed ? `🔀 MIXED TURN — The user wants BOTH lifestyle context AND listings. You MUST return a "results" array with matching property cards AND a "blocks" array. Inside "blocks", include a "text" block (2–4 sentences) AND a separate "followups" block. Both results and blocks are required.` : ''}
+${!isPureLifestyle && !intent.isMixed && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
+
+📊 AVAILABLE PROPERTIES (${promptProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
+${promptProperties.length > 0 ? promptProperties.map((p, i) => `
 [${i+1}] ${p.matchReasons.some(r => r.includes('exactly')) ? '⭐ EXACT MATCH' : '📍 NEARBY'} ${p.title}
    ID: ${p.id}
    Location: ${p.location} (${p.locationTier})
@@ -2083,7 +2140,8 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : 'No properties currently match these criteria in our database.'}
+`).join('\n') : (isPureLifestyle ? '(Skipped — lifestyle/info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
+
 
 🧠 CRITICAL INSTRUCTIONS:
 
@@ -2133,6 +2191,8 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    **AMENITY ACCURACY**: Check the property's full amenities list, description, title, AND highlights before saying a property does or doesn't have something. A property is considered furnished if "Furnished" or "Fully Furnished" appears anywhere in the amenities, highlights, or description, OR if the property has multiple furniture items (e.g., Bed, Sofa, Wardrobe, Desk, Table, Chair) in its amenities list. Never say a property is "not furnished" when it clearly has furniture amenities listed.
 
 9. **JSON RESPONSE FORMAT** — Always return ONE JSON object. Pick the right shape based on the user's intent:
+
+   ⚠️ **DEFAULT TO SHOPPING.** If property candidates are listed in AVAILABLE PROPERTIES above (count > 0) and the user has not explicitly said "just tell me / don't show listings / no listings", you MUST include a "results" array with those property cards. Omit "results" ONLY on pure info turns where AVAILABLE PROPERTIES is empty/skipped.
 
    A. SHOPPING / SEARCH intent (user wants apartments) → include "results" with property cards AND optional "blocks" for extra context (advice, complex info, etc.):
    {
@@ -2186,7 +2246,7 @@ ${topProperties.length > 0 ? topProperties.map((p, i) => `
    Rules for blocks:
    - Use the "complex" / "distance" blocks ONLY when the matching fact is in KNOWN COMPLEXES or KNOWN NEIGHBORHOOD DISTANCES above (or in the LOCATION KNOWLEDGE section). Omit any field you cannot support — NEVER invent year_completed, prices, or commute minutes.
    - "district" blocks may use the LOCATION KNOWLEDGE section and general knowledge of HCMC/Hanoi neighborhoods, but keep claims conservative.
-   - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them. EVERY suggestion MUST begin with one of these intent tags so the UI can render the right icon:
+   - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them. You MUST put them in a separate block of type "followups", NEVER inside the "text" body. EVERY suggestion MUST begin with one of these intent tags so the UI can render the right icon:
        • "[Search] ..." — tapping will fetch property listings (filters, budgets, bedrooms, specific complexes, "show me", "find").
        • "[Ask] ..." — tapping returns advice/info only (district comparisons, pet policy, commute, "tell me about", "is X good for Y").
      Examples: "[Search] 2BR in Phu My Hung under 20M", "[Ask] How far is Thao Dien from District 1?", "[Ask] Pros and cons of Masteri Thao Dien".
@@ -2221,7 +2281,25 @@ Maximum ${maxResults} properties in results.`;
     // carry long-term memory, and a shorter prompt is faster + cheaper.
     const messagesWithHistory = [
       { role: 'system', content: systemPrompt },
-      ...chatHistory.slice(-10).map(msg => ({ role: msg.role, content: msg.content })),
+      ...chatHistory.slice(-10).map(msg => {
+        if (msg.role === 'assistant') {
+          try {
+            const parsed = JSON.parse(msg.content);
+            if (parsed.results) {
+              return {
+                role: 'assistant',
+                content: JSON.stringify({
+                  blocks: parsed.blocks || [],
+                  _system_note: "[Results omitted to save tokens. They are stored in DB.]"
+                })
+              };
+            }
+          } catch (e) {
+            // Ignored
+          }
+        }
+        return { role: msg.role, content: msg.content };
+      }),
       { role: 'user', content: userMessageContent }
     ];
 
@@ -2290,13 +2368,29 @@ Maximum ${maxResults} properties in results.`;
       if (!Array.isArray(raw)) return undefined;
       const allowed = new Set(['text', 'complex', 'district', 'distance', 'followups']);
       const clipStr = (s: any, n = 600) => (typeof s === 'string' ? s.slice(0, n) : undefined);
+      
+      const extractedFollowups: string[] = [];
+
       const clean = raw
         .filter((b: any) => b && typeof b === 'object' && allowed.has(b.type))
         .map((b: any) => {
-          if (b.type === 'text') return { type: 'text', body: clipStr(b.body, 1200) || '' };
+          if (b.type === 'text') {
+            let body = clipStr(b.body, 1200) || '';
+            const followupRegex = /^\s*-?\s*(\[(?:Ask|Search)\][^\r\n]+)/gim;
+            let match;
+            while ((match = followupRegex.exec(body)) !== null) {
+              extractedFollowups.push(match[1].trim());
+            }
+            body = body.replace(/^\s*-?\s*\[(?:Ask|Search)\][^\n]*\n?/gim, '');
+            body = body.replace(/^[^\w\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|options?|questions?|suggestions?)[^\n]*\n?/gim, '');
+            body = body.replace(/^If you have specific interests or activities in mind, feel free to ask![^\n]*\n?/gim, '');
+            body = body.replace(/\*\*/g, '');
+            return { type: 'text', body: body.trim() };
+          }
           if (b.type === 'followups') {
             const s = Array.isArray(b.suggestions) ? b.suggestions.filter((x: any) => typeof x === 'string').slice(0, 4).map((x: string) => x.slice(0, 120)) : [];
-            return s.length ? { type: 'followups', suggestions: s } : null;
+            extractedFollowups.push(...s);
+            return null; // Will consolidate at the end
           }
           if (b.type === 'complex') {
             return {
@@ -2346,7 +2440,16 @@ Maximum ${maxResults} properties in results.`;
           return null;
         })
         .filter(Boolean) as any[];
-      return clean.length ? clean : undefined;
+        
+      const finalClean = clean.filter((b: any) => b.type !== 'text' || b.body.length > 0);
+      
+      if (extractedFollowups.length > 0) {
+        // Remove duplicates just in case
+        const uniqueFollowups = Array.from(new Set(extractedFollowups)).slice(0, 4);
+        finalClean.push({ type: 'followups', suggestions: uniqueFollowups });
+      }
+
+      return finalClean.length ? finalClean : undefined;
     }
     const sanitizedBlocks = extractedJson ? sanitizeBlocks(extractedJson.blocks) : undefined;
 
@@ -2354,7 +2457,7 @@ Maximum ${maxResults} properties in results.`;
     let searchData: any = null;
     let usedFallback = false;
 
-    if (extractedJson && extractedJson.results && Array.isArray(extractedJson.results)) {
+    if (extractedJson && Array.isArray(extractedJson.results) && extractedJson.results.length > 0) {
       console.log(`[Validation] AI returned ${extractedJson.results.length} results, validating...`);
       const validatedResults = validateAndFixAIResults(extractedJson.results, scoredProperties, accContext);
       console.log(`[Validation] ${validatedResults.length} results passed validation`);
@@ -2362,7 +2465,7 @@ Maximum ${maxResults} properties in results.`;
       extractedJson.totalMatches = validatedResults.length;
       if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
 
-      if (validatedResults.length === 0 && topProperties.length > 0) {
+      if (validatedResults.length === 0 && topProperties.length > 0 && !isPureLifestyle) {
         console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
         usedFallback = true;
       } else {
@@ -2379,7 +2482,7 @@ Maximum ${maxResults} properties in results.`;
 
     
     // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
-    if (!searchData && topProperties.length > 0) {
+    if (!searchData && topProperties.length > 0 && !isPureLifestyle) {
       console.log('[Fallback] Generating results from pre-scored properties');
       usedFallback = true;
       
@@ -2436,8 +2539,41 @@ Maximum ${maxResults} properties in results.`;
     }
     
     // If still no search data and no properties, keep the AI's conversational response
+    // BUT first check if plain-text response contains embedded followups we can extract
     if (!searchData) {
-      console.log('[Response] No properties to show, using conversational response');
+      console.log('[Response] No properties to show, checking plain text for embedded followups');
+      const plainText = responseContent;
+      const followupExtract: string[] = [];
+      const fupRe = /^\s*-?\s*(\[(?:Ask|Search)\][^\r\n]+)/gim;
+      let fupMatch;
+      while ((fupMatch = fupRe.exec(plainText)) !== null) {
+        followupExtract.push(fupMatch[1].trim());
+      }
+      if (followupExtract.length > 0) {
+        // Strip the followup lines and their header from the text body
+        let cleanBody = plainText;
+        cleanBody = cleanBody.replace(/^\s*-?\s*\[(?:Ask|Search)\][^\n]*\n?/gim, '');
+        cleanBody = cleanBody.replace(/^[^\w\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|options?|questions?|suggestions?)[^\n]*:?\s*\n?/gim, '');
+        cleanBody = cleanBody.replace(/^#+\s*(?:follow-?ups?|suggestions?)[^\n]*\n?/gim, '');
+        cleanBody = cleanBody.replace(/\*\*/g, '');
+        cleanBody = cleanBody.replace(/^If you have specific (?:needs|interests)[^\n]*\n?/gim, '');
+        cleanBody = cleanBody.trim();
+
+        const blocks: any[] = [];
+        if (cleanBody.length > 0) {
+          blocks.push({ type: 'text', body: cleanBody });
+        }
+        const uniqueFollowups = Array.from(new Set(followupExtract)).slice(0, 4);
+        blocks.push({ type: 'followups', suggestions: uniqueFollowups });
+
+        searchData = { results: [], summary: '', totalMatches: 0, blocks };
+        responseContent = JSON.stringify(searchData);
+        console.log(`[Response] Extracted ${uniqueFollowups.length} followups from plain text, converted to blocks`);
+      } else {
+        // Still plain text with no followups — strip markdown bold markers
+        responseContent = responseContent.replace(/\*\*/g, '');
+        console.log('[Response] Pure conversational response, no followups found');
+      }
     }
 
     // Save response to database

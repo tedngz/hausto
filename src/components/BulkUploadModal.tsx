@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Upload, FileSpreadsheet, Download, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBulkImport } from '@/hooks/useBulkImport';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 
 interface BulkUploadModalProps {
@@ -77,11 +77,20 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
   const [parsedData, setParsedData] = useState<ExcelProperty[]>([]);
   const [lastResult, setLastResult] = useState<any>(null);
 
-  const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet(sampleData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Properties");
-    XLSX.writeFile(wb, "property_template.xlsx");
+  const downloadTemplate = async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Properties');
+    const columns = Object.keys(sampleData[0]);
+    ws.columns = columns.map(key => ({ header: key, key, width: 20 }));
+    sampleData.forEach(row => ws.addRow(row));
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'property_template.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,13 +98,30 @@ export const BulkUploadModal = ({ isOpen, onClose, onSuccess }: BulkUploadModalP
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelProperty[];
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(data.buffer);
+        const worksheet = wb.worksheets[0];
+        if (!worksheet) {
+          toast.error('No worksheet found in the Excel file');
+          return;
+        }
+        const headers: string[] = [];
+        worksheet.getRow(1).eachCell((cell, colNumber) => {
+          headers[colNumber - 1] = String(cell.value || '');
+        });
+        const jsonData: ExcelProperty[] = [];
+        worksheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return; // skip header
+          const obj: any = {};
+          row.eachCell((cell, colNumber) => {
+            const key = headers[colNumber - 1];
+            if (key) obj[key] = cell.value;
+          });
+          if (Object.keys(obj).length > 0) jsonData.push(obj as ExcelProperty);
+        });
         
         if (jsonData.length === 0) {
           toast.error('Excel file is empty or has no valid data');
