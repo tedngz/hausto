@@ -1337,6 +1337,10 @@ function validateAndFixAIResults(
     // Fix any incorrect data
     const fixed = {
       ...result,
+      title: actualProperty.title,
+      size: actualProperty.size,
+      vibe: actualProperty.vibe,
+      description: actualProperty.description,
       price: actualProperty.price,
       location: actualProperty.location,
       images: actualProperty.images,
@@ -2199,20 +2203,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
      "results": [
        {
          "id": "exact-property-id-from-above",
-         "title": "Property title",
-         "location": "Exact location",
-         "price": 12000000,
-         "size": "45m²",
-         "vibe": "Modern, Cozy",
-         "description": "Brief description",
-         "highlights": ["Modern", "Balcony"],
-         "images": ["copy-exact-urls-from-property-data"],
-         "matchScore": 85,
-         "matchReason": "Natural reason explaining why this matches, mentioning location honestly",
-         "realtor_id": "exact-realtor-id-from-above",
-         "isExternal": false,
-         "source": null,
-         "sourceUrl": null
+         "matchReason": "Natural reason explaining why this matches, mentioning location honestly"
        }
      ],
      "summary": "Short prose intro for the listings (e.g., 'Here are 3 cozy Thao Dien apartments under 15M VND').",
