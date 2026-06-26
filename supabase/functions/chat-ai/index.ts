@@ -2366,7 +2366,7 @@ Maximum ${maxResults} properties in results.`;
               extractedFollowups.push(match[1].trim());
             }
             body = body.replace(/^\s*-?\s*\[(?:Ask|Search)\][^\n]*\n?/gim, '');
-            body = body.replace(/^[^\w\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|options?|questions?|suggestions?)[^\n]*\n?/gim, '');
+            body = body.replace(/^[^\w\n]*(?:Here are some|Some|These are some)?\s*(?:follow-?ups?|suggestions?)\s*(?:for you|to explore|to consider)?[:\s]*\n?/gim, '');
             body = body.replace(/^If you have specific interests or activities in mind, feel free to ask![^\n]*\n?/gim, '');
             body = body.replace(/\*\*/g, '');
             return { type: 'text', body: body.trim() };
@@ -2436,6 +2436,33 @@ Maximum ${maxResults} properties in results.`;
       return finalClean.length ? finalClean : undefined;
     }
     const sanitizedBlocks = extractedJson ? sanitizeBlocks(extractedJson.blocks) : undefined;
+
+    // ── GUARD: ensure lifestyle / blocks-only responses always contain a text
+    //    block.  If sanitization stripped every text block (e.g. the model
+    //    inlined [Ask]/[Search] into the text body), recover the answer from
+    //    the original raw text body stored in the first text block before
+    //    sanitization.
+    if (sanitizedBlocks && sanitizedBlocks.length > 0) {
+      const hasContentBlock = sanitizedBlocks.some(
+        (b: any) => b.type === 'text' || b.type === 'complex' || b.type === 'district' || b.type === 'distance'
+      );
+      if (!hasContentBlock && extractedJson?.blocks) {
+        // Find the first text block from the ORIGINAL (pre-sanitized) blocks
+        const origTextBlock = extractedJson.blocks.find(
+          (b: any) => b.type === 'text' && typeof b.body === 'string' && b.body.trim().length > 0
+        );
+        if (origTextBlock) {
+          // Strip only bold markers, keep the rest
+          let recoveredBody = origTextBlock.body.replace(/\*\*/g, '').trim();
+          // Remove only standalone [Ask]/[Search] lines but keep surrounding text
+          recoveredBody = recoveredBody.replace(/^\s*-?\s*\[(?:Ask|Search)\][^\n]*\n?/gim, '').trim();
+          if (recoveredBody.length > 0) {
+            console.log('[Sanitize] Recovered text block that was stripped empty by followup regex');
+            sanitizedBlocks.unshift({ type: 'text', body: recoveredBody });
+          }
+        }
+      }
+    }
 
     // ========== POST-PROCESSING VALIDATION ==========
     let searchData: any = null;
