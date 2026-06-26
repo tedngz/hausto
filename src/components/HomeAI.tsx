@@ -594,7 +594,7 @@ export const HomeAI = ({
     setShowPropertyModal(true);
   };
   return <div className="w-full max-w-4xl mx-auto mt-4 px-1">
-      <div className="p-3 md:p-6 shadow-xl bg-background/95 backdrop-blur-sm rounded-xl border border-border/50">
+      <div className="p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10">
       {/* Header */}
       <div className="text-center mb-2 relative">
         
@@ -640,8 +640,8 @@ export const HomeAI = ({
       {user && <div className="space-y-4 mb-4 mt-6 max-h-96 overflow-y-auto my-[50px]">
           {messages.map((message, index) => {
           if (message.role === 'user') {
-            return <div key={index} className="flex justify-end animate-fade-in">
-                  <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
+            return <div key={index} className="flex justify-end animate-slide-up">
+                  <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
                     <p className="text-sm text-left">{message.content}</p>
                     {message.metadata?.images && message.metadata.images.length > 0 && <div className="flex gap-2 flex-wrap">
                         {message.metadata.images.map((image, imgIndex) => <img key={imgIndex} src={image} alt={`Reference ${imgIndex + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />)}
@@ -703,10 +703,10 @@ export const HomeAI = ({
               }
             }
             if (searchResults) {
-              return <div key={index} className="flex justify-start animate-fade-in">
+              return <div key={index} className="flex justify-start animate-slide-up">
                     <div className="w-full space-y-4">
-                      {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
-                          <p className="text-sm text-left">{searchResults.summary}</p>
+                      {searchResults.summary && <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
+                          <p className="text-sm text-left text-foreground/90 leading-relaxed">{searchResults.summary}</p>
                         </div>}
                       <AIBlocks blocks={searchResults.blocks} onFollowup={handleFollowup} />
                       
@@ -795,11 +795,10 @@ export const HomeAI = ({
                          </div>}
                     </div>
                   </div>;
-            } else {
               // Regular text message - use cleaned content
-              return <div key={index} className="flex justify-start animate-fade-in">
-                    <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
-                      <p className="text-sm whitespace-pre-wrap text-justify">{displayContent}</p>
+              return <div key={index} className="flex justify-start animate-slide-up">
+                    <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
+                      <p className="text-sm whitespace-pre-wrap text-justify text-foreground/90 leading-relaxed">{displayContent}</p>
                      </div>
                    </div>;
             }
@@ -807,8 +806,8 @@ export const HomeAI = ({
         })}
 
           {/* Temporary user message for instant feedback - shows after all existing messages */}
-          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-fade-in">
-              <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
+          {tempUserMessageForLoggedIn && <div className="flex justify-end animate-slide-up">
+              <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
                 <p className="text-sm text-left">{tempUserMessageForLoggedIn}</p>
                 {tempUserImages.length > 0 && <div className="flex gap-2 flex-wrap">
                     {tempUserImages.map((image, index) => <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />)}
@@ -816,9 +815,8 @@ export const HomeAI = ({
               </div>
             </div>}
 
-          {/* AI Thinking Animation for Signed In Users */}
           {isSendingMessage && <div className="flex justify-start animate-fade-in">
-              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+              <div className="glass p-4 rounded-2xl rounded-tl-sm shadow-sm">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
                 animationDelay: '0ms'
@@ -838,8 +836,8 @@ export const HomeAI = ({
       {/* Temporary Chat Messages for Non-Logged In Users */}
       {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
           {/* User Message */}
-          <div className="flex justify-end animate-fade-in">
-            <div className="max-w-[80%] p-3 rounded-lg bg-primary text-primary-foreground space-y-2">
+          <div className="flex justify-end animate-slide-up">
+            <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
               <p className="text-sm text-left">{tempUserMessage}</p>
               {tempUserImages.length > 0 && <div className="flex gap-2 flex-wrap">
                   {tempUserImages.map((image, index) => <img key={index} src={image} alt={`Reference ${index + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/20" />)}
@@ -847,9 +845,8 @@ export const HomeAI = ({
             </div>
           </div>
           
-          {/* AI Thinking Animation */}
           {isSearching && <div className="flex justify-start animate-fade-in">
-              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+              <div className="glass p-4 rounded-2xl rounded-tl-sm shadow-sm">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{
                 animationDelay: '0ms'
@@ -867,10 +864,10 @@ export const HomeAI = ({
 
       {/* Search Results for Non-Logged In Users */}
       {searchResults && !user && <div className="space-y-4 mb-6">
-          <div className="flex justify-start animate-fade-in">
+          <div className="flex justify-start animate-slide-up">
             <div className="w-full space-y-4">
-              {searchResults.summary && <div className="bg-secondary text-secondary-foreground p-3 rounded-lg max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit">
-                  <p className="text-sm text-left">{searchResults.summary}</p>
+              {searchResults.summary && <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
+                  <p className="text-sm text-left text-foreground/90 leading-relaxed">{searchResults.summary}</p>
                 </div>}
               <AIBlocks blocks={searchResults.blocks} onFollowup={handleFollowup} />
               

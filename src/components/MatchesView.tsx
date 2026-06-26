@@ -131,20 +131,20 @@ export const MatchesView = ({
   }
   const allApartments = renterMatches?.map(transformMatchToApartment).filter((apt): apt is Apartment => apt !== null) || [];
   if (allApartments.length === 0) {
-    return <div className="text-center py-12">
-        <div className="w-24 h-24 bg-gradient-to-r from-orange-400 to-red-400 rounded-full flex items-center justify-center mx-auto mb-6 mt-20">
-          <span className="text-white text-3xl">💕</span>
+    return <div className="text-center py-12 animate-fade-in">
+        <div className="w-24 h-24 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto mb-8 mt-20 shadow-xl animate-float">
+          <span className="text-white text-4xl">💕</span>
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">No matches yet</h3>
-        <p className="text-gray-600 mb-6">Start swiping to find your perfect place!</p>
+        <h3 className="text-2xl font-serif text-foreground mb-3">No matches yet</h3>
+        <p className="text-muted-foreground text-base max-w-sm mx-auto">Start chatting with the AI or swiping to discover your perfect place!</p>
       </div>;
   }
-  return <div className="container mx-auto px-4 pt-4 pb-8">
-      <div className="mb-8">
-        <h2 className="text-2xl mt-4 mb-2 text-center text-inherit font-serif font-normal">Your Matches</h2>
-        <p className="text-center text-muted-foreground text-sm">
-          {allApartments.length} properties matched
-        </p>
+  return <div className="container mx-auto px-4 pt-6 pb-12 animate-fade-in">
+      <div className="mb-10 text-center">
+        <h2 className="text-3xl md:text-4xl font-serif font-medium text-foreground mb-3 tracking-tight">Your Matches</h2>
+        <div className="inline-block px-4 py-1.5 rounded-full bg-secondary text-secondary-foreground text-sm font-medium">
+          {allApartments.length} {allApartments.length === 1 ? 'property' : 'properties'} saved
+        </div>
       </div>
 
       <div className="columns-1 md:columns-2 lg:columns-3 gap-6">

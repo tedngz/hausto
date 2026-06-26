@@ -179,65 +179,73 @@ export const PropertyCard = ({
     color: 'border-accent/30 bg-accent/10',
     activity: 'border-secondary/30 bg-secondary/10'
   };
-  return <Card className={`bg-white/70 backdrop-blur-md overflow-hidden ${className}`}>
-      <div className="relative h-48">
-        <img src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'} alt={`${apartment.title} - Image ${currentImageIndex + 1}`} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" onClick={() => setIsImageModalOpen(true)} />
+  return <Card className={`glass-card overflow-hidden group/card transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${className}`}>
+      <div className="relative aspect-[4/3] sm:aspect-[16/9] w-full">
+        <img src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'} alt={`${apartment.title} - Image ${currentImageIndex + 1}`} className="w-full h-full object-cover cursor-pointer transition-transform duration-700 group-hover/card:scale-105" onClick={() => setIsImageModalOpen(true)} />
+        
+        {/* Dark gradient scrim for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
 
-        {/* Vibe Ranking Overlay */}
+        {/* Vibe Ranking Overlay with Explainable AI */}
         {vibeScore && !hideVibeScore && (
-          <div className="absolute top-3 left-3 z-10">
-            <VibeScore score={vibeScore} apartment={apartment} size="sm" isAnonymous={isAnonymous} />
+          <div className="absolute top-3 left-3 z-20 group/vibe cursor-help">
+            <div className="transform transition-transform hover:scale-105">
+              <VibeScore score={vibeScore} apartment={apartment} size="sm" isAnonymous={isAnonymous} />
+            </div>
+            
+            {/* Explainable AI Tooltip */}
+            <div className="absolute left-0 top-full mt-2 w-64 p-3 rounded-xl glass-dark opacity-0 invisible group-hover/vibe:opacity-100 group-hover/vibe:visible transition-all duration-200 z-50 text-white text-xs shadow-2xl translate-y-2 group-hover/vibe:translate-y-0">
+              <div className="flex items-center gap-1.5 mb-1.5 text-white font-semibold border-b border-white/20 pb-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-primary" /> AI Match Insights
+              </div>
+              <p className="text-white/90 leading-relaxed">
+                This property aligns with your preference for <span className="font-semibold text-primary">{userPreferences?.styles?.[0] || 'modern'}</span> aesthetics and <span className="font-semibold text-primary">{userPreferences?.activities?.[0] || 'relaxing'}</span> lifestyles.
+              </p>
+            </div>
           </div>
         )}
 
         {/* Share Button Overlay */}
-        <div className={`absolute top-3 z-10 ${hasDeleteButton ? 'right-12' : 'right-3'}`}>
-          <Button size="sm" variant="secondary" aria-label="Share property" className="bg-white/90 backdrop-blur-sm hover:bg-white shadow-md w-8 h-8 p-0" onClick={handleShare}>
+        <div className={`absolute top-3 z-20 ${hasDeleteButton ? 'right-12' : 'right-3'}`}>
+          <Button size="icon" variant="secondary" aria-label="Share property" className="bg-white/20 backdrop-blur-md hover:bg-white/40 text-white border-white/20 shadow-md w-8 h-8 rounded-full transition-all" onClick={handleShare}>
             <Share2 className="w-4 h-4" aria-hidden="true" />
           </Button>
         </div>
-
-      </div>
-      
-      <div className="p-4 sm:p-6">
-        <div className="mb-2">
-          {/* Mobile: Title above vibe score */}
-          <div className="block sm:hidden mb-3">
-            <h2 className="text-xl text-gray-900 font-serif font-normal">
-              <span className={showFullTitle ? '' : 'line-clamp-2'}>{displayTitle}</span>
+        
+        {/* Title and Price - Moved ON TOP of the image */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-10 text-white">
+          <div className="flex flex-col gap-1.5">
+            <h2 className="text-2xl sm:text-3xl font-serif font-medium text-shadow tracking-tight line-clamp-2">
+              {displayTitle}
             </h2>
-          </div>
-          
-          <div className="flex items-start justify-between mb-2">
-            {/* Desktop: Title */}
-            <h2 className="hidden sm:block text-xl text-gray-900 flex-1 mr-3 font-serif font-normal">
-              <span className={showFullTitle ? '' : 'line-clamp-2'}>{displayTitle}</span>
-            </h2>
+            <div className="flex items-center justify-between mt-1">
+              <div className="flex items-center gap-2">
+                <Badge className="bg-primary/90 hover:bg-primary text-white font-semibold backdrop-blur-md border-0 text-sm py-0.5 px-2.5">
+                  {formatPrice(apartment.price)}/mo
+                </Badge>
+                {apartment.rooms && <Badge variant="outline" className="bg-black/30 border-white/30 text-white backdrop-blur-md">
+                  {apartment.rooms}
+                </Badge>}
+              </div>
+            </div>
           </div>
         </div>
+      </div>
+      
+      <div className="p-4 sm:p-5">
+        {/* Title removed from here, moved to image overlay */}
         
-        <div className="flex flex-col text-sm mb-3 gap-2">
-          <div className="flex items-center text-muted-foreground">
-            <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+        <div className="flex flex-col text-sm mb-4">
+          <div className="flex items-center text-muted-foreground bg-secondary/50 p-2 rounded-lg border border-border/50">
+            <MapPin className="w-4 h-4 mr-2 text-primary flex-shrink-0" />
             <button
-              className="line-clamp-1 text-left hover:text-primary hover:underline transition-colors cursor-pointer flex items-center gap-1"
+              className="line-clamp-1 text-left hover:text-primary transition-colors cursor-pointer flex items-center gap-1 font-medium"
               onClick={handleLocationClick}
               disabled={isGeocoding}
             >
               {displayLocation}
               {isGeocoding && <Loader2 className="w-3 h-3 animate-spin" />}
             </button>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge className="bg-primary text-primary-foreground font-semibold">
-              {formatPrice(apartment.price)}/mo
-            </Badge>
-            {apartment.rooms && <Badge variant="outline" className="text-xs">
-                {apartment.rooms}
-              </Badge>}
-            {apartment.size && <Badge variant="outline" className="text-xs">
-                {/m²|m2|sqm|sqft/i.test(apartment.size) ? apartment.size : `${apartment.size} m²`}
-              </Badge>}
           </div>
         </div>
 
