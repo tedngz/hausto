@@ -1482,8 +1482,11 @@ serve(async (req) => {
       );
     }
 
-    const { message, conversationId, userType, userPreferences, propertyImages } = parsedBody;
+    const { message: rawMessage, conversationId, userType, userPreferences, propertyImages } = parsedBody;
     
+    // Strip [Ask] or [Search] prefixes so the AI treats them as natural questions
+    let message = (rawMessage || '').replace(/^\[(?:Ask|Search)\]\s*/i, '').trim();
+    message = message.replace(/Follow-up:\s*\[(?:Ask|Search)\]\s*/i, 'Follow-up: ').trim();
     // Process uploaded images for style detection
     const validImages: string[] = Array.isArray(propertyImages) 
       ? propertyImages.filter((img: string) => typeof img === 'string' && img.startsWith('data:image/'))
