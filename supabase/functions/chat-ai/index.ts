@@ -2503,7 +2503,12 @@ Maximum ${maxResults} properties in results.`;
     } else if (extractedJson && sanitizedBlocks && sanitizedBlocks.length > 0) {
       // Info-only response — no listings, just blocks.
       console.log(`[AI] Blocks-only response with ${sanitizedBlocks.length} blocks`);
-      const infoOnly = { results: [], summary: '', totalMatches: 0, blocks: sanitizedBlocks };
+      const infoOnly = { 
+        results: [], 
+        summary: extractedJson.summary || '', 
+        totalMatches: 0, 
+        blocks: sanitizedBlocks 
+      };
       searchData = infoOnly;
       responseContent = JSON.stringify(infoOnly);
     }
