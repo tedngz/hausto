@@ -486,7 +486,7 @@ function stripAccents(s: string): string {
 // shopping turns ("safe 2BR near international school") and would suppress
 // property cards.
 const LIFESTYLE_TRIGGERS = [
-  'best place to live', 'best area to live', 'where should i live', 'where to live',
+  'best place', 'best area', 'where should i live', 'where to live',
   'best neighborhood', 'best district', 'good for families', 'good for kids',
   'is it safe', 'how safe', 'cost of living', 'how much does it cost', 'how expensive',
   "what's the vibe", 'what is the vibe', 'the vibe', 'vibe in', 'vibe of', 'what is it like', "what's it like",

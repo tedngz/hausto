@@ -2581,9 +2581,12 @@ Maximum ${maxResults} properties in results.`;
       }
       summary += '.';
       
+      const aiSummary = extractedJson?.summary || extractedJson?.text || extractedJson?.message || extractedJson?.content || extractedJson?.answer || '';
+      const finalSummary = aiSummary ? `${aiSummary}\n\n${summary}` : summary;
+      
       searchData = {
         results: fallbackResults,
-        summary: summary,
+        summary: finalSummary,
         totalMatches: fallbackResults.length,
         blocks: sanitizedBlocks || []
       };
