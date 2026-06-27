@@ -2431,7 +2431,18 @@ Maximum ${maxResults} properties in results.`;
 
       return finalClean.length ? finalClean : undefined;
     }
-    const sanitizedBlocks = extractedJson ? sanitizeBlocks(extractedJson.blocks) : undefined;
+    
+    let sanitizedBlocks: any[] | undefined = undefined;
+    if (extractedJson) {
+      const rawBlocks = Array.isArray(extractedJson.blocks) ? extractedJson.blocks : [];
+      // Handle case where AI outputs top-level followups instead of nesting inside blocks
+      if (Array.isArray(extractedJson.followups) && extractedJson.followups.length > 0) {
+        rawBlocks.push({ type: 'followups', suggestions: extractedJson.followups });
+      }
+      if (rawBlocks.length > 0) {
+        sanitizedBlocks = sanitizeBlocks(rawBlocks);
+      }
+    }
 
     // ── GUARD: ensure lifestyle / blocks-only responses always contain a text
     //    block.  If sanitization stripped every text block (e.g. the model
@@ -2539,7 +2550,8 @@ Maximum ${maxResults} properties in results.`;
       searchData = {
         results: fallbackResults,
         summary: summary,
-        totalMatches: fallbackResults.length
+        totalMatches: fallbackResults.length,
+        blocks: sanitizedBlocks || []
       };
       responseContent = JSON.stringify(searchData);
       console.log(`[Fallback] Generated ${fallbackResults.length} property results`);
