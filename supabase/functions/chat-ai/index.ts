@@ -813,9 +813,9 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     // Center preference
     if (isCenterRequest(text)) context.wantsCenter = true;
     
-    // Price detection (take the most restrictive)
+    // Price detection (most recent user mention wins, so users can increase or decrease budget)
     const price = parsePrice(text);
-    if (price && (!context.maxPrice || price < context.maxPrice)) {
+    if (price) {
       context.maxPrice = price;
     }
     
@@ -853,6 +853,13 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
   // Requested complexes: only honor those mentioned in the CURRENT user message
   // so users can switch projects without sticky filters from earlier in the chat.
   context.requestedComplexes = extractRequestedComplexes(currentMessage);
+
+  // Specific districts: honor those mentioned in the CURRENT user message if present.
+  // This allows users to pivot their search to a new district without dragging old ones along.
+  const currentDistricts = extractSpecificDistricts(currentMessage);
+  if (currentDistricts.length > 0) {
+    context.specificDistricts = currentDistricts;
+  }
 
   // Determine location tier based on center preference
   if (context.wantsCenter) {
