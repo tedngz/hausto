@@ -454,7 +454,7 @@ const HCM_COMPLEX_NAMES: string[] = [
   'estella heights', 'the estella', 'the vista an phu', 'thao dien pearl',
   'q2 thao dien', 'lumiere riverside', "d'edge thao dien", 'nassim thao dien',
   'empire city', 'the river thu thiem', 'sala thu thiem', 'new city thu thiem',
-  'diamond island', 'the sun avenue', 'the krista',
+  'diamond island', 'the sun avenue', 'the krista', 'lakeview city', 'lakeview', 'lake view',
   'vinhomes grand park', 'centana thu thiem',
   // Binh Thanh
   'vinhomes central park', 'saigon pearl', 'sunwah pearl', 'landmark 81',
@@ -850,9 +850,17 @@ function buildAccumulatedContext(chatHistory: Array<{role: string, content: stri
     }
   }
 
-  // Requested complexes: only honor those mentioned in the CURRENT user message
-  // so users can switch projects without sticky filters from earlier in the chat.
-  context.requestedComplexes = extractRequestedComplexes(currentMessage);
+  // Requested complexes: parse the history and keep the most recently mentioned complex.
+  // This allows users to follow up (e.g. "Apartments near these schools" after asking about Lakeview)
+  // while still allowing them to pivot to a new complex without old ones sticking around.
+  let latestComplexes: string[] = [];
+  for (const text of allUserTexts) {
+    const found = extractRequestedComplexes(text);
+    if (found.length > 0) {
+      latestComplexes = found;
+    }
+  }
+  context.requestedComplexes = latestComplexes;
 
   // Specific districts: honor those mentioned in the CURRENT user message if present.
   // This allows users to pivot their search to a new district without dragging old ones along.
@@ -2495,19 +2503,25 @@ Maximum ${maxResults} properties in results.`;
     // ========== POST-PROCESSING VALIDATION ==========
     let searchData: any = null;
     let usedFallback = false;
+    let validatedResults: any[] = [];
+    
+    const hasResultsArray = extractedJson && Array.isArray(extractedJson.results) && extractedJson.results.length > 0;
+    const aiFailedShopping = (shoppingOverride || !isPureLifestyle) && topProperties.length > 0 && !hasResultsArray;
 
-    if (extractedJson && Array.isArray(extractedJson.results) && extractedJson.results.length > 0) {
-      console.log(`[Validation] AI returned ${extractedJson.results.length} results, validating...`);
-      const validatedResults = validateAndFixAIResults(extractedJson.results, scoredProperties, accContext);
-      console.log(`[Validation] ${validatedResults.length} results passed validation`);
-      extractedJson.results = validatedResults;
-      extractedJson.totalMatches = validatedResults.length;
-      if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
-
-      if (validatedResults.length === 0 && topProperties.length > 0 && !isPureLifestyle) {
-        console.log('[Validation] All AI results rejected, using fallback from pre-scored properties');
+    if (hasResultsArray || aiFailedShopping) {
+      if (hasResultsArray) {
+        console.log(`[Validation] AI returned ${extractedJson.results.length} results, validating...`);
+        validatedResults = validateAndFixAIResults(extractedJson.results, scoredProperties, accContext);
+        console.log(`[Validation] ${validatedResults.length} results passed validation`);
+        extractedJson.results = validatedResults;
+        extractedJson.totalMatches = validatedResults.length;
+        if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
+      }
+      
+      if ((validatedResults.length === 0 || aiFailedShopping) && topProperties.length > 0 && !isPureLifestyle) {
+        console.log('[Validation] AI failed to provide valid shopping results, using fallback from pre-scored properties');
         usedFallback = true;
-      } else {
+      } else if (hasResultsArray) {
         searchData = extractedJson;
         responseContent = JSON.stringify(extractedJson);
       }
