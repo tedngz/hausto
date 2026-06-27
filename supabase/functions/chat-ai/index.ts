@@ -2471,6 +2471,16 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
+    // Ensure there is always a followups block
+    if (!sanitizedBlocks) sanitizedBlocks = [];
+    const hasFollowups = sanitizedBlocks.some(b => b.type === 'followups');
+    if (!hasFollowups) {
+      sanitizedBlocks.push({
+        type: 'followups',
+        suggestions: ['[Ask] Tell me more about this area', '[Search] Show me similar properties']
+      });
+    }
+
     // ========== POST-PROCESSING VALIDATION ==========
     let searchData: any = null;
     let usedFallback = false;
