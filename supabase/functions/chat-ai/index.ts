@@ -2500,15 +2500,29 @@ Maximum ${maxResults} properties in results.`;
         searchData = extractedJson;
         responseContent = JSON.stringify(extractedJson);
       }
-    } else if (extractedJson && sanitizedBlocks && sanitizedBlocks.length > 0) {
+    } else if (extractedJson) {
       // Info-only response — no listings, just blocks.
-      console.log(`[AI] Blocks-only response with ${sanitizedBlocks.length} blocks`);
+      console.log(`[AI] Info-only response with ${sanitizedBlocks?.length || 0} blocks`);
+      const fallbackSummary = extractedJson.summary || extractedJson.text || extractedJson.message || extractedJson.content || extractedJson.answer || '';
+      
       const infoOnly = { 
         results: [], 
-        summary: extractedJson.summary || '', 
+        summary: fallbackSummary, 
         totalMatches: 0, 
-        blocks: sanitizedBlocks 
+        blocks: sanitizedBlocks || []
       };
+      
+      // If we still have no readable text to show the user, fall back to the raw JSON string
+      if (!infoOnly.summary && !infoOnly.blocks.some((b: any) => b.type === 'text' || b.type === 'district')) {
+         let rawText = JSON.stringify(extractedJson);
+         // Try to extract any long string values from the json
+         const stringValues = Object.values(extractedJson).filter(v => typeof v === 'string' && v.length > 20);
+         if (stringValues.length > 0) {
+            rawText = stringValues.join('\n\n');
+         }
+         infoOnly.blocks.unshift({ type: 'text', body: rawText });
+      }
+
       searchData = infoOnly;
       responseContent = JSON.stringify(infoOnly);
     }
