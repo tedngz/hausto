@@ -2230,8 +2230,9 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
        • "[Search] ..." — tapping will fetch property listings (filters, budgets, bedrooms, specific complexes, "show me", "find").
        • "[Ask] ..." — tapping returns advice/info only (district comparisons, pet policy, commute, "tell me about", "is X good for Y").
    - **ALWAYS include a "followups" block** — on EVERY response, whether shopping or info. For shopping turns, suggest refinements like narrowing budget, different bedroom count, nearby districts, or asking about a neighborhood. For info turns, mix [Ask] and [Search] suggestions.
+   - **ALWAYS include a conversational answer** in the "summary" field or a "text" block if the user is asking an informational question. Never leave the user hanging without a text explanation.
    - You may MIX A and B: a shopping turn can also carry a "text" block ("Heads up: under 15M in D1 is rare — these are mostly studios") or a "followups" block.
-   - If you only have a quick conversational reply (clarifying question, simple advice), return { "blocks": [ { "type": "text", "body": "..." }, { "type": "followups", "suggestions": ["[Search] ...", "[Ask] ..."] } ] } with no "results".
+   - If you only have a quick conversational reply (clarifying question, simple advice), return { "summary": "...", "blocks": [ { "type": "followups", "suggestions": ["[Search] ...", "[Ask] ..."] } ] } with no "results".
 
 10. **WHEN to use which intent**: shopping → user says "show me", "find", "any 2BR", uploads images, gives budget/area/feature filters. Info → user asks "tell me about X", "what's it like in Y", "how far is A from B", "should I pick X or Y", "is X pet friendly". Mixed → "show me 2BRs in Thao Dien and tell me about the area" → include both results and blocks.
 
@@ -2512,15 +2513,16 @@ Maximum ${maxResults} properties in results.`;
         blocks: sanitizedBlocks || []
       };
       
-      // If we still have no readable text to show the user, fall back to the raw JSON string
-      if (!infoOnly.summary && !infoOnly.blocks.some((b: any) => b.type === 'text' || b.type === 'district')) {
-         let rawText = JSON.stringify(extractedJson);
-         // Try to extract any long string values from the json
+      // If we still have no readable text to show the user, fall back to a polite error message
+      if (!infoOnly.summary && !infoOnly.blocks.some((b: any) => b.type === 'text' || b.type === 'district' || b.type === 'complex' || b.type === 'distance')) {
+         let fallbackBody = "I'm sorry, I couldn't find a detailed description for that. Please try one of the suggested options below.";
+         
+         // Try to extract any long string values from the json, ignoring arrays
          const stringValues = Object.values(extractedJson).filter(v => typeof v === 'string' && v.length > 20);
          if (stringValues.length > 0) {
-            rawText = stringValues.join('\n\n');
+            fallbackBody = stringValues.join('\n\n');
          }
-         infoOnly.blocks.unshift({ type: 'text', body: rawText });
+         infoOnly.blocks.unshift({ type: 'text', body: fallbackBody });
       }
 
       searchData = infoOnly;
