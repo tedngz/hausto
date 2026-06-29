@@ -109,6 +109,11 @@ function extractListingId(url: string, marketplace: string): string | null {
       const match = url.match(/\/rooms\/(\d+)/i);
       if (match) return `ab${match[1]}`;
     }
+    if (marketplace === 'housingsgn') {
+      // TODO: Update for housingsgn.com ID extraction
+      const match = url.match(/\/properties\/(\d+)/i);
+      if (match) return `hs${match[1]}`;
+    }
   } catch { /* ignore */ }
   return null;
 }
@@ -596,7 +601,7 @@ interface ExternalProperty {
   description: string;
   highlights: string[];
   amenities: string[];
-  source: 'batdongsan' | 'nhatot' | 'airbnb';
+  source: 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn';
   sourceUrl: string;
   sourceProviderName?: string;
   sourceProviderPhone?: string;
@@ -611,7 +616,7 @@ interface ExternalProperty {
 }
 
 interface SearchParams {
-  marketplace: 'batdongsan' | 'nhatot' | 'airbnb';
+  marketplace: 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn';
   query: string;
   location?: string;
   minPrice?: number;
@@ -799,6 +804,13 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
       return page > 1 ? `${baseAirbnb}&items_offset=${(page - 1) * 18}` : baseAirbnb;
     }
       
+    case 'housingsgn': {
+      // TODO: Update for housingsgn.com
+      // Construct the actual search URL for housingsgn.com based on the parameters
+      const base = `https://housingsgn.com/advanced-search?q=${encodeURIComponent(query || location || '')}`;
+      return page > 1 ? `${base}&page=${page}` : base;
+    }
+      
     default:
       return '';
   }
@@ -819,6 +831,7 @@ async function extractListingUrls(
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
     nhatot: /nhatot\.com\/[^?#]*\/(thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
+    housingsgn: /housingsgn\.com\/properties\/\d+/i, // TODO: Update for housingsgn.com property detail URLs
   };
 
   // Exclude any URL that clearly points to a buy/sell listing
@@ -1174,7 +1187,7 @@ RESPOND WITH VALID JSON ONLY:
       description: p.description || '',
       highlights: [],
       amenities: Array.isArray(p.amenities) ? p.amenities : [],
-      source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
+      source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
       sourceUrl,
       sourceProviderName: p.contactName,
       sourceProviderPhone: p.contactPhone,
@@ -1253,7 +1266,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
         description: p.description || '',
         highlights: [],
         amenities: Array.isArray(p.amenities) ? p.amenities : [],
-        source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
+        source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
         sourceUrl: p.sourceUrl || '',
         sourceProviderName: p.contactName,
         sourceProviderPhone: p.contactPhone,
@@ -1330,7 +1343,7 @@ function buildRawProperty(
     description: detailMarkdown.substring(0, 1000),
     highlights: [],
     amenities: [],
-    source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb',
+    source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
     sourceUrl,
     sourceProviderName: undefined,
     sourceProviderPhone: undefined,

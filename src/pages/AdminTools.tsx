@@ -76,7 +76,7 @@ const AdminTools = () => {
   // Crawl state
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlCity, setCrawlCity] = useState<'ho_chi_minh' | 'hanoi' | 'da_nang'>('ho_chi_minh');
-  const [crawlMarketplaces, setCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
+  const [crawlMarketplaces, setCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: false });
   const [crawlForceRefresh, setCrawlForceRefresh] = useState(false);
   const [crawlRunVibe, setCrawlRunVibe] = useState(true);
   const [crawlResults, setCrawlResults] = useState<any>(null);
@@ -112,7 +112,7 @@ const AdminTools = () => {
   const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
   const [projectCrawlMinPriceM, setProjectCrawlMinPriceM] = useState<number>(10); // millions VND/month (minimum)
   const [projectCrawlMaxListings, setProjectCrawlMaxListings] = useState<number>(10);
-  const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true });
+  const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: false });
   const [projectCrawlRunVibe, setProjectCrawlRunVibe] = useState(true);
   const [isProjectCrawling, setIsProjectCrawling] = useState(false);
   const [projectCrawlProgress, setProjectCrawlProgress] = useState<{ current: number; total: number; project: string } | null>(null);
@@ -679,7 +679,7 @@ const AdminTools = () => {
       toast.error("Select at least one project to crawl");
       return;
     }
-    const selectedMarketplaces = (Object.entries(projectCrawlMarketplaces) as [('batdongsan' | 'nhatot'), boolean][])
+    const selectedMarketplaces = (Object.entries(projectCrawlMarketplaces) as [('batdongsan' | 'nhatot' | 'housingsgn'), boolean][])
       .filter(([, v]) => v).map(([k]) => k);
     if (selectedMarketplaces.length === 0) {
       toast.error("Select at least one marketplace");
@@ -990,6 +990,15 @@ const AdminTools = () => {
                   />
                   nhatot.vn
                 </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={crawlMarketplaces.housingsgn}
+                    onChange={(e) => setCrawlMarketplaces(prev => ({ ...prev, housingsgn: e.target.checked }))}
+                    className="rounded"
+                  />
+                  housingsgn.com
+                </label>
               </div>
             </div>
           </div>
@@ -1146,6 +1155,10 @@ const AdminTools = () => {
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={projectCrawlMarketplaces.nhatot} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, nhatot: !!c }))} />
                   Nhatot
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={projectCrawlMarketplaces.housingsgn} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, housingsgn: !!c }))} />
+                  Housingsgn
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <Switch checked={projectCrawlRunVibe} onCheckedChange={setProjectCrawlRunVibe} />
