@@ -776,24 +776,31 @@ export const HaustoChat = ({
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col bg-white overflow-hidden sm:rounded-lg">
+      <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col glass-card overflow-hidden sm:rounded-2xl relative border-white/20 shadow-2xl">
+        {/* Animated Background Blobs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-gradient-to-tr from-orange-400/20 to-pink-500/20 blur-3xl animate-blob-float-1" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-gradient-to-bl from-purple-400/20 to-pink-400/20 blur-3xl animate-blob-float-2" />
+        </div>
+
         <DialogTitle className="sr-only">Hausto Chat Assistant</DialogTitle>
         <DialogDescription className="sr-only">
           Chat with Hausto AI assistant for property recommendations and real estate help
         </DialogDescription>
-        <div className="p-3 md:p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
-          <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Hausto Chat</h2>
-          
+        
+        {/* Header - Conversation List Mode */}
+        <div className="p-3 md:p-4 border-b border-white/30 bg-white/40 backdrop-blur-md relative z-10 flex-shrink-0 shadow-sm">
+          <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent drop-shadow-sm">Hausto Chat</h2>
         </div>
 
         
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden relative z-10">
           {!selectedMatch && !isStartingNewChat ? <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
+              <div className="p-3 border-b border-white/30 bg-white/40 backdrop-blur-sm flex items-center justify-between">
                 <div>
                   
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm font-medium text-gray-700">
                     {convs.length} conversation{convs.length !== 1 ? 's' : ''}
                   </p>
                 </div>
@@ -814,7 +821,7 @@ export const HaustoChat = ({
                       <div
                         key={conv.id}
                         onClick={() => handleMatchSelect(conv.id)}
-                        className="p-3 sm:p-4 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg border border-gray-200 hover:border-orange-200"
+                        className="p-3 sm:p-4 cursor-pointer bg-white/50 backdrop-blur-md hover:bg-white/70 transition-all duration-300 rounded-xl border border-white/60 hover:border-orange-300/60 hover:shadow-lg group shadow-sm"
                       >
                         <div className="flex items-start gap-2 sm:gap-3">
                           <Avatar className="w-9 h-9 sm:w-12 sm:h-12 flex-shrink-0">
@@ -862,14 +869,14 @@ export const HaustoChat = ({
                 </div>
               </ScrollArea>
             </div> : (/* User Messages Interface */
-        <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-2 sm:p-4 border-b bg-gradient-to-r from-orange-50 to-pink-50 flex-shrink-0">
+        <div className="flex-1 flex flex-col overflow-hidden relative z-10">
+              <div className="p-2 sm:p-4 border-b border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 shadow-sm">
                 <div className="flex items-center justify-between w-full gap-2">
                   <div className="flex items-center space-x-2 sm:space-x-3">
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1" aria-label="Back to conversations">
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1 rounded-full" aria-label="Back to conversations">
                       <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
                     </Button>
-                    <Avatar className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0">
+                    <Avatar className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 shadow-sm ring-2 ring-white/50">
                     <AvatarImage src={(() => {
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       return userType === 'realtor' ? currentConv?.renter_avatar : currentConv?.realtor_avatar;
@@ -902,7 +909,7 @@ export const HaustoChat = ({
                       );
                      })()}
                     <button 
-                      className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
+                      className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 hover:underline text-left font-medium"
                       onClick={() => setShowPropertyList(true)}
                     >
                       {(() => {
@@ -920,16 +927,16 @@ export const HaustoChat = ({
                       size="sm"
                       onClick={handleRequestAI}
                       disabled={isRequestingAI}
-                      className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:border-purple-300 text-purple-700 text-[10px] sm:text-xs"
+                      className="glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 text-[10px] sm:text-xs rounded-full shadow-sm hover:shadow-md transition-all duration-300"
                     >
-                      <MessageCircle className="w-3 h-3 sm:mr-1" />
-                      <span className="hidden sm:inline">{isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}</span>
-                      <span className="sm:hidden">{isRequestingAI ? 'AI...' : 'AI'}</span>
+                      <MessageCircle className="w-3 h-3 sm:mr-1 text-purple-500" />
+                      <span className="hidden sm:inline font-semibold">{isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}</span>
+                      <span className="sm:hidden font-semibold">{isRequestingAI ? 'AI...' : 'AI'}</span>
                     </Button>
                   ) : (
-                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[8px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 flex items-center justify-center whitespace-nowrap">
-                      <span className="hidden sm:inline">AI Active</span>
-                      <span className="sm:hidden">AI</span>
+                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[8px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-sm flex items-center justify-center whitespace-nowrap animate-pulse-ring">
+                      <span className="hidden sm:inline font-semibold">AI Active</span>
+                      <span className="sm:hidden font-semibold">AI</span>
                     </Badge>
                   )}
                 </div>
@@ -959,15 +966,18 @@ export const HaustoChat = ({
                       if (isAIMessage) {
                         return (
                           <div key={message.id}>
-                            <div className="flex justify-center my-4">
-                              <div className="w-[75%] max-w-md bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 shadow-sm mx-auto">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                            <div className="flex justify-center my-4 relative">
+                              <div className="w-[85%] max-w-lg glass bg-white/70 border border-purple-200/50 shadow-[0_4px_20px_-4px_rgba(168,85,247,0.15)] rounded-2xl p-4 sm:p-5 mx-auto relative overflow-hidden group">
+                                {/* Glow effect background */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                                
+                                <div className="flex items-center gap-3 mb-3 relative z-10">
+                                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-md">
                                     <MessageCircle className="w-4 h-4 text-white" />
                                   </div>
-                                  <span className="text-xs font-semibold text-purple-700">Hausto AI Assistant</span>
+                                  <span className="text-sm font-bold bg-gradient-to-r from-purple-700 to-pink-600 bg-clip-text text-transparent">Hausto AI Assistant</span>
                                 </div>
-                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                <p className="text-sm sm:text-base text-gray-800 leading-relaxed whitespace-pre-wrap relative z-10">
                                   {message.content.split(/(\[View My Matches\]\(\/\)|"[^"]+")/).map((part, idx) => {
                                     if (part === '[View My Matches](/)') {
                                       return (
@@ -1069,7 +1079,7 @@ export const HaustoChat = ({
                                       variant="outline"
                                       onClick={() => handleAIAction(action)}
                                       disabled={isRequestingAI}
-                                      className="text-xs bg-white hover:bg-purple-50 border-purple-300 text-purple-700"
+                                      className="text-xs glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 rounded-full shadow-sm hover:shadow-md transition-all duration-300 relative z-10"
                                     >
                                       {actionLabels[action] || action}
                                     </Button>
@@ -1095,7 +1105,7 @@ export const HaustoChat = ({
                             <p className="text-xs text-gray-500 mb-1 px-1">
                               {senderName}
                             </p>
-                            <div className={`w-full px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg break-words ${isOwnMessage ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                            <div className={`w-full px-3 py-2 sm:px-4 sm:py-3 rounded-2xl break-words shadow-sm ${isOwnMessage ? 'bg-gradient-to-br from-orange-500 to-pink-600 text-white border border-white/20' : 'glass bg-white/80 border border-white/40 text-gray-900 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.05)]'}`}>
                               <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
                               <p className={`text-[10px] sm:text-xs mt-1 ${isOwnMessage ? 'text-white/70' : 'text-gray-500'}`}>
                                 {new Date(message.created_at).toLocaleTimeString([], {
@@ -1120,11 +1130,12 @@ export const HaustoChat = ({
                  <div ref={messagesEndRef} />
                </div>
 
-              <div className="p-4 border-t border-gray-200 flex-shrink-0">
-                <div className="flex space-x-2">
-                  <Input value={inputMessage} onChange={e => setInputMessage(e.target.value)} placeholder="Type your message..." onKeyPress={handleKeyPress} disabled={isSendingDirectMessage} className="flex-1 text-sm md:text-base" />
-                  <Button onClick={handleSendMessage} disabled={!inputMessage.trim() || isSendingDirectMessage} className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 flex-shrink-0" size="sm">
-                    <Send className="w-3 md:w-4 h-3 md:h-4" />
+              <div className="p-3 sm:p-4 border-t border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 relative z-10">
+                <div className="flex space-x-2 relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-pink-500/10 rounded-xl blur-md -z-10" />
+                  <Input value={inputMessage} onChange={e => setInputMessage(e.target.value)} placeholder="Type your message..." onKeyPress={handleKeyPress} disabled={isSendingDirectMessage} className="flex-1 text-sm md:text-base glass bg-white/70 border-white/50 rounded-xl focus-visible:ring-orange-400" />
+                  <Button onClick={handleSendMessage} disabled={!inputMessage.trim() || isSendingDirectMessage} className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 flex-shrink-0 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 w-10 h-10 p-0 flex items-center justify-center">
+                    <Send className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
