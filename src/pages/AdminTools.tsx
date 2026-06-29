@@ -1147,7 +1147,7 @@ const AdminTools = () => {
             </div>
             <div className="space-y-2">
               <Label>Marketplaces</Label>
-              <div className="flex items-center gap-4 pt-1">
+              <div className="flex flex-wrap items-center gap-4 pt-1">
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={projectCrawlMarketplaces.batdongsan} onCheckedChange={(c) => setProjectCrawlMarketplaces(s => ({ ...s, batdongsan: !!c }))} />
                   Batdongsan
