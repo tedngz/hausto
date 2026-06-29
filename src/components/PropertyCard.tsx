@@ -215,15 +215,15 @@ export const PropertyCard = ({
         {/* Title and Price - Moved ON TOP of the image */}
         <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-10 text-white">
           <div className="flex flex-col gap-1.5">
-            <h2 className="text-2xl sm:text-3xl font-serif font-medium text-shadow tracking-tight line-clamp-2">
+            <h2 className="text-lg sm:text-xl font-serif font-medium text-shadow tracking-tight line-clamp-2">
               {displayTitle}
             </h2>
             <div className="flex items-center justify-between mt-1">
               <div className="flex items-center gap-2">
-                <Badge className="bg-primary/90 hover:bg-primary text-white font-semibold backdrop-blur-md border-0 text-sm py-0.5 px-2.5">
+                <Badge className="bg-primary/90 hover:bg-primary text-white font-semibold backdrop-blur-md border-0 text-sm h-7 px-3 flex items-center justify-center">
                   {formatPrice(apartment.price)}/mo
                 </Badge>
-                {apartment.rooms && <Badge variant="outline" className="bg-black/30 border-white/30 text-white backdrop-blur-md">
+                {apartment.rooms && <Badge variant="outline" className="bg-black/30 border-white/30 text-white backdrop-blur-md font-semibold text-sm h-7 px-3 flex items-center justify-center">
                   {apartment.rooms}
                 </Badge>}
               </div>

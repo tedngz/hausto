@@ -141,8 +141,8 @@ export const MatchesView = ({
   }
   return <div className="container mx-auto px-4 pt-6 pb-12 animate-fade-in">
       <div className="mb-10 text-center">
-        <h2 className="text-2xl md:text-3xl font-serif font-medium text-foreground mb-3 tracking-tight">Your Matches</h2>
-        <div className="inline-block px-4 py-1.5 rounded-full bg-secondary text-secondary-foreground text-sm font-medium">
+        <h2 className="text-xl md:text-2xl font-serif font-medium text-foreground mb-3 tracking-tight">Your Matches</h2>
+        <div className="inline-block px-4 py-1.5 rounded-full bg-secondary text-secondary-foreground text-sm font-medium border border-border">
           {allApartments.length} {allApartments.length === 1 ? 'property' : 'properties'} saved
         </div>
       </div>
