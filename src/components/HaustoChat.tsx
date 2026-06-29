@@ -776,7 +776,7 @@ export const HaustoChat = ({
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col glass-card bg-white/40 backdrop-blur-xl overflow-hidden sm:rounded-2xl relative border-white/20 shadow-2xl">
+      <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col glass-card bg-white/40 backdrop-blur-xl overflow-hidden sm:rounded-2xl border-white/20 shadow-2xl">
         {/* Animated Background Blobs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
           <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-gradient-to-tr from-orange-400/20 to-pink-500/20 blur-3xl animate-blob-float-1" />
