@@ -780,10 +780,10 @@ export const HaustoChat = ({
         {/* Glass Background */}
         <div className="absolute inset-0 glass-card bg-white/40 backdrop-blur-xl pointer-events-none -z-20" />
         
-        {/* Animated Background Blobs */}
+        {/* Animated Background Blobs - Toned Down */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-gradient-to-tr from-orange-400/20 to-pink-500/20 blur-3xl animate-blob-float-1" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-gradient-to-bl from-purple-400/20 to-pink-400/20 blur-3xl animate-blob-float-2" />
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-gradient-to-tr from-orange-400/10 to-pink-500/10 blur-3xl animate-blob-float-1" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-gradient-to-bl from-purple-400/10 to-pink-400/10 blur-3xl animate-blob-float-2" />
         </div>
 
         <DialogTitle className="sr-only">Hausto Chat Assistant</DialogTitle>
@@ -791,10 +791,12 @@ export const HaustoChat = ({
           Chat with Hausto AI assistant for property recommendations and real estate help
         </DialogDescription>
         
-        {/* Header - Conversation List Mode */}
-        <div className="p-3 md:p-4 border-b border-white/30 bg-white/40 backdrop-blur-md relative z-10 flex-shrink-0 shadow-sm">
-          <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent drop-shadow-sm">Hausto Chat</h2>
-        </div>
+        {/* Header - Conversation List Mode (Only show when not in a chat) */}
+        {!selectedMatch && !isStartingNewChat && (
+          <div className="p-3 md:p-4 border-b border-white/30 bg-white/40 backdrop-blur-md relative z-10 flex-shrink-0 shadow-sm">
+            <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent drop-shadow-sm">Hausto Chat</h2>
+          </div>
+        )}
 
         
 
