@@ -801,8 +801,8 @@ export const HaustoChat = ({
                 <div className="flex items-center gap-2 sm:gap-3">
                   <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent drop-shadow-sm">Hausto Chat</h2>
                   <div className="h-4 w-px bg-white/40 hidden sm:block"></div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600 bg-white/50 px-2 sm:px-2.5 py-0.5 rounded-full border border-white/40 shadow-sm">
-                    {convs.length} <span className="hidden sm:inline">conversation{convs.length !== 1 ? 's' : ''}</span>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600 bg-white/50 px-2.5 py-0.5 rounded-full border border-white/40 shadow-sm whitespace-nowrap">
+                    {convs.length} conversation{convs.length !== 1 ? 's' : ''}
                   </p>
                 </div>
               </div>
@@ -870,7 +870,7 @@ export const HaustoChat = ({
               </ScrollArea>
             </div> : (/* User Messages Interface */
         <div className="flex-1 flex flex-col overflow-hidden relative z-10">
-              <div className="p-2 sm:p-4 border-b border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 shadow-sm">
+              <div className="p-2 sm:p-4 pr-12 border-b border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 shadow-sm">
                 <div className="flex items-center justify-between w-full gap-2">
                   <div className="flex items-center space-x-2 sm:space-x-3">
                     <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1 rounded-full" aria-label="Back to conversations">
