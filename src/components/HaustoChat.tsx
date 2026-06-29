@@ -791,25 +791,24 @@ export const HaustoChat = ({
           Chat with Hausto AI assistant for property recommendations and real estate help
         </DialogDescription>
         
-        {/* Header - Conversation List Mode (Only show when not in a chat) */}
-        {!selectedMatch && !isStartingNewChat && (
-          <div className="p-3 md:p-4 border-b border-white/30 bg-white/40 backdrop-blur-md relative z-10 flex-shrink-0 shadow-sm">
-            <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent drop-shadow-sm">Hausto Chat</h2>
-          </div>
-        )}
+
 
         
 
         <div className="flex-1 flex flex-col overflow-hidden relative z-10">
           {!selectedMatch && !isStartingNewChat ? <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-3 border-b border-white/30 bg-white/40 backdrop-blur-sm flex items-center justify-between">
-                <div>
-                  
-                  <p className="text-sm font-medium text-gray-700">
+              <div className="p-3 md:p-4 border-b border-white/30 bg-white/40 backdrop-blur-sm flex items-center justify-between flex-shrink-0 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent drop-shadow-sm">Hausto Chat</h2>
+                  <div className="h-4 w-px bg-white/40 mx-1 hidden sm:block"></div>
+                  <p className="text-sm font-medium text-gray-600 bg-white/50 px-2.5 py-0.5 rounded-full border border-white/40 shadow-sm hidden sm:block">
                     {convs.length} conversation{convs.length !== 1 ? 's' : ''}
                   </p>
                 </div>
-                
+                {/* Mobile only conversation count */}
+                <p className="text-xs font-medium text-gray-600 bg-white/50 px-2 py-0.5 rounded-full border border-white/40 shadow-sm sm:hidden">
+                  {convs.length}
+                </p>
               </div>
               
               <ScrollArea className="flex-1 p-3">
