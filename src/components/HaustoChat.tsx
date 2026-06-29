@@ -870,7 +870,7 @@ export const HaustoChat = ({
               </ScrollArea>
             </div> : (/* User Messages Interface */
         <div className="flex-1 flex flex-col overflow-hidden relative z-10">
-              <div className="p-2 sm:p-4 pr-12 border-b border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 shadow-sm">
+              <div className="p-2 pr-12 sm:p-4 sm:pr-14 border-b border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 shadow-sm">
                 <div className="flex items-center justify-between w-full gap-2">
                   <div className="flex items-center space-x-2 sm:space-x-3">
                     <Button variant="ghost" size="sm" onClick={() => setSelectedMatch(null)} className="hover:bg-white/50 p-1 rounded-full" aria-label="Back to conversations">
