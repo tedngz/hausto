@@ -805,10 +805,8 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
     }
       
     case 'housingsgn': {
-      // TODO: Update for housingsgn.com
-      // Construct the actual search URL for housingsgn.com based on the parameters
-      const base = `https://housingsgn.com/advanced-search?q=${encodeURIComponent(query || location || '')}`;
-      return page > 1 ? `${base}&page=${page}` : base;
+      const q = encodeURIComponent(query || location || '');
+      return page > 1 ? `https://housingsgn.com/page/${page}/?s=${q}` : `https://housingsgn.com/?s=${q}`;
     }
       
     default:
@@ -831,7 +829,7 @@ async function extractListingUrls(
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
     nhatot: /nhatot\.com\/[^?#]*\/(thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
-    housingsgn: /housingsgn\.com\/[^\/]+for-rent[^\/]*\/?/i, // Updated to match their actual slug structure (-for-rent)
+    housingsgn: /housingsgn\.com\/properties\/[^\/\?#]+/i,
   };
 
   // Exclude any URL that clearly points to a buy/sell listing
