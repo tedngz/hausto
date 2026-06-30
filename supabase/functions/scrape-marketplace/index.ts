@@ -1686,6 +1686,18 @@ serve(async (req) => {
       });
     }
 
+    // Global deduplication to prevent SPA/LLM duplicate clones
+    const uniqueFinalProps = new Map<string, ExternalProperty>();
+    for (const p of filteredProperties) {
+      const key = (p.title || p.sourceUrl).toLowerCase().trim();
+      if (!uniqueFinalProps.has(key)) {
+        uniqueFinalProps.set(key, p);
+      } else {
+        console.log(`[scrape-marketplace] Dropped duplicate property by title: ${p.title}`);
+      }
+    }
+    filteredProperties = Array.from(uniqueFinalProps.values());
+
     // Direct save mode: save properties to DB immediately (used by scheduled-crawl)
     if (directSave && isServiceRole) {
       console.log(`[scrape-marketplace] DirectSave mode (rawMode=${rawMode}): saving ${filteredProperties.length} properties to DB`);
