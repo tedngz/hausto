@@ -110,8 +110,8 @@ function extractListingId(url: string, marketplace: string): string | null {
       if (match) return `ab${match[1]}`;
     }
     if (marketplace === 'housingsgn') {
-      // TODO: Update for housingsgn.com ID extraction
-      const match = url.match(/\/properties\/(\d+)/i);
+      // Updated to match whatever is after /properties/ (even if it's text instead of numbers)
+      const match = url.match(/\/properties\/([^\/\?#]+)/i);
       if (match) return `hs${match[1]}`;
     }
   } catch { /* ignore */ }
@@ -831,7 +831,7 @@ async function extractListingUrls(
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
     nhatot: /nhatot\.com\/[^?#]*\/(thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
-    housingsgn: /housingsgn\.com\/properties\/\d+/i, // TODO: Update for housingsgn.com property detail URLs
+    housingsgn: /housingsgn\.com\/properties\/[^\/\?#]+/i, // Updated to match text slugs, not just digits
   };
 
   // Exclude any URL that clearly points to a buy/sell listing
