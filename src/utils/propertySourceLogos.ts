@@ -50,6 +50,13 @@ export const getPropertySourceLogo = (sourceLink: string): { name: string; logo:
     };
   }
   
+  if (url.includes('housingsgn') || url === 'housingsgn') {
+    return {
+      name: 'Housing SGN',
+      logo: '/logos/housingsgn-logo.svg'
+    };
+  }
+  
   // Default fallback
   return {
     name: 'External Source',
