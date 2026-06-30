@@ -86,6 +86,7 @@ function detectMarketplace(source: string, url: string): string {
   if (s.includes('nhatot')) return 'nhatot';
   if (s.includes('batdongsan')) return 'batdongsan';
   if (s.includes('airbnb')) return 'airbnb';
+  if (s.includes('housingsgn')) return 'housingsgn';
   return source || 'unknown';
 }
 
@@ -183,7 +184,7 @@ serve(async (req) => {
 
     // Fetch HTML — prefer Firecrawl for protected sites
     let html = '', markdown = '';
-    const needsFirecrawl = marketplace === 'nhatot' || marketplace === 'batdongsan';
+    const needsFirecrawl = marketplace === 'nhatot' || marketplace === 'batdongsan' || marketplace === 'housingsgn';
     try {
       if (needsFirecrawl && FIRECRAWL_API_KEY) {
         const r = await firecrawlFetch(row.source_url);

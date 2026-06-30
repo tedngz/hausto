@@ -261,7 +261,7 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'da_nang', location: 'Ngũ Hành Sơn' },
 ];
 
-const MARKETPLACES = ['batdongsan', 'nhatot'] as const;
+const MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'] as const;
 
 const MIN_PRICE_VND = 2_000_000;
 const MAX_PRICE_VND = 200_000_000;

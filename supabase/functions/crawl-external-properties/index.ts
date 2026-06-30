@@ -30,7 +30,7 @@ interface CrawlRequest {
   // projects (one per call) and uses the project name as the marketplace
   // search keyword, with district as the URL location.
   projects?: ProjectTarget[];
-  marketplaces?: ('batdongsan' | 'nhatot' | 'airbnb')[];
+  marketplaces?: ('batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn')[];
   city?: 'ho_chi_minh' | 'hanoi';
   forceRefresh?: boolean;
   storeInDatabase?: boolean;
@@ -437,7 +437,7 @@ serve(async (req) => {
     const { 
       locations = [], 
       projects = [],
-      marketplaces = ['batdongsan', 'nhatot'],
+      marketplaces = ['batdongsan', 'nhatot', 'housingsgn'],
       city = 'ho_chi_minh',
       forceRefresh = false,
       storeInDatabase = true,

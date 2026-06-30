@@ -36,12 +36,13 @@ const AIRBNB_DEAD_KEYWORDS = [
   'page not found',
 ];
 
-function detectSource(source: string, url: string): 'nhatot' | 'batdongsan' | 'airbnb' | 'unknown' {
+function detectSource(source: string, url: string): 'nhatot' | 'batdongsan' | 'airbnb' | 'housingsgn' | 'unknown' {
   const s = (source || '').toLowerCase();
   const u = (url || '').toLowerCase();
   if (s.includes('nhatot') || u.includes('nhatot')) return 'nhatot';
   if (s.includes('batdongsan') || u.includes('batdongsan')) return 'batdongsan';
   if (s.includes('airbnb') || u.includes('airbnb')) return 'airbnb';
+  if (s.includes('housingsgn') || u.includes('housingsgn')) return 'housingsgn';
   return 'unknown';
 }
 
@@ -117,6 +118,7 @@ async function verifyListing(source: string, url: string): Promise<DeadResult> {
     case 'nhatot': return await verifyViaBrowserless(url, NHATOT_DEAD_KEYWORDS);
     case 'batdongsan': return await verifyViaBrowserless(url, BATDONGSAN_DEAD_KEYWORDS);
     case 'airbnb': return await verifyPlain(url, AIRBNB_DEAD_KEYWORDS);
+    case 'housingsgn': return await verifyPlain(url, ['404 Not Found', 'không tìm thấy trang']);
     default: return { status: 'error', reason: 'unknown_source' };
   }
 }
