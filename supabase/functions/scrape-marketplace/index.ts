@@ -831,7 +831,7 @@ async function extractListingUrls(
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
     nhatot: /nhatot\.com\/[^?#]*\/(thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
-    housingsgn: /housingsgn\.com\/properties\/[^\/\?#]+/i, // Updated to match text slugs, not just digits
+    housingsgn: /housingsgn\.com\/[^\/]+for-rent[^\/]*\/?/i, // Updated to match their actual slug structure (-for-rent)
   };
 
   // Exclude any URL that clearly points to a buy/sell listing
@@ -1654,7 +1654,8 @@ serve(async (req) => {
     }
     
     // ── Fallback: extract from search page if detail scraping yielded few results (skipped in raw mode — costs OpenAI) ──
-    if (!rawMode && properties.length < 2) {
+    // ONLY run for older non-SPA sites. Housingsgn search pages cause massive AI hallucinations, so we skip it.
+    if (!rawMode && properties.length < 2 && marketplace !== 'housingsgn') {
       console.log(`[Fallback] Only ${properties.length} from detail pages, falling back to search page extraction`);
       
       const searchImages = extractImagesFromHtml(allHtml);
