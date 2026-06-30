@@ -1219,7 +1219,7 @@ ${extractedImages.slice(0, 25).join('\n')}
 
 SEARCH CONTEXT: "${searchQuery}"
 
-CRITICAL: ALL text MUST be in ENGLISH. Extract up to 5 properties.
+CRITICAL: ALL text MUST be in ENGLISH. Extract ONLY the properties explicitly found in the text. Do NOT duplicate properties. Do NOT invent or hallucinate properties. If there is only 1 property, return 1. Every property must have a UNIQUE sourceUrl and title.
 
 For EACH property:
 - title: English descriptive title
@@ -1228,7 +1228,7 @@ For EACH property:
 - priceDisplay: Original price text
 - size: m² if available
 - rooms: Apartment type, one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
-- images: 3-5 image URLs from above
+- images: 3-5 image URLs from above (MUST belong to this specific property)
 - description: 100-200 word English description
 - amenities: English amenity names
 - sourceUrl: Listing URL
@@ -1239,7 +1239,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
   try {
     const content = await callAI(
       [
-        { role: 'system', content: 'Extract structured property data from Vietnamese website content. Output English. Keep location/address names in Vietnamese. Valid JSON only.' },
+        { role: 'system', content: 'Extract structured property data from Vietnamese website content. Output English. Keep location/address names in Vietnamese. Valid JSON only. Never hallucinate or duplicate.' },
         { role: 'user', content: prompt }
       ],
       4000,
@@ -1251,7 +1251,18 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
     let cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     const parsed = JSON.parse(cleaned);
-    return (parsed.properties || []).map((p: any, i: number) => {
+    const uniqueProps = new Map<string, any>();
+    
+    // Deduplicate LLM output by title to prevent hallucinated copies
+    for (const p of (parsed.properties || [])) {
+      if (!p.title) continue;
+      const normalizedTitle = p.title.toLowerCase().trim();
+      if (!uniqueProps.has(normalizedTitle)) {
+        uniqueProps.set(normalizedTitle, p);
+      }
+    }
+
+    return Array.from(uniqueProps.values()).map((p: any, i: number) => {
       const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 5);
       
       return {
