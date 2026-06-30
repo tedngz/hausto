@@ -908,7 +908,7 @@ async function firecrawlFetch(url: string): Promise<{ html: string; markdown: st
     body: JSON.stringify({
       url,
       formats: ['html', 'markdown', 'links'],
-      waitFor: 3000,
+      waitFor: 8000, // Increased to 8 seconds to allow SPAs to fetch data from their APIs
       location: { country: 'VN', languages: ['vi'] },
     }),
   });
