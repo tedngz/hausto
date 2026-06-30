@@ -1129,13 +1129,14 @@ CRITICAL INSTRUCTIONS:
 7. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
 8. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. Keep the Vietnamese location names as-is (do NOT translate location names).
 9. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
+10. **PRICE**: The numeric `price` MUST be the full numeric value in VND. If the price is listed in USD (e.g., "$700"), you MUST convert it to VND by multiplying the USD amount by 25000 (e.g. 700 * 25000 = 17500000). The `priceDisplay` can remain the original text.
 
 RESPOND WITH VALID JSON ONLY:
 {
   "title": "Evocative vibe-focused English title",
   "location": "FULL address: Street, Ward, District, City (keep Vietnamese names)",
-  "price": 5000000,
-  "priceDisplay": "5 triệu/tháng",
+  "price": 17500000,
+  "priceDisplay": "$700/month",
   "size": "25m²",
   "rooms": "Studio",
   "images": ["url1", "url2", ...],
@@ -1222,7 +1223,7 @@ CRITICAL: ALL text MUST be in ENGLISH. Extract ONLY the properties explicitly fo
 For EACH property:
 - title: English descriptive title
 - location: FULL address with street, ward, district, city (keep Vietnamese place names as-is)
-- price: Numeric VND
+- price: Numeric VND. If the price is in USD (e.g. $700), you MUST convert it by multiplying by 25000 (e.g. 17500000).
 - priceDisplay: Original price text
 - size: m² if available
 - rooms: Apartment type, one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
