@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase CLI local state (machine/project-specific cache)
+supabase/.temp
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
