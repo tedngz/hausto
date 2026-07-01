@@ -377,6 +377,87 @@ function extractBatdongsanGalleryImages(html: string): string[] {
   return unique.filter(isValidPropertyImageUrl);
 }
 
+// ─── Housingsgn (WordPress) Helpers ──────────────────────────────
+// housingsgn.com is an English, foreigner-focused WordPress site. Every listing
+// has a property code (e.g. KHH0219) embedded BOTH in the URL slug
+// (/properties/khh0219-...) AND in each gallery image filename
+// (KHH0219-1.jpg). "Similar Properties" images carry a DIFFERENT code
+// (KHH0218-6-525x328.jpg), so matching the code deterministically keeps only
+// the current listing's photos and eliminates cross-property image mixing.
+
+// USD→VND conversion rate. housingsgn quotes rents in USD ("$ 885 / month").
+// Kept as a single constant so it can be updated in one place.
+const USD_TO_VND = 25000;
+
+// Extract the property code from a housingsgn /properties/<code>-<slug>/ URL.
+function extractHousingsgnPropertyCode(url: string): string | null {
+  const m = url.match(/\/properties\/([^\/?#]+)/i);
+  if (!m) return null;
+  const token = m[1].split('-')[0];
+  // Codes look like "khh0219", "sag0002", "tb0117" or numeric "030324".
+  return /^[a-z0-9]{2,10}$/i.test(token) ? token.toLowerCase() : null;
+}
+
+// Strip WordPress thumbnail dimension suffix (e.g. -143x83, -525x328) to get
+// the full-size original image.
+function normalizeHousingsgnImageUrl(url: string): string {
+  return url.replace(/-\d{2,4}x\d{2,4}(\.(?:jpg|jpeg|png|webp|gif))(\?|$)/i, '$1$2');
+}
+
+// Parse a USD amount from text like "$ 885 / month", "USD 1,200", "$1200/mo".
+function extractUsdAmount(text: string): number | null {
+  if (!text) return null;
+  const m = text.match(/(?:US\$|USD|\$)\s*([\d.,]{2,})/i);
+  if (!m) return null;
+  const num = parseFloat(m[1].replace(/,/g, ''));
+  return isFinite(num) && num > 0 ? num : null;
+}
+
+// Deterministic gallery extraction for housingsgn detail pages: collects
+// wp-content upload images, normalizes thumbnails to full-size, keeps only
+// images whose filename matches the listing's property code, dedupes, and
+// orders by the trailing image index so the hero shot comes first.
+function extractHousingsgnGalleryImages(html: string, url: string): string[] {
+  const code = extractHousingsgnPropertyCode(url);
+  const raw: string[] = [];
+  const patterns = [
+    /(?:src|data-src|data-lazy-src|data-original|href)=["'](https:\/\/[^"']*\/wp-content\/uploads\/[^"']+\.(?:jpe?g|png|webp))["']/gi,
+    /srcset=["']([^"']+)["']/gi,
+    /url\(["']?(https:\/\/[^"')]*\/wp-content\/uploads\/[^"')]+\.(?:jpe?g|png|webp))["']?\)/gi,
+  ];
+  for (const regex of patterns) {
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      if (regex === patterns[1]) {
+        match[1].split(',').forEach(part => {
+          const u = part.trim().split(' ')[0];
+          if (u && /wp-content\/uploads/i.test(u) && /\.(jpe?g|png|webp)/i.test(u)) raw.push(u);
+        });
+      } else if (match[1]) {
+        raw.push(match[1]);
+      }
+    }
+  }
+
+  const byUrl = new Map<string, string>();
+  for (const u of raw) {
+    const full = normalizeHousingsgnImageUrl(u);
+    if (code) {
+      const file = (full.split('/').pop() || '').toLowerCase();
+      if (!file.startsWith(code)) continue; // reject "Similar Properties" images
+    }
+    byUrl.set(full.toLowerCase(), full);
+  }
+
+  const imgs = [...byUrl.values()].filter(isValidPropertyImageUrl);
+  imgs.sort((a, b) => {
+    const na = parseInt(a.match(/-(\d+)\.(?:jpe?g|png|webp)(?:\?|$)/i)?.[1] || '9999', 10);
+    const nb = parseInt(b.match(/-(\d+)\.(?:jpe?g|png|webp)(?:\?|$)/i)?.[1] || '9999', 10);
+    return na - nb;
+  });
+  return imgs;
+}
+
 function detectCity(location: string): string {
   const lower = location.toLowerCase();
   if (/(ho chi minh|hcm|saigon|sài gòn|thủ đức|thu duc|quận [0-9]|quan [0-9]|district [0-9]|d[0-9]|bình thạnh|binh thanh|phú nhuận|phu nhuan|tân bình|tan binh|gò vấp|go vap|tân phú|tan phu|bình tân|binh tan|bình chánh|binh chanh|nhà bè|nha be|hóc môn|hoc mon|củ chi|cu chi|cần giờ|can gio)/i.test(lower)) return 'ho_chi_minh';
@@ -641,6 +722,15 @@ function stripDiacritics(str: string): string {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd');
 }
 
+// True when the query is a generic "apartment for rent" crawl phrase rather than
+// a specific project/building name. Matches both generic phrasings we send:
+// "căn hộ chung cư cho thuê" and "cho thuê căn hộ chung cư nhà ở".
+function isGenericRentQuery(query?: string): boolean {
+  if (!query) return true;
+  const s = stripDiacritics(query).toLowerCase();
+  return /chung cu/.test(s) && /(cho thue|thue)/.test(s);
+}
+
 function buildSearchUrl(params: SearchParams, page: number = 1): string {
   const { marketplace, query, location } = params;
   
@@ -807,7 +897,19 @@ function buildSearchUrl(params: SearchParams, page: number = 1): string {
     }
       
     case 'housingsgn': {
-      const q = encodeURIComponent(query || location || '');
+      // housingsgn.com is an English, foreigner-focused WordPress site. Searching
+      // the Vietnamese generic phrase ("cho thuê căn hộ chung cư nhà ở") returns
+      // BLOG POSTS with no /properties/ links, so we must search by the specific
+      // project/building name when available, otherwise by district/location.
+      let term: string;
+      if (query && !isGenericRentQuery(query)) {
+        term = query;                       // e.g. "Masteri Thao Dien"
+      } else if (location) {
+        term = location;                    // e.g. "Quận 1" (returns real listings)
+      } else {
+        term = 'apartment for rent';
+      }
+      const q = encodeURIComponent(term);
       return page > 1 ? `https://housingsgn.com/page/${page}/?s=${q}` : `https://housingsgn.com/?s=${q}`;
     }
       
@@ -1056,8 +1158,10 @@ async function scrapeDetailPage(url: string, marketplace: string): Promise<{
     // Use marketplace-specific image extraction for better quality
     if (marketplace === 'batdongsan') {
       images = extractBatdongsanGalleryImages(html);
+    } else if (marketplace === 'housingsgn') {
+      images = extractHousingsgnGalleryImages(html, url);
     }
-    
+
     // Fallback to generic extraction
     if (images.length === 0) {
       images = extractImagesFromHtml(html);
@@ -1131,7 +1235,7 @@ CRITICAL INSTRUCTIONS:
 7. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
 8. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. Keep the Vietnamese location names as-is (do NOT translate location names).
 9. Determine the apartment type - MUST be one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
-10. **PRICE**: The numeric price MUST be the full numeric value in VND. If the price is listed in USD (e.g., "$700"), you MUST convert it to VND by multiplying the USD amount by 25000 (e.g. 700 * 25000 = 17500000). The priceDisplay can remain the original text.
+10. **PRICE**: The numeric price MUST be the full numeric value in VND. If the price is listed in USD (e.g., "$700"), you MUST convert it to VND by multiplying the USD amount by ${USD_TO_VND} (e.g. 700 * ${USD_TO_VND} = ${(700 * USD_TO_VND).toLocaleString('en-US').replace(/,/g, '')}). Keep the priceDisplay as the ORIGINAL text (e.g. "$700/month").
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -1165,23 +1269,61 @@ RESPOND WITH VALID JSON ONLY:
 
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const p = JSON.parse(cleaned);
-    
+
     // Use AI-extracted images if available, otherwise use scraped images
     // Normalize batdongsan image URLs to full-size
     let finalImages = (Array.isArray(p.images) && p.images.length > 0 ? p.images : detailImages)
       .filter((img: string) => isValidPropertyImageUrl(img))
       .slice(0, 5);
-    
+
     if (marketplace === 'batdongsan') {
       finalImages = finalImages.map(normalizeBatdongsanImageUrl);
+    } else if (marketplace === 'housingsgn') {
+      // The LLM is unreliable at excluding "Similar Properties" images, so trust
+      // the deterministic, property-code-matched gallery from scrapeDetailPage.
+      // Match by property code to guarantee no cross-property mixing, and dedupe.
+      const code = extractHousingsgnPropertyCode(sourceUrl);
+      const codeMatched = [...new Set(
+        detailImages
+          .map(normalizeHousingsgnImageUrl)
+          .filter((img: string) => {
+            if (!isValidPropertyImageUrl(img)) return false;
+            if (!code) return true;
+            return (img.split('/').pop() || '').toLowerCase().startsWith(code);
+          })
+      )];
+      if (codeMatched.length > 0) {
+        // Keep up to 8 (gallery-ordered, hero first) so the downstream vision gate
+        // can curate the best 5; direct consumers slice to 5 themselves.
+        finalImages = codeMatched.slice(0, 8);
+      } else {
+        // No gallery images survived matching — keep whatever URL-valid, deduped
+        // images we have rather than dropping the listing entirely.
+        finalImages = [...new Set(finalImages.map(normalizeHousingsgnImageUrl))].slice(0, 5);
+      }
+    }
+
+    // Price: numeric VND. housingsgn quotes USD, so convert deterministically from
+    // the page text instead of trusting the LLM to multiply correctly.
+    let priceVnd = typeof p.price === 'number' ? p.price : parseInt(String(p.price).replace(/\D/g, '')) || 0;
+    let priceDisplay = p.priceDisplay || (priceVnd ? `${priceVnd.toLocaleString()} VND` : '');
+    if (marketplace === 'housingsgn') {
+      const usd = extractUsdAmount(p.priceDisplay || '') ?? extractUsdAmount(detailMarkdown);
+      if (usd) {
+        priceVnd = Math.round(usd * USD_TO_VND);
+        priceDisplay = `$${usd.toLocaleString('en-US')}/month`;
+      } else if (priceVnd > 0 && priceVnd < 100_000) {
+        // LLM returned a raw USD figure without converting — convert it.
+        priceVnd = priceVnd * USD_TO_VND;
+      }
     }
 
     return {
       id: `external-${marketplace}-${Date.now()}-${index}`,
       title: p.title || 'Rental Property',
       location: p.location || 'Ho Chi Minh City',
-      price: typeof p.price === 'number' ? p.price : parseInt(String(p.price).replace(/\D/g, '')) || 0,
-      priceDisplay: p.priceDisplay || `${p.price?.toLocaleString()} VND`,
+      price: priceVnd,
+      priceDisplay,
       size: p.size || 'N/A',
       rooms: p.rooms || '',
       images: finalImages,
@@ -1296,6 +1438,9 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
 function extractPriceFromText(text: string): { price: number; display: string } {
   if (!text) return { price: 0, display: '' };
   const t = text.toLowerCase().replace(/\s+/g, ' ');
+  // USD (housingsgn and some listings): "$ 885 / month", "USD 1,200"
+  const usd = extractUsdAmount(text);
+  if (usd) return { price: Math.round(usd * USD_TO_VND), display: text.trim() };
   // Vietnamese: "X triệu", "X tr", "X.Y triệu", "X.Y tỷ"
   const triMatch = t.match(/(\d+(?:[.,]\d+)?)\s*(?:triệu|tri[eê]u|tr\b)/);
   const tyMatch = t.match(/(\d+(?:[.,]\d+)?)\s*t[ỷy]/);

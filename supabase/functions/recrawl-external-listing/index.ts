@@ -81,6 +81,52 @@ function extractImages(html: string, marketplace: string): string[] {
   return out;
 }
 
+// ─── Housingsgn (WordPress) helpers ─────────────────────────────
+// Property code (e.g. KHH0219) is embedded in the URL slug and in every gallery
+// image filename, so we match on it to avoid mixing in "Similar Properties".
+const USD_TO_VND = 25000;
+
+function extractHousingsgnPropertyCode(url: string): string | null {
+  const m = url.match(/\/properties\/([^\/?#]+)/i);
+  if (!m) return null;
+  const token = m[1].split('-')[0];
+  return /^[a-z0-9]{2,10}$/i.test(token) ? token.toLowerCase() : null;
+}
+
+function normalizeHousingsgnImageUrl(url: string): string {
+  return url.replace(/-\d{2,4}x\d{2,4}(\.(?:jpg|jpeg|png|webp|gif))(\?|$)/i, '$1$2');
+}
+
+function extractUsdAmount(text: string): number | null {
+  if (!text) return null;
+  const m = text.match(/(?:US\$|USD|\$)\s*([\d.,]{2,})/i);
+  if (!m) return null;
+  const num = parseFloat(m[1].replace(/,/g, ''));
+  return isFinite(num) && num > 0 ? num : null;
+}
+
+// Keep only full-size images belonging to THIS housingsgn listing (by code), deduped.
+function filterHousingsgnImages(images: string[], sourceUrl: string): string[] {
+  const code = extractHousingsgnPropertyCode(sourceUrl);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of images) {
+    if (!/wp-content\/uploads/i.test(raw)) continue;
+    const full = normalizeHousingsgnImageUrl(raw);
+    if (code && !(full.split('/').pop() || '').toLowerCase().startsWith(code)) continue;
+    const key = full.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(full);
+  }
+  out.sort((a, b) => {
+    const na = parseInt(a.match(/-(\d+)\.(?:jpe?g|png|webp)(?:\?|$)/i)?.[1] || '9999', 10);
+    const nb = parseInt(b.match(/-(\d+)\.(?:jpe?g|png|webp)(?:\?|$)/i)?.[1] || '9999', 10);
+    return na - nb;
+  });
+  return out;
+}
+
 function detectMarketplace(source: string, url: string): string {
   const s = (source + ' ' + url).toLowerCase();
   if (s.includes('nhatot')) return 'nhatot';
@@ -212,20 +258,45 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Source page returned empty/blocked content' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const scrapedImages = extractImages(html, marketplace);
+    let scrapedImages = extractImages(html, marketplace);
+    // For housingsgn, deterministically keep only THIS listing's gallery images
+    // (matched by property code) so we never mix in "Similar Properties" photos.
+    if (marketplace === 'housingsgn') {
+      const matched = filterHousingsgnImages(scrapedImages, row.source_url);
+      if (matched.length > 0) scrapedImages = matched;
+    }
     const extracted = await extractFromDetailPage(markdown, scrapedImages, row.source_url, marketplace);
     if (!extracted) {
       return new Response(JSON.stringify({ error: 'AI extraction failed' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const finalImages: string[] = (Array.isArray(extracted.images) && extracted.images.length > 0
+    // Prefer the deterministic, code-matched gallery for housingsgn; trust AI
+    // image selection only for other marketplaces.
+    let candidateImages: string[] = Array.isArray(extracted.images) && extracted.images.length > 0
       ? extracted.images
-      : scrapedImages
-    ).filter((u: any) => typeof u === 'string' && u.startsWith('http')).slice(0, 5);
+      : scrapedImages;
+    if (marketplace === 'housingsgn') {
+      const matched = filterHousingsgnImages(candidateImages, row.source_url);
+      candidateImages = matched.length > 0 ? matched : scrapedImages;
+    }
+    const finalImages: string[] = candidateImages
+      .filter((u: any) => typeof u === 'string' && u.startsWith('http'))
+      .slice(0, 5);
 
-    const priceNum = typeof extracted.price === 'number'
+    let priceNum = typeof extracted.price === 'number'
       ? extracted.price
       : parseInt(String(extracted.price || '').replace(/\D/g, '')) || null;
+    let priceDisplay: string | undefined = extracted.priceDisplay || undefined;
+    // housingsgn quotes USD — convert deterministically from the page text.
+    if (marketplace === 'housingsgn') {
+      const usd = extractUsdAmount(extracted.priceDisplay || '') ?? extractUsdAmount(markdown);
+      if (usd) {
+        priceNum = Math.round(usd * USD_TO_VND);
+        priceDisplay = `$${usd.toLocaleString('en-US')}/month`;
+      } else if (priceNum && priceNum > 0 && priceNum < 100_000) {
+        priceNum = priceNum * USD_TO_VND;
+      }
+    }
 
     // Preserve recovery anchor for future repair runs
     const newRaw = {
@@ -238,7 +309,7 @@ serve(async (req) => {
       title: extracted.title || undefined,
       location: extracted.location || undefined,
       price: priceNum ?? undefined,
-      price_display: extracted.priceDisplay || undefined,
+      price_display: priceDisplay,
       size: extracted.size || undefined,
       rooms: extracted.rooms || undefined,
       description: extracted.description || undefined,

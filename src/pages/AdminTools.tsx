@@ -76,7 +76,7 @@ const AdminTools = () => {
   // Crawl state
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlCity, setCrawlCity] = useState<'ho_chi_minh' | 'hanoi' | 'da_nang'>('ho_chi_minh');
-  const [crawlMarketplaces, setCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: false });
+  const [crawlMarketplaces, setCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: true });
   const [crawlForceRefresh, setCrawlForceRefresh] = useState(false);
   const [crawlRunVibe, setCrawlRunVibe] = useState(true);
   const [crawlResults, setCrawlResults] = useState<any>(null);
@@ -112,7 +112,7 @@ const AdminTools = () => {
   const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
   const [projectCrawlMinPriceM, setProjectCrawlMinPriceM] = useState<number>(10); // millions VND/month (minimum)
   const [projectCrawlMaxListings, setProjectCrawlMaxListings] = useState<number>(10);
-  const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: false });
+  const [projectCrawlMarketplaces, setProjectCrawlMarketplaces] = useState({ batdongsan: true, nhatot: true, housingsgn: true });
   const [projectCrawlRunVibe, setProjectCrawlRunVibe] = useState(true);
   const [isProjectCrawling, setIsProjectCrawling] = useState(false);
   const [projectCrawlProgress, setProjectCrawlProgress] = useState<{ current: number; total: number; project: string } | null>(null);

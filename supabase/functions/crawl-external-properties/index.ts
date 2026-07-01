@@ -216,6 +216,9 @@ function isValidPropertyImageUrl(url: string): boolean {
   if (/\b(logo|icon|avatar|sprite|placeholder|banner|ads?|advert|tracking|pixel|badge|button)\b/i.test(lower)) return false;
   if (/\b(facebook|twitter|zalo|share|social|og-image)\b/i.test(lower)) return false;
   if (/\/\d{1,2}x\d{1,2}\//i.test(lower)) return false;
+  // Reject WordPress thumbnails (e.g., -143x83.jpg, -525x328.jpg) — these are the
+  // small "Similar Properties" crops on housingsgn detail pages.
+  if (/-\d{2,4}x\d{2,4}\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower)) return false;
   if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower) && !lower.includes('batdongsan.com.vn') && !lower.includes('nhatot.com')) return false;
   return true;
 }
@@ -514,7 +517,9 @@ serve(async (req) => {
           console.log(`[crawl-external-properties] Scraping ${marketplace} for ${location}...`);
           
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+          // Detail-page crawling (Firecrawl fetch + AI extraction per listing) can
+          // take well over a minute; a 60s abort was cutting crawls off mid-run.
+          const timeoutId = setTimeout(() => controller.abort(), 110000);
           
           const scrapeResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-marketplace`, {
             method: 'POST',
