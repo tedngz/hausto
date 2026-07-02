@@ -162,7 +162,10 @@ const DISTRICT_SHAPES = cityDistrictsData as DistrictData;
 function formatBracket(c: Complex): string | null {
   const b = c.average_rent_brackets;
   if (!b) return null;
-  const pick = b['2BR'] ?? b['1BR'] ?? b['3BR'] ?? Object.values(b)[0];
+  // Bracket keys are stored lowercase ("1br"/"2br"/"3br"); match case-insensitively.
+  const byKey = (k: string) =>
+    Object.entries(b).find(([key]) => key.toLowerCase() === k)?.[1];
+  const pick = byKey('2br') ?? byKey('1br') ?? byKey('3br') ?? Object.values(b)[0];
   if (!pick || typeof pick.min !== 'number' || typeof pick.max !== 'number') return null;
   return `$${pick.min.toLocaleString()} — $${pick.max.toLocaleString()}`;
 }
@@ -438,7 +441,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         });
         const marker = L.marker([c.latitude!, c.longitude!], { icon, title: c.name });
         const bracket = formatBracket(c);
-        const premium = c.tags?.includes('luxury');
+        const premium = c.tags?.some((t) => t.toLowerCase() === 'luxury');
         const popupHtml = `
           <div class="hausto-popup-card" style="width:240px;">
             ${c.hero_image ? `<img src="${esc(c.hero_image)}" alt="${esc(c.name)}" loading="lazy" style="width:100%;height:104px;object-fit:cover;background:rgba(13,79,74,0.05);display:block;" />` : ''}
