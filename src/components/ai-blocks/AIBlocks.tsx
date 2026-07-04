@@ -1,7 +1,8 @@
+import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building2, MapPin, Route, Lightbulb, ArrowRight, Search, MessageCircle } from 'lucide-react';
+import { Building2, MapPin, Route, ArrowRight, Search, MessageCircle } from 'lucide-react';
 
 // Parse "[Search] ..." or "[Ask] ..." prefix from an AI follow-up suggestion.
 // Defaults to "ask" when no tag is present so the chip still works.
@@ -19,18 +20,17 @@ function parseFollowup(raw: string): { intent: 'search' | 'ask'; label: string; 
 export type AIBlock =
   | { type: 'text'; body: string }
   | {
+      // Compact teaser card — facts live in the text answer and on the
+      // /complexes/<slug> profile page this card links to.
       type: 'complex';
       name: string;
+      slug?: string;
+      heroImage?: string;
+      tagline?: string;
       city?: string;
       district?: string;
-      developer?: string;
-      management?: string;
-      yearCompleted?: number;
-      petPolicy?: string;
-      amenities?: string[];
-      rentRanges?: { bedrooms: string; minUsd: number; maxUsd: number }[];
-      insiderNotes?: string;
-      commute?: { to: string; minutes: number }[];
+      tags?: string[];
+      rentFrom?: number;
     }
   | {
       type: 'district';
@@ -73,104 +73,66 @@ export const AIBlocks = ({ blocks, onFollowup }: AIBlocksProps) => {
               </div>
             );
 
-          case 'complex':
+          case 'complex': {
+            const inner = (
+              <div className="flex items-stretch">
+                {block.heroImage && (
+                  <img
+                    src={block.heroImage}
+                    alt={block.name}
+                    className="w-28 sm:w-36 object-cover flex-shrink-0 group-hover:opacity-95 transition-opacity"
+                  />
+                )}
+                <div className="p-3 flex-1 min-w-0 text-left space-y-1">
+                  <div className="flex items-start gap-1.5">
+                    <Building2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                    <h4 className="text-sm font-serif text-foreground leading-tight">{block.name}</h4>
+                  </div>
+                  {block.tagline && (
+                    <p className="text-xs text-foreground/70 italic line-clamp-2">{block.tagline}</p>
+                  )}
+                  {(block.district || block.city) && (
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {[block.district, block.city].filter(Boolean).map(s => String(s).replace(/_/g, ' ')).join(' · ')}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {typeof block.rentFrom === 'number' && block.rentFrom > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        From ${block.rentFrom.toLocaleString()}/mo
+                      </Badge>
+                    )}
+                    {block.tags?.map((t, j) => (
+                      <Badge key={j} variant="outline" className="text-xs">
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                  {block.slug && (
+                    <span className="text-xs text-primary font-medium inline-flex items-center gap-1 pt-0.5 group-hover:underline">
+                      View full profile
+                      <ArrowRight className="h-3 w-3" />
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
             return (
-              <Card key={i} className="border-border">
-                <CardContent className="p-4 space-y-3 text-left">
-                  <div className="flex items-start gap-2">
-                    <Building2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-base font-serif text-foreground">{block.name}</h4>
-                      {(block.district || block.city) && (
-                        <p className="text-xs text-muted-foreground">
-                          {[block.district, block.city].filter(Boolean).join(' · ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {block.developer && (
-                      <div>
-                        <span className="text-muted-foreground">Developer: </span>
-                        <span className="text-foreground">{block.developer}</span>
-                      </div>
-                    )}
-                    {block.management && (
-                      <div>
-                        <span className="text-muted-foreground">Managed by: </span>
-                        <span className="text-foreground">{block.management}</span>
-                      </div>
-                    )}
-                    {block.yearCompleted && (
-                      <div>
-                        <span className="text-muted-foreground">Built: </span>
-                        <span className="text-foreground">{block.yearCompleted}</span>
-                      </div>
-                    )}
-                    {block.petPolicy && (
-                      <div>
-                        <span className="text-muted-foreground">Pets: </span>
-                        <span className="text-foreground">{block.petPolicy}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {block.amenities && block.amenities.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {block.amenities.map((a, j) => (
-                        <Badge key={j} variant="outline" className="text-xs">
-                          {a}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-
-                  {block.rentRanges && block.rentRanges.length > 0 && (
-                    <div className="border-t border-border pt-2">
-                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">
-                        Typical rents (USD/mo)
-                      </p>
-                      <div className="space-y-1">
-                        {block.rentRanges.map((r, j) => (
-                          <div key={j} className="flex justify-between text-xs">
-                            <span className="text-foreground">{r.bedrooms}</span>
-                            <span className="text-muted-foreground">
-                              ${r.minUsd.toLocaleString()} – ${r.maxUsd.toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {block.commute && block.commute.length > 0 && (
-                    <div className="border-t border-border pt-2">
-                      <p className="text-xs font-semibold text-muted-foreground mb-1.5">
-                        Commute
-                      </p>
-                      <div className="space-y-1">
-                        {block.commute.map((c, j) => (
-                          <div key={j} className="flex items-center gap-2 text-xs text-foreground">
-                            <Route className="h-3 w-3 text-muted-foreground" />
-                            <span>
-                              To {c.to}: ~{c.minutes} min
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {block.insiderNotes && (
-                    <div className="border-t border-border pt-2 flex gap-2">
-                      <Lightbulb className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-foreground italic">{block.insiderNotes}</p>
-                    </div>
-                  )}
-                </CardContent>
+              <Card key={i} className="border-border overflow-hidden max-w-md">
+                {block.slug ? (
+                  <Link
+                    to={`/complexes/${block.slug}`}
+                    className="group block"
+                    aria-label={`View ${block.name} profile`}
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  inner
+                )}
               </Card>
             );
+          }
 
           case 'district':
             return (

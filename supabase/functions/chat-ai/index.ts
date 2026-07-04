@@ -2066,7 +2066,7 @@ ${scoredPreviousProperties.map((p, i) => `
     try {
       const { data: cxList } = await supabase
         .from('complexes')
-        .select('id, slug, name, city, district, developer, management_company, year_completed, pet_policy, amenities, average_rent_brackets, insider_pros, insider_cons, commute_times, aliases, tags')
+        .select('id, slug, name, city, district, developer, management_company, year_completed, pet_policy, amenities, average_rent_brackets, insider_pros, insider_cons, commute_times, aliases, tags, hero_image, tagline')
         .eq('is_published', true)
         .limit(80);
       if (cxList && cxList.length > 0) {
@@ -2103,6 +2103,15 @@ ${scoredPreviousProperties.map((p, i) => `
     const shoppingOverride = hasShoppingKeyword(message);
     // Pure-lifestyle ONLY when detector says so AND there's no shopping keyword
     const isPureLifestyle = intent.isLifestyle && !shoppingOverride;
+
+    // COMPLEX INFO TURN: the user named a known complex and shows no shopping
+    // signal ("what are the amenities like in X", "is X pet friendly"). These
+    // must answer with the complex profile, NOT listing cards.
+    const hasShoppingNumeric =
+      /\b\d+\s*(br|bedroom|phong ngu)\b/i.test(message) ||
+      /\b\d+\s*(m|million|tr|trieu)\b/i.test(message) ||
+      /\$\s*\d/.test(message);
+    const isComplexInfoTurn = knownComplexes.length > 0 && !shoppingOverride && !hasShoppingNumeric;
     
     if (shoppingOverride && intent.isLifestyle) {
       intent.isMixed = true;
@@ -2118,9 +2127,9 @@ ${scoredPreviousProperties.map((p, i) => `
       `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
     );
 
-    // On pure lifestyle turns, drop the property block from the prompt to save
-    // tokens and prevent the model from forcing listings into the answer.
-    const promptProperties = isPureLifestyle ? [] : topProperties;
+    // On pure lifestyle and complex-info turns, drop the property block from the
+    // prompt to save tokens and prevent the model from forcing listings into the answer.
+    const promptProperties = (isPureLifestyle || isComplexInfoTurn) ? [] : topProperties;
 
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
@@ -2138,6 +2147,7 @@ ${previousPropertiesSection}
 5. Does my final ordering respect the priority list below and the user's stated preferences?
 6. Is the user actually shopping, or asking a LIFESTYLE / INFO question (vibe, cost of living, best area for X, safety, schools, commute, "tell me about")? If the latter, answer from LIFESTYLE KNOWLEDGE in prose blocks — do NOT return "results".
 
+${isComplexInfoTurn ? `🏢 COMPLEX INFO TURN — The user is asking ABOUT a specific complex (${knownComplexes.map((c: any) => c.name).join(', ')}), NOT for listings. Respond using ONLY the "blocks" shape: a "text" block that DIRECTLY and COMPLETELY answers their exact question using KNOWN COMPLEXES above (if they ask about amenities, enumerate the amenities; if about pets, quote the pet policy; if a field is unknown, say so honestly — never invent), then a "followups" block mixing "[Ask]" and "[Search]" (e.g. "[Search] Show me apartments in ${knownComplexes[0]?.name || 'this complex'}"). A compact profile card for the complex is attached automatically by the system — do NOT emit a "complex" block yourself and do NOT pad the text with data the user didn't ask about. DO NOT return a "results" array — the user has not asked for listings yet.` : ''}
 ${isPureLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. You MUST include a separate block of type "followups" containing 2–4 suggestions mixing "[Ask]" and "[Search]". DO NOT put these suggestions inside the "text" block body.` : ''}
 ${intent.isMixed ? `🔀 MIXED TURN — The user wants BOTH lifestyle context AND listings. You MUST return a "results" array with matching property cards AND a "blocks" array. Inside "blocks", include a "text" block (2–4 sentences) AND a separate "followups" block. Both results and blocks are required.` : ''}
 ${!isPureLifestyle && !intent.isMixed && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
@@ -2155,7 +2165,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : (isPureLifestyle ? '(Skipped — lifestyle/info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
+`).join('\n') : ((isPureLifestyle || isComplexInfoTurn) ? '(Skipped — info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
 
 
 🧠 CRITICAL INSTRUCTIONS:
@@ -2469,9 +2479,9 @@ Maximum ${maxResults} properties in results.`;
     //    the original raw text body stored in the first text block before
     //    sanitization.
     if (sanitizedBlocks && sanitizedBlocks.length > 0) {
-      const hasContentBlock = sanitizedBlocks.some(
-        (b: any) => b.type === 'text' || b.type === 'complex' || b.type === 'district' || b.type === 'distance'
-      );
+      // A complex/district/distance card alone is not a conversational answer —
+      // always try to recover the model's prose when the text block is missing.
+      const hasContentBlock = sanitizedBlocks.some((b: any) => b.type === 'text');
       if (!hasContentBlock && extractedJson?.blocks) {
         // Find the first text block from the ORIGINAL (pre-sanitized) blocks
         const origTextBlock = extractedJson.blocks.find(
@@ -2500,13 +2510,74 @@ Maximum ${maxResults} properties in results.`;
       });
     }
 
+    // ── COMPLEX PROFILE ENRICHMENT ──
+    // Complex blocks shown to the user must come from the DB, not the model:
+    // replace any model-emitted complex block that matches a known complex with
+    // the authoritative row (adds slug/heroImage/tagline so the UI can render a
+    // full profile card), and on complex-info turns inject one if the model
+    // skipped it.
+    // Compact teaser card: just enough to intrigue a click through to the
+    // profile page. Facts (amenities, pet policy, commute, full rents) belong
+    // in the model's text answer and on /complexes/<slug>.
+    const dbComplexToBlock = (c: any) => {
+      const rb = c.average_rent_brackets || {};
+      const mins = ['1br', '2br', '3br'].map(k => Number(rb[k]?.min) || 0).filter(v => v > 0);
+      return {
+        type: 'complex',
+        slug: c.slug,
+        name: c.name,
+        heroImage: c.hero_image || undefined,
+        tagline: c.tagline || undefined,
+        city: c.city,
+        district: c.district,
+        tags: Array.isArray(c.tags) && c.tags.length ? c.tags.slice(0, 2) : undefined,
+        rentFrom: mins.length ? Math.min(...mins) : undefined,
+      };
+    };
+    if (knownComplexes.length > 0) {
+      const matchDbComplex = (blockName: string) => {
+        const n = (blockName || '').toLowerCase();
+        return knownComplexes.find((c: any) =>
+          n && ((c.name || '').toLowerCase().includes(n) || n.includes((c.name || '').toLowerCase()))
+        );
+      };
+      let replacedAny = false;
+      sanitizedBlocks = sanitizedBlocks.map((b: any) => {
+        if (b.type !== 'complex') return b;
+        const db = matchDbComplex(b.name);
+        if (db) { replacedAny = true; return dbComplexToBlock(db); }
+        return b;
+      });
+      if (isComplexInfoTurn && !replacedAny) {
+        // Model answered in prose only — inject the profile card after the last
+        // content block, before followups.
+        const followupIdx = sanitizedBlocks.findIndex((b: any) => b.type === 'followups');
+        const card = dbComplexToBlock(knownComplexes[0]);
+        if (followupIdx === -1) sanitizedBlocks.push(card);
+        else sanitizedBlocks.splice(followupIdx, 0, card);
+        console.log('[Enrichment] Injected complex profile card for', knownComplexes[0].name);
+      }
+      // If the model gave no prose at all (no text block, no summary), open with
+      // a short grounded intro so the card never appears without an answer.
+      const hasProse = sanitizedBlocks.some((b: any) => b.type === 'text') ||
+        (extractedJson && typeof extractedJson.summary === 'string' && extractedJson.summary.trim().length > 0);
+      if (isComplexInfoTurn && !hasProse) {
+        const c0 = knownComplexes[0];
+        const amenityTeaser = (c0.amenities || []).slice(0, 3).join(', ');
+        sanitizedBlocks.unshift({
+          type: 'text',
+          body: `Here's the vetted profile for ${c0.name} in ${c0.district}${amenityTeaser ? ` — highlights include ${amenityTeaser.toLowerCase()}` : ''}. Full details below.`,
+        });
+      }
+    }
+
     // ========== POST-PROCESSING VALIDATION ==========
     let searchData: any = null;
     let usedFallback = false;
     let validatedResults: any[] = [];
     
     const hasResultsArray = extractedJson && Array.isArray(extractedJson.results) && extractedJson.results.length > 0;
-    const aiFailedShopping = (shoppingOverride || !isPureLifestyle) && topProperties.length > 0 && !hasResultsArray;
+    const aiFailedShopping = (shoppingOverride || !isPureLifestyle) && !isComplexInfoTurn && topProperties.length > 0 && !hasResultsArray;
 
     if (hasResultsArray || aiFailedShopping) {
       if (hasResultsArray) {
@@ -2518,7 +2589,7 @@ Maximum ${maxResults} properties in results.`;
         if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
       }
       
-      if ((validatedResults.length === 0 || aiFailedShopping) && topProperties.length > 0 && !isPureLifestyle) {
+      if ((validatedResults.length === 0 || aiFailedShopping) && topProperties.length > 0 && !isPureLifestyle && !isComplexInfoTurn) {
         console.log('[Validation] AI failed to provide valid shopping results, using fallback from pre-scored properties');
         usedFallback = true;
       } else if (hasResultsArray) {
@@ -2555,7 +2626,7 @@ Maximum ${maxResults} properties in results.`;
 
     
     // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
-    if (!searchData && topProperties.length > 0 && !isPureLifestyle) {
+    if (!searchData && topProperties.length > 0 && !isPureLifestyle && !isComplexInfoTurn) {
       console.log('[Fallback] Generating results from pre-scored properties');
       usedFallback = true;
       
@@ -2590,7 +2661,9 @@ Maximum ${maxResults} properties in results.`;
       if (imageAnalysisResult) {
         summary += `I detected a ${imageAnalysisResult.styles.join(', ')} style with ${imageAnalysisResult.colors.join(', ')} tones from your image. `;
       }
-      summary += `Here are ${fallbackResults.length} matching apartments`;
+      summary += fallbackResults.length === 1
+        ? 'Here is 1 matching apartment'
+        : `Here are ${fallbackResults.length} matching apartments`;
       if (accContext.city) {
         summary += ` in ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`;
       }
@@ -2615,6 +2688,27 @@ Maximum ${maxResults} properties in results.`;
       console.log(`[Fallback] Generated ${fallbackResults.length} property results`);
     }
     
+    // COMPLEX INFO TURN with a plain-text (non-JSON) model reply: wrap the prose
+    // into blocks so the injected profile card still reaches the UI.
+    if (!searchData && isComplexInfoTurn && sanitizedBlocks && sanitizedBlocks.length > 0) {
+      let body = responseContent.replace(/\*\*/g, '');
+      const extraFups: string[] = [];
+      const fupRe2 = /^\s*-?\s*(\[(?:Ask|Search)\][^\r\n]+)/gim;
+      let fm;
+      while ((fm = fupRe2.exec(body)) !== null) extraFups.push(fm[1].trim());
+      body = body.replace(/^\s*-?\s*\[(?:Ask|Search)\][^\n]*\n?/gim, '').trim();
+      // The model's real answer replaces any synthesized intro.
+      const blocks = sanitizedBlocks.filter((b: any) => b.type !== 'text');
+      if (body) blocks.unshift({ type: 'text', body });
+      if (extraFups.length > 0) {
+        const fu = blocks.find((b: any) => b.type === 'followups');
+        if (fu) fu.suggestions = Array.from(new Set([...(fu.suggestions || []), ...extraFups])).slice(0, 4);
+      }
+      searchData = { results: [], summary: '', totalMatches: 0, blocks };
+      responseContent = JSON.stringify(searchData);
+      console.log('[ComplexInfo] Wrapped plain-text reply into blocks with profile card');
+    }
+
     // If still no search data and no properties, keep the AI's conversational response
     // BUT first check if plain-text response contains embedded followups we can extract
     if (!searchData) {
