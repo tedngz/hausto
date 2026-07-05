@@ -20,7 +20,6 @@ import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFunction } from '@/integrations/supabase/functions-client';
-import { ExternalPropertyBadge } from '@/components/ExternalPropertyBadge';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { useSubscription } from '@/hooks/useSubscription';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
@@ -596,24 +595,19 @@ export const HomeAI = ({
   };
   return <div className="w-full max-w-4xl mx-auto mt-4 px-1">
       <div className="p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10">
-      {/* Header */}
-      <div className="text-center mb-2 relative">
-        
-        {/* History and New Chat buttons - positioned to avoid text overlap */}
-        {user && <div className="absolute top-0 right-2 flex gap-2 z-10">
-            <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" aria-label="Chat history" className="h-8 w-8 p-0 hover:bg-secondary/50">
-              <History className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            <Button onClick={createNewChat} variant="ghost" size="sm" aria-label="New chat" className="h-8 w-8 p-0 hover:bg-secondary/50">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>}
-        
-        
-      </div>
+      {/* Header — history / new-chat controls sit in normal flow so they reserve
+          their own row and never overlap the composer in the compact state */}
+      {user && <div className="flex justify-end gap-2 mb-2">
+          <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" aria-label="Chat history" className="h-8 w-8 p-0 hover:bg-secondary/50">
+            <History className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          <Button onClick={createNewChat} variant="ghost" size="sm" aria-label="New chat" className="h-8 w-8 p-0 hover:bg-secondary/50">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>}
 
       {/* Chat History Dropdown */}
-      {showHistory && user && <Card className="mb-3 mt-12 border-border">
+      {showHistory && user && <Card className="mb-3 border-border">
           <CardContent className="p-4">
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {conversations.map(conversation => <div key={conversation.id} onClick={() => switchToConversation(conversation.id)} className={`p-3 rounded-lg cursor-pointer transition-colors ${conversation.id === currentConversationId ? 'bg-primary/10 border border-primary/20' : 'hover:bg-secondary/50'}`}>
@@ -637,8 +631,8 @@ export const HomeAI = ({
           </CardContent>
         </Card>}
 
-      {/* Chat Messages for Signed In Users */}
-      {user && <div className="space-y-4 mb-4 mt-12 max-h-[calc(100dvh-16rem)] min-h-96 overflow-y-auto">
+      {/* Chat Messages for Signed In Users — compact until there's content, then grows/scrolls */}
+      {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage) && <div className="space-y-4 mb-4 max-h-[calc(100dvh-16rem)] overflow-y-auto">
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-slide-up">
@@ -721,15 +715,13 @@ export const HomeAI = ({
                                  key={property.id}
                                  apartment={property}
                                  aspectClass="aspect-[4/5]"
+                                 compact
                                  className="max-w-[300px] w-full mx-auto sm:mx-0"
                                  vibeScore={typeof property.matchScore === 'number' ? { overall: property.matchScore } : undefined}
                                  vibeDetailsText={property.matchReason}
                                  quoteFallback={property.matchReason}
                                  liked={likedProperties.has(property.id)}
                                  onLike={() => handleLikeProperty(property.id, property.realtor_id)}
-                                 externalBadge={property.isExternal && property.source
-                                   ? <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />
-                                   : undefined}
                                />
                              ))}
                       </div>}
@@ -777,7 +769,7 @@ export const HomeAI = ({
         </div>}
 
       {/* Temporary Chat Messages for Non-Logged In Users */}
-      {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-[calc(100dvh-16rem)] min-h-96 overflow-y-auto">
+      {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-[calc(100dvh-16rem)] overflow-y-auto">
           {/* User Message */}
           <div className="flex justify-end animate-slide-up">
             <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
@@ -879,7 +871,6 @@ export const HomeAI = ({
                             <div className="flex flex-wrap items-center gap-1.5 mb-2">
                               <Badge className="bg-primary text-primary-foreground font-semibold text-xs">{formatPrice(property.price)}/mo</Badge>
                               {property.size && <Badge variant="outline" className="text-xs">{property.size}</Badge>}
-                              {property.isExternal && property.source && <ExternalPropertyBadge source={property.source} sourceUrl={property.sourceUrl || undefined} cached={property.cached} crawledAt={property.crawledAt} />}
                             </div>
 
                             <p className="text-xs text-foreground text-left">

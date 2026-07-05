@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, ReactNode } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -67,12 +67,12 @@ interface EditorialPropertyCardProps {
   liked?: boolean;
   onLike?: () => void;
   onContact?: () => void;
-  /** Extra element rendered next to the contact button (e.g. external source badge) */
-  externalBadge?: ReactNode;
   initialImageIndex?: number;
   onImageIndexChange?: (index: number) => void;
   /** Override the card's aspect ratio (default: editorial 380/560 portrait) */
   aspectClass?: string;
+  /** Smaller typography so the photo dominates (used in the AI chat's compact cards) */
+  compact?: boolean;
   className?: string;
 }
 
@@ -110,10 +110,10 @@ export const EditorialPropertyCard = ({
   liked,
   onLike,
   onContact,
-  externalBadge,
   initialImageIndex = 0,
   onImageIndexChange,
   aspectClass = 'aspect-[380/560]',
+  compact = false,
   className = '',
 }: EditorialPropertyCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
@@ -357,15 +357,15 @@ export const EditorialPropertyCard = ({
       )}
 
       {/* Bottom content stack — always visible, no hover needed */}
-      <div className="absolute left-5 right-5 bottom-5 flex flex-col gap-2.5 text-white text-left">
+      <div className={`absolute text-white text-left flex flex-col ${compact ? 'left-4 right-4 bottom-4 gap-1.5' : 'left-5 right-5 bottom-5 gap-2.5'}`}>
         {/* Title + location live on the cover (first image) only */}
         {isFirstImage && (
-          <div className="flex flex-col gap-1.5">
-            <h3 className="font-serif font-medium text-lg sm:text-xl leading-snug line-clamp-2 [text-wrap:pretty]">
+          <div className={`flex flex-col ${compact ? 'gap-1' : 'gap-1.5'}`}>
+            <h3 className={`font-serif font-medium leading-snug [text-wrap:pretty] ${compact ? 'text-sm line-clamp-1' : 'text-lg sm:text-xl line-clamp-2'}`}>
               {displayTitle}
             </h3>
             <button
-              className="flex items-center gap-1.5 text-[13px] tracking-[0.04em] text-white/85 hover:text-white hover:underline underline-offset-2 transition-colors w-fit max-w-full"
+              className={`flex items-center gap-1.5 tracking-[0.04em] text-white/85 hover:text-white hover:underline underline-offset-2 transition-colors w-fit max-w-full ${compact ? 'text-[11px]' : 'text-[13px]'}`}
               onClick={handleLocationClick}
               disabled={isGeocoding}
               aria-label="Show on map"
@@ -379,22 +379,18 @@ export const EditorialPropertyCard = ({
 
         {/* Current photo's highlight — plain italic caption, no quotes */}
         {quote && (
-          <p className="font-serif italic text-[15px] leading-snug text-white/95 line-clamp-2">
+          <p className={`font-serif italic leading-snug text-white/95 ${compact ? 'text-[13px] line-clamp-1' : 'text-[15px] line-clamp-2'}`}>
             {quote}
           </p>
         )}
 
-        {externalBadge && (
-          <div onClick={e => e.stopPropagation()}>{externalBadge}</div>
-        )}
-
         {/* Size · price · contact — one level */}
-        <div className="flex items-center justify-between gap-2 border-t border-white/30 pt-2.5">
-          <span className="text-[13px] text-white/80 line-clamp-1">{spec}</span>
+        <div className={`flex items-center justify-between gap-2 border-t border-white/30 ${compact ? 'pt-1.5' : 'pt-2.5'}`}>
+          <span className={`text-white/80 line-clamp-1 ${compact ? 'text-[11px]' : 'text-[13px]'}`}>{spec}</span>
           <div className="flex items-center gap-3 flex-shrink-0">
-            <span className="text-lg font-semibold whitespace-nowrap">
+            <span className={`font-semibold whitespace-nowrap ${compact ? 'text-sm' : 'text-lg'}`}>
               {formatPrice(apartment.price)}
-              <span className="text-xs font-normal text-white/80"> /mo</span>
+              <span className={`font-normal text-white/80 ${compact ? 'text-[10px]' : 'text-xs'}`}> /mo</span>
             </span>
             {onContact && (
               <Button
