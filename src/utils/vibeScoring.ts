@@ -42,6 +42,46 @@ const getVibeMetrics = (apartment: Apartment) => {
   return vibeAnalysis && typeof vibeAnalysis === 'object' ? vibeAnalysis : null;
 };
 
+export interface VibeAttribute {
+  label: string;
+  matched: boolean;
+}
+
+export interface VibeAttributeMatch {
+  style: VibeAttribute[];
+  color: VibeAttribute[];
+  lifestyle: VibeAttribute[];
+  hasAny: boolean;
+}
+
+// Categorise the property's AI-detected styles/colors/lifestyle and flag which
+// ones align with the renter's stated preferences. Powers the vibe-match
+// popover so renters see WHAT matches, not just a percentage.
+export const getVibeAttributeMatch = (apartment: Apartment, preferences: UserPreferences): VibeAttributeMatch => {
+  const vibeAnalysis = getVibeMetrics(apartment) || {};
+  const prefs = normalizePreferencePayload(preferences);
+
+  const build = (propertyVals: string[], userVals: string[]): VibeAttribute[] => {
+    const userLower = new Set(userVals.map(v => v.toLowerCase()));
+    const seen = new Set<string>();
+    const out: VibeAttribute[] = [];
+    for (const raw of propertyVals) {
+      const key = raw.toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ label: raw.trim(), matched: userLower.has(key) });
+    }
+    // Sort matched first so the alignment is obvious at a glance.
+    return out.sort((a, b) => Number(b.matched) - Number(a.matched)).slice(0, 6);
+  };
+
+  const style = build(toStringArray(vibeAnalysis.styles), prefs.styles);
+  const color = build(toStringArray(vibeAnalysis.colors), prefs.colors);
+  const lifestyle = build(toStringArray(vibeAnalysis.activities), prefs.activities);
+
+  return { style, color, lifestyle, hasAny: style.length + color.length + lifestyle.length > 0 };
+};
+
 export const calculateVibeScore = (apartment: Apartment, preferences: UserPreferences): VibeScore => {
   const normalizedPreferences = normalizePreferencePayload(preferences);
 

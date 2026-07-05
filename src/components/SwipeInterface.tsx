@@ -5,15 +5,14 @@ import { Heart, X, RotateCcw, UserCheck } from 'lucide-react';
 import { UserPreferences, Apartment } from '@/types';
 import { UserProfile } from '@/components/LoginModal';
 import { useProperties, Property } from '@/hooks/useProperties';
-import { calculateVibeScore } from '@/utils/vibeScoring';
+import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
 import { sortPropertiesForDiscovery } from '@/utils/propertyDiscovery';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
-import { PropertyImageModal } from '@/components/PropertyImageModal';
-import { PropertyCard } from '@/components/PropertyCard';
+import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { Card } from '@/components/ui/card';
 import { VibeScore } from '@/components/VibeScore';
 import { toast } from 'sonner';
@@ -60,7 +59,6 @@ export const SwipeInterface = ({
     updatePropertyView,
     loading: usageLoading
   } = useUsageTracking();
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   // Fetch external (crawled) properties
   const { data: externalProperties = [] } = useQuery({
@@ -710,15 +708,17 @@ export const SwipeInterface = ({
       breakdown: {}
     };
     const currentImageIndex = imageIndices[currentApartment.id] || 0;
-
-    // Create a modified apartment with current image index
-    const modifiedApartment = {
-      ...currentApartment,
-      _currentImageIndex: currentImageIndex
-    };
     return <div className="pt-4 px-4 min-h-screen">
         <div className="max-w-md mx-auto pb-8">
-          <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md" />
+          <EditorialPropertyCard
+            key={currentApartment.id}
+            apartment={currentApartment}
+            vibeScore={userPreferences && vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
+            vibeMatch={userPreferences ? getVibeAttributeMatch(currentApartment, userPreferences) : undefined}
+            initialImageIndex={currentImageIndex}
+            onImageIndexChange={i => setImageIndices(prev => ({ ...prev, [currentApartment.id]: i }))}
+            className="mb-6"
+          />
 
           {/* Quiz recommendation card */}
           <Card className="mb-6 p-6 text-center bg-gradient-to-r from-orange-50 to-yellow-50 border-orange-200">
@@ -741,9 +741,6 @@ export const SwipeInterface = ({
               <Heart className="w-8 h-8" />
             </Button>
           </div>
-
-          {/* Full-size image modal */}
-          <PropertyImageModal apartment={currentApartment} isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} initialImageIndex={currentImageIndex} />
         </div>
       </div>;
   }
@@ -755,15 +752,17 @@ export const SwipeInterface = ({
   };
   const currentImageIndex = imageIndices[currentApartment.id] || 0;
   const isRealProperty = realProperties?.some(p => p.id === currentApartment.id) || false;
-
-  // Create a modified apartment with current image index for consistent PropertyCard usage
-  const modifiedApartment = {
-    ...currentApartment,
-    _currentImageIndex: currentImageIndex
-  };
   return <div className="pt-4 px-4 min-h-screen">
       <div className="max-w-md mx-auto pb-8">
-          <PropertyCard apartment={modifiedApartment} userPreferences={userPreferences} showContactButton={false} showFullTitle={true} showFullDescription={false} showAllHighlights={false} className="mb-6 max-w-md" />
+          <EditorialPropertyCard
+            key={currentApartment.id}
+            apartment={currentApartment}
+            vibeScore={userPreferences && vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
+            vibeMatch={userPreferences ? getVibeAttributeMatch(currentApartment, userPreferences) : undefined}
+            initialImageIndex={currentImageIndex}
+            onImageIndexChange={i => setImageIndices(prev => ({ ...prev, [currentApartment.id]: i }))}
+            className="mb-6"
+          />
 
         {/* Action buttons */}
         <div className="flex justify-center space-x-4 mb-8">
@@ -774,9 +773,6 @@ export const SwipeInterface = ({
             <Heart className="w-8 h-8" />
           </Button>
         </div>
-
-        {/* Full-size image modal */}
-        <PropertyImageModal apartment={currentApartment} isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} initialImageIndex={currentImageIndex} />
       </div>
     </div>;
 };

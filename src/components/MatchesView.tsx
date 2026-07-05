@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/types';
-import { PropertyCard } from '@/components/PropertyCard';
+import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
+import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { ContactModal } from '@/components/ContactModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
-import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
 import { HaustoChat } from '@/components/HaustoChat';
@@ -25,7 +25,6 @@ export const MatchesView = ({
 }: MatchesViewProps) => {
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null);
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
-  const [detailModalApartment, setDetailModalApartment] = useState<Apartment | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const {
@@ -147,11 +146,18 @@ export const MatchesView = ({
         </div>
       </div>
 
-      <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {allApartments.map(apartment => {
-        return <div key={apartment.id} className="relative mb-6 break-inside-avoid">
-                <PropertyCard apartment={apartment} userPreferences={userPreferences} onContact={() => handleContactRealtor(apartment)} showContactButton={true} showFullTitle={true} showFullDescription={false} showAllHighlights={true} className="sm:h-auto" hasDeleteButton={true} />
-              {apartment.matchId && <div className="absolute top-3 right-3">
+        const vibeScore = userPreferences ? calculateVibeScore(apartment, userPreferences) : null;
+        const vibeMatch = userPreferences ? getVibeAttributeMatch(apartment, userPreferences) : undefined;
+        return <div key={apartment.id} className="relative">
+                <EditorialPropertyCard
+                  apartment={apartment}
+                  vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
+                  vibeMatch={vibeMatch}
+                  onContact={() => handleContactRealtor(apartment)}
+                />
+              {apartment.matchId && <div className="absolute top-4 right-4">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button size="sm" variant="outline" className="text-red-600 hover:text-red-800 hover:bg-red-50 w-8 h-8 p-0 bg-white/90 backdrop-blur-sm shadow-md" disabled={isRemovingMatch}>
@@ -181,8 +187,6 @@ export const MatchesView = ({
       {selectedApartment && <ContactModal apartment={selectedApartment} onClose={() => setSelectedApartment(null)} userProfile={userProfile} />}
 
       {selectedRealtorId && <RealtorProfileModal realtorId={selectedRealtorId} isOpen={!!selectedRealtorId} onClose={() => setSelectedRealtorId(null)} />}
-
-      {detailModalApartment && <PropertyDetailModal apartment={detailModalApartment} isOpen={!!detailModalApartment} onClose={() => setDetailModalApartment(null)} userPreferences={userPreferences} />}
 
       <HaustoChat isOpen={isChatOpen} onClose={() => {
       setIsChatOpen(false);

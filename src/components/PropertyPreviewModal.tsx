@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import { Property } from '@/hooks/useProperties';
-import { PropertyCard } from '@/components/PropertyCard';
+import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { Apartment } from '@/types';
 
 interface PropertyPreviewModalProps {
@@ -53,14 +53,9 @@ export const PropertyPreviewModal = ({ isOpen, onClose, property }: PropertyPrev
         </div>
 
         <div className="p-4">
-          <PropertyCard
-            apartment={previewApartment}
-            showFullTitle={true}
-            showFullDescription={true}
-            showAllHighlights={true}
-            showContactButton={false}
-            className="max-w-md mx-auto"
-          />
+          <div className="max-w-sm mx-auto">
+            <EditorialPropertyCard apartment={previewApartment} />
+          </div>
         </div>
       </Card>
     </div>

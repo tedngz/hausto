@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { PropertyCard } from '@/components/PropertyCard';
+import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
 import { BulkUploadModal } from '@/components/BulkUploadModal';
@@ -1129,14 +1129,9 @@ export const RealtorDashboard = ({
               </Button>
             </div>
             <div className="p-4">
-              <PropertyCard
-                apartment={previewCrawledApartment}
-                showFullTitle={true}
-                showFullDescription={true}
-                showAllHighlights={true}
-                showContactButton={false}
-                className="max-w-md mx-auto"
-              />
+              <div className="max-w-sm mx-auto">
+                <EditorialPropertyCard apartment={previewCrawledApartment} />
+              </div>
             </div>
           </Card>
         </div>

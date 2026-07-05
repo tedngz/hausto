@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConciergeCaptureModal } from '@/components/ConciergeCaptureModal';
-import { PropertyCard } from '@/components/PropertyCard';
+import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
 import { useComplexes } from '@/hooks/useComplexes';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
@@ -278,15 +278,9 @@ export default function ComplexDetail() {
                     <Skeleton className="h-64 w-full" />
                   </div>
                 ) : listings && listings.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {listings.map((a) => (
-                      <PropertyCard
-                        key={a.id}
-                        apartment={a}
-                        showContactButton={false}
-                        hideVibeScore
-                        showRealtorInfo={false}
-                      />
+                      <EditorialPropertyCard key={a.id} apartment={a} />
                     ))}
                   </div>
                 ) : (
