@@ -71,6 +71,8 @@ interface EditorialPropertyCardProps {
   externalBadge?: ReactNode;
   initialImageIndex?: number;
   onImageIndexChange?: (index: number) => void;
+  /** Override the card's aspect ratio (default: editorial 380/560 portrait) */
+  aspectClass?: string;
   className?: string;
 }
 
@@ -111,6 +113,7 @@ export const EditorialPropertyCard = ({
   externalBadge,
   initialImageIndex = 0,
   onImageIndexChange,
+  aspectClass = 'aspect-[380/560]',
   className = '',
 }: EditorialPropertyCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
@@ -195,7 +198,7 @@ export const EditorialPropertyCard = ({
 
   return (
     <div
-      className={`group relative w-full aspect-[380/560] overflow-hidden rounded-[20px] bg-foreground shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
+      className={`group relative w-full ${aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={onCardClick}

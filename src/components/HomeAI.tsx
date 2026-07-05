@@ -638,7 +638,7 @@ export const HomeAI = ({
         </Card>}
 
       {/* Chat Messages for Signed In Users */}
-      {user && <div className="space-y-4 mb-4 mt-12 max-h-96 overflow-y-auto">
+      {user && <div className="space-y-4 mb-4 mt-12 max-h-[calc(100dvh-16rem)] min-h-96 overflow-y-auto">
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-slide-up">
@@ -715,11 +715,13 @@ export const HomeAI = ({
                       {/* Text/info blocks shown ABOVE results */}
                       <AIBlocks blocks={topBlocks} onFollowup={handleFollowup} />
                       
-                      {searchResults.results.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[680px]">
+                      {searchResults.results.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[640px]">
                              {searchResults.results.map(property => (
                                <EditorialPropertyCard
                                  key={property.id}
                                  apartment={property}
+                                 aspectClass="aspect-[4/5]"
+                                 className="max-w-[300px] w-full mx-auto sm:mx-0"
                                  vibeScore={typeof property.matchScore === 'number' ? { overall: property.matchScore } : undefined}
                                  vibeDetailsText={property.matchReason}
                                  quoteFallback={property.matchReason}
@@ -775,7 +777,7 @@ export const HomeAI = ({
         </div>}
 
       {/* Temporary Chat Messages for Non-Logged In Users */}
-      {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+      {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-[calc(100dvh-16rem)] min-h-96 overflow-y-auto">
           {/* User Message */}
           <div className="flex justify-end animate-slide-up">
             <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
@@ -952,7 +954,7 @@ export const HomeAI = ({
       {/* Chat Input - Show for everyone until they search */}
       {(user || !hasSearched) && <div className="space-y-4">
           <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] pr-20 resize-none bg-transparent" />
+            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[56px] sm:min-h-[88px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" aria-label="Upload image" className="h-8 w-8 p-0">
