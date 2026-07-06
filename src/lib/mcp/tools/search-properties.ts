@@ -5,6 +5,9 @@ import { z } from "zod";
 const BASE_URL = "https://hausto.lovable.app";
 const VND_TO_USD = 24500;
 
+declare const process: { env: Record<string, string | undefined> };
+
+
 function sb() {
   return createClient(
     process.env.SUPABASE_URL!,
