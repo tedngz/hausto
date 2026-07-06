@@ -43,8 +43,10 @@ export const useProperties = () => {
 
   // Fetch all properties with realtor profile data
   const { data: properties = [], isLoading } = useQuery({
-    queryKey: ['properties'],
+    queryKey: ['properties', user?.id],
+    enabled: !!user?.id,
     queryFn: async () => {
+
       const cacheKey = 'properties:all';
 
       // Try to get from cache first
