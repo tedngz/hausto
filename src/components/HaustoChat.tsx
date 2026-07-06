@@ -52,7 +52,7 @@ export const HaustoChat = ({
   const [showPropertySelectionForContact, setShowPropertySelectionForContact] = useState(false);
   const [propertiesToSelect, setPropertiesToSelect] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const aiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const aiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track per-conversation proactive timers and last scheduled message IDs
   const proactiveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const lastScheduledMsgRef = useRef<Record<string, string>>({});
