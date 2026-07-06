@@ -1918,6 +1918,17 @@ Pick 1-3 styles and 1-2 colors that best match.`
           isComparisonResponse: true // Flag for frontend
         };
 
+        if (isAnonymous) {
+          comparisonResponse.results = comparisonResponse.results.map((r: any) => ({
+            ...r,
+            providerName: null,
+            providerPhone: null,
+            property_source_provider_name: null,
+            property_source_provider_phone: null,
+            contact_name: null,
+            contact_phone: null,
+          }));
+        }
         const responseContent = JSON.stringify(comparisonResponse);
 
         // Save only the assistant message, NOT ai_searches
@@ -2809,6 +2820,28 @@ Maximum ${maxResults} properties in results.`;
       } catch (usageError) {
         console.error('Error tracking usage:', usageError);
       }
+    }
+
+    // Strip owner/realtor contact info for anonymous callers
+    if (isAnonymous) {
+      try {
+        const parsed = JSON.parse(responseContent);
+        const stripContact = (r: any) => {
+          if (r && typeof r === 'object') {
+            r.providerName = null;
+            r.providerPhone = null;
+            r.property_source_provider_name = null;
+            r.property_source_provider_phone = null;
+            r.contact_name = null;
+            r.contact_phone = null;
+          }
+        };
+        if (Array.isArray(parsed?.results)) parsed.results.forEach(stripContact);
+        if (Array.isArray(parsed?.blocks)) parsed.blocks.forEach((b: any) => {
+          if (Array.isArray(b?.properties)) b.properties.forEach(stripContact);
+        });
+        responseContent = JSON.stringify(parsed);
+      } catch { /* non-JSON content, leave as-is */ }
     }
 
     return new Response(JSON.stringify({ response: responseContent }), {

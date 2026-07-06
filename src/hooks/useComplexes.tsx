@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import type { Apartment } from '@/types';
+
 
 export interface RentBracket { min: number; max: number }
 export interface Complex {
@@ -79,13 +81,14 @@ function escForOr(s: string): string {
  * matched by name/alias text against title/location/description.
  */
 export function useComplexListings(complex: Complex | null | undefined) {
+  const { user } = useAuth();
   const terms = complex ? [complex.name, ...(complex.aliases ?? [])] : [];
   // de-dupe, drop short tokens
   const uniq = Array.from(new Set(terms.map((t) => t.trim()).filter((t) => t.length >= 3)));
 
   return useQuery({
-    queryKey: ['complex-listings', complex?.id, uniq],
-    enabled: !!complex && uniq.length > 0,
+    queryKey: ['complex-listings', complex?.id, uniq, !!user],
+    enabled: !!complex && uniq.length > 0 && !!user,
     queryFn: async (): Promise<Apartment[]> => {
       const orInternal = uniq
         .flatMap((t) => {
