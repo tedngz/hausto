@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MapViewModal } from '@/components/MapViewModal';
@@ -174,6 +174,33 @@ export const EditorialPropertyCard = ({
   const mapLat = hasCoords ? apartment.latitude! : geocodedCoords?.lat ?? 0;
   const mapLng = hasCoords ? apartment.longitude! : geocodedCoords?.lng ?? 0;
 
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // External swipe cards carry an "ext-" prefix; the public detail route
+    // resolves listings by their raw id.
+    const shareId = String(apartment.id).replace(/^ext-/, '');
+    const shareUrl = `${window.location.origin}/property/${shareId}`;
+    const shareData = { title: displayTitle, text: `Check out this rental on Hausto: ${displayTitle}`, url: shareUrl };
+    try {
+      if (typeof navigator.share === 'function' && navigator.canShare?.(shareData)) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({ title: 'Link copied', description: 'Property link copied to your clipboard.' });
+      }
+    } catch (err) {
+      // Swallow user-cancelled share (AbortError); surface only real clipboard failures.
+      if ((err as Error)?.name !== 'AbortError') {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          toast({ title: 'Link copied', description: 'Property link copied to your clipboard.' });
+        } catch {
+          toast({ title: 'Could not share', description: 'Please try again.', variant: 'destructive' });
+        }
+      }
+    }
+  };
+
   const handleLocationClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (hasCoords || geocodedCoords) {
@@ -252,13 +279,10 @@ export const EditorialPropertyCard = ({
             <PopoverContent className="w-72 p-4" align="start" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-foreground">Vibe match</span>
-                <span className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${RATING_DOT[ratingLabel!] || 'bg-gray-300'}`} />
-                  <span className="text-xs font-medium capitalize text-foreground">{ratingLabel}</span>
-                </span>
+                <span className="text-xs font-mono text-muted-foreground">{Math.round(Number(vibeScore!.overall))}%</span>
               </div>
               <p className="text-xs text-muted-foreground mb-3">
-                How this home fits the taste and budget from your quiz.
+                How this property aligns with your preferences.
               </p>
 
               {vibeMatch && (vibeMatch.style.length + vibeMatch.color.length + vibeMatch.lifestyle.length) > 0 ? (
@@ -320,20 +344,31 @@ export const EditorialPropertyCard = ({
           </Popover>
         ) : <span />}
 
-        {onLike && (
+        <div className="flex items-center gap-2">
           <Button
             size="icon"
             variant="secondary"
-            aria-label={liked ? 'Unlike property' : 'Like property'}
-            className={`w-8 h-8 rounded-full border-0 backdrop-blur-md transition-all ${liked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-white/20 text-white hover:bg-white/40'}`}
-            onClick={e => {
-              e.stopPropagation();
-              onLike();
-            }}
+            aria-label="Share property"
+            className="w-8 h-8 rounded-full border-0 backdrop-blur-md transition-all bg-white/20 text-white hover:bg-white/40"
+            onClick={handleShare}
           >
-            <Heart className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
+            <Share2 className="w-4 h-4" />
           </Button>
-        )}
+          {onLike && (
+            <Button
+              size="icon"
+              variant="secondary"
+              aria-label={liked ? 'Unlike property' : 'Like property'}
+              className={`w-8 h-8 rounded-full border-0 backdrop-blur-md transition-all ${liked ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-white/20 text-white hover:bg-white/40'}`}
+              onClick={e => {
+                e.stopPropagation();
+                onLike();
+              }}
+            >
+              <Heart className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Slideshow arrows */}

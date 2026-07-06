@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { PropertyCard } from '@/components/PropertyCard';
+import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { ContactModal } from '@/components/ContactModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { Button } from '@/components/ui/button';
@@ -180,16 +180,18 @@ const PropertyDetail = () => {
 
           <h1 className="sr-only">{apartment.title} — {apartment.location}</h1>
 
-          <PropertyCard
-            apartment={apartment}
-            onContact={() => setShowContactModal(true)}
-            showContactButton={!!user}
-            showFullTitle={true}
-            showFullDescription={true}
-            showAllHighlights={true}
-            showRealtorInfo={!!user}
-            className="max-w-md mx-auto"
-          />
+          <div className="max-w-sm mx-auto">
+            <EditorialPropertyCard
+              apartment={apartment}
+              onContact={user ? () => setShowContactModal(true) : undefined}
+            />
+          </div>
+
+          {apartment.description && (
+            <p className="max-w-sm mx-auto mt-4 text-sm text-foreground/80 leading-relaxed text-center">
+              {apartment.description}
+            </p>
+          )}
 
           {!user && (
             <Card className="mt-4">
