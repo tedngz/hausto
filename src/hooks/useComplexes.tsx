@@ -88,8 +88,18 @@ export function useComplexListings(complex: Complex | null | undefined) {
 
   return useQuery({
     queryKey: ['complex-listings', complex?.id, uniq, !!user],
-    enabled: !!complex && uniq.length > 0 && !!user,
+    enabled: !!complex && uniq.length > 0,
     queryFn: async (): Promise<Apartment[]> => {
+      // Anonymous visitors can browse listings via a public edge function that
+      // strips contact details; only signed-in users query the tables directly.
+      if (!user) {
+        const { data, error } = await supabase.functions.invoke('get-complex-listings', {
+          body: { terms: uniq },
+        });
+        if (error) throw error;
+        return (data?.listings ?? []) as Apartment[];
+      }
+
       const orInternal = uniq
         .flatMap((t) => {
           const e = escForOr(t);

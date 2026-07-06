@@ -72,6 +72,9 @@ verify_jwt = false
 [functions.public-property-search]
 verify_jwt = false
 
+[functions.get-complex-listings]
+verify_jwt = false
+
 [functions.sitemap]
 verify_jwt = false
 
