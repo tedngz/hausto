@@ -1918,6 +1918,17 @@ Pick 1-3 styles and 1-2 colors that best match.`
           isComparisonResponse: true // Flag for frontend
         };
 
+        if (isAnonymous) {
+          comparisonResponse.results = comparisonResponse.results.map((r: any) => ({
+            ...r,
+            providerName: null,
+            providerPhone: null,
+            property_source_provider_name: null,
+            property_source_provider_phone: null,
+            contact_name: null,
+            contact_phone: null,
+          }));
+        }
         const responseContent = JSON.stringify(comparisonResponse);
 
         // Save only the assistant message, NOT ai_searches
