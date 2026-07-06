@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "sdk_version": "0.20.0",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "hausto-mcp",
+      "version": "0.1.0",
+      "title": "Hausto Property Search"
+    },
+    "tools": [
+      {
+        "name": "search_properties",
+        "title": "Search rental properties",
+        "description": "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a hausto.lovable.app share link.",
+        "annotations": {
+          "readOnlyHint": true,
+          "openWorldHint": true
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string",
+              "enum": [
+                "hcmc",
+                "hanoi",
+                "danang"
+              ],
+              "description": "City slug. Use 'hcmc' for Ho Chi Minh City."
+            },
+            "district": {
+              "type": "string",
+              "description": "District name filter."
+            },
+            "min_budget_usd": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_budget_usd": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rooms": {
+              "type": "string",
+              "description": "e.g. 'Studio', '1 Bed', '2 Bed', '3 Bed', 'Penthouse'."
+            },
+            "style": {
+              "type": "string",
+              "description": "Style/vibe keyword such as modern, luxury, vintage, urban."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_property",
+        "title": "Get property details",
+        "description": "Fetch full details for a single rental property by its Hausto id, including price, amenities, highlights, images and the share URL.",
+        "annotations": {
+          "readOnlyHint": true,
+          "openWorldHint": true
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Hausto property UUID."
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
