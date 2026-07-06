@@ -2811,6 +2811,28 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
+    // Strip owner/realtor contact info for anonymous callers
+    if (isAnonymous) {
+      try {
+        const parsed = JSON.parse(responseContent);
+        const stripContact = (r: any) => {
+          if (r && typeof r === 'object') {
+            r.providerName = null;
+            r.providerPhone = null;
+            r.property_source_provider_name = null;
+            r.property_source_provider_phone = null;
+            r.contact_name = null;
+            r.contact_phone = null;
+          }
+        };
+        if (Array.isArray(parsed?.results)) parsed.results.forEach(stripContact);
+        if (Array.isArray(parsed?.blocks)) parsed.blocks.forEach((b: any) => {
+          if (Array.isArray(b?.properties)) b.properties.forEach(stripContact);
+        });
+        responseContent = JSON.stringify(parsed);
+      } catch { /* non-JSON content, leave as-is */ }
+    }
+
     return new Response(JSON.stringify({ response: responseContent }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
