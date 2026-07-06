@@ -1,44 +1,71 @@
-# Fix: Chat AI not returning property cards on listing queries
+## Goal
 
-## Root cause
+Anonymous visitors can:
+- Chat with the AI and see matched listings (no phone/name of the property owner).
+- Open a shared property link (no phone/name of the property owner).
 
-In `supabase/functions/_shared/lifestyle-kb.ts`, `detectLifestyleIntent` is too greedy. `LIFESTYLE_TRIGGERS` contains short generic words (`safe`, `safety`, `expat`, `schools`, `commute`, `cafe`, `walkable`, `transportation`, `pet friendly`, `vibe`, `tell me about`) that fire on perfectly normal shopping turns like "safe 2BR for expats near international school in D2". `SHOPPING_TRIGGERS` is narrow (mostly "show me / find me / under X"), so many real shopping phrasings ("apartment in Thao Dien", "rent in D7", "2 bedroom in An Phu") don't register as shopping.
+Anonymous visitors can NOT:
+- Read `contact_phone` / `contact_name` on `external_properties`.
+- Read `property_source_provider_phone` / `property_source_provider_name` on `properties`.
+- Browse Discover, Complexes grid, or any other DB-backed listing page — those require sign-in.
 
-Result: `isLifestyle=true` → `chat-ai/index.ts` line 2073 strips `topProperties` from the prompt AND line 2091 instructs the model "DO NOT return a results array". The model dutifully answers in prose, no cards.
+Signed-in users keep full behavior, including contact info in the ContactModal and match views.
 
-Secondary: even on `isMixed` turns the model often follows the generic "INFO → blocks only" rule in section 2156, because nothing in the prompt forces it to include `results` when listings exist.
+## Database changes (single migration)
 
-## Changes
+`external_properties`
+- Drop policy `Anyone can view active external properties by direct link`.
+- Keep policy `Authenticated users can view active external properties` (already exists).
+- `REVOKE SELECT ON public.external_properties FROM anon;`
 
-### 1. `supabase/functions/_shared/lifestyle-kb.ts`
+`properties`
+- Drop policy `Anyone can view individual active properties by direct link` (this is the one exposing `property_source_provider_*`).
+- Keep the existing authenticated-user SELECT policies.
+- `REVOKE SELECT ON public.properties FROM anon;`
 
-- Tighten `LIFESTYLE_TRIGGERS`: keep only multi-word phrases that unambiguously request info ("best place to live", "where should i live", "tell me about", "what is it like", "cost of living", "pros and cons", "vs", "versus", "recommend an area / district", "good for families/kids", "is it safe", "how safe", "food scene", "nightlife scene"). Drop bare words.
-- Expand `SHOPPING_TRIGGERS` to cover natural listing phrasings: `apartment`, `apartments`, `flat`, `condo`, `studio`, `place to rent`, `for rent`, `rent in`, `rent a`, `any 2br/3br`, `something in`, `options in`, `units in`, `available in`.
-- Add an override: if the message contains a clear apartment/listing keyword (`apartment`, `rent`, `studio`, `\d+\s*br`, `bedroom`), force `isLifestyle=false`. Mixed stays mixed.
+Result: anon has zero direct table access to either listings source. Contact columns are unreachable.
 
-### 2. `supabase/functions/chat-ai/index.ts`
+## Backend (edge functions, service-role, unaffected by RLS)
 
-- Around line 2073, keep `promptProperties` populated whenever `isMixed` OR shopping-keyword override is true (already covered by tighter detection, but add a belt-and-braces check on `topProperties.length > 0` and an explicit shopping-keyword regex).
-- Around line 2091, add a new branch for `isMixed`: 
+`chat-ai` — used by anon and signed-in AI chat
+- Detect whether the caller is authenticated (Authorization header present + `getClaims` succeeds).
+- When anon: set `providerName: null` and `providerPhone: null` on every scored listing before returning. Everything else (title, images, price, location, match score, share link) stays.
+- When signed-in: unchanged.
 
-  > 🔀 MIXED TURN — answer the lifestyle question briefly in a `text` block AND include the matching listings in `results`. Both are required.
+New edge function `get-public-property` (or extend existing `public-property-search`)
+- Input: `{ id }` (internal UUID or external Hausto Agent ID).
+- Uses service role to fetch from `properties` then `external_properties`.
+- Strips `property_source_provider_name/phone` and `contact_name/phone` from the response for anon callers; returns them for signed-in callers.
+- Returns 404 for inactive/expired listings.
 
-- In the JSON FORMAT section (≈line 2156), prepend a hard rule:
+## Frontend
 
-  > **DEFAULT TO SHOPPING.** If property candidates are provided below and the user has not explicitly said "just tell me / don't show listings", you MUST include `results`. Omit `results` only on pure info turns where no candidates are supplied.
+`src/pages/PropertyDetail.tsx`
+- Replace the two direct `supabase.from('properties'|'external_properties').select(...)` calls with a single call to the new `get-public-property` edge function.
+- This keeps shared links working for anon while ensuring contact fields are only present when the viewer is signed in.
 
-- Update log line 2067 to also print whether shopping override fired, for future debugging.
+`src/hooks/useProperties.tsx` and `src/hooks/useComplexes.tsx` (grid browse)
+- Add an auth guard: if there is no session, return `[]` and let the calling pages (Discover, Complexes) render a "Sign in to browse listings" empty state with a login CTA.
+- Signed-in behavior unchanged (queries continue to work under the existing authenticated RLS policies).
 
-### 3. Validation
+`src/pages/Discover.tsx` and `src/pages/Complexes.tsx`
+- When `useAuth().user` is null, render the sign-in prompt instead of the grid.
+- Keep the AI chat entry point visible so anon visitors can still explore via chat.
 
-After edits, in build mode:
-- Deploy `chat-ai`.
-- `curl_edge_functions` with sample bodies:
-  - "2BR in Thao Dien under 25M" → expect `results.length > 0`.
-  - "safe apartment for expats near international school in D2" → expect `results.length > 0`.
-  - "tell me about Thao Dien" → expect `blocks` only, no `results`.
-  - "show me 2BRs in Thao Dien and tell me about the area" → expect both.
+`src/components/ContactModal.tsx`
+- No shape change; it already reads `apartment.property_source_provider_*`. Those fields will simply be absent for anon (via the edge function), so the modal already falls back to the Hausto-managed flow. No user-visible regression for signed-in flows.
 
 ## Out of scope
 
-No UI changes, no DB changes, no changes to the lifestyle KB content itself — only the intent classifier and prompt wiring.
+- No changes to `complex_inquiries`, storage bucket policies, `SECURITY DEFINER` function findings, leaked-password protection, or Postgres upgrade — those are separate findings the user did not ask to fix.
+- No schema changes to columns themselves; visibility is enforced via RLS + edge function projection.
+
+## Verification
+
+1. Run the app while signed out:
+   - Discover / Complexes show a sign-in prompt (no listings grid).
+   - AI chat returns listings without `providerName` / `providerPhone`.
+   - `/property/:id` share link renders with no contact info.
+   - Direct REST call to `external_properties` / `properties` returns permission denied.
+2. Sign in and confirm Discover, Complexes, ContactModal, and matches all show contact info exactly as before.
+3. Re-run the security scan and mark `external_properties_contact_phone_public` fixed via `manage_security_finding`.
