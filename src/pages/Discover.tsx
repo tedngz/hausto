@@ -20,8 +20,9 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { UsageMeter } from '@/components/UsageMeter';
 import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { Loader2 } from 'lucide-react';
-import { UserPreferences, Apartment, Match } from '@/types';
+import { UserPreferences } from '@/types';
 import { useUserRoles } from '@/hooks/useUserRoles';
+import { useMatches } from '@/hooks/useMatches';
 import { supabase } from '@/integrations/supabase/client';
 import { dbToPreferences, preferencesToSearchQuery, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
@@ -31,14 +32,15 @@ const Discover = () => {
     loading
   } = useAuth();
   const { isRealtor, isLoading: rolesLoading } = useUserRoles();
+  // DB-backed matches are the single source of truth for badge counts, so the
+  // renter/realtor nav badges stay in sync with what MatchesView actually shows.
+  const { renterMatches, realtorMatches: realtorMatchesDb } = useMatches();
   const location = useLocation();
   const navigate = useNavigate();
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
 
   const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile'>('ai-chat');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
-  const [matches, setMatches] = useState<Apartment[]>([]);
-  const [realtorMatches, setRealtorMatches] = useState<Match[]>([]);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
@@ -183,22 +185,6 @@ const Discover = () => {
       localStorage.removeItem(`userPreferences_${user.id}`);
     }
     setCurrentView('onboarding');
-    setMatches([]);
-  };
-  const handleMatch = (apartment: Apartment) => {
-    setMatches(prev => [...prev, apartment]);
-
-    // Simulate realtor match notification
-    const newMatch: Match = {
-      id: `match-${Date.now()}`,
-      apartmentId: apartment.id,
-      renterId: 'current-user',
-      realtorId: apartment.realtor.id,
-      timestamp: new Date(),
-      apartment,
-      renterPreferences: userPreferences!
-    };
-    setRealtorMatches(prev => [...prev, newMatch]);
   };
   const switchUserType = () => {
     const newType = userType === 'renter' ? 'realtor' : 'renter';
@@ -229,8 +215,6 @@ const Discover = () => {
       }
       setCurrentView('ai-chat');
     }
-    setMatches([]);
-    setRealtorMatches([]);
   };
   // Hold the renter view until we know whether they have saved preferences,
   // so brand-new renters go straight to the quiz without an ai-chat flash.
@@ -269,14 +253,14 @@ const Discover = () => {
               setCurrentView(view as 'swipe' | 'matches');
             }
           }}
-          matchCount={matches.length}
+          matchCount={renterMatches.length}
           userType={userType}
           onSwitchUserType={switchUserType}
           onOpenAIChat={() => setCurrentView('ai-chat')}
           onRestartOnboarding={userType === 'renter' ? handleRestartOnboarding : undefined}
         />}
 
-        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatches.length} onSwitchUserType={switchUserType} onOpenAIChat={() => setIsAIChatOpen(true)} onAddProperty={() => setIsUploadModalOpen(true)} />}
+        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatchesDb.length} onSwitchUserType={switchUserType} onOpenAIChat={() => setIsAIChatOpen(true)} onAddProperty={() => setIsUploadModalOpen(true)} />}
 
         <main className="h-full overflow-y-auto pt-14">
           {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-4">
@@ -291,7 +275,10 @@ const Discover = () => {
           
           {userType === 'renter' && currentView === 'onboarding' && <OnboardingQuiz onComplete={handleOnboardingComplete} onSkip={() => setCurrentView('ai-chat')} />}
           
-          {userType === 'renter' && currentView === 'swipe' && <SwipeInterface userPreferences={userPreferences} onMatch={handleMatch} userProfile={{
+          {userType === 'renter' && currentView === 'swipe' && <SwipeInterface userPreferences={userPreferences} onMatch={() => {
+          // No-op: SwipeInterface persists the match via useMatches.createMatch,
+          // and the nav badge derives its count from that same DB query.
+        }} userProfile={{
           name: user.user_metadata?.name || '',
           email: user.email || '',
           phone: user.user_metadata?.phone || ''

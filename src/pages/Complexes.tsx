@@ -51,7 +51,7 @@ export default function Complexes() {
           <div className="container mx-auto px-6 py-16 md:py-24 max-w-5xl">
             <div className="max-w-3xl">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-4">
-                ​
+                Vetted Complexes
               </p>
               <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight">
                 Your insider guide to <em className="text-primary not-italic">premium</em> Vietnam rentals.

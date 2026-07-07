@@ -90,6 +90,10 @@ export const HomeAI = ({
   const [tempUserImages, setTempUserImages] = useState<string[]>([]);
   const [typedPlaceholder, setTypedPlaceholder] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  // Anonymous users get a few free searches before we ask them to sign up.
+  // Follow-ups (chip taps) don't count against this so a conversation can breathe.
+  const ANON_SEARCH_LIMIT = 3;
+  const [anonSearchCount, setAnonSearchCount] = useState(0);
   const [wantsNewChat, setWantsNewChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialQuerySentRef = useRef(false);
@@ -103,6 +107,8 @@ export const HomeAI = ({
   const {
     user
   } = useAuth();
+  // Derived here (not with the useState above) so it reads `user` after useAuth runs.
+  const anonLimitReached = !user && anonSearchCount >= ANON_SEARCH_LIMIT;
   const {
     createMatch
   } = useMatches();
@@ -442,8 +448,14 @@ export const HomeAI = ({
       return;
     }
 
-    // For anonymous users, limit to a single search — but always allow follow-ups
-    if (!user && hasSearched && !isFollowup) {
+    // For anonymous users, allow a few searches before the sign-up wall —
+    // follow-ups always work so the current conversation isn't cut off.
+    if (!user && !isFollowup && anonSearchCount >= ANON_SEARCH_LIMIT) {
+      toast({
+        title: "Sign up to keep searching",
+        description: "You've used your free searches. Create an account to keep going — your conversation is saved.",
+      });
+      setTimeout(() => navigate('/auth', { state: { returnTo: '/discover' } }), 1500);
       return;
     }
     if (!queryToUse.trim() && uploadedImages.length === 0) {
@@ -562,6 +574,10 @@ export const HomeAI = ({
           setSearchResults(searchResults);
         }
         setHasSearched(true);
+        // Only new searches count toward the anonymous cap; follow-ups are free.
+        if (!isFollowup) {
+          setAnonSearchCount(count => count + 1);
+        }
         toast({
           title: "Search completed!",
           description: "AI has processed your search request."
@@ -852,16 +868,21 @@ export const HomeAI = ({
                     ))}
                   </div>
 
-                  {/* Sign in CTA for Non-Logged In Users */}
-                  <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
-                    <Button onClick={() => navigate('/auth', {
-                  state: {
-                    returnTo: '/discover'
-                  }
-                })} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
-                      Sign in to chat more
-                    </Button>
-                  </div>
+                  {/* Sign-up wall — only once the anonymous search cap is reached */}
+                  {anonLimitReached && (
+                    <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Sign up to keep searching — your conversation is saved.
+                      </p>
+                      <Button onClick={() => navigate('/auth', {
+                    state: {
+                      returnTo: '/discover'
+                    }
+                  })} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
+                        Sign up to keep searching
+                      </Button>
+                    </div>
+                  )}
                 </div>}
 
               {/* Followup suggestions BELOW results */}
@@ -881,10 +902,14 @@ export const HomeAI = ({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold leading-tight">
-              You've liked {likedProperties.size >= 3 ? '3+' : likedProperties.size} {likedProperties.size === 1 ? 'property' : 'properties'}
+              {subscription_tier === 'premium'
+                ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
+                : 'Hausto books the viewings for you'}
             </p>
             <p className="text-xs text-muted-foreground leading-tight">
-              Want Hausto to coordinate viewings for you?
+              {subscription_tier === 'premium'
+                ? 'Pick your times — Hausto contacts the agents and confirms the viewings.'
+                : 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.'}
             </p>
           </div>
           <Button
@@ -898,7 +923,7 @@ export const HomeAI = ({
               }
             }}
           >
-            {subscription_tier === 'premium' ? 'Schedule viewings' : 'Upgrade'}
+            {subscription_tier === 'premium' ? 'Schedule viewings' : 'Book my viewings'}
           </Button>
           <Button
             size="sm"
@@ -913,7 +938,7 @@ export const HomeAI = ({
       )}
 
       {/* Chat Input - Show for everyone until they search */}
-      {(user || !hasSearched) && <div className="space-y-4">
+      {(user || !anonLimitReached) && <div className="space-y-4">
           <div className="relative">
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] sm:min-h-[104px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">
