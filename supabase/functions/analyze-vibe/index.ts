@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { analyzeImagesQualityFirst } from "./shared.ts";
+import { extractPropertyFeatures } from "../_shared/property-features.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,6 +81,19 @@ serve(async (req) => {
     const avg = (key: string) =>
       Math.round(analyses.reduce((s, a) => s + (Number(a[key]) || 5), 0) / analyses.length);
 
+    // Aggregate the per-image lifestyle activities that were previously discarded,
+    // so the vibe score's lifestyle signal is grounded in real property data.
+    const activitySet = new Set<string>();
+    analyses.forEach(a => {
+      if (Array.isArray(a.suggested_activities)) {
+        a.suggested_activities.forEach((x: string) => { if (x) activitySet.add(x); });
+      }
+    });
+
+    const positionalHighlights = analyses
+      .map(a => String(a.image_highlight || '').trim())
+      .filter(Boolean);
+
     const aggregated: any = {
       modern: avg('modern'),
       cozy: avg('cozy'),
@@ -92,8 +106,19 @@ serve(async (req) => {
       rustic: avg('rustic'),
       elegant: avg('elegant'),
       amenities: Array.from(allAmenities),
+      activities: Array.from(activitySet),
       image_analyses: analyses,
     };
+
+    // Derive the canonical feature set from data we now have (metrics + amenities
+    // + highlights). Read by both the client vibe score and the chat-ai ranker.
+    aggregated.features = extractPropertyFeatures({
+      metrics: aggregated,
+      amenities: aggregated.amenities,
+      highlights: positionalHighlights,
+      description: propertyInfo?.description ?? '',
+      title: propertyInfo?.title ?? '',
+    });
 
     // If a propertyId was provided, persist directly and mark vibe_status=complete
     if (propertyId) {
@@ -101,9 +126,6 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
-      const positionalHighlights = analyses
-        .map(a => String(a.image_highlight || '').trim())
-        .filter(Boolean);
 
       const { error: updateErr } = await supabase
         .from('external_properties')

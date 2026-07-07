@@ -1104,6 +1104,7 @@ export type Database = {
           id: string
           location: string[] | null
           move_in_date: string | null
+          must_haves: string[] | null
           price_range_max: number | null
           price_range_min: number | null
           size: string | null
@@ -1118,6 +1119,7 @@ export type Database = {
           id?: string
           location?: string[] | null
           move_in_date?: string | null
+          must_haves?: string[] | null
           price_range_max?: number | null
           price_range_min?: number | null
           size?: string | null
@@ -1132,6 +1134,7 @@ export type Database = {
           id?: string
           location?: string[] | null
           move_in_date?: string | null
+          must_haves?: string[] | null
           price_range_max?: number | null
           price_range_min?: number | null
           size?: string | null
@@ -1286,7 +1289,7 @@ export type Database = {
         Args: { renter_id: string }
         Returns: {
           activities: string[]
-          colors: string[]
+          must_haves: string[]
           location: string[]
           move_in_date: string
           price_range_max: number

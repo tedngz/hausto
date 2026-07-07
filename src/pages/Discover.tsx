@@ -22,6 +22,8 @@ import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { Loader2 } from 'lucide-react';
 import { UserPreferences, Apartment, Match } from '@/types';
 import { useUserRoles } from '@/hooks/useUserRoles';
+import { supabase } from '@/integrations/supabase/client';
+import { dbToPreferences, preferencesToSearchQuery, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
 const Discover = () => {
   const {
@@ -40,6 +42,11 @@ const Discover = () => {
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  // One-shot seed query for the quiz → AI-search handoff.
+  const [aiSeedQuery, setAiSeedQuery] = useState<string | undefined>(undefined);
+  // Gates the renter view until we know whether they have saved preferences
+  // (so brand-new renters land in the quiz without an ai-chat flash first).
+  const [prefsResolved, setPrefsResolved] = useState(false);
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -61,17 +68,45 @@ const Discover = () => {
     localStorage.setItem(`userType_${user.id}`, effectiveType);
 
     if (effectiveType === 'realtor') {
+      setPrefsResolved(true);
       setCurrentView('dashboard');
-    } else if (savedPreferences) {
+      return;
+    }
+
+    // Hydrate preferences: localStorage first (instant), then reconcile with the
+    // DB so they follow the user across devices even if localStorage is empty.
+    // Brand-new renters (no prefs anywhere) are routed straight into the quiz.
+    let localPrefs: UserPreferences | null = null;
+    if (savedPreferences) {
       try {
-        setUserPreferences(JSON.parse(savedPreferences));
+        localPrefs = JSON.parse(savedPreferences);
+        setUserPreferences(localPrefs);
       } catch (error) {
         console.error('Error parsing saved preferences:', error);
       }
-      setCurrentView('ai-chat');
-    } else {
-      setCurrentView('ai-chat');
     }
+    if (localPrefs && hasMeaningfulPreferences(localPrefs)) {
+      // Returning renter — no need to wait on the DB to pick a view.
+      setCurrentView('ai-chat');
+      setPrefsResolved(true);
+    }
+    (async () => {
+      const { data: prefRow } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const dbPrefs = dbToPreferences(prefRow as any);
+      if (dbPrefs && hasMeaningfulPreferences(dbPrefs)) {
+        setUserPreferences(dbPrefs);
+        localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(dbPrefs));
+        setCurrentView('ai-chat');
+      } else if (!(localPrefs && hasMeaningfulPreferences(localPrefs))) {
+        // Nothing saved anywhere → force onboarding for this new renter.
+        setCurrentView('onboarding');
+      }
+      setPrefsResolved(true);
+    })();
   }, [user, rolesLoading, isRealtor]);
   useEffect(() => {
     // Listen for AI chat opening event from SwipeInterface
@@ -136,7 +171,10 @@ const Discover = () => {
     if (user) {
       localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(preferences));
     }
-    setCurrentView('swipe');
+    // Hand off straight into the AI search, pre-seeded with what they just told us,
+    // so the quiz flows naturally into results instead of a cold swipe deck.
+    setAiSeedQuery(preferencesToSearchQuery(preferences));
+    setCurrentView('ai-chat');
   };
   const handleRestartOnboarding = () => {
     setUserPreferences(null);
@@ -194,7 +232,9 @@ const Discover = () => {
     setMatches([]);
     setRealtorMatches([]);
   };
-  if (loading) {
+  // Hold the renter view until we know whether they have saved preferences,
+  // so brand-new renters go straight to the quiz without an ai-chat flash.
+  if (loading || rolesLoading || (userType === 'renter' && !prefsResolved)) {
     return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-orange-500" />
@@ -277,7 +317,11 @@ const Discover = () => {
                 </div>
               </div>)}
 
-          {currentView === 'ai-chat' && userType && <HomeAI />}
+          {currentView === 'ai-chat' && userType && <HomeAI
+            userPreferences={userPreferences ?? undefined}
+            initialQuery={aiSeedQuery}
+            onInitialQueryConsumed={() => setAiSeedQuery(undefined)}
+          />}
 
           {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
         </main>

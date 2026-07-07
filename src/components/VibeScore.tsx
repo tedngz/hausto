@@ -3,8 +3,9 @@ import { Progress } from '@/components/ui/progress';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { VibeScore as VibeScoreType } from '@/utils/vibeScoring';
 import { getVibeRatingLabel, getVibeRatingColor } from '@/utils/vibeRating';
-import { Sparkles, MapPin, Home, Palette, Activity } from 'lucide-react';
+import { Sparkles, MapPin, Home, CheckCircle2 } from 'lucide-react';
 import { Apartment } from '@/types';
+import { extractPropertyFeatures, FEATURE_LABELS, FeatureKey, propertyHasFeature } from '@/lib/propertyFeatures';
 
 interface VibeScoreProps {
   score: VibeScoreType;
@@ -45,8 +46,25 @@ export const VibeScore = ({ score, apartment, showBreakdown = false, size = 'md'
   };
 
   const getStyleTags = (): string[] => toSafeArray(apartment?.vibe_analysis?.styles);
-  const getColorPalette = (): string[] => toSafeArray(apartment?.vibe_analysis?.colors);
-  const getActivities = (): string[] => toSafeArray(apartment?.vibe_analysis?.activities);
+
+  // Concrete features present on this property (balcony, view, pool…), for the
+  // Features row. Prefers stored vibe_analysis.features, else derives on the fly.
+  const getPresentFeatures = (): string[] => {
+    if (!apartment) return [];
+    const va: any = apartment.vibe_analysis;
+    const features = (va?.features && typeof va.features === 'object')
+      ? va.features
+      : extractPropertyFeatures({
+          metrics: va,
+          amenities: (apartment as any).amenities,
+          highlights: (apartment as any).highlights,
+          description: (apartment as any).description,
+          title: apartment.title,
+        });
+    return (Object.keys(FEATURE_LABELS) as FeatureKey[])
+      .filter((k) => propertyHasFeature(features, k))
+      .map((k) => FEATURE_LABELS[k]);
+  };
 
   const sizeClasses = {
     sm: 'text-xs px-2 py-1',
@@ -58,8 +76,7 @@ export const VibeScore = ({ score, apartment, showBreakdown = false, size = 'md'
     overall: Math.round(score.overall),
     breakdown: {
       style: Math.round(score.breakdown.style),
-      color: Math.round(score.breakdown.color),
-      activities: Math.round(score.breakdown.activities),
+      features: Math.round(score.breakdown.features),
       price: Math.round(score.breakdown.price),
       location: Math.round(score.breakdown.location)
     }
@@ -105,32 +122,15 @@ export const VibeScore = ({ score, apartment, showBreakdown = false, size = 'md'
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <Palette className="w-4 h-4 text-purple-500" />
-                    <span className="text-xs text-gray-600">Color</span>
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <span className="text-xs text-gray-600">Features</span>
                   </div>
-                  <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.color}%</span>
+                  <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.features}%</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {getColorPalette().slice(0, 3).map((color, index) => (
-                    <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
-                      {color}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-green-500" />
-                    <span className="text-xs text-gray-600">Activities</span>
-                  </div>
-                  <span className="text-xs font-semibold text-gray-700">{roundedScore.breakdown.activities}%</span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {getActivities().slice(0, 3).map((activity, index) => (
+                  {getPresentFeatures().slice(0, 4).map((feature, index) => (
                     <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700 border-green-200">
-                      {activity}
+                      {feature}
                     </Badge>
                   ))}
                 </div>
@@ -174,25 +174,12 @@ export const VibeScore = ({ score, apartment, showBreakdown = false, size = 'md'
             
             <div>
               <div className="flex items-center mb-2">
-                <span className="text-gray-600 font-medium">Color</span>
+                <span className="text-gray-600 font-medium">Features</span>
               </div>
                   <div className="flex flex-wrap gap-1">
-                    {getColorPalette().map((color, index) => (
-                      <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
-                        {color}
-                      </Badge>
-                    ))}
-                  </div>
-            </div>
-            
-            <div>
-              <div className="flex items-center mb-2">
-                <span className="text-gray-600 font-medium">Lifestyle Activities</span>
-              </div>
-                  <div className="flex flex-wrap gap-1">
-                    {getActivities().map((activity, index) => (
+                    {getPresentFeatures().map((feature, index) => (
                       <Badge key={index} variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-200">
-                        {activity}
+                        {feature}
                       </Badge>
                     ))}
                   </div>

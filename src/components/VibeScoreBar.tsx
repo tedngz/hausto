@@ -2,7 +2,7 @@ import { VibeScore } from '@/utils/vibeScoring';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Home, Palette, Activity, DollarSign, MapPin } from 'lucide-react';
+import { Home, Activity, DollarSign, MapPin } from 'lucide-react';
 
 interface VibeScoreBarProps {
   score: VibeScore;
@@ -20,30 +20,16 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
   };
 
   // Helper function to categorize highlights
-  const categorizeHighlight = (highlight: string): 'style' | 'color' | 'activity' => {
+  const categorizeHighlight = (highlight: string): 'style' | 'activity' => {
     const lowerHighlight = highlight.toLowerCase();
-    
-    // Style keywords
-    const styleKeywords = ['modern', 'traditional', 'minimalist', 'bohemian', 'industrial', 'scandinavian', 'contemporary', 'rustic', 'vintage', 'luxury', 'urban', 'cozy', 'sleek', 'elegant', 'chic'];
-    
-    // Color keywords  
-    const colorKeywords = ['warm', 'cool', 'neutral', 'bold', 'bright', 'dark', 'colorful', 'white', 'black', 'grey', 'beige', 'wood', 'natural', 'light'];
-    
+
     // Activity keywords
     const activityKeywords = ['working', 'entertaining', 'relaxing', 'cooking', 'exercising', 'reading', 'creating', 'dining', 'sleeping', 'studying', 'socializing'];
-    
-    for (const keyword of styleKeywords) {
-      if (lowerHighlight.includes(keyword)) return 'style';
-    }
-    
-    for (const keyword of colorKeywords) {
-      if (lowerHighlight.includes(keyword)) return 'color';
-    }
-    
+
     for (const keyword of activityKeywords) {
       if (lowerHighlight.includes(keyword)) return 'activity';
     }
-    
+
     // Default to style if no match
     return 'style';
   };
@@ -52,14 +38,12 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
     if (!apartment?.highlights || !Array.isArray(apartment.highlights)) {
       return {
         style: ['Stylish', 'Modern'],
-        color: ['Neutral', 'Warm'],
         activity: ['Relaxing', 'Reading']
       };
     }
 
     const categorized = {
       style: [] as string[],
-      color: [] as string[],
       activity: [] as string[]
     };
 
@@ -72,7 +56,6 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
 
     // Fill with fallbacks if categories are empty
     if (categorized.style.length === 0) categorized.style = ['Stylish', 'Modern'];
-    if (categorized.color.length === 0) categorized.color = ['Neutral', 'Warm'];
     if (categorized.activity.length === 0) categorized.activity = ['Relaxing', 'Comfortable'];
 
     return categorized;
@@ -120,27 +103,10 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <Palette className="w-3 h-3 text-purple-500" />
-                    <span className="text-xs text-gray-600">Color</span>
-                  </div>
-                  <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.color)}%</span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {categorizedHighlights.color.map((color, index) => (
-                    <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
-                      {color}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
                     <Activity className="w-3 h-3 text-green-500" />
-                    <span className="text-xs text-gray-600">Activities</span>
+                    <span className="text-xs text-gray-600">Features</span>
                   </div>
-                  <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.activities)}%</span>
+                  <span className="text-xs font-semibold text-gray-700">{Math.round(score.breakdown.features)}%</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {categorizedHighlights.activity.map((activity, index) => (
@@ -184,18 +150,6 @@ export const VibeScoreBar = ({ score, showBreakdown = false, className = "", apa
             {categorizedHighlights.style.map((tag, index) => (
               <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
                 {tag}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Palette className="w-3 h-3 text-purple-500" />
-          <span className="text-xs text-gray-600 flex-1">Color</span>
-          <div className="flex flex-wrap gap-1">
-            {categorizedHighlights.color.map((color, index) => (
-              <Badge key={index} variant="outline" className="text-[10px] px-1.5 py-0.5 bg-purple-50 text-purple-700 border-purple-200">
-                {color}
               </Badge>
             ))}
           </div>

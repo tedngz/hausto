@@ -6,13 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { User, Mail, Phone, MapPin, Edit3, Save, X, Heart, TrendingUp, Home, Palette, Activity, DollarSign, Camera } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit3, Save, X, Heart, TrendingUp, Home, Activity, DollarSign, Camera } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { dbToPreferences } from '@/lib/preferences';
+import { PreferencesEditModal } from '@/components/PreferencesEditModal';
+import { FEATURE_LABELS, FeatureKey } from '@/lib/propertyFeatures';
 interface ProfileProps {
   userType: 'renter' | 'realtor';
 }
@@ -37,6 +40,7 @@ const PreferencesCard = ({
   const {
     formatPrice
   } = useCurrency();
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const {
     data: preferences,
     isLoading
@@ -44,8 +48,14 @@ const PreferencesCard = ({
     queryKey: ['user-preferences', userId],
     queryFn: async () => {
       if (!userId) return null;
-
-      // Get preferences from localStorage since that's where they're stored
+      // Source of truth is the DB; fall back to localStorage for older sessions.
+      const { data } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const dbPrefs = dbToPreferences(data as any);
+      if (dbPrefs) return dbPrefs;
       const stored = localStorage.getItem(`userPreferences_${userId}`);
       return stored ? JSON.parse(stored) : null;
     },
@@ -65,17 +75,28 @@ const PreferencesCard = ({
       </Card>;
   }
   if (!preferences) {
-    return <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Preferences</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-4 text-gray-500">
-            <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Complete the onboarding quiz to see your preferences here</p>
-          </div>
-        </CardContent>
-      </Card>;
+    return <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Preferences</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-4 text-gray-500">
+              <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm mb-4">Set your preferences so AI search can personalize your matches</p>
+              <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)}>
+                <Edit3 className="w-4 h-4 mr-2" />
+                Set preferences
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        <PreferencesEditModal
+          isOpen={isEditOpen}
+          onClose={() => setIsEditOpen(false)}
+          initial={null}
+        />
+      </>;
   }
   const styleLabels: {
     [key: string]: string;
@@ -87,14 +108,6 @@ const PreferencesCard = ({
     'industrial': 'Industrial',
     'scandinavian': 'Scandinavian',
     'cozy': 'Cozy'
-  };
-  const colorLabels: {
-    [key: string]: string;
-  } = {
-    'warm': 'Warm tones',
-    'cool': 'Cool tones',
-    'neutral': 'Neutral colors',
-    'bold': 'Bold colors'
   };
   const activityLabels: {
     [key: string]: string;
@@ -123,11 +136,17 @@ const PreferencesCard = ({
     '3months': 'Within 3 months',
     '6months': '6+ months'
   };
-  return <Card>
+  return <><Card>
       <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Heart className="w-5 h-5 text-red-500" />
-          Your Preferences
+        <CardTitle className="text-lg flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <Heart className="w-5 h-5 text-red-500" />
+            Your Preferences
+          </span>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={() => setIsEditOpen(true)}>
+            <Edit3 className="w-4 h-4 md:mr-1.5" />
+            <span className="hidden md:inline">Edit</span>
+          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -145,14 +164,14 @@ const PreferencesCard = ({
               </div>
             </div>}
 
-          {preferences.colors?.length > 0 && <div>
+          {preferences.mustHaves?.length > 0 && <div>
               <div className="flex items-center gap-2 mb-2">
-                <Palette className="w-4 h-4 text-purple-500" />
-                <span className="font-medium text-sm">Colors</span>
+                <Heart className="w-4 h-4 text-rose-500" />
+                <span className="font-medium text-sm">Must-haves</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {preferences.colors.map((color: string) => <Badge key={color} variant="secondary" className="bg-purple-50 text-purple-700 text-xs">
-                    {colorLabels[color] || color}
+                {preferences.mustHaves.map((m: string) => <Badge key={m} variant="secondary" className="bg-rose-50 text-rose-700 text-xs">
+                    {FEATURE_LABELS[m as FeatureKey] || m}
                   </Badge>)}
               </div>
             </div>}
@@ -217,7 +236,13 @@ const PreferencesCard = ({
             </div>}
         </div>
       </CardContent>
-    </Card>;
+    </Card>
+    <PreferencesEditModal
+      isOpen={isEditOpen}
+      onClose={() => setIsEditOpen(false)}
+      initial={preferences}
+    />
+    </>;
 };
 export const Profile = ({
   userType

@@ -39,10 +39,10 @@ export const PropertyDetailModal = ({
   };
   const vibeScore = userPreferences && !isAnonymous ? calculateVibeScore(apartment, userPreferences) : {
     overall: 75,
+    missingMustHave: false,
     breakdown: {
       style: 75,
-      color: 75,
-      activities: 75,
+      features: 75,
       price: 75,
       location: 75
     }

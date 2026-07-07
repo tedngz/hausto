@@ -25,7 +25,6 @@ interface GetCachedVibeScoreParams {
 export const hashPreferences = (preferences: UserPreferences): string => {
   const key = JSON.stringify({
     styles: preferences.styles?.sort(),
-    colors: preferences.colors?.sort(),
     activities: preferences.activities?.sort(),
     location: preferences.location?.sort(),
     priceRange: preferences.priceRange,

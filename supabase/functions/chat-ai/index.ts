@@ -781,16 +781,70 @@ function extractLikes(text: string): string[] {
   return out;
 }
 
-function buildAccumulatedContext(chatHistory: Array<{role: string, content: string}>, currentMessage: string): AccumulatedContext {
+// Renter's saved quiz preferences, resolved from the `user_preferences` table.
+// Used as a SOFT baseline: it seeds a few safe continuity fields and is surfaced
+// to the model as background context. The current message always overrides it.
+interface RenterProfile {
+  styles: string[];
+  activities: string[];
+  mustHaves: string[];       // feature keys, e.g. ['balcony','view']
+  minPrice: number | null;
+  maxPrice: number | null;
+  size: string | null;       // 'studio' | '1br' | '2br' | '3br+'
+  locations: string[];       // e.g. ["District 2, Ho Chi Minh City"]
+  moveInDate: string | null; // 'asap' | '1month' | '3months' | '6months'
+  city: 'hcm' | 'hanoi' | 'danang' | null;
+}
+
+// Feature-key → amenity search keyword, so quiz must-haves feed the existing
+// (boost-only, never-filter) amenity matcher. Results are never eliminated on
+// these, so a renter can always explore outside their saved preferences.
+const MUST_HAVE_KEYWORDS: Record<string, string> = {
+  balcony: 'balcony',
+  view: 'view',
+  greenery: 'garden',
+  pool: 'pool',
+  gym: 'gym',
+  natural_light: 'natural light',
+  spacious: 'spacious',
+  furnished: 'furnished',
+  kitchen_ready: 'kitchen',
+  workspace: 'desk',
+  quiet: 'quiet',
+};
+
+const MUST_HAVE_LABELS: Record<string, string> = {
+  balcony: 'balcony', view: 'a view', greenery: 'greenery/park', pool: 'a pool',
+  gym: 'a gym', natural_light: 'natural light', spacious: 'spaciousness',
+  furnished: 'furnished', kitchen_ready: 'a full kitchen', workspace: 'a workspace',
+  quiet: 'a quiet setting',
+};
+
+// Derive a coarse city token from the quiz's "District X, City" location strings.
+function cityFromLocations(locations: string[]): 'hcm' | 'hanoi' | 'danang' | null {
+  for (const loc of locations) {
+    const l = loc.toLowerCase();
+    if (l.includes('ho chi minh')) return 'hcm';
+    if (l.includes('hanoi') || l.includes('ha noi')) return 'hanoi';
+    if (l.includes('da nang') || l.includes('danang')) return 'danang';
+  }
+  return null;
+}
+
+function buildAccumulatedContext(
+  chatHistory: Array<{role: string, content: string}>,
+  currentMessage: string,
+  seed?: Partial<AccumulatedContext>,
+): AccumulatedContext {
   const context: AccumulatedContext = {
-    city: null,
-    wantsCenter: false,
+    city: seed?.city ?? null,
+    wantsCenter: seed?.wantsCenter ?? false,
     locationTier: null,
-    maxPrice: null,
-    minPrice: null,
+    maxPrice: seed?.maxPrice ?? null,
+    minPrice: seed?.minPrice ?? null,
     bedrooms: null,
-    amenities: [],
-    styles: [],
+    amenities: [...(seed?.amenities ?? [])],
+    styles: [...(seed?.styles ?? [])],
     specificDistricts: [],
     requestedComplexes: [],
     rejections: [],
@@ -1727,9 +1781,58 @@ When analyzing property images, ONLY use tags from the standard list above.`;
     }
 
     // ========== RENTER MODE - Enhanced AI Search ==========
-    
-    // Build accumulated context from conversation history
-    const accContext = buildAccumulatedContext(chatHistory, message);
+
+    // Load the renter's saved quiz preferences (authenticated users only).
+    // These act as a SOFT baseline the model leans on when the current message
+    // is vague — never a hard filter that overrides an explicit request.
+    let renterProfile: RenterProfile | null = null;
+    if (!isAnonymous && user?.id) {
+      try {
+        const { data: prefRow } = await supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (prefRow) {
+          const locations: string[] = Array.isArray(prefRow.location) ? prefRow.location : [];
+          renterProfile = {
+            styles: Array.isArray(prefRow.styles) ? prefRow.styles : [],
+            activities: Array.isArray(prefRow.activities) ? prefRow.activities : [],
+            mustHaves: Array.isArray(prefRow.must_haves) ? prefRow.must_haves : [],
+            minPrice: prefRow.price_range_min ?? null,
+            maxPrice: prefRow.price_range_max ?? null,
+            size: Array.isArray(prefRow.size) ? (prefRow.size[0] ?? null) : (prefRow.size ?? null),
+            locations,
+            moveInDate: prefRow.move_in_date ?? null,
+            city: cityFromLocations(locations),
+          };
+          console.log('[Profile] Loaded renter preferences for', user.id);
+        }
+      } catch (e) {
+        console.log('[Profile] Could not load user_preferences:', (e as Error)?.message);
+      }
+    }
+
+    // Seed only SAFE continuity fields (city, budget ceiling, styles). Bedrooms,
+    // specific districts and complexes are intentionally NOT seeded so a vague or
+    // "show me anywhere" message is never trapped by stale quiz answers.
+    const contextSeed: Partial<AccumulatedContext> | undefined = renterProfile
+      ? {
+          city: renterProfile.city ?? undefined,
+          maxPrice: renterProfile.maxPrice ?? undefined,
+          styles: renterProfile.styles,
+          // Must-haves become SOFT amenity boosts (never hard filters), so the
+          // renter still gets results when exploring outside their preferences.
+          amenities: renterProfile.mustHaves
+            .map((k) => MUST_HAVE_KEYWORDS[k])
+            .filter((v): v is string => !!v),
+        }
+      : undefined;
+
+    // Build accumulated context from conversation history (seeded from profile).
+    // Chat-text parsing runs AFTER the seed, so anything the user actually types
+    // this turn overrides their saved preferences.
+    const accContext = buildAccumulatedContext(chatHistory, message, contextSeed);
 
     // Kick off conversation summary in PARALLEL (don't block the main AI call).
     // We only consume the summary if it resolves quickly; otherwise we skip it
@@ -2019,6 +2122,40 @@ Pick 1-3 styles and 1-2 colors that best match.`
       ? `\n🧠 EARLIER CONVERSATION SUMMARY:\n${conversationSummary}\n`
       : '';
 
+    // Soft "renter profile" derived from the onboarding quiz. Surfaced as
+    // BACKGROUND taste, not a hard filter — the model uses it to personalise
+    // ranking and tone, but must always honour the current message first.
+    let renterProfileBlock = '';
+    if (renterProfile) {
+      const p = renterProfile;
+      const profileLines: string[] = [];
+      if (p.styles.length) profileLines.push(`Preferred styles: ${p.styles.join(', ')}`);
+      if (p.mustHaves.length) {
+        const labels = p.mustHaves.map((k) => MUST_HAVE_LABELS[k] || k);
+        profileLines.push(`Must-haves (strong preference — lead with places that have these, but still honor an explicit request for something else): ${labels.join(', ')}`);
+      }
+      if (p.activities.length) profileLines.push(`Home lifestyle: ${p.activities.join(', ')}`);
+      if (p.minPrice && p.maxPrice) {
+        profileLines.push(`Comfortable budget: ${(p.minPrice/1000000).toFixed(0)}–${(p.maxPrice/1000000).toFixed(0)}M VND/month`);
+      }
+      if (p.size) {
+        const sizeLabel = ({ studio: 'Studio', '1br': '1 bedroom', '2br': '2 bedrooms', '3br+': '3+ bedrooms' } as Record<string,string>)[p.size] || p.size;
+        profileLines.push(`Preferred size: ${sizeLabel}`);
+      }
+      if (p.locations.length) profileLines.push(`Preferred areas: ${p.locations.join('; ')}`);
+      if (p.moveInDate) {
+        const moveLabel = ({ asap: 'as soon as possible', '1month': 'within a month', '3months': 'within 3 months', '6months': '6+ months' } as Record<string,string>)[p.moveInDate] || p.moveInDate;
+        profileLines.push(`Move-in timeline: ${moveLabel}`);
+      }
+      if (profileLines.length) {
+        renterProfileBlock = `\n🧭 RENTER PROFILE (saved preferences from onboarding — BACKGROUND context, NOT a hard filter):\n${profileLines.map(l => `• ${l}`).join('\n')}\n` +
+          `HOW TO USE THIS PROFILE:\n` +
+          `• Treat it as the renter's default taste. When THIS message is vague ("show me some places"), lean on it to personalise results and tone.\n` +
+          `• The CURRENT message ALWAYS wins. If the user asks for something that differs from or contradicts this profile (a different city, a higher budget, a different size, "surprise me", "anything nice"), fully honour the new request — do NOT silently re-apply the saved preferences.\n` +
+          `• When you notice a request clearly departs from the saved profile, acknowledge it in one short clause (e.g. "Stepping outside your usual District 2 picks —") and proceed with what they asked for.\n`;
+      }
+    }
+
     // Check if we have center matches when user wants center
     const hasCenterMatches = accContext.wantsCenter && topProperties.some(p => p.locationTier === 'center');
     const hasNearCenterMatches = accContext.wantsCenter && topProperties.some(p => p.locationTier === 'near-center');
@@ -2147,7 +2284,7 @@ ${scoredPreviousProperties.map((p, i) => `
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
 ${constraintsSummary.length > 0 ? constraintsSummary.map(c => `• ${c}`).join('\n') : '• No specific requirements yet - ask what they\'re looking for!'}
-${rejectionsBlock}${likesBlock}${summaryBlock}${locationNote}
+${renterProfileBlock}${rejectionsBlock}${likesBlock}${summaryBlock}${locationNote}
 ${knownComplexesBlock}${knownDistancesBlock}${lifestyleKBBlock}
 ${previousPropertiesSection}
 🪜 BEFORE YOU RESPOND, REASON THROUGH:
@@ -2156,6 +2293,7 @@ ${previousPropertiesSection}
 3. Are there positive signals (likes) I should weight higher?
 4. Is there an open question or ambiguity I should clarify briefly before listing properties?
 5. Does my final ordering respect the priority list below and the user's stated preferences?
+5b. Does THIS message match the saved RENTER PROFILE, or depart from it? If it departs (different city/budget/size, or "surprise me"/"anything"), follow the current message and briefly acknowledge the change — never override an explicit request with saved preferences.
 6. Is the user actually shopping, or asking a LIFESTYLE / INFO question (vibe, cost of living, best area for X, safety, schools, commute, "tell me about")? If the latter, answer from LIFESTYLE KNOWLEDGE in prose blocks — do NOT return "results".
 
 ${isComplexInfoTurn ? `🏢 COMPLEX INFO TURN — The user is asking ABOUT a specific complex (${knownComplexes.map((c: any) => c.name).join(', ')}), NOT for listings. Respond using ONLY the "blocks" shape: a "text" block that DIRECTLY and COMPLETELY answers their exact question using KNOWN COMPLEXES above (if they ask about amenities, enumerate the amenities; if about pets, quote the pet policy; if a field is unknown, say so honestly — never invent), then a "followups" block mixing "[Ask]" and "[Search]" (e.g. "[Search] Show me apartments in ${knownComplexes[0]?.name || 'this complex'}"). A compact profile card for the complex is attached automatically by the system — do NOT emit a "complex" block yourself and do NOT pad the text with data the user didn't ask about. DO NOT return a "results" array — the user has not asked for listings yet.` : ''}

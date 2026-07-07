@@ -7,10 +7,12 @@ import { UserPreferences } from '@/types';
 import { BudgetRangeSelector } from '@/components/BudgetRangeSelector';
 import { CityDistrictSelector } from '@/components/CityDistrictSelector';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
-import { Heart, Sparkles, Home, MapPin, Calendar, DollarSign, Ruler } from 'lucide-react';
+import { Sparkles, Home, MapPin, Calendar, DollarSign, Ruler, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { preferencesToDb } from '@/lib/preferences';
+import { MUST_HAVE_OPTIONS } from '@/lib/propertyFeatures';
 
 interface OnboardingQuizProps {
   onComplete: (preferences: UserPreferences) => void;
@@ -26,15 +28,14 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   const [showContent, setShowContent] = useState(true);
   const [preferences, setPreferences] = useState<Partial<UserPreferences>>({
     styles: [],
-    colors: [],
     activities: [],
+    mustHaves: [],
     priceRange: [8000000, 15000000],
     size: '',
     location: [],
     moveInDate: ''
   });
 
-  const totalSteps = 7;
 
   useEffect(() => {
     setShowContent(true);
@@ -104,8 +105,8 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   const handleSubmit = async () => {
     const finalPreferences: UserPreferences = {
       styles: preferences.styles as string[],
-      colors: preferences.colors as string[],
       activities: preferences.activities as string[],
+      mustHaves: (preferences.mustHaves as string[]) || [],
       priceRange: preferences.priceRange as [number, number],
       size: preferences.size as string,
       location: preferences.location as string[],
@@ -117,19 +118,8 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       try {
         const { error } = await supabase
           .from('user_preferences')
-          .upsert({
-            user_id: user.id,
-            styles: finalPreferences.styles,
-            colors: finalPreferences.colors,
-            activities: finalPreferences.activities,
-            price_range_min: finalPreferences.priceRange[0],
-            price_range_max: finalPreferences.priceRange[1],
-            size: finalPreferences.size,
-            location: finalPreferences.location,
-            move_in_date: finalPreferences.moveInDate,
-            updated_at: new Date().toISOString()
-          }, { 
-            onConflict: 'user_id' 
+          .upsert(preferencesToDb(finalPreferences, user.id), {
+            onConflict: 'user_id',
           });
 
         if (error) {
@@ -171,84 +161,42 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
           description: 'Raw, urban edge',
           image: '/lovable-uploads/bc78b489-f8ff-4c97-85ef-65446bfb59dd.png'
         },
-        { 
-          id: 'Bohemian', 
-          label: 'Bohemian', 
-          description: 'Artistic, free spirit',
-          image: '/lovable-uploads/5fee52da-6f45-4cbe-88a3-d3868ca23d6d.png'
-        },
-        { 
-          id: 'Scandinavian', 
-          label: 'Scandinavian', 
+        {
+          id: 'Scandinavian',
+          label: 'Scandinavian',
           description: 'Light, airy perfection',
           image: '/lovable-uploads/f1a210c9-bdfa-4180-a680-983793a494d8.png'
         },
-        { 
-          id: 'Minimalist', 
-          label: 'Minimalist', 
+        {
+          id: 'Minimalist',
+          label: 'Minimalist',
           description: 'Less is more magic',
           image: '/lovable-uploads/de3ec921-af90-424b-9f8e-01c4368a5ae4.png'
         },
-        { 
-          id: 'Contemporary', 
-          label: 'Contemporary', 
-          description: 'Stylish & current',
-          image: '/lovable-uploads/contemporary-style.png'
-        },
-        { 
-          id: 'Traditional', 
-          label: 'Traditional', 
-          description: 'Timeless classics',
-          image: '/lovable-uploads/traditional-style.png'
-        },
-        { 
-          id: 'Rustic', 
-          label: 'Rustic', 
-          description: 'Natural & earthy',
-          image: '/lovable-uploads/rustic-style.png'
-        },
-        { 
-          id: 'Luxury', 
-          label: 'Luxury', 
+        {
+          id: 'Luxury',
+          label: 'Luxury',
           description: 'Premium elegance',
           image: '/lovable-uploads/luxury-style.png'
-        },
-        { 
-          id: 'Urban', 
-          label: 'Urban', 
-          description: 'City sophistication',
-          image: '/lovable-uploads/urban-style.png'
-        },
-        { 
-          id: 'Vintage', 
-          label: 'Vintage', 
-          description: 'Retro charm',
-          image: '/lovable-uploads/vintage-style.png'
         }
       ]
     },
     {
-      title: "Amazing choices! 🎨 Now, what colors speak to your soul?",
-      subtitle: "Colors have this incredible power to transform how we feel in a space. Which palette makes you go 'yes, this is me!'?",
+      title: "What can't you live without? 🎯",
+      subtitle: "Pick your deal-breakers — we'll make sure your top matches have them (you can still explore other options anytime).",
       type: "multi-select" as const,
-      key: "colors" as keyof UserPreferences,
-      icon: Heart,
-      options: [
-        { id: 'Neutral', label: 'Neutral', emoji: '🤍', description: 'Calming neutrals' },
-        { id: 'Warm', label: 'Warm', emoji: '🧡', description: 'Cozy warmth' },
-        { id: 'Cool', label: 'Cool', emoji: '💙', description: 'Refreshing cool tones' },
-        { id: 'Bright', label: 'Bright', emoji: '☀️', description: 'Light & airy' },
-        { id: 'Dark', label: 'Dark', emoji: '🌙', description: 'Deep & moody' },
-        { id: 'Colorful', label: 'Colorful', emoji: '🌈', description: 'Vibrant colors' },
-        { id: 'Natural', label: 'Natural', emoji: '🌿', description: 'Organic tones' },
-        { id: 'White', label: 'White', emoji: '⚪', description: 'Pure & clean' },
-        { id: 'Earth', label: 'Earth', emoji: '🤎', description: 'Earthy browns' },
-        { id: 'Bold', label: 'Bold', emoji: '💥', description: 'Bold statements' }
-      ]
+      key: "mustHaves" as keyof UserPreferences,
+      icon: CheckCircle2,
+      options: MUST_HAVE_OPTIONS.map(o => ({
+        id: o.id,
+        label: o.label,
+        emoji: o.emoji,
+        description: o.description,
+      })),
     },
     {
-      title: "Perfect! 🏠 Tell me about your home life...",
-      subtitle: "Everyone uses their space differently. What activities make you happiest at home? (Don't worry, we won't judge if it's mostly Netflix!)",
+      title: "Perfect! 🏠 How do you spend time at home?",
+      subtitle: "This helps us find spaces that fit your day-to-day. Pick whatever sounds like you.",
       type: "multi-select" as const,
       key: "activities" as keyof UserPreferences,
       icon: Home,
@@ -271,7 +219,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
     {
       title: "Space to breathe! How much room do you need?",
       subtitle: "Some love cozy spaces, others need room to spread out. What feels like 'just right' for your lifestyle?",
-      type: "multi-select" as const,
+      type: "single-select" as const,
       key: "size" as keyof UserPreferences,
       icon: Ruler,
       options: [
@@ -303,6 +251,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
     }
   ];
 
+  const totalSteps = steps.length;
   const currentStepData = steps[currentStep];
 
   return (

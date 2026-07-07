@@ -11,7 +11,6 @@ import {
   X,
   Heart,
   Home,
-  Palette,
   Activity,
   DollarSign,
   Calendar,
@@ -76,8 +75,8 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
         const pref = data[0];
         return {
           styles: pref.styles || [],
-          colors: pref.colors || [],
           activities: pref.activities || [],
+          mustHaves: pref.must_haves || [],
           priceRange: [pref.price_range_min, pref.price_range_max] as [number, number],
           size: pref.size || '',
           location: pref.location || [],
@@ -118,19 +117,6 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
     'Luxury': 'Luxury',
     'Urban': 'Urban',
     'Vintage': 'Vintage'
-  };
-
-  const colorLabels: { [key: string]: string } = {
-    'Neutral': 'Neutral tones',
-    'Warm': 'Warm tones', 
-    'Cool': 'Cool tones',
-    'Bright': 'Bright & airy',
-    'Dark': 'Dark & moody',
-    'Colorful': 'Colorful',
-    'Natural': 'Natural tones',
-    'White': 'Pure white',
-    'Earth': 'Earthy tones',
-    'Bold': 'Bold colors'
   };
 
   const activityLabels: { [key: string]: string } = {
@@ -275,23 +261,6 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
                       </div>
                     )}
 
-                    {/* Color Preferences */}
-                    {preferences.colors?.length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <Palette className="w-4 h-4 text-purple-500" />
-                          <span className="font-medium text-sm">Color Preferences</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {preferences.colors.map((color: string) => (
-                            <Badge key={color} variant="secondary" className="bg-purple-50 text-purple-700">
-                              {colorLabels[color] || color}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     {/* Activity Preferences */}
                     {preferences.activities?.length > 0 && (
                       <div>
@@ -374,8 +343,8 @@ export const RenterProfileModal = ({ userId, isOpen, onClose }: RenterProfileMod
                     )}
 
                     {/* Show message if no specific preferences are set */}
-                    {(!preferences.styles?.length && !preferences.colors?.length && 
-                      !preferences.activities?.length && !preferences.location?.length && 
+                    {(!preferences.styles?.length &&
+                      !preferences.activities?.length && !preferences.location?.length &&
                       !preferences.size && !preferences.moveInDate) && (
                       <p className="text-sm text-muted-foreground italic text-center py-4">
                         This renter hasn't set specific preferences yet.

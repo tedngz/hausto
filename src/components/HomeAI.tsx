@@ -63,9 +63,15 @@ interface SearchResult {
 }
 interface HomeAIProps {
   userPreferences?: UserPreferences;
+  /** When provided, HomeAI auto-sends this as the first message once (used for the
+   *  quiz → AI-search handoff). Cleared by the parent after it fires. */
+  initialQuery?: string;
+  onInitialQueryConsumed?: () => void;
 }
 export const HomeAI = ({
-  userPreferences
+  userPreferences,
+  initialQuery,
+  onInitialQueryConsumed
 }: HomeAIProps) => {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
@@ -86,6 +92,7 @@ export const HomeAI = ({
   const [hasSearched, setHasSearched] = useState(false);
   const [wantsNewChat, setWantsNewChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialQuerySentRef = useRef(false);
   const navigate = useNavigate();
   const {
     formatPrice
@@ -187,6 +194,24 @@ export const HomeAI = ({
       }
     }
   }, [user]);
+  // Quiz → AI-search handoff: auto-send the preference-derived query exactly once
+  // for a freshly landed logged-in user with an empty conversation.
+  useEffect(() => {
+    if (!initialQuery || !initialQuery.trim()) return;
+    if (initialQuerySentRef.current) return;
+    if (!user) return;
+    if (messages.length > 0 || hasSearched) return;
+    initialQuerySentRef.current = true;
+    setQuery(initialQuery);
+    // Defer so the input paints before the request fires.
+    const t = setTimeout(() => {
+      handleSearch(initialQuery);
+      onInitialQueryConsumed?.();
+    }, 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery, user, messages.length]);
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {

@@ -110,8 +110,8 @@ export const PropertyCard = ({
   // Always calculate vibe score - use default preferences if none provided
   const defaultPreferences: UserPreferences = {
     styles: ['modern', 'minimalist'],
-    colors: ['neutral', 'warm'],
     activities: ['relaxing', 'working'],
+    mustHaves: [],
     priceRange: [1000, 5000] as [number, number],
     size: '1-2 bedrooms',
     location: ['any'],

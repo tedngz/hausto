@@ -51,8 +51,7 @@ interface VibeAttribute {
 
 export interface VibeMatchAttributes {
   style: VibeAttribute[];
-  color: VibeAttribute[];
-  lifestyle: VibeAttribute[];
+  features: VibeAttribute[];
 }
 
 interface EditorialPropertyCardProps {
@@ -89,11 +88,11 @@ const RATING_DOT: Record<string, string> = {
   casual: 'bg-gray-300',
 };
 
-// Aesthetic dimensions (the "vibe") shown as attribute chips.
-const ATTRIBUTE_GROUPS: Array<{ key: 'style' | 'color' | 'lifestyle'; label: string }> = [
+// Dimensions shown as attribute chips: aesthetic style + concrete features
+// (must-haves and lifestyle-derived), each flagged matched/unmatched.
+const ATTRIBUTE_GROUPS: Array<{ key: 'style' | 'features'; label: string }> = [
   { key: 'style', label: 'Style' },
-  { key: 'color', label: 'Colors' },
-  { key: 'lifestyle', label: 'Lifestyle' },
+  { key: 'features', label: 'Features' },
 ];
 
 // Practical dimensions shown as a compact fit indicator, not a competing bar.
@@ -326,7 +325,7 @@ export const EditorialPropertyCard = ({
                 How this property aligns with your preferences.
               </p>
 
-              {vibeMatch && (vibeMatch.style.length + vibeMatch.color.length + vibeMatch.lifestyle.length) > 0 ? (
+              {vibeMatch && (vibeMatch.style.length + vibeMatch.features.length) > 0 ? (
                 <div className="space-y-2.5">
                   {ATTRIBUTE_GROUPS.map(({ key, label }) => {
                     const items = vibeMatch[key];
@@ -379,7 +378,7 @@ export const EditorialPropertyCard = ({
               ) : vibeDetailsText ? (
                 <p className="text-xs text-foreground/90 leading-relaxed">{vibeDetailsText}</p>
               ) : (
-                <p className="text-xs text-muted-foreground">A quick read on how this home matches your style, colors and lifestyle.</p>
+                <p className="text-xs text-muted-foreground">A quick read on how this home matches your style and lifestyle.</p>
               )}
             </PopoverContent>
           </Popover>

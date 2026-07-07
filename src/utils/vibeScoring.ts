@@ -1,12 +1,22 @@
 
 import { UserPreferences, Apartment } from '@/types';
+import {
+  PropertyFeatures,
+  FeatureKey,
+  FeatureAttribute,
+  extractPropertyFeatures,
+  getFeatureMatch,
+  propertyHasFeature,
+  lifestyleToSoftFeatures,
+} from '@/lib/propertyFeatures';
 
 export interface VibeScore {
   overall: number;
+  /** True when the property is missing a hard must-have (grade is capped). */
+  missingMustHave: boolean;
   breakdown: {
     style: number;
-    color: number;
-    activities: number;
+    features: number;
     price: number;
     location: number;
   };
@@ -29,8 +39,6 @@ const toStringArray = (value: unknown): string[] => {
 
 const normalizePreferencePayload = (preferences: UserPreferences) => ({
   styles: toStringArray(preferences?.styles),
-  colors: toStringArray(preferences?.colors),
-  activities: toStringArray(preferences?.activities),
   location: toStringArray(preferences?.location),
   priceRange: Array.isArray(preferences?.priceRange) && preferences.priceRange.length === 2
     ? preferences.priceRange
@@ -42,6 +50,27 @@ const getVibeMetrics = (apartment: Apartment) => {
   return vibeAnalysis && typeof vibeAnalysis === 'object' ? vibeAnalysis : null;
 };
 
+// Resolve the property's canonical feature set: prefer the stored
+// vibe_analysis.features (from analyze-vibe / backfill), else derive on the fly
+// so scoring works even before a property has been re-processed.
+const getPropertyFeatures = (apartment: Apartment): PropertyFeatures => {
+  const va = getVibeMetrics(apartment) || {};
+  if (va.features && typeof va.features === 'object') return va.features as PropertyFeatures;
+  return extractPropertyFeatures({
+    metrics: va,
+    amenities: (apartment as any).amenities,
+    highlights: (apartment as any).highlights,
+    description: (apartment as any).description,
+    title: (apartment as any).title,
+  });
+};
+
+const getRequiredFeatures = (preferences: UserPreferences) => {
+  const mustHaves = (preferences?.mustHaves ?? []) as FeatureKey[];
+  const soft = lifestyleToSoftFeatures(preferences?.activities);
+  return { mustHaves, soft };
+};
+
 export interface VibeAttribute {
   label: string;
   matched: boolean;
@@ -49,62 +78,87 @@ export interface VibeAttribute {
 
 export interface VibeAttributeMatch {
   style: VibeAttribute[];
-  color: VibeAttribute[];
-  lifestyle: VibeAttribute[];
+  features: FeatureAttribute[];
   hasAny: boolean;
 }
 
-// Categorise the property's AI-detected styles/colors/lifestyle and flag which
-// ones align with the renter's stated preferences. Powers the vibe-match
-// popover so renters see WHAT matches, not just a percentage.
+// Categorise the property's style + concrete features and flag which align with
+// the renter's preferences. Powers the vibe-match popover so renters see WHAT
+// matches (must-haves + lifestyle-derived features), not just a percentage.
 export const getVibeAttributeMatch = (apartment: Apartment, preferences: UserPreferences): VibeAttributeMatch => {
   const vibeAnalysis = getVibeMetrics(apartment) || {};
   const prefs = normalizePreferencePayload(preferences);
 
-  const build = (propertyVals: string[], userVals: string[]): VibeAttribute[] => {
-    const userLower = new Set(userVals.map(v => v.toLowerCase()));
-    const seen = new Set<string>();
-    const out: VibeAttribute[] = [];
-    for (const raw of propertyVals) {
-      const key = raw.toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      out.push({ label: raw.trim(), matched: userLower.has(key) });
-    }
-    // Sort matched first so the alignment is obvious at a glance.
-    return out.sort((a, b) => Number(b.matched) - Number(a.matched)).slice(0, 6);
-  };
+  const userLower = new Set(prefs.styles.map(v => v.toLowerCase()));
+  const seen = new Set<string>();
+  const style: VibeAttribute[] = [];
+  for (const raw of toStringArray(vibeAnalysis.styles)) {
+    const key = raw.toLowerCase().trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    style.push({ label: raw.trim(), matched: userLower.has(key) });
+  }
+  style.sort((a, b) => Number(b.matched) - Number(a.matched));
 
-  const style = build(toStringArray(vibeAnalysis.styles), prefs.styles);
-  const color = build(toStringArray(vibeAnalysis.colors), prefs.colors);
-  const lifestyle = build(toStringArray(vibeAnalysis.activities), prefs.activities);
+  const { mustHaves, soft } = getRequiredFeatures(preferences);
+  const { attributes: features } = getFeatureMatch(getPropertyFeatures(apartment), mustHaves, soft);
 
-  return { style, color, lifestyle, hasAny: style.length + color.length + lifestyle.length > 0 };
+  return { style: style.slice(0, 6), features, hasAny: style.length + features.length > 0 };
+};
+
+// Feature dimension: must-haves dominate; lifestyle-derived soft features nudge.
+// Returns a raw 0-100 score and whether a hard must-have is unmet.
+const calculateFeatureMatch = (
+  apartment: Apartment,
+  mustHaves: FeatureKey[],
+  soft: FeatureKey[],
+): { score: number; missingMustHave: boolean } => {
+  const features = getPropertyFeatures(apartment);
+  const { missingMustHave, mustMatched } = getFeatureMatch(features, mustHaves, soft);
+  const softList = soft.filter(k => !mustHaves.includes(k));
+  const softMatched = softList.filter(k => propertyHasFeature(features, k)).length;
+
+  let score: number;
+  if (mustHaves.length === 0 && softList.length === 0) {
+    score = 70; // renter expressed no feature preference — neutral, non-punishing
+  } else if (mustHaves.length > 0) {
+    const mustRatio = mustMatched / mustHaves.length;
+    const softRatio = softList.length ? softMatched / softList.length : 0;
+    score = 100 * (0.8 * mustRatio + 0.2 * softRatio);
+  } else {
+    const softRatio = softList.length ? softMatched / softList.length : 0;
+    score = 55 + 45 * softRatio;
+  }
+  return { score, missingMustHave };
 };
 
 export const calculateVibeScore = (apartment: Apartment, preferences: UserPreferences): VibeScore => {
   const normalizedPreferences = normalizePreferencePayload(preferences);
+  const { mustHaves, soft } = getRequiredFeatures(preferences);
 
   const styleScore = calculateStyleMatch(apartment, normalizedPreferences.styles);
   const locationScore = calculateLocationMatch(apartment.location, normalizedPreferences.location);
-  const colorScore = calculateColorMatch(apartment, normalizedPreferences.colors);
-  const activityScore = calculateActivityMatch(apartment, normalizedPreferences.activities);
   const priceScore = calculatePriceMatch(apartment.price, normalizedPreferences.priceRange);
+  const { score: featureRaw, missingMustHave } = calculateFeatureMatch(apartment, mustHaves, soft);
 
-  const overall = Math.round(
+  // Hard cap: a property missing a deal-breaker can't score well on features.
+  const featureScore = missingMustHave ? Math.min(featureRaw, 40) : featureRaw;
+
+  let overall = Math.round(
     styleScore * 0.30 +
+    featureScore * 0.35 +
     locationScore * 0.20 +
-    colorScore * 0.20 +
-    activityScore * 0.20 +
-    priceScore * 0.10
+    priceScore * 0.15
   );
+  // And its overall grade is capped so a deal-breaker miss can't read "Perfect vibe".
+  if (missingMustHave) overall = Math.min(overall, 60);
 
   return {
     overall,
+    missingMustHave,
     breakdown: {
       style: Math.round(styleScore),
-      color: Math.round(colorScore),
-      activities: Math.round(activityScore),
+      features: Math.round(featureScore),
       price: Math.round(priceScore),
       location: Math.round(locationScore)
     }
@@ -184,129 +238,6 @@ const calculateStyleMatch = (apartment: Apartment, userStyles: string[]): number
     });
 
     if (apartmentStyles.length > 0 || apartment.vibe) {
-      matchScore += 50;
-    }
-  }
-
-  return Math.min(100, matchScore);
-};
-
-const calculateColorMatch = (apartment: Apartment, userColors: string[]): number => {
-  let matchScore = 0;
-  const vibeAnalysis = getVibeMetrics(apartment);
-  const storedColors = toStringArray(vibeAnalysis?.colors);
-
-  if (storedColors.length > 0) {
-    userColors.forEach(userColor => {
-      if (storedColors.some((c) => c.toLowerCase() === userColor.toLowerCase())) {
-        matchScore += 30;
-      }
-    });
-
-    matchScore = matchScore > 0 ? matchScore + 40 : 30;
-  } else if (vibeAnalysis) {
-    const colorMap: { [key: string]: string[] } = {
-      'neutral': ['minimalist', 'elegant'],
-      'warm': ['cozy', 'rustic'],
-      'cool': ['modern', 'urban'],
-      'bright': ['colorful', 'natural_light'],
-      'dark': ['luxurious', 'elegant'],
-      'colorful': ['colorful'],
-      'natural': ['rustic', 'natural_light'],
-      'white': ['minimalist', 'modern', 'natural_light'],
-      'earth': ['rustic', 'cozy'],
-      'bold': ['colorful', 'modern']
-    };
-
-    userColors.forEach(userColor => {
-      const mappedMetrics = colorMap[userColor.toLowerCase()] || [userColor.toLowerCase()];
-      mappedMetrics.forEach(metric => {
-        const metricValue = typeof vibeAnalysis[metric] === 'number' ? vibeAnalysis[metric] : 0;
-        if (metricValue >= 7) {
-          matchScore += 25;
-        } else if (metricValue >= 5) {
-          matchScore += 15;
-        }
-      });
-    });
-
-    if (typeof vibeAnalysis.natural_light === 'number' && vibeAnalysis.natural_light >= 8) {
-      matchScore += 20;
-    }
-
-    if (userColors.some(c => c.toLowerCase() === 'colorful') && typeof vibeAnalysis.colorful === 'number' && vibeAnalysis.colorful >= 6) {
-      matchScore += 30;
-    }
-  } else {
-    const apartmentColorMap: { [key: string]: string[] } = {
-      'Modern': ['neutral', 'cool', 'white', 'grey'],
-      'Cozy': ['warm', 'earth', 'brown', 'beige'],
-      'Industrial': ['neutral', 'cool', 'metal', 'grey'],
-      'Bohemian': ['warm', 'bold', 'colorful', 'earth'],
-      'Scandinavian': ['neutral', 'white', 'natural', 'light'],
-      'Minimalist': ['neutral', 'white', 'simple', 'clean'],
-      'Contemporary': ['neutral', 'cool', 'modern', 'sleek'],
-      'Traditional': ['warm', 'earth', 'classic', 'rich'],
-      'Rustic': ['earth', 'natural', 'wood', 'warm'],
-      'Luxury': ['rich', 'elegant', 'gold', 'sophisticated'],
-      'Urban': ['neutral', 'cool', 'modern', 'grey'],
-      'Vintage': ['classic', 'muted', 'antique', 'period']
-    };
-
-    const apartmentColors = apartmentColorMap[apartment.vibe] || [];
-
-    userColors.forEach(userColor => {
-      if (apartmentColors.includes(userColor.toLowerCase())) {
-        matchScore += 20;
-      }
-    });
-
-    if (apartmentColors.length > 0 || apartment.vibe) {
-      matchScore += 50;
-    }
-  }
-
-  return Math.min(100, matchScore);
-};
-
-const calculateActivityMatch = (apartment: Apartment, userActivities: string[]): number => {
-  let matchScore = 0;
-  const vibeAnalysis = getVibeMetrics(apartment);
-  const storedActivities = toStringArray(vibeAnalysis?.activities);
-
-  if (storedActivities.length > 0) {
-    userActivities.forEach(userActivity => {
-      if (storedActivities.some((a) => a.toLowerCase() === userActivity.toLowerCase())) {
-        matchScore += 30;
-      }
-    });
-
-    matchScore = matchScore > 0 ? matchScore + 40 : 30;
-  } else {
-    const apartmentActivityMap: { [key: string]: string[] } = {
-      'Modern': ['working', 'reading', 'relaxing', 'entertaining'],
-      'Cozy': ['reading', 'relaxing', 'cooking', 'family time'],
-      'Industrial': ['working', 'entertaining', 'exercising', 'creating'],
-      'Bohemian': ['creating', 'entertaining', 'relaxing', 'artistic'],
-      'Scandinavian': ['relaxing', 'reading', 'meditating', 'family time'],
-      'Minimalist': ['relaxing', 'working', 'reading', 'meditating'],
-      'Contemporary': ['working', 'entertaining', 'relaxing', 'socializing'],
-      'Traditional': ['family time', 'cooking', 'reading', 'relaxing'],
-      'Rustic': ['relaxing', 'cooking', 'family time', 'outdoor activities'],
-      'Luxury': ['entertaining', 'relaxing', 'socializing', 'formal dining'],
-      'Urban': ['working', 'socializing', 'exercising', 'entertainment'],
-      'Vintage': ['collecting', 'reading', 'entertaining', 'crafting'],
-    };
-
-    const apartmentActivities = apartmentActivityMap[apartment.vibe] || [];
-
-    userActivities.forEach(userActivity => {
-      if (apartmentActivities.includes(userActivity.toLowerCase())) {
-        matchScore += 20;
-      }
-    });
-
-    if (apartmentActivities.length > 0 || apartment.vibe) {
       matchScore += 50;
     }
   }

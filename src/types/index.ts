@@ -1,7 +1,8 @@
 export type UserPreferences = {
   styles: string[];
-  colors: string[];
   activities: string[];
+  /** Feature keys the renter requires (deal-breakers). See src/lib/propertyFeatures.ts */
+  mustHaves: string[];
   priceRange: [number, number];
   size: string;
   location: string[];
