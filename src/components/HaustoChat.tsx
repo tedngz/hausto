@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useSubscription } from '@/hooks/useSubscription';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
@@ -1203,9 +1204,18 @@ export const HaustoChat = ({
               {(() => {
                 const currentConv = conversations.find(c => c.id === selectedMatch);
                 return currentConv?.properties?.map((prop, index) => (
-                  <button
+                  <EditorialPropertyCard
                     key={prop.property_id}
-                    onClick={async () => {
+                    apartment={{
+                      id: prop.property_id,
+                      images: prop.images || [],
+                      title: prop.title || 'Untitled Property',
+                      location: prop.location,
+                      price: Number(prop.price || 0),
+                    }}
+                    compact
+                    aspectClass="aspect-[16/10]"
+                    onCardClick={async () => {
                       try {
                         // Try internal properties first
                         const { data: fullProperty, error } = await supabase
@@ -1290,29 +1300,7 @@ export const HaustoChat = ({
                         });
                       }
                     }}
-                    className="w-full flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors text-left"
-                  >
-                    {prop.images?.[0] ? (
-                      <img 
-                        src={prop.images[0]} 
-                        alt={prop.title}
-                        className="w-16 h-16 object-cover rounded-md flex-shrink-0"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center flex-shrink-0">
-                        <MapPin className="w-6 h-6 text-gray-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm text-gray-900 truncate">{prop.title}</h4>
-                      <p className="text-xs text-gray-500 truncate">{prop.location}</p>
-                      {prop.price && (
-                        <p className="text-xs font-medium text-orange-600 mt-1">
-                          {formatPrice(Number(prop.price))}/mo
-                        </p>
-                      )}
-                    </div>
-                  </button>
+                  />
                 ));
               })()}
             </div>

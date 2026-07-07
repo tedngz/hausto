@@ -3,6 +3,8 @@ import { Tv, Wifi, Wind, Waves, Car, Dumbbell, Shield, Flower2, Flame, Bath, Spa
 interface PropertyAmenitiesProps {
   amenities: string[];
   compact?: boolean;
+  /** 'overlay' renders translucent chips for use on top of a dark photo */
+  variant?: 'default' | 'overlay';
 }
 
 const amenityIconMap: Record<string, { icon: any; label: string }> = {
@@ -155,7 +157,7 @@ const normalizeAmenity = (amenity: string): string => {
   return normalized;
 };
 
-export const PropertyAmenities = ({ amenities, compact = true }: PropertyAmenitiesProps) => {
+export const PropertyAmenities = ({ amenities, compact = true, variant = 'default' }: PropertyAmenitiesProps) => {
   if (!amenities || amenities.length === 0) return null;
 
   // Deduplicate, filter, and normalize amenities
@@ -165,17 +167,22 @@ export const PropertyAmenities = ({ amenities, compact = true }: PropertyAmeniti
 
   if (uniqueAmenities.length === 0) return null;
 
+  const chipClass =
+    variant === 'overlay'
+      ? 'bg-white/15 border-white/25 text-white backdrop-blur-md'
+      : 'bg-muted/50 border-border text-muted-foreground';
+
   return (
     <div className={`flex flex-wrap gap-2 ${compact ? 'py-2' : 'py-3'}`}>
       {uniqueAmenities.map((amenity) => {
         const mapped = amenityIconMap[amenity];
-        
+
         if (mapped) {
           const { icon: Icon, label } = mapped;
           return (
             <div
               key={amenity}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground ${compact ? 'text-xs' : 'text-sm'}`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${chipClass} ${compact ? 'text-xs' : 'text-sm'}`}
               title={label}
             >
               <Icon className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
@@ -183,12 +190,12 @@ export const PropertyAmenities = ({ amenities, compact = true }: PropertyAmeniti
             </div>
           );
         }
-        
+
         // Render AI-detected amenities without icons
         return (
           <div
             key={amenity}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground ${compact ? 'text-xs' : 'text-sm'}`}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${chipClass} ${compact ? 'text-xs' : 'text-sm'}`}
             title={amenity}
           >
             <span className="font-medium">{amenity}</span>

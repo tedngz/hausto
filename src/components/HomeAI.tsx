@@ -807,81 +807,26 @@ export const HomeAI = ({
               {/* Text/info blocks shown ABOVE results */}
               <AIBlocks blocks={(searchResults.blocks || []).filter((b: any) => b.type !== 'followups')} onFollowup={handleFollowup} />
               
-              {searchResults.results.length > 0 && <div className="space-y-3 max-w-[680px]">
-                  {searchResults.results.map(property => <Card key={property.id} className="border-border hover:shadow-lg transition-all duration-200 cursor-pointer hover-scale" onClick={() => handlePropertyClick(property)}>
-                      <CardContent className="p-3 sm:p-4">
-                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                          {/* Property Image */}
-                          <div className="w-full h-44 sm:w-28 sm:h-24 md:w-28 md:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative sm:order-1">
-                            {property.images && property.images.length > 0 ? <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" onError={e => {
-                        const target = e.target as HTMLImageElement;
-                        target.onerror = null;
-                        const currentIndex = property.images.indexOf(target.src);
-                        if (currentIndex < property.images.length - 1) {
-                          target.src = property.images[currentIndex + 1];
-                        } else {
-                          target.style.display = 'none';
-                          target.parentElement?.classList.add('fallback-active');
-                        }
-                      }} /> : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
-                                <Home className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
-                              </div>}
-                            {property.isExternal && (!property.images || property.images.length === 0) && <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/30">
-                                <Home className="h-10 w-10 text-primary mb-2" />
-                                <span className="text-xs text-muted-foreground font-medium">External Listing</span>
-                              </div>}
-                            {/* Match Score Overlay */}
-                            <div className="absolute top-2 left-2">
-                              <Badge className="bg-primary/90 text-primary-foreground border-none text-xs font-semibold px-1.5 py-0.5">
-                                {property.matchScore}% match
-                              </Badge>
-                            </div>
-                            {/* Like Button - Mobile */}
-                            <div className="absolute top-2 right-2 sm:hidden">
-                              <Button onClick={e => {
-                          e.stopPropagation();
-                          handleLikeProperty(property.id, property.realtor_id);
-                        }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-8 w-8 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-white/90 hover:bg-white text-orange-600 backdrop-blur"}`}>
-                                <Heart className={`h-4 w-4 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                              </Button>
-                            </div>
-                          </div>
+              {searchResults.results.length > 0 && <div className="space-y-4 max-w-[680px]">
+                  {/* Same editorial cards as logged-in users see */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[640px]">
+                    {searchResults.results.map(property => (
+                      <EditorialPropertyCard
+                        key={property.id}
+                        apartment={property}
+                        aspectClass="aspect-[4/5]"
+                        compact
+                        className="max-w-[300px] w-full mx-auto sm:mx-0"
+                        vibeScore={typeof property.matchScore === 'number' ? { overall: property.matchScore } : undefined}
+                        vibeDetailsText={property.matchReason}
+                        quoteFallback={property.matchReason}
+                        onCardClick={() => handlePropertyClick(property)}
+                        liked={likedProperties.has(property.id)}
+                        onLike={() => handleLikeProperty(property.id, property.realtor_id)}
+                      />
+                    ))}
+                  </div>
 
-                          {/* Property Details */}
-                          <div className="flex-1 min-w-0 sm:order-2 text-left">
-                            <div className="flex items-start justify-between mb-1">
-                              <div className="flex-1 min-w-0 pr-2">
-                                <h5 className="text-foreground line-clamp-1 text-sm sm:text-base text-left font-serif font-normal">{property.title}</h5>
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-                                  <MapPin className="h-3 w-3 flex-shrink-0" />
-                                  <span className="line-clamp-1">{translateLocationToEnglish(property.location)}</span>
-                                </div>
-                              </div>
-                              {/* Desktop like button */}
-                              <div className="hidden sm:flex flex-col items-end gap-1">
-                                <Button onClick={e => {
-                            e.stopPropagation();
-                            handleLikeProperty(property.id, property.realtor_id);
-                          }} size="sm" variant={likedProperties.has(property.id) ? "default" : "ghost"} className={`h-7 w-7 p-0 ${likedProperties.has(property.id) ? "bg-orange-500 hover:bg-orange-600 text-white" : "hover:bg-orange-50 text-orange-600"}`}>
-                                   <Heart className={`h-3.5 w-3.5 ${likedProperties.has(property.id) ? "fill-current" : ""}`} />
-                                 </Button>
-                               </div>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                              <Badge className="bg-primary text-primary-foreground font-semibold text-xs">{formatPrice(property.price)}/mo</Badge>
-                              {property.size && <Badge variant="outline" className="text-xs">{property.size}</Badge>}
-                            </div>
-
-                            <p className="text-xs text-foreground text-left">
-                              <span className="font-semibold text-primary">Why it matches: </span>
-                              {property.matchReason}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>)}
-                
                   {/* Sign in CTA for Non-Logged In Users */}
                   <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center">
                     <Button onClick={() => navigate('/auth', {

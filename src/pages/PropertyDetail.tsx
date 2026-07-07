@@ -187,12 +187,6 @@ const PropertyDetail = () => {
             />
           </div>
 
-          {apartment.description && (
-            <p className="max-w-sm mx-auto mt-4 text-sm text-foreground/80 leading-relaxed text-center">
-              {apartment.description}
-            </p>
-          )}
-
           {!user && (
             <Card className="mt-4">
               <CardContent className="pt-6">

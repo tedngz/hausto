@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X, Share2 } from 'lucide-react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X, Share2, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { MapViewModal } from '@/components/MapViewModal';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { toast } from '@/hooks/use-toast';
@@ -26,6 +27,7 @@ export interface EditorialApartment {
   vibe?: string | null;
   description?: string | null;
   highlights?: string[];
+  amenities?: string[];
   vibe_analysis?: any;
   latitude?: number | null;
   longitude?: number | null;
@@ -73,6 +75,8 @@ interface EditorialPropertyCardProps {
   aspectClass?: string;
   /** Smaller typography so the photo dominates (used in the AI chat's compact cards) */
   compact?: boolean;
+  /** Extra actions rendered in the top-right cluster, before the share/like buttons (e.g. a delete button) */
+  topRightActions?: ReactNode;
   className?: string;
 }
 
@@ -114,12 +118,14 @@ export const EditorialPropertyCard = ({
   onImageIndexChange,
   aspectClass = 'aspect-[380/560]',
   compact = false,
+  topRightActions,
   className = '',
 }: EditorialPropertyCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(Math.min(initialImageIndex, images.length - 1));
   const [hover, setHover] = useState(false);
   const [noHover, setNoHover] = useState(false);
+  const [showAmenities, setShowAmenities] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -164,9 +170,32 @@ export const EditorialPropertyCard = ({
   }, [quoteFallback, apartment.vibe, apartment.description]);
 
   const quote = imageHighlight || fallbackQuote;
-  const spec = [apartment.rooms, apartment.size].filter(s => s && String(s).trim()).join(' · ');
+  // Size values are inconsistent across sources: some already carry a unit ("85m²",
+  // "120 sqm"), others are a bare number ("64"). Append m² only when no unit is present.
+  const formatSize = (size?: string | null) => {
+    const s = String(size ?? '').trim();
+    if (!s) return '';
+    if (/m²|m2|sqm|sq\s*m|ft²|sq\s*ft/i.test(s)) return s;
+    return /^\d+([.,]\d+)?$/.test(s) ? `${s}m²` : s;
+  };
+  const spec = [apartment.rooms, formatSize(apartment.size)].filter(s => s && String(s).trim()).join(' · ');
   const arrowsVisible = hover || noHover;
+  const revealVisible = hover || noHover;
   const isFirstImage = current === 0;
+
+  // Full description, revealed on hover (touch devices have no hover, so it stays open).
+  // Skip it when it merely repeats the title or the visible caption.
+  const revealText = useMemo(() => {
+    const desc = apartment.description?.trim();
+    if (!desc) return '';
+    const lower = desc.toLowerCase();
+    if (lower === displayTitle.trim().toLowerCase()) return '';
+    if (quote && lower === quote.trim().toLowerCase()) return '';
+    return desc;
+  }, [apartment.description, displayTitle, quote]);
+
+  const amenities = Array.isArray(apartment.amenities) ? apartment.amenities.filter(a => a && String(a).trim()) : [];
+  const hasAmenities = amenities.length > 0;
 
   const ratingLabel = vibeScore ? getVibeRatingLabel(Number(vibeScore.overall)) : null;
 
@@ -345,6 +374,7 @@ export const EditorialPropertyCard = ({
         ) : <span />}
 
         <div className="flex items-center gap-2">
+          {topRightActions}
           <Button
             size="icon"
             variant="secondary"
@@ -419,9 +449,42 @@ export const EditorialPropertyCard = ({
           </p>
         )}
 
-        {/* Size · price · contact — one level */}
+        {/* Full description — cover (first image) only; hidden at rest, slides up on hover (always open on touch) */}
+        {isFirstImage && revealText && (
+          <div
+            className="overflow-hidden"
+            style={{
+              maxHeight: revealVisible ? (compact ? 84 : 120) : 0,
+              opacity: revealVisible ? 1 : 0,
+              transition: `max-height 700ms ${EASE}, opacity 500ms ${EASE}`,
+            }}
+          >
+            <p className={`text-white/85 leading-relaxed ${compact ? 'text-[11px] line-clamp-4' : 'text-[13px] line-clamp-5'}`}>
+              {revealText}
+            </p>
+          </div>
+        )}
+
+        {/* Size · amenities · price · contact — one level */}
         <div className={`flex items-center justify-between gap-2 border-t border-white/30 ${compact ? 'pt-1.5' : 'pt-2.5'}`}>
-          <span className={`text-white/80 line-clamp-1 ${compact ? 'text-[11px]' : 'text-[13px]'}`}>{spec}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`text-white/80 line-clamp-1 ${compact ? 'text-[11px]' : 'text-[13px]'}`}>{spec}</span>
+            {hasAmenities && (
+              <button
+                type="button"
+                aria-label={showAmenities ? 'Hide amenities' : 'Show amenities'}
+                aria-expanded={showAmenities}
+                title="Amenities"
+                className={`flex-shrink-0 flex items-center justify-center rounded-full backdrop-blur-md transition-colors ${compact ? 'w-5 h-5' : 'w-6 h-6'} ${showAmenities ? 'bg-white text-foreground' : 'bg-black/35 text-white hover:bg-black/55'}`}
+                onClick={e => {
+                  e.stopPropagation();
+                  setShowAmenities(v => !v);
+                }}
+              >
+                <LayoutGrid className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             <span className={`font-semibold whitespace-nowrap ${compact ? 'text-sm' : 'text-lg'}`}>
               {formatPrice(apartment.price)}
@@ -441,6 +504,13 @@ export const EditorialPropertyCard = ({
             )}
           </div>
         </div>
+
+        {/* Amenity details — revealed when the amenities icon next to the spec is toggled */}
+        {hasAmenities && showAmenities && (
+          <div className="w-full">
+            <PropertyAmenities amenities={amenities} compact variant="overlay" />
+          </div>
+        )}
       </div>
 
       {/* Map modal for the location */}
