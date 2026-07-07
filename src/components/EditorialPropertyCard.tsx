@@ -125,6 +125,7 @@ export const EditorialPropertyCard = ({
   const [current, setCurrent] = useState(Math.min(initialImageIndex, images.length - 1));
   const [hover, setHover] = useState(false);
   const [noHover, setNoHover] = useState(false);
+  const [tapReveal, setTapReveal] = useState(false);
   const [showAmenities, setShowAmenities] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -142,6 +143,7 @@ export const EditorialPropertyCard = ({
 
   const go = (delta: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    setTapReveal(false);
     setCurrent(c => {
       const next = (c + delta + images.length) % images.length;
       onImageIndexChange?.(next);
@@ -180,7 +182,9 @@ export const EditorialPropertyCard = ({
   };
   const spec = [apartment.rooms, formatSize(apartment.size)].filter(s => s && String(s).trim()).join(' · ');
   const arrowsVisible = hover || noHover;
-  const revealVisible = hover || noHover;
+  // Desktop reveals the description on hover; touch devices (no hover) reveal it
+  // on tap of the cover image instead of showing it permanently.
+  const revealVisible = noHover ? tapReveal : hover;
   const isFirstImage = current === 0;
 
   // Full description, revealed on hover (touch devices have no hover, so it stays open).
@@ -266,6 +270,14 @@ export const EditorialPropertyCard = ({
         alt={`${displayTitle} — photo ${current + 1} of ${images.length}`}
         className="absolute inset-0 w-full h-full object-cover"
         style={{ transition: `transform 1200ms ${EASE}`, transform: hover ? 'scale(1.07)' : 'scale(1)' }}
+        onClick={e => {
+          // On touch devices, tap the cover photo to reveal/hide the description
+          // instead of showing it permanently. Let other taps fall through to onCardClick.
+          if (noHover && isFirstImage && revealText) {
+            e.stopPropagation();
+            setTapReveal(v => !v);
+          }
+        }}
         onError={e => {
           const target = e.target as HTMLImageElement;
           target.onerror = null;
