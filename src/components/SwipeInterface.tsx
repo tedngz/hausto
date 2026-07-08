@@ -66,7 +66,7 @@ export const SwipeInterface = ({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('*')
+        .select('id, title, location, price, size, vibe, description, highlights, amenities, images, vibe_analysis, rooms, source_url, source, latitude, longitude, created_at, is_active, expires_at, crawled_at')
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
         .order('crawled_at', { ascending: false })
