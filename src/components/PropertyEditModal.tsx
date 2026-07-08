@@ -252,7 +252,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
       
       const table = isExternal ? 'external_properties' : 'properties';
       const selectFields = isExternal
-        ? 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, source_url, contact_name, contact_phone, updated_at'
+        ? 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, source_url, updated_at'
         : 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, property_source_link, property_source_provider_name, property_source_provider_phone, updated_at';
       
       const { data: fresh, error } = await supabase
@@ -263,6 +263,12 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
       if (error) {
         console.error('Failed to fetch fresh property for edit modal:', error);
         return;
+      }
+      if (!cancelled && fresh && isExternal) {
+        const { data: contactRows } = await supabase.rpc('get_external_property_contact', { _property_id: property.id });
+        const contact = Array.isArray(contactRows) ? contactRows[0] : contactRows;
+        (fresh as any).contact_name = contact?.contact_name ?? null;
+        (fresh as any).contact_phone = contact?.contact_phone ?? null;
       }
       if (!cancelled && fresh) {
         const analysis = (fresh as any)?.vibe_analysis || {};
