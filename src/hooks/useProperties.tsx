@@ -83,7 +83,7 @@ export const useProperties = () => {
           .order('created_at', { ascending: false }),
         supabase
           .from('external_properties')
-          .select('*')
+          .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false }),
