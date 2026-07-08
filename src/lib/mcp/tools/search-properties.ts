@@ -1,4 +1,4 @@
-import { defineTool } from "@lovable.dev/mcp-js";
+import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
@@ -7,11 +7,14 @@ const VND_TO_USD = 24500;
 
 declare const process: { env: Record<string, string | undefined> };
 
-
-function sb() {
+function sbForUser(ctx: ToolContext) {
   return createClient(
     process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_PUBLISHABLE_KEY!,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
   );
 }
 
@@ -39,8 +42,14 @@ export default defineTool({
     limit: z.number().int().min(1).max(50).optional().default(10),
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
-  handler: async (input) => {
-    const supabase = sb();
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true,
+      };
+    }
+    const supabase = sbForUser(ctx);
     const tenDaysAgo = new Date(
       Date.now() - 10 * 24 * 60 * 60 * 1000,
     ).toISOString();

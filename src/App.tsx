@@ -20,6 +20,7 @@ import Complexes from "./pages/Complexes";
 import ComplexDetail from "./pages/ComplexDetail";
 import ComplexMap from "./pages/ComplexMap";
 import RealtorApply from "./pages/RealtorApply";
+import OAuthConsent from "./pages/OAuthConsent";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
             <Route path="/subscription-cancel" element={<SubscriptionCancel />} />
             <Route path="/addon-success" element={<AddonSuccess />} />
+            <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

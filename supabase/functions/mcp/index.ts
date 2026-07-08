@@ -3,7 +3,7 @@
 // supabase function: mcp
 // Bundled from src/lib/mcp/index.ts by @lovable.dev/mcp-js.
 // src/lib/mcp/index.ts
-import { defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
 
 // src/lib/mcp/tools/search-properties.ts
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
@@ -11,10 +11,14 @@ import { createClient } from "npm:@supabase/supabase-js@^2.108.2";
 import { z } from "npm:zod@^3.25.76";
 var BASE_URL = "https://hausto.lovable.app";
 var VND_TO_USD = 24500;
-function sb() {
+function sbForUser(ctx) {
   return createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false }
+    }
   );
 }
 var search_properties_default = defineTool({
@@ -31,8 +35,14 @@ var search_properties_default = defineTool({
     limit: z.number().int().min(1).max(50).optional().default(10)
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
-  handler: async (input) => {
-    const supabase = sb();
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true
+      };
+    }
+    const supabase = sbForUser(ctx);
     const tenDaysAgo = new Date(
       Date.now() - 10 * 24 * 60 * 60 * 1e3
     ).toISOString();
@@ -97,10 +107,14 @@ import { createClient as createClient2 } from "npm:@supabase/supabase-js@^2.108.
 import { z as z2 } from "npm:zod@^3.25.76";
 var BASE_URL2 = "https://hausto.lovable.app";
 var VND_TO_USD2 = 24500;
-function sb2() {
+function sbForUser2(ctx) {
   return createClient2(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false }
+    }
   );
 }
 var get_property_default = defineTool2({
@@ -111,8 +125,14 @@ var get_property_default = defineTool2({
     id: z2.string().describe("Hausto property UUID.")
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
-  handler: async ({ id }) => {
-    const { data, error } = await sb2().from("properties").select(
+  handler: async ({ id }, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true
+      };
+    }
+    const { data, error } = await sbForUser2(ctx).from("properties").select(
       "id, title, location, price, size, vibe, rooms, images, description, highlights, amenities, is_active"
     ).eq("id", id).maybeSingle();
     if (error) {
@@ -153,11 +173,16 @@ ${url}`
 });
 
 // src/lib/mcp/index.ts
+var projectRef = "gbgrwjdmytaksrztcyzs";
 var mcp_default = defineMcp({
   name: "hausto-mcp",
   title: "Hausto Property Search",
-  version: "0.1.0",
-  instructions: "Tools for Hausto \u2014 search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (hausto.lovable.app) with the user.",
+  version: "0.2.0",
+  instructions: "Tools for Hausto \u2014 search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Sign in with your Hausto account to connect. Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (hausto.lovable.app) with the user.",
+  auth: auth.oauth.issuer({
+    issuer: `https://${projectRef}.supabase.co/auth/v1`,
+    acceptedAudiences: "authenticated"
+  }),
   tools: [search_properties_default, get_property_default]
 });
 
