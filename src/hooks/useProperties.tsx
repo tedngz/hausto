@@ -96,6 +96,18 @@ export const useProperties = () => {
 
       if (!propertiesData.length && !externalData.length) return [];
 
+      // Fetch contact info for external properties via SECURITY DEFINER RPC
+      // (contact columns are not readable directly by authenticated users).
+      const externalIds = externalData.map((e: any) => e.id);
+      const contactMap = new Map<string, { contact_name: string | null; contact_phone: string | null }>();
+      if (externalIds.length > 0) {
+        const { data: contacts } = await supabase.rpc('get_external_property_contacts', { _property_ids: externalIds });
+        (contacts as any[] | null)?.forEach((c) => {
+          contactMap.set(c.id, { contact_name: c.contact_name, contact_phone: c.contact_phone });
+        });
+      }
+
+
       // Get all unique realtor IDs from internal properties
       const realtorIds = [...new Set(propertiesData.map(p => p.realtor_id))];
       
