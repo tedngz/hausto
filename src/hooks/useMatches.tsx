@@ -46,14 +46,20 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
   const internalIds = matches.filter(m => m.property_type !== 'external').map(m => m.property_id);
   const externalIds = matches.filter(m => m.property_type === 'external').map(m => m.property_id);
 
-  const [internalResult, externalResult] = await Promise.all([
+  const [internalResult, externalResult, contactsResult] = await Promise.all([
     internalIds.length > 0
       ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, property_source_link, property_source_provider_name, property_source_provider_phone, amenities').in('id', internalIds)
       : Promise.resolve({ data: [] }),
     externalIds.length > 0
       ? supabase.from('external_properties').select('id, title, location, price, vibe, images, description, highlights, size, vibe_analysis, amenities, source_url, source').in('id', externalIds)
       : Promise.resolve({ data: [] }),
+    externalIds.length > 0
+      ? supabase.rpc('get_external_property_contacts', { _property_ids: externalIds })
+      : Promise.resolve({ data: [] }),
   ]);
+  const contactMap = new Map<string, { contact_name: string | null; contact_phone: string | null }>(
+    ((contactsResult as any).data || []).map((c: any) => [c.id, { contact_name: c.contact_name, contact_phone: c.contact_phone }])
+  );
 
   const propertyMap = new Map<string, any>();
   (internalResult.data || []).forEach(p => propertyMap.set(p.id, { ...p, _type: 'internal' }));
