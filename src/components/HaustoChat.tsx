@@ -802,8 +802,8 @@ export const HaustoChat = ({
                             highlights: extProperty.highlights || [],
                             vibe_analysis: extProperty.vibe_analysis,
                             property_source_link: extProperty.source_url,
-                            property_source_provider_name: extProperty.contact_name,
-                            property_source_provider_phone: extProperty.contact_phone,
+                            property_source_provider_name: extContact?.contact_name ?? null,
+                            property_source_provider_phone: extContact?.contact_phone ?? null,
                             realtor: {
                               id: currentConv.realtor_id,
                               name: currentConv.realtor_name || 'Hausto Agent',
