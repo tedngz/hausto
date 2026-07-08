@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       ai_search_results: {
@@ -1257,36 +1232,6 @@ export type Database = {
         }
         Relationships: []
       }
-      viewing_addons: {
-        Row: {
-          amount_usd: number
-          created_at: string
-          expires_at: string
-          id: string
-          paypal_order_id: string
-          renter_id: string
-          starts_at: string
-        }
-        Insert: {
-          amount_usd?: number
-          created_at?: string
-          expires_at: string
-          id?: string
-          paypal_order_id: string
-          renter_id: string
-          starts_at?: string
-        }
-        Update: {
-          amount_usd?: number
-          created_at?: string
-          expires_at?: string
-          id?: string
-          paypal_order_id?: string
-          renter_id?: string
-          starts_at?: string
-        }
-        Relationships: []
-      }
       vibe_analysis_queue: {
         Row: {
           attempts: number
@@ -1314,6 +1259,36 @@ export type Database = {
           property_id?: string
           status?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      viewing_addons: {
+        Row: {
+          amount_usd: number
+          created_at: string
+          expires_at: string
+          id: string
+          paypal_order_id: string
+          renter_id: string
+          starts_at: string
+        }
+        Insert: {
+          amount_usd?: number
+          created_at?: string
+          expires_at: string
+          id?: string
+          paypal_order_id: string
+          renter_id: string
+          starts_at?: string
+        }
+        Update: {
+          amount_usd?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          paypal_order_id?: string
+          renter_id?: string
+          starts_at?: string
         }
         Relationships: []
       }
@@ -1586,9 +1561,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user", "realtor"],
