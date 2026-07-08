@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { EXTERNAL_PROPERTY_PUBLIC_COLUMNS } from '@/lib/externalPropertyColumns';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -82,7 +83,7 @@ export const useProperties = () => {
           .order('created_at', { ascending: false }),
         supabase
           .from('external_properties')
-          .select('*')
+          .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false }),
@@ -94,6 +95,18 @@ export const useProperties = () => {
       const externalData = externalResult.data || [];
 
       if (!propertiesData.length && !externalData.length) return [];
+
+      // Fetch contact info for external properties via SECURITY DEFINER RPC
+      // (contact columns are not readable directly by authenticated users).
+      const externalIds = externalData.map((e: any) => e.id);
+      const contactMap = new Map<string, { contact_name: string | null; contact_phone: string | null }>();
+      if (externalIds.length > 0) {
+        const { data: contacts } = await supabase.rpc('get_external_property_contacts', { _property_ids: externalIds });
+        (contacts as any[] | null)?.forEach((c) => {
+          contactMap.set(c.id, { contact_name: c.contact_name, contact_phone: c.contact_phone });
+        });
+      }
+
 
       // Get all unique realtor IDs from internal properties
       const realtorIds = [...new Set(propertiesData.map(p => p.realtor_id))];
@@ -125,7 +138,9 @@ export const useProperties = () => {
       });
 
       // Transform external properties to match the same interface
-      const transformedExternal = externalData.map(ext => ({
+      const transformedExternal = externalData.map(ext => {
+        const contact = contactMap.get(ext.id) || { contact_name: null, contact_phone: null };
+        return {
         id: ext.id,
         realtor_id: `ext-${ext.source}`,
         title: ext.title,
@@ -139,8 +154,8 @@ export const useProperties = () => {
         images: ext.images || [],
         vibe_analysis: ext.vibe_analysis,
         property_source_link: ext.source_url,
-        property_source_provider_name: ext.contact_name,
-        property_source_provider_phone: ext.contact_phone,
+        property_source_provider_name: contact.contact_name,
+        property_source_provider_phone: contact.contact_phone,
         amenities: ext.amenities || [],
         created_at: ext.created_at || ext.crawled_at || new Date().toISOString(),
         updated_at: ext.updated_at || new Date().toISOString(),
@@ -153,12 +168,14 @@ export const useProperties = () => {
         _sourceUrl: ext.source_url,
         realtor: {
           id: `ext-${ext.source}`,
-          name: ext.contact_name || ext.source || 'External Listing',
+          name: contact.contact_name || ext.source || 'External Listing',
           email: '',
-          phone: ext.contact_phone || '',
+          phone: contact.contact_phone || '',
           avatar: ''
         }
-      }));
+        };
+      });
+
 
       const transformedProperties = [...transformedInternal, ...transformedExternal];
 

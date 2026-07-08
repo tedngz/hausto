@@ -113,12 +113,25 @@ export const RealtorDashboard = ({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('*')
+        .select('id, external_id, source, source_url, title, location, location_normalized, city, price, price_display, size, description, highlights, amenities, images, vibe, vibe_analysis, crawled_at, expires_at, last_verified_at, is_active, created_at, updated_at, latitude, longitude, rooms, verification_failures, last_verification_status, last_verification_reason, deactivated_at, phone_extraction_attempts, vibe_status, raw_only, raw_data')
         .eq('raw_only', showRawHarvested)
         .order('crawled_at', { ascending: false })
         .limit(500);
       if (error) throw error;
-      const listings = data || [];
+      let listings: any[] = data || [];
+
+      // Admin: fetch contact info via SECURITY DEFINER RPC (contact columns are
+      // not directly readable by authenticated users, but the RPC allows admins).
+      if (listings.length > 0) {
+        const ids = listings.map((l) => l.id);
+        const { data: contacts } = await supabase.rpc('get_external_property_contacts', { _property_ids: ids });
+        const contactMap = new Map<string, any>((contacts as any[] | null)?.map((c) => [c.id, c]) || []);
+        listings = listings.map((l) => ({
+          ...l,
+          contact_name: contactMap.get(l.id)?.contact_name ?? null,
+          contact_phone: contactMap.get(l.id)?.contact_phone ?? null,
+        }));
+      }
 
       // Auto-deactivate expired listings that still have is_active = true
       const now = new Date();

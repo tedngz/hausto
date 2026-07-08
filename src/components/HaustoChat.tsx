@@ -777,11 +777,17 @@ export const HaustoChat = ({
                         // Try external properties
                         const { data: extProperty, error: extError } = await supabase
                           .from('external_properties')
-                          .select('*')
+                          .select('id, title, location, price, size, vibe, description, highlights, images, vibe_analysis, source_url, is_active')
                           .eq('id', prop.property_id)
                           .maybeSingle();
 
                         if (extError) throw extError;
+
+                        // Contact info requires an existing match — fetch via RPC.
+                        const { data: extContacts } = extProperty
+                          ? await supabase.rpc('get_external_property_contacts', { _property_ids: [extProperty.id] })
+                          : { data: null } as any;
+                        const extContact = (extContacts as any[] | null)?.[0];
 
                         if (extProperty && extProperty.is_active) {
                           setDetailModalApartment({
@@ -796,8 +802,8 @@ export const HaustoChat = ({
                             highlights: extProperty.highlights || [],
                             vibe_analysis: extProperty.vibe_analysis,
                             property_source_link: extProperty.source_url,
-                            property_source_provider_name: extProperty.contact_name,
-                            property_source_provider_phone: extProperty.contact_phone,
+                            property_source_provider_name: extContact?.contact_name ?? null,
+                            property_source_provider_phone: extContact?.contact_phone ?? null,
                             realtor: {
                               id: currentConv.realtor_id,
                               name: currentConv.realtor_name || 'Hausto Agent',
