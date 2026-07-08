@@ -180,8 +180,8 @@ export function useComplexListings(complex: Complex | null | undefined) {
         amenities: e.amenities ?? [],
         vibe_analysis: e.vibe_analysis,
         property_source_link: e.source_url,
-        property_source_provider_name: e.contact_name ?? e.source,
-        property_source_provider_phone: e.contact_phone ?? undefined,
+        property_source_provider_name: e.source,
+        property_source_provider_phone: undefined,
         latitude: e.latitude,
         longitude: e.longitude,
         rooms: e.rooms,
@@ -189,8 +189,8 @@ export function useComplexListings(complex: Complex | null | undefined) {
         created_at: e.created_at,
         realtor: {
           id: `ext-${e.source}`,
-          name: e.contact_name || e.source || 'External Listing',
-          phone: e.contact_phone || '',
+          name: e.source || 'External Listing',
+          phone: '',
           email: '',
         },
       }));
