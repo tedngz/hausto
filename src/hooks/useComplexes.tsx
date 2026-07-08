@@ -128,7 +128,7 @@ export function useComplexListings(complex: Complex | null | undefined) {
           .limit(12),
         supabase
           .from('external_properties')
-          .select('*')
+          .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
           .gt('expires_at', now)
           .or(orExternal)
