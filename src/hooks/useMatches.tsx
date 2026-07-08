@@ -63,27 +63,30 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
 
   const propertyMap = new Map<string, any>();
   (internalResult.data || []).forEach(p => propertyMap.set(p.id, { ...p, _type: 'internal' }));
-  (externalResult.data || []).forEach(p => propertyMap.set(p.id, {
-    id: p.id,
-    title: p.title,
-    location: p.location,
-    price: Number(p.price) || 0,
-    vibe: p.vibe,
-    images: p.images,
-    description: p.description,
-    highlights: p.highlights,
-    size: p.size,
-    vibe_analysis: p.vibe_analysis,
-    amenities: p.amenities,
-    property_source_link: p.source_url,
-    property_source_provider_name: p.contact_name,
-    property_source_provider_phone: p.contact_phone,
-    realtor_id: `ext-${p.source}`,
-    source_url: p.source_url,
-    contact_name: p.contact_name,
-    contact_phone: p.contact_phone,
-    _type: 'external',
-  }));
+  (externalResult.data || []).forEach(p => {
+    const c = contactMap.get(p.id) || { contact_name: null, contact_phone: null };
+    propertyMap.set(p.id, {
+      id: p.id,
+      title: p.title,
+      location: p.location,
+      price: Number(p.price) || 0,
+      vibe: p.vibe,
+      images: p.images,
+      description: p.description,
+      highlights: p.highlights,
+      size: p.size,
+      vibe_analysis: p.vibe_analysis,
+      amenities: p.amenities,
+      property_source_link: p.source_url,
+      property_source_provider_name: c.contact_name,
+      property_source_provider_phone: c.contact_phone,
+      realtor_id: `ext-${p.source}`,
+      source_url: p.source_url,
+      contact_name: c.contact_name,
+      contact_phone: c.contact_phone,
+      _type: 'external',
+    });
+  });
 
   return matches.map(match => ({
     ...match,
