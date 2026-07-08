@@ -51,7 +51,14 @@ export const SubscriptionModal = ({
     }
   };
   const freeFeatures = ['10 property views per day', '20 matches per week', '10 AI searches per day'];
-  const premiumFeatures = ['Unlimited property views', 'Unlimited matches', 'Unlimited AI Search'];
+  const premiumFeatures = [
+    'Unlimited property views',
+    'Unlimited matches',
+    'Unlimited AI Search',
+    'Fast-Track: Hausto books property viewings for you',
+    '3 viewing bookings included each billing cycle',
+    'Need more? $20 add-on: unlimited viewings for 30 days',
+  ];
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -96,7 +103,7 @@ export const SubscriptionModal = ({
                 <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 Premium Plan
               </CardTitle>
-              <CardDescription>Unlimited access to everything</CardDescription>
+              <CardDescription>Unlimited search, plus Fast-Track viewings</CardDescription>
               <div className="text-2xl sm:text-3xl font-bold">$10<span className="text-sm font-normal">/month</span></div>
               
             </CardHeader>

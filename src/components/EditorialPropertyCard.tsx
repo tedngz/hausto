@@ -62,6 +62,10 @@ interface EditorialPropertyCardProps {
   vibeMatch?: VibeMatchAttributes;
   /** Prose shown in the scoring popover when no attributes exist (e.g. the AI match reason) */
   vibeDetailsText?: string;
+  /** What the score measures: fit to the current AI search ('search') or to the
+   *  renter's saved preferences ('preferences', default). Changes the popover
+   *  title/explanation so renters understand why the two ratings can differ. */
+  scoreContext?: 'search' | 'preferences';
   /** Quote shown when the current image has no per-image highlight */
   quoteFallback?: string;
   onCardClick?: () => void;
@@ -112,6 +116,7 @@ export const EditorialPropertyCard = ({
   vibeScore,
   vibeMatch,
   vibeDetailsText,
+  scoreContext = 'preferences',
   quoteFallback,
   onCardClick,
   liked,
@@ -324,11 +329,15 @@ export const EditorialPropertyCard = ({
             </PopoverTrigger>
             <PopoverContent className="w-72 p-4" align="start" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-foreground">Vibe match</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {scoreContext === 'search' ? 'Search match' : 'Vibe match'}
+                </span>
                 <span className="text-xs font-mono text-muted-foreground">{Math.round(Number(vibeScore!.overall))}%</span>
               </div>
               <p className="text-xs text-muted-foreground mb-3">
-                How this property aligns with your preferences.
+                {scoreContext === 'search'
+                  ? 'How well this home fits what you asked for in this search. Your Matches page rates against your saved preferences instead, so the two can differ.'
+                  : 'How this home aligns with your saved preferences. AI search results rate against your search request instead, so the two can differ.'}
               </p>
 
               {vibeMatch && (vibeMatch.style.length + vibeMatch.features.length) > 0 ? (

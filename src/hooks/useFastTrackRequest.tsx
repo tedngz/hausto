@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { ViewingScheduleData } from '@/components/ViewingScheduleModal';
 
 export interface FastTrackProperty {
@@ -18,6 +19,7 @@ export interface FastTrackProperty {
  */
 export const useFastTrackRequest = () => {
   const { user } = useAuth();
+  const { quota, refetchQuota } = useViewingQuota();
 
   const submitFastTrack = async ({
     conversationId,
@@ -32,6 +34,12 @@ export const useFastTrackRequest = () => {
     properties: FastTrackProperty[];
   }): Promise<void> => {
     if (!user?.id) throw new Error('User not authenticated');
+
+    // Premium includes 3 bookings per cycle; the $20 add-on lifts the cap.
+    // Callers catch this error to show the add-on upsell.
+    if (quota && !quota.canBook) {
+      throw new Error('VIEWING_QUOTA_EXCEEDED');
+    }
 
     const { error: requestError } = await supabase.from('fast_track_requests').insert({
       conversation_id: conversationId,
@@ -75,6 +83,8 @@ export const useFastTrackRequest = () => {
     } catch (notificationError) {
       console.error('Error sending fast track notification:', notificationError);
     }
+
+    refetchQuota();
   };
 
   return { submitFastTrack };

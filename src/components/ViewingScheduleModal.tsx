@@ -7,10 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CalendarIcon, X } from 'lucide-react';
+import { CalendarIcon, X, Infinity as InfinityIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 
 interface Property {
   id: string;
@@ -42,6 +43,8 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
   const [specialRequirements, setSpecialRequirements] = useState('');
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>(initialSelectedIds ?? []);
   const { toast } = useToast();
+  const { quota, purchaseUnlimitedMonth } = useViewingQuota();
+  const quotaExhausted = !!quota && !quota.canBook;
 
   // Re-seed selection whenever modal opens or initial ids change
   useEffect(() => {
@@ -109,6 +112,15 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
 
   const handleSubmit = () => {
     // Validation
+    if (quotaExhausted) {
+      toast({
+        title: "Viewing limit reached",
+        description: "You've used your 3 included viewings this cycle. Get unlimited viewings for 30 days to keep booking.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (selectedPropertyIds.length === 0) {
       toast({
         title: "Properties Required",
@@ -170,6 +182,32 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
             Hausto Agent will coordinate with up to 3 listing providers based on your preferences.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Viewing quota: 3 included per cycle; $20 add-on lifts the cap for 30 days */}
+        {quota && (
+          quota.unlimited ? (
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 flex items-center gap-2 text-sm text-emerald-800">
+              <InfinityIcon className="h-4 w-4 shrink-0" />
+              <span>
+                Unlimited viewings active until {quota.addonExpiresAt ? format(new Date(quota.addonExpiresAt), 'MMM dd, yyyy') : 'the end of your add-on'}.
+              </span>
+            </div>
+          ) : quota.remaining > 0 ? (
+            <div className="rounded-lg border border-border bg-secondary/30 px-3 py-2 text-sm text-muted-foreground">
+              {quota.remaining} of {quota.included} included viewing bookings left this cycle.
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 space-y-2">
+              <p>You've used your {quota.included} included viewings this cycle.</p>
+              <Button size="sm" onClick={purchaseUnlimitedMonth}>
+                Unlimited viewings for 30 days — $20
+              </Button>
+              <p className="text-xs text-amber-800/80">
+                We'll coordinate as many viewings as you need until you settle on a home.
+              </p>
+            </div>
+          )
+        )}
 
         <div className="space-y-6 py-4">
           {/* Property Selection */}
@@ -341,7 +379,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>
+          <Button onClick={handleSubmit} disabled={quotaExhausted}>
             Submit Request
           </Button>
         </div>

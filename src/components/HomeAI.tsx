@@ -10,7 +10,6 @@ import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
-import { calculateVibeScore } from '@/utils/vibeScoring';
 import { VibeScore } from '@/components/VibeScore';
 import { HighlightTags } from '@/components/HighlightTags';
 import { UserPreferences } from '@/types';
@@ -161,6 +160,13 @@ export const HomeAI = ({
       setTypedPlaceholder("Ask me about properties, neighborhoods, or anything else...");
     }
   }, [messages.length, fullPlaceholder]);
+
+  // Badge score for a result card: the AI's matchScore, which rates fit to the
+  // CURRENT SEARCH QUERY. This intentionally differs from Matches/Swipe, which
+  // rate against saved preferences — the card's scoreContext="search" popover
+  // explains the distinction to the renter.
+  const cardVibeScore = (property: PropertyMatch) =>
+    typeof property.matchScore === 'number' ? { overall: property.matchScore } : undefined;
 
   // Compute all results from messages to avoid infinite re-renders
   const allResults = useMemo(() => {
@@ -758,7 +764,8 @@ export const HomeAI = ({
                                  aspectClass="aspect-[4/5]"
                                  compact
                                  className="max-w-[300px] w-full mx-auto sm:mx-0"
-                                 vibeScore={typeof property.matchScore === 'number' ? { overall: property.matchScore } : undefined}
+                                 vibeScore={cardVibeScore(property)}
+                                 scoreContext="search"
                                  vibeDetailsText={property.matchReason}
                                  quoteFallback={property.matchReason}
                                  liked={likedProperties.has(property.id)}
@@ -858,7 +865,8 @@ export const HomeAI = ({
                         aspectClass="aspect-[4/5]"
                         compact
                         className="max-w-[300px] w-full mx-auto sm:mx-0"
-                        vibeScore={typeof property.matchScore === 'number' ? { overall: property.matchScore } : undefined}
+                        vibeScore={cardVibeScore(property)}
+                                 scoreContext="search"
                         vibeDetailsText={property.matchReason}
                         quoteFallback={property.matchReason}
                         onCardClick={() => handlePropertyClick(property)}

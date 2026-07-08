@@ -15,6 +15,7 @@ import AdminTools from "./pages/AdminTools";
 import AdminComplexes from "./pages/AdminComplexes";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import SubscriptionCancel from "./pages/SubscriptionCancel";
+import AddonSuccess from "./pages/AddonSuccess";
 import Complexes from "./pages/Complexes";
 import ComplexDetail from "./pages/ComplexDetail";
 import ComplexMap from "./pages/ComplexMap";
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/realtor/apply" element={<RealtorApply />} />
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
             <Route path="/subscription-cancel" element={<SubscriptionCancel />} />
+            <Route path="/addon-success" element={<AddonSuccess />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

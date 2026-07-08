@@ -1257,6 +1257,36 @@ export type Database = {
         }
         Relationships: []
       }
+      viewing_addons: {
+        Row: {
+          amount_usd: number
+          created_at: string
+          expires_at: string
+          id: string
+          paypal_order_id: string
+          renter_id: string
+          starts_at: string
+        }
+        Insert: {
+          amount_usd?: number
+          created_at?: string
+          expires_at: string
+          id?: string
+          paypal_order_id: string
+          renter_id: string
+          starts_at?: string
+        }
+        Update: {
+          amount_usd?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          paypal_order_id?: string
+          renter_id?: string
+          starts_at?: string
+        }
+        Relationships: []
+      }
       vibe_analysis_queue: {
         Row: {
           attempts: number

@@ -37,32 +37,44 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   });
 
 
+  // Must match the exit transition duration on the step-content wrappers below.
+  const STEP_EXIT_MS = 200;
+
   useEffect(() => {
-    setShowContent(true);
-    setIsAnimating(false);
+    // Double rAF guarantees the browser paints the hidden (opacity-0) state of
+    // the new step before we flip to visible — otherwise React batches the
+    // class change into the same paint and the fade-in randomly doesn't run.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setShowContent(true);
+        setIsAnimating(false);
+      });
+    });
     // Scroll to top when step changes (window + any scrollable ancestor)
     window.scrollTo({ top: 0, behavior: 'smooth' });
     document.querySelectorAll('.overflow-y-auto').forEach((el) => {
       (el as HTMLElement).scrollTo({ top: 0, behavior: 'smooth' });
     });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
   }, [currentStep]);
 
 
-  const handleNext = () => {
+  const goToStep = (step: number) => {
+    if (isAnimating) return; // ignore clicks while a transition is in flight
     setIsAnimating(true);
     setShowContent(false);
     setTimeout(() => {
-      setCurrentStep(currentStep + 1);
-    }, 150);
+      setCurrentStep(step);
+    }, STEP_EXIT_MS);
   };
 
-  const handleBack = () => {
-    setIsAnimating(true);
-    setShowContent(false);
-    setTimeout(() => {
-      setCurrentStep(currentStep - 1);
-    }, 150);
-  };
+  const handleNext = () => goToStep(currentStep + 1);
+
+  const handleBack = () => goToStep(currentStep - 1);
 
   const handleMultiSelect = (optionId: string, key: keyof UserPreferences) => {
     const currentValues = (preferences[key] as string[]) || [];
@@ -260,7 +272,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
         <Card className="bg-card shadow-xl rounded-3xl border-0 overflow-hidden">
           {/* Clean Header */}
           <div className="p-8 text-center">
-            <div className={`transition-all duration-500 ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            <div className={`transition-all ${showContent ? 'duration-300 opacity-100 translate-y-0' : 'duration-200 opacity-0 translate-y-4'}`}>
               <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
                 {currentStepData.icon && (
                   <currentStepData.icon className="w-8 h-8 text-white" />
@@ -285,7 +297,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
 
           {/* Clean Content area */}
           <div className="p-8">
-            <div className={`min-h-[400px] flex items-center justify-center transition-all duration-500 ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            <div className={`min-h-[400px] flex items-center justify-center transition-all ${showContent ? 'duration-300 opacity-100 translate-y-0' : 'duration-200 opacity-0 translate-y-8'}`}>
               {currentStepData.type === "multi-select" && (
                 <div className="w-full">
                   {currentStep === 0 ? (
