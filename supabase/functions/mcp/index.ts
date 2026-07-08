@@ -11,10 +11,14 @@ import { createClient } from "npm:@supabase/supabase-js@^2.108.2";
 import { z } from "npm:zod@^3.25.76";
 var BASE_URL = "https://hausto.lovable.app";
 var VND_TO_USD = 24500;
-function sb() {
+function sbForUser(ctx) {
   return createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false }
+    }
   );
 }
 var search_properties_default = defineTool({
@@ -31,8 +35,14 @@ var search_properties_default = defineTool({
     limit: z.number().int().min(1).max(50).optional().default(10)
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
-  handler: async (input) => {
-    const supabase = sb();
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true
+      };
+    }
+    const supabase = sbForUser(ctx);
     const tenDaysAgo = new Date(
       Date.now() - 10 * 24 * 60 * 60 * 1e3
     ).toISOString();
@@ -97,7 +107,7 @@ import { createClient as createClient2 } from "npm:@supabase/supabase-js@^2.108.
 import { z as z2 } from "npm:zod@^3.25.76";
 var BASE_URL2 = "https://hausto.lovable.app";
 var VND_TO_USD2 = 24500;
-function sb2() {
+function sb() {
   return createClient2(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -112,7 +122,7 @@ var get_property_default = defineTool2({
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
   handler: async ({ id }) => {
-    const { data, error } = await sb2().from("properties").select(
+    const { data, error } = await sb().from("properties").select(
       "id, title, location, price, size, vibe, rooms, images, description, highlights, amenities, is_active"
     ).eq("id", id).maybeSingle();
     if (error) {
