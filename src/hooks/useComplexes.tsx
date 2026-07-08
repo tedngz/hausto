@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { EXTERNAL_PROPERTY_PUBLIC_COLUMNS } from '@/lib/externalPropertyColumns';
 import { useAuth } from '@/hooks/useAuth';
 import type { Apartment } from '@/types';
 
