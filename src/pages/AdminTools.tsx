@@ -445,7 +445,7 @@ const AdminTools = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, source, source_url, last_verified_at, last_verification_status, last_verification_reason, verification_failures, contact_phone, phone_extraction_attempts')
+        .select('id, title, source, source_url, last_verified_at, last_verification_status, last_verification_reason, verification_failures, phone_extraction_attempts')
         .eq('is_active', true)
         .order('last_verified_at', { ascending: true, nullsFirst: true })
         .limit(20);
