@@ -11,6 +11,10 @@ import { useMatches } from '@/hooks/useMatches';
 import { HaustoChat } from '@/components/HaustoChat';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
+import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
+import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -27,6 +31,10 @@ export const MatchesView = ({
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  // Fast-Track scheduling: which conversation/realtor the request belongs to,
+  // and which property the renter clicked "Viewing" on.
+  const [scheduleContext, setScheduleContext] = useState<{ conversationId: string; realtorId: string; propertyId: string } | null>(null);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const {
     renterMatches,
     isLoadingMatches,
@@ -39,6 +47,8 @@ export const MatchesView = ({
     setCurrentConversationId
   } = useDirectMessages();
   const { user } = useAuth();
+  const { subscription_tier } = useSubscription();
+  const { submitFastTrack } = useFastTrackRequest();
   const transformMatchToApartment = (match: any): Apartment | null => {
     // Filter out matches with null/undefined properties
     if (!match.properties) {
@@ -123,6 +133,56 @@ export const MatchesView = ({
       setSelectedApartment(apartment);
     }
   };
+
+  // Primary CTA: Hausto books the viewings (Fast-Track). Premium-gated —
+  // free users get the value story + upgrade modal.
+  const handleScheduleViewing = async (apartment: Apartment) => {
+    if (!user?.id) {
+      setSelectedApartment(apartment);
+      return;
+    }
+    if (subscription_tier !== 'premium') {
+      toast.info('Hausto books the viewings for you', {
+        description: 'Skip the back-and-forth: pick times, and our team coordinates every viewing. Available on premium.',
+      });
+      setIsSubscriptionModalOpen(true);
+      return;
+    }
+    const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;
+    const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
+    const conversationId = await getOrCreateConversation(user.id, realtorId);
+    if (!conversationId) {
+      toast.error('Could not start a viewing request. Please try again.');
+      return;
+    }
+    setScheduleContext({ conversationId, realtorId, propertyId: apartment.id });
+  };
+
+  const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
+    if (!scheduleContext) return;
+    try {
+      await submitFastTrack({
+        conversationId: scheduleContext.conversationId,
+        realtorId: scheduleContext.realtorId,
+        scheduleData,
+        properties: allApartments.map(a => ({
+          id: a.id,
+          title: a.title,
+          location: a.location,
+          price: a.price,
+          imageUrl: a.images?.[0] || '',
+        })),
+      });
+      toast.success('Viewing request sent!', {
+        description: 'Hausto will coordinate the viewings and get back to you soon.',
+      });
+      setScheduleContext(null);
+    } catch (error) {
+      console.error('Error submitting viewing schedule:', error);
+      toast.error('Failed to submit viewing request. Please try again.');
+    }
+  };
+
   if (isLoadingMatches) {
     return <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full"></div>
@@ -156,6 +216,8 @@ export const MatchesView = ({
                   vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
                   vibeMatch={vibeMatch}
                   onContact={() => handleContactRealtor(apartment)}
+                  contactLabel="Ask"
+                  onSchedule={() => handleScheduleViewing(apartment)}
                   topRightActions={apartment.matchId ? (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -199,5 +261,21 @@ export const MatchesView = ({
       setIsChatOpen(false);
       setSelectedConversationId(null);
     }} userPreferences={userPreferences} userType="renter" initialMatchId={selectedConversationId} />
+
+      <ViewingScheduleModal
+        isOpen={!!scheduleContext}
+        onClose={() => setScheduleContext(null)}
+        onSubmit={handleViewingScheduleSubmit}
+        matchedProperties={allApartments.map(a => ({
+          id: a.id,
+          title: a.title,
+          images: a.images,
+          location: a.location,
+          price: a.price,
+        }))}
+        initialSelectedIds={scheduleContext ? [scheduleContext.propertyId] : []}
+      />
+
+      <SubscriptionModal isOpen={isSubscriptionModalOpen} onClose={() => setIsSubscriptionModalOpen(false)} />
     </div>;
 };

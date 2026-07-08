@@ -25,6 +25,8 @@ import { BatchReanalyzeProgressModal } from '@/components/BatchReanalyzeProgress
 import { useProperties, Property } from '@/hooks/useProperties';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches, PropertyMatch } from '@/hooks/useMatches';
+import { useConciergeQueue } from '@/hooks/useConciergeQueue';
+import { ConciergeQueue } from '@/components/realtor/ConciergeQueue';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -213,7 +215,7 @@ export const RealtorDashboard = ({
     };
     setPreviewCrawledApartment(apartment);
   };
-  const unreadMatches = realtorMatches.filter(match => new Date(match.created_at).getTime() > Date.now() - 86400000);
+  const { pendingCount: conciergePendingCount } = useConciergeQueue();
   const handleEdit = (property: Property) => {
     setSelectedProperty(property);
     setIsEditingExternal(false);
@@ -688,14 +690,23 @@ export const RealtorDashboard = ({
           <Card className="p-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">New Today</p>
-                <p className="text-2xl font-bold text-slate-900">{unreadMatches.length}</p>
+                <p className="text-sm text-slate-600">Needs Your Reply</p>
+                <p className="text-2xl font-bold text-slate-900">{conciergePendingCount}</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
                 <MessageSquare className="w-6 h-6 text-white" />
               </div>
             </div>
           </Card>
+        </div>
+
+        {/* Concierge queue: escalated renter questions + Fast-Track viewing requests */}
+        <div className="mb-8">
+          <h2 className="text-lg md:text-xl font-semibold text-slate-900 mb-1">Concierge Queue</h2>
+          <p className="text-slate-600 text-sm mb-4">
+            Questions Hausto AI escalated to you, and viewing requests to coordinate.
+          </p>
+          <ConciergeQueue />
         </div>
 
         {/* My Properties */}

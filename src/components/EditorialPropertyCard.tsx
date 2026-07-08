@@ -68,6 +68,10 @@ interface EditorialPropertyCardProps {
   liked?: boolean;
   onLike?: () => void;
   onContact?: () => void;
+  /** Label for the onContact button (default "Contact") */
+  contactLabel?: string;
+  /** Primary "Schedule viewing" CTA — when set, onContact renders as a secondary button */
+  onSchedule?: () => void;
   initialImageIndex?: number;
   onImageIndexChange?: (index: number) => void;
   /** Override the card's aspect ratio (default: editorial 380/560 portrait) */
@@ -113,6 +117,8 @@ export const EditorialPropertyCard = ({
   liked,
   onLike,
   onContact,
+  contactLabel = 'Contact',
+  onSchedule,
   initialImageIndex = 0,
   onImageIndexChange,
   aspectClass = 'aspect-[380/560]',
@@ -504,13 +510,28 @@ export const EditorialPropertyCard = ({
             {onContact && (
               <Button
                 size="sm"
-                className="h-8 px-4 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                variant={onSchedule ? 'outline' : 'default'}
+                className={`h-8 rounded-full shadow-md ${onSchedule
+                  ? 'px-3 bg-white/15 hover:bg-white/30 text-white border-white/40'
+                  : 'px-4 bg-primary hover:bg-primary/90 text-primary-foreground'}`}
                 onClick={e => {
                   e.stopPropagation();
                   onContact();
                 }}
               >
-                Contact
+                {contactLabel}
+              </Button>
+            )}
+            {onSchedule && (
+              <Button
+                size="sm"
+                className="h-8 px-3 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                onClick={e => {
+                  e.stopPropagation();
+                  onSchedule();
+                }}
+              >
+                Viewing
               </Button>
             )}
           </div>

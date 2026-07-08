@@ -15,7 +15,13 @@ interface DirectMessage {
   read_at: string | null;
   deleted_by: string[];
   metadata?: {
-    type?: 'system' | 'ai-greeting' | 'ai-suggestion' | 'ai-exit' | 'ai-confirmation' | 'user-action';
+    type?: 'system' | 'ai-greeting' | 'ai-suggestion' | 'ai-exit' | 'ai-confirmation' | 'user-action'
+      | 'ai-answer' | 'ai-escalation-notice';
+    /** Set on concierge AI rows; legacy AI rows are detected by ai-* type. */
+    is_ai?: boolean;
+    escalation_id?: string;
+    suggest_fast_track?: boolean;
+    scheduleData?: unknown;
     property_id?: string;
     property_title?: string;
     property_location?: string;
@@ -307,10 +313,12 @@ export const useDirectMessages = () => {
 
   // Send message
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content, receiverId }: { 
-      conversationId: string; 
-      content: string; 
+    mutationFn: async ({ conversationId, content, receiverId }: {
+      conversationId: string;
+      content: string;
       receiverId: string;
+      /** When true (renter side), the concierge AI replies to this message server-side. */
+      triggerConcierge?: boolean;
     }) => {
       if (!user?.id) {
         console.error('User not authenticated - user:', user);
@@ -361,9 +369,20 @@ export const useDirectMessages = () => {
       // Force immediate refetch of messages and conversations
       await queryClient.invalidateQueries({ queryKey: ['direct-messages', currentConversationId] });
       await queryClient.invalidateQueries({ queryKey: ['match-conversations'] });
-      
+
       // Also manually refetch messages for immediate update
       refetchMessages();
+
+      // Fire-and-forget: the concierge edge function answers (or escalates)
+      // this renter message server-side, so the reply lands even if the tab
+      // closes. The AI row arrives via realtime / the 3s poll.
+      if (variables.triggerConcierge && data?.id) {
+        supabase.functions
+          .invoke('concierge-reply', {
+            body: { conversationId: variables.conversationId, messageId: data.id },
+          })
+          .catch((err) => console.error('concierge-reply invoke error:', err));
+      }
     },
     onError: (error) => {
       console.error('Error sending message:', error);

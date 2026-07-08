@@ -8,6 +8,8 @@ import { X, Send, MessageCircle, MapPin, ArrowLeft } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
+import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -46,18 +48,11 @@ export const HaustoChat = ({
   const [selectedRenterId, setSelectedRenterId] = useState<string | null>(null);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [showPropertyList, setShowPropertyList] = useState(false);
-  const [isRequestingAI, setIsRequestingAI] = useState(false);
-  const [isAIActive, setIsAIActive] = useState(false);
-  const [aiLastActiveTime, setAiLastActiveTime] = useState<number | null>(null);
   const [isViewingScheduleModalOpen, setIsViewingScheduleModalOpen] = useState(false);
-  const [showPropertySelectionForContact, setShowPropertySelectionForContact] = useState(false);
-  const [propertiesToSelect, setPropertiesToSelect] = useState<any[]>([]);
+  // Shows "Hausto AI is typing…" between a renter send and the concierge reply.
+  const [isAwaitingConcierge, setIsAwaitingConcierge] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const aiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track per-conversation proactive timers and last scheduled message IDs
-  const proactiveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const lastScheduledMsgRef = useRef<Record<string, string>>({});
-  const aiRespondedToRef = useRef<Set<string>>(new Set());
+  const conciergeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
     formatPrice
   } = useCurrency();
@@ -76,6 +71,41 @@ export const HaustoChat = ({
     markAsRead,
     refetchMessages
   } = useDirectMessages();
+  const { submitFastTrack } = useFastTrackRequest();
+
+  // Escalation statuses for this thread → pending/answered chips on
+  // ai-escalation-notice messages. Poll alongside the 3s message refetch.
+  const { data: escalations = [] } = useQuery({
+    queryKey: ['concierge-escalations', selectedMatch],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('concierge_escalations')
+        .select('id, status')
+        .eq('conversation_id', selectedMatch!);
+      return data || [];
+    },
+    enabled: !!selectedMatch && !!user?.id,
+    refetchInterval: 5000,
+  });
+  const escalationStatusById = new Map(escalations.map(e => [e.id, e.status]));
+
+  // Latest fast-track request status for the conversation → chip on the
+  // confirmation message.
+  const { data: fastTrackStatus } = useQuery({
+    queryKey: ['fast-track-status', selectedMatch],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('fast_track_requests')
+        .select('status')
+        .eq('conversation_id', selectedMatch!)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data?.status ?? null;
+    },
+    enabled: !!selectedMatch && !!user?.id,
+    refetchInterval: 15000,
+  });
   const scrollToBottom = () => {
     // Use setTimeout to ensure DOM has updated before scrolling
     setTimeout(() => {
@@ -96,13 +126,6 @@ export const HaustoChat = ({
       scrollToBottom();
     }
   }, [showPropertyList, selectedMatch]);
-
-  // Scroll to bottom when property selection dialog closes
-  useEffect(() => {
-    if (!showPropertySelectionForContact && selectedMatch && directMessages.length > 0) {
-      scrollToBottom();
-    }
-  }, [showPropertySelectionForContact, selectedMatch]);
 
   // Scroll to bottom when detail modal closes
   useEffect(() => {
@@ -135,62 +158,36 @@ export const HaustoChat = ({
       const currentConv = conversations.find(c => c.id === selectedMatch);
       if (currentConv) {
         const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
-        const messageContent = inputMessage.trim();
-        
+        const isRenterSending = user?.id === currentConv.renter_id;
+
         sendDirectMessage({
           conversationId: selectedMatch,
-          content: messageContent,
-          receiverId
+          content: inputMessage.trim(),
+          receiverId,
+          // Renter messages get an AI-first concierge reply server-side.
+          triggerConcierge: isRenterSending,
         });
 
-        // Check if message is a number (property selection)
-        const propertyNumber = parseInt(messageContent);
-        if (!isNaN(propertyNumber) && propertyNumber > 0 && currentConv.properties && propertyNumber <= currentConv.properties.length) {
-          // User selected a property by number
-          const selectedProperty = currentConv.properties[propertyNumber - 1];
-          
-          // Automatically trigger AI response with selected property contact info
-          setIsRequestingAI(true);
-          
-          try {
-            const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
-              body: {
-                conversationId: selectedMatch,
-                userType,
-                messages: [],
-                properties: [selectedProperty], // Pass only the selected property
-                action: 'contact_provider',
-                isPremium: subscription_tier === 'premium',
-              }
-            });
-
-            if (error) throw error;
-
-            // Send AI response with contact info
-            await supabase.from('direct_messages').insert({
-              conversation_id: selectedMatch,
-              sender_id: user?.id || '',
-              receiver_id: receiverId,
-              content: data.suggestion,
-              metadata: { type: 'ai-confirmation' }
-            });
-
-            await refetchMessages();
-          } catch (error) {
-            console.error('Error getting property contact:', error);
-            toast({
-              title: "Error",
-              description: "Failed to get property information",
-              variant: "destructive"
-            });
-          } finally {
-            setIsRequestingAI(false);
-          }
+        if (isRenterSending) {
+          setIsAwaitingConcierge(true);
+          if (conciergeTimeoutRef.current) clearTimeout(conciergeTimeoutRef.current);
+          conciergeTimeoutRef.current = setTimeout(() => setIsAwaitingConcierge(false), 30000);
         }
       }
     }
     setInputMessage('');
   };
+
+  // Clear the typing indicator once a reply (AI or human) lands.
+  useEffect(() => {
+    if (!isAwaitingConcierge || directMessages.length === 0) return;
+    const currentConv = conversations.find(c => c.id === selectedMatch);
+    const lastMessage = directMessages[directMessages.length - 1];
+    if (currentConv && lastMessage.sender_id !== currentConv.renter_id) {
+      setIsAwaitingConcierge(false);
+      if (conciergeTimeoutRef.current) clearTimeout(conciergeTimeoutRef.current);
+    }
+  }, [directMessages, isAwaitingConcierge, conversations, selectedMatch]);
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -209,462 +206,13 @@ export const HaustoChat = ({
     setPendingMessage('');
   };
 
-  // AI auto-exit after 5 minutes of no new renter messages
-  useEffect(() => {
-    if (isAIActive && aiLastActiveTime) {
-      // Clear existing timeout
-      if (aiTimeoutRef.current) {
-        clearTimeout(aiTimeoutRef.current);
-      }
-
-      // Set new timeout for 5 minutes
-      aiTimeoutRef.current = setTimeout(async () => {
-        if (!selectedMatch || !user?.id) return;
-        
-        const currentConv = conversations.find(c => c.id === selectedMatch);
-        if (!currentConv) return;
-        
-        const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
-        
-        // Send exit message
-        await supabase.from('direct_messages').insert({
-          conversation_id: selectedMatch,
-          sender_id: user?.id,
-          receiver_id: receiverId,
-          content: "I'll step away for now to let you both continue your conversation. Feel free to call me back anytime if you need more assistance! 👋",
-          metadata: { type: 'ai-exit' }
-        });
-        
-        await refetchMessages();
-        setIsAIActive(false);
-        setAiLastActiveTime(null);
-      }, 5 * 60 * 1000); // 5 minutes
-    }
-
-    return () => {
-      if (aiTimeoutRef.current) {
-        clearTimeout(aiTimeoutRef.current);
-      }
-    };
-  }, [isAIActive, aiLastActiveTime, selectedMatch, user?.id, conversations, refetchMessages]);
-
-  // Proactive AI response to new renter messages when AI is active
-  useEffect(() => {
-    if (!isAIActive || !selectedMatch || !directMessages.length || !user?.id) return;
-
-    const currentConv = conversations.find(c => c.id === selectedMatch);
-    if (!currentConv) return;
-
-    const lastMessage = directMessages[directMessages.length - 1];
-    
-    // Only respond to new renter messages
-    if (lastMessage.sender_id !== currentConv.renter_id) return;
-    
-    // Don't respond to AI's own messages
-    const isAIMessage = lastMessage?.metadata && 
-      (lastMessage.metadata.type === 'ai-greeting' || 
-       lastMessage.metadata.type === 'ai-suggestion' ||
-       lastMessage.metadata.type === 'ai-exit' ||
-       lastMessage.metadata.type === 'ai-confirmation');
-    
-    if (isAIMessage) return;
-
-    // Check if we already responded to this message (in-memory only)
-    if (aiRespondedToRef.current.has(lastMessage.id)) return;
-    aiRespondedToRef.current.add(lastMessage.id);
-
-    const respondToRenter = async () => {
-      try {
-        const receiverId = currentConv.renter_id;
-
-        // Get recent messages for context
-        const recentMessages = directMessages.slice(-5).map(m => ({
-          role: m.sender_id === currentConv.renter_id ? 'user' : 'assistant',
-          content: m.content,
-        }));
-
-        const propertiesContext = currentConv.properties?.map(p => ({
-          title: p.title,
-          location: p.location,
-          price: p.price,
-          property_source_provider_name: p.property_source_provider_name,
-          property_source_provider_phone: p.property_source_provider_phone,
-        })) || [];
-
-        const { data: aiData, error: aiError } = await supabase.functions.invoke('hausto-ai-assist', {
-          body: {
-            userType: 'realtor',
-            messages: recentMessages,
-            properties: propertiesContext,
-            action: null,
-            isPremium: subscription_tier === 'premium',
-          },
-        });
-
-        if (aiError) throw aiError;
-
-        // Send AI response
-        await supabase.from('direct_messages').insert({
-          conversation_id: selectedMatch,
-          sender_id: user.id,
-          receiver_id: receiverId,
-          content: aiData?.suggestion || "I'm here to help move things forward.",
-          metadata: {
-            type: 'ai-suggestion',
-            suggestedActions: aiData?.suggestedActions || [],
-          },
-        });
-
-        await refetchMessages();
-        
-        // Reset the 5-minute exit timer
-        setAiLastActiveTime(Date.now());
-      } catch (error) {
-        console.error('Proactive AI response error:', error);
-      }
-    };
-
-    // Respond immediately
-    respondToRenter();
-  }, [isAIActive, selectedMatch, directMessages, user?.id, conversations, refetchMessages]);
-
-  // Reset AI timer only when AI sends a message
-  useEffect(() => {
-    if (isAIActive && directMessages.length > 0) {
-      const lastMessage = directMessages[directMessages.length - 1];
-      const isAIMessage = lastMessage?.metadata && 
-        (lastMessage.metadata.type === 'ai-greeting' || 
-         lastMessage.metadata.type === 'ai-suggestion' ||
-         lastMessage.metadata.type === 'ai-confirmation');
-      
-      if (isAIMessage) {
-        setAiLastActiveTime(Date.now());
-      }
-    }
-  }, [directMessages.length, isAIActive, directMessages]);
-
-  // Proactive AI: Auto-respond after 1 minute if realtor hasn't replied to renter
-  useEffect(() => {
-    if (!selectedMatch || !directMessages.length || !user?.id) return;
-
-    const currentConv = conversations.find(c => c.id === selectedMatch);
-    if (!currentConv) return;
-
-    const lastMessage = directMessages[directMessages.length - 1];
-    const convKey = selectedMatch;
-
-    // If realtor replied, cancel any scheduled timer for this conversation
-    if (lastMessage.sender_id === currentConv.realtor_id) {
-      const existing = proactiveTimersRef.current[convKey];
-      if (existing) {
-        clearTimeout(existing);
-        delete proactiveTimersRef.current[convKey];
-      }
-      lastScheduledMsgRef.current[convKey] = '';
-      return;
-    }
-
-    // Only schedule when last message is from renter
-    const isFromRenter = lastMessage.sender_id === currentConv.renter_id;
-    if (!isFromRenter) return;
-
-    // Avoid rescheduling for the same renter message across refetches
-    if (lastScheduledMsgRef.current[convKey] === lastMessage.id) return;
-
-    // Clear any prior timer and schedule a new one for this specific message
-    const existingTimer = proactiveTimersRef.current[convKey];
-    if (existingTimer) clearTimeout(existingTimer);
-    lastScheduledMsgRef.current[convKey] = lastMessage.id;
-
-    proactiveTimersRef.current[convKey] = setTimeout(async () => {
-      console.log('Proactive AI: 1 minute passed, requesting server-side reply...');
-      try {
-        // Double-check the latest message is still not from the realtor
-        const { data: latest } = await supabase
-          .from('direct_messages')
-          .select('id,sender_id,created_at')
-          .eq('conversation_id', convKey)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (latest?.sender_id === currentConv.realtor_id) {
-          console.log('Proactive AI: Realtor has responded, canceling AI response');
-          return;
-        }
-
-        // Ask server to step in and reply as realtor (uses service role)
-        const { data, error } = await supabase.functions.invoke('proactive-ai-reply', {
-          body: { conversationId: convKey },
-        });
-
-        if (error) {
-          console.error('proactive-ai-reply error:', error);
-          return;
-        }
-
-        setIsAIActive(true);
-        setAiLastActiveTime(Date.now());
-        await refetchMessages();
-
-        toast({
-          title: 'Hausto AI Active',
-          description: 'AI has responded on behalf of the realtor.',
-        });
-      } catch (error) {
-        console.error('Proactive AI error:', error);
-      } finally {
-        delete proactiveTimersRef.current[convKey];
-      }
-    }, 60000);
-  }, [selectedMatch, user?.id, conversations, directMessages]);
-
-  // Cleanup any pending timers on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(proactiveTimersRef.current).forEach((t) => clearTimeout(t));
-    };
-  }, []);
-
-  const handleRequestAI = async () => {
-    if (!selectedMatch || isRequestingAI) return;
-    if (!user?.id) {
-      toast({ title: 'Sign in required', description: 'Please sign in to use Hausto AI.' });
-      return;
-    }
-    
-    setIsRequestingAI(true);
-    
-    try {
-      const currentConv = conversations.find(c => c.id === selectedMatch);
-      if (!currentConv) return;
-
-      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
-
-      // Clear the responded tracking when AI is manually activated
-      aiRespondedToRef.current.clear();
-
-      // Activate AI
-      setIsAIActive(true);
-      setAiLastActiveTime(Date.now());
-
-      // First, insert greeting message from Hausto AI
-      await supabase.from('direct_messages').insert({
-        conversation_id: selectedMatch,
-        sender_id: user?.id || '',
-        receiver_id: receiverId,
-        content: "Hi there! 👋 I'm Hausto AI, your real estate assistant. I've been following your conversation and I'm here to help facilitate this deal. How can I assist you both today?",
-        metadata: { type: 'ai-greeting' }
-      });
-
-      // Refetch to show greeting immediately
-      await refetchMessages();
-      
-      // Wait a moment for better UX
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Get recent messages for context
-      const recentMessages = directMessages.slice(-5).map(m => ({
-        role: m.sender_id === user?.id ? 'user' : 'other',
-        content: m.content
-      }));
-
-      // Ensure properties include provider info
-      const propertiesWithProvider = currentConv.properties?.map(p => ({
-        title: p.title,
-        location: p.location,
-        price: p.price,
-        property_source_provider_name: p.property_source_provider_name,
-        property_source_provider_phone: p.property_source_provider_phone,
-      })) || [];
-
-      console.log('Sending properties to AI:', propertiesWithProvider);
-
-      const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
-        body: {
-          conversationId: selectedMatch,
-          userType,
-          messages: recentMessages,
-          properties: propertiesWithProvider,
-          isPremium: subscription_tier === 'premium',
-        }
-      });
-
-      if (error) throw error;
-
-      // Send AI suggestion message with actions
-      await supabase.from('direct_messages').insert({
-        conversation_id: selectedMatch,
-        sender_id: user?.id || '',
-        receiver_id: receiverId,
-        content: data.suggestion,
-        metadata: { 
-          type: 'ai-suggestion',
-          suggestedActions: data.suggestedActions || []
-        }
-      });
-
-      // Refetch to show suggestion
-      await refetchMessages();
-
-      toast({
-        title: "Hausto AI",
-        description: "AI assistant has joined the conversation",
-      });
-    } catch (error) {
-      console.error('Error requesting AI:', error);
-      toast({
-        title: "Error",
-        description: "Failed to get AI assistance",
-        variant: "destructive"
-      });
-    } finally {
-      setIsRequestingAI(false);
-    }
-  };
-
-  const handleAIAction = async (action: string) => {
-    if (!selectedMatch || isRequestingAI || !user?.id) return;
-    
-    // Special handling for Get Fast Track for premium users
-    if (action === 'get_fast_track' && subscription_tier === 'premium') {
+  // "Schedule viewing" chip under AI messages: premium renters go straight to
+  // the Fast-Track modal; free users get the subscription pitch.
+  const handleScheduleViewingChip = () => {
+    if (subscription_tier === 'premium') {
       setIsViewingScheduleModalOpen(true);
-      return;
-    }
-    
-    setIsRequestingAI(true);
-    setAiLastActiveTime(Date.now()); // Reset timer
-    
-    try {
-      const currentConv = conversations.find(c => c.id === selectedMatch);
-      if (!currentConv) return;
-
-      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
-
-      // Get action label
-      const actionLabels: Record<string, string> = {
-        contact_provider: 'Contact Listing Provider',
-        get_fast_track: 'Get Fast Track'
-      };
-
-      // Insert user's action selection as a message
-      await supabase.from('direct_messages').insert({
-        conversation_id: selectedMatch,
-        sender_id: user?.id,
-        receiver_id: receiverId,
-        content: `[Selected: ${actionLabels[action] || action}]`,
-        metadata: { type: 'user-action' }
-      });
-
-      await refetchMessages();
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Get recent messages for context
-      const recentMessages = directMessages.slice(-5).map(m => ({
-        role: m.sender_id === user?.id ? 'user' : 'other',
-        content: m.content
-      }));
-
-      // Ensure properties include provider info
-      const propertiesWithProvider = currentConv.properties?.map(p => ({
-        id: p.property_id,
-        title: p.title,
-        location: p.location,
-        price: p.price,
-        images: p.images,
-        property_source_provider_name: p.property_source_provider_name,
-        property_source_provider_phone: p.property_source_provider_phone,
-      })) || [];
-
-      console.log('Sending properties to AI (action):', propertiesWithProvider);
-
-      const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
-        body: {
-          conversationId: selectedMatch,
-          userType,
-          messages: recentMessages,
-          properties: propertiesWithProvider,
-          action,
-          isPremium: subscription_tier === 'premium',
-        }
-      });
-
-      if (error) throw error;
-
-      // Check if AI is requesting property selection
-      if (data.requirePropertySelection && data.availableProperties) {
-        setPropertiesToSelect(data.availableProperties);
-        setShowPropertySelectionForContact(true);
-        // Don't send the suggestion message when showing property selection UI
-      } else {
-        // Send AI follow-up
-        await supabase.from('direct_messages').insert({
-          conversation_id: selectedMatch,
-          sender_id: user?.id,
-          receiver_id: receiverId,
-          content: data.suggestion,
-          metadata: { type: 'ai-suggestion' }
-        });
-
-        await refetchMessages();
-      }
-    } catch (error) {
-      console.error('Error handling AI action:', error);
-      toast({
-        title: "Error",
-        description: "Failed to process action",
-        variant: "destructive"
-      });
-    } finally {
-      setIsRequestingAI(false);
-    }
-  };
-
-  const handlePropertySelectionForContact = async (property: any) => {
-    if (!selectedMatch || !user?.id) return;
-    
-    setShowPropertySelectionForContact(false);
-    setPropertiesToSelect([]);
-    setIsRequestingAI(true);
-    
-    try {
-      const currentConv = conversations.find(c => c.id === selectedMatch);
-      if (!currentConv) return;
-
-      const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
-
-      // Call AI with the selected property
-      const { data, error } = await supabase.functions.invoke('hausto-ai-assist', {
-        body: {
-          userType,
-          messages: [],
-          properties: [property], // Send only the selected property
-          action: 'contact_provider',
-          isPremium: subscription_tier === 'premium',
-        }
-      });
-
-      if (error) throw error;
-
-      // Send AI response with contact info
-      await supabase.from('direct_messages').insert({
-        conversation_id: selectedMatch,
-        sender_id: user?.id,
-        receiver_id: receiverId,
-        content: data.suggestion,
-        metadata: { type: 'ai-confirmation' }
-      });
-
-      await refetchMessages();
-    } catch (error) {
-      console.error('Error getting property contact:', error);
-      toast({
-        title: "Error",
-        description: "Failed to get property information",
-        variant: "destructive"
-      });
-    } finally {
-      setIsRequestingAI(false);
+    } else {
+      window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
     }
   };
 
@@ -677,57 +225,19 @@ export const HaustoChat = ({
 
       const receiverId = user?.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
 
-      // Insert into fast_track_requests table with selected properties
-      const { error: requestError } = await supabase.from('fast_track_requests').insert({
-        conversation_id: selectedMatch,
-        renter_id: user.id,
-        realtor_id: currentConv.realtor_id,
-        property_ids: scheduleData.selectedPropertyIds,
-        preferred_dates: scheduleData.dates.map(d => format(d, 'yyyy-MM-dd')),
-        preferred_times: scheduleData.preferredTimes,
-        special_requirements: scheduleData.specialRequirements || null,
-        status: 'pending'
-      });
-
-      if (requestError) throw requestError;
-
-      // Send notification emails to admin and renter
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('name, email')
-          .eq('id', user.id)
-          .single();
-
-        // Get titles for selected properties only
-        const selectedProperties = currentConv.properties?.filter(p => 
-          scheduleData.selectedPropertyIds.includes(p.property_id)
-        ) || [];
-        
-        const propertyData = selectedProperties.map(p => ({
+      // Insert the fast_track_requests row and send notification emails
+      await submitFastTrack({
+        conversationId: selectedMatch,
+        realtorId: currentConv.realtor_id,
+        scheduleData,
+        properties: (currentConv.properties || []).map(p => ({
           id: p.property_id,
           title: p.title || 'Untitled Property',
           location: p.location,
           price: p.price,
-          imageUrl: p.images?.[0] || ''
-        }));
-
-        await supabase.functions.invoke('notify-fast-track-request', {
-          body: {
-            renterName: profile?.name || 'User',
-            renterEmail: profile?.email || user.email || '',
-            preferredDates: scheduleData.dates.map(d => format(d, 'MMM dd, yyyy')),
-            preferredTimes: scheduleData.preferredTimes,
-            specialRequirements: scheduleData.specialRequirements || '',
-            properties: propertyData,
-            conversationId: selectedMatch,
-          },
-        });
-        console.log('Fast track notification sent successfully');
-      } catch (notificationError) {
-        console.error('Error sending fast track notification:', notificationError);
-        // Don't throw - continue with chat message even if notification fails
-      }
+          imageUrl: p.images?.[0] || '',
+        })),
+      });
 
       // Format the viewing schedule message
       const datesText = scheduleData.dates
@@ -922,24 +432,14 @@ export const HaustoChat = ({
                     </button>
                   </div>
                   </div>
-                  {!isAIActive ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRequestAI}
-                      disabled={isRequestingAI}
-                      className="glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 text-[10px] sm:text-xs rounded-full shadow-sm hover:shadow-md transition-all duration-300"
-                    >
-                      <MessageCircle className="w-3 h-3 sm:mr-1 text-purple-500" />
-                      <span className="hidden sm:inline font-semibold">{isRequestingAI ? 'Calling AI...' : 'Ask Hausto AI'}</span>
-                      <span className="sm:hidden font-semibold">{isRequestingAI ? 'AI...' : 'AI'}</span>
-                    </Button>
-                  ) : (
-                    <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[8px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-sm flex items-center justify-center whitespace-nowrap animate-pulse-ring">
-                      <span className="hidden sm:inline font-semibold">AI Active</span>
-                      <span className="sm:hidden font-semibold">AI</span>
-                    </Badge>
-                  )}
+                  <Badge
+                    title="Hausto AI answers instantly; our team steps in for anything it can't handle"
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[8px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-sm flex items-center justify-center whitespace-nowrap"
+                  >
+                    <MessageCircle className="w-3 h-3 sm:mr-1" />
+                    <span className="hidden sm:inline font-semibold">Hausto AI + team</span>
+                    <span className="sm:hidden font-semibold">AI</span>
+                  </Badge>
                 </div>
               </div>
 
@@ -955,8 +455,14 @@ export const HaustoChat = ({
                   </div> : <div className="space-y-4">
                     {directMessages.map(message => {
                       const isOwnMessage = message.sender_id === user?.id;
-                      const isAIMessage = message.metadata?.type === 'ai-greeting' || message.metadata?.type === 'ai-suggestion' || message.metadata?.type === 'ai-exit' || message.metadata?.type === 'ai-confirmation';
+                      // AI identity lives in metadata: is_ai on new concierge rows,
+                      // ai-* types on legacy rows. Never label AI rows with a human name.
+                      const isAIMessage = message.metadata?.is_ai === true ||
+                        (typeof message.metadata?.type === 'string' && message.metadata.type.startsWith('ai-'));
                       const isUserAction = message.metadata?.type === 'user-action';
+                      const escalationStatus = message.metadata?.type === 'ai-escalation-notice' && message.metadata?.escalation_id
+                        ? escalationStatusById.get(message.metadata.escalation_id as string)
+                        : undefined;
                       const currentConv = conversations.find(c => c.id === selectedMatch);
                       const isRealtor = userType === 'realtor';
                       const senderName = isAIMessage ? 'Hausto AI' : (isOwnMessage ? 'You' : (isRealtor ? (currentConv?.renter_name || 'Renter') : (currentConv?.realtor_name || 'Property Owner')));
@@ -1059,33 +565,40 @@ export const HaustoChat = ({
                                     return part;
                                   })}
                                 </p>
-                                <span className="text-xs text-gray-400 mt-2 block">
-                                  {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className="text-xs text-gray-400">
+                                    {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  {escalationStatus === 'pending' && (
+                                    <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px]">
+                                      Passed to our team
+                                    </Badge>
+                                  )}
+                                  {escalationStatus === 'answered' && (
+                                    <Badge className="bg-green-100 text-green-800 border border-green-200 text-[10px]">
+                                      Answered by our team
+                                    </Badge>
+                                  )}
+                                  {message.metadata?.scheduleData && fastTrackStatus && (
+                                    <Badge className="bg-blue-100 text-blue-800 border border-blue-200 text-[10px] capitalize">
+                                      Viewing request: {String(fastTrackStatus).replace('_', ' ')}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                            
-                            {/* Show suggested actions */}
-                            {message.metadata?.suggestedActions && message.metadata.suggestedActions.length > 0 && (
-                              <div className="flex justify-center gap-2 mt-2 flex-wrap">
-                                {message.metadata.suggestedActions.map((action: string) => {
-                                  const actionLabels: Record<string, string> = {
-                                    contact_provider: 'Contact Listing Provider',
-                                    get_fast_track: 'Get Fast Track'
-                                  };
-                                  return (
-                                    <Button
-                                      key={action}
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleAIAction(action)}
-                                      disabled={isRequestingAI}
-                                      className="text-xs glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 rounded-full shadow-sm hover:shadow-md transition-all duration-300 relative z-10"
-                                    >
-                                      {actionLabels[action] || action}
-                                    </Button>
-                                  );
-                                })}
+
+                            {/* Fast-Track nudge from the concierge AI */}
+                            {message.metadata?.suggest_fast_track && userType === 'renter' && (
+                              <div className="flex justify-center mt-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleScheduleViewingChip}
+                                  className="text-xs glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 rounded-full shadow-sm hover:shadow-md transition-all duration-300 relative z-10"
+                                >
+                                  📅 Schedule a viewing
+                                </Button>
                               </div>
                             )}
                           </div>
@@ -1128,6 +641,16 @@ export const HaustoChat = ({
                       );
                     })}
                   </div>}
+                 {isAwaitingConcierge && (
+                   <div className="flex justify-center my-4">
+                     <div className="glass bg-white/70 border border-purple-200/50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
+                       <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                       <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                       <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                       <span className="text-xs text-purple-700 font-medium ml-1">Hausto AI is typing…</span>
+                     </div>
+                   </div>
+                 )}
                  <div ref={messagesEndRef} />
                </div>
 
@@ -1316,65 +839,6 @@ export const HaustoChat = ({
           </DialogContent>
         </Dialog>
 
-        {/* Property Selection for Contact Modal */}
-        <Dialog open={showPropertySelectionForContact} onOpenChange={setShowPropertySelectionForContact}>
-          <DialogContent className="max-w-md bg-white">
-            <DialogTitle className="text-lg font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
-              Select a Property
-            </DialogTitle>
-            <DialogDescription className="text-sm text-gray-600">
-              Choose which property you'd like to contact the listing provider for:
-            </DialogDescription>
-            <div className="space-y-3 mt-4 max-h-[400px] overflow-y-auto">
-              {propertiesToSelect.map((property, index) => (
-                <button
-                  key={property.id || index}
-                  onClick={() => handlePropertySelectionForContact(property)}
-                  className="w-full flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors text-left"
-                >
-                  {property.images?.[0] ? (
-                    <img 
-                      src={property.images[0]} 
-                      alt={property.title}
-                      className="w-16 h-16 object-cover rounded-md flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-6 h-6 text-gray-400" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-sm text-gray-900 truncate">{property.title}</h4>
-                    <p className="text-xs text-gray-500 truncate">{property.location}</p>
-                    {property.price && (
-                      <p className="text-xs font-medium text-orange-600 mt-1">
-                        {formatPrice(property.price)}/mo
-                      </p>
-                    )}
-                    {property.providerName && (
-                      <p className="text-xs text-green-600 mt-1">✓ Contact available</p>
-                    )}
-                    {!property.providerName && (
-                      <p className="text-xs text-gray-400 mt-1">No contact info</p>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  setShowPropertySelectionForContact(false);
-                  setPropertiesToSelect([]);
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </DialogContent>
     </Dialog>
   );

@@ -325,6 +325,56 @@ export type Database = {
         }
         Relationships: []
       }
+      concierge_escalations: {
+        Row: {
+          answered_message_id: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          property_id: string | null
+          question: string
+          realtor_id: string
+          renter_id: string
+          source_message_id: string | null
+          status: Database["public"]["Enums"]["escalation_status"]
+          updated_at: string
+        }
+        Insert: {
+          answered_message_id?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          property_id?: string | null
+          question: string
+          realtor_id: string
+          renter_id: string
+          source_message_id?: string | null
+          status?: Database["public"]["Enums"]["escalation_status"]
+          updated_at?: string
+        }
+        Update: {
+          answered_message_id?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          property_id?: string | null
+          question?: string
+          realtor_id?: string
+          renter_id?: string
+          source_message_id?: string | null
+          status?: Database["public"]["Enums"]["escalation_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "concierge_escalations_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "match_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crawler_rejections: {
         Row: {
           id: string
@@ -1335,6 +1385,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "realtor"
+      escalation_status: "pending" | "answered" | "dismissed"
       fast_track_status:
         | "pending"
         | "in_progress"
@@ -1469,6 +1520,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user", "realtor"],
+      escalation_status: ["pending", "answered", "dismissed"],
       fast_track_status: [
         "pending",
         "in_progress",
