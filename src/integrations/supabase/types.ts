@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ai_search_results: {
@@ -367,10 +392,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "concierge_escalations_answered_message_id_fkey"
+            columns: ["answered_message_id"]
+            isOneToOne: false
+            referencedRelation: "direct_messages"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "concierge_escalations_conversation_id_fkey"
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "match_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "concierge_escalations_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "direct_messages"
             referencedColumns: ["id"]
           },
         ]
@@ -1339,9 +1378,9 @@ export type Database = {
         Args: { renter_id: string }
         Returns: {
           activities: string[]
-          must_haves: string[]
           location: string[]
           move_in_date: string
+          must_haves: string[]
           price_range_max: number
           price_range_min: number
           size: string
@@ -1517,6 +1556,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user", "realtor"],
