@@ -391,10 +391,23 @@ const AdminTools = () => {
     try {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, location, price, images, vibe, vibe_analysis, vibe_status, highlights, amenities, source, source_url, city, crawled_at, is_active, size, rooms, contact_name, contact_phone')
+        .select('id, title, location, price, images, vibe, vibe_analysis, vibe_status, highlights, amenities, source, source_url, city, crawled_at, is_active, size, rooms')
         .in('id', propertyIds);
       if (error) throw error;
-      setExpandedRunProperties(data || []);
+      const rows = data || [];
+      let enriched = rows;
+      if (rows.length > 0) {
+        const { data: contacts } = await supabase.rpc('get_external_property_contacts', {
+          _property_ids: rows.map((r: any) => r.id),
+        });
+        const cmap = new Map<string, any>((contacts || []).map((c: any) => [c.id, c]));
+        enriched = rows.map((r: any) => ({
+          ...r,
+          contact_name: cmap.get(r.id)?.contact_name ?? null,
+          contact_phone: cmap.get(r.id)?.contact_phone ?? null,
+        }));
+      }
+      setExpandedRunProperties(enriched);
     } catch {
       if (showLoading) setExpandedRunProperties([]);
     } finally {
