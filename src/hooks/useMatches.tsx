@@ -51,7 +51,7 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
       ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, property_source_link, property_source_provider_name, property_source_provider_phone, amenities').in('id', internalIds)
       : Promise.resolve({ data: [] }),
     externalIds.length > 0
-      ? supabase.from('external_properties').select('id, title, location, price, vibe, images, description, highlights, size, vibe_analysis, amenities, source_url, contact_name, contact_phone, source').in('id', externalIds)
+      ? supabase.from('external_properties').select('id, title, location, price, vibe, images, description, highlights, size, vibe_analysis, amenities, source_url, source').in('id', externalIds)
       : Promise.resolve({ data: [] }),
   ]);
 
