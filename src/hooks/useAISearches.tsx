@@ -85,7 +85,7 @@ export const useAISearches = (conversationId?: string) => {
     // Fetch from both internal and external properties in parallel
     const [internalResult, externalResult] = await Promise.all([
       supabase.from('properties').select('*').in('id', propertyIds),
-      supabase.from('external_properties').select('*').in('id', propertyIds),
+      supabase.from('external_properties').select('id, title, location, price, size, vibe, description, highlights, images, source, vibe_analysis').in('id', propertyIds),
     ]);
 
     const internalProperties = internalResult.data || [];
