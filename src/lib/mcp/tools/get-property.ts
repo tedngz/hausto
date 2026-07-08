@@ -1,4 +1,4 @@
-import { defineTool } from "@lovable.dev/mcp-js";
+import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
@@ -7,10 +7,14 @@ const VND_TO_USD = 24500;
 
 declare const process: { env: Record<string, string | undefined> };
 
-function sb() {
+function sbForUser(ctx: ToolContext) {
   return createClient(
     process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_PUBLISHABLE_KEY!,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
   );
 }
 
@@ -23,8 +27,14 @@ export default defineTool({
     id: z.string().describe("Hausto property UUID."),
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
-  handler: async ({ id }) => {
-    const { data, error } = await sb()
+  handler: async ({ id }, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true,
+      };
+    }
+    const { data, error } = await sbForUser(ctx)
       .from("properties")
       .select(
         "id, title, location, price, size, vibe, rooms, images, description, highlights, amenities, is_active",

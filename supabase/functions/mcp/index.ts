@@ -107,10 +107,14 @@ import { createClient as createClient2 } from "npm:@supabase/supabase-js@^2.108.
 import { z as z2 } from "npm:zod@^3.25.76";
 var BASE_URL2 = "https://hausto.lovable.app";
 var VND_TO_USD2 = 24500;
-function sb() {
+function sbForUser2(ctx) {
   return createClient2(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false }
+    }
   );
 }
 var get_property_default = defineTool2({
@@ -121,8 +125,14 @@ var get_property_default = defineTool2({
     id: z2.string().describe("Hausto property UUID.")
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
-  handler: async ({ id }) => {
-    const { data, error } = await sb().from("properties").select(
+  handler: async ({ id }, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true
+      };
+    }
+    const { data, error } = await sbForUser2(ctx).from("properties").select(
       "id, title, location, price, size, vibe, rooms, images, description, highlights, amenities, is_active"
     ).eq("id", id).maybeSingle();
     if (error) {
