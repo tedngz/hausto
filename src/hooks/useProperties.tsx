@@ -138,7 +138,9 @@ export const useProperties = () => {
       });
 
       // Transform external properties to match the same interface
-      const transformedExternal = externalData.map(ext => ({
+      const transformedExternal = externalData.map(ext => {
+        const contact = contactMap.get(ext.id) || { contact_name: null, contact_phone: null };
+        return {
         id: ext.id,
         realtor_id: `ext-${ext.source}`,
         title: ext.title,
@@ -152,8 +154,8 @@ export const useProperties = () => {
         images: ext.images || [],
         vibe_analysis: ext.vibe_analysis,
         property_source_link: ext.source_url,
-        property_source_provider_name: ext.contact_name,
-        property_source_provider_phone: ext.contact_phone,
+        property_source_provider_name: contact.contact_name,
+        property_source_provider_phone: contact.contact_phone,
         amenities: ext.amenities || [],
         created_at: ext.created_at || ext.crawled_at || new Date().toISOString(),
         updated_at: ext.updated_at || new Date().toISOString(),
@@ -166,12 +168,14 @@ export const useProperties = () => {
         _sourceUrl: ext.source_url,
         realtor: {
           id: `ext-${ext.source}`,
-          name: ext.contact_name || ext.source || 'External Listing',
+          name: contact.contact_name || ext.source || 'External Listing',
           email: '',
-          phone: ext.contact_phone || '',
+          phone: contact.contact_phone || '',
           avatar: ''
         }
-      }));
+        };
+      });
+
 
       const transformedProperties = [...transformedInternal, ...transformedExternal];
 
