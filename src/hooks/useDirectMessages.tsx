@@ -154,14 +154,22 @@ export const useDirectMessages = () => {
           const legacyPropertyIds = [...new Set(legacyMatchesNeedingMerge.map((match) => match.property_id))];
           const { data: legacyExternalProperties, error: legacyExternalPropsError } = await supabase
             .from('external_properties')
-            .select('id, title, location, price, images, contact_name, contact_phone')
+            .select('id, title, location, price, images')
             .in('id', legacyPropertyIds);
 
           if (legacyExternalPropsError) {
             console.error('Error fetching legacy external property details:', legacyExternalPropsError);
           }
 
-          const propertyById = new Map((legacyExternalProperties || []).map((property) => [property.id, property]));
+          const { data: legacyContacts } = await supabase.rpc('get_external_property_contacts', {
+            _property_ids: legacyPropertyIds,
+          });
+          const contactById = new Map<string, any>((legacyContacts || []).map((c: any) => [c.id, c]));
+          const propertyById = new Map((legacyExternalProperties || []).map((property) => [property.id, {
+            ...property,
+            contact_name: contactById.get(property.id)?.contact_name ?? null,
+            contact_phone: contactById.get(property.id)?.contact_phone ?? null,
+          }]));
 
           legacyMatchesNeedingMerge.forEach((match) => {
             const property = propertyById.get(match.property_id);
