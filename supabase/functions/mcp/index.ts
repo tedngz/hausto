@@ -3,7 +3,7 @@
 // supabase function: mcp
 // Bundled from src/lib/mcp/index.ts by @lovable.dev/mcp-js.
 // src/lib/mcp/index.ts
-import { defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
 
 // src/lib/mcp/tools/search-properties.ts
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
@@ -153,11 +153,16 @@ ${url}`
 });
 
 // src/lib/mcp/index.ts
+var projectRef = "gbgrwjdmytaksrztcyzs";
 var mcp_default = defineMcp({
   name: "hausto-mcp",
   title: "Hausto Property Search",
-  version: "0.1.0",
-  instructions: "Tools for Hausto \u2014 search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (hausto.lovable.app) with the user.",
+  version: "0.2.0",
+  instructions: "Tools for Hausto \u2014 search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Sign in with your Hausto account to connect. Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (hausto.lovable.app) with the user.",
+  auth: auth.oauth.issuer({
+    issuer: `https://${projectRef}.supabase.co/auth/v1`,
+    acceptedAudiences: "authenticated"
+  }),
   tools: [search_properties_default, get_property_default]
 });
 
