@@ -1321,6 +1321,21 @@ export type Database = {
           title: string
         }[]
       }
+      get_external_property_contact: {
+        Args: { _property_id: string }
+        Returns: {
+          contact_name: string
+          contact_phone: string
+        }[]
+      }
+      get_external_property_contacts: {
+        Args: { _property_ids: string[] }
+        Returns: {
+          contact_name: string
+          contact_phone: string
+          id: string
+        }[]
+      }
       get_matched_public_profiles: {
         Args: { user_ids: string[] }
         Returns: {
