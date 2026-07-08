@@ -450,7 +450,15 @@ const AdminTools = () => {
         .order('last_verified_at', { ascending: true, nullsFirst: true })
         .limit(20);
       if (error) throw error;
-      return data || [];
+      const rows = data || [];
+      if (rows.length > 0) {
+        const { data: contacts } = await supabase.rpc('get_external_property_contacts', {
+          _property_ids: rows.map((r: any) => r.id),
+        });
+        const phoneMap = new Map<string, string | null>((contacts || []).map((c: any) => [c.id, c.contact_phone]));
+        return rows.map((r: any) => ({ ...r, contact_phone: phoneMap.get(r.id) ?? null }));
+      }
+      return rows;
     },
     refetchInterval: 60_000,
     enabled: !!user && !!isAdmin,
