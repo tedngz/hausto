@@ -161,11 +161,12 @@ export const MatchesView = ({
   const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
     if (!scheduleContext) return;
     try {
+      const realtorApartments = allApartments.filter(a => a.realtor.id === scheduleContext.realtorId);
       await submitFastTrack({
         conversationId: scheduleContext.conversationId,
         realtorId: scheduleContext.realtorId,
         scheduleData,
-        properties: allApartments.map(a => ({
+        properties: realtorApartments.map(a => ({
           id: a.id,
           title: a.title,
           location: a.location,
@@ -266,13 +267,15 @@ export const MatchesView = ({
         isOpen={!!scheduleContext}
         onClose={() => setScheduleContext(null)}
         onSubmit={handleViewingScheduleSubmit}
-        matchedProperties={allApartments.map(a => ({
-          id: a.id,
-          title: a.title,
-          images: a.images,
-          location: a.location,
-          price: a.price,
-        }))}
+        matchedProperties={allApartments
+          .filter(a => !scheduleContext || a.realtor.id === scheduleContext.realtorId)
+          .map(a => ({
+            id: a.id,
+            title: a.title,
+            images: a.images,
+            location: a.location,
+            price: a.price,
+          }))}
         initialSelectedIds={scheduleContext ? [scheduleContext.propertyId] : []}
       />
 
