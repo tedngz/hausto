@@ -161,11 +161,12 @@ export const MatchesView = ({
   const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
     if (!scheduleContext) return;
     try {
+      const realtorApartments = allApartments.filter(a => a.realtor.id === scheduleContext.realtorId);
       await submitFastTrack({
         conversationId: scheduleContext.conversationId,
         realtorId: scheduleContext.realtorId,
         scheduleData,
-        properties: allApartments.map(a => ({
+        properties: realtorApartments.map(a => ({
           id: a.id,
           title: a.title,
           location: a.location,
