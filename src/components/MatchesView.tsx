@@ -267,13 +267,15 @@ export const MatchesView = ({
         isOpen={!!scheduleContext}
         onClose={() => setScheduleContext(null)}
         onSubmit={handleViewingScheduleSubmit}
-        matchedProperties={allApartments.map(a => ({
-          id: a.id,
-          title: a.title,
-          images: a.images,
-          location: a.location,
-          price: a.price,
-        }))}
+        matchedProperties={allApartments
+          .filter(a => !scheduleContext || a.realtor.id === scheduleContext.realtorId)
+          .map(a => ({
+            id: a.id,
+            title: a.title,
+            images: a.images,
+            location: a.location,
+            price: a.price,
+          }))}
         initialSelectedIds={scheduleContext ? [scheduleContext.propertyId] : []}
       />
 
