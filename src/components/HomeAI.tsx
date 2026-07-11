@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart, CalendarCheck } from 'lucide-react';
+import { Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart, CalendarCheck, Search, MessageCircle } from 'lucide-react';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -531,7 +531,9 @@ export const HomeAI = ({
           userType: 'renter' as const,
           userPreferences: null,
           // Anonymous users don't have saved preferences
-          propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
+          propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : [],
+          // Follow-up chip taps are exempt from the server's anon search limit.
+          isFollowup
         };
         const response = await invokeFunction<any>('chat-ai', {
           body: messageData
@@ -1001,6 +1003,40 @@ export const HomeAI = ({
                 </Button>
               </div>)}
           </div>}
+
+        {/* Starter suggestions — shown until the conversation has content, so
+            first-time users learn the AI does both searches AND area advice */}
+        {!hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !isSearching && !isSendingMessage && (
+          <div className="flex flex-wrap gap-2 animate-fade-in">
+            {([
+              { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
+              { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
+              { intent: 'ask', text: 'Which district suits young professionals?' },
+              { intent: 'ask', text: "What's it like living in Binh Thanh?" },
+            ] as const).map(({ intent, text }) => {
+              const isSearch = intent === 'search';
+              const Icon = isSearch ? Search : MessageCircle;
+              return (
+                <Button
+                  key={text}
+                  variant="outline"
+                  size="sm"
+                  title={isSearch ? 'Find listings' : 'Get advice'}
+                  className={
+                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 ' +
+                    (isSearch
+                      ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
+                      : 'border-border text-foreground hover:bg-secondary')
+                  }
+                  onClick={() => handleSearch(text)}
+                >
+                  <Icon className="h-3 w-3" />
+                  <span>{text}</span>
+                </Button>
+              );
+            })}
+          </div>
+        )}
 
         </div>}
 

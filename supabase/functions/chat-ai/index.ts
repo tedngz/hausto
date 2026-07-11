@@ -1499,40 +1499,6 @@ serve(async (req) => {
 
     console.log('Chat AI function called');
 
-    // Rate limiting for anonymous users
-    if (isAnonymous) {
-      const xForwardedFor = req.headers.get('x-forwarded-for');
-      const xRealIp = req.headers.get('x-real-ip');
-      const cfConnectingIp = req.headers.get('cf-connecting-ip');
-      const clientIP = (xForwardedFor?.split(',')[0].trim() || xRealIp || cfConnectingIp || 'unknown');
-
-      if (clientIP !== 'unknown') {
-        try {
-          const today = new Date().toISOString().split('T')[0];
-          const rateLimitKey = `anon_rate:${clientIP}:${today}`;
-          const attempts = await redis.get(rateLimitKey) as number | null;
-          const currentAttempts = attempts || 0;
-          
-          console.log(`[Redis] Anonymous user search count: ${currentAttempts}/2 for IP: ${clientIP}`);
-          
-          if (currentAttempts >= 2) {
-            return new Response(
-              JSON.stringify({ 
-                response: 'You\'ve used your 2 free searches today! To get unlimited AI-powered property searches, please sign in or create a free account.',
-                requiresAuth: true
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-            );
-          }
-          
-          await redis.incr(rateLimitKey);
-          await redis.expire(rateLimitKey, 86400);
-        } catch (redisError) {
-          console.error('[Redis] Error checking rate limit:', redisError);
-        }
-      }
-    }
-    
     const requestBody = await req.text();
     if (!requestBody) {
       return new Response(
@@ -1552,7 +1518,55 @@ serve(async (req) => {
     }
 
     const { message: rawMessage, conversationId, userType, userPreferences, propertyImages } = parsedBody;
-    
+
+    // Rate limiting for anonymous users. Follow-up chip taps don't count
+    // toward the free-search limit (the client promises follow-ups are free),
+    // but a hard ceiling still bounds abuse of the flag.
+    if (isAnonymous) {
+      const ANON_SEARCH_LIMIT = 3;   // must match ANON_SEARCH_LIMIT in HomeAI.tsx
+      const ANON_HARD_CAP = 15;      // absolute daily cap, follow-ups included
+      const isFollowupRequest = parsedBody.isFollowup === true;
+      const xForwardedFor = req.headers.get('x-forwarded-for');
+      const xRealIp = req.headers.get('x-real-ip');
+      const cfConnectingIp = req.headers.get('cf-connecting-ip');
+      const clientIP = (xForwardedFor?.split(',')[0].trim() || xRealIp || cfConnectingIp || 'unknown');
+
+      if (clientIP !== 'unknown') {
+        try {
+          const today = new Date().toISOString().split('T')[0];
+          const rateLimitKey = `anon_rate:${clientIP}:${today}`;
+          const hardCapKey = `anon_rate_all:${clientIP}:${today}`;
+          const [attempts, totalAttempts] = await Promise.all([
+            redis.get(rateLimitKey) as Promise<number | null>,
+            redis.get(hardCapKey) as Promise<number | null>,
+          ]);
+          const currentAttempts = attempts || 0;
+          const currentTotal = totalAttempts || 0;
+
+          console.log(`[Redis] Anonymous searches: ${currentAttempts}/${ANON_SEARCH_LIMIT} (total ${currentTotal}/${ANON_HARD_CAP}, followup: ${isFollowupRequest}) for IP: ${clientIP}`);
+
+          if (currentTotal >= ANON_HARD_CAP || (!isFollowupRequest && currentAttempts >= ANON_SEARCH_LIMIT)) {
+            return new Response(
+              JSON.stringify({
+                response: `You've used your ${ANON_SEARCH_LIMIT} free searches today! To get unlimited AI-powered property searches, please sign in or create a free account.`,
+                requiresAuth: true
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
+          }
+
+          if (!isFollowupRequest) {
+            await redis.incr(rateLimitKey);
+            await redis.expire(rateLimitKey, 86400);
+          }
+          await redis.incr(hardCapKey);
+          await redis.expire(hardCapKey, 86400);
+        } catch (redisError) {
+          console.error('[Redis] Error checking rate limit:', redisError);
+        }
+      }
+    }
+
     // Followup chips are tagged with their intent by the model itself —
     // an [Ask] chip is an info question, never a listing search. Remember the
     // tag before stripping it so intent detection can honor it.
@@ -2428,7 +2442,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
      ],
      "summary": "Short prose intro for the listings (e.g., 'Here are 3 cozy Thao Dien apartments under 15M VND').",
      "totalMatches": 3,
-     "blocks": [ { "type": "followups", "suggestions": ["[Search] Same area under 12M", "[Ask] What is Binh Thanh like?", "[Search] 2BR with balcony in Binh Thanh"] } ]
+     "blocks": [ { "type": "followups", "suggestions": ["[Search] Same area under <lower budget>", "[Ask] What is <a nearby district> like?", "[Search] <more bedrooms> with balcony in <a nearby district>"] } ]
    }
 
    B. INFO intent (user asks about a complex, district, distance, or wants advice — NOT shopping) → return "blocks" only (MUST include "text" and "followups"), omit "results":
@@ -2446,7 +2460,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
        { "type": "distance", "from": "Thao Dien", "to": "District 1",
                              "km": 7, "driveMinutes": 20, "bikeMinutes": 25,
                              "notes": "Via Saigon Bridge; rush hour can double this." },
-       { "type": "followups","suggestions": ["[Search] 1BR under 15M in Thao Dien","[Ask] Compare Thao Dien vs Phu My Hung for families"] }
+       { "type": "followups","suggestions": ["[Search] <bedrooms> under <budget> in <the district discussed>","[Ask] Compare <the district discussed> vs <a comparable district> for <the user's situation>"] }
      ]
    }
 
@@ -2456,6 +2470,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    - "followups" are 2–4 short, tappable next-question suggestions phrased as the user would say them. You MUST put them in a separate block of type "followups", NEVER inside the "text" body. EVERY suggestion MUST begin with one of these intent tags so the UI can render the right icon:
        • "[Search] ..." — tapping will fetch property listings (filters, budgets, bedrooms, specific complexes, "show me", "find").
        • "[Ask] ..." — tapping returns advice/info only (district comparisons, pet policy, commute, "tell me about", "is X good for Y").
+   - Followups MUST be tailored to THIS conversation: reference the actual district/complex/budget/bedroom count the user asked about or that appears in the returned listings. The <angle-bracket> parts in the JSON examples above are placeholders — NEVER output them literally and NEVER reuse an example district or number the user didn't mention.
    - **ALWAYS include a "followups" block** — on EVERY response, whether shopping or info. For shopping turns, suggest refinements like narrowing budget, different bedroom count, nearby districts, or asking about a neighborhood. For info turns, mix [Ask] and [Search] suggestions.
    - **ALWAYS include a conversational answer** in the "summary" field or a "text" block if the user is asking an informational question. Never leave the user hanging without a text explanation.
    - You may MIX A and B: a shopping turn can also carry a "text" block ("Heads up: under 15M in D1 is rare — these are mostly studios") or a "followups" block.

@@ -170,8 +170,10 @@ export const HaustoChat = ({
       setActivePropertyId(initialPropertyId ?? null);
     }
   }, [initialPropertyId, isOpen]);
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+  const handleSendMessage = async (text?: string) => {
+    // Guard: when used directly as onClick, `text` is the click event.
+    const content = (typeof text === 'string' ? text : inputMessage).trim();
+    if (!content) return;
     if (selectedMatch) {
       const currentConv = conversations.find(c => c.id === selectedMatch);
       if (currentConv) {
@@ -180,7 +182,7 @@ export const HaustoChat = ({
 
         sendDirectMessage({
           conversationId: selectedMatch,
-          content: inputMessage.trim(),
+          content,
           receiverId,
           // Renter messages get an AI-first concierge reply server-side.
           triggerConcierge: isRenterSending,
@@ -194,7 +196,8 @@ export const HaustoChat = ({
         }
       }
     }
-    setInputMessage('');
+    // Don't wipe a typed draft when a starter chip sent its own text.
+    if (typeof text !== 'string') setInputMessage('');
   };
 
   // Clear the typing indicator once a reply (AI or human) lands.
@@ -662,7 +665,30 @@ export const HaustoChat = ({
                     <div className="text-center">
                       <MessageCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p className="text-base">Start the conversation!</p>
-                      <p className="text-sm text-gray-400 mt-1">Send a message to connect</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        {userType === 'renter' ? 'Ask anything — Hausto AI answers instantly' : 'Send a message to connect'}
+                      </p>
+                      {userType === 'renter' && !loadingDirectMessages && (
+                        <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-md mx-auto">
+                          {[
+                            'Is this property still available?',
+                            "What's the pet policy?",
+                            'Can I visit this weekend?',
+                            'Is the price negotiable?',
+                          ].map(q => (
+                            <Button
+                              key={q}
+                              size="sm"
+                              variant="outline"
+                              disabled={isSendingDirectMessage}
+                              onClick={() => handleSendMessage(q)}
+                              className="text-xs h-auto py-1.5 px-3 rounded-full glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 shadow-sm"
+                            >
+                              {q}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div> : <div className="space-y-4">
                     {directMessages.map(message => {
