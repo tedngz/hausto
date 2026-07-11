@@ -519,12 +519,21 @@ export function hasShoppingKeyword(message: string): boolean {
   return SHOPPING_KEYWORD_RE.test(stripAccents(message || ''));
 }
 
+// Info-question shapes the literal trigger list can't cover, e.g.
+// "what is Binh Thanh like?" — the list only has the pronoun form
+// "what is it like", so place-name variants slipped through to shopping.
+const LIFESTYLE_REGEXES = [
+  /\bwhat(?:'?s| is| are)\s+[\w\s.'-]{1,40}?\s+like\b/, // what is <place> like
+  /\bhow (?:is|are) (?:life|living|it)\b/,              // how is life/living/it (in X)
+  /\bis [\w\s.'-]{1,40}? (?:a )?(?:good|nice|safe) (?:area|place|district|neighborhood)\b/,
+];
+
 export function detectLifestyleIntent(message: string): {
   isLifestyle: boolean;
   isMixed: boolean;
 } {
   const lc = stripAccents(message || '');
-  const hasLifestyle = LIFESTYLE_TRIGGERS.some(t => lc.includes(t));
+  const hasLifestyle = LIFESTYLE_TRIGGERS.some(t => lc.includes(t)) || LIFESTYLE_REGEXES.some(r => r.test(lc));
   const hasShopping = SHOPPING_TRIGGERS.some(t => lc.includes(t));
   // bedroom/budget patterns also signal shopping
   const hasShoppingNumeric =

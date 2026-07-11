@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,9 +21,13 @@ interface Props {
 }
 
 export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexName }: Props) {
+  const { user } = useAuth();
+  const { subscribed } = useSubscription();
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
 
   // Step 1
   const [moveIn, setMoveIn] = useState('');
@@ -39,7 +46,28 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
     setStep(1); setDone(false); setMoveIn(''); setLease(12);
     setBedrooms(2); setBudget([1500, 3000]); setHasPets(false);
     setName(''); setEmail(''); setPhone(''); setNotes('');
+    setPrefilled(false);
   };
+
+  // Logged-in renters shouldn't retype what Hausto already knows: prefill the
+  // contact step from their profile the first time the modal opens.
+  useEffect(() => {
+    if (!open || !user || prefilled) return;
+    let cancelled = false;
+    (async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name, email, phone')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      setName(prev => prev || profile?.name || user.user_metadata?.name || '');
+      setEmail(prev => prev || profile?.email || user.email || '');
+      setPhone(prev => prev || profile?.phone || user.user_metadata?.phone || '');
+      setPrefilled(true);
+    })();
+    return () => { cancelled = true; };
+  }, [open, user, prefilled]);
 
   const close = () => { onOpenChange(false); setTimeout(reset, 300); };
 
@@ -51,6 +79,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
     setSubmitting(true);
     const { error } = await supabase.from('complex_inquiries').insert({
       complex_id: complexId,
+      user_id: user?.id ?? null,
       full_name: name.trim(),
       email: email.trim(),
       phone: phone.trim() || null,
@@ -71,6 +100,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())}>
       <DialogContent className="max-w-lg">
         {done ? (
@@ -80,7 +110,18 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
             <DialogDescription className="text-base">
               Our concierge will reach out within 24 hours with vetted availability at <strong>{complexName}</strong>.
             </DialogDescription>
-            <Button onClick={close} className="mt-4">Close</Button>
+            {!subscribed && (
+              <div className="rounded-lg border bg-secondary/40 p-4 text-left space-y-2">
+                <p className="text-sm font-medium">Want to see units in person?</p>
+                <p className="text-sm text-muted-foreground">
+                  Premium members can schedule in-person viewings — Hausto's Fast-Track team books the visits for you.
+                </p>
+                <Button size="sm" className="w-full" onClick={() => setShowUpgrade(true)}>
+                  Go Premium to schedule viewings
+                </Button>
+              </div>
+            )}
+            <Button variant={subscribed ? 'default' : 'ghost'} onClick={close} className="mt-2">Close</Button>
           </div>
         ) : (
           <>
@@ -152,6 +193,11 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
 
             {step === 3 && (
               <div className="space-y-4">
+                {user && prefilled && (name || email) && (
+                  <p className="text-xs text-muted-foreground rounded-md bg-secondary/40 px-3 py-2">
+                    We've filled this in from your Hausto profile — just confirm and adjust if needed.
+                  </p>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="name">Full name *</Label>
                   <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
@@ -196,5 +242,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         )}
       </DialogContent>
     </Dialog>
+    <SubscriptionModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
+    </>
   );
 }

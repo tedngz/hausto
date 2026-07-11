@@ -268,7 +268,7 @@ const Discover = () => {
             </div>}
           
           {currentView === 'swipe' && userType && <div className="container mx-auto px-4 pt-4">
-              <h2 className="text-2xl mt-4 mb-4 text-center text-inherit font-serif font-normal">Vibe & Find Your Home</h2>
+              <h2 className="text-2xl mt-4 mb-4 text-center text-inherit font-serif font-normal">Swipe & Vibe</h2>
             </div>}
         
           {!userType && <UserTypeSelector onSelect={handleUserTypeSelect} />}

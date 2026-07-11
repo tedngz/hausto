@@ -321,12 +321,15 @@ export const useDirectMessages = () => {
 
   // Send message
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content, receiverId }: {
+    mutationFn: async ({ conversationId, content, receiverId, metadata }: {
       conversationId: string;
       content: string;
       receiverId: string;
       /** When true (renter side), the concierge AI replies to this message server-side. */
       triggerConcierge?: boolean;
+      /** Optional message metadata, e.g. { property_id } when the renter tags
+       *  which matched listing they're asking about. */
+      metadata?: Record<string, unknown>;
     }) => {
       if (!user?.id) {
         console.error('User not authenticated - user:', user);
@@ -349,7 +352,8 @@ export const useDirectMessages = () => {
           conversation_id: conversationId,
           sender_id: user.id,
           receiver_id: receiverId,
-          content: validatedData.content
+          content: validatedData.content,
+          ...(metadata ? { metadata } : {})
         })
         .select()
         .single();

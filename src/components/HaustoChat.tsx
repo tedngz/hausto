@@ -4,18 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { X, Send, MessageCircle, MapPin, ArrowLeft } from 'lucide-react';
+import { X, Send, MessageCircle, MapPin, ArrowLeft, Check, ChevronRight } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useSubscription } from '@/hooks/useSubscription';
-import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
@@ -30,6 +30,9 @@ interface HaustoChatProps {
   userType: 'renter' | 'realtor';
   propertyImages?: string[];
   initialMatchId?: string | null;
+  /** Pre-tags the conversation with this matched property (e.g. the listing the
+   *  renter clicked "Chat" on in MatchesView). */
+  initialPropertyId?: string | null;
 }
 export const HaustoChat = ({
   isOpen,
@@ -37,7 +40,8 @@ export const HaustoChat = ({
   userPreferences,
   userType,
   propertyImages = [],
-  initialMatchId = null
+  initialMatchId = null,
+  initialPropertyId = null
 }: HaustoChatProps) => {
   const [inputMessage, setInputMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'messages'>('messages');
@@ -49,6 +53,12 @@ export const HaustoChat = ({
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [showPropertyList, setShowPropertyList] = useState(false);
   const [isViewingScheduleModalOpen, setIsViewingScheduleModalOpen] = useState(false);
+  // Which matched listing the renter is currently asking about. Tags outgoing
+  // messages with metadata.property_id so the concierge AI (and the realtor)
+  // know which of the pair's matched properties the question refers to.
+  const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
+  const [isRequestingHuman, setIsRequestingHuman] = useState(false);
+  const [isSharingContact, setIsSharingContact] = useState(false);
   // Shows "Hausto AI is typing…" between a renter send and the concierge reply.
   const [isAwaitingConcierge, setIsAwaitingConcierge] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -60,6 +70,7 @@ export const HaustoChat = ({
     user
   } = useAuth();
   const { subscription_tier } = useSubscription();
+  const { quota } = useViewingQuota();
   const { toast } = useToast();
   const {
     conversations,
@@ -152,6 +163,13 @@ export const HaustoChat = ({
       setSelectedMatch(initialMatchId);
     }
   }, [initialMatchId, isOpen]);
+
+  // Seed the "asking about" property from the caller (e.g. MatchesView "Chat").
+  useEffect(() => {
+    if (isOpen) {
+      setActivePropertyId(initialPropertyId ?? null);
+    }
+  }, [initialPropertyId, isOpen]);
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
     if (selectedMatch) {
@@ -166,6 +184,7 @@ export const HaustoChat = ({
           receiverId,
           // Renter messages get an AI-first concierge reply server-side.
           triggerConcierge: isRenterSending,
+          ...(isRenterSending && activePropertyId ? { metadata: { property_id: activePropertyId } } : {}),
         });
 
         if (isRenterSending) {
@@ -206,10 +225,89 @@ export const HaustoChat = ({
     setPendingMessage('');
   };
 
-  // "Schedule viewing" chip under AI messages: premium renters go straight to
-  // the Fast-Track modal; free users get the subscription pitch.
+  // Explicit human hand-off: creates an escalation server-side (the renter's
+  // choice, not the AI's) so the team gets notified and the queue picks it up.
+  const handleRequestHuman = async () => {
+    if (!selectedMatch || isRequestingHuman) return;
+    setIsRequestingHuman(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('concierge-reply', {
+        body: { conversationId: selectedMatch, forceEscalate: true },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+      await refetchMessages();
+    } catch (err) {
+      console.error('Error requesting human support:', err);
+      toast({
+        title: 'Could not reach our team',
+        description: 'Please try again in a moment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRequestingHuman(false);
+    }
+  };
+
+  // "Get contact" chip under AI messages: the AI replies in-thread with the
+  // owner/realtor contact for the property being asked about (the free
+  // alternative to Fast-Track — the renter reaches out themselves). The
+  // property comes from the AI message's metadata.property_id, falling back
+  // to the renter's currently selected "Ask about this" property.
+  const handleGetContact = async (propertyId?: string) => {
+    if (!selectedMatch || !user?.id || isSharingContact) return;
+    const currentConv = conversations.find(c => c.id === selectedMatch);
+    if (!currentConv) return;
+
+    const receiverId = user.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
+    const targetId = propertyId ?? activePropertyId ?? undefined;
+    const props = currentConv.properties || [];
+    // Without a specific property in context, only answer when the thread has
+    // exactly one property — otherwise ask the renter to pick one.
+    const property = targetId
+      ? props.find(p => p.property_id === targetId)
+      : props.length === 1 ? props[0] : undefined;
+
+    let content: string;
+    if (!property) {
+      content = `Which property would you like the contact for? Tap "Ask about this" on a listing above and I'll share its owner/realtor contact.`;
+    } else if (property.property_source_provider_phone || property.property_source_provider_name) {
+      const lines = [`📞 Here is the contact for "${property.title}":`, ''];
+      if (property.property_source_provider_name) lines.push(`Contact: ${property.property_source_provider_name}`);
+      lines.push(property.property_source_provider_phone ? `Phone: ${property.property_source_provider_phone}` : 'Phone: not listed');
+      lines.push('', `Feel free to reach out directly, or keep chatting here and I'll help with anything else.`);
+      content = lines.join('\n');
+    } else {
+      content = `I don't have a direct owner/realtor contact on file for "${property.title}" yet. Use "Schedule a viewing" and Hausto will coordinate with the listing provider for you, or ask me anything else about this home.`;
+    }
+
+    setIsSharingContact(true);
+    try {
+      const { error } = await supabase.from('direct_messages').insert({
+        conversation_id: selectedMatch,
+        sender_id: user.id,
+        receiver_id: receiverId,
+        content,
+        metadata: { type: 'ai-answer', is_ai: true }
+      });
+      if (error) throw error;
+      await refetchMessages();
+    } catch (error) {
+      console.error('Error sharing contact:', error);
+      toast({
+        title: 'Error',
+        description: 'Could not fetch the contact. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSharingContact(false);
+    }
+  };
+
+  // "Schedule viewing" chip under AI messages: premium renters and holders of
+  // the $20 Unlimited Viewings add-on go straight to the Fast-Track modal;
+  // everyone else gets the subscription pitch.
   const handleScheduleViewingChip = () => {
-    if (subscription_tier === 'premium') {
+    if (subscription_tier === 'premium' || quota?.unlimited) {
       setIsViewingScheduleModalOpen(true);
     } else {
       window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
@@ -276,6 +374,102 @@ export const HaustoChat = ({
         title: "Error",
         description: "Failed to submit viewing schedule",
         variant: "destructive"
+      });
+    }
+  };
+
+  // Open the full property detail modal for a matched listing (internal first,
+  // then external). Used by the Matched Properties list rows.
+  const openPropertyDetail = async (propertyId: string) => {
+    const currentConv = conversations.find(c => c.id === selectedMatch);
+    if (!currentConv) return;
+    try {
+      // Try internal properties first
+      const { data: fullProperty, error } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('id', propertyId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (fullProperty && fullProperty.is_active) {
+        setDetailModalApartment({
+          id: fullProperty.id,
+          images: fullProperty.images || [],
+          title: fullProperty.title,
+          location: fullProperty.location,
+          price: Number(fullProperty.price || 0),
+          size: fullProperty.size || '',
+          vibe: fullProperty.vibe || '',
+          description: fullProperty.description || '',
+          highlights: fullProperty.highlights || [],
+          vibe_analysis: fullProperty.vibe_analysis,
+          property_source_link: fullProperty.property_source_link,
+          realtor: {
+            id: currentConv.realtor_id,
+            name: currentConv.realtor_name || 'Property Owner',
+            phone: '+1-234-567-8900',
+            email: 'contact@realtor.com'
+          },
+          matchId: currentConv.id
+        });
+        setShowPropertyList(false);
+        return;
+      }
+
+      // Try external properties
+      const { data: extProperty, error: extError } = await supabase
+        .from('external_properties')
+        .select('id, title, location, price, size, vibe, description, highlights, images, vibe_analysis, source_url, is_active')
+        .eq('id', propertyId)
+        .maybeSingle();
+
+      if (extError) throw extError;
+
+      // Contact info requires an existing match — fetch via RPC.
+      const { data: extContacts } = extProperty
+        ? await supabase.rpc('get_external_property_contacts', { _property_ids: [extProperty.id] })
+        : { data: null } as any;
+      const extContact = (extContacts as any[] | null)?.[0];
+
+      if (extProperty && extProperty.is_active) {
+        setDetailModalApartment({
+          id: extProperty.id,
+          images: extProperty.images || [],
+          title: extProperty.title,
+          location: extProperty.location,
+          price: Number(extProperty.price || 0),
+          size: extProperty.size || '',
+          vibe: extProperty.vibe || '',
+          description: extProperty.description || '',
+          highlights: extProperty.highlights || [],
+          vibe_analysis: extProperty.vibe_analysis,
+          property_source_link: extProperty.source_url,
+          property_source_provider_name: extContact?.contact_name ?? null,
+          property_source_provider_phone: extContact?.contact_phone ?? null,
+          realtor: {
+            id: currentConv.realtor_id,
+            name: currentConv.realtor_name || 'Hausto Agent',
+            phone: '',
+            email: ''
+          },
+          matchId: currentConv.id
+        });
+        setShowPropertyList(false);
+        return;
+      }
+
+      toast({
+        title: 'Property No Longer Available',
+        description: 'This property is no longer listed. It may have been rented or removed by the owner.',
+      });
+    } catch (error) {
+      console.error('Error fetching property details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load property details',
+        variant: 'destructive'
       });
     }
   };
@@ -432,14 +626,32 @@ export const HaustoChat = ({
                     </button>
                   </div>
                   </div>
-                  <Badge
-                    title="Hausto AI answers instantly; our team steps in for anything it can't handle"
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 text-[8px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-sm flex items-center justify-center whitespace-nowrap"
-                  >
-                    <MessageCircle className="w-3 h-3 sm:mr-1" />
-                    <span className="hidden sm:inline font-semibold">Hausto AI + team</span>
-                    <span className="sm:hidden font-semibold">AI</span>
-                  </Badge>
+                  {/* Renter quick actions — sits where the old AI badge lived */}
+                  {userType === 'renter' && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleScheduleViewingChip}
+                        className="h-8 text-xs rounded-full px-2.5 sm:px-3"
+                        title="Hausto books the viewings for you"
+                      >
+                        <span className="sm:hidden">📅</span>
+                        <span className="hidden sm:inline">📅 Schedule viewing</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleRequestHuman}
+                        disabled={isRequestingHuman}
+                        className="h-8 text-xs rounded-full px-2.5 sm:px-3"
+                        title="Ask a real person from the Hausto team to step in"
+                      >
+                        <span className="sm:hidden">🙋</span>
+                        <span className="hidden sm:inline">{isRequestingHuman ? 'Contacting…' : '🙋 Talk to a human'}</span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -590,7 +802,7 @@ export const HaustoChat = ({
 
                             {/* Fast-Track nudge from the concierge AI */}
                             {message.metadata?.suggest_fast_track && userType === 'renter' && (
-                              <div className="flex justify-center mt-2">
+                              <div className="flex justify-center gap-2 mt-2">
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -598,6 +810,15 @@ export const HaustoChat = ({
                                   className="text-xs glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 rounded-full shadow-sm hover:shadow-md transition-all duration-300 relative z-10"
                                 >
                                   📅 Schedule a viewing
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleGetContact(message.metadata?.property_id)}
+                                  disabled={isSharingContact}
+                                  className="text-xs glass bg-white/70 hover:bg-white border-blue-200/50 hover:border-blue-300 text-blue-700 rounded-full shadow-sm hover:shadow-md transition-all duration-300 relative z-10"
+                                >
+                                  {isSharingContact ? 'Getting contact…' : '📞 Get contact'}
                                 </Button>
                               </div>
                             )}
@@ -654,7 +875,25 @@ export const HaustoChat = ({
                  <div ref={messagesEndRef} />
                </div>
 
-              <div className="p-3 sm:p-4 border-t border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 relative z-10">
+              <div className="p-3 sm:p-4 border-t border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 relative z-10 space-y-2">
+                {/* "Asking about" context chip — set from the property list */}
+                {userType === 'renter' && (() => {
+                  const currentConv = conversations.find(c => c.id === selectedMatch);
+                  const activeProp = activePropertyId
+                    ? currentConv?.properties?.find(p => p.property_id === activePropertyId)
+                    : undefined;
+                  if (!activeProp) return null;
+                  return (
+                    <div className="flex items-center">
+                      <Badge variant="secondary" className="text-[11px] max-w-[260px] flex items-center gap-1 rounded-full">
+                        <span className="truncate">Asking about: {activeProp.title || 'this property'}</span>
+                        <button aria-label="Clear property context" onClick={() => setActivePropertyId(null)} className="shrink-0">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    </div>
+                  );
+                })()}
                 <div className="flex space-x-2 relative">
                   <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-pink-500/10 rounded-xl blur-md -z-10" />
                   <Input value={inputMessage} onChange={e => setInputMessage(e.target.value)} placeholder="Type your message..." onKeyPress={handleKeyPress} disabled={isSendingDirectMessage} className="flex-1 text-sm md:text-base glass bg-white/70 border-white/50 rounded-xl focus-visible:ring-orange-400" />
@@ -666,7 +905,33 @@ export const HaustoChat = ({
             </div>)}
         </div>
 
-        {detailModalApartment && <PropertyDetailModal apartment={detailModalApartment} userPreferences={userPreferences} isOpen={!!detailModalApartment} onClose={() => setDetailModalApartment(null)} />}
+        {/* Property detail: the editorial card (platform's current listing design) in a frameless dialog */}
+        <Dialog open={!!detailModalApartment} onOpenChange={o => !o && setDetailModalApartment(null)}>
+          <DialogContent className="max-w-[420px] w-[92vw] p-0 bg-transparent border-none shadow-none [&>button]:bg-black/40 [&>button]:text-white [&>button]:rounded-full [&>button]:opacity-100 [&>button]:z-20">
+            <DialogTitle className="sr-only">{detailModalApartment?.title || 'Property details'}</DialogTitle>
+            <DialogDescription className="sr-only">Property listing details</DialogDescription>
+            {detailModalApartment && (
+              <EditorialPropertyCard
+                apartment={{
+                  id: detailModalApartment.id,
+                  images: detailModalApartment.images,
+                  title: detailModalApartment.title,
+                  location: detailModalApartment.location,
+                  price: detailModalApartment.price,
+                  size: detailModalApartment.size,
+                  rooms: detailModalApartment.rooms,
+                  vibe: detailModalApartment.vibe,
+                  description: detailModalApartment.description,
+                  highlights: detailModalApartment.highlights,
+                  amenities: detailModalApartment.amenities,
+                  vibe_analysis: detailModalApartment.vibe_analysis,
+                  latitude: detailModalApartment.latitude,
+                  longitude: detailModalApartment.longitude,
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {selectedRealtorId && <RealtorProfileModal realtorId={selectedRealtorId} isOpen={!!selectedRealtorId} onClose={() => setSelectedRealtorId(null)} />}
 
@@ -716,131 +981,87 @@ export const HaustoChat = ({
         {/* Property Selection for Contact Provider */}
         {/* Property List Modal */}
         <Dialog open={showPropertyList} onOpenChange={setShowPropertyList}>
-          <DialogContent className="max-w-md bg-white">
-            <DialogTitle className="text-lg font-semibold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
-              Matched Properties
+          <DialogContent className="max-w-md">
+            <DialogTitle className="font-serif text-2xl font-normal">
+              Matched properties
             </DialogTitle>
-            <DialogDescription className="text-sm text-gray-600">
-              View and explore your matched properties:
+            <DialogDescription className="text-sm text-muted-foreground">
+              {userType === 'renter'
+                ? 'Tap a listing for details · use the pill to pick which one to ask about'
+                : 'Tap a listing to view details'}
             </DialogDescription>
-            <div className="space-y-3 mt-4 max-h-[400px] overflow-y-auto">
+            <div className="space-y-2 mt-3 max-h-[420px] overflow-y-auto pr-0.5">
               {(() => {
                 const currentConv = conversations.find(c => c.id === selectedMatch);
-                return currentConv?.properties?.map((prop, index) => (
-                  <EditorialPropertyCard
-                    key={prop.property_id}
-                    apartment={{
-                      id: prop.property_id,
-                      images: prop.images || [],
-                      title: prop.title || 'Untitled Property',
-                      location: prop.location,
-                      price: Number(prop.price || 0),
-                    }}
-                    compact
-                    aspectClass="aspect-[16/10]"
-                    onCardClick={async () => {
-                      try {
-                        // Try internal properties first
-                        const { data: fullProperty, error } = await supabase
-                          .from('properties')
-                          .select('*')
-                          .eq('id', prop.property_id)
-                          .maybeSingle();
-
-                        if (error) throw error;
-
-                        if (fullProperty && fullProperty.is_active) {
-                          setDetailModalApartment({
-                            id: fullProperty.id,
-                            images: fullProperty.images || [],
-                            title: fullProperty.title,
-                            location: fullProperty.location,
-                            price: Number(fullProperty.price || 0),
-                            size: fullProperty.size || '',
-                            vibe: fullProperty.vibe || '',
-                            description: fullProperty.description || '',
-                            highlights: fullProperty.highlights || [],
-                            vibe_analysis: fullProperty.vibe_analysis,
-                            property_source_link: fullProperty.property_source_link,
-                            realtor: {
-                              id: currentConv.realtor_id,
-                              name: currentConv.realtor_name || 'Property Owner',
-                              phone: '+1-234-567-8900',
-                              email: 'contact@realtor.com'
-                            },
-                            matchId: currentConv.id
-                          });
-                          setShowPropertyList(false);
-                          return;
+                return currentConv?.properties?.map((prop) => {
+                  const isSelected = activePropertyId === prop.property_id;
+                  return (
+                    <div
+                      key={prop.property_id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openPropertyDetail(prop.property_id)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openPropertyDetail(prop.property_id);
                         }
-
-                        // Try external properties
-                        const { data: extProperty, error: extError } = await supabase
-                          .from('external_properties')
-                          .select('id, title, location, price, size, vibe, description, highlights, images, vibe_analysis, source_url, is_active')
-                          .eq('id', prop.property_id)
-                          .maybeSingle();
-
-                        if (extError) throw extError;
-
-                        // Contact info requires an existing match — fetch via RPC.
-                        const { data: extContacts } = extProperty
-                          ? await supabase.rpc('get_external_property_contacts', { _property_ids: [extProperty.id] })
-                          : { data: null } as any;
-                        const extContact = (extContacts as any[] | null)?.[0];
-
-                        if (extProperty && extProperty.is_active) {
-                          setDetailModalApartment({
-                            id: extProperty.id,
-                            images: extProperty.images || [],
-                            title: extProperty.title,
-                            location: extProperty.location,
-                            price: Number(extProperty.price || 0),
-                            size: extProperty.size || '',
-                            vibe: extProperty.vibe || '',
-                            description: extProperty.description || '',
-                            highlights: extProperty.highlights || [],
-                            vibe_analysis: extProperty.vibe_analysis,
-                            property_source_link: extProperty.source_url,
-                            property_source_provider_name: extContact?.contact_name ?? null,
-                            property_source_provider_phone: extContact?.contact_phone ?? null,
-                            realtor: {
-                              id: currentConv.realtor_id,
-                              name: currentConv.realtor_name || 'Hausto Agent',
-                              phone: '',
-                              email: ''
-                            },
-                            matchId: currentConv.id
-                          });
-                          setShowPropertyList(false);
-                          return;
-                        }
-
-                        toast({
-                          title: 'Property No Longer Available',
-                          description: 'This property is no longer listed. It may have been rented or removed by the owner.',
-                        });
-                      } catch (error) {
-                        console.error('Error fetching property details:', error);
-                        toast({
-                          title: 'Error',
-                          description: 'Failed to load property details',
-                          variant: 'destructive'
-                        });
-                      }
-                    }}
-                  />
-                ));
+                      }}
+                      className={`w-full flex items-center gap-3 rounded-xl border p-2 text-left cursor-pointer transition-colors hover:bg-accent/50 ${
+                        isSelected ? 'border-primary/60 bg-primary/5' : 'border-border'
+                      }`}
+                    >
+                      {prop.images?.[0] ? (
+                        <img
+                          src={prop.images[0]}
+                          alt={prop.title || 'Property'}
+                          className="w-20 h-14 object-cover rounded-lg shrink-0"
+                          onError={e => {
+                            const target = e.target as HTMLImageElement;
+                            target.onerror = null;
+                            target.src = '/placeholder-property.jpg';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-20 h-14 rounded-lg bg-muted shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-snug line-clamp-1">
+                          {prop.title || 'Untitled Property'}
+                        </p>
+                        <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          {prop.location}
+                        </p>
+                        <p className="text-sm font-semibold mt-0.5">
+                          {formatPrice(Number(prop.price || 0))}
+                          <span className="text-xs font-normal text-muted-foreground">/mo</span>
+                        </p>
+                      </div>
+                      {userType === 'renter' ? (
+                        <Button
+                          size="sm"
+                          variant={isSelected ? 'default' : 'outline'}
+                          className="h-7 text-xs rounded-full shrink-0"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setActivePropertyId(prop.property_id);
+                            setShowPropertyList(false);
+                          }}
+                        >
+                          {isSelected ? (
+                            <><Check className="w-3 h-3 mr-1" />Asking</>
+                          ) : (
+                            'Ask about this'
+                          )}
+                        </Button>
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                      )}
+                    </div>
+                  );
+                });
               })()}
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowPropertyList(false)}
-              >
-                Close
-              </Button>
             </div>
           </DialogContent>
         </Dialog>

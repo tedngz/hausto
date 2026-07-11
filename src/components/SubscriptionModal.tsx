@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Check, Crown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { toast } from 'sonner';
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -23,9 +24,11 @@ export const SubscriptionModal = ({
   const {
     createSubscription
   } = useSubscription();
+  const { quota, purchaseUnlimitedMonth } = useViewingQuota();
   const [loading, setLoading] = useState(false);
+  const [addonLoading, setAddonLoading] = useState(false);
   const reasonMessages = {
-    views: "You've reached your daily limit of 10 property views.",
+    views: "You've reached your daily limit of 10 swipes.",
     matches: "You've reached your weekly limit of 20 matches.",
     quiz: "You've used both weekly quiz retakes."
   };
@@ -50,14 +53,24 @@ export const SubscriptionModal = ({
       setLoading(false);
     }
   };
-  const freeFeatures = ['10 property views per day', '20 matches per week', '10 AI searches per day'];
+  const handleBuyAddon = async () => {
+    if (!user) {
+      toast.error('Please log in to purchase the add-on');
+      return;
+    }
+    setAddonLoading(true);
+    try {
+      await purchaseUnlimitedMonth();
+    } finally {
+      setAddonLoading(false);
+    }
+  };
+  const freeFeatures = ['10 swipes per day', '20 matches per week', '10 AI searches per day'];
   const premiumFeatures = [
-    'Unlimited property views',
+    'Unlimited swipes',
     'Unlimited matches',
-    'Unlimited AI Search',
-    'Fast-Track: Hausto books property viewings for you',
-    '3 viewing bookings included each billing cycle',
-    'Need more? $20 add-on: unlimited viewings for 30 days',
+    'Unlimited AI searches',
+    'Fast-Track: Hausto coordinates with realtors/owners to schedule up to 3 viewings per month for you',
   ];
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -120,6 +133,30 @@ export const SubscriptionModal = ({
             </CardContent>
           </Card>
         </div>
+
+        {/* Unlimited viewing schedules: sold as a standalone $20 add-on, not bundled into Premium */}
+        <Card className="mt-4 sm:mt-6">
+          <CardContent className="pt-4 sm:pt-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+            <div className="flex-1">
+              <div className="font-semibold flex items-center gap-2">
+                Unlimited Viewings
+                <Badge variant="secondary">$20/month</Badge>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                Book as many in-person viewings as you need for 30 days. Hausto coordinates every visit until you settle on a home. No Premium plan required.
+                {quota?.unlimited && ' Already active on your account.'}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleBuyAddon}
+              disabled={addonLoading || quota?.unlimited}
+              className="shrink-0"
+            >
+              {addonLoading ? 'Processing...' : quota?.unlimited ? 'Active' : 'Get unlimited viewings'}
+            </Button>
+          </CardContent>
+        </Card>
 
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
           <p>✓ Cancel anytime • ✓ Secure PayPal payment • ✓ Fast activation</p>

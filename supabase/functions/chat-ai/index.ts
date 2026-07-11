@@ -1553,6 +1553,10 @@ serve(async (req) => {
 
     const { message: rawMessage, conversationId, userType, userPreferences, propertyImages } = parsedBody;
     
+    // Followup chips are tagged with their intent by the model itself —
+    // an [Ask] chip is an info question, never a listing search. Remember the
+    // tag before stripping it so intent detection can honor it.
+    const askTagged = /^\[Ask\]/i.test(rawMessage || '') || /Follow-up:\s*\[Ask\]/i.test(rawMessage || '');
     // Strip [Ask] or [Search] prefixes so the AI treats them as natural questions
     let message = (rawMessage || '').replace(/^\[(?:Ask|Search)\]\s*/i, '').trim();
     message = message.replace(/Follow-up:\s*\[(?:Ask|Search)\]\s*/i, 'Follow-up: ').trim();
@@ -2053,13 +2057,54 @@ Pick 1-3 styles and 1-2 colors that best match.`
       console.log('[Comparison] No matches in previous properties, continuing to new search');
     }
 
-    // Filter and score ALL properties based on accumulated context
-    // Always include all matching properties - don't filter out previously suggested ones
-    // Users want to see all relevant results, even if some were shown before
-    const basePropertySet = properties;
+    // Filter and score properties based on accumulated context.
+    // When the user asks for MORE / similar / other options, exclude everything
+    // they've already been shown — resurfacing the same cards reads as a bug.
+    // Plain new searches still consider the full set (a relevant listing may
+    // legitimately reappear under different criteria).
+    const wantsFreshResults =
+      previouslySuggestedIds.size > 0 &&
+      /\b(similar|more|other|others|different|another|new|else)\b/i.test(message);
+    const basePropertySet = wantsFreshResults
+      ? properties.filter((p: any) => !previouslySuggestedIds.has(p.id))
+      : properties;
+    if (wantsFreshResults) {
+      console.log(`[Fresh] Excluding ${previouslySuggestedIds.size} previously shown properties (${basePropertySet.length} candidates left)`);
+    }
 
     const scoredProperties = filterAndScoreProperties(basePropertySet, accContext);
     console.log(`[Filtering] ${scoredProperties.length} properties after filtering (from ${properties.length})`);
+
+    // Nothing fresh matches — say so instead of repeating the same results.
+    if (wantsFreshResults && scoredProperties.length === 0) {
+      const noFreshResponse = {
+        summary: "You've already seen every listing I have that matches this search — nothing new is similar right now. I can widen the search if you like.",
+        results: [],
+        blocks: [
+          {
+            type: 'followups',
+            suggestions: [
+              '[Search] Widen to nearby districts',
+              '[Search] Raise the budget a little',
+              '[Ask] Which areas are similar to this one?',
+            ],
+          },
+        ],
+      };
+      const responseContent = JSON.stringify(noFreshResponse);
+      if (canPersist) {
+        await supabase.from('chat_messages').insert({
+          conversation_id: conversationId,
+          role: 'assistant',
+          content: responseContent,
+        });
+      }
+      console.log('[Fresh] No unseen matches — returning "nothing new" response without AI call');
+      return new Response(JSON.stringify({ response: responseContent }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
 
     // Take top scored properties, but guarantee external listings get representation
     // so they aren't starved out by internal listings that score similarly.
@@ -2248,6 +2293,11 @@ ${scoredPreviousProperties.map((p, i) => `
 
     // ========== LIFESTYLE INTENT + KB LOOKUP ==========
     const intent = detectLifestyleIntent(message);
+    // A tapped [Ask] chip is an explicit info question — treat it as lifestyle
+    // even when the phrasing doesn't match the trigger list.
+    if (askTagged && !intent.isLifestyle && !intent.isMixed) {
+      intent.isLifestyle = true;
+    }
     const shoppingOverride = hasShoppingKeyword(message);
     // Pure-lifestyle ONLY when detector says so AND there's no shopping keyword
     const isPureLifestyle = intent.isLifestyle && !shoppingOverride;
@@ -2757,14 +2807,27 @@ Maximum ${maxResults} properties in results.`;
         blocks: sanitizedBlocks || []
       };
       
-      // If we still have no readable text to show the user, fall back to a polite error message
+      // If we still have no readable text to show the user, build the answer
+      // ourselves. The lifestyle KB is deterministic — when the question named a
+      // district we cover, answer from its entry instead of apologizing.
       if (!infoOnly.summary && !infoOnly.blocks.some((b: any) => b.type === 'text' || b.type === 'district' || b.type === 'complex' || b.type === 'distance')) {
          let fallbackBody = "I'm sorry, I couldn't find a detailed description for that. Please try one of the suggested options below.";
-         
+
+         const kbDistrict = kbLookup.districtEntries[0] as any;
+         const kbCity = kbLookup.cityEntries[0] as any;
          // Try to extract any long string values from the json, ignoring arrays
          const stringValues = Object.values(extractedJson).filter(v => typeof v === 'string' && v.length > 20);
          if (stringValues.length > 0) {
             fallbackBody = stringValues.join('\n\n');
+         } else if (kbDistrict) {
+            const parts = [`${kbDistrict.district}: ${kbDistrict.vibe}`];
+            if (kbDistrict.bestFor?.length) parts.push(`Best for ${kbDistrict.bestFor.join(', ')}.`);
+            if (kbDistrict.notFor?.length) parts.push(`Less ideal for ${kbDistrict.notFor.join(', ')}.`);
+            const rent = kbDistrict.costOfLiving?.rent1BR;
+            if (Array.isArray(rent) && rent.length === 2) parts.push(`A typical 1BR runs $${rent[0]}–$${rent[1]}/month.`);
+            fallbackBody = parts.join(' ');
+         } else if (kbCity?.overview) {
+            fallbackBody = kbCity.overview;
          }
          infoOnly.blocks.unshift({ type: 'text', body: fallbackBody });
       }

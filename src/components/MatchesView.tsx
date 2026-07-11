@@ -31,6 +31,9 @@ export const MatchesView = ({
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  // Which listing the renter clicked "Ask" on — passed into HaustoChat so the
+  // conversation opens already tagged with that property.
+  const [chatPropertyId, setChatPropertyId] = useState<string | null>(null);
   // Fast-Track scheduling: which conversation/realtor the request belongs to,
   // and which property the renter clicked "Viewing" on.
   const [scheduleContext, setScheduleContext] = useState<{ conversationId: string; realtorId: string; propertyId: string } | null>(null);
@@ -128,6 +131,7 @@ export const MatchesView = ({
     if (conversationId) {
       setCurrentConversationId(conversationId);
       setSelectedConversationId(conversationId);
+      setChatPropertyId(apartment.id);
       setIsChatOpen(true);
     } else {
       setSelectedApartment(apartment);
@@ -261,7 +265,8 @@ export const MatchesView = ({
       <HaustoChat isOpen={isChatOpen} onClose={() => {
       setIsChatOpen(false);
       setSelectedConversationId(null);
-    }} userPreferences={userPreferences} userType="renter" initialMatchId={selectedConversationId} />
+      setChatPropertyId(null);
+    }} userPreferences={userPreferences} userType="renter" initialMatchId={selectedConversationId} initialPropertyId={chatPropertyId} />
 
       <ViewingScheduleModal
         isOpen={!!scheduleContext}

@@ -41,21 +41,21 @@ export const UsageMeter = () => {
   const usageItems = [
     {
       icon: Eye,
-      label: 'Daily Views',
+      label: 'Daily swipes',
       current: todayUsage.propertiesViewed,
       limit: limits.dailyViews,
       color: 'text-blue-500',
     },
     {
       icon: Heart,
-      label: 'Weekly Matches',
+      label: 'Weekly matches',
       current: weeklyMatches,
       limit: limits.weeklyMatches,
       color: 'text-red-500',
     },
     {
       icon: MessageSquare,
-      label: 'Daily AI Requests',
+      label: 'Daily AI searches',
       current: todayUsage.aiSearches,
       limit: limits.dailyAiRequests,
       color: 'text-green-500',

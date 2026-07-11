@@ -20,6 +20,7 @@ import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFunction } from '@/integrations/supabase/functions-client';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useSubscription } from '@/hooks/useSubscription';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { format } from 'date-fns';
@@ -112,6 +113,9 @@ export const HomeAI = ({
     createMatch
   } = useMatches();
   const { subscription_tier } = useSubscription();
+  const { quota } = useViewingQuota();
+  // Fast-Track access: Premium plan or the standalone $20 Unlimited Viewings add-on
+  const canFastTrack = subscription_tier === 'premium' || !!quota?.unlimited;
   const {
     canPerformAction,
     updateUsage,
@@ -756,7 +760,8 @@ export const HomeAI = ({
                       {/* Text/info blocks shown ABOVE results */}
                       <AIBlocks blocks={topBlocks} onFollowup={handleFollowup} />
                       
-                      {searchResults.results.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[640px]">
+                      {searchResults.results.length > 0 && <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[640px]">
                              {searchResults.results.map(property => (
                                <EditorialPropertyCard
                                  key={property.id}
@@ -772,7 +777,12 @@ export const HomeAI = ({
                                  onLike={() => handleLikeProperty(property.id, property.realtor_id)}
                                />
                              ))}
-                      </div>}
+                        </div>
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground max-w-[640px]">
+                          <Heart className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          Like a listing to match with its realtor — you can then chat and arrange a viewing.
+                        </p>
+                      </>}
 
                       {/* Followup suggestions shown BELOW results */}
                       {followupBlocks.length > 0 && <AIBlocks blocks={followupBlocks} onFollowup={handleFollowup} />}
@@ -875,6 +885,10 @@ export const HomeAI = ({
                       />
                     ))}
                   </div>
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Heart className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    Like a listing to match with its realtor — you can then chat and arrange a viewing.
+                  </p>
 
                   {/* Sign-up wall — only once the anonymous search cap is reached */}
                   {anonLimitReached && (
@@ -910,38 +924,56 @@ export const HomeAI = ({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold leading-tight">
-              {subscription_tier === 'premium'
+              {canFastTrack
                 ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
                 : 'Hausto books the viewings for you'}
             </p>
             <p className="text-xs text-muted-foreground leading-tight">
-              {subscription_tier === 'premium'
+              {canFastTrack
                 ? 'Pick your times — Hausto contacts the agents and confirms the viewings.'
                 : 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.'}
             </p>
           </div>
-          <Button
-            size="sm"
-            className="shrink-0"
-            onClick={() => {
-              if (subscription_tier === 'premium') {
-                openScheduleForIds(Array.from(likedProperties));
-              } else {
-                setIsSubscriptionModalOpen(true);
-              }
-            }}
-          >
-            {subscription_tier === 'premium' ? 'Schedule viewings' : 'Book my viewings'}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0 shrink-0"
-            onClick={() => setIsFastTrackBannerDismissed(true)}
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                // The messages modal lives on /discover; from the landing page,
+                // navigate there first and fire the open event once it mounts.
+                if (window.location.pathname.startsWith('/discover')) {
+                  window.dispatchEvent(new CustomEvent('openAIChat'));
+                } else {
+                  navigate('/discover');
+                  setTimeout(() => window.dispatchEvent(new CustomEvent('openAIChat')), 600);
+                }
+              }}
+            >
+              <MessageSquare className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+              Chat with realtor
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (canFastTrack) {
+                  openScheduleForIds(Array.from(likedProperties));
+                } else {
+                  setIsSubscriptionModalOpen(true);
+                }
+              }}
+            >
+              {canFastTrack ? 'Schedule viewings' : 'Book my viewings'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0"
+              onClick={() => setIsFastTrackBannerDismissed(true)}
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 

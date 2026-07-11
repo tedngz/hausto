@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ArrowLeft, Building2, CalendarCheck, Home, Loader2, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useComplex, useComplexListings, CITY_LABEL } from '@/hooks/useComplexes';
+import { useAuth } from '@/hooks/useAuth';
+import { useMatches } from '@/hooks/useMatches';
+import type { Apartment } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -23,8 +26,53 @@ export default function ComplexDetail() {
   const { data: complex, isLoading } = useComplex(slug);
   const { data: allComplexes } = useComplexes();
   const { data: listings, isLoading: listingsLoading } = useComplexListings(complex);
+  const { user } = useAuth();
+  const { createMatch, renterMatches } = useMatches();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+
+  // Reflect properties the renter has already matched (e.g. liked in AI search)
+  // so their heart shows filled here too.
+  useEffect(() => {
+    if (renterMatches.length === 0) return;
+    setLikedIds(prev => {
+      const next = new Set(prev);
+      renterMatches.forEach(m => next.add(m.property_id));
+      return next;
+    });
+  }, [renterMatches]);
+
+  // Like a live listing: creates a property_match (same flow as AI search).
+  // External listings carry an "ext-" realtor id and use the renter as placeholder.
+  const handleLike = async (apartment: Apartment) => {
+    if (!user) {
+      navigate('/auth', { state: { returnTo: location.pathname } });
+      return;
+    }
+    const propertyId = apartment.id;
+    const realtorId = apartment.realtor?.id;
+    const isExternal = realtorId?.startsWith('ext-');
+    setLikedIds(prev => new Set(prev).add(propertyId));
+    try {
+      if (isExternal) {
+        await createMatch(propertyId, user.id, 'external');
+      } else if (realtorId) {
+        await createMatch(propertyId, realtorId, 'internal');
+      }
+    } catch (error: any) {
+      // Keep the heart filled if it was already a match; otherwise revert.
+      if (error?.message !== 'ALREADY_MATCHED') {
+        setLikedIds(prev => {
+          const next = new Set(prev);
+          next.delete(propertyId);
+          return next;
+        });
+      }
+    }
+  };
 
   if (isLoading) {
     return (
@@ -280,7 +328,12 @@ export default function ComplexDetail() {
                 ) : listings && listings.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {listings.map((a) => (
-                      <EditorialPropertyCard key={a.id} apartment={a} />
+                      <EditorialPropertyCard
+                        key={a.id}
+                        apartment={a}
+                        liked={likedIds.has(a.id)}
+                        onLike={() => handleLike(a)}
+                      />
                     ))}
                   </div>
                 ) : (

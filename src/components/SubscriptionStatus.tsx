@@ -99,9 +99,10 @@ export const SubscriptionStatus = ({
                 Premium Benefits Active
               </div>
               <ul className="text-xs text-muted-foreground space-y-0.5">
-                <li>• Unlimited property views</li>
+                <li>• Unlimited swipes</li>
                 <li>• Unlimited matches</li>
-                <li>• Unlimited AI search</li>
+                <li>• Unlimited AI searches</li>
+                <li>• Fast-Track: up to 3 viewings scheduled per month</li>
               </ul>
             </div>
             
@@ -124,9 +125,10 @@ export const SubscriptionStatus = ({
               Upgrade to unlock unlimited access
             </p>
             <ul className="text-xs text-muted-foreground space-y-0.5">
-              <li>• Unlimited property views</li>
+              <li>• Unlimited swipes</li>
               <li>• Unlimited matches</li>
-              <li>• Unlimited AI Search</li>
+              <li>• Unlimited AI searches</li>
+              <li>• Fast-Track: up to 3 viewings scheduled per month</li>
             </ul>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />
@@ -145,9 +147,10 @@ export const SubscriptionStatus = ({
               <p>Your premium benefits will remain active until {subscription_end ? new Date(subscription_end).toLocaleDateString() : 'the end of your current billing period'}.</p>
               <p className="text-muted-foreground">After that date, you'll lose access to:</p>
               <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
-                <li>Unlimited property views</li>
+                <li>Unlimited swipes</li>
                 <li>Unlimited matches</li>
-                <li>Unlimited AI search</li>
+                <li>Unlimited AI searches</li>
+                <li>Fast-Track viewing scheduling</li>
               </ul>
             </div>
           </AlertDialogDescription>

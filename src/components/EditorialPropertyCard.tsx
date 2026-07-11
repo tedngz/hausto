@@ -268,7 +268,7 @@ export const EditorialPropertyCard = ({
 
   return (
     <div
-      className={`group relative w-full ${aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
+      className={`group relative w-full ${aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={onCardClick}
@@ -336,8 +336,8 @@ export const EditorialPropertyCard = ({
               </div>
               <p className="text-xs text-muted-foreground mb-3">
                 {scoreContext === 'search'
-                  ? 'How well this home fits what you asked for in this search. Your Matches page rates against your saved preferences instead, so the two can differ.'
-                  : 'How this home aligns with your saved preferences. AI search results rate against your search request instead, so the two can differ.'}
+                  ? 'How well this home fits what you asked for.'
+                  : 'How this home aligns with your preferences.'}
               </p>
 
               {vibeMatch && (vibeMatch.style.length + vibeMatch.features.length) > 0 ? (
