@@ -920,23 +920,25 @@ export const HomeAI = ({
 
       {/* Fast-Track viewing banner — appears once a user has liked a property in this AI chat */}
       {user && likedProperties.size > 0 && !isFastTrackBannerDismissed && (
-        <div className="mb-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-3 flex items-center gap-3 animate-fade-in">
-          <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-            <CalendarCheck className="h-5 w-5 text-primary" />
+        <div className="mb-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-3 flex flex-col sm:flex-row sm:items-center gap-3 animate-fade-in">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+              <CalendarCheck className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold leading-tight">
+                {canFastTrack
+                  ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
+                  : 'Hausto books the viewings for you'}
+              </p>
+              <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                {canFastTrack
+                  ? 'Pick your times — Hausto contacts the agents and confirms the viewings.'
+                  : 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.'}
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold leading-tight">
-              {canFastTrack
-                ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
-                : 'Hausto books the viewings for you'}
-            </p>
-            <p className="text-xs text-muted-foreground leading-tight">
-              {canFastTrack
-                ? 'Pick your times — Hausto contacts the agents and confirms the viewings.'
-                : 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap pl-12 sm:pl-0">
             <Button
               size="sm"
               variant="outline"
