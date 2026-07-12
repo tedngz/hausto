@@ -2,7 +2,190 @@
 // To take ownership, delete this banner line; the plugin then leaves the file alone.
 // supabase function: mcp
 // Bundled from src/lib/mcp/index.ts by @lovable.dev/mcp-js.
+// src/lib/mcp/index.ts
+import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
+
+// src/lib/mcp/tools/search-properties.ts
+import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { createClient } from "npm:@supabase/supabase-js@^2.108.2";
+import { z } from "npm:zod@^3.25.76";
+var BASE_URL = "https://hausto.lovable.app";
+var VND_TO_USD = 24500;
+function sbForUser(ctx) {
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false }
+    }
+  );
+}
+var search_properties_default = defineTool({
+  name: "search_properties",
+  title: "Search rental properties",
+  description: "Search rental apartments and houses in Vietnam (Ho Chi Minh City, Hanoi, Da Nang). Filter by city, district, budget range in USD, number of rooms, and style/vibe. Returns listings with title, location, price (VND + USD), size, images and a hausto.lovable.app share link.",
+  inputSchema: {
+    city: z.enum(["hcmc", "hanoi", "danang"]).optional().describe("City slug. Use 'hcmc' for Ho Chi Minh City."),
+    district: z.string().optional().describe("District name filter."),
+    min_budget_usd: z.number().int().min(0).optional(),
+    max_budget_usd: z.number().int().min(0).optional(),
+    rooms: z.string().optional().describe("e.g. 'Studio', '1 Bed', '2 Bed', '3 Bed', 'Penthouse'."),
+    style: z.string().optional().describe("Style/vibe keyword such as modern, luxury, vintage, urban."),
+    limit: z.number().int().min(1).max(50).optional().default(10)
+  },
+  annotations: { readOnlyHint: true, openWorldHint: true },
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true
+      };
+    }
+    const supabase = sbForUser(ctx);
+    const tenDaysAgo = new Date(
+      Date.now() - 10 * 24 * 60 * 60 * 1e3
+    ).toISOString();
+    let q = supabase.from("properties").select(
+      "id, title, location, price, size, vibe, rooms, images, description"
+    ).eq("is_active", true).gte("last_activated_at", tenDaysAgo).order("created_at", { ascending: false }).limit(input.limit ?? 10);
+    if (input.city) {
+      const cityMap = {
+        hcmc: "Ho Chi Minh",
+        hanoi: "Hanoi",
+        danang: "Da Nang"
+      };
+      q = q.ilike("location", `%${cityMap[input.city]}%`);
+    }
+    if (input.district) q = q.ilike("location", `%${input.district}%`);
+    if (input.rooms) q = q.eq("rooms", input.rooms);
+    if (input.style) q = q.ilike("vibe", `%${input.style}%`);
+    if (input.min_budget_usd)
+      q = q.gte("price", input.min_budget_usd * VND_TO_USD);
+    if (input.max_budget_usd)
+      q = q.lte("price", input.max_budget_usd * VND_TO_USD);
+    const { data, error } = await q;
+    if (error) {
+      return {
+        content: [{ type: "text", text: `Search failed: ${error.message}` }],
+        isError: true
+      };
+    }
+    const results = (data ?? []).map((p) => ({
+      id: p.id,
+      title: p.title,
+      location: p.location,
+      price_vnd: Number(p.price),
+      price_usd: Math.round(Number(p.price) / VND_TO_USD),
+      size: p.size,
+      rooms: p.rooms,
+      vibe: p.vibe,
+      image: p.images?.[0] ?? null,
+      url: `${BASE_URL}/property/${p.id}`
+    }));
+    return {
+      content: [
+        {
+          type: "text",
+          text: results.length === 0 ? "No matching properties found." : `Found ${results.length} propert${results.length === 1 ? "y" : "ies"}:
+
+${results.map(
+            (r) => `\u2022 ${r.title} \u2014 ${r.location}
+  ${r.rooms ?? ""} ${r.size ?? ""} \xB7 $${r.price_usd}/mo (${r.price_vnd.toLocaleString()} VND)
+  ${r.url}`
+          ).join("\n\n")}`
+        }
+      ],
+      structuredContent: { results }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-property.ts
+import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { createClient as createClient2 } from "npm:@supabase/supabase-js@^2.108.2";
+import { z as z2 } from "npm:zod@^3.25.76";
+var BASE_URL2 = "https://hausto.lovable.app";
+var VND_TO_USD2 = 24500;
+function sbForUser2(ctx) {
+  return createClient2(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    {
+      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+      auth: { persistSession: false, autoRefreshToken: false }
+    }
+  );
+}
+var get_property_default = defineTool2({
+  name: "get_property",
+  title: "Get property details",
+  description: "Fetch full details for a single rental property by its Hausto id, including price, amenities, highlights, images and the share URL.",
+  inputSchema: {
+    id: z2.string().describe("Hausto property UUID.")
+  },
+  annotations: { readOnlyHint: true, openWorldHint: true },
+  handler: async ({ id }, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        content: [{ type: "text", text: "Not authenticated" }],
+        isError: true
+      };
+    }
+    const { data, error } = await sbForUser2(ctx).from("properties").select(
+      "id, title, location, price, size, vibe, rooms, images, description, highlights, amenities, is_active"
+    ).eq("id", id).maybeSingle();
+    if (error) {
+      return {
+        content: [{ type: "text", text: `Lookup failed: ${error.message}` }],
+        isError: true
+      };
+    }
+    if (!data) {
+      return {
+        content: [{ type: "text", text: `No property with id ${id}.` }],
+        isError: true
+      };
+    }
+    const price_usd = Math.round(Number(data.price) / VND_TO_USD2);
+    const url = `${BASE_URL2}/property/${data.id}`;
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${data.title}
+${data.location}
+${data.rooms ?? ""} ${data.size ?? ""} \xB7 $${price_usd}/mo
+
+${data.description ?? ""}
+
+${url}`
+        }
+      ],
+      structuredContent: {
+        ...data,
+        price_vnd: Number(data.price),
+        price_usd,
+        url
+      }
+    };
+  }
+});
+
+// src/lib/mcp/index.ts
+var projectRef = "gbgrwjdmytaksrztcyzs";
+var mcp_default = defineMcp({
+  name: "hausto-mcp",
+  title: "Hausto Property Search",
+  version: "0.2.0",
+  instructions: "Tools for Hausto \u2014 search premium rental properties in Vietnam (HCMC, Hanoi, Da Nang). Sign in with your Hausto account to connect. Use `search_properties` to find listings by city/district/budget/rooms/style, then `get_property` for full details. Always share the returned `url` (hausto.lovable.app) with the user.",
+  auth: auth.oauth.issuer({
+    issuer: `https://${projectRef}.supabase.co/auth/v1`,
+    acceptedAudiences: "authenticated"
+  }),
+  tools: [search_properties_default, get_property_default]
+});
+
 // lovable-mcp-supabase-entry.ts
-import mcp from "npm:C:\\Users\\tedng\\OneDrive\\Documents\\GitHub\\hausto\\src\\lib\\mcp\\index.ts";
 import { createSupabaseHandler } from "npm:@lovable.dev/mcp-js@0.20.0/stacks/supabase";
-Deno.serve(createSupabaseHandler(mcp, { functionName: "mcp" }));
+Deno.serve(createSupabaseHandler(mcp_default, { functionName: "mcp" }));
