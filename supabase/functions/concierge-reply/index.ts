@@ -159,20 +159,28 @@ serve(async (req) => {
     // Which listing the renter tagged via "Ask about this" — resolved here so
     // its details land in the property context below. The matched-properties
     // query is capped, so fetch the tagged listing directly if it fell outside.
-    const taggedPropertyId = (sourceMsg?.metadata as Record<string, unknown> | null)?.property_id as string | undefined;
-    let taggedProperty = taggedPropertyId ? properties.find((p) => p.id === taggedPropertyId) : undefined;
-    if (taggedPropertyId && !taggedProperty) {
+    const sourceMeta = sourceMsg?.metadata as Record<string, unknown> | null;
+    const taggedPropertyId = sourceMeta?.property_id as string | undefined;
+    // The renter can tag several matched listings at once (property_ids);
+    // single-tag messages only carry property_id.
+    const rawTaggedIds = sourceMeta?.property_ids;
+    const taggedPropertyIds: string[] = Array.isArray(rawTaggedIds) && rawTaggedIds.length > 0
+      ? (rawTaggedIds as string[])
+      : taggedPropertyId ? [taggedPropertyId] : [];
+    const missingTaggedIds = taggedPropertyIds.filter((id) => !properties.some((p) => p.id === id));
+    if (missingTaggedIds.length > 0) {
       const [{ data: internal }, { data: external }] = await Promise.all([
         supabase.from("properties")
           .select("id, title, location, price, size, vibe, description, highlights, amenities, vibe_analysis, rooms, property_source_provider_name")
-          .eq("id", taggedPropertyId).maybeSingle(),
+          .in("id", missingTaggedIds),
         supabase.from("external_properties")
           .select("id, title, location, price, size, vibe, description, highlights, amenities, vibe_analysis, contact_name")
-          .eq("id", taggedPropertyId).maybeSingle(),
+          .in("id", missingTaggedIds),
       ]);
-      taggedProperty = internal ?? external ?? undefined;
-      if (taggedProperty) properties.unshift(taggedProperty);
+      properties.unshift(...(internal || []), ...(external || []));
     }
+    const taggedProperties = properties.filter((p) => taggedPropertyIds.includes(p.id));
+    const taggedProperty = taggedProperties[0];
 
     // Complex profiles whose name/alias appears in a property title/location
     let complexContext = "";
@@ -192,7 +200,7 @@ serve(async (req) => {
 
     const propertyContext = properties.map((p, i) => {
       const va = p.vibe_analysis ? JSON.stringify(p.vibe_analysis).slice(0, 600) : "";
-      const marker = p.id === taggedPropertyId ? " ← THE PROPERTY THE RENTER IS ASKING ABOUT" : "";
+      const marker = taggedPropertyIds.includes(p.id) ? " ← A PROPERTY THE RENTER IS ASKING ABOUT" : "";
       return `Property ${i + 1} [id ${p.id}]${marker}: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? "size n/a"}, rooms: ${(p as Record<string, unknown>).rooms ?? "n/a"}. Vibe: ${p.vibe ?? "n/a"}. Highlights: ${(p.highlights || []).join(", ")}. Amenities: ${(p.amenities || []).join(", ")}. ${p.description ? `Description: ${String(p.description).slice(0, 400)}` : ""} ${va ? `Analysis: ${va}` : ""}`;
     }).join("\n");
 
@@ -228,8 +236,9 @@ serve(async (req) => {
     // ---- LLM: answer or escalate (skipped entirely on an explicit human request) ----
     let decision: { action?: string; reply?: string; suggest_fast_track?: boolean } = { action: "escalate", reply: "" };
     if (!forceEscalate) {
-      const taggedNote = taggedProperty
-        ? `\nIMPORTANT: The renter's CURRENT question is about "${taggedProperty.title}" (${taggedProperty.location}). Earlier messages in the conversation may be labeled [about: …] with a DIFFERENT property — that context is stale; do not carry its details over. Answer about "${taggedProperty.title}" specifically unless the renter's latest message clearly names another property.\n`
+      const taggedTitles = taggedProperties.map((p) => `"${p.title}" (${p.location})`).join(", ");
+      const taggedNote = taggedProperties.length > 0
+        ? `\nIMPORTANT: The renter's CURRENT question is about ${taggedProperties.length > 1 ? "these properties" : "this property"}: ${taggedTitles}. ${taggedProperties.length > 1 ? "Answer for EACH of them (briefly per property when they differ)." : ""} Earlier messages in the conversation may be labeled [about: …] with a DIFFERENT property — that context is stale; do not carry its details over. Answer about the tagged ${taggedProperties.length > 1 ? "properties" : "property"} specifically unless the renter's latest message clearly names another property.\n`
         : "";
       const systemPrompt = `You are Hausto AI, the concierge assistant for Hausto, a vetted rental platform in Vietnam. You are an AI — never claim to be the realtor, the property owner, or a human, and never invent facts.
 ${taggedNote}
@@ -238,7 +247,10 @@ You are replying inside a renter's post-match conversation. Decide between:
 - "answer": STRONGLY PREFERRED. Answer whenever the property/complex data below covers the question, even partially — give the helpful partial answer and say plainly what you're not sure about. Greetings, small talk, general questions about the area, the platform, or the rental process are always "answer". Be warm, concise (2-4 sentences), and concrete.
 - "escalate": ONLY when the question genuinely requires the property team — confirming current availability or a specific move-in date, negotiating price, contracts/deposits/legal terms — AND you cannot give a useful answer from the data. Escalation interrupts a human, so treat it as a last resort, never a default. When escalating, "reply" should briefly acknowledge the question in one sentence (the system appends the hand-off notice separately — do not promise response times yourself).
 
-Set "suggest_fast_track" to true when scheduling a viewing is the natural next step${isPremium ? "" : " (the renter is on the free tier; Fast-Track viewing coordination is a premium feature — you may mention that)"}.
+Set "suggest_fast_track" to true when scheduling a viewing is the natural next step.
+${isPremium
+  ? `The renter is on PREMIUM: Fast-Track viewing coordination is included — you may offer to have Hausto coordinate the viewing.`
+  : `The renter is on the FREE tier: Fast-Track viewing coordination is a PREMIUM feature they do NOT have. NEVER say you can coordinate, book, or fast-track a viewing for them, and never ask for their preferred times as if you will arrange it. If they ask about viewing, say viewings are arranged with the property contact, and that Hausto's Fast-Track service (we book everything for you) is available on the premium plan if they'd like to upgrade.`}
 
 Matched properties:
 ${propertyContext || "None on record."}

@@ -53,11 +53,10 @@ export const HaustoChat = ({
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [showPropertyList, setShowPropertyList] = useState(false);
   const [isViewingScheduleModalOpen, setIsViewingScheduleModalOpen] = useState(false);
-  // Which matched listing the renter is currently asking about. Tags outgoing
-  // messages with metadata.property_id so the concierge AI (and the realtor)
-  // know which of the pair's matched properties the question refers to.
-  const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
-  const [isRequestingHuman, setIsRequestingHuman] = useState(false);
+  // Which matched listings the renter is currently asking about (multi-select).
+  // Tags outgoing messages with metadata.property_id (first pick, for the
+  // concierge AI / realtor) plus metadata.property_ids when several are picked.
+  const [activePropertyIds, setActivePropertyIds] = useState<string[]>([]);
   const [isSharingContact, setIsSharingContact] = useState(false);
   // Shows "Hausto AI is typing…" between a renter send and the concierge reply.
   const [isAwaitingConcierge, setIsAwaitingConcierge] = useState(false);
@@ -167,7 +166,7 @@ export const HaustoChat = ({
   // Seed the "asking about" property from the caller (e.g. MatchesView "Chat").
   useEffect(() => {
     if (isOpen) {
-      setActivePropertyId(initialPropertyId ?? null);
+      setActivePropertyIds(initialPropertyId ? [initialPropertyId] : []);
     }
   }, [initialPropertyId, isOpen]);
   const handleSendMessage = async (text?: string) => {
@@ -186,7 +185,12 @@ export const HaustoChat = ({
           receiverId,
           // Renter messages get an AI-first concierge reply server-side.
           triggerConcierge: isRenterSending,
-          ...(isRenterSending && activePropertyId ? { metadata: { property_id: activePropertyId } } : {}),
+          ...(isRenterSending && activePropertyIds.length > 0 ? {
+            metadata: {
+              property_id: activePropertyIds[0],
+              ...(activePropertyIds.length > 1 ? { property_ids: activePropertyIds } : {}),
+            },
+          } : {}),
         });
 
         if (isRenterSending) {
@@ -228,29 +232,6 @@ export const HaustoChat = ({
     setPendingMessage('');
   };
 
-  // Explicit human hand-off: creates an escalation server-side (the renter's
-  // choice, not the AI's) so the team gets notified and the queue picks it up.
-  const handleRequestHuman = async () => {
-    if (!selectedMatch || isRequestingHuman) return;
-    setIsRequestingHuman(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('concierge-reply', {
-        body: { conversationId: selectedMatch, forceEscalate: true },
-      });
-      if (error || data?.error) throw new Error(data?.error || error?.message);
-      await refetchMessages();
-    } catch (err) {
-      console.error('Error requesting human support:', err);
-      toast({
-        title: 'Could not reach our team',
-        description: 'Please try again in a moment.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsRequestingHuman(false);
-    }
-  };
-
   // "Get contact" chip under AI messages: the AI replies in-thread with the
   // owner/realtor contact for the property being asked about (the free
   // alternative to Fast-Track — the renter reaches out themselves). The
@@ -262,7 +243,7 @@ export const HaustoChat = ({
     if (!currentConv) return;
 
     const receiverId = user.id === currentConv.realtor_id ? currentConv.renter_id : currentConv.realtor_id;
-    const targetId = propertyId ?? activePropertyId ?? undefined;
+    const targetId = propertyId ?? activePropertyIds[0] ?? undefined;
     const props = currentConv.properties || [];
     // Without a specific property in context, only answer when the thread has
     // exactly one property — otherwise ask the renter to pick one.
@@ -417,7 +398,8 @@ export const HaustoChat = ({
           },
           matchId: currentConv.id
         });
-        setShowPropertyList(false);
+        // Keep the property list open underneath — closing the detail card
+        // drops the renter back into the list to keep browsing.
         return;
       }
 
@@ -459,7 +441,6 @@ export const HaustoChat = ({
           },
           matchId: currentConv.id
         });
-        setShowPropertyList(false);
         return;
       }
 
@@ -616,17 +597,21 @@ export const HaustoChat = ({
                         </>
                       );
                      })()}
-                    <button 
-                      className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 hover:underline text-left font-medium"
-                      onClick={() => setShowPropertyList(true)}
-                    >
-                      {(() => {
-                        const currentConv = conversations.find(c => c.id === selectedMatch);
-                        const firstProp = currentConv?.properties?.[0];
-                        const extraCount = Math.max((currentConv?.properties?.length || 0) - 1, 0);
-                        return firstProp ? `${firstProp.title}${extraCount > 0 ? ` (+${extraCount} more)` : ''}` : 'View properties';
-                      })()}
-                    </button>
+                    {/* Renters pick properties via the "Asking about" chip; realtors
+                        still need this link to see the matched listings */}
+                    {userType === 'realtor' && (
+                      <button
+                        className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 hover:underline text-left font-medium"
+                        onClick={() => setShowPropertyList(true)}
+                      >
+                        {(() => {
+                          const currentConv = conversations.find(c => c.id === selectedMatch);
+                          const firstProp = currentConv?.properties?.[0];
+                          const extraCount = Math.max((currentConv?.properties?.length || 0) - 1, 0);
+                          return firstProp ? `${firstProp.title}${extraCount > 0 ? ` (+${extraCount} more)` : ''}` : 'View properties';
+                        })()}
+                      </button>
+                    )}
                   </div>
                   </div>
                   {/* Renter quick actions — sits where the old AI badge lived */}
@@ -636,22 +621,11 @@ export const HaustoChat = ({
                         size="sm"
                         variant="outline"
                         onClick={handleScheduleViewingChip}
-                        className="h-8 text-xs rounded-full px-2.5 sm:px-3"
-                        title="Hausto books the viewings for you"
+                        className="h-8 text-xs rounded-full px-3 sm:px-4 bg-orange-50/80 hover:bg-orange-100 text-orange-700 border-orange-200 hover:border-orange-300 font-medium shadow-sm transition-colors"
+                        title="Skip the back-and-forth — Hausto books the viewings for you"
                       >
-                        <span className="sm:hidden">📅</span>
-                        <span className="hidden sm:inline">📅 Schedule viewing</span>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleRequestHuman}
-                        disabled={isRequestingHuman}
-                        className="h-8 text-xs rounded-full px-2.5 sm:px-3"
-                        title="Ask a real person from the Hausto team to step in"
-                      >
-                        <span className="sm:hidden">🙋</span>
-                        <span className="hidden sm:inline">{isRequestingHuman ? 'Contacting…' : '🙋 Talk to a human'}</span>
+                        <span className="sm:hidden">⚡ Fast-Track</span>
+                        <span className="hidden sm:inline">⚡ Fast-Track viewing</span>
                       </Button>
                     </div>
                   )}
@@ -668,27 +642,6 @@ export const HaustoChat = ({
                       <p className="text-sm text-gray-400 mt-1">
                         {userType === 'renter' ? 'Ask anything — Hausto AI answers instantly' : 'Send a message to connect'}
                       </p>
-                      {userType === 'renter' && !loadingDirectMessages && (
-                        <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-md mx-auto">
-                          {[
-                            'Is this property still available?',
-                            "What's the pet policy?",
-                            'Can I visit this weekend?',
-                            'Is the price negotiable?',
-                          ].map(q => (
-                            <Button
-                              key={q}
-                              size="sm"
-                              variant="outline"
-                              disabled={isSendingDirectMessage}
-                              onClick={() => handleSendMessage(q)}
-                              className="text-xs h-auto py-1.5 px-3 rounded-full glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 shadow-sm"
-                            >
-                              {q}
-                            </Button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div> : <div className="space-y-4">
                     {directMessages.map(message => {
@@ -835,7 +788,7 @@ export const HaustoChat = ({
                                   onClick={handleScheduleViewingChip}
                                   className="text-xs glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 rounded-full shadow-sm hover:shadow-md transition-all duration-300 relative z-10"
                                 >
-                                  📅 Schedule a viewing
+                                  ⚡ Fast-Track a viewing
                                 </Button>
                                 <Button
                                   size="sm"
@@ -902,24 +855,77 @@ export const HaustoChat = ({
                </div>
 
               <div className="p-3 sm:p-4 border-t border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 relative z-10 space-y-2">
-                {/* "Asking about" context chip — set from the property list */}
+                {/* "Asking about" context chip — always shown; tap it to pick
+                    which matched property questions are about */}
                 {userType === 'renter' && (() => {
                   const currentConv = conversations.find(c => c.id === selectedMatch);
-                  const activeProp = activePropertyId
-                    ? currentConv?.properties?.find(p => p.property_id === activePropertyId)
-                    : undefined;
-                  if (!activeProp) return null;
+                  const activeProps = (currentConv?.properties || [])
+                    .filter(p => activePropertyIds.includes(p.property_id));
+                  const chipLabel = activeProps.length === 0
+                    ? 'Asking about: tap to pick properties'
+                    : activeProps.length === 1
+                      ? `Asking about: ${activeProps[0].title || 'this property'}`
+                      : `Asking about: ${activeProps.length} properties`;
                   return (
                     <div className="flex items-center">
-                      <Badge variant="secondary" className="text-[11px] max-w-[260px] flex items-center gap-1 rounded-full">
-                        <span className="truncate">Asking about: {activeProp.title || 'this property'}</span>
-                        <button aria-label="Clear property context" onClick={() => setActivePropertyId(null)} className="shrink-0">
-                          <X className="w-3 h-3" />
-                        </button>
+                      <Badge
+                        variant="secondary"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setShowPropertyList(true)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setShowPropertyList(true);
+                          }
+                        }}
+                        className="h-7 text-[11px] max-w-[280px] flex items-center gap-1 rounded-full px-3 cursor-pointer hover:bg-secondary/80 transition-colors"
+                        title="Choose which matched property you're asking about"
+                      >
+                        <span className="truncate">{chipLabel}</span>
+                        {activeProps.length > 0 ? (
+                          <button
+                            aria-label="Clear property context"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setActivePropertyIds([]);
+                            }}
+                            className="shrink-0"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <ChevronRight className="w-3 h-3 shrink-0" />
+                        )}
                       </Badge>
                     </div>
                   );
                 })()}
+                {/* Starter questions — single tidy row, scrolls horizontally on
+                    narrow screens instead of wrapping */}
+                {userType === 'renter' && !loadingDirectMessages && (
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {([
+                      { label: 'Is this property still available?' },
+                      // Answered instantly from the listing data, not via the AI round-trip
+                      { label: "📞 Get the owner's contact", action: () => handleGetContact() },
+                      { label: "What's the pet policy?" },
+                      { label: 'Can I visit this weekend?' },
+                      { label: 'Is the price negotiable?' },
+                    ] as { label: string; action?: () => void }[]).map(({ label, action }) => (
+                      <Button
+                        key={label}
+                        size="sm"
+                        variant="outline"
+                        disabled={isSendingDirectMessage || (action ? isSharingContact : false)}
+                        onClick={() => (action ? action() : handleSendMessage(label))}
+                        className="shrink-0 text-xs h-7 px-3 rounded-full glass bg-white/70 hover:bg-white border-purple-200/50 hover:border-purple-300 text-purple-700 font-normal shadow-sm"
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex space-x-2 relative">
                   <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-pink-500/10 rounded-xl blur-md -z-10" />
                   <Input value={inputMessage} onChange={e => setInputMessage(e.target.value)} placeholder="Type your message..." onKeyPress={handleKeyPress} disabled={isSendingDirectMessage} className="flex-1 text-sm md:text-base glass bg-white/70 border-white/50 rounded-xl focus-visible:ring-orange-400" />
@@ -933,7 +939,7 @@ export const HaustoChat = ({
 
         {/* Property detail: the editorial card (platform's current listing design) in a frameless dialog */}
         <Dialog open={!!detailModalApartment} onOpenChange={o => !o && setDetailModalApartment(null)}>
-          <DialogContent className="max-w-[420px] w-[92vw] p-0 bg-transparent border-none shadow-none [&>button]:bg-black/40 [&>button]:text-white [&>button]:rounded-full [&>button]:opacity-100 [&>button]:z-20">
+          <DialogContent className="max-w-[420px] w-[92vw] p-0 bg-transparent border-none shadow-none [&>button]:bg-black/50 [&>button]:text-white [&>button]:rounded-full [&>button]:opacity-100 [&>button]:z-20 [&>button]:!-top-2 [&>button]:!-right-2 [&>button]:shadow-md">
             <DialogTitle className="sr-only">{detailModalApartment?.title || 'Property details'}</DialogTitle>
             <DialogDescription className="sr-only">Property listing details</DialogDescription>
             {detailModalApartment && (
@@ -1007,20 +1013,22 @@ export const HaustoChat = ({
         {/* Property Selection for Contact Provider */}
         {/* Property List Modal */}
         <Dialog open={showPropertyList} onOpenChange={setShowPropertyList}>
-          <DialogContent className="max-w-md">
-            <DialogTitle className="font-serif text-2xl font-normal">
-              Matched properties
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              {userType === 'renter'
-                ? 'Tap a listing for details · use the pill to pick which one to ask about'
-                : 'Tap a listing to view details'}
-            </DialogDescription>
-            <div className="space-y-2 mt-3 max-h-[420px] overflow-y-auto pr-0.5">
+          <DialogContent className="max-w-md rounded-2xl p-0 gap-0 overflow-hidden">
+            <div className="px-6 pt-6 pb-4 border-b border-border/60">
+              <DialogTitle className="font-serif text-2xl font-normal tracking-tight">
+                Matched properties
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground mt-1.5">
+                {userType === 'renter'
+                  ? 'Tap a listing for details · tick to ask about it'
+                  : 'Tap a listing to view details'}
+              </DialogDescription>
+            </div>
+            <div className="px-3 py-3 space-y-1 max-h-[440px] overflow-y-auto">
               {(() => {
                 const currentConv = conversations.find(c => c.id === selectedMatch);
                 return currentConv?.properties?.map((prop) => {
-                  const isSelected = activePropertyId === prop.property_id;
+                  const isSelected = activePropertyIds.includes(prop.property_id);
                   return (
                     <div
                       key={prop.property_id}
@@ -1033,15 +1041,17 @@ export const HaustoChat = ({
                           openPropertyDetail(prop.property_id);
                         }
                       }}
-                      className={`w-full flex items-center gap-3 rounded-xl border p-2 text-left cursor-pointer transition-colors hover:bg-accent/50 ${
-                        isSelected ? 'border-primary/60 bg-primary/5' : 'border-border'
+                      className={`group w-full flex items-center gap-3.5 rounded-xl p-2.5 text-left cursor-pointer transition-all duration-200 ${
+                        isSelected
+                          ? 'bg-primary/[0.06] ring-1 ring-primary/30'
+                          : 'hover:bg-accent/40'
                       }`}
                     >
                       {prop.images?.[0] ? (
                         <img
                           src={prop.images[0]}
                           alt={prop.title || 'Property'}
-                          className="w-20 h-14 object-cover rounded-lg shrink-0"
+                          className="w-[88px] h-16 object-cover rounded-lg shrink-0 shadow-sm"
                           onError={e => {
                             const target = e.target as HTMLImageElement;
                             target.onerror = null;
@@ -1049,38 +1059,41 @@ export const HaustoChat = ({
                           }}
                         />
                       ) : (
-                        <div className="w-20 h-14 rounded-lg bg-muted shrink-0" />
+                        <div className="w-[88px] h-16 rounded-lg bg-muted shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium leading-snug line-clamp-1">
+                        <p className="text-sm font-medium leading-snug line-clamp-1 text-foreground">
                           {prop.title || 'Untitled Property'}
                         </p>
-                        <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1">
+                        <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1 mt-0.5">
                           <MapPin className="w-3 h-3 shrink-0" />
                           {prop.location}
                         </p>
-                        <p className="text-sm font-semibold mt-0.5">
-                          {formatPrice(Number(prop.price || 0))}
-                          <span className="text-xs font-normal text-muted-foreground">/mo</span>
+                        <p className="text-sm mt-1">
+                          <span className="font-semibold">{formatPrice(Number(prop.price || 0))}</span>
+                          <span className="text-xs text-muted-foreground"> /mo</span>
                         </p>
                       </div>
                       {userType === 'renter' ? (
-                        <Button
-                          size="sm"
-                          variant={isSelected ? 'default' : 'outline'}
-                          className="h-7 text-xs rounded-full shrink-0"
+                        <button
+                          aria-label={isSelected ? 'Stop asking about this property' : 'Ask about this property'}
+                          aria-pressed={isSelected}
+                          className={`w-6 h-6 mr-1 rounded-full border-[1.5px] shrink-0 flex items-center justify-center transition-all duration-200 ${
+                            isSelected
+                              ? 'bg-primary border-primary text-primary-foreground scale-105'
+                              : 'border-muted-foreground/30 text-transparent hover:border-primary/70 group-hover:border-muted-foreground/50'
+                          }`}
                           onClick={e => {
                             e.stopPropagation();
-                            setActivePropertyId(prop.property_id);
-                            setShowPropertyList(false);
+                            setActivePropertyIds(ids =>
+                              ids.includes(prop.property_id)
+                                ? ids.filter(id => id !== prop.property_id)
+                                : [...ids, prop.property_id]
+                            );
                           }}
                         >
-                          {isSelected ? (
-                            <><Check className="w-3 h-3 mr-1" />Asking</>
-                          ) : (
-                            'Ask about this'
-                          )}
-                        </Button>
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
                       ) : (
                         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                       )}
