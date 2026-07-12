@@ -353,7 +353,7 @@ export const useDirectMessages = () => {
           sender_id: user.id,
           receiver_id: receiverId,
           content: validatedData.content,
-          ...(metadata ? { metadata } : {})
+          ...(metadata ? { metadata: metadata as any } : {})
         })
         .select()
         .single();
