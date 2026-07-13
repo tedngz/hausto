@@ -10,7 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, MapPin, Scale, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, Loader2, MapPin, Scale, Sparkles } from 'lucide-react';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 
 // Public, no-auth browse table. Data comes from the public-property-search edge
 // function, which never returns contact details — contacts stay behind sign-in.
@@ -96,9 +102,79 @@ const Browse = () => {
   const [sortKey, setSortKey] = useState<SortKey>('last_verified_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  // Compare
+  // Compare + fast-track
   const [selected, setSelected] = useState<Row[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const { user } = useAuth();
+  const { quota, refetchQuota } = useViewingQuota();
+
+  const openFastTrack = () => {
+    if (!user) {
+      navigate('/auth', { state: { returnTo: '/browse' } });
+      return;
+    }
+    if (quota && !quota.canBook) {
+      toast.error('Viewing bookings used up for this cycle', {
+        description: 'Upgrade or purchase the unlimited add-on from your matches page to book more.',
+      });
+      return;
+    }
+    setScheduleOpen(true);
+  };
+
+  const submitFastTrack = async (scheduleData: ViewingScheduleData) => {
+    if (!user) return;
+    try {
+      // Browse requests have no chat conversation or matched realtor yet —
+      // ops picks them up from the admin queue and coordinates directly.
+      const { error: insertError } = await supabase.from('fast_track_requests').insert({
+        conversation_id: null,
+        realtor_id: null,
+        renter_id: user.id,
+        property_ids: scheduleData.selectedPropertyIds,
+        preferred_dates: scheduleData.dates.map((d) => format(d, 'yyyy-MM-dd')),
+        preferred_times: scheduleData.preferredTimes,
+        special_requirements: scheduleData.specialRequirements || null,
+        status: 'pending',
+        source: 'browse',
+      } as any);
+      if (insertError) throw insertError;
+
+      // Notification is best-effort; the request row is the source of truth.
+      try {
+        const { data: profile } = await supabase
+          .from('profiles').select('name, email').eq('id', user.id).single();
+        const chosen = selected.filter((r) => scheduleData.selectedPropertyIds.includes(r.id));
+        await supabase.functions.invoke('notify-fast-track-request', {
+          body: {
+            renterName: profile?.name || 'User',
+            renterEmail: profile?.email || user.email || '',
+            preferredDates: scheduleData.dates.map((d) => format(d, 'MMM dd, yyyy')),
+            preferredTimes: scheduleData.preferredTimes,
+            specialRequirements: scheduleData.specialRequirements || '',
+            properties: chosen.map((r) => ({
+              id: r.id, title: r.title, location: r.location,
+              price: r.price_vnd || 0, imageUrl: r.images?.[0] || '',
+            })),
+            conversationId: null,
+          },
+        });
+      } catch (e) {
+        console.error('Fast-track notification failed:', e);
+      }
+
+      refetchQuota();
+      setScheduleOpen(false);
+      setSelected([]);
+      toast.success('Viewing request sent', {
+        description: "We'll confirm availability with the agents and send you a schedule.",
+      });
+    } catch (e) {
+      console.error('Fast-track request failed:', e);
+      toast.error('Could not send the request. Please try again.');
+    }
+  };
 
   // Debounce free-text district input
   useEffect(() => {
@@ -355,9 +431,25 @@ const Browse = () => {
           <Button size="sm" variant="secondary" className="rounded-full h-7" disabled={selected.length < 2} onClick={() => setCompareOpen(true)}>
             Compare
           </Button>
+          <Button size="sm" className="rounded-full h-7" onClick={openFastTrack}>
+            <CalendarCheck className="w-3.5 h-3.5 mr-1.5" />
+            Request viewings
+          </Button>
           <button className="text-xs opacity-70 hover:opacity-100" onClick={() => setSelected([])}>Clear</button>
         </div>
       )}
+
+      <ViewingScheduleModal
+        isOpen={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        onSubmit={submitFastTrack}
+        matchedProperties={selected.map((r) => ({
+          id: r.id, title: r.title, images: r.images,
+          location: r.location, price: r.price_vnd || undefined,
+        }))}
+        initialSelectedIds={selected.map((r) => r.id)}
+        onPropertyClick={(id) => navigate(`/property/${id}`)}
+      />
 
       <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
         <DialogContent className="max-w-4xl">
