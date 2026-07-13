@@ -400,12 +400,22 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
       'Urban': analysisResult.urban || 5,
       'Rustic': analysisResult.rustic || 5,
     };
+    // Tags must discriminate: pick styles that STAND OUT relative to this
+    // listing's own score profile, not everything above an absolute bar
+    // (LLM positivity bias rates most photos 6-8 on modern/cozy/luxurious,
+    // which used to tag every listing "Modern, Cozy, Luxurious").
+    const scoreValues = Object.values(vibeScoreMap);
+    const meanScore = scoreValues.reduce((s, v) => s + v, 0) / scoreValues.length;
     const derivedStyles = Object.entries(vibeScoreMap)
-      .filter(([_, score]) => score >= 6)
+      .filter(([_, score]) => score >= 7 && score >= meanScore + 1)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
+      .slice(0, 2)
       .map(([style]) => style);
-    if (derivedStyles.length === 0) derivedStyles.push('Contemporary');
+    if (derivedStyles.length === 0) {
+      // Flat profile: fall back to the single highest-scoring style
+      const top = Object.entries(vibeScoreMap).sort((a, b) => b[1] - a[1])[0];
+      derivedStyles.push(top && top[1] >= 6 ? top[0] : 'Contemporary');
+    }
 
     // Derive colors from vibe scores
     const derivedColors: string[] = [];

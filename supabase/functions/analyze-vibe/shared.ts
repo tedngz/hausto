@@ -81,6 +81,12 @@ Rules for image_highlight:
 - Must be DIFFERENT from previous highlights listed above
 - No generic phrases like "modern living space", "spacious apartment", "well furnished"
 
+Scoring calibration — these scores drive search ranking, so they MUST discriminate:
+- 5 means "typical for a mid-range Vietnamese rental apartment". Most images should score 3-6 on most dimensions.
+- Reserve 8-10 for genuinely exceptional evidence visible in THIS image (e.g. luxurious=9 needs marble, designer furniture, or premium finishes — not just "clean and new").
+- At most TWO dimensions may score 7 or higher. Decide which one or two qualities most distinguish this space, and keep the rest at or below their honest level.
+- Opposing dimensions constrain each other: a space cannot be both highly minimalist and highly colorful, or highly modern and highly rustic. Pick a side.
+
 Return ONLY valid JSON with this exact shape:
 {
   "modern": 1-10,
