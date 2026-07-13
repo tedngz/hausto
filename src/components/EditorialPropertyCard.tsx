@@ -31,6 +31,7 @@ export interface EditorialApartment {
   vibe_analysis?: any;
   latitude?: number | null;
   longitude?: number | null;
+  last_verified_at?: string | null;
 }
 
 export interface VibeScoreDetails {
@@ -191,6 +192,15 @@ export const EditorialPropertyCard = ({
     return /^\d+([.,]\d+)?$/.test(s) ? `${s}m²` : s;
   };
   const spec = [apartment.rooms, formatSize(apartment.size)].filter(s => s && String(s).trim()).join(' · ');
+  // Freshness chip: how recently the source listing was confirmed still live.
+  // Claims "live on source", never "available" — availability is only settled at viewing time.
+  const verifiedLabel = useMemo(() => {
+    if (!apartment.last_verified_at) return '';
+    const days = Math.floor((Date.now() - new Date(apartment.last_verified_at).getTime()) / 86_400_000);
+    if (days < 0 || days > 30) return '';
+    if (days === 0) return 'Verified live today';
+    return `Verified live ${days}d ago`;
+  }, [apartment.last_verified_at]);
   const arrowsVisible = hover || noHover;
   // Desktop reveals the description on hover; touch devices (no hover) reveal it
   // on tap of the cover image instead of showing it permanently.
@@ -465,6 +475,12 @@ export const EditorialPropertyCard = ({
               <span className="line-clamp-1">{displayLocation}</span>
               {isGeocoding && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
             </button>
+            {verifiedLabel && (
+              <span className={`flex items-center gap-1.5 w-fit rounded-full bg-black/35 backdrop-blur-md text-white/90 ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                {verifiedLabel}
+              </span>
+            )}
           </div>
         )}
 

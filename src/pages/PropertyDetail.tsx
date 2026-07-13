@@ -87,6 +87,7 @@ const PropertyDetail = () => {
             property_source_provider_name: extProperty.contact_name || extProperty.source,
             property_source_provider_phone: extProperty.contact_phone || undefined,
             rooms: extProperty.rooms || null,
+            last_verified_at: extProperty.last_verified_at || null,
             latitude: extProperty.latitude,
             longitude: extProperty.longitude,
             realtor: {

@@ -80,6 +80,12 @@ export const LandingPage = () => {
             <HomeAI />
           </div>
 
+          <div className="flex justify-center">
+            <Button asChild size="lg" className="px-8">
+              <Link to="/browse">Browse all listings →</Link>
+            </Button>
+          </div>
+
           {notableComplexes.length > 0 && (
             <div className="mt-12 text-left">
               <div className="mb-6 text-center">

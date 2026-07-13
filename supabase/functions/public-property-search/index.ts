@@ -144,7 +144,7 @@ serve(async (req) => {
     if (source !== 'internal') {
       let externalQuery = supabase
         .from('external_properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, description, source, source_url, created_at')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id')
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });
@@ -186,7 +186,20 @@ serve(async (req) => {
       const { data: externalProps } = await externalQuery.range(0, 999);
 
       if (externalProps) {
+        // Collapse duplicate-unit groups: the same apartment posted by several
+        // agents shows once, annotated with how many postings it has.
+        const groupCounts = new Map<string, number>();
         for (const p of externalProps) {
+          if (p.canonical_group_id) {
+            groupCounts.set(p.canonical_group_id, (groupCounts.get(p.canonical_group_id) || 0) + 1);
+          }
+        }
+        const seenGroups = new Set<string>();
+        for (const p of externalProps) {
+          if (p.canonical_group_id) {
+            if (seenGroups.has(p.canonical_group_id)) continue;
+            seenGroups.add(p.canonical_group_id);
+          }
           results.push({
             id: p.id,
             title: p.title,
@@ -203,6 +216,10 @@ serve(async (req) => {
             description: p.description ? p.description.substring(0, 300) : null,
             source: p.source || 'external',
             listed_at: p.created_at,
+            crawled_at: p.crawled_at || null,
+            last_verified_at: p.last_verified_at || null,
+            // >1 means this unit is posted by multiple agents (deduplicated here)
+            posting_count: p.canonical_group_id ? (groupCounts.get(p.canonical_group_id) || 1) : 1,
           });
         }
       }

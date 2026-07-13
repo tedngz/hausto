@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
+import Browse from "./pages/Browse";
 import Auth from "./pages/Auth";
 import PropertyDetail from "./pages/PropertyDetail";
 import NotFound from "./pages/NotFound";
@@ -35,6 +36,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/discover" element={<Discover />} />
+            <Route path="/browse" element={<Browse />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/property/:id" element={<PropertyDetail />} />
             <Route path="/complexes" element={<Complexes />} />

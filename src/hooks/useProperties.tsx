@@ -161,6 +161,7 @@ export const useProperties = () => {
         updated_at: ext.updated_at || new Date().toISOString(),
         is_active: ext.is_active ?? true,
         last_activated_at: ext.crawled_at || ext.created_at || new Date().toISOString(),
+        last_verified_at: ext.last_verified_at || null,
         latitude: ext.latitude,
         longitude: ext.longitude,
         _isExternal: true,

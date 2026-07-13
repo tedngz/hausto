@@ -10,6 +10,12 @@ const FETCH_TIMEOUT_MS = 10_000;
 const BATCH_SIZE = 25;
 const CONCURRENCY = 2;
 
+// Tiered re-verification cadence: fresh listings churn fastest, so check them more often.
+const RECENT_LISTING_DAYS = 14;      // "recent" = crawled within this window
+const RECENT_REVERIFY_DAYS = 3;      // recent listings due after 3 days
+const OLD_REVERIFY_DAYS = 7;         // older listings due after 7 days
+const MAX_UNVERIFIED_AGE_DAYS = 60;  // hard age cap: archive if never confirmed alive within this window
+
 type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string };
 
 const NHATOT_DEAD_KEYWORDS = [
@@ -132,14 +138,46 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } }
   );
 
-  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, errors: 0, deactivated_ids: [] as string[] };
+  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, stale_archived: 0, errors: 0, deactivated_ids: [] as string[] };
 
   try {
-    // Pull batch ordered by oldest verified first (NULLS FIRST so never-verified come first)
+    const nowMs = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const recentCrawlCutoff = new Date(nowMs - RECENT_LISTING_DAYS * dayMs).toISOString();
+    const recentReverifyCutoff = new Date(nowMs - RECENT_REVERIFY_DAYS * dayMs).toISOString();
+    const oldReverifyCutoff = new Date(nowMs - OLD_REVERIFY_DAYS * dayMs).toISOString();
+    const ageCapCutoff = new Date(nowMs - MAX_UNVERIFIED_AGE_DAYS * dayMs).toISOString();
+
+    // Hard age cap: archive listings crawled >60 days ago that were never confirmed alive since
+    const { data: staleRows } = await supabase
+      .from('external_properties')
+      .update({
+        is_active: false,
+        deactivated_at: new Date().toISOString(),
+        last_verification_status: 'stale',
+        last_verification_reason: `age_cap_${MAX_UNVERIFIED_AGE_DAYS}d`,
+      })
+      .eq('is_active', true)
+      .lt('crawled_at', ageCapCutoff)
+      .or(`last_verified_at.is.null,last_verified_at.lt.${ageCapCutoff}`)
+      .select('id');
+    const staleArchived = staleRows?.length ?? 0;
+    summary.stale_archived = staleArchived;
+    if (staleArchived > 0) {
+      console.log(`[verify-external-listings] Age cap: archived ${staleArchived} stale listings`);
+    }
+
+    // Pull only listings due for a check, oldest-verified first (never-verified first).
+    // Due = never verified, OR recent listing not checked in 3 days, OR old listing not checked in 7 days.
     const { data: listings, error } = await supabase
       .from('external_properties')
       .select('id, source, source_url, verification_failures')
       .eq('is_active', true)
+      .or(
+        `last_verified_at.is.null,` +
+        `and(crawled_at.gte.${recentCrawlCutoff},last_verified_at.lte.${recentReverifyCutoff}),` +
+        `last_verified_at.lte.${oldReverifyCutoff}`
+      )
       .order('last_verified_at', { ascending: true, nullsFirst: true })
       .limit(BATCH_SIZE);
 
@@ -200,7 +238,7 @@ Deno.serve(async (req) => {
     }
 
     // Invalidate discovery cache if we deactivated anything
-    if (summary.deactivated > 0) {
+    if (summary.deactivated > 0 || summary.stale_archived > 0) {
       try {
         await supabase.functions.invoke('property-discovery-cache', { body: { action: 'invalidate' } });
       } catch (e) {

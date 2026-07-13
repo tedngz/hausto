@@ -37,6 +37,7 @@ export type Apartment = {
   latitude?: number | null;
   longitude?: number | null;
   rooms?: string | null;
+  last_verified_at?: string | null;
 };
 
 export type Match = {
