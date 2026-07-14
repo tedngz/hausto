@@ -483,7 +483,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                               src={r.images[0]}
                               alt=""
                               loading="lazy"
-                              className="w-14 h-10 rounded object-cover flex-shrink-0 hidden sm:block"
+                              className="w-14 h-10 rounded-lg object-cover flex-shrink-0 hidden sm:block"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                           )}
@@ -594,7 +594,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   <th className="text-left p-2 w-28" />
                   {selected.map((r) => (
                     <th key={r.id} className="text-left p-2 align-top min-w-[160px]">
-                      {r.images?.[0] && <img src={r.images[0]} alt="" className="w-full h-24 rounded object-cover mb-2" />}
+                      {r.images?.[0] && <img src={r.images[0]} alt="" className="w-full h-24 rounded-lg object-cover mb-2" />}
                       <button className="font-medium hover:underline text-left line-clamp-2" onClick={() => setPreview(r)}>
                         {r.title}
                       </button>

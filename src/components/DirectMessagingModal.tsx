@@ -359,7 +359,7 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                             <img 
                               src={property.images[0]} 
                               alt={property.title}
-                              className="w-12 h-12 object-cover rounded"
+                              className="w-12 h-12 object-cover rounded-lg"
                             />
                           )}
                           <div className="text-left min-w-0 flex-1">

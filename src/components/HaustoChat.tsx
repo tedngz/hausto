@@ -261,7 +261,7 @@ export const HaustoChat = ({
       lines.push('', `Feel free to reach out directly, or keep chatting here and I'll help with anything else.`);
       content = lines.join('\n');
     } else {
-      content = `I don't have a direct owner/realtor contact on file for "${property.title}" yet. Use "Schedule a viewing" and Hausto will coordinate with the listing provider for you, or ask me anything else about this home.`;
+      content = `I don't have a direct owner/realtor contact on file for "${property.title}" yet. Use "Fast-Track viewing" and Hausto will coordinate with the listing provider for you, or ask me anything else about this home.`;
     }
 
     setIsSharingContact(true);
@@ -906,9 +906,9 @@ export const HaustoChat = ({
                 {userType === 'renter' && !loadingDirectMessages && (
                   <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {([
-                      { label: 'Is this property still available?' },
                       // Answered instantly from the listing data, not via the AI round-trip
                       { label: "📞 Get the owner's contact", action: () => handleGetContact() },
+                      { label: 'Is this property still available?' },
                       { label: "What's the pet policy?" },
                       { label: 'Can I visit this weekend?' },
                       { label: 'Is the price negotiable?' },
