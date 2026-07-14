@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ExternalLink, Loader2, MapPin, Scale, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, Loader2, MapPin, Scale, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -547,7 +547,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
 
       {/* In-place property preview: full editorial card with like, no page change */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
-        <DialogContent className="max-w-md p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:bg-black/40 [&>button]:text-white [&>button]:rounded-full [&>button]:p-1">
+        <DialogContent className="max-w-md p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:bg-black/50 [&>button]:text-white [&>button]:rounded-full [&>button]:p-1.5 [&>button]:-top-3 [&>button]:right-1 sm:[&>button]:-right-3 [&>button]:opacity-100">
           {preview && (
             <div>
               <EditorialPropertyCard
@@ -567,17 +567,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                 liked={likedIds.has(preview.id)}
                 onLike={() => handleLike(preview)}
               />
-              <div className="flex justify-center mt-3">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => navigate(`/property/${preview.id}`)}
-                >
-                  <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                  Full details
-                </Button>
-              </div>
             </div>
           )}
         </DialogContent>

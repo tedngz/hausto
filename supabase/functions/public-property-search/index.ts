@@ -232,12 +232,28 @@ serve(async (req) => {
     // Freshness stats over the whole active external inventory (head-only
     // count queries, cheap). Consumed by the landing preview.
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { count: verified7d } = await supabase
-      .from('external_properties')
-      .select('id', { count: 'exact', head: true })
-      .eq('is_active', true)
-      .gt('expires_at', new Date().toISOString())
-      .gte('last_verified_at', sevenDaysAgo);
+    const [{ count: verified7d }, { count: externalActive }, { count: internalActive }] = await Promise.all([
+      supabase
+        .from('external_properties')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .gte('last_verified_at', sevenDaysAgo),
+      supabase
+        .from('external_properties')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString()),
+      supabase
+        .from('properties')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .gte('last_activated_at', tenDaysAgo),
+    ]);
+    // Duplicate-unit groups collapse to one row in results, so the public
+    // total counts each group once (matches what the browse table shows).
+    const { data: groupRows } = await supabase.from('listing_groups').select('member_count');
+    const duplicateExcess = (groupRows || []).reduce((s, g) => s + Math.max(0, (g.member_count || 1) - 1), 0);
 
     const response = {
       results: paginatedResults,
@@ -245,7 +261,10 @@ serve(async (req) => {
       limit,
       offset,
       query: { city, district, min_budget: minBudget, max_budget: maxBudget, rooms, style, source },
-      stats: { verified_last_7_days: verified7d ?? 0 },
+      stats: {
+        verified_last_7_days: verified7d ?? 0,
+        total_active_listings: (externalActive ?? 0) + (internalActive ?? 0) - duplicateExcess,
+      },
       _links: {
         self: `${supabaseUrl}/functions/v1/public-property-search${url.search}`,
         docs: `${BASE_URL}/llms.txt`,

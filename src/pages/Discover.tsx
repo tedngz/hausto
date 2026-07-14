@@ -88,9 +88,13 @@ const Discover = () => {
         console.error('Error parsing saved preferences:', error);
       }
     }
+    // Deep link (?view=browse) wins over the default ai-chat view; without the
+    // guard the async DB reconciliation below would override it back.
+    const wantsBrowse = new URLSearchParams(location.search).get('view') === 'browse';
+    const defaultView = wantsBrowse ? 'browse' : 'ai-chat';
     if (localPrefs && hasMeaningfulPreferences(localPrefs)) {
       // Returning renter — no need to wait on the DB to pick a view.
-      setCurrentView('ai-chat');
+      setCurrentView(defaultView);
       setPrefsResolved(true);
     }
     (async () => {
@@ -103,7 +107,7 @@ const Discover = () => {
       if (dbPrefs && hasMeaningfulPreferences(dbPrefs)) {
         setUserPreferences(dbPrefs);
         localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(dbPrefs));
-        setCurrentView('ai-chat');
+        setCurrentView(defaultView);
       } else if (!(localPrefs && hasMeaningfulPreferences(localPrefs))) {
         // Nothing saved anywhere → force onboarding for this new renter.
         setCurrentView('onboarding');
@@ -331,7 +335,7 @@ const Discover = () => {
           {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
         </main>
 
-        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
+        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'browse' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
 
         <HaustoChat isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} userPreferences={userPreferences} userType={userType || 'renter'} />
 

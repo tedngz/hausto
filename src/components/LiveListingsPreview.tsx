@@ -57,7 +57,8 @@ export const LiveListingsPreview = () => {
           (b.last_verified_at || '').localeCompare(a.last_verified_at || ''));
         if (!cancelled) {
           setRows(sorted.slice(0, PREVIEW_ROWS));
-          setTotal(data.total ?? null);
+          // Inventory-wide count (internal + external), not just this query's total
+          setTotal(data.stats?.total_active_listings ?? data.total ?? null);
           // Real inventory-wide count from the API, not a count of this sample
           setVerifiedThisWeek(data.stats?.verified_last_7_days ?? 0);
         }
