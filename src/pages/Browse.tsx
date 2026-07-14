@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -287,18 +287,27 @@ const Browse = () => {
         <link rel="canonical" href="https://hausto.lovable.app/browse" />
       </Helmet>
 
-      <main className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-          <div>
-            <h1 className="text-2xl font-serif font-medium">Browse rentals</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Every listing checked against its source — duplicates merged, dead listings removed.
-            </p>
-          </div>
-          <Button variant="outline" onClick={() => navigate('/discover')}>
+      {/* Header mirrors the landing page nav for a consistent shell */}
+      <header className="container mx-auto px-4 py-4 md:py-6 max-w-6xl">
+        <nav className="flex items-center justify-between">
+          <Link to="/" className="flex items-center space-x-2">
+            <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="h-6 w-6 md:h-8 md:w-8" />
+            <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
+          </Link>
+          <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground" onClick={() => navigate('/discover')}>
             <Sparkles className="w-4 h-4 mr-2" />
-            Vibe match instead
+            Vibe match
           </Button>
+        </nav>
+      </header>
+
+      <main className="container mx-auto px-4 pb-12 pt-2 max-w-6xl">
+        <div className="text-center mb-8">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Live Inventory</p>
+          <h1 className="font-serif text-3xl md:text-4xl tracking-tight">Browse rentals</h1>
+          <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-xl mx-auto">
+            Every listing checked against its source — duplicates merged, dead listings removed.
+          </p>
         </div>
 
         {/* Filter bar */}
@@ -343,7 +352,7 @@ const Browse = () => {
         ) : (
           <>
             <p className="text-xs text-muted-foreground mb-2">{filtered.length} listings</p>
-            <div className="rounded-lg border bg-background overflow-x-auto">
+            <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm shadow-sm overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -400,7 +409,10 @@ const Browse = () => {
                           <span className="line-clamp-1">{districtOf(r.location)}</span>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">{r.rooms || '—'}</TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">{r.size && r.size !== 'Not specified' ? r.size : '—'}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">
+                          {/* Source data sometimes puts room counts or "N/A" in size */}
+                          {r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '—'}
+                        </TableCell>
                         <TableCell className="text-sm font-medium whitespace-nowrap">
                           {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '—'}
                           <span className="text-xs text-muted-foreground font-normal">/mo</span>

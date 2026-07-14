@@ -10,11 +10,14 @@ const FETCH_TIMEOUT_MS = 10_000;
 const BATCH_SIZE = 25;
 const CONCURRENCY = 2;
 
-// Tiered re-verification cadence: fresh listings churn fastest, so check them more often.
-const RECENT_LISTING_DAYS = 14;      // "recent" = crawled within this window
-const RECENT_REVERIFY_DAYS = 3;      // recent listings due after 3 days
-const OLD_REVERIFY_DAYS = 7;         // older listings due after 7 days
-const MAX_UNVERIFIED_AGE_DAYS = 60;  // hard age cap: archive if never confirmed alive within this window
+// Tiered re-verification cadence, tuned to the HCMC market where units lease
+// within 2-6 weeks of posting: a listing's entire high-churn life is its first
+// ~42 days, so that whole window gets the fast cadence. Survivors past it
+// (overpriced / long-tail) churn slower.
+const RECENT_LISTING_DAYS = 42;      // the 6-week lease window = high churn risk
+const RECENT_REVERIFY_DAYS = 2;      // inside the lease window: check every 2 days
+const OLD_REVERIFY_DAYS = 5;         // past the window: every 5 days
+const MAX_UNVERIFIED_AGE_DAYS = 45;  // unconfirmed past the lease window + grace: archive
 
 type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string };
 

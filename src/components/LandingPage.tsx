@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import { useComplexes } from "@/hooks/useComplexes";
 import { ComplexCard } from "@/components/ComplexCard";
+import { LiveListingsPreview } from "@/components/LiveListingsPreview";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -45,6 +46,9 @@ export const LandingPage = () => {
             <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
           </div>
           <div className="flex items-center gap-2 md:gap-4">
+            <Button asChild variant="ghost" size="sm" className="text-xs md:text-sm px-2 md:px-3">
+              <Link to="/browse">Browse</Link>
+            </Button>
             {user ? <>
                 <span className="hidden sm:block text-xs md:text-sm text-muted-foreground truncate max-w-32 md:max-w-none">
                   Welcome back, {user.user_metadata?.name || user.email?.split('@')[0]}!
@@ -80,11 +84,9 @@ export const LandingPage = () => {
             <HomeAI />
           </div>
 
-          <div className="flex justify-center">
-            <Button asChild size="lg" className="px-8">
-              <Link to="/browse">Browse all listings →</Link>
-            </Button>
-          </div>
+          {/* The verified-listings table is the center of the platform: it gets
+              the first content slot, rendered as a live preview of /browse. */}
+          <LiveListingsPreview />
 
           {notableComplexes.length > 0 && (
             <div className="mt-12 text-left">
