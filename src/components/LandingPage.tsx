@@ -88,23 +88,25 @@ export const LandingPage = () => {
               the first content slot, rendered as a live preview of /browse. */}
           <LiveListingsPreview />
 
+          {/* Secondary discovery: complexes keep their cards but not a
+              hero-level CTA - the section header link is enough. */}
           {notableComplexes.length > 0 && (
             <div className="mt-12 text-left">
               <div className="mb-6 text-center">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Featured Complexes</p>
                 <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Vetted homes renters love</h2>
+                <Link
+                  to="/complexes"
+                  className="inline-block mt-2 text-sm text-muted-foreground hover:text-primary underline-offset-4 hover:underline transition-colors"
+                >
+                  Explore all vetted complexes →
+                </Link>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {notableComplexes.map((c) => <ComplexCard key={c.id} complex={c} />)}
               </div>
             </div>
           )}
-
-          <div className="mt-10 flex justify-center items-center">
-            <Button asChild size="lg" variant="outline">
-              <Link to="/complexes">Explore vetted complexes →</Link>
-            </Button>
-          </div>
         </div>
       </section>
 
