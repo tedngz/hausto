@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, Loader2, MapPin, Scale, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,6 +52,31 @@ const CITIES = [
   { value: 'danang', label: 'Da Nang' },
 ];
 
+// Renter-facing district lists per city (matches CityDistrictSelector naming)
+const CITY_DISTRICTS: Record<string, string[]> = {
+  hcmc: [
+    'District 1', 'District 2', 'District 3', 'District 4', 'District 5',
+    'District 6', 'District 7', 'District 8', 'District 10', 'District 11',
+    'Binh Thanh', 'Tan Binh', 'Tan Phu', 'Phu Nhuan', 'Go Vap', 'Thu Duc', 'Binh Tan',
+  ],
+  hanoi: ['Hoan Kiem', 'Ba Dinh', 'Cau Giay', 'Tay Ho', 'Dong Da', 'Hai Ba Trung', 'Long Bien', 'Nam Tu Liem'],
+  danang: ['Hai Chau', 'Son Tra', 'Ngu Hanh Son', 'Thanh Khe', 'Lien Chieu', 'Cam Le'],
+};
+
+const stripDiacritics = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+
+// Listings mix Vietnamese ("Quan Tan Binh") and English ("District 2") location
+// strings, so district matching is diacritic-stripped with a Quan/District alias.
+const locationMatchesDistrict = (location: string, district: string): boolean => {
+  const loc = stripDiacritics(location).toLowerCase();
+  const d = stripDiacritics(district).toLowerCase();
+  if (loc.includes(d)) return true;
+  const numbered = d.match(/^district (\d+)$/);
+  if (numbered) return new RegExp(`quan ${numbered[1]}(?!\\d)`).test(loc);
+  return false;
+};
+
 const ROOM_OPTIONS = [
   { value: 'all', label: 'Any rooms' },
   { value: 'studio', label: 'Studio' },
@@ -67,7 +93,7 @@ const daysAgo = (iso?: string | null): number | null => {
 
 const verifiedLabel = (iso?: string | null): string => {
   const d = daysAgo(iso);
-  if (d === null) return '—';
+  if (d === null) return '-';
   if (d === 0) return 'today';
   return `${d}d ago`;
 };
@@ -92,11 +118,20 @@ const Browse = () => {
 
   // Filters
   const [city, setCity] = useState('all');
-  const [district, setDistrict] = useState('');
-  const [districtInput, setDistrictInput] = useState('');
+  const [districts, setDistricts] = useState<string[]>([]);
   const [roomsFilter, setRoomsFilter] = useState('all');
+  const [minBudget, setMinBudget] = useState('');
   const [maxBudget, setMaxBudget] = useState('');
   const [freshOnly, setFreshOnly] = useState(false);
+
+  const changeCity = (c: string) => {
+    setCity(c);
+    setDistricts([]); // district list is city-specific
+  };
+
+  const toggleDistrict = (d: string) => {
+    setDistricts((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]));
+  };
 
   // Sorting
   const [sortKey, setSortKey] = useState<SortKey>('last_verified_at');
@@ -176,12 +211,6 @@ const Browse = () => {
     }
   };
 
-  // Debounce free-text district input
-  useEffect(() => {
-    const t = setTimeout(() => setDistrict(districtInput.trim()), 400);
-    return () => clearTimeout(t);
-  }, [districtInput]);
-
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -190,7 +219,7 @@ const Browse = () => {
       try {
         const params = new URLSearchParams();
         if (city !== 'all') params.set('city', city);
-        if (district) params.set('district', district);
+        if (minBudget && Number(minBudget) > 0) params.set('min_budget', minBudget);
         if (maxBudget && Number(maxBudget) > 0) params.set('max_budget', maxBudget);
         params.set('limit', String(PAGE_SIZE));
         const collected: Row[] = [];
@@ -211,10 +240,13 @@ const Browse = () => {
     };
     run();
     return () => { cancelled = true; };
-  }, [city, district, maxBudget]);
+  }, [city, minBudget, maxBudget]);
 
   const filtered = useMemo(() => {
     let out = rows;
+    if (districts.length > 0) {
+      out = out.filter((r) => districts.some((d) => locationMatchesDistrict(r.location, d)));
+    }
     if (roomsFilter !== 'all') {
       out = out.filter((r) => {
         const rr = (r.rooms || '').toLowerCase();
@@ -245,7 +277,7 @@ const Browse = () => {
       }
       return (av - bv) * dir;
     });
-  }, [rows, roomsFilter, freshOnly, sortKey, sortDir]);
+  }, [rows, districts, roomsFilter, freshOnly, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -271,10 +303,10 @@ const Browse = () => {
 
   const compareFields: { label: string; get: (r: Row) => string }[] = [
     { label: 'Location', get: (r) => r.location },
-    { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd}/mo` : '—') },
-    { label: 'Rooms', get: (r) => r.rooms || '—' },
-    { label: 'Size', get: (r) => r.size || '—' },
-    { label: 'Vibe', get: (r) => r.vibe || '—' },
+    { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd}/mo` : '-') },
+    { label: 'Rooms', get: (r) => r.rooms || '-' },
+    { label: 'Size', get: (r) => r.size || '-' },
+    { label: 'Vibe', get: (r) => r.vibe || '-' },
     { label: 'Verified live', get: (r) => verifiedLabel(r.last_verified_at) },
     { label: 'Postings', get: (r) => String(r.posting_count || 1) },
   ];
@@ -282,8 +314,8 @@ const Browse = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
       <Helmet>
-        <title>Browse rentals — Hausto</title>
-        <meta name="description" content="Compare verified rental apartments in Ho Chi Minh City, Hanoi, and Da Nang. Sortable table with prices, sizes, and freshness — duplicates merged." />
+        <title>Browse rentals - Hausto</title>
+        <meta name="description" content="Compare verified rental apartments in Ho Chi Minh City, Hanoi, and Da Nang. Sortable table with prices, sizes, and freshness - duplicates merged." />
         <link rel="canonical" href="https://hausto.lovable.app/browse" />
       </Helmet>
 
@@ -306,37 +338,85 @@ const Browse = () => {
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Live Inventory</p>
           <h1 className="font-serif text-3xl md:text-4xl tracking-tight">Browse rentals</h1>
           <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-xl mx-auto">
-            Every listing checked against its source — duplicates merged, dead listings removed.
+            Every listing checked against its source - duplicates merged, dead listings removed.
           </p>
         </div>
 
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-3 mb-4">
-          <Select value={city} onValueChange={setCity}>
+          <Select value={city} onValueChange={changeCity}>
             <SelectTrigger className="w-[180px] bg-background"><SelectValue /></SelectTrigger>
             <SelectContent>
               {CITIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Input
-            placeholder="District or area…"
-            value={districtInput}
-            onChange={(e) => setDistrictInput(e.target.value)}
-            className="w-[180px] bg-background"
-          />
+          {city !== 'all' && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="bg-background font-normal">
+                  {districts.length === 0
+                    ? 'All districts'
+                    : districts.length <= 2
+                      ? districts.join(', ')
+                      : `${districts.length} districts`}
+                  <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="start">
+                <div className="flex flex-wrap gap-1.5 max-h-64 overflow-y-auto">
+                  {(CITY_DISTRICTS[city] || []).map((d) => {
+                    const active = districts.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => toggleDistrict(d)}
+                        className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
+                          active
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/50'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+                {districts.length > 0 && (
+                  <button
+                    className="mt-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    onClick={() => setDistricts([])}
+                  >
+                    <X className="w-3 h-3" /> Clear districts
+                  </button>
+                )}
+              </PopoverContent>
+            </Popover>
+          )}
           <Select value={roomsFilter} onValueChange={setRoomsFilter}>
             <SelectTrigger className="w-[150px] bg-background"><SelectValue /></SelectTrigger>
             <SelectContent>
               {ROOM_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Input
-            type="number"
-            placeholder="Max $/mo"
-            value={maxBudget}
-            onChange={(e) => setMaxBudget(e.target.value)}
-            className="w-[120px] bg-background"
-          />
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              placeholder="Min $"
+              value={minBudget}
+              onChange={(e) => setMinBudget(e.target.value)}
+              className="w-[90px] bg-background"
+              aria-label="Minimum monthly budget in USD"
+            />
+            <span className="text-muted-foreground text-sm">-</span>
+            <Input
+              type="number"
+              placeholder="Max $"
+              value={maxBudget}
+              onChange={(e) => setMaxBudget(e.target.value)}
+              className="w-[90px] bg-background"
+              aria-label="Maximum monthly budget in USD"
+            />
+          </div>
           <div className="flex items-center gap-2">
             <Switch id="fresh" checked={freshOnly} onCheckedChange={setFreshOnly} />
             <Label htmlFor="fresh" className="text-sm cursor-pointer">Verified this week</Label>
@@ -408,13 +488,13 @@ const Browse = () => {
                         <TableCell className="hidden md:table-cell text-sm text-muted-foreground max-w-[220px]">
                           <span className="line-clamp-1">{districtOf(r.location)}</span>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">{r.rooms || '—'}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">{r.rooms || '-'}</TableCell>
                         <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">
                           {/* Source data sometimes puts room counts or "N/A" in size */}
-                          {r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '—'}
+                          {r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '-'}
                         </TableCell>
                         <TableCell className="text-sm font-medium whitespace-nowrap">
-                          {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '—'}
+                          {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
                           <span className="text-xs text-muted-foreground font-normal">/mo</span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">

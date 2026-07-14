@@ -112,7 +112,7 @@ export const LiveListingsPreview = () => {
               )}
               <div className="text-right flex-shrink-0">
                 <p className="text-sm font-semibold whitespace-nowrap">
-                  {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '—'}
+                  {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
                   <span className="text-xs text-muted-foreground font-normal">/mo</span>
                 </p>
                 {fresh !== null && fresh <= 30 && (
