@@ -10,6 +10,7 @@ import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';
 import { UserTypeSelector } from '@/components/UserTypeSelector';
 import { HaustoChat } from '@/components/HaustoChat';
+import { BrowseTable } from '@/components/BrowseTable';
 import { FloatingAIButton } from '@/components/FloatingAIButton';
 import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
@@ -39,7 +40,7 @@ const Discover = () => {
   const navigate = useNavigate();
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
 
-  const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile'>('ai-chat');
+  const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'browse'>('ai-chat');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -110,6 +111,15 @@ const Discover = () => {
       setPrefsResolved(true);
     })();
   }, [user, rolesLoading, isRealtor]);
+
+  // Deep link: /discover?view=browse (e.g. from the landing table preview)
+  // overrides the default view once preferences resolve.
+  useEffect(() => {
+    if (!prefsResolved || userType !== 'renter') return;
+    if (new URLSearchParams(location.search).get('view') === 'browse') {
+      setCurrentView('browse');
+    }
+  }, [prefsResolved, userType, location.search]);
   useEffect(() => {
     // Listen for AI chat opening event from SwipeInterface
     const handleOpenAIChat = () => {
@@ -250,7 +260,7 @@ const Discover = () => {
             } else if (view === 'ai-chat') {
               setCurrentView('ai-chat');
             } else {
-              setCurrentView(view as 'swipe' | 'matches');
+              setCurrentView(view as 'swipe' | 'matches' | 'browse');
             }
           }}
           matchCount={renterMatches.length}
@@ -284,6 +294,14 @@ const Discover = () => {
           phone: user.user_metadata?.phone || ''
         }} onRestartOnboarding={handleRestartOnboarding} />}
           
+          {userType === 'renter' && currentView === 'browse' && <div className="container mx-auto px-4 pt-4 pb-12 max-w-6xl">
+              <h2 className="text-2xl mt-4 mb-2 text-center text-inherit font-serif font-normal">Browse All Listings</h2>
+              <p className="text-sm text-muted-foreground text-center mb-6">
+                Verified inventory - duplicates merged, dead listings removed.
+              </p>
+              <BrowseTable returnTo="/discover" />
+            </div>}
+
           {userType === 'renter' && currentView === 'matches' && <MatchesView userPreferences={userPreferences} userProfile={{
           name: user.user_metadata?.name || '',
           email: user.email || '',

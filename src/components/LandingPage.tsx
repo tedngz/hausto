@@ -46,9 +46,6 @@ export const LandingPage = () => {
             <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
           </div>
           <div className="flex items-center gap-2 md:gap-4">
-            <Button asChild variant="ghost" size="sm" className="text-xs md:text-sm px-2 md:px-3">
-              <Link to="/browse">Browse</Link>
-            </Button>
             {user ? <>
                 <span className="hidden sm:block text-xs md:text-sm text-muted-foreground truncate max-w-32 md:max-w-none">
                   Welcome back, {user.user_metadata?.name || user.email?.split('@')[0]}!

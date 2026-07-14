@@ -229,12 +229,23 @@ serve(async (req) => {
     const total = results.length;
     const paginatedResults = results.slice(offset, offset + limit);
 
+    // Freshness stats over the whole active external inventory (head-only
+    // count queries, cheap). Consumed by the landing preview.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { count: verified7d } = await supabase
+      .from('external_properties')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString())
+      .gte('last_verified_at', sevenDaysAgo);
+
     const response = {
       results: paginatedResults,
       total,
       limit,
       offset,
       query: { city, district, min_budget: minBudget, max_budget: maxBudget, rooms, style, source },
+      stats: { verified_last_7_days: verified7d ?? 0 },
       _links: {
         self: `${supabaseUrl}/functions/v1/public-property-search${url.search}`,
         docs: `${BASE_URL}/llms.txt`,

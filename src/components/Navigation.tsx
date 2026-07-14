@@ -1,14 +1,14 @@
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageSquare, User, Users, Sparkles, Search } from 'lucide-react';
+import { Heart, MessageSquare, User, Users, Sparkles, Search, LayoutList } from 'lucide-react';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { UserMenu } from '@/components/UserMenu';
 import { useNavigate } from 'react-router-dom';
 
 interface NavigationProps {
-  currentView: 'swipe' | 'matches' | 'profile' | 'ai-chat';
-  setCurrentView: (view: 'swipe' | 'matches' | 'profile' | 'ai-chat') => void;
+  currentView: 'swipe' | 'matches' | 'profile' | 'ai-chat' | 'browse';
+  setCurrentView: (view: 'swipe' | 'matches' | 'profile' | 'ai-chat' | 'browse') => void;
   matchCount: number;
   userType: 'renter' | 'realtor';
   onSwitchUserType: () => void;
@@ -58,6 +58,16 @@ export const Navigation = ({
                 <Sparkles className="w-5 h-5" aria-hidden="true" />
               </Button>
               
+              <Button
+                variant={currentView === 'browse' ? 'default' : 'ghost'}
+                size="icon"
+                onClick={() => setCurrentView('browse')}
+                aria-label="Browse all listings"
+                className={`h-10 w-10 shrink-0 ${currentView === 'browse' ? 'bg-primary text-primary-foreground' : ''}`}
+              >
+                <LayoutList className="w-5 h-5" aria-hidden="true" />
+              </Button>
+
               <Button
                 variant={currentView === 'swipe' ? 'default' : 'ghost'}
                 size="icon"

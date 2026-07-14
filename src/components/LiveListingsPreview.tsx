@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MapPin } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 // Landing-page preview of the browse table: the freshest verified listings,
 // rendered in the same row format so the landing "is" the product. Public
@@ -36,6 +37,9 @@ const districtOf = (location: string): string => {
 
 export const LiveListingsPreview = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Signed-in renters get the table inside Discover; visitors get the public page.
+  const browsePath = user ? '/discover?view=browse' : '/browse';
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [verifiedThisWeek, setVerifiedThisWeek] = useState(0);
@@ -54,10 +58,8 @@ export const LiveListingsPreview = () => {
         if (!cancelled) {
           setRows(sorted.slice(0, PREVIEW_ROWS));
           setTotal(data.total ?? null);
-          setVerifiedThisWeek(results.filter((r) => {
-            const d = daysAgo(r.last_verified_at);
-            return d !== null && d <= 7;
-          }).length);
+          // Real inventory-wide count from the API, not a count of this sample
+          setVerifiedThisWeek(data.stats?.verified_last_7_days ?? 0);
         }
       } catch {
         // Preview is decorative — fail silently, section just doesn't render.
@@ -129,7 +131,7 @@ export const LiveListingsPreview = () => {
 
       <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
         <Button asChild size="lg" className="px-8">
-          <Link to="/browse">
+          <Link to={browsePath}>
             Browse {total ? `all ${total}` : 'all'} listings →
           </Link>
         </Button>

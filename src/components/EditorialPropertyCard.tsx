@@ -323,8 +323,9 @@ export const EditorialPropertyCard = ({
         </div>
       )}
 
-      {/* Top row: vibe match rating chip (left) + like (right) */}
+      {/* Top row: vibe match rating chip + verified chip (left), share/like (right) */}
       <div className="absolute top-5 left-5 right-5 flex items-start justify-between">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
         {ratingLabel ? (
           <Popover>
             <PopoverTrigger asChild>
@@ -407,9 +408,16 @@ export const EditorialPropertyCard = ({
               )}
             </PopoverContent>
           </Popover>
-        ) : <span />}
+        ) : null}
+        {verifiedLabel && (
+          <span className={`flex items-center gap-1.5 rounded-full bg-black/35 backdrop-blur-md text-white/90 whitespace-nowrap ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            {verifiedLabel}
+          </span>
+        )}
+        </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {topRightActions}
           <Button
             size="icon"
@@ -475,12 +483,6 @@ export const EditorialPropertyCard = ({
               <span className="line-clamp-1">{displayLocation}</span>
               {isGeocoding && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
             </button>
-            {verifiedLabel && (
-              <span className={`flex items-center gap-1.5 w-fit rounded-full bg-black/35 backdrop-blur-md text-white/90 ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                {verifiedLabel}
-              </span>
-            )}
           </div>
         )}
 
