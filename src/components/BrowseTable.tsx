@@ -263,6 +263,12 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         : locationScore > 0 ? 'Near your preferred areas'
         : 'Outside your preferred areas';
 
+      const sizeScore = score.breakdown?.size ?? 70;
+      const sizeText = sizeScore >= 100 ? 'The size you wanted'
+        : sizeScore >= 70 ? 'A bit bigger than you asked for'
+        : sizeScore >= 40 ? 'Smaller than you asked for'
+        : 'Not the size you wanted';
+
       return {
         overall: score.overall,
         rating: getVibeRatingLabel(score.overall),
@@ -273,6 +279,8 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         budgetOk: budgetScore >= 80,
         locationText,
         locationOk: locationScore >= 80,
+        sizeText,
+        sizeOk: sizeScore >= 100,
       };
     } catch {
       return null;
@@ -780,6 +788,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                         )}
                         <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug">
                           <li className={score.budgetOk ? 'text-emerald-600' : 'text-amber-600'}>{score.budgetText}</li>
+                          <li className={score.sizeOk ? 'text-emerald-600' : 'text-muted-foreground'}>{score.sizeText}</li>
                           <li className={score.locationOk ? 'text-emerald-600' : 'text-muted-foreground'}>{score.locationText}</li>
                           {score.missingMustHave && <li className="text-destructive">Missing a must-have feature</li>}
                         </ul>

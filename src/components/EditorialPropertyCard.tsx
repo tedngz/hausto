@@ -42,6 +42,7 @@ export interface VibeScoreDetails {
     activities?: number;
     price?: number;
     location?: number;
+    size?: number;
   };
 }
 
@@ -382,13 +383,20 @@ export const EditorialPropertyCard = ({
                   {(() => {
                     const budget = fitFromScore(vibeScore!.breakdown?.price);
                     const location = fitFromScore(vibeScore!.breakdown?.location);
-                    if (!budget && !location) return null;
+                    const sizeFit = fitFromScore(vibeScore!.breakdown?.size);
+                    if (!budget && !location && !sizeFit) return null;
                     return (
                       <div className="flex items-center gap-4 pt-1 mt-1 border-t border-border">
                         {budget && (
                           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                             {budget.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
                             Budget · {budget.label}
+                          </span>
+                        )}
+                        {sizeFit && (
+                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            {sizeFit.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
+                            Size · {sizeFit.label}
                           </span>
                         )}
                         {location && (

@@ -19,8 +19,36 @@ export interface VibeScore {
     features: number;
     price: number;
     location: number;
+    /** Bedroom-count fit vs the quiz "how much room do you need" answer. */
+    size?: number;
   };
 }
+
+// Quiz size answers and listing rooms strings, normalized to a bedroom count
+// ordinal (studio = 0). Returns null when unparseable.
+const roomsOrdinal = (value: string | null | undefined): number | null => {
+  const v = String(value ?? '').toLowerCase();
+  if (!v) return null;
+  if (v.includes('studio')) return 0;
+  const m = v.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+};
+
+// Bedroom-count fit: exact answer = 100; one bigger is fine (70), one smaller
+// is cramped (40); further off barely counts. Unknown on either side stays
+// neutral so unparsed data isn't punished.
+const calculateSizeMatch = (apartmentRooms: string | null | undefined, preferredSize: string | undefined): number => {
+  const want = roomsOrdinal(preferredSize);
+  const has = roomsOrdinal(apartmentRooms);
+  if (want === null || has === null) return 70;
+  // "3br+" means 3 or more
+  if (String(preferredSize).includes('+') && has >= want) return 100;
+  const diff = has - want;
+  if (diff === 0) return 100;
+  if (diff === 1) return 70;
+  if (diff === -1) return 40;
+  return 15;
+};
 
 const toStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -139,14 +167,19 @@ export const calculateVibeScore = (apartment: Apartment, preferences: UserPrefer
   const styleScore = calculateStyleMatch(apartment, normalizedPreferences.styles);
   const locationScore = calculateLocationMatch(apartment.location, normalizedPreferences.location);
   const priceScore = calculatePriceMatch(apartment.price, normalizedPreferences.priceRange);
+  const sizeScore = calculateSizeMatch(apartment.rooms, preferences?.size);
   const { score: featureRaw, missingMustHave } = calculateFeatureMatch(apartment, mustHaves, soft);
 
   // Hard cap: a property missing a deal-breaker can't score well on features.
   const featureScore = missingMustHave ? Math.min(featureRaw, 40) : featureRaw;
 
+  // Every quiz answer feeds a dimension: styles -> style, activities ->
+  // lifestyle-derived soft features (inside features), mustHaves -> features,
+  // size -> bedroom fit, location and priceRange -> their own dimensions.
   let overall = Math.round(
-    styleScore * 0.30 +
-    featureScore * 0.35 +
+    styleScore * 0.25 +
+    featureScore * 0.30 +
+    sizeScore * 0.10 +
     locationScore * 0.20 +
     priceScore * 0.15
   );
@@ -160,7 +193,8 @@ export const calculateVibeScore = (apartment: Apartment, preferences: UserPrefer
       style: Math.round(styleScore),
       features: Math.round(featureScore),
       price: Math.round(priceScore),
-      location: Math.round(locationScore)
+      location: Math.round(locationScore),
+      size: Math.round(sizeScore)
     }
   };
 };
