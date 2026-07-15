@@ -3,14 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Info, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,7 +21,7 @@ import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingS
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
-import { calculateVibeScore } from '@/utils/vibeScoring';
+import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import type { Apartment, UserPreferences } from '@/types';
 
 // The verified-listings table. Public data from public-property-search (no
@@ -224,7 +223,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     }
   }, [user]);
 
-  const vibeMatchOf = (r: BrowseRow): ReturnType<typeof calculateVibeScore> | null => {
+  // Plain-language vibe match: overall score plus what specifically matched
+  // on each dimension, shown inline (no popup).
+  const vibeMatchOf = (r: BrowseRow) => {
     if (!savedPreferences) return null;
     try {
       const apartment = {
@@ -240,7 +241,35 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         amenities: r.amenities || [],
         realtor: { id: '', name: '', phone: '', email: '' },
       } as Apartment;
-      return calculateVibeScore(apartment, savedPreferences);
+      const score = calculateVibeScore(apartment, savedPreferences);
+      const attrs = getVibeAttributeMatch(apartment, savedPreferences);
+
+      const matchedStyles = attrs.style.filter((a) => a.matched).map((a) => a.label);
+      const matchedFeatures = attrs.features.filter((a) => a.matched).map((a) => a.label);
+      const missingFeatures = attrs.features.filter((a) => !a.matched).map((a) => a.label);
+
+      const budgetScore = score.breakdown?.price ?? 0;
+      const budgetText = budgetScore >= 80 ? 'Within your budget'
+        : budgetScore >= 50 ? 'Slightly above your budget'
+        : 'Over your budget';
+
+      const locationScore = score.breakdown?.location ?? 0;
+      const locationText = locationScore >= 80 ? 'In your preferred area'
+        : locationScore > 0 ? 'Near your preferred areas'
+        : 'Outside your preferred areas';
+
+      return {
+        overall: score.overall,
+        missingMustHave: score.missingMustHave,
+        styleText: matchedStyles.length > 0 ? `Matches ${matchedStyles.join(', ').toLowerCase()}` : 'No style overlap',
+        featureText: matchedFeatures.length > 0
+          ? `Has ${matchedFeatures.slice(0, 3).join(', ').toLowerCase()}`
+          : missingFeatures.length > 0 ? `Missing ${missingFeatures.slice(0, 2).join(', ').toLowerCase()}` : null,
+        budgetText,
+        budgetOk: budgetScore >= 80,
+        locationText,
+        locationOk: locationScore >= 80,
+      };
     } catch {
       return null;
     }
@@ -444,7 +473,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     { label: 'Rooms', get: (r) => r.rooms || '-' },
     { label: 'Size', get: (r) => (r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '-') },
     { label: 'Verified live', get: (r) => verifiedLabel(r.last_verified_at) },
-    { label: 'Agent postings', get: (r) => String(r.posting_count || 1) },
   ];
 
   // Ask-AI helper inside the compare dialog
@@ -609,11 +637,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                               <MapPin className="w-3 h-3 flex-shrink-0" />
                               <span className="line-clamp-1">{districtOf(r.location)}</span>
                             </p>
-                            {(r.posting_count || 1) > 1 && (
-                              <Badge variant="secondary" className="mt-0.5 text-[10px] py-0">
-                                {r.posting_count} agents posting
-                              </Badge>
-                            )}
                           </div>
                         </div>
                       </TableCell>
@@ -725,36 +748,19 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     </p>
 
                     {score && (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button className={`flex items-center gap-1.5 w-fit rounded-full px-2.5 py-1 text-xs font-medium ${score.overall >= 75 ? 'bg-emerald-100 text-emerald-700' : score.overall >= 55 ? 'bg-amber-100 text-amber-700' : 'bg-secondary text-muted-foreground'}`}>
-                            {score.overall}% vibe match
-                            <Info className="w-3 h-3 opacity-60" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64 p-3 text-xs" align="start">
-                          <p className="font-medium text-sm mb-1">Vibe match</p>
-                          <p className="text-muted-foreground mb-2">
-                            How well this home fits your saved preferences from the quiz - style, must-have features, budget, and preferred areas.
-                          </p>
-                          <div className="space-y-1">
-                            {([['Style', score.breakdown?.style], ['Features', score.breakdown?.features], ['Budget', score.breakdown?.price], ['Location', score.breakdown?.location]] as [string, number | undefined][]).map(([label, v]) => (
-                              v !== undefined && (
-                                <div key={label} className="flex items-center gap-2">
-                                  <span className="w-16 text-muted-foreground">{label}</span>
-                                  <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                                    <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, v))}%` }} />
-                                  </div>
-                                  <span className="w-8 text-right">{v}%</span>
-                                </div>
-                              )
-                            ))}
-                          </div>
-                          {score.missingMustHave && (
-                            <p className="mt-2 text-destructive">Missing one of your must-have features.</p>
-                          )}
-                        </PopoverContent>
-                      </Popover>
+                      <div>
+                        <span className={`inline-flex items-center w-fit rounded-full px-2.5 py-1 text-xs font-medium ${score.overall >= 75 ? 'bg-emerald-100 text-emerald-700' : score.overall >= 55 ? 'bg-amber-100 text-amber-700' : 'bg-secondary text-muted-foreground'}`}>
+                          {score.overall}% vibe match
+                        </span>
+                        {/* What matched, in plain language - no popup needed */}
+                        <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug">
+                          <li className="text-muted-foreground">{score.styleText}</li>
+                          {score.featureText && <li className="text-muted-foreground">{score.featureText}</li>}
+                          <li className={score.budgetOk ? 'text-emerald-600' : 'text-amber-600'}>{score.budgetText}</li>
+                          <li className={score.locationOk ? 'text-emerald-600' : 'text-muted-foreground'}>{score.locationText}</li>
+                          {score.missingMustHave && <li className="text-destructive">Missing a must-have feature</li>}
+                        </ul>
+                      </div>
                     )}
 
                     <dl className="text-xs space-y-1 mt-1">
