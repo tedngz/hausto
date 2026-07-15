@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, Check, ChevronLeft, ChevronRight, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,6 +22,7 @@ import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
+import { getVibeRatingLabel } from '@/utils/vibeRating';
 import type { Apartment, UserPreferences } from '@/types';
 
 // The verified-listings table. Public data from public-property-search (no
@@ -84,6 +85,14 @@ const locationMatchesDistrict = (location: string, district: string): boolean =>
   const numbered = d.match(/^district (\d+)$/);
   if (numbered) return new RegExp(`quan ${numbered[1]}(?!\\d)`).test(loc);
   return false;
+};
+
+// Rating-dot colors, mirroring EditorialPropertyCard's chip
+const RATING_DOT: Record<string, string> = {
+  perfect: 'bg-emerald-400',
+  strong: 'bg-blue-400',
+  good: 'bg-orange-400',
+  casual: 'bg-gray-300',
 };
 
 const ROOM_OPTIONS = [
@@ -244,10 +253,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       const score = calculateVibeScore(apartment, savedPreferences);
       const attrs = getVibeAttributeMatch(apartment, savedPreferences);
 
-      const matchedStyles = attrs.style.filter((a) => a.matched).map((a) => a.label);
-      const matchedFeatures = attrs.features.filter((a) => a.matched).map((a) => a.label);
-      const missingFeatures = attrs.features.filter((a) => !a.matched).map((a) => a.label);
-
       const budgetScore = score.breakdown?.price ?? 0;
       const budgetText = budgetScore >= 80 ? 'Within your budget'
         : budgetScore >= 50 ? 'Slightly above your budget'
@@ -260,11 +265,10 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
 
       return {
         overall: score.overall,
+        rating: getVibeRatingLabel(score.overall),
         missingMustHave: score.missingMustHave,
-        styleText: matchedStyles.length > 0 ? `Matches ${matchedStyles.join(', ').toLowerCase()}` : 'No style overlap',
-        featureText: matchedFeatures.length > 0
-          ? `Has ${matchedFeatures.slice(0, 3).join(', ').toLowerCase()}`
-          : missingFeatures.length > 0 ? `Missing ${missingFeatures.slice(0, 2).join(', ').toLowerCase()}` : null,
+        // All the property's qualities, with matched-to-preferences flags
+        qualities: [...attrs.style, ...attrs.features],
         budgetText,
         budgetOk: budgetScore >= 80,
         locationText,
@@ -747,15 +751,34 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                       <span className="line-clamp-1">{districtOf(r.location)}</span>
                     </p>
 
-                    {score && (
+    {score && (
                       <div>
-                        <span className={`inline-flex items-center w-fit rounded-full px-2.5 py-1 text-xs font-medium ${score.overall >= 75 ? 'bg-emerald-100 text-emerald-700' : score.overall >= 55 ? 'bg-amber-100 text-amber-700' : 'bg-secondary text-muted-foreground'}`}>
-                          {score.overall}% vibe match
+                        {/* Same rating vocabulary as the property card chip */}
+                        <span className="inline-flex items-center gap-1.5 w-fit rounded-full bg-secondary px-2.5 py-1">
+                          <span className={`w-2 h-2 rounded-full ${RATING_DOT[score.rating] || 'bg-gray-300'}`} />
+                          <span className="font-mono text-[10px] tracking-[0.14em] uppercase">{score.rating} match</span>
+                          <span className="text-[11px] font-medium text-muted-foreground">· {score.overall}%</span>
                         </span>
-                        {/* What matched, in plain language - no popup needed */}
+                        {/* Every quality this home has; the ones matching the
+                            renter's preferences are highlighted */}
+                        {score.qualities.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {score.qualities.map((q, qi) => (
+                              <span
+                                key={`${q.label}-${qi}`}
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] capitalize border ${
+                                  q.matched
+                                    ? 'bg-primary/10 border-primary/40 text-primary font-medium'
+                                    : 'bg-transparent border-border text-muted-foreground'
+                                }`}
+                              >
+                                {q.matched && <Check className="w-2.5 h-2.5" />}
+                                {q.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug">
-                          <li className="text-muted-foreground">{score.styleText}</li>
-                          {score.featureText && <li className="text-muted-foreground">{score.featureText}</li>}
                           <li className={score.budgetOk ? 'text-emerald-600' : 'text-amber-600'}>{score.budgetText}</li>
                           <li className={score.locationOk ? 'text-emerald-600' : 'text-muted-foreground'}>{score.locationText}</li>
                           {score.missingMustHave && <li className="text-destructive">Missing a must-have feature</li>}
