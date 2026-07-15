@@ -72,7 +72,7 @@ serve(async (req) => {
     if (source !== 'external') {
       let internalQuery = supabase
         .from('properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, description, created_at')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, created_at')
         .eq('is_active', true)
         .gte('last_activated_at', tenDaysAgo)
         .order('created_at', { ascending: false });
@@ -130,8 +130,9 @@ serve(async (req) => {
             rooms: p.rooms || null,
             size: p.size || null,
             vibe: p.vibe || null,
-            images: (p.images || []).slice(0, 3),
+            images: (p.images || []).slice(0, 10),
             highlights: p.highlights || [],
+            amenities: p.amenities || [],
             description: p.description ? p.description.substring(0, 300) : null,
             source: 'hausto',
             listed_at: p.created_at,
@@ -144,7 +145,7 @@ serve(async (req) => {
     if (source !== 'internal') {
       let externalQuery = supabase
         .from('external_properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id')
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });
@@ -211,8 +212,9 @@ serve(async (req) => {
             rooms: p.rooms || null,
             size: p.size || null,
             vibe: p.vibe || null,
-            images: (p.images || []).slice(0, 3),
+            images: (p.images || []).slice(0, 10),
             highlights: p.highlights || [],
+            amenities: p.amenities || [],
             description: p.description ? p.description.substring(0, 300) : null,
             source: p.source || 'external',
             listed_at: p.created_at,

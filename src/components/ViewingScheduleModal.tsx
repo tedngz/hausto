@@ -235,7 +235,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
                         <img 
                           src={property.images[0]} 
                           alt={property.title}
-                          className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                          className="w-16 h-16 object-cover rounded flex-shrink-0"
                         />
                       )}
                       <div className="flex-1 min-w-0">

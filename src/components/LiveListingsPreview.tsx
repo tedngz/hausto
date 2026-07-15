@@ -96,7 +96,7 @@ export const LiveListingsPreview = () => {
                   src={r.images[0]}
                   alt=""
                   loading="lazy"
-                  className="w-16 h-12 rounded-lg object-cover flex-shrink-0"
+                  className="w-16 h-12 rounded object-cover flex-shrink-0"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               )}

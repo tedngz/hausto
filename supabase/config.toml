@@ -91,3 +91,6 @@ verify_jwt = false
 verify_jwt = false
 [functions.dedupe-external-listings]
 verify_jwt = false
+
+[functions.compare-listings-ai]
+verify_jwt = false

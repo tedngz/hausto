@@ -11,6 +11,7 @@ import { RealtorNavigation } from '@/components/RealtorNavigation';
 import { UserTypeSelector } from '@/components/UserTypeSelector';
 import { HaustoChat } from '@/components/HaustoChat';
 import { BrowseTable } from '@/components/BrowseTable';
+import { FastTrackRequestsCard } from '@/components/FastTrackRequestsCard';
 import { FloatingAIButton } from '@/components/FloatingAIButton';
 import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
@@ -317,6 +318,7 @@ const Discover = () => {
                   {/* Left column (wider): Profile info + Preferences */}
                   <div className="lg:col-span-2 flex flex-col gap-6">
                     <Profile userType={userType} />
+                    <FastTrackRequestsCard />
                   </div>
                   {/* Right column (narrower): Subscription + Usage */}
                   <div className="lg:col-span-1 flex flex-col gap-6">

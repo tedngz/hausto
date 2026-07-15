@@ -10,16 +10,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, Loader2, MapPin, Scale, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
+import { useSubscription } from '@/hooks/useSubscription';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
+import { calculateVibeScore } from '@/utils/vibeScoring';
+import type { Apartment, UserPreferences } from '@/types';
 
 // The verified-listings table. Public data from public-property-search (no
 // contact details); rendered standalone at /browse and embedded as the
@@ -41,6 +45,7 @@ export type BrowseRow = {
   vibe: string | null;
   images: string[];
   highlights?: string[];
+  amenities?: string[];
   description?: string | null;
   source: string;
   listed_at: string;
@@ -153,9 +158,45 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
   const [preview, setPreview] = useState<BrowseRow | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [liking, setLiking] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const { user } = useAuth();
   const { createMatch } = useMatches();
+  const { subscribed } = useSubscription();
   const { quota, refetchQuota } = useViewingQuota();
+
+  // Saved vibe preferences (from the onboarding quiz) power the compare
+  // dialog's match scores; absent for users who skipped the quiz.
+  const savedPreferences = useMemo<UserPreferences | null>(() => {
+    if (!user) return null;
+    try {
+      const raw = localStorage.getItem(`userPreferences_${user.id}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, [user]);
+
+  const vibeMatchOf = (r: BrowseRow): number | null => {
+    if (!savedPreferences) return null;
+    try {
+      const apartment = {
+        id: r.id,
+        images: r.images || [],
+        title: r.title,
+        location: r.location,
+        price: r.price_vnd || 0,
+        size: r.size || '',
+        vibe: r.vibe || '',
+        description: r.description || '',
+        highlights: r.highlights || [],
+        amenities: r.amenities || [],
+        realtor: { id: '', name: '', phone: '', email: '' },
+      } as Apartment;
+      return calculateVibeScore(apartment, savedPreferences).overall;
+    } catch {
+      return null;
+    }
+  };
 
   const handleLike = async (row: BrowseRow) => {
     if (!user) {
@@ -190,6 +231,11 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
   const openFastTrack = () => {
     if (!user) {
       navigate('/auth', { state: { returnTo } });
+      return;
+    }
+    // Fast-Track coordination is a premium feature: free tier sees the upgrade modal
+    if (!subscribed) {
+      setSubscriptionOpen(true);
       return;
     }
     if (quota && !quota.canBook) {
@@ -349,11 +395,35 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     { label: 'Location', get: (r) => r.location },
     { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd}/mo` : '-') },
     { label: 'Rooms', get: (r) => r.rooms || '-' },
-    { label: 'Size', get: (r) => r.size || '-' },
+    { label: 'Size', get: (r) => (r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '-') },
     { label: 'Vibe', get: (r) => r.vibe || '-' },
     { label: 'Verified live', get: (r) => verifiedLabel(r.last_verified_at) },
     { label: 'Postings', get: (r) => String(r.posting_count || 1) },
   ];
+
+  // Ask-AI helper inside the compare dialog
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiAnswer, setAiAnswer] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const askCompareAI = async (q?: string) => {
+    const question = (q ?? aiQuestion).trim();
+    if (!question || aiLoading || selected.length < 2) return;
+    setAiLoading(true);
+    setAiAnswer('');
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('compare-listings-ai', {
+        body: { question, listings: selected, preferences: savedPreferences || undefined },
+      });
+      if (fnError) throw fnError;
+      setAiAnswer(data?.answer || 'Sorry, I could not analyze these listings.');
+    } catch (e) {
+      console.error('Compare AI failed:', e);
+      setAiAnswer('Something went wrong - please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   return (
     <div>
@@ -483,7 +553,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                               src={r.images[0]}
                               alt=""
                               loading="lazy"
-                              className="w-14 h-10 rounded-lg object-cover flex-shrink-0 hidden sm:block"
+                              className="w-14 h-10 rounded object-cover flex-shrink-0 hidden sm:block"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                           )}
@@ -584,36 +654,121 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         onPropertyClick={(id) => navigate(`/property/${id}`)}
       />
 
-      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
-        <DialogContent className="max-w-4xl">
+      <Dialog open={compareOpen} onOpenChange={(o) => { setCompareOpen(o); if (!o) { setAiAnswer(''); setAiQuestion(''); } }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Compare listings</DialogTitle></DialogHeader>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr>
                   <th className="text-left p-2 w-28" />
-                  {selected.map((r) => (
-                    <th key={r.id} className="text-left p-2 align-top min-w-[160px]">
-                      {r.images?.[0] && <img src={r.images[0]} alt="" className="w-full h-24 rounded-lg object-cover mb-2" />}
+                  {selected.map((r, i) => (
+                    <th key={r.id} className="text-left p-2 align-top min-w-[170px]">
+                      {/* Full gallery, horizontally scrollable */}
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 [scrollbar-width:thin]">
+                        {(r.images || []).map((src, j) => (
+                          <img
+                            key={j}
+                            src={src}
+                            alt=""
+                            loading="lazy"
+                            className={`h-24 rounded object-cover flex-shrink-0 ${j === 0 ? 'w-full min-w-[150px]' : 'w-32'}`}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ))}
+                      </div>
                       <button className="font-medium hover:underline text-left line-clamp-2" onClick={() => setPreview(r)}>
-                        {r.title}
+                        <span className="text-muted-foreground mr-1">{i + 1}.</span>{r.title}
                       </button>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
+                {savedPreferences && (
+                  <tr className="border-t">
+                    <td className="p-2 text-muted-foreground">Vibe match</td>
+                    {selected.map((r) => {
+                      const s = vibeMatchOf(r);
+                      return (
+                        <td key={r.id} className="p-2">
+                          {s !== null ? (
+                            <span className={`font-medium ${s >= 75 ? 'text-emerald-600' : s >= 55 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                              {s}%
+                            </span>
+                          ) : '-'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
                 {compareFields.map((f) => (
                   <tr key={f.label} className="border-t">
                     <td className="p-2 text-muted-foreground">{f.label}</td>
                     {selected.map((r) => <td key={r.id} className="p-2">{f.get(r)}</td>)}
                   </tr>
                 ))}
+                <tr className="border-t align-top">
+                  <td className="p-2 text-muted-foreground">Amenities</td>
+                  {selected.map((r) => (
+                    <td key={r.id} className="p-2">
+                      {(r.amenities && r.amenities.length > 0) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {r.amenities.slice(0, 12).map((a) => (
+                            <span key={a} className="rounded-full bg-secondary px-2 py-0.5 text-[11px]">{a}</span>
+                          ))}
+                          {r.amenities.length > 12 && (
+                            <span className="text-[11px] text-muted-foreground">+{r.amenities.length - 12} more</span>
+                          )}
+                        </div>
+                      ) : '-'}
+                    </td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </div>
+
+          {/* Ask AI to help decide */}
+          <div className="border-t pt-4 mt-2">
+            <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Ask AI to help you decide
+            </p>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {['Which is the best value?', 'Which fits my preferences best?', 'What are the tradeoffs?'].map((q) => (
+                <button
+                  key={q}
+                  className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors"
+                  disabled={aiLoading}
+                  onClick={() => { setAiQuestion(q); askCompareAI(q); }}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={aiQuestion}
+                onChange={(e) => setAiQuestion(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') askCompareAI(); }}
+                placeholder="e.g. Which one is best for working from home?"
+                className="bg-background"
+              />
+              <Button onClick={() => askCompareAI()} disabled={aiLoading || !aiQuestion.trim()}>
+                {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ask'}
+              </Button>
+            </div>
+            {aiAnswer && (
+              <div className="mt-3 rounded-lg bg-secondary/50 p-3 text-sm whitespace-pre-wrap">
+                {aiAnswer}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
+
+      <SubscriptionModal isOpen={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
     </div>
   );
 };
