@@ -520,6 +520,7 @@ export type Database = {
       external_properties: {
         Row: {
           amenities: string[] | null
+          canonical_group_id: string | null
           city: string | null
           contact_name: string | null
           contact_phone: string | null
@@ -558,6 +559,7 @@ export type Database = {
         }
         Insert: {
           amenities?: string[] | null
+          canonical_group_id?: string | null
           city?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -596,6 +598,7 @@ export type Database = {
         }
         Update: {
           amenities?: string[] | null
+          canonical_group_id?: string | null
           city?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -636,46 +639,49 @@ export type Database = {
       }
       fast_track_requests: {
         Row: {
-          conversation_id: string
+          conversation_id: string | null
           created_at: string
           id: string
           notes: string | null
           preferred_dates: string[]
           preferred_times: string[]
           property_ids: string[]
-          realtor_id: string
+          realtor_id: string | null
           renter_id: string
           scheduled_viewings: Json | null
+          source: string
           special_requirements: string | null
           status: Database["public"]["Enums"]["fast_track_status"]
           updated_at: string
         }
         Insert: {
-          conversation_id: string
+          conversation_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
           preferred_dates: string[]
           preferred_times: string[]
           property_ids?: string[]
-          realtor_id: string
+          realtor_id?: string | null
           renter_id: string
           scheduled_viewings?: Json | null
+          source?: string
           special_requirements?: string | null
           status?: Database["public"]["Enums"]["fast_track_status"]
           updated_at?: string
         }
         Update: {
-          conversation_id?: string
+          conversation_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
           preferred_dates?: string[]
           preferred_times?: string[]
           property_ids?: string[]
-          realtor_id?: string
+          realtor_id?: string | null
           renter_id?: string
           scheduled_viewings?: Json | null
+          source?: string
           special_requirements?: string | null
           status?: Database["public"]["Enums"]["fast_track_status"]
           updated_at?: string
@@ -689,6 +695,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      listing_groups: {
+        Row: {
+          city: string | null
+          created_at: string
+          id: string
+          member_count: number
+          price_max: number | null
+          price_min: number | null
+          project_key: string
+          representative_id: string | null
+          rooms: string | null
+          size_sqm: number | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          id?: string
+          member_count?: number
+          price_max?: number | null
+          price_min?: number | null
+          project_key: string
+          representative_id?: string | null
+          rooms?: string | null
+          size_sqm?: number | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          id?: string
+          member_count?: number
+          price_max?: number | null
+          price_min?: number | null
+          project_key?: string
+          representative_id?: string | null
+          rooms?: string | null
+          size_sqm?: number | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       match_conversations: {
         Row: {
