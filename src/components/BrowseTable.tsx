@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Info, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -119,6 +119,54 @@ const districtOf = (location: string): string => {
   return parts.slice(0, -1).slice(-2).join(', ');
 };
 
+// Card-style image browser for the compare dialog: one photo at a time with
+// arrows and progress segments, mirroring the editorial property card.
+const CompareImageCarousel = ({ images, alt }: { images: string[]; alt: string }) => {
+  const [idx, setIdx] = useState(0);
+  const list = images && images.length > 0 ? images : [];
+  if (list.length === 0) {
+    return <div className="aspect-[4/3] rounded bg-secondary" />;
+  }
+  const go = (delta: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIdx((i) => (i + delta + list.length) % list.length);
+  };
+  return (
+    <div className="relative aspect-[4/3] rounded overflow-hidden group/carousel">
+      <img
+        src={list[idx]}
+        alt={alt}
+        loading="lazy"
+        className="absolute inset-0 w-full h-full object-cover"
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      />
+      {list.length > 1 && (
+        <>
+          <div className="absolute top-1.5 left-2 right-2 flex gap-1">
+            {list.map((_, i) => (
+              <span key={i} className={`h-[2px] flex-1 rounded-full ${i === idx ? 'bg-white/95' : 'bg-white/35'}`} />
+            ))}
+          </div>
+          <button
+            aria-label="Previous photo"
+            className="absolute left-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/30 text-white backdrop-blur-sm flex items-center justify-center hover:bg-black/50"
+            onClick={(e) => go(-1, e)}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            aria-label="Next photo"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/30 text-white backdrop-blur-sm flex items-center justify-center hover:bg-black/50"
+            onClick={(e) => go(1, e)}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+};
+
 interface BrowseTableProps {
   /** Where auth redirects should return to (default /browse) */
   returnTo?: string;
@@ -176,7 +224,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     }
   }, [user]);
 
-  const vibeMatchOf = (r: BrowseRow): number | null => {
+  const vibeMatchOf = (r: BrowseRow): ReturnType<typeof calculateVibeScore> | null => {
     if (!savedPreferences) return null;
     try {
       const apartment = {
@@ -192,7 +240,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         amenities: r.amenities || [],
         realtor: { id: '', name: '', phone: '', email: '' },
       } as Apartment;
-      return calculateVibeScore(apartment, savedPreferences).overall;
+      return calculateVibeScore(apartment, savedPreferences);
     } catch {
       return null;
     }
@@ -392,13 +440,11 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
   );
 
   const compareFields: { label: string; get: (r: BrowseRow) => string }[] = [
-    { label: 'Location', get: (r) => r.location },
-    { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd}/mo` : '-') },
+    { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd.toLocaleString()}/mo` : '-') },
     { label: 'Rooms', get: (r) => r.rooms || '-' },
     { label: 'Size', get: (r) => (r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '-') },
-    { label: 'Vibe', get: (r) => r.vibe || '-' },
     { label: 'Verified live', get: (r) => verifiedLabel(r.last_verified_at) },
-    { label: 'Postings', get: (r) => String(r.posting_count || 1) },
+    { label: 'Agent postings', get: (r) => String(r.posting_count || 1) },
   ];
 
   // Ask-AI helper inside the compare dialog
@@ -657,76 +703,81 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       <Dialog open={compareOpen} onOpenChange={(o) => { setCompareOpen(o); if (!o) { setAiAnswer(''); setAiQuestion(''); } }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Compare listings</DialogTitle></DialogHeader>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr>
-                  <th className="text-left p-2 w-28" />
-                  {selected.map((r, i) => (
-                    <th key={r.id} className="text-left p-2 align-top min-w-[170px]">
-                      {/* Full gallery, horizontally scrollable */}
-                      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 [scrollbar-width:thin]">
-                        {(r.images || []).map((src, j) => (
-                          <img
-                            key={j}
-                            src={src}
-                            alt=""
-                            loading="lazy"
-                            className={`h-24 rounded object-cover flex-shrink-0 ${j === 0 ? 'w-full min-w-[150px]' : 'w-32'}`}
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          />
-                        ))}
-                      </div>
-                      <button className="font-medium hover:underline text-left line-clamp-2" onClick={() => setPreview(r)}>
-                        <span className="text-muted-foreground mr-1">{i + 1}.</span>{r.title}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {savedPreferences && (
-                  <tr className="border-t">
-                    <td className="p-2 text-muted-foreground">Vibe match</td>
-                    {selected.map((r) => {
-                      const s = vibeMatchOf(r);
-                      return (
-                        <td key={r.id} className="p-2">
-                          {s !== null ? (
-                            <span className={`font-medium ${s >= 75 ? 'text-emerald-600' : s >= 55 ? 'text-amber-600' : 'text-muted-foreground'}`}>
-                              {s}%
-                            </span>
-                          ) : '-'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                )}
-                {compareFields.map((f) => (
-                  <tr key={f.label} className="border-t">
-                    <td className="p-2 text-muted-foreground">{f.label}</td>
-                    {selected.map((r) => <td key={r.id} className="p-2">{f.get(r)}</td>)}
-                  </tr>
-                ))}
-                <tr className="border-t align-top">
-                  <td className="p-2 text-muted-foreground">Amenities</td>
-                  {selected.map((r) => (
-                    <td key={r.id} className="p-2">
-                      {(r.amenities && r.amenities.length > 0) ? (
-                        <div className="flex flex-wrap gap-1">
-                          {r.amenities.slice(0, 12).map((a) => (
-                            <span key={a} className="rounded-full bg-secondary px-2 py-0.5 text-[11px]">{a}</span>
-                          ))}
-                          {r.amenities.length > 12 && (
-                            <span className="text-[11px] text-muted-foreground">+{r.amenities.length - 12} more</span>
+          {/* One card per listing: side by side on desktop, horizontal snap
+              scroll on mobile so each card gets full width */}
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1 [scrollbar-width:thin]">
+            {selected.map((r, i) => {
+              const score = vibeMatchOf(r);
+              return (
+                <div
+                  key={r.id}
+                  className="snap-start flex-shrink-0 w-[80vw] max-w-[280px] sm:w-auto sm:min-w-[220px] sm:flex-1 rounded-xl border border-border bg-card overflow-hidden flex flex-col"
+                >
+                  <CompareImageCarousel images={r.images || []} alt={r.title} />
+                  <div className="p-3 flex flex-col gap-2 flex-1">
+                    <button className="font-medium text-sm text-left hover:underline line-clamp-2" onClick={() => setPreview(r)}>
+                      <span className="text-muted-foreground mr-1">{i + 1}.</span>{r.title}
+                    </button>
+                    <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 flex-shrink-0" />{districtOf(r.location)}
+                    </p>
+
+                    {score && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className={`flex items-center gap-1.5 w-fit rounded-full px-2.5 py-1 text-xs font-medium ${score.overall >= 75 ? 'bg-emerald-100 text-emerald-700' : score.overall >= 55 ? 'bg-amber-100 text-amber-700' : 'bg-secondary text-muted-foreground'}`}>
+                            {score.overall}% vibe match
+                            <Info className="w-3 h-3 opacity-60" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-3 text-xs" align="start">
+                          <p className="font-medium text-sm mb-1">Vibe match</p>
+                          <p className="text-muted-foreground mb-2">
+                            How well this home fits your saved preferences from the quiz - style, must-have features, budget, and preferred areas.
+                          </p>
+                          <div className="space-y-1">
+                            {([['Style', score.breakdown?.style], ['Features', score.breakdown?.features], ['Budget', score.breakdown?.price], ['Location', score.breakdown?.location]] as [string, number | undefined][]).map(([label, v]) => (
+                              v !== undefined && (
+                                <div key={label} className="flex items-center gap-2">
+                                  <span className="w-16 text-muted-foreground">{label}</span>
+                                  <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                                    <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, v))}%` }} />
+                                  </div>
+                                  <span className="w-8 text-right">{v}%</span>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                          {score.missingMustHave && (
+                            <p className="mt-2 text-destructive">Missing one of your must-have features.</p>
                           )}
+                        </PopoverContent>
+                      </Popover>
+                    )}
+
+                    <dl className="text-xs space-y-1 mt-1">
+                      {compareFields.map((f) => (
+                        <div key={f.label} className="flex justify-between gap-2">
+                          <dt className="text-muted-foreground">{f.label}</dt>
+                          <dd className="font-medium text-right">{f.get(r)}</dd>
                         </div>
-                      ) : '-'}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+                      ))}
+                    </dl>
+
+                    {(r.amenities && r.amenities.length > 0) && (
+                      <div className="flex flex-wrap gap-1 mt-auto pt-2 border-t border-border">
+                        {r.amenities.slice(0, 8).map((a) => (
+                          <span key={a} className="rounded-full bg-secondary px-2 py-0.5 text-[10px]">{a}</span>
+                        ))}
+                        {r.amenities.length > 8 && (
+                          <span className="text-[10px] text-muted-foreground self-center">+{r.amenities.length - 8}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Ask AI to help decide */}
