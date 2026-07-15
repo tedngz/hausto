@@ -605,8 +605,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                           )}
                           <div className="min-w-0">
                             <p className="font-medium text-sm line-clamp-1">{r.title}</p>
-                            <p className="text-xs text-muted-foreground line-clamp-1 md:hidden flex items-center gap-1">
-                              <MapPin className="w-3 h-3 flex-shrink-0" />{districtOf(r.location)}
+                            <p className="text-xs text-muted-foreground md:hidden flex items-center gap-1">
+                              <MapPin className="w-3 h-3 flex-shrink-0" />
+                              <span className="line-clamp-1">{districtOf(r.location)}</span>
                             </p>
                             {(r.posting_count || 1) > 1 && (
                               <Badge variant="secondary" className="mt-0.5 text-[10px] py-0">
@@ -718,8 +719,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     <button className="font-medium text-sm text-left hover:underline line-clamp-2" onClick={() => setPreview(r)}>
                       <span className="text-muted-foreground mr-1">{i + 1}.</span>{r.title}
                     </button>
-                    <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1">
-                      <MapPin className="w-3 h-3 flex-shrink-0" />{districtOf(r.location)}
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      <span className="line-clamp-1">{districtOf(r.location)}</span>
                     </p>
 
                     {score && (

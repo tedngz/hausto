@@ -102,10 +102,12 @@ export const LiveListingsPreview = () => {
               )}
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-sm line-clamp-1">{r.title}</p>
-                <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1 mt-0.5">
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                   <MapPin className="w-3 h-3 flex-shrink-0" />
-                  {districtOf(r.location)}
-                  {r.rooms && <span className="hidden sm:inline"> · {r.rooms}</span>}
+                  <span className="line-clamp-1">
+                    {districtOf(r.location)}
+                    {r.rooms && <span className="hidden sm:inline"> · {r.rooms}</span>}
+                  </span>
                 </p>
               </div>
               {(r.posting_count || 1) > 1 && (
