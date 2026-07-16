@@ -273,8 +273,10 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         overall: score.overall,
         rating: getVibeRatingLabel(score.overall),
         missingMustHave: score.missingMustHave,
-        // All the property's qualities, with matched-to-preferences flags
-        qualities: [...attrs.style, ...attrs.features],
+        // All the property's qualities, with matched-to-preferences flags.
+        // Lifestyle chips use the quiz's own words (Working, Cooking, ...) -
+        // matched when the property has the related soft features.
+        qualities: [...attrs.style, ...attrs.lifestyle, ...attrs.features],
         budgetText,
         budgetOk: budgetScore >= 80,
         locationText,

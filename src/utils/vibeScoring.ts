@@ -8,6 +8,7 @@ import {
   getFeatureMatch,
   propertyHasFeature,
   lifestyleToSoftFeatures,
+  LIFESTYLE_FEATURE_MAP,
 } from '@/lib/propertyFeatures';
 
 export interface VibeScore {
@@ -106,6 +107,11 @@ export interface VibeAttribute {
 
 export interface VibeAttributeMatch {
   style: VibeAttribute[];
+  /** Quiz lifestyle activities (Working, Cooking, ...) - matched when the
+   *  property has the related soft features. Shown in the quiz's own words. */
+  lifestyle: VibeAttribute[];
+  /** Concrete must-have features only; lifestyle-derived soft features are
+   *  represented through the lifestyle group instead. */
   features: FeatureAttribute[];
   hasAny: boolean;
 }
@@ -128,10 +134,27 @@ export const getVibeAttributeMatch = (apartment: Apartment, preferences: UserPre
   }
   style.sort((a, b) => Number(b.matched) - Number(a.matched));
 
-  const { mustHaves, soft } = getRequiredFeatures(preferences);
-  const { attributes: features } = getFeatureMatch(getPropertyFeatures(apartment), mustHaves, soft);
+  const { mustHaves } = getRequiredFeatures(preferences);
+  const propertyFeatures = getPropertyFeatures(apartment);
+  // Features group shows concrete must-haves only; lifestyle soft features
+  // surface through the lifestyle group below in the quiz's own words.
+  const { attributes: features } = getFeatureMatch(propertyFeatures, mustHaves, []);
 
-  return { style: style.slice(0, 6), features, hasAny: style.length + features.length > 0 };
+  // Lifestyle: each quiz activity is matched when the property has at least
+  // half of its related soft features (e.g. Working -> workspace/light/quiet).
+  const lifestyle: VibeAttribute[] = toStringArray(preferences?.activities).map((activity) => {
+    const mapped = LIFESTYLE_FEATURE_MAP[activity] ?? [];
+    const hits = mapped.filter((f) => propertyHasFeature(propertyFeatures, f)).length;
+    return { label: activity, matched: mapped.length > 0 && hits >= Math.ceil(mapped.length / 2) };
+  });
+  lifestyle.sort((a, b) => Number(b.matched) - Number(a.matched));
+
+  return {
+    style: style.slice(0, 6),
+    lifestyle,
+    features,
+    hasAny: style.length + lifestyle.length + features.length > 0,
+  };
 };
 
 // Feature dimension: must-haves dominate; lifestyle-derived soft features nudge.

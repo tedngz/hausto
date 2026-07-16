@@ -53,6 +53,8 @@ interface VibeAttribute {
 
 export interface VibeMatchAttributes {
   style: VibeAttribute[];
+  /** Quiz lifestyle activities, matched via the property's soft features. */
+  lifestyle?: VibeAttribute[];
   features: VibeAttribute[];
 }
 
@@ -100,8 +102,9 @@ const RATING_DOT: Record<string, string> = {
 
 // Dimensions shown as attribute chips: aesthetic style + concrete features
 // (must-haves and lifestyle-derived), each flagged matched/unmatched.
-const ATTRIBUTE_GROUPS: Array<{ key: 'style' | 'features'; label: string }> = [
+const ATTRIBUTE_GROUPS: Array<{ key: 'style' | 'lifestyle' | 'features'; label: string }> = [
   { key: 'style', label: 'Style' },
+  { key: 'lifestyle', label: 'Lifestyle' },
   { key: 'features', label: 'Features' },
 ];
 
@@ -352,7 +355,7 @@ export const EditorialPropertyCard = ({
                   : 'How this home aligns with your preferences.'}
               </p>
 
-              {vibeMatch && (vibeMatch.style.length + vibeMatch.features.length) > 0 ? (
+              {vibeMatch && (vibeMatch.style.length + (vibeMatch.lifestyle?.length ?? 0) + vibeMatch.features.length) > 0 ? (
                 <div className="space-y-2.5">
                   {ATTRIBUTE_GROUPS.map(({ key, label }) => {
                     const items = vibeMatch[key];
