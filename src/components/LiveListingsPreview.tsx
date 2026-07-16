@@ -77,8 +77,7 @@ export const LiveListingsPreview = () => {
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Live Inventory</p>
         <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Fresh, verified, no duplicates</h2>
         <p className="text-muted-foreground mt-3 max-w-xl mx-auto text-sm md:text-base">
-          Auto-curated from Vietnam's top listing platforms, verified fresh, duplicates merged.
-          Your next home is probably in here.
+          Auto-curated from Vietnam's top rental platforms, verified fresh, no duplicates, dead listings removed.
         </p>
       </div>
 

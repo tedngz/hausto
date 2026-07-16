@@ -116,19 +116,62 @@ async function verifyPlain(url: string, deadKeywords: string[], expectedCode?: s
   }
 }
 
+// Browserless /function API: unlike /content, it exposes the FINAL URL after
+// client-side redirects, so removed listings that bounce to the homepage or a
+// search page are caught even when the page itself looks healthy.
 async function verifyViaBrowserless(url: string, deadKeywords: string[]): Promise<DeadResult> {
   const browserlessKey = Deno.env.get('BROWSERLESS_API_KEY');
   if (!browserlessKey) return { status: 'error', reason: 'no_browserless_key' };
   try {
-    const res = await fetch(`https://production-sfo.browserless.io/content?token=${browserlessKey}`, {
+    const code = `export default async function ({ page, context }) {
+      const response = await page.goto(context.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      const html = await page.content();
+      return {
+        data: {
+          status: response ? response.status() : 0,
+          finalUrl: page.url(),
+          html: html.slice(0, 300000),
+        },
+        type: 'application/json',
+      };
+    }`;
+    const res = await fetch(`https://production-sfo.browserless.io/function?token=${browserlessKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, gotoOptions: { waitUntil: 'domcontentloaded', timeout: 15_000 } }),
-      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({ code, context: { url } }),
+      signal: AbortSignal.timeout(30_000),
     });
-    if (res.status === 404 || res.status === 410) return { status: 'dead', reason: `http_${res.status}` };
     if (!res.ok) return { status: 'error', reason: `browserless_${res.status}` };
-    const html = (await res.text()).toLowerCase();
+    const raw = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return { status: 'error', reason: 'browserless_parse' };
+    }
+    // /function may return the payload directly or wrapped in { data, type }
+    if (data && typeof data === 'object' && data.data && typeof data.data === 'object') data = data.data;
+    const status = Number(data?.status) || 0;
+    const finalUrl = String(data?.finalUrl || '').toLowerCase();
+    const html = typeof data?.html === 'string' ? data.html.toLowerCase() : '';
+    // No content is a tooling failure, never evidence the listing is dead
+    if (!html) return { status: 'error', reason: 'browserless_empty' };
+
+    if (status === 404 || status === 410) return { status: 'dead', reason: `http_${status}` };
+    if (status >= 500) return { status: 'error', reason: `http_${status}` };
+    if (finalUrl.includes('tin-dang-het-han') || finalUrl.includes('expired')) {
+      return { status: 'dead', reason: 'redirect_expired' };
+    }
+    // Redirect away from the listing path (homepage / search page) = removed
+    try {
+      const originalPath = new URL(url).pathname.replace(/\/$/, '');
+      const finalPath = new URL(finalUrl).pathname.replace(/\/$/, '');
+      const slug = originalPath.split('/').filter(Boolean).pop() || '';
+      if (originalPath && finalPath !== originalPath && slug && !finalPath.includes(slug)) {
+        return { status: 'dead', reason: 'redirect_away' };
+      }
+    } catch { /* URL parse issues: fall through to content checks */ }
+
     for (const kw of deadKeywords) {
       if (html.includes(kw)) return { status: 'dead', reason: `keyword:${kw}` };
     }

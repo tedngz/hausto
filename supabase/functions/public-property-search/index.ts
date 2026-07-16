@@ -72,7 +72,7 @@ serve(async (req) => {
     if (source !== 'external') {
       let internalQuery = supabase
         .from('properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, created_at')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, created_at, style_tags:vibe_analysis->styles')
         .eq('is_active', true)
         .gte('last_activated_at', tenDaysAgo)
         .order('created_at', { ascending: false });
@@ -130,6 +130,7 @@ serve(async (req) => {
             rooms: p.rooms || null,
             size: p.size || null,
             vibe: p.vibe || null,
+            style_tags: Array.isArray(p.style_tags) ? p.style_tags : [],
             images: (p.images || []).slice(0, 10),
             highlights: p.highlights || [],
             amenities: p.amenities || [],
@@ -145,7 +146,7 @@ serve(async (req) => {
     if (source !== 'internal') {
       let externalQuery = supabase
         .from('external_properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, style_tags:vibe_analysis->styles')
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });
@@ -212,6 +213,7 @@ serve(async (req) => {
             rooms: p.rooms || null,
             size: p.size || null,
             vibe: p.vibe || null,
+            style_tags: Array.isArray(p.style_tags) ? p.style_tags : [],
             images: (p.images || []).slice(0, 10),
             highlights: p.highlights || [],
             amenities: p.amenities || [],

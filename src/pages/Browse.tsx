@@ -38,7 +38,7 @@ const Browse = () => {
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Live Inventory</p>
           <h1 className="font-serif text-3xl md:text-4xl tracking-tight">Browse rentals</h1>
           <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-xl mx-auto">
-            Vietnam's rentals, auto-curated from the top platforms and verified fresh - find your next home.
+            Auto-curated from Vietnam's top rental platforms, verified fresh, no duplicates, dead listings removed.
           </p>
         </div>
         <BrowseTable />

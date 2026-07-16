@@ -47,6 +47,8 @@ export type BrowseRow = {
   images: string[];
   highlights?: string[];
   amenities?: string[];
+  /** vibe_analysis.styles from the AI analysis - drives the Style match group */
+  style_tags?: string[];
   description?: string | null;
   source: string;
   listed_at: string;
@@ -249,6 +251,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         description: r.description || '',
         highlights: r.highlights || [],
         amenities: r.amenities || [],
+        // Same shape the matches view consumes, so the Style group renders
+        // from the AI analysis tags (vibe string is the scoring fallback).
+        vibe_analysis: (r.style_tags && r.style_tags.length > 0) ? { styles: r.style_tags } : undefined,
         realtor: { id: '', name: '', phone: '', email: '' },
       } as Apartment;
       const score = calculateVibeScore(apartment, savedPreferences);
