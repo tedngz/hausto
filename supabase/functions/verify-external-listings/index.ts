@@ -27,6 +27,10 @@ const NHATOT_DEAD_KEYWORDS = [
   'không tồn tại',
   'tin-dang-het-han',
   'tin đăng đã hết hạn',
+  'tin đã được bán',
+  'tin đã hết hạn',
+  'không tìm thấy tin đăng',
+  'tin đăng này đã bị ẩn',
 ];
 
 const BATDONGSAN_DEAD_KEYWORDS = [
@@ -75,7 +79,7 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Re
   }
 }
 
-async function verifyPlain(url: string, deadKeywords: string[]): Promise<DeadResult> {
+async function verifyPlain(url: string, deadKeywords: string[], expectedCode?: string): Promise<DeadResult> {
   try {
     const res = await fetchWithTimeout(url);
     const finalUrl = res.url.toLowerCase();
@@ -86,9 +90,25 @@ async function verifyPlain(url: string, deadKeywords: string[]): Promise<DeadRes
     }
     if (!res.ok) return { status: 'error', reason: `http_${res.status}` };
 
+    // Removed listings often 200 after silently redirecting to the homepage
+    // or a search page - a redirect that drops the listing path is dead.
+    try {
+      const originalPath = new URL(url).pathname.replace(/\/$/, '');
+      const finalPath = new URL(res.url).pathname.replace(/\/$/, '');
+      const slug = originalPath.split('/').filter(Boolean).pop() || '';
+      if (originalPath && finalPath !== originalPath && slug && !finalPath.includes(slug)) {
+        return { status: 'dead', reason: 'redirect_away' };
+      }
+    } catch { /* URL parse issues: fall through to content checks */ }
+
     const html = (await res.text()).toLowerCase();
     for (const kw of deadKeywords) {
       if (html.includes(kw)) return { status: 'dead', reason: `keyword:${kw}` };
+    }
+    // Strongest signal when we know the listing's property code (housingsgn):
+    // a live listing page always contains its own code.
+    if (expectedCode && !html.includes(expectedCode.toLowerCase())) {
+      return { status: 'dead', reason: 'code_missing' };
     }
     return { status: 'alive' };
   } catch (e) {
@@ -120,14 +140,19 @@ async function verifyViaBrowserless(url: string, deadKeywords: string[]): Promis
   }
 }
 
-async function verifyListing(source: string, url: string): Promise<DeadResult> {
+async function verifyListing(source: string, url: string, externalId?: string): Promise<DeadResult> {
   const kind = detectSource(source, url);
+  // housingsgn property codes look like "CAL0223" - when the external_id is
+  // one, a live page must contain it (guards against soft-404 pages).
+  const code = kind === 'housingsgn' && externalId && /^[a-z]{2,5}\d{2,6}$/i.test(externalId)
+    ? externalId
+    : undefined;
   switch (kind) {
     // Both Nhatot and Batdongsan are Cloudflare-protected — go through Browserless
     case 'nhatot': return await verifyViaBrowserless(url, NHATOT_DEAD_KEYWORDS);
     case 'batdongsan': return await verifyViaBrowserless(url, BATDONGSAN_DEAD_KEYWORDS);
     case 'airbnb': return await verifyPlain(url, AIRBNB_DEAD_KEYWORDS);
-    case 'housingsgn': return await verifyPlain(url, ['404 Not Found', 'không tìm thấy trang']);
+    case 'housingsgn': return await verifyPlain(url, ['404 not found', 'không tìm thấy trang', 'page not found', 'trang không tồn tại'], code);
     default: return { status: 'error', reason: 'unknown_source' };
   }
 }
@@ -174,7 +199,7 @@ Deno.serve(async (req) => {
     // Due = never verified, OR recent listing not checked in 3 days, OR old listing not checked in 7 days.
     const { data: listings, error } = await supabase
       .from('external_properties')
-      .select('id, source, source_url, verification_failures')
+      .select('id, source, source_url, external_id, verification_failures')
       .eq('is_active', true)
       .or(
         `last_verified_at.is.null,` +
@@ -195,7 +220,7 @@ Deno.serve(async (req) => {
 
     const processOne = async (item: any) => {
       summary.checked++;
-      const result = await verifyListing(item.source, item.source_url);
+      const result = await verifyListing(item.source, item.source_url, item.external_id);
       const now = new Date().toISOString();
 
       if (result.status === 'alive') {

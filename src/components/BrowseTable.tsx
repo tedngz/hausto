@@ -661,7 +661,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                               <img
                                 src={info.logo}
                                 alt={info.name}
-                                className="w-4 h-4 rounded-sm object-contain"
+                                className="h-6 max-w-[72px] rounded-sm object-contain"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                               />
                             </a>
@@ -698,27 +698,33 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       {/* In-place property preview: full editorial card with like, no page change */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         <DialogContent className="max-w-md p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:bg-black/50 [&>button]:text-white [&>button]:rounded-full [&>button]:p-1.5 [&>button]:-top-3 [&>button]:right-1 sm:[&>button]:-right-3 [&>button]:opacity-100">
-          {preview && (
-            <div>
-              <EditorialPropertyCard
-                apartment={{
-                  id: preview.id,
-                  images: preview.images || [],
-                  title: preview.title,
-                  location: preview.location,
-                  price: preview.price_vnd || 0,
-                  size: preview.size,
-                  rooms: preview.rooms,
-                  vibe: preview.vibe,
-                  description: preview.description,
-                  highlights: preview.highlights,
-                  last_verified_at: preview.last_verified_at,
-                }}
-                liked={likedIds.has(preview.id)}
-                onLike={() => handleLike(preview)}
-              />
-            </div>
-          )}
+          {preview && (() => {
+            const previewScore = vibeMatchOf(preview);
+            return (
+              <div>
+                <EditorialPropertyCard
+                  apartment={{
+                    id: preview.id,
+                    images: preview.images || [],
+                    title: preview.title,
+                    location: preview.location,
+                    price: preview.price_vnd || 0,
+                    size: preview.size,
+                    rooms: preview.rooms,
+                    vibe: preview.vibe,
+                    description: preview.description,
+                    highlights: preview.highlights,
+                    last_verified_at: preview.last_verified_at,
+                  }}
+                  vibeScore={previewScore?.score}
+                  vibeMatch={previewScore?.attrs}
+                  scoreContext="preferences"
+                  liked={likedIds.has(preview.id)}
+                  onLike={() => handleLike(preview)}
+                />
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

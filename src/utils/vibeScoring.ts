@@ -126,7 +126,13 @@ export const getVibeAttributeMatch = (apartment: Apartment, preferences: UserPre
   const userLower = new Set(prefs.styles.map(v => v.toLowerCase()));
   const seen = new Set<string>();
   const style: VibeAttribute[] = [];
-  for (const raw of toStringArray(vibeAnalysis.styles)) {
+  // vibe_analysis.styles when available (full property payloads); fall back to
+  // the display vibe string ("Modern, Natural_light") for slim payloads like
+  // the browse table, so the Style group is never silently empty.
+  const styleSource = toStringArray(vibeAnalysis.styles).length > 0
+    ? toStringArray(vibeAnalysis.styles)
+    : toStringArray(apartment.vibe).map((s) => s.replace(/_/g, ' '));
+  for (const raw of styleSource) {
     const key = raw.toLowerCase().trim();
     if (!key || seen.has(key)) continue;
     seen.add(key);
