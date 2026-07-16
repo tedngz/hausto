@@ -77,8 +77,9 @@ export const LiveListingsPreview = () => {
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Live Inventory</p>
         <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Fresh, verified, no duplicates</h2>
         <p className="text-muted-foreground mt-3 max-w-xl mx-auto text-sm md:text-base">
-          Every listing is re-checked against its source while it's on the market.
-          Dead listings are removed, duplicate agent posts are merged.
+          Curated automatically from Vietnam's major listing platforms and Hausto's own network,
+          then re-checked against the source while on the market - dead listings removed,
+          duplicate agent posts merged.
         </p>
       </div>
 

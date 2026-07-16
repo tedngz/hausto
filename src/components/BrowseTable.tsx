@@ -21,6 +21,7 @@ import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingS
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
+import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
 import type { Apartment, UserPreferences } from '@/types';
@@ -252,38 +253,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       } as Apartment;
       const score = calculateVibeScore(apartment, savedPreferences);
       const attrs = getVibeAttributeMatch(apartment, savedPreferences);
-
-      const budgetScore = score.breakdown?.price ?? 0;
-      const budgetText = budgetScore >= 80 ? 'Within your budget'
-        : budgetScore >= 50 ? 'Slightly above your budget'
-        : 'Over your budget';
-
-      const locationScore = score.breakdown?.location ?? 0;
-      const locationText = locationScore >= 80 ? 'In your preferred area'
-        : locationScore > 0 ? 'Near your preferred areas'
-        : 'Outside your preferred areas';
-
-      const sizeScore = score.breakdown?.size ?? 70;
-      const sizeText = sizeScore >= 100 ? 'The size you wanted'
-        : sizeScore >= 70 ? 'A bit bigger than you asked for'
-        : sizeScore >= 40 ? 'Smaller than you asked for'
-        : 'Not the size you wanted';
-
-      return {
-        overall: score.overall,
-        rating: getVibeRatingLabel(score.overall),
-        missingMustHave: score.missingMustHave,
-        // All the property's qualities, with matched-to-preferences flags.
-        // Lifestyle chips use the quiz's own words (Working, Cooking, ...) -
-        // matched when the property has the related soft features.
-        qualities: [...attrs.style, ...attrs.lifestyle, ...attrs.features],
-        budgetText,
-        budgetOk: budgetScore >= 80,
-        locationText,
-        locationOk: locationScore >= 80,
-        sizeText,
-        sizeOk: sizeScore >= 100,
-      };
+      return { score, attrs, rating: getVibeRatingLabel(score.overall) };
     } catch {
       return null;
     }
@@ -616,6 +586,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   <SortHeader label="Size" k="size" className="hidden sm:table-cell" />
                   <SortHeader label="Price" k="price_usd" />
                   <SortHeader label="Verified" k="last_verified_at" />
+                  <TableHead className="hidden sm:table-cell">Source</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -671,6 +642,31 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                           {fresh !== null && fresh <= 7 && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
                           {verifiedLabel(r.last_verified_at)}
                         </span>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell" onClick={(e) => e.stopPropagation()}>
+                        {(() => {
+                          const isHausto = r.source === 'hausto';
+                          const info = isHausto
+                            ? { name: 'Hausto', logo: '/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png' }
+                            : getPropertySourceLogo(r.source_url || r.source);
+                          const href = isHausto ? `/property/${r.id}` : (r.source_url || '#');
+                          return (
+                            <a
+                              href={href}
+                              target={isHausto ? undefined : '_blank'}
+                              rel={isHausto ? undefined : 'noopener noreferrer'}
+                              title={info.name}
+                              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              <img
+                                src={info.logo}
+                                alt={info.name}
+                                className="w-4 h-4 rounded-sm object-contain"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            </a>
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                   );
@@ -762,39 +758,74 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     </p>
 
     {score && (
-                      <div>
-                        {/* Same rating vocabulary as the property card chip */}
-                        <span className="inline-flex items-center gap-1.5 w-fit rounded-full bg-secondary px-2.5 py-1">
-                          <span className={`w-2 h-2 rounded-full ${RATING_DOT[score.rating] || 'bg-gray-300'}`} />
-                          <span className="font-mono text-[10px] tracking-[0.14em] uppercase">{score.rating} match</span>
-                          <span className="text-[11px] font-medium text-muted-foreground">· {score.overall}%</span>
-                        </span>
-                        {/* Every quality this home has; the ones matching the
-                            renter's preferences are highlighted */}
-                        {score.qualities.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {score.qualities.map((q, qi) => (
-                              <span
-                                key={`${q.label}-${qi}`}
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] capitalize border ${
-                                  q.matched
-                                    ? 'bg-primary/10 border-primary/40 text-primary font-medium'
-                                    : 'bg-transparent border-border text-muted-foreground'
-                                }`}
-                              >
-                                {q.matched && <Check className="w-2.5 h-2.5" />}
-                                {q.label}
-                              </span>
-                            ))}
+                      /* Same chip + popover pattern as the listing card */
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            aria-label="View match scoring details"
+                            className="inline-flex items-center gap-1.5 w-fit rounded-full bg-secondary px-2.5 py-1 hover:bg-secondary/70 transition-colors"
+                          >
+                            <span className={`w-2 h-2 rounded-full ${RATING_DOT[score.rating] || 'bg-gray-300'}`} />
+                            <span className="font-mono text-[10px] tracking-[0.14em] uppercase">{score.rating} match</span>
+                            <span className="text-[11px] font-medium text-muted-foreground">· {score.score.overall}%</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-4" align="start">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-semibold text-foreground">Vibe match</span>
+                            <span className="text-xs font-mono text-muted-foreground">{score.score.overall}%</span>
                           </div>
-                        )}
-                        <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug">
-                          <li className={score.budgetOk ? 'text-emerald-600' : 'text-amber-600'}>{score.budgetText}</li>
-                          <li className={score.sizeOk ? 'text-emerald-600' : 'text-muted-foreground'}>{score.sizeText}</li>
-                          <li className={score.locationOk ? 'text-emerald-600' : 'text-muted-foreground'}>{score.locationText}</li>
-                          {score.missingMustHave && <li className="text-destructive">Missing a must-have feature</li>}
-                        </ul>
-                      </div>
+                          <p className="text-xs text-muted-foreground mb-3">How this home aligns with your preferences.</p>
+                          <div className="space-y-2.5">
+                            {([['style', 'Style'], ['lifestyle', 'Lifestyle'], ['features', 'Features']] as const).map(([key, label]) => {
+                              const items = score.attrs[key];
+                              if (!items || items.length === 0) return null;
+                              return (
+                                <div key={key}>
+                                  <p className="text-[11px] font-medium text-muted-foreground mb-1">{label}</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {items.map((a, j) => (
+                                      <span
+                                        key={j}
+                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] capitalize border ${
+                                          a.matched
+                                            ? 'bg-primary/10 border-primary/40 text-primary font-medium'
+                                            : 'bg-transparent border-border text-muted-foreground'
+                                        }`}
+                                      >
+                                        {a.matched && <Check className="w-2.5 h-2.5" />}
+                                        {a.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {(() => {
+                              const fits = ([
+                                ['Budget', score.score.breakdown?.price],
+                                ['Size', score.score.breakdown?.size],
+                                ['Location', score.score.breakdown?.location],
+                              ] as [string, number | undefined][])
+                                .map(([label, v]) => typeof v === 'number'
+                                  ? { label, ok: v >= 60, fit: v >= 100 ? 'Perfect' : v >= 60 ? 'Close' : 'Off' }
+                                  : null)
+                                .filter(Boolean) as { label: string; ok: boolean; fit: string }[];
+                              if (fits.length === 0) return null;
+                              return (
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 mt-1 border-t border-border">
+                                  {fits.map((f) => (
+                                    <span key={f.label} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                      {f.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
+                                      {f.label} · {f.fit}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     )}
 
                     <dl className="text-xs space-y-1 mt-1">
