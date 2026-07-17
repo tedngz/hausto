@@ -26,7 +26,30 @@ type Listing = {
   size: string | null;
   last_verified_at: string | null;
   crawled_at: string | null;
+  image_hashes: string[] | null;
 };
+
+// Two image dHashes match when their Hamming distance is small (survives
+// recompression and resizing of the same source photo).
+const HAMMING_MAX = 6;
+const IMAGE_MATCHES_REQUIRED = 2; // shared photos needed to call it the same unit
+
+function hammingHex(a: string, b: string): number {
+  let x = BigInt('0x' + a) ^ BigInt('0x' + b);
+  let count = 0;
+  while (x) { count += Number(x & 1n); x >>= 1n; }
+  return count;
+}
+
+function imageOverlap(a: Listing, b: Listing): number {
+  const ha = a.image_hashes || [], hb = b.image_hashes || [];
+  if (ha.length === 0 || hb.length === 0) return 0;
+  let matches = 0;
+  for (const x of ha) {
+    if (hb.some((y) => hammingHex(x, y) <= HAMMING_MAX)) matches++;
+  }
+  return matches;
+}
 
 const stripDiacritics = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
@@ -74,7 +97,7 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
-  const summary = { listings: 0, buckets: 0, groups: 0, grouped_listings: 0 };
+  const summary = { listings: 0, buckets: 0, groups: 0, grouped_listings: 0, image_merges: 0, image_conflicts: 0 };
 
   try {
     // Pull all active listings (paged; table is well under 10k rows)
@@ -82,7 +105,7 @@ Deno.serve(async (req) => {
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, location, city, rooms, price, size, last_verified_at, crawled_at')
+        .select('id, title, location, city, rooms, price, size, last_verified_at, crawled_at, image_hashes')
         .eq('is_active', true)
         .range(from, from + 999);
       if (error) throw error;
@@ -103,34 +126,67 @@ Deno.serve(async (req) => {
     }
     summary.buckets = buckets.size;
 
-    // Union-find within each bucket
-    const groupOf = new Map<string, string[]>(); // representative listing id -> member ids
+    // Global union-find: edges come from (a) the text heuristics within each
+    // project bucket and (b) shared image fingerprints across ALL listings.
+    const indexOf = new Map<string, number>(all.map((l, i) => [l.id, i]));
+    const parent = all.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const union = (i: number, j: number) => { parent[find(i)] = find(j); };
+
     for (const [, items] of buckets) {
       if (items.length < 2) continue;
       const sizes = items.map((l) => parseSizeSqm(l.size));
-      const parent = items.map((_, i) => i);
-      const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
       for (let i = 0; i < items.length; i++) {
         for (let j = i + 1; j < items.length; j++) {
           if (sameUnit(items[i], items[j], sizes[i], sizes[j])) {
-            parent[find(i)] = find(j);
+            union(indexOf.get(items[i].id)!, indexOf.get(items[j].id)!);
           }
         }
       }
-      const clusters = new Map<number, number[]>();
-      for (let i = 0; i < items.length; i++) {
-        const root = find(i);
-        (clusters.get(root) || clusters.set(root, []).get(root)!).push(i);
+    }
+
+    // Image-fingerprint pass: agents repost the landlord's photo set, so
+    // shared photos identify the same unit regardless of listing text.
+    // Policy: same photos but materially different claimed location (or
+    // different room count) is bait or stolen photos - flag both listings
+    // for ops review, never merge them.
+    const conflictIds = new Set<string>();
+    for (let i = 0; i < all.length; i++) {
+      const a = all[i];
+      if (!a.image_hashes || a.image_hashes.length === 0) continue;
+      for (let j = i + 1; j < all.length; j++) {
+        const b = all[j];
+        if (!b.image_hashes || b.image_hashes.length === 0) continue;
+        const needed = Math.min(IMAGE_MATCHES_REQUIRED, a.image_hashes.length, b.image_hashes.length);
+        if (imageOverlap(a, b) < needed) continue;
+        const sameCity = (a.city || '') === (b.city || '');
+        const sameProject = projectKey(a.location) === projectKey(b.location);
+        const sameRooms = normalizeRooms(a.rooms) === normalizeRooms(b.rooms);
+        if (sameCity && sameProject && sameRooms) {
+          union(i, j);
+          summary.image_merges++;
+        } else {
+          conflictIds.add(a.id);
+          conflictIds.add(b.id);
+        }
       }
-      for (const idxs of clusters.values()) {
-        if (idxs.length < 2) continue;
-        // Representative: most recently verified, then most recently crawled
-        const members = idxs.map((i) => items[i]);
-        members.sort((a, b) =>
-          (b.last_verified_at || '').localeCompare(a.last_verified_at || '') ||
-          (b.crawled_at || '').localeCompare(a.crawled_at || ''));
-        groupOf.set(members[0].id, members.map((m) => m.id));
-      }
+    }
+    summary.image_conflicts = conflictIds.size;
+
+    const groupOf = new Map<string, string[]>(); // representative listing id -> member ids
+    const clusters = new Map<number, number[]>();
+    for (let i = 0; i < all.length; i++) {
+      const root = find(i);
+      (clusters.get(root) || clusters.set(root, []).get(root)!).push(i);
+    }
+    for (const idxs of clusters.values()) {
+      if (idxs.length < 2) continue;
+      // Representative: most recently verified, then most recently crawled
+      const members = idxs.map((i) => all[i]);
+      members.sort((a, b) =>
+        (b.last_verified_at || '').localeCompare(a.last_verified_at || '') ||
+        (b.crawled_at || '').localeCompare(a.crawled_at || ''));
+      groupOf.set(members[0].id, members.map((m) => m.id));
     }
 
     // Rebuild groups: clear stale assignments, then write current ones
@@ -139,6 +195,15 @@ Deno.serve(async (req) => {
       .update({ canonical_group_id: null })
       .not('canonical_group_id', 'is', null);
     if (clearErr) throw clearErr;
+    // Conflict flags are recomputed each run
+    await supabase.from('external_properties')
+      .update({ image_location_conflict: false })
+      .eq('image_location_conflict', true);
+    if (conflictIds.size > 0) {
+      await supabase.from('external_properties')
+        .update({ image_location_conflict: true })
+        .in('id', Array.from(conflictIds));
+    }
     // listing_groups is rebuilt from scratch each run
     await supabase.from('listing_groups').delete().not('id', 'is', null);
 

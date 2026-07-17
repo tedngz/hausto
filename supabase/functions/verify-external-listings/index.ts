@@ -183,6 +183,28 @@ async function verifyViaBrowserless(url: string, deadKeywords: string[]): Promis
   }
 }
 
+// nhatot is chotot: the official public gateway gives a definitive answer
+// ("entity not found" once an ad is delisted), far more reliable than
+// scraping the SPA shell, which renders enough content to look alive.
+async function verifyViaChototApi(url: string): Promise<DeadResult> {
+  const idMatch = url.match(/(\d{6,})(?:\.htm)?(?:[?#].*)?$/);
+  if (!idMatch) return { status: 'error', reason: 'no_list_id' };
+  try {
+    const res = await fetchWithTimeout(`https://gateway.chotot.com/v1/public/ad-listing/${idMatch[1]}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (res.status === 404) return { status: 'dead', reason: 'gateway_not_found' };
+    if (!res.ok) return { status: 'error', reason: `gateway_${res.status}` };
+    const data = await res.json().catch(() => null);
+    if (data?.ad && typeof data.ad === 'object') return { status: 'alive' };
+    const msg = String(data?.message || '').toLowerCase();
+    if (msg.includes('not found')) return { status: 'dead', reason: 'gateway_not_found' };
+    return { status: 'error', reason: 'gateway_unrecognized' };
+  } catch (e) {
+    return { status: 'error', reason: (e as Error).message };
+  }
+}
+
 async function verifyListing(source: string, url: string, externalId?: string): Promise<DeadResult> {
   const kind = detectSource(source, url);
   // housingsgn property codes look like "CAL0223" - when the external_id is
@@ -191,8 +213,14 @@ async function verifyListing(source: string, url: string, externalId?: string): 
     ? externalId
     : undefined;
   switch (kind) {
-    // Both Nhatot and Batdongsan are Cloudflare-protected — go through Browserless
-    case 'nhatot': return await verifyViaBrowserless(url, NHATOT_DEAD_KEYWORDS);
+    case 'nhatot': {
+      // Gateway API first (definitive); Browserless only as a fallback when
+      // the gateway itself errors.
+      const viaApi = await verifyViaChototApi(url);
+      if (viaApi.status !== 'error') return viaApi;
+      return await verifyViaBrowserless(url, NHATOT_DEAD_KEYWORDS);
+    }
+    // Batdongsan is Cloudflare-protected — go through Browserless
     case 'batdongsan': return await verifyViaBrowserless(url, BATDONGSAN_DEAD_KEYWORDS);
     case 'airbnb': return await verifyPlain(url, AIRBNB_DEAD_KEYWORDS);
     case 'housingsgn': return await verifyPlain(url, ['404 not found', 'không tìm thấy trang', 'page not found', 'trang không tồn tại'], code);

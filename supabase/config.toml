@@ -94,3 +94,6 @@ verify_jwt = false
 
 [functions.compare-listings-ai]
 verify_jwt = false
+
+[functions.hash-listing-images]
+verify_jwt = false
