@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject } from "@/data/hcmcApartmentProjects";
 import { RealtorApplicationsPanel } from "@/components/admin/RealtorApplicationsPanel";
 import { FastTrackQueuePanel } from "@/components/admin/FastTrackQueuePanel";
+import { ImageConflictsPanel } from "@/components/admin/ImageConflictsPanel";
 
 function getTimeAgo(timestamp: string): string {
   const diff = Date.now() - new Date(timestamp).getTime();
@@ -964,6 +965,8 @@ const AdminTools = () => {
 
 
       <FastTrackQueuePanel />
+
+      <ImageConflictsPanel />
 
       <RealtorApplicationsPanel />
 

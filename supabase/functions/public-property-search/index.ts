@@ -146,7 +146,7 @@ serve(async (req) => {
     if (source !== 'internal') {
       let externalQuery = supabase
         .from('external_properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, style_tags:vibe_analysis->styles')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles')
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });
@@ -197,12 +197,15 @@ serve(async (req) => {
           }
         }
         const seenGroups = new Set<string>();
+        // Suspected bait (same photos, conflicting location) quietly sinks to
+        // the end of results rather than being exposed or hidden outright.
+        const flaggedResults: any[] = [];
         for (const p of externalProps) {
           if (p.canonical_group_id) {
             if (seenGroups.has(p.canonical_group_id)) continue;
             seenGroups.add(p.canonical_group_id);
           }
-          results.push({
+          (p.image_location_conflict ? flaggedResults : results).push({
             id: p.id,
             title: p.title,
             url: `${BASE_URL}/property/${p.id}`,
@@ -226,6 +229,7 @@ serve(async (req) => {
             posting_count: p.canonical_group_id ? (groupCounts.get(p.canonical_group_id) || 1) : 1,
           });
         }
+        results.push(...flaggedResults);
       }
     }
 
