@@ -661,14 +661,15 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                               target={isHausto ? undefined : '_blank'}
                               rel={isHausto ? undefined : 'noopener noreferrer'}
                               title={info.name}
-                              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                             >
                               <img
                                 src={info.logo}
                                 alt={info.name}
-                                className="h-6 max-w-[72px] rounded-sm object-contain"
+                                className="h-6 w-auto max-w-[80px] rounded-sm object-contain flex-shrink-0"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                               />
+                              {isHausto && <span className="font-semibold text-foreground">Hausto</span>}
                             </a>
                           );
                         })()}
@@ -781,24 +782,29 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                             <span className="text-[11px] font-medium text-muted-foreground">· {score.score.overall}%</span>
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-72 p-4" align="start">
+                        <PopoverContent
+                          className="w-52 max-h-64 overflow-y-auto p-3"
+                          align="start"
+                          side="bottom"
+                          sideOffset={4}
+                          avoidCollisions
+                        >
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-semibold text-foreground">Vibe match</span>
-                            <span className="text-xs font-mono text-muted-foreground">{score.score.overall}%</span>
+                            <span className="text-xs font-semibold text-foreground">Vibe match</span>
+                            <span className="text-[11px] font-mono text-muted-foreground">{score.score.overall}%</span>
                           </div>
-                          <p className="text-xs text-muted-foreground mb-3">How this home aligns with your preferences.</p>
-                          <div className="space-y-2.5">
+                          <div className="space-y-2">
                             {([['style', 'Style'], ['lifestyle', 'Lifestyle'], ['features', 'Features']] as const).map(([key, label]) => {
                               const items = score.attrs[key];
                               if (!items || items.length === 0) return null;
                               return (
                                 <div key={key}>
-                                  <p className="text-[11px] font-medium text-muted-foreground mb-1">{label}</p>
-                                  <div className="flex flex-wrap gap-1.5">
+                                  <p className="text-[10px] font-medium text-muted-foreground mb-1">{label}</p>
+                                  <div className="flex flex-wrap gap-1">
                                     {items.map((a, j) => (
                                       <span
                                         key={j}
-                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] capitalize border ${
+                                        className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] capitalize border ${
                                           a.matched
                                             ? 'bg-primary/10 border-primary/40 text-primary font-medium'
                                             : 'bg-transparent border-border text-muted-foreground'
@@ -824,9 +830,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                                 .filter(Boolean) as { label: string; ok: boolean; fit: string }[];
                               if (fits.length === 0) return null;
                               return (
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 mt-1 border-t border-border">
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 mt-1 border-t border-border">
                                   {fits.map((f) => (
-                                    <span key={f.label} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                    <span key={f.label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                       {f.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
                                       {f.label} · {f.fit}
                                     </span>
