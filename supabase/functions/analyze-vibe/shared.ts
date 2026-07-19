@@ -150,6 +150,12 @@ async function callOpenAIWithBackoff(
       const txt = await resp.text().catch(() => '');
       const reason = `http_${resp.status}`;
       console.warn(`[analyze-vibe] image ${imageIndex} attempt ${attempt + 1} failed ${reason}: ${txt.substring(0, 200)}`);
+      // Billing quota exhaustion is not transient - retrying just burns
+      // worker CPU (it took down scheduled-crawl runs). Fail immediately;
+      // vibe_status stays pending and the queue retries after a top-up.
+      if (txt.includes('insufficient_quota') || txt.includes('exceeded your current quota')) {
+        return { ok: false, reason: 'openai_quota_exhausted' };
+      }
       if (attempt === delays.length) return { ok: false, reason };
       const jitter = 0.8 + Math.random() * 0.4;
       await new Promise(r => setTimeout(r, Math.round(delays[attempt] * jitter)));
@@ -195,6 +201,14 @@ export async function analyzeImagesQualityFirst(args: AnalyzeArgs): Promise<Anal
     const result = await callOpenAIWithBackoff(body, openaiKey, i);
     if (!result.ok) {
       failures.push({ image_index: i, reason: result.reason });
+      // Account-level quota exhaustion affects every image - stop wasting
+      // fetch/encode work on the rest of the batch.
+      if (result.reason === 'openai_quota_exhausted') {
+        for (let j = i + 1; j < imageUrls.length; j++) {
+          failures.push({ image_index: j, reason: 'openai_quota_exhausted' });
+        }
+        break;
+      }
       continue;
     }
 
