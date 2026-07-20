@@ -139,7 +139,7 @@ const AdminTools = () => {
         body: { action: 'get-config' },
       });
       if (error) throw error;
-      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number; minPriceVnd?: number; configStorageError?: string } | null;
+      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number; minPriceVnd?: number; enabledMarketplaces?: string[]; configStorageError?: string } | null;
     },
     refetchInterval: 10000,
   });
@@ -182,12 +182,15 @@ const AdminTools = () => {
   const [localFrequency, setLocalFrequency] = useState<number | null>(null);
   const [localMaxListings, setLocalMaxListings] = useState<number | null>(null);
   const [localMinPrice, setLocalMinPrice] = useState<number | null>(null);
+  const [localMarketplaces, setLocalMarketplaces] = useState<string[] | null>(null);
   const [localPausedOverride, setLocalPausedOverride] = useState<boolean | null>(null);
 
   // Sync local state when config loads
   const effectiveFrequency = localFrequency ?? crawlConfig?.frequencyMinutes ?? 240;
   const effectiveMaxListings = localMaxListings ?? crawlConfig?.maxListingsPerRun ?? 10;
   const effectiveMinPrice = localMinPrice ?? crawlConfig?.minPriceVnd ?? 5_000_000;
+  const ALL_MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'];
+  const effectiveMarketplaces = localMarketplaces ?? crawlConfig?.enabledMarketplaces ?? ALL_MARKETPLACES;
   const isPaused = localPausedOverride ?? crawlConfig?.paused ?? false;
   const crawlConfigStorageError = crawlConfig?.configStorageError;
 
@@ -221,6 +224,7 @@ const AdminTools = () => {
           frequencyMinutes: effectiveFrequency,
           maxListingsPerRun: effectiveMaxListings,
           minPriceVnd: effectiveMinPrice,
+          enabledMarketplaces: effectiveMarketplaces,
         },
       });
       if (error) throw error;
@@ -228,17 +232,19 @@ const AdminTools = () => {
       setLocalFrequency(null);
       setLocalMaxListings(null);
       setLocalMinPrice(null);
+      setLocalMarketplaces(null);
       refetchConfig();
     } catch (err: any) {
       toast.error('Failed to save settings', { description: err.message });
     } finally {
       setIsSavingConfig(false);
     }
-  }, [effectiveFrequency, effectiveMaxListings, effectiveMinPrice, refetchConfig]);
+  }, [effectiveFrequency, effectiveMaxListings, effectiveMinPrice, effectiveMarketplaces, refetchConfig]);
 
   const hasUnsavedChanges = (localFrequency !== null && localFrequency !== crawlConfig?.frequencyMinutes) ||
     (localMaxListings !== null && localMaxListings !== crawlConfig?.maxListingsPerRun) ||
-    (localMinPrice !== null && localMinPrice !== (crawlConfig?.minPriceVnd ?? 5_000_000));
+    (localMinPrice !== null && localMinPrice !== (crawlConfig?.minPriceVnd ?? 5_000_000)) ||
+    (localMarketplaces !== null && JSON.stringify([...localMarketplaces].sort()) !== JSON.stringify([...(crawlConfig?.enabledMarketplaces ?? ALL_MARKETPLACES)].sort()));
 
   const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
     queryKey: ['crawl-activity'],
@@ -1886,6 +1892,40 @@ const AdminTools = () => {
                   Listings below this rent are skipped - keeps inventory mid-range for our target renters
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Source platforms</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {ALL_MARKETPLACES.map((mp) => {
+                    const active = effectiveMarketplaces.includes(mp);
+                    return (
+                      <button
+                        key={mp}
+                        type="button"
+                        onClick={() => {
+                          const next = active
+                            ? effectiveMarketplaces.filter((m) => m !== mp)
+                            : [...effectiveMarketplaces, mp];
+                          if (next.length === 0) {
+                            toast.error('Keep at least one platform enabled');
+                            return;
+                          }
+                          setLocalMarketplaces(next);
+                        }}
+                        className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
+                          active
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-background border-border text-muted-foreground hover:border-primary/50'
+                        }`}
+                      >
+                        {mp}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The rotation only crawls the selected platforms
+                </p>
+              </div>
             </div>
             {hasUnsavedChanges && (
               <div className="flex justify-end pt-1">
@@ -1913,7 +1953,7 @@ const AdminTools = () => {
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
               <p className="text-xs text-muted-foreground">Marketplaces</p>
-              <p className="text-sm font-bold">batdongsan + nhatot</p>
+              <p className="text-sm font-bold">{effectiveMarketplaces.join(' + ') || 'none'}</p>
             </div>
             <div className="p-3 bg-muted rounded-lg text-center">
               <p className="text-xs text-muted-foreground">Cooldown</p>

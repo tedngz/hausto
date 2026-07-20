@@ -142,6 +142,8 @@ interface CrawlConfig {
   maxListingsPerRun: number;
   /** Floor in VND: sub-mid-range listings don't fit the target renter or carry Fast-Track margin */
   minPriceVnd: number;
+  /** Which source platforms the rotation crawls; subset of MARKETPLACES */
+  enabledMarketplaces: string[];
   configStorageError?: string;
 }
 
@@ -150,6 +152,7 @@ const DEFAULT_CONFIG: CrawlConfig = {
   frequencyMinutes: 2880,
   maxListingsPerRun: 5,
   minPriceVnd: 5_000_000,
+  enabledMarketplaces: ['batdongsan', 'nhatot', 'housingsgn'],
 };
 
 // Redis helpers
@@ -602,7 +605,13 @@ Deno.serve(async (req) => {
         frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(4320, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
         maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(10, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
         minPriceVnd: body.minPriceVnd !== undefined ? Math.max(0, Math.min(50_000_000, Number(body.minPriceVnd) || 0)) : (currentConfig.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd),
+        enabledMarketplaces: Array.isArray(body.enabledMarketplaces)
+          ? body.enabledMarketplaces.filter((m: string) => (MARKETPLACES as readonly string[]).includes(m))
+          : (currentConfig.enabledMarketplaces ?? DEFAULT_CONFIG.enabledMarketplaces),
       };
+      if (newConfig.enabledMarketplaces.length === 0) {
+        newConfig.enabledMarketplaces = DEFAULT_CONFIG.enabledMarketplaces;
+      }
       const saved = await redisSet(CONFIG_KEY, newConfig);
       if (!saved) {
         return new Response(JSON.stringify({ success: false, error: 'Crawl config storage is unavailable', config: currentConfig, storageError: lastRedisError }), {
@@ -988,9 +997,12 @@ Deno.serve(async (req) => {
     let oldestCrawlTime = Infinity;
 
     // Check all location+marketplace combos in parallel batches
+    const enabledMps = (config.enabledMarketplaces ?? DEFAULT_CONFIG.enabledMarketplaces)
+      .filter((m) => (MARKETPLACES as readonly string[]).includes(m));
+    const rotationMps = enabledMps.length > 0 ? enabledMps : [...MARKETPLACES];
     const checks: Promise<{ loc: typeof CRAWL_LOCATIONS[0]; mp: string; lastCrawl: number | null }>[] = [];
     for (const loc of CRAWL_LOCATIONS) {
-      for (const mp of MARKETPLACES) {
+      for (const mp of rotationMps) {
         checks.push(
           getLastCrawlTime(loc.location, mp).then(lastCrawl => ({ loc, mp, lastCrawl }))
         );
