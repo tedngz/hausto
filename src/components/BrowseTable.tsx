@@ -652,7 +652,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                         {(() => {
                           const isHausto = r.source === 'hausto';
                           const info = isHausto
-                            ? { name: 'Hausto', logo: '/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png' }
+                            ? { name: 'Hausto', logo: '/logos/hausto-wordmark.svg' }
                             : getPropertySourceLogo(r.source_url || r.source);
                           const href = isHausto ? `/property/${r.id}` : (r.source_url || '#');
                           return (
@@ -669,7 +669,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                                 className="h-6 w-auto max-w-[80px] rounded-sm object-contain flex-shrink-0"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                               />
-                              {isHausto && <span className="font-semibold text-foreground">Hausto</span>}
                             </a>
                           );
                         })()}

@@ -32,14 +32,16 @@ function sanitizeVibeAnalysis(va: Record<string, unknown>): Record<string, unkno
 }
 
 // ─── Direct Save Helpers (for scheduled crawl mode) ─────────────
-const MIN_PRICE_VND = 2_000_000;
+// Mid-range floor: sub-5M VND rooms/dorms aren't the target inventory and
+// don't carry Fast-Track margin. Overridable per crawl via body.minPrice.
+const MIN_PRICE_VND = 5_000_000;
 const MAX_PRICE_VND = 200_000_000;
 
-function isSuspiciousListing(property: any): { suspicious: boolean; reason?: string } {
+function isSuspiciousListing(property: any, minPrice: number = MIN_PRICE_VND): { suspicious: boolean; reason?: string } {
   if (!property.title || property.title.length < 5) {
     return { suspicious: true, reason: 'Title too short or missing' };
   }
-  if (property.price && property.price > 0 && property.price < MIN_PRICE_VND) {
+  if (property.price && property.price > 0 && property.price < minPrice) {
     return { suspicious: true, reason: `Price too low: ${property.price} VND` };
   }
   if (property.price && property.price > MAX_PRICE_VND) {
@@ -160,6 +162,8 @@ function isValidPropertyImageUrl(url: string): boolean {
   if (lower.includes('/video/') || lower.includes('/videos/')) return false;
   // Reject logos, icons, avatars, sprites, placeholders
   if (/\b(logo|icon|avatar|sprite|placeholder|banner|ads?|advert|tracking|pixel|badge|button)\b/i.test(lower)) return false;
+  // Reject user/profile photo CDNs (chotot user avatars live under /uac2/)
+  if (/\/(uac\d*|users?|profiles?|members?|agents?)\//i.test(lower)) return false;
   // Reject social media / sharing images
   if (/\b(facebook|twitter|zalo|share|social|og-image)\b/i.test(lower)) return false;
   // Reject very small images (likely icons/thumbnails)
@@ -238,7 +242,10 @@ If ALL images show only exteriors, building facades, neighborhood/street views, 
 Reject (set is_quality_acceptable=false) if the apartment appears UNFINISHED (raw concrete, exposed wires), severely DIRTY/DAMAGED, or UNINHABITABLE in the majority of interior shots. One slightly dim photo is fine.
 
 **CONSISTENCY:**
-Set is_consistent=false ONLY if 3+ images clearly show DIFFERENT apartments.
+Set is_consistent=false ONLY if 3+ images clearly show DIFFERENT apartments (completely different style, finish level, or room layout that cannot belong to one unit).
+
+**AUTHENTICITY:**
+Set is_authentic=false if the images are AI-generated, 3D renders, or stock/marketing photos rather than real photographs of the actual unit (telltales: impossible geometry, uncanny textures, watermark-free showroom perfection across every shot, developer render lighting).
 
 **SELECTION:**
 From the qualifying INTERIOR images only, select up to 5 best representative shots (rooms, kitchen, bathroom, living area, interior balcony view). Exclude:
@@ -251,7 +258,7 @@ From the qualifying INTERIOR images only, select up to 5 best representative sho
 - Near-duplicate angles
 
 Return ONLY valid JSON, indexes 0-based matching shown order:
-{"has_interior": true, "is_consistent": true, "is_quality_acceptable": true, "reason": "brief explanation", "selected": [0,2,3]}`;
+{"has_interior": true, "is_consistent": true, "is_quality_acceptable": true, "is_authentic": true, "reason": "brief explanation", "selected": [0,2,3]}`;
 
   const content = await callAI([{
     role: 'user',
@@ -277,6 +284,9 @@ Return ONLY valid JSON, indexes 0-based matching shown order:
     }
     if (!isQualityAcceptable) {
       return { has_interior: false, selected: [], reason: reason || 'poor_quality_unfinished_or_dirty' };
+    }
+    if (parsed.is_authentic === false) {
+      return { has_interior: false, selected: [], reason: reason || 'ai_render_or_stock_images' };
     }
 
     let selected: string[] = [];
@@ -468,6 +478,7 @@ async function savePropertiesToDB(
   marketplace: string,
   fallbackLocation: string,
   rawMode: boolean = false,
+  minPrice: number = MIN_PRICE_VND,
 ): Promise<{ newListings: number; updatedListings: number; duplicatesSkipped: number; filtered: number }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   let newListings = 0, updatedListings = 0, duplicatesSkipped = 0, filtered = 0;
@@ -483,7 +494,7 @@ async function savePropertiesToDB(
       }
 
       // In raw mode, only filter clearly non-residential or for-sale listings — title/price/images checks relaxed
-      const check = isSuspiciousListing(property);
+      const check = isSuspiciousListing(property, minPrice);
       const skipForSuspicion = rawMode
         ? !!check.suspicious && !!check.reason && (check.reason.startsWith('Sale keyword') || check.reason.startsWith('Non-residential'))
         : check.suspicious;
@@ -1845,7 +1856,7 @@ Deno.serve(async (req) => {
     // Direct save mode: save properties to DB immediately (used by scheduled-crawl)
     if (directSave && isServiceRole) {
       console.log(`[scrape-marketplace] DirectSave mode (rawMode=${rawMode}): saving ${filteredProperties.length} properties to DB`);
-      const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '', rawMode);
+      const saveResult = await savePropertiesToDB(filteredProperties, marketplace, crawlLocation || location || '', rawMode, Number(minPrice) || MIN_PRICE_VND);
       console.log(`[scrape-marketplace] DirectSave result:`, JSON.stringify(saveResult));
 
       // Trigger phone extraction for newly saved properties missing phone numbers

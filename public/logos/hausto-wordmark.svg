@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 415 100" role="img" aria-label="hausto">
+  <!-- House icon: orange rounded house with white bar -->
+  <path d="M14 38 L52 12 Q58 8 66 10 L86 16 Q96 19 96 30 L96 78 Q96 92 82 92 L24 92 Q10 92 10 78 L10 46 Q10 41 14 38 Z" fill="#F97316"/>
+  <rect x="22" y="70" width="62" height="11" rx="5.5" fill="#ffffff"/>
+  <!-- Wordmark -->
+  <text x="112" y="88" font-family="'Nunito','Quicksand','Segoe UI',system-ui,-apple-system,sans-serif" font-size="96" font-weight="700" letter-spacing="-3" fill="#111111">hausto</text>
+</svg>

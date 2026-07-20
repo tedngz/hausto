@@ -140,6 +140,8 @@ interface CrawlConfig {
   paused: boolean;
   frequencyMinutes: number;
   maxListingsPerRun: number;
+  /** Floor in VND: sub-mid-range listings don't fit the target renter or carry Fast-Track margin */
+  minPriceVnd: number;
   configStorageError?: string;
 }
 
@@ -147,6 +149,7 @@ const DEFAULT_CONFIG: CrawlConfig = {
   paused: false,
   frequencyMinutes: 2880,
   maxListingsPerRun: 5,
+  minPriceVnd: 5_000_000,
 };
 
 // Redis helpers
@@ -263,7 +266,7 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
 
 const MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'] as const;
 
-const MIN_PRICE_VND = 2_000_000;
+const MIN_PRICE_VND = 5_000_000;
 const MAX_PRICE_VND = 200_000_000;
 
 function isSuspiciousListing(property: any): { suspicious: boolean; reason?: string } {
@@ -568,11 +571,37 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === 'set-config') {
+      // Config writes are privileged: service role or an admin-role user only.
+      // (The function is verify_jwt=false for cron/QStash, which previously
+      // left this endpoint writable by anyone.)
+      const authToken = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      if (authToken !== SUPABASE_SERVICE_ROLE_KEY) {
+        const authed = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { data: userData } = await authed.auth.getUser(authToken);
+        const userId = userData?.user?.id;
+        let isAdmin = false;
+        if (userId) {
+          const { data: role } = await authed
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userId)
+            .eq('role', 'admin')
+            .maybeSingle();
+          isAdmin = !!role;
+        }
+        if (!isAdmin) {
+          console.warn('[scheduled-crawl] Unauthorized set-config attempt');
+          return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+            status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
       const currentConfig = await getConfig();
       const newConfig: CrawlConfig = {
         paused: body.paused !== undefined ? body.paused : currentConfig.paused,
         frequencyMinutes: body.frequencyMinutes !== undefined ? Math.max(30, Math.min(4320, body.frequencyMinutes)) : currentConfig.frequencyMinutes,
         maxListingsPerRun: body.maxListingsPerRun !== undefined ? Math.max(1, Math.min(10, body.maxListingsPerRun)) : currentConfig.maxListingsPerRun,
+        minPriceVnd: body.minPriceVnd !== undefined ? Math.max(0, Math.min(50_000_000, Number(body.minPriceVnd) || 0)) : (currentConfig.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd),
       };
       const saved = await redisSet(CONFIG_KEY, newConfig);
       if (!saved) {
@@ -1052,6 +1081,7 @@ Deno.serve(async (req) => {
           maxResults: effectiveMax,
           pages: 1,
           directSave: true,
+          minPrice: config.minPriceVnd ?? DEFAULT_CONFIG.minPriceVnd,
         }),
         signal: controller.signal,
       });

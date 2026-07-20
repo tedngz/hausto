@@ -139,7 +139,7 @@ const AdminTools = () => {
         body: { action: 'get-config' },
       });
       if (error) throw error;
-      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number; configStorageError?: string } | null;
+      return data?.config as { paused: boolean; frequencyMinutes: number; maxListingsPerRun: number; minPriceVnd?: number; configStorageError?: string } | null;
     },
     refetchInterval: 10000,
   });
@@ -181,11 +181,13 @@ const AdminTools = () => {
 
   const [localFrequency, setLocalFrequency] = useState<number | null>(null);
   const [localMaxListings, setLocalMaxListings] = useState<number | null>(null);
+  const [localMinPrice, setLocalMinPrice] = useState<number | null>(null);
   const [localPausedOverride, setLocalPausedOverride] = useState<boolean | null>(null);
 
   // Sync local state when config loads
   const effectiveFrequency = localFrequency ?? crawlConfig?.frequencyMinutes ?? 240;
   const effectiveMaxListings = localMaxListings ?? crawlConfig?.maxListingsPerRun ?? 10;
+  const effectiveMinPrice = localMinPrice ?? crawlConfig?.minPriceVnd ?? 5_000_000;
   const isPaused = localPausedOverride ?? crawlConfig?.paused ?? false;
   const crawlConfigStorageError = crawlConfig?.configStorageError;
 
@@ -218,22 +220,25 @@ const AdminTools = () => {
           action: 'set-config',
           frequencyMinutes: effectiveFrequency,
           maxListingsPerRun: effectiveMaxListings,
+          minPriceVnd: effectiveMinPrice,
         },
       });
       if (error) throw error;
       toast.success('Crawl settings saved');
       setLocalFrequency(null);
       setLocalMaxListings(null);
+      setLocalMinPrice(null);
       refetchConfig();
     } catch (err: any) {
       toast.error('Failed to save settings', { description: err.message });
     } finally {
       setIsSavingConfig(false);
     }
-  }, [effectiveFrequency, effectiveMaxListings, refetchConfig]);
+  }, [effectiveFrequency, effectiveMaxListings, effectiveMinPrice, refetchConfig]);
 
   const hasUnsavedChanges = (localFrequency !== null && localFrequency !== crawlConfig?.frequencyMinutes) ||
-    (localMaxListings !== null && localMaxListings !== crawlConfig?.maxListingsPerRun);
+    (localMaxListings !== null && localMaxListings !== crawlConfig?.maxListingsPerRun) ||
+    (localMinPrice !== null && localMinPrice !== (crawlConfig?.minPriceVnd ?? 5_000_000));
 
   const { data: crawlActivity, refetch: refetchCrawlActivity } = useQuery({
     queryKey: ['crawl-activity'],
@@ -1862,6 +1867,23 @@ const AdminTools = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum listings scraped per location per run
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Min price (VND/month)</Label>
+                  <span className="text-xs font-bold text-primary">{(effectiveMinPrice / 1e6).toFixed(1)}M</span>
+                </div>
+                <Slider
+                  value={[effectiveMinPrice]}
+                  onValueChange={(v) => setLocalMinPrice(v[0])}
+                  min={0}
+                  max={20_000_000}
+                  step={500_000}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Listings below this rent are skipped - keeps inventory mid-range for our target renters
                 </p>
               </div>
             </div>
