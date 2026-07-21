@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,8 +68,26 @@ const QuestionRow = ({
 };
 
 export const RenterQuestionsDialog = ({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) => {
-  const { escalations, answerEscalation, dismissEscalation } = useConciergeQueue();
+  const { escalations, dismissEscalation } = useConciergeQueue();
+  const queryClient = useQueryClient();
   const pending = escalations.filter((e) => e.status === 'pending');
+
+  // Route answers through the edge function: it adds the question context + a
+  // property link to the chat message and emails the renter.
+  const answerEscalation = async (escalation: ConciergeEscalation, reply: string) => {
+    const { data, error } = await supabase.functions.invoke('concierge-answer', {
+      body: { escalationId: escalation.id, reply },
+    });
+    if (error || data?.error) {
+      toast.error('Failed to send reply', { description: (error?.message || data?.error) });
+      throw new Error(error?.message || data?.error);
+    }
+    queryClient.invalidateQueries({ queryKey: ['concierge-queue-escalations'] });
+    queryClient.invalidateQueries({ queryKey: ['pending-renter-questions'] });
+    toast.success('Reply sent to the renter.', {
+      description: data?.emailDelivered ? 'Delivered in chat and by email.' : 'Delivered in chat.',
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

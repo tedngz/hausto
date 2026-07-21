@@ -35,6 +35,29 @@ interface HaustoChatProps {
    *  renter clicked "Chat" on in MatchesView). */
   initialPropertyId?: string | null;
 }
+// Render message text with clickable URLs (e.g. property links a realtor
+// includes in an answer). Splits on http(s) URLs; everything else is plain text.
+const renderWithLinks = (text: string, isOwn: boolean) => {
+  if (!text) return text;
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className={`underline underline-offset-2 break-all ${isOwn ? 'text-white' : 'text-orange-600 hover:text-orange-700'}`}
+      >
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  );
+};
+
 export const HaustoChat = ({
   isOpen,
   onClose,
@@ -72,21 +95,28 @@ export const HaustoChat = ({
     user
   } = useAuth();
 
-  // Lightweight count of unresolved escalated questions (realtors only) -
-  // drives the "Review & reply" banner without loading the full queue.
-  const { data: pendingQuestionCount = 0 } = useQuery({
+  // Unresolved escalated questions (realtors only) - drives the "Review & reply"
+  // banner and the per-conversation badges. Returns the total plus a
+  // conversation_id -> count map from one query.
+  const { data: questionInfo = { total: 0, byConversation: new Map<string, number>() } } = useQuery({
     queryKey: ['pending-renter-questions', user?.id],
     enabled: !!user?.id && userType === 'realtor' && isOpen,
     refetchInterval: 30000,
     queryFn: async () => {
-      const { count } = await supabase
+      const { data } = await supabase
         .from('concierge_escalations')
-        .select('id', { count: 'exact', head: true })
+        .select('conversation_id')
         .eq('realtor_id', user!.id)
         .eq('status', 'pending');
-      return count || 0;
+      const byConversation = new Map<string, number>();
+      for (const row of data || []) {
+        const cid = (row as any).conversation_id;
+        if (cid) byConversation.set(cid, (byConversation.get(cid) || 0) + 1);
+      }
+      return { total: (data || []).length, byConversation };
     },
   });
+  const pendingQuestionCount = questionInfo.total;
   const { subscription_tier } = useSubscription();
   const { quota } = useViewingQuota();
   const { toast } = useToast();
@@ -539,6 +569,7 @@ export const HaustoChat = ({
                     const otherUserId = isRealtor ? conv.renter_id : conv.realtor_id;
                     const firstProp = conv.properties?.[0];
                     const extraCount = Math.max((conv.properties?.length || 0) - 1, 0);
+                    const convQuestions = questionInfo.byConversation.get(conv.id) || 0;
                     return (
                       <div
                         key={conv.id}
@@ -566,6 +597,12 @@ export const HaustoChat = ({
                             >
                               {otherUserName || (isRealtor ? 'Interested Renter' : 'Property Owner')}
                             </p>
+                            {convQuestions > 0 && (
+                              <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] h-5 gap-1 px-1.5">
+                                <MessageCircleQuestion className="w-3 h-3" />
+                                {convQuestions} question{convQuestions === 1 ? '' : 's'}
+                              </Badge>
+                            )}
                             <p className="text-xs sm:text-sm text-gray-600 line-clamp-1">
                               {firstProp?.title}{extraCount > 0 ? ` (+${extraCount} more)` : ''}
                             </p>
@@ -853,7 +890,7 @@ export const HaustoChat = ({
                               {senderName}
                             </p>
                             <div className={`w-full px-3 py-2 sm:px-4 sm:py-3 rounded-2xl break-words shadow-sm ${isOwnMessage ? 'bg-gradient-to-br from-orange-500 to-pink-600 text-white border border-white/20' : 'glass bg-white/80 border border-white/40 text-gray-900 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.05)]'}`}>
-                              <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                              <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">{renderWithLinks(message.content, isOwnMessage)}</p>
                               <p className={`text-[10px] sm:text-xs mt-1 ${isOwnMessage ? 'text-white/70' : 'text-gray-500'}`}>
                                 {new Date(message.created_at).toLocaleTimeString([], {
                                   hour: '2-digit',

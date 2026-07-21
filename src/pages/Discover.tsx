@@ -26,6 +26,7 @@ import { UserPreferences } from '@/types';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { useMatches } from '@/hooks/useMatches';
 import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 import { dbToPreferences, preferencesToSearchQuery, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
 const Discover = () => {
@@ -39,6 +40,21 @@ const Discover = () => {
   const { renterMatches, realtorMatches: realtorMatchesDb } = useMatches();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Unresolved renter-question count for the chat launcher badge (realtors)
+  const { data: pendingQuestions = 0 } = useQuery({
+    queryKey: ['fab-pending-questions', user?.id],
+    enabled: !!user?.id && isRealtor,
+    refetchInterval: 30000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('concierge_escalations')
+        .select('id', { count: 'exact', head: true })
+        .eq('realtor_id', user!.id)
+        .eq('status', 'pending');
+      return count || 0;
+    },
+  });
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
 
   const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'browse'>('ai-chat');
@@ -337,7 +353,7 @@ const Discover = () => {
           {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
         </main>
 
-        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'browse' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} />}
+        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'browse' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} badgeCount={pendingQuestions} />}
 
         <HaustoChat isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} userPreferences={userPreferences} userType={userType || 'renter'} />
 
