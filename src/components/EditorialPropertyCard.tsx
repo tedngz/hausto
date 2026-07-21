@@ -73,6 +73,9 @@ interface EditorialPropertyCardProps {
   /** Quote shown when the current image has no per-image highlight */
   quoteFallback?: string;
   onCardClick?: () => void;
+  /** When set (card shown in an overlay), renders a close button inline with
+   *  share/like at the same size and style, instead of a floating dialog X. */
+  onClose?: () => void;
   liked?: boolean;
   onLike?: () => void;
   onContact?: () => void;
@@ -124,6 +127,7 @@ export const EditorialPropertyCard = ({
   scoreContext = 'preferences',
   quoteFallback,
   onCardClick,
+  onClose,
   liked,
   onLike,
   onContact,
@@ -451,6 +455,20 @@ export const EditorialPropertyCard = ({
               }}
             >
               <Heart className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
+            </Button>
+          )}
+          {onClose && (
+            <Button
+              size="icon"
+              variant="secondary"
+              aria-label="Close"
+              className="w-8 h-8 rounded-full border-0 backdrop-blur-md transition-all bg-white/20 text-white hover:bg-white/40"
+              onClick={e => {
+                e.stopPropagation();
+                onClose();
+              }}
+            >
+              <X className="w-4 h-4" />
             </Button>
           )}
         </div>

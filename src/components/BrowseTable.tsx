@@ -702,7 +702,8 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
 
       {/* In-place property preview: full editorial card with like, no page change */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
-        <DialogContent className="max-w-md p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:bg-black/50 [&>button]:text-white [&>button]:rounded-full [&>button]:p-1.5 [&>button]:-top-3 [&>button]:right-1 sm:[&>button]:-right-3 [&>button]:opacity-100">
+        {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
+        <DialogContent className="max-w-md p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
           {preview && (() => {
             const previewScore = vibeMatchOf(preview);
             return (
@@ -726,6 +727,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   scoreContext="preferences"
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
+                  onClose={() => setPreview(null)}
                 />
               </div>
             );
