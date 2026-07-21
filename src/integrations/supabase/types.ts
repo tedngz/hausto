@@ -1406,6 +1406,14 @@ export type Database = {
         }[]
       }
       get_post_like_count: { Args: { post_uuid: string }; Returns: number }
+      get_profiles_for_admin: {
+        Args: { _user_ids: string[] }
+        Returns: {
+          email: string
+          id: string
+          name: string
+        }[]
+      }
       get_realtor_contact_for_renter: {
         Args: { realtor_id: string }
         Returns: {
