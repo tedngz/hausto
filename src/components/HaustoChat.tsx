@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { X, Send, MessageCircle, MapPin, ArrowLeft, Check, ChevronRight } from 'lucide-react';
+import { X, Send, MessageCircle, MessageCircleQuestion, MapPin, ArrowLeft, Check, ChevronRight } from 'lucide-react';
+import { RenterQuestionsDialog } from '@/components/realtor/RenterQuestionsDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
@@ -60,6 +61,8 @@ export const HaustoChat = ({
   const [isSharingContact, setIsSharingContact] = useState(false);
   // Shows "Hausto AI is typing…" between a renter send and the concierge reply.
   const [isAwaitingConcierge, setIsAwaitingConcierge] = useState(false);
+  // Realtor-only: unresolved escalated questions surface as a chat banner
+  const [showQuestionsDialog, setShowQuestionsDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const conciergeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
@@ -68,6 +71,22 @@ export const HaustoChat = ({
   const {
     user
   } = useAuth();
+
+  // Lightweight count of unresolved escalated questions (realtors only) -
+  // drives the "Review & reply" banner without loading the full queue.
+  const { data: pendingQuestionCount = 0 } = useQuery({
+    queryKey: ['pending-renter-questions', user?.id],
+    enabled: !!user?.id && userType === 'realtor' && isOpen,
+    refetchInterval: 30000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('concierge_escalations')
+        .select('id', { count: 'exact', head: true })
+        .eq('realtor_id', user!.id)
+        .eq('status', 'pending');
+      return count || 0;
+    },
+  });
   const { subscription_tier } = useSubscription();
   const { quota } = useViewingQuota();
   const { toast } = useToast();
@@ -485,6 +504,20 @@ export const HaustoChat = ({
         
 
         <div className="flex-1 flex flex-col overflow-hidden relative z-10">
+          {/* Realtor notification: unresolved renter questions live in the chat,
+              not on the dashboard - the banner opens the reply dialog */}
+          {userType === 'realtor' && pendingQuestionCount > 0 && (
+            <button
+              className="flex items-center gap-2 mx-3 mt-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm hover:bg-amber-100 transition-colors text-left"
+              onClick={() => setShowQuestionsDialog(true)}
+            >
+              <MessageCircleQuestion className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">
+                You have {pendingQuestionCount} unresolved renter question{pendingQuestionCount === 1 ? '' : 's'}
+              </span>
+              <span className="text-xs font-medium underline underline-offset-2">Review & reply</span>
+            </button>
+          )}
           {!selectedMatch && !isStartingNewChat ? <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-3 md:p-4 border-b border-white/30 bg-white/40 backdrop-blur-sm flex items-center flex-shrink-0 shadow-sm pr-12">
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -965,6 +998,8 @@ export const HaustoChat = ({
             )}
           </DialogContent>
         </Dialog>
+
+        {showQuestionsDialog && <RenterQuestionsDialog open={showQuestionsDialog} onOpenChange={setShowQuestionsDialog} />}
 
         {selectedRealtorId && <RealtorProfileModal realtorId={selectedRealtorId} isOpen={!!selectedRealtorId} onClose={() => setSelectedRealtorId(null)} />}
 

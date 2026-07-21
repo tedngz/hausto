@@ -97,3 +97,6 @@ verify_jwt = false
 
 [functions.hash-listing-images]
 verify_jwt = false
+
+[functions.fast-track-action]
+verify_jwt = false
