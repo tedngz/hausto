@@ -175,6 +175,35 @@ function isValidPropertyImageUrl(url: string): boolean {
   return true;
 }
 
+// ─── Image dimension probe ──────────────────────────────────────
+// Parse pixel width from JPEG SOF / PNG IHDR headers. Blur on the site is
+// almost always a tiny source thumbnail (e.g. batdongsan 283x141 crops), so
+// anything under this width is rejected before screening/mirroring.
+const MIN_IMAGE_WIDTH = 600;
+
+function imageWidth(bytes: Uint8Array): number | null {
+  try {
+    if (bytes[0] === 0xff && bytes[1] === 0xd8) { // JPEG
+      let i = 2;
+      while (i < bytes.length - 9) {
+        if (bytes[i] !== 0xff) { i++; continue; }
+        const marker = bytes[i + 1];
+        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+          return (bytes[i + 7] << 8) | bytes[i + 8];
+        }
+        i += 2 + ((bytes[i + 2] << 8) | bytes[i + 3]);
+      }
+      return null;
+    }
+    if (bytes[0] === 0x89 && bytes[1] === 0x50) { // PNG
+      return (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    }
+    return null; // webp/unknown: don't block on unparsed formats
+  } catch {
+    return null;
+  }
+}
+
 // ─── Interior Gate (Quality-First) ──────────────────────────────
 // Hard gate: requires at least one true interior shot. Drops exteriors,
 // people, banners, neighborhood photos, etc. Returns rejection reason
@@ -206,6 +235,11 @@ async function screenPropertyImages(
       const buf = await resp.arrayBuffer();
       const bytes = new Uint8Array(buf);
       if (bytes.length > 4 * 1024 * 1024) continue;
+
+      // Tiny source thumbnails render blurry on the site - drop them here so
+      // they can neither pass screening nor get mirrored.
+      const w = imageWidth(bytes);
+      if (w !== null && w < MIN_IMAGE_WIDTH) continue;
 
       let b64 = '';
       const chunk = 8192;
@@ -579,7 +613,11 @@ async function savePropertiesToDB(
         updatedListings++;
       } else {
         let finalImages: string[] = [];
-        const validImages = propertyData.images;
+        // Belt-and-braces: batdongsan URLs from ANY extraction path (gallery,
+        // search-card JSON, Firecrawl) get upgraded from crop thumbnails to
+        // the full-size rendition before screening/mirroring.
+        const validImages = (propertyData.images || []).map((u: string) =>
+          u.includes('batdongsan.com.vn') ? normalizeBatdongsanImageUrl(u) : u);
 
         if (rawMode) {
           // Raw mode: skip OpenAI vision interior gate. Save up to 10 URL-filtered images.
