@@ -77,17 +77,24 @@ export const FastTrackQueuePanel = () => {
     enabled: allPropertyIds.length > 0,
     queryFn: async () => {
       const map = new Map<string, ListingLite>();
-      // Agent phone is the coordination lifeline - admin RLS permits it here.
-      const [ext, internal] = await Promise.all([
+      // Contact columns are revoked from authenticated; fetch them via the
+      // match/admin-gated RPC that every other consumer uses.
+      const [ext, internal, contacts] = await Promise.all([
         supabase.from('external_properties')
-          .select('id, title, location, price, source_url, contact_name, contact_phone, is_active, last_verified_at')
+          .select('id, title, location, price, source_url, is_active, last_verified_at')
           .in('id', allPropertyIds),
         supabase.from('properties')
           .select('id, title, location, price, is_active')
           .in('id', allPropertyIds),
+        supabase.rpc('get_external_property_contacts', { _property_ids: allPropertyIds }),
       ]);
+      const contactMap = new Map<string, { contact_name: string | null; contact_phone: string | null }>();
+      for (const c of (contacts.data as any[]) || []) {
+        contactMap.set(c.id, { contact_name: c.contact_name, contact_phone: c.contact_phone });
+      }
       for (const p of ext.data || []) {
-        map.set(p.id, { ...p, isExternal: true } as ListingLite);
+        const c = contactMap.get(p.id);
+        map.set(p.id, { ...p, contact_name: c?.contact_name ?? null, contact_phone: c?.contact_phone ?? null, isExternal: true } as ListingLite);
       }
       for (const p of internal.data || []) {
         map.set(p.id, { ...p, source_url: null, contact_name: null, contact_phone: null, last_verified_at: null, isExternal: false } as ListingLite);
