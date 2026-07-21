@@ -619,7 +619,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                               src={r.images[0]}
                               alt=""
                               loading="lazy"
-                              className="w-14 h-10 rounded object-cover flex-shrink-0 hidden sm:block"
+                              className="w-16 h-12 sm:w-14 sm:h-10 rounded object-cover flex-shrink-0"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                           )}

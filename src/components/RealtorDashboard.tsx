@@ -675,42 +675,26 @@ export const RealtorDashboard = ({
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-16">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
-          <Card className="p-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Listed Properties</p>
-                <p className="text-2xl font-bold text-slate-900">{realtorProperties.length}</p>
+        <div className="grid grid-cols-3 gap-3 md:gap-6 mb-8">
+          {[
+            { label: 'Listed Properties', value: realtorProperties.length, Icon: Upload, gradient: 'from-green-400 to-emerald-500' },
+            { label: 'Total Matches', value: realtorMatches.length, Icon: User, gradient: 'from-orange-400 to-red-500' },
+            { label: 'Needs Your Reply', value: conciergePendingCount, Icon: MessageSquare, gradient: 'from-purple-400 to-pink-500' },
+          ].map(({ label, value, Icon, gradient }) => (
+            <Card key={label} className="p-4 md:p-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div
+                  className={`order-first w-9 h-9 md:w-12 md:h-12 bg-gradient-to-r ${gradient} rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 sm:order-last`}
+                >
+                  <Icon className="w-4 h-4 md:w-6 md:h-6 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs md:text-sm text-slate-600 leading-tight">{label}</p>
+                  <p className="text-xl md:text-2xl font-bold text-slate-900">{value}</p>
+                </div>
               </div>
-              <div className="w-12 h-12 bg-gradient-to-r from-green-400 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
-                <Upload className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Total Matches</p>
-                <p className="text-2xl font-bold text-slate-900">{realtorMatches.length}</p>
-              </div>
-              <div className="w-12 h-12 bg-gradient-to-r from-orange-400 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
-                <User className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Needs Your Reply</p>
-                <p className="text-2xl font-bold text-slate-900">{conciergePendingCount}</p>
-              </div>
-              <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
-                <MessageSquare className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </Card>
+            </Card>
+          ))}
         </div>
 
         {/* Concierge queue: escalated renter questions + Fast-Track viewing requests */}
