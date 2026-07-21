@@ -465,6 +465,10 @@ const AdminTools = () => {
     enabled: !!user?.id,
   });
 
+  useEffect(() => {
+    if (user && isAdmin) loadMirrorStatus();
+  }, [user, isAdmin, loadMirrorStatus]);
+
   // Verify external listings (must be before any early return to keep hook order stable)
   const { data: verifyStats, refetch: refetchVerifyStats } = useQuery({
     queryKey: ['external-verify-stats'],
