@@ -673,9 +673,9 @@ export const RealtorDashboard = ({
     return realtorProperties.filter(p => !p.is_active).length;
   })();
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 pt-16">
-      <div className="max-w-6xl mx-auto p-4 md:p-6">
+      <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6 md:space-y-8">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 md:gap-6 mb-8">
+        <div className="grid grid-cols-3 gap-3 md:gap-6">
           {[
             { label: 'Listed Properties', value: realtorProperties.length, Icon: Upload, gradient: 'from-green-400 to-emerald-500' },
             { label: 'Total Matches', value: realtorMatches.length, Icon: User, gradient: 'from-orange-400 to-red-500' },
@@ -698,7 +698,7 @@ export const RealtorDashboard = ({
         </div>
 
         {/* Concierge queue: escalated renter questions + Fast-Track viewing requests */}
-        <div className="mb-8">
+        <div>
           <h2 className="text-lg md:text-xl font-semibold text-slate-900 mb-1">Concierge Queue</h2>
           <p className="text-slate-600 text-sm mb-4">
             Questions Hausto AI escalated to you, and viewing requests to coordinate.
@@ -707,7 +707,7 @@ export const RealtorDashboard = ({
         </div>
 
         {/* My Properties */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
+        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
           <div className="p-4 md:p-6 border-b border-slate-200">
             <div className="flex flex-col space-y-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -882,7 +882,7 @@ export const RealtorDashboard = ({
         
         {/* Crawled External Listings (Admin Only) */}
         {isAdmin && (
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg mb-8">
+          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
             <div className="p-4 md:p-6 border-b border-slate-200">
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
