@@ -55,9 +55,9 @@ export const RealtorNavigation = ({
                 variant={currentView === 'dashboard' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setCurrentView('dashboard')}
-                className={`text-xs px-2 py-1.5 h-8 ${currentView === 'dashboard' ? 'bg-primary text-primary-foreground' : ''}`}
+                className={`text-xs h-8 px-2 inline-flex items-center justify-center gap-1 ${currentView === 'dashboard' ? 'bg-primary text-primary-foreground' : ''}`}
               >
-                <Building className="w-3.5 h-3.5 mr-1" />
+                <Building className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden xs:inline text-xs">Dashboard</span>
               </Button>
             </div>
