@@ -532,6 +532,8 @@ export type Database = {
           external_id: string
           highlights: string[] | null
           id: string
+          image_hashes: string[] | null
+          image_location_conflict: boolean
           images: string[] | null
           is_active: boolean | null
           last_verification_reason: string | null
@@ -571,6 +573,8 @@ export type Database = {
           external_id: string
           highlights?: string[] | null
           id?: string
+          image_hashes?: string[] | null
+          image_location_conflict?: boolean
           images?: string[] | null
           is_active?: boolean | null
           last_verification_reason?: string | null
@@ -610,6 +614,8 @@ export type Database = {
           external_id?: string
           highlights?: string[] | null
           id?: string
+          image_hashes?: string[] | null
+          image_location_conflict?: boolean
           images?: string[] | null
           is_active?: boolean | null
           last_verification_reason?: string | null
