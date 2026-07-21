@@ -72,7 +72,7 @@ serve(async (req) => {
     if (source !== 'external') {
       let internalQuery = supabase
         .from('properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, created_at, style_tags:vibe_analysis->styles')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, created_at, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
         .eq('is_active', true)
         .gte('last_activated_at', tenDaysAgo)
         .order('created_at', { ascending: false });
@@ -131,6 +131,11 @@ serve(async (req) => {
             size: p.size || null,
             vibe: p.vibe || null,
             style_tags: Array.isArray(p.style_tags) ? p.style_tags : [],
+            // Slim per-image highlight strings (indexed to images) so cards can
+            // show the detailed AI highlight per photo, not just the vibe word.
+            image_highlights: Array.isArray(p.image_analyses)
+              ? p.image_analyses.map((a: any) => String(a?.image_highlight || a?.highlight || ''))
+              : [],
             images: (p.images || []).slice(0, 10),
             highlights: p.highlights || [],
             amenities: p.amenities || [],
@@ -146,7 +151,7 @@ serve(async (req) => {
     if (source !== 'internal') {
       let externalQuery = supabase
         .from('external_properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles')
+        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });
@@ -217,6 +222,9 @@ serve(async (req) => {
             size: p.size || null,
             vibe: p.vibe || null,
             style_tags: Array.isArray(p.style_tags) ? p.style_tags : [],
+            image_highlights: Array.isArray(p.image_analyses)
+              ? p.image_analyses.map((a: any) => String(a?.image_highlight || a?.highlight || ''))
+              : [],
             images: (p.images || []).slice(0, 10),
             highlights: p.highlights || [],
             amenities: p.amenities || [],

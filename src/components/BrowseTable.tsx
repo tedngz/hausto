@@ -49,6 +49,8 @@ export type BrowseRow = {
   amenities?: string[];
   /** vibe_analysis.styles from the AI analysis - drives the Style match group */
   style_tags?: string[];
+  /** Per-image AI highlight strings, indexed to images - the detailed captions */
+  image_highlights?: string[];
   description?: string | null;
   source: string;
   listed_at: string;
@@ -721,6 +723,11 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     description: preview.description,
                     highlights: preview.highlights,
                     last_verified_at: preview.last_verified_at,
+                    // Reconstruct per-image analyses so the card shows the
+                    // detailed highlight per photo, not just the vibe word.
+                    vibe_analysis: (preview.image_highlights && preview.image_highlights.length > 0)
+                      ? { image_analyses: preview.image_highlights.map((h, i) => ({ image_index: i, image_highlight: h })) }
+                      : undefined,
                   }}
                   vibeScore={previewScore?.score}
                   vibeMatch={previewScore?.attrs}
