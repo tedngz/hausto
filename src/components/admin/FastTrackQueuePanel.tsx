@@ -109,8 +109,8 @@ export const FastTrackQueuePanel = () => {
     queryKey: ['admin-fast-track-renters', renterIds.join(',')],
     enabled: renterIds.length > 0,
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, name, email').in('id', renterIds);
-      return new Map((data || []).map((p: any) => [p.id, { name: p.name, email: p.email }]));
+      const { data } = await supabase.rpc('get_profiles_for_admin', { _user_ids: renterIds });
+      return new Map(((data as any[]) || []).map((p: any) => [p.id, { name: p.name, email: p.email }]));
     },
   });
 
