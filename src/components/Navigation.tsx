@@ -1,6 +1,5 @@
 
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Heart, MessageSquare, User, Users, Sparkles, Search, LayoutList } from 'lucide-react';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { UserMenu } from '@/components/UserMenu';
@@ -88,9 +87,9 @@ export const Navigation = ({
               >
                 <Heart className="w-5 h-5" aria-hidden="true" />
                 {matchCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs h-4 min-w-4 flex items-center justify-center rounded-full">
-                    {matchCount}
-                  </Badge>
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold border-2 border-white leading-none">
+                    {matchCount > 99 ? '99+' : matchCount}
+                  </span>
                 )}
               </Button>
             </div>

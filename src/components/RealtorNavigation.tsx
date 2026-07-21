@@ -32,15 +32,15 @@ export const RealtorNavigation = ({
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
       <div className="max-w-4xl mx-auto px-3 md:px-4 py-2 md:py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center min-w-0">
-            <div 
+        <div className="flex items-center justify-between relative">
+          <div className="flex items-center min-w-0 z-10">
+            <div
               className="flex items-center justify-center space-x-1.5 md:space-x-2 cursor-pointer"
               onClick={() => navigate('/')}
             >
-              <img 
-                src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" 
-                alt="Hausto Logo" 
+              <img
+                src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png"
+                alt="Hausto Logo"
                 className="w-5 h-5 md:w-6 md:h-6"
               />
               <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
@@ -48,9 +48,9 @@ export const RealtorNavigation = ({
               </h1>
             </div>
           </div>
-          
-          <div className="flex items-center justify-center flex-1 px-2 md:px-4">
-            <div className="flex items-center space-x-1">
+
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="flex items-center pointer-events-auto">
               <Button
                 variant={currentView === 'dashboard' ? 'default' : 'ghost'}
                 size="sm"
@@ -63,7 +63,7 @@ export const RealtorNavigation = ({
             </div>
           </div>
 
-          <div className="flex items-center min-w-0">
+          <div className="flex items-center min-w-0 z-10">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="p-1.5 md:p-2 h-8 md:h-9">

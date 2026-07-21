@@ -583,59 +583,52 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         <>
           <p className="text-xs text-muted-foreground mb-2">{filtered.length} listings</p>
 
-          {/* Mobile: photo-first card list (the table doesn't fit a phone width) */}
-          <div className="sm:hidden space-y-3">
+          {/* Mobile: compact row list (same format as the landing preview);
+              the full comparison table doesn't fit a phone width */}
+          <div className="sm:hidden rounded-2xl border border-border bg-card/80 backdrop-blur-sm overflow-hidden shadow-sm">
             {filtered.map((r) => {
               const fresh = daysAgo(r.last_verified_at);
               const isSel = selected.some((s) => s.id === r.id);
-              const showSize = r.size && !/not specified|n\/a|bed/i.test(r.size);
               return (
                 <div
                   key={r.id}
                   onClick={() => setPreview(r)}
-                  className={`relative rounded-2xl border bg-card overflow-hidden shadow-sm cursor-pointer ${isSel ? 'border-primary ring-2 ring-primary/20' : 'border-border'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-3 border-b border-border last:border-b-0 transition-colors text-left cursor-pointer ${isSel ? 'bg-primary/5' : 'hover:bg-secondary/40'}`}
                 >
-                  <div className="relative aspect-[16/10] bg-secondary">
-                    {r.images?.[0] && (
-                      <img
-                        src={r.images[0]}
-                        alt=""
-                        loading="lazy"
-                        className="absolute inset-0 w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    )}
-                    <div className="absolute top-2 left-2" onClick={(e) => e.stopPropagation()}>
-                      <div className="rounded-md bg-background/90 backdrop-blur-sm p-1 shadow-sm">
-                        <Checkbox
-                          checked={isSel}
-                          onCheckedChange={() => toggleSelect(r)}
-                          aria-label="Select for comparison"
-                        />
-                      </div>
-                    </div>
-                    {fresh !== null && fresh <= 7 && (
-                      <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/90 text-white px-2 py-0.5 text-[11px] shadow-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                        {verifiedLabel(r.last_verified_at)}
-                      </span>
-                    )}
-                    <span className="absolute bottom-2 left-2 rounded-full bg-background/90 backdrop-blur-sm px-2.5 py-1 text-sm font-semibold shadow-sm">
-                      {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
-                      <span className="text-xs font-normal text-muted-foreground">/mo</span>
-                    </span>
-                  </div>
-                  <div className="p-3">
+                  <span onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
+                    <Checkbox
+                      checked={isSel}
+                      onCheckedChange={() => toggleSelect(r)}
+                      aria-label="Select for comparison"
+                    />
+                  </span>
+                  {r.images?.[0] && (
+                    <img
+                      src={r.images[0]}
+                      alt=""
+                      loading="lazy"
+                      className="w-16 h-12 rounded object-cover flex-shrink-0"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium text-sm line-clamp-1">{r.title}</p>
                     <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                       <MapPin className="w-3 h-3 flex-shrink-0" />
                       <span className="line-clamp-1">{districtOf(r.location)}</span>
                     </p>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
-                      {r.rooms && <span>{r.rooms}</span>}
-                      {showSize && <span>{r.size}</span>}
-                      {(fresh === null || fresh > 7) && <span>Verified {verifiedLabel(r.last_verified_at)}</span>}
-                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold whitespace-nowrap">
+                      {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
+                      <span className="text-xs text-muted-foreground font-normal">/mo</span>
+                    </p>
+                    {fresh !== null && fresh <= 30 && (
+                      <p className="text-[11px] text-emerald-600 flex items-center justify-end gap-1 whitespace-nowrap">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        verified {fresh === 0 ? 'today' : `${fresh}d ago`}
+                      </p>
+                    )}
                   </div>
                 </div>
               );

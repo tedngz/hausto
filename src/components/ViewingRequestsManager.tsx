@@ -244,14 +244,14 @@ export const ViewingRequestsManager = ({ scope }: ViewingRequestsManagerProps) =
                       {req.preferred_times.filter(Boolean).length > 0 && ` (${req.preferred_times.filter(Boolean).join(', ')})`}
                     </span>
                     {OPEN_STATUSES.includes(req.status) && (
-                      <span className="flex gap-1.5 ml-auto">
-                        <Button size="sm" className="h-7 text-xs" onClick={() => openAction(req, 'confirm')}>
+                      <span className="flex flex-wrap gap-1.5 w-full sm:w-auto sm:ml-auto">
+                        <Button size="sm" className="h-7 text-xs flex-1 sm:flex-none" onClick={() => openAction(req, 'confirm')}>
                           <CalendarCheck className="w-3.5 h-3.5 mr-1" /> Confirm
                         </Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAction(req, 'suggest')}>
+                        <Button size="sm" variant="outline" className="h-7 text-xs flex-1 sm:flex-none" onClick={() => openAction(req, 'suggest')}>
                           <MessageSquareText className="w-3.5 h-3.5 mr-1" /> Suggest change
                         </Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => openAction(req, 'cancel')}>
+                        <Button size="sm" variant="outline" className="h-7 text-xs flex-1 sm:flex-none text-destructive hover:text-destructive" onClick={() => openAction(req, 'cancel')}>
                           <XCircle className="w-3.5 h-3.5 mr-1" /> Cancel
                         </Button>
                       </span>
