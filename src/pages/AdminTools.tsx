@@ -107,7 +107,7 @@ const AdminTools = () => {
     }
   }, []);
 
-  useEffect(() => { loadMirrorStatus(); }, [loadMirrorStatus]);
+  // isAdmin is declared below; effect reads it via closure and re-runs when it flips true
 
   // Project-targeted crawl state
   const [projectCrawlSearch, setProjectCrawlSearch] = useState("");
@@ -464,6 +464,10 @@ const AdminTools = () => {
     },
     enabled: !!user?.id,
   });
+
+  useEffect(() => {
+    if (user && isAdmin) loadMirrorStatus();
+  }, [user, isAdmin, loadMirrorStatus]);
 
   // Verify external listings (must be before any early return to keep hook order stable)
   const { data: verifyStats, refetch: refetchVerifyStats } = useQuery({
