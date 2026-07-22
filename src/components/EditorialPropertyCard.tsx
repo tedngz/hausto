@@ -9,6 +9,8 @@ import { toast } from '@/hooks/use-toast';
 import { translateLocationToEnglish } from '@/utils/locationTranslation';
 import { normalizeRepeatedTitle } from '@/utils/normalizeTitle';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
+import { formatSize } from '@/utils/propertySize';
+import { shareProperty } from '@/utils/shareProperty';
 import { geocodeLocation } from '@/utils/geocoding';
 
 // Editorial magazine-cover property card with an image slideshow.
@@ -191,14 +193,6 @@ export const EditorialPropertyCard = ({
   }, [quoteFallback, apartment.vibe, apartment.description]);
 
   const quote = imageHighlight || fallbackQuote;
-  // Size values are inconsistent across sources: some already carry a unit ("85m²",
-  // "120 sqm"), others are a bare number ("64"). Append m² only when no unit is present.
-  const formatSize = (size?: string | null) => {
-    const s = String(size ?? '').trim();
-    if (!s) return '';
-    if (/m²|m2|sqm|sq\s*m|ft²|sq\s*ft/i.test(s)) return s;
-    return /^\d+([.,]\d+)?$/.test(s) ? `${s}m²` : s;
-  };
   const spec = [apartment.rooms, formatSize(apartment.size)].filter(s => s && String(s).trim()).join(' · ');
   // Freshness chip: how recently the source listing was confirmed still live.
   // Claims "live on source", never "available" — availability is only settled at viewing time.
@@ -235,31 +229,9 @@ export const EditorialPropertyCard = ({
   const mapLat = hasCoords ? apartment.latitude! : geocodedCoords?.lat ?? 0;
   const mapLng = hasCoords ? apartment.longitude! : geocodedCoords?.lng ?? 0;
 
-  const handleShare = async (e: React.MouseEvent) => {
+  const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // External swipe cards carry an "ext-" prefix; the public detail route
-    // resolves listings by their raw id.
-    const shareId = String(apartment.id).replace(/^ext-/, '');
-    const shareUrl = `${window.location.origin}/property/${shareId}`;
-    const shareData = { title: displayTitle, text: `Check out this rental on Hausto: ${displayTitle}`, url: shareUrl };
-    try {
-      if (typeof navigator.share === 'function' && navigator.canShare?.(shareData)) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        toast({ title: 'Link copied', description: 'Property link copied to your clipboard.' });
-      }
-    } catch (err) {
-      // Swallow user-cancelled share (AbortError); surface only real clipboard failures.
-      if ((err as Error)?.name !== 'AbortError') {
-        try {
-          await navigator.clipboard.writeText(shareUrl);
-          toast({ title: 'Link copied', description: 'Property link copied to your clipboard.' });
-        } catch {
-          toast({ title: 'Could not share', description: 'Please try again.', variant: 'destructive' });
-        }
-      }
-    }
+    shareProperty(apartment.id, displayTitle);
   };
 
   const handleLocationClick = async (e: React.MouseEvent) => {

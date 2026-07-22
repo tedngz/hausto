@@ -157,6 +157,31 @@ const normalizeAmenity = (amenity: string): string => {
   return normalized;
 };
 
+export interface NormalizedAmenity {
+  /** Normalized amenity key (also used as a React key) */
+  key: string;
+  /** Display label — the mapped friendly name, or the raw AI-detected text */
+  label: string;
+  /** Lucide icon when the amenity maps to a known one */
+  icon?: any;
+}
+
+/**
+ * Deduplicate, filter out non-amenity noise, and normalize a raw amenity list
+ * into display-ready items. Shared so callers can lay amenities out themselves
+ * (e.g. the listing page's grid) without duplicating the icon map.
+ */
+export const getNormalizedAmenities = (amenities?: string[] | null, limit = 12): NormalizedAmenity[] => {
+  if (!amenities || amenities.length === 0) return [];
+  return Array.from(new Set(amenities.filter(isValidAmenity).map(normalizeAmenity)))
+    .filter(a => isValidAmenity(a))
+    .slice(0, limit)
+    .map(a => {
+      const mapped = amenityIconMap[a];
+      return { key: a, label: mapped?.label ?? a, icon: mapped?.icon };
+    });
+};
+
 export const PropertyAmenities = ({ amenities, compact = true, variant = 'default' }: PropertyAmenitiesProps) => {
   if (!amenities || amenities.length === 0) return null;
 

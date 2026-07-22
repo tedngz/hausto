@@ -3,14 +3,18 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
+import { PropertyListingCard } from '@/components/PropertyListingCard';
 import { ContactModal } from '@/components/ContactModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, LogIn } from 'lucide-react';
-import { Apartment } from '@/types';
+import { CurrencyDropdown } from '@/components/CurrencyDropdown';
+import { shareProperty } from '@/utils/shareProperty';
+import { ArrowLeft, Loader2, LogIn, Share2 } from 'lucide-react';
+import { Apartment, UserPreferences } from '@/types';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { Card, CardContent } from '@/components/ui/card';
+import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
+import { calculateVibeScore } from '@/utils/vibeScoring';
 
 const PropertyDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +24,37 @@ const PropertyDetail = () => {
   const [loading, setLoading] = useState(true);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showRealtorProfile, setShowRealtorProfile] = useState(false);
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+
+  // Signed-in renters see how the listing matches their saved preferences
+  // instead of the property's generic style badge. localStorage first for an
+  // instant read, then reconcile with the DB so it works on a fresh device.
+  useEffect(() => {
+    if (!user) {
+      setPreferences(null);
+      return;
+    }
+    const cached = localStorage.getItem(`userPreferences_${user.id}`);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as UserPreferences;
+        if (hasMeaningfulPreferences(parsed)) setPreferences(parsed);
+      } catch {
+        // ignore malformed cache and fall through to the DB read
+      }
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const dbPrefs = dbToPreferences(data as any);
+      if (!cancelled && dbPrefs && hasMeaningfulPreferences(dbPrefs)) setPreferences(dbPrefs);
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   useEffect(() => {
     const fetchProperty = async () => {
@@ -134,6 +169,8 @@ const PropertyDetail = () => {
     );
   }
 
+  const vibeScore = preferences ? calculateVibeScore(apartment, preferences) : null;
+
   const jsonLd = apartment ? {
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
@@ -168,28 +205,43 @@ const PropertyDetail = () => {
         </Helmet>
       )}
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
-        <main className="container mx-auto px-4 py-8 max-w-3xl">
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/')}
-            className="mb-6"
-            aria-label="Go back to home"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
-            Back
-          </Button>
+        <main className="container mx-auto px-4 py-8 max-w-4xl">
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/')}
+              aria-label="Go back to home"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
+              Back
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <CurrencyDropdown />
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Share property"
+                onClick={() => shareProperty(apartment.id, apartment.title)}
+              >
+                <Share2 className="w-4 h-4" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
 
           <h1 className="sr-only">{apartment.title} — {apartment.location}</h1>
 
-          <div className="max-w-sm mx-auto">
-            <EditorialPropertyCard
+          <div className="max-w-[760px] mx-auto">
+            <PropertyListingCard
               apartment={apartment}
+              vibeScore={vibeScore ? { overall: Number(vibeScore.overall) } : undefined}
               onContact={user ? () => setShowContactModal(true) : undefined}
             />
           </div>
 
           {!user && (
-            <Card className="mt-4">
+            <Card className="mt-4 max-w-[760px] mx-auto">
               <CardContent className="pt-6">
                 <div className="text-center space-y-4">
                   <p className="text-muted-foreground">
