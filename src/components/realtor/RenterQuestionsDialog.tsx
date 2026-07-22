@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { X } from 'lucide-react';
 import { useConciergeQueue, ConciergeEscalation } from '@/hooks/useConciergeQueue';
+import { ListingCardDialog } from '@/components/ListingCardDialog';
 
 // Renter questions escalated by Hausto AI, answered from inside the chat
 // surface (opened via the unresolved-questions banner) instead of cluttering
@@ -17,10 +18,12 @@ const QuestionRow = ({
   escalation,
   onAnswer,
   onDismiss,
+  onPreviewProperty,
 }: {
   escalation: ConciergeEscalation;
   onAnswer: (e: ConciergeEscalation, reply: string) => Promise<void>;
   onDismiss: (id: string) => void;
+  onPreviewProperty: (propertyId: string) => void;
 }) => {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -32,7 +35,20 @@ const QuestionRow = ({
           <p className="text-sm font-medium">
             {escalation.renter_name || 'A renter'}
             {escalation.property_title && (
-              <span className="text-muted-foreground font-normal"> · {escalation.property_title}</span>
+              <>
+                <span className="text-muted-foreground font-normal"> · </span>
+                {escalation.property_id ? (
+                  <button
+                    type="button"
+                    onClick={() => onPreviewProperty(escalation.property_id!)}
+                    className="text-muted-foreground font-normal text-left underline decoration-border underline-offset-4 hover:text-primary hover:decoration-primary transition-colors"
+                  >
+                    {escalation.property_title}
+                  </button>
+                ) : (
+                  <span className="text-muted-foreground font-normal">{escalation.property_title}</span>
+                )}
+              </>
             )}
           </p>
           <p className="text-xs text-muted-foreground">{new Date(escalation.created_at).toLocaleString()}</p>
@@ -70,6 +86,7 @@ const QuestionRow = ({
 export const RenterQuestionsDialog = ({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) => {
   const { escalations, dismissEscalation } = useConciergeQueue();
   const queryClient = useQueryClient();
+  const [previewPropertyId, setPreviewPropertyId] = useState<string | null>(null);
   const pending = escalations.filter((e) => e.status === 'pending');
 
   // Route answers through the edge function: it adds the question context + a
@@ -90,6 +107,7 @@ export const RenterQuestionsDialog = ({ open, onOpenChange }: { open: boolean; o
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
@@ -110,11 +128,24 @@ export const RenterQuestionsDialog = ({ open, onOpenChange }: { open: boolean; o
         ) : (
           <div className="space-y-3">
             {pending.map((e) => (
-              <QuestionRow key={e.id} escalation={e} onAnswer={answerEscalation} onDismiss={dismissEscalation} />
+              <QuestionRow
+                key={e.id}
+                escalation={e}
+                onAnswer={answerEscalation}
+                onDismiss={dismissEscalation}
+                onPreviewProperty={setPreviewPropertyId}
+              />
             ))}
           </div>
         )}
       </DialogContent>
     </Dialog>
+
+    <ListingCardDialog
+      propertyId={previewPropertyId}
+      open={!!previewPropertyId}
+      onOpenChange={(o) => { if (!o) setPreviewPropertyId(null); }}
+    />
+    </>
   );
 };
