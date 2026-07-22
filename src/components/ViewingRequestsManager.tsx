@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ListingCardDialog } from '@/components/ListingCardDialog';
 import { toast } from 'sonner';
 import {
   CalendarCheck, CheckCircle2, ChevronDown, ExternalLink, Loader2,
@@ -67,6 +68,7 @@ export const ViewingRequestsManager = ({ scope }: ViewingRequestsManagerProps) =
   const queryClient = useQueryClient();
   const [showClosed, setShowClosed] = useState(false);
   const [busyListing, setBusyListing] = useState<string | null>(null);
+  const [previewPropertyId, setPreviewPropertyId] = useState<string | null>(null);
 
   // Action dialog state
   const [actionReq, setActionReq] = useState<RequestRow | null>(null);
@@ -274,9 +276,13 @@ export const ViewingRequestsManager = ({ scope }: ViewingRequestsManagerProps) =
                       if (!l) return <p key={pid} className="text-xs text-muted-foreground py-1">A requested listing was removed</p>;
                       return (
                         <div key={pid} className="flex items-center gap-2 py-1 text-sm">
-                          <span className={`line-clamp-1 flex-1 min-w-[140px] ${l.is_active === false ? 'line-through text-muted-foreground' : ''}`}>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPropertyId(pid)}
+                            className={`line-clamp-1 flex-1 min-w-[140px] text-left underline decoration-border underline-offset-4 hover:text-primary hover:decoration-primary transition-colors ${l.is_active === false ? 'line-through text-muted-foreground' : ''}`}
+                          >
                             {l.title}
-                          </span>
+                          </button>
                           {l.price ? <span className="text-xs text-muted-foreground whitespace-nowrap">{(Number(l.price) / 1e6).toFixed(1)}M</span> : null}
                           {scope === 'admin' && l.contact_phone && (
                             <a href={`tel:${l.contact_phone}`} title={l.contact_name || 'Agent'} className="flex items-center gap-1 text-xs text-primary whitespace-nowrap hover:underline">
@@ -308,6 +314,12 @@ export const ViewingRequestsManager = ({ scope }: ViewingRequestsManagerProps) =
           </div>
         );
       })}
+
+      <ListingCardDialog
+        propertyId={previewPropertyId}
+        open={!!previewPropertyId}
+        onOpenChange={(o) => { if (!o) setPreviewPropertyId(null); }}
+      />
 
       {/* Action dialog: confirm schedule / suggest change / cancel */}
       <Dialog open={!!actionReq} onOpenChange={(o) => { if (!o) setActionReq(null); }}>

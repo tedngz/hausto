@@ -723,6 +723,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     vibe: preview.vibe,
                     description: preview.description,
                     highlights: preview.highlights,
+                    amenities: preview.amenities,
                     last_verified_at: preview.last_verified_at,
                     // Reconstruct per-image analyses so the card shows the
                     // detailed highlight per photo, not just the vibe word.
