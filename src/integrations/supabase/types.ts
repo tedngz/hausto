@@ -645,6 +645,7 @@ export type Database = {
       }
       fast_track_requests: {
         Row: {
+          archived_at: string | null
           conversation_id: string | null
           created_at: string
           id: string
@@ -661,6 +662,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           conversation_id?: string | null
           created_at?: string
           id?: string
@@ -677,6 +679,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           conversation_id?: string | null
           created_at?: string
           id?: string
@@ -1500,6 +1503,13 @@ export type Database = {
         Returns: boolean
       }
       normalize_location: { Args: { location_text: string }; Returns: string }
+      set_fast_track_archived: {
+        Args: { _archived: boolean; _request_id: string }
+        Returns: {
+          archived_at: string
+          id: string
+        }[]
+      }
       user_liked_post: { Args: { post_uuid: string }; Returns: boolean }
       validate_email: { Args: { email_input: string }; Returns: boolean }
       validate_phone: { Args: { phone_input: string }; Returns: boolean }
