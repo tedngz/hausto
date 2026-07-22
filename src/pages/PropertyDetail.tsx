@@ -4,8 +4,12 @@ import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyListingCard } from '@/components/PropertyListingCard';
-import { ContactModal } from '@/components/ContactModal';
+import { HaustoChat } from '@/components/HaustoChat';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
+import { useMatches } from '@/hooks/useMatches';
+import { useDirectMessages } from '@/hooks/useDirectMessages';
+import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
+import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { shareProperty } from '@/utils/shareProperty';
@@ -14,7 +18,7 @@ import { Apartment, UserPreferences } from '@/types';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
-import { calculateVibeScore } from '@/utils/vibeScoring';
+import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 
 const PropertyDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,9 +26,14 @@ const PropertyDetail = () => {
   const { user } = useAuth();
   const [apartment, setApartment] = useState<Apartment | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showContactModal, setShowContactModal] = useState(false);
   const [showRealtorProfile, setShowRealtorProfile] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [source, setSource] = useState<'internal' | 'external'>('internal');
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
+  const [isContacting, setIsContacting] = useState(false);
+  const { createMatch } = useMatches();
+  const { getOrCreateConversation } = useDirectMessages();
 
   // Signed-in renters see how the listing matches their saved preferences
   // instead of the property's generic style badge. localStorage first for an
@@ -69,6 +78,8 @@ const PropertyDetail = () => {
           setLoading(false);
           return;
         }
+
+        setSource(data.source === 'external' ? 'external' : 'internal');
 
         if (data.source === 'internal') {
           const property = data.property;
@@ -170,6 +181,43 @@ const PropertyDetail = () => {
   }
 
   const vibeScore = preferences ? calculateVibeScore(apartment, preferences) : null;
+  const vibeMatch = preferences ? getVibeAttributeMatch(apartment, preferences) : undefined;
+
+  // Contacting saves the listing to Matches and opens the existing Hausto chat
+  // with the realtor, rather than a one-off contact form. External listings have
+  // no realtor account, so the Hausto agent is the counterpart.
+  const handleContact = async () => {
+    if (!user || !apartment) return;
+    setIsContacting(true);
+    try {
+      const isExternal = source === 'external';
+      const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
+      try {
+        await createMatch(apartment.id, realtorId, isExternal ? 'external' : 'internal');
+      } catch (err) {
+        // useMatches already toasts each case. Only an existing match should
+        // still open the chat; limits and real failures stop here.
+        if ((err as Error)?.message !== 'ALREADY_MATCHED') return;
+      }
+
+      // Conversations are keyed by renter/realtor pair in match_conversations —
+      // resolve (or create) that thread so we continue the existing chat instead
+      // of opening an empty one.
+      const conversationId = await getOrCreateConversation(user.id, realtorId);
+      if (!conversationId) {
+        toast({
+          title: 'Could not open chat',
+          description: 'The listing was saved to Matches but the conversation could not be opened. Try again from Matches.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setChatConversationId(conversationId);
+      setIsChatOpen(true);
+    } finally {
+      setIsContacting(false);
+    }
+  };
 
   const jsonLd = apartment ? {
     "@context": "https://schema.org",
@@ -235,8 +283,11 @@ const PropertyDetail = () => {
           <div className="max-w-[760px] mx-auto">
             <PropertyListingCard
               apartment={apartment}
-              vibeScore={vibeScore ? { overall: Number(vibeScore.overall) } : undefined}
-              onContact={user ? () => setShowContactModal(true) : undefined}
+              vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
+              preferences={preferences}
+              vibeMatch={vibeMatch}
+              onContact={user ? handleContact : undefined}
+              isContacting={isContacting}
             />
           </div>
 
@@ -260,10 +311,14 @@ const PropertyDetail = () => {
           )}
         </main>
 
-        {showContactModal && (
-          <ContactModal
-            apartment={apartment}
-            onClose={() => setShowContactModal(false)}
+        {user && (
+          <HaustoChat
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            userType="renter"
+            userPreferences={preferences}
+            initialMatchId={chatConversationId}
+            initialPropertyId={apartment.id}
           />
         )}
 

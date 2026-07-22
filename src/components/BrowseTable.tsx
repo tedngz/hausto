@@ -19,6 +19,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
+import { VibeMatchPopover } from '@/components/VibeMatchPopover';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
@@ -835,79 +836,17 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     </p>
 
     {score && (
-                      /* Same chip + popover pattern as the listing card */
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            aria-label="View match scoring details"
-                            className="inline-flex items-center gap-1.5 w-fit rounded-full bg-secondary px-2.5 py-1 hover:bg-secondary/70 transition-colors"
-                          >
-                            <span className={`w-2 h-2 rounded-full ${RATING_DOT[score.rating] || 'bg-gray-300'}`} />
-                            <span className="font-mono text-[10px] tracking-[0.14em] uppercase">{score.rating} match</span>
-                            <span className="text-[11px] font-medium text-muted-foreground">· {score.score.overall}%</span>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          className="w-52 max-h-64 overflow-y-auto p-3"
-                          align="start"
-                          side="bottom"
-                          sideOffset={4}
-                          avoidCollisions
+                      /* Same chip + popover as every other vibe badge on the platform */
+                      <VibeMatchPopover vibeScore={score.score} vibeMatch={score.attrs} align="start">
+                        <button
+                          aria-label="View match scoring details"
+                          className="inline-flex items-center gap-1.5 w-fit rounded-full bg-secondary px-2.5 py-1 hover:bg-secondary/70 transition-colors"
                         >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-foreground">Vibe match</span>
-                            <span className="text-[11px] font-mono text-muted-foreground">{score.score.overall}%</span>
-                          </div>
-                          <div className="space-y-2">
-                            {([['style', 'Style'], ['lifestyle', 'Lifestyle'], ['features', 'Features']] as const).map(([key, label]) => {
-                              const items = score.attrs[key];
-                              if (!items || items.length === 0) return null;
-                              return (
-                                <div key={key}>
-                                  <p className="text-[10px] font-medium text-muted-foreground mb-1">{label}</p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {items.map((a, j) => (
-                                      <span
-                                        key={j}
-                                        className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] capitalize border ${
-                                          a.matched
-                                            ? 'bg-primary/10 border-primary/40 text-primary font-medium'
-                                            : 'bg-transparent border-border text-muted-foreground'
-                                        }`}
-                                      >
-                                        {a.matched && <Check className="w-2.5 h-2.5" />}
-                                        {a.label}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            {(() => {
-                              const fits = ([
-                                ['Budget', score.score.breakdown?.price],
-                                ['Size', score.score.breakdown?.size],
-                                ['Location', score.score.breakdown?.location],
-                              ] as [string, number | undefined][])
-                                .map(([label, v]) => typeof v === 'number'
-                                  ? { label, ok: v >= 60, fit: v >= 100 ? 'Perfect' : v >= 60 ? 'Close' : 'Off' }
-                                  : null)
-                                .filter(Boolean) as { label: string; ok: boolean; fit: string }[];
-                              if (fits.length === 0) return null;
-                              return (
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 mt-1 border-t border-border">
-                                  {fits.map((f) => (
-                                    <span key={f.label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                      {f.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
-                                      {f.label} · {f.fit}
-                                    </span>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
+                          <span className={`w-2 h-2 rounded-full ${RATING_DOT[score.rating] || 'bg-gray-300'}`} />
+                          <span className="font-mono text-[10px] tracking-[0.14em] uppercase">{score.rating} match</span>
+                          <span className="text-[11px] font-medium text-muted-foreground">· {score.score.overall}%</span>
+                        </button>
+                      </VibeMatchPopover>
                     )}
 
                     <dl className="text-xs space-y-1 mt-1">

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getNormalizedAmenities } from '@/components/PropertyAmenities';
 import { MapViewModal } from '@/components/MapViewModal';
+import { VibeMatchPopover, type VibeMatchAttributes, type VibeScoreDetails } from '@/components/VibeMatchPopover';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { toast } from '@/hooks/use-toast';
 import { translateLocationToEnglish } from '@/utils/locationTranslation';
@@ -10,7 +11,7 @@ import { normalizeRepeatedTitle } from '@/utils/normalizeTitle';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
 import { formatSize } from '@/utils/propertySize';
 import { geocodeLocation } from '@/utils/geocoding';
-import { Apartment } from '@/types';
+import { Apartment, UserPreferences } from '@/types';
 
 // Full listing card for the individual property page: a 16:9 gallery on top and
 // a details panel below (badges, title/price, vibe tags, description, amenities).
@@ -37,11 +38,24 @@ const verifiedLabel = (iso?: string | null): string | null => {
 interface PropertyListingCardProps {
   apartment: Apartment;
   /** 0-100 match score; renders the match badge when provided */
-  vibeScore?: { overall: number };
+  vibeScore?: VibeScoreDetails;
+  /** Renter preferences — used to flag matching attributes in the vibe popover */
+  preferences?: UserPreferences | null;
+  /** Matched style/lifestyle/feature attributes shown in the vibe popover */
+  vibeMatch?: VibeMatchAttributes;
   onContact?: () => void;
+  /** Disables the contact CTA while a chat is being opened */
+  isContacting?: boolean;
 }
 
-export const PropertyListingCard = ({ apartment, vibeScore, onContact }: PropertyListingCardProps) => {
+export const PropertyListingCard = ({
+  apartment,
+  vibeScore,
+  preferences,
+  vibeMatch,
+  onContact,
+  isContacting = false,
+}: PropertyListingCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(0);
   const [fits, setFits] = useState<Record<number, 'cover' | 'contain'>>({});
@@ -97,6 +111,13 @@ export const PropertyListingCard = ({ apartment, vibeScore, onContact }: Propert
       .filter(Boolean)
       .slice(0, 3);
   }, [apartment.vibe_analysis, apartment.vibe]);
+
+  // Signed-out visitors have nothing to match against, so the popover just lists
+  // the analysed style with no match flags.
+  const styleOnlyMatch = useMemo<VibeMatchAttributes | undefined>(
+    () => (vibeStyles.length > 0 ? { style: vibeStyles.map(label => ({ label, matched: false })), features: [] } : undefined),
+    [vibeStyles],
+  );
 
   const description = useMemo(() => {
     const desc = apartment.description?.trim();
@@ -210,18 +231,28 @@ export const PropertyListingCard = ({ apartment, vibeScore, onContact }: Propert
         {(ratingLabel || vibeStyles.length > 0 || verified) && (
           <div className="flex flex-wrap gap-2">
             {/* Signed-in renters with preferences see how well it matches them;
-                everyone else sees the property's own analysed style. */}
-            {ratingLabel ? (
-              <span className="flex items-center gap-[7px] rounded-full bg-secondary text-secondary-foreground px-3 py-1.5 font-mono text-[10.5px] tracking-[0.12em] uppercase">
-                <span className={`w-1.5 h-1.5 rounded-full ${RATING_DOT[ratingLabel] || 'bg-muted-foreground/50'}`} />
-                {ratingLabel} match
-              </span>
-            ) : vibeStyles.length > 0 ? (
-              <span className="flex items-center gap-[7px] rounded-full bg-secondary text-secondary-foreground px-3 py-1.5 font-mono text-[10.5px] tracking-[0.12em] uppercase">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                {vibeStyles.join(' · ')}
-              </span>
-            ) : null}
+                everyone else sees the property's own analysed style. Either way
+                the badge opens the full vibe breakdown. */}
+            {(ratingLabel || vibeStyles.length > 0) && (
+              <VibeMatchPopover
+                vibeScore={vibeScore}
+                vibeMatch={vibeMatch ?? styleOnlyMatch}
+                note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
+              >
+                <button
+                  type="button"
+                  aria-label="View match scoring details"
+                  className="flex items-center gap-[7px] rounded-full bg-secondary text-secondary-foreground px-3 py-1.5 font-mono text-[10.5px] tracking-[0.12em] uppercase hover:bg-secondary/70 transition-colors"
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      ratingLabel ? RATING_DOT[ratingLabel] || 'bg-muted-foreground/50' : 'bg-primary'
+                    }`}
+                  />
+                  {ratingLabel ? `${ratingLabel} match` : vibeStyles.join(' · ')}
+                </button>
+              </VibeMatchPopover>
+            )}
             {verified && (
               <span className="flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 text-[11.5px]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -233,7 +264,7 @@ export const PropertyListingCard = ({ apartment, vibeScore, onContact }: Propert
 
         {/* Title + location (left) · price + size (right), generously spaced so
             a long title never crowds the price */}
-        <div className="flex items-start justify-between gap-6 sm:gap-10">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-10">
           <div className="flex flex-col gap-2 min-w-0">
             <h2 className="font-serif font-medium text-2xl sm:text-[32px] leading-[1.06] [text-wrap:pretty]">
               {displayTitle}
@@ -252,7 +283,8 @@ export const PropertyListingCard = ({ apartment, vibeScore, onContact }: Propert
             </button>
           </div>
 
-          <div className="flex flex-col items-end gap-1.5 flex-shrink-0 text-right">
+          {/* On mobile this drops below the location but stays right-aligned */}
+          <div className="flex flex-col items-end gap-1.5 sm:flex-shrink-0 text-right">
             <p className="font-serif font-semibold text-xl sm:text-[28px] leading-tight whitespace-nowrap">
               {formatPrice(apartment.price)}
               <span className="font-sans font-normal text-[13px] text-muted-foreground"> /mo</span>
@@ -288,8 +320,8 @@ export const PropertyListingCard = ({ apartment, vibeScore, onContact }: Propert
         )}
 
         {onContact && (
-          <Button className="w-full rounded-full mt-1" size="lg" onClick={onContact}>
-            Contact
+          <Button className="w-full rounded-full mt-1" size="lg" onClick={onContact} disabled={isContacting}>
+            {isContacting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Contact'}
           </Button>
         )}
       </div>

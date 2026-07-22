@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X, Share2, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { VibeMatchPopover, type VibeScoreDetails, type VibeMatchAttributes } from '@/components/VibeMatchPopover';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { MapViewModal } from '@/components/MapViewModal';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -36,29 +36,9 @@ export interface EditorialApartment {
   last_verified_at?: string | null;
 }
 
-export interface VibeScoreDetails {
-  overall: number; // 0-100
-  breakdown?: {
-    style?: number;
-    color?: number;
-    activities?: number;
-    price?: number;
-    location?: number;
-    size?: number;
-  };
-}
-
-interface VibeAttribute {
-  label: string;
-  matched: boolean;
-}
-
-export interface VibeMatchAttributes {
-  style: VibeAttribute[];
-  /** Quiz lifestyle activities, matched via the property's soft features. */
-  lifestyle?: VibeAttribute[];
-  features: VibeAttribute[];
-}
+// The vibe badge's popover lives in VibeMatchPopover so every surface shows the
+// same breakdown; these re-exports keep existing import sites working.
+export type { VibeScoreDetails, VibeMatchAttributes };
 
 interface EditorialPropertyCardProps {
   apartment: EditorialApartment;
@@ -103,22 +83,6 @@ const RATING_DOT: Record<string, string> = {
   strong: 'bg-blue-400',
   good: 'bg-orange-400',
   casual: 'bg-gray-300',
-};
-
-// Dimensions shown as attribute chips: aesthetic style + concrete features
-// (must-haves and lifestyle-derived), each flagged matched/unmatched.
-const ATTRIBUTE_GROUPS: Array<{ key: 'style' | 'lifestyle' | 'features'; label: string }> = [
-  { key: 'style', label: 'Style' },
-  { key: 'lifestyle', label: 'Lifestyle' },
-  { key: 'features', label: 'Features' },
-];
-
-// Practical dimensions shown as a compact fit indicator, not a competing bar.
-const fitFromScore = (score?: number): { label: string; ok: boolean } | null => {
-  if (typeof score !== 'number') return null;
-  if (score >= 100) return { label: 'Perfect', ok: true };
-  if (score >= 60) return { label: 'Close', ok: true };
-  return { label: 'Off', ok: false };
 };
 
 export const EditorialPropertyCard = ({
@@ -307,94 +271,21 @@ export const EditorialPropertyCard = ({
       <div className="absolute top-5 left-5 right-5 flex items-start justify-between">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
         {ratingLabel ? (
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                aria-label="View match scoring details"
-                className="flex items-center gap-1.5 rounded-full bg-black/35 backdrop-blur-md px-3 py-1.5 text-white hover:bg-black/55 transition-colors"
-                onClick={e => e.stopPropagation()}
-              >
-                <span className={`w-2 h-2 rounded-full ${RATING_DOT[ratingLabel] || 'bg-gray-300'}`} />
-                <span className="font-mono text-[11px] tracking-[0.14em] uppercase">{ratingLabel} match</span>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-72 p-4" align="start" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-foreground">
-                  {scoreContext === 'search' ? 'Search match' : 'Vibe match'}
-                </span>
-                <span className="text-xs font-mono text-muted-foreground">{Math.round(Number(vibeScore!.overall))}%</span>
-              </div>
-              <p className="text-xs text-muted-foreground mb-3">
-                {scoreContext === 'search'
-                  ? 'How well this home fits what you asked for.'
-                  : 'How this home aligns with your preferences.'}
-              </p>
-
-              {vibeMatch && (vibeMatch.style.length + (vibeMatch.lifestyle?.length ?? 0) + vibeMatch.features.length) > 0 ? (
-                <div className="space-y-2.5">
-                  {ATTRIBUTE_GROUPS.map(({ key, label }) => {
-                    const items = vibeMatch[key];
-                    if (!items || items.length === 0) return null;
-                    return (
-                      <div key={key}>
-                        <p className="text-[11px] font-medium text-muted-foreground mb-1">{label}</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {items.map((a, j) => (
-                            <span
-                              key={j}
-                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] capitalize border ${
-                                a.matched
-                                  ? 'bg-primary/10 border-primary/40 text-primary font-medium'
-                                  : 'bg-transparent border-border text-muted-foreground'
-                              }`}
-                            >
-                              {a.matched && <Check className="w-2.5 h-2.5" />}
-                              {a.label}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Practical fit: budget + location as compact indicators */}
-                  {(() => {
-                    const budget = fitFromScore(vibeScore!.breakdown?.price);
-                    const location = fitFromScore(vibeScore!.breakdown?.location);
-                    const sizeFit = fitFromScore(vibeScore!.breakdown?.size);
-                    if (!budget && !location && !sizeFit) return null;
-                    return (
-                      <div className="flex items-center gap-4 pt-1 mt-1 border-t border-border">
-                        {budget && (
-                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            {budget.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
-                            Budget · {budget.label}
-                          </span>
-                        )}
-                        {sizeFit && (
-                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            {sizeFit.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
-                            Size · {sizeFit.label}
-                          </span>
-                        )}
-                        {location && (
-                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            {location.ok ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3 text-muted-foreground" />}
-                            Location · {location.label}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              ) : vibeDetailsText ? (
-                <p className="text-xs text-foreground/90 leading-relaxed">{vibeDetailsText}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">A quick read on how this home matches your style and lifestyle.</p>
-              )}
-            </PopoverContent>
-          </Popover>
+          <VibeMatchPopover
+            vibeScore={vibeScore}
+            vibeMatch={vibeMatch}
+            vibeDetailsText={vibeDetailsText}
+            scoreContext={scoreContext}
+          >
+            <button
+              aria-label="View match scoring details"
+              className="flex items-center gap-1.5 rounded-full bg-black/35 backdrop-blur-md px-3 py-1.5 text-white hover:bg-black/55 transition-colors"
+              onClick={e => e.stopPropagation()}
+            >
+              <span className={`w-2 h-2 rounded-full ${RATING_DOT[ratingLabel] || 'bg-gray-300'}`} />
+              <span className="font-mono text-[11px] tracking-[0.14em] uppercase">{ratingLabel} match</span>
+            </button>
+          </VibeMatchPopover>
         ) : null}
         {verifiedLabel && (
           <span className={`flex items-center gap-1.5 rounded-full bg-black/35 backdrop-blur-md text-white/90 whitespace-nowrap ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}>
