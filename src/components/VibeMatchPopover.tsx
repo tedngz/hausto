@@ -77,7 +77,7 @@ export const VibeMatchPopover = ({
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-72 p-4" align={align} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-1">
+        <div className={`flex items-center justify-between ${vibeScore ? 'mb-1' : 'mb-3'}`}>
           <span className="text-sm font-semibold text-foreground">
             {!vibeScore ? 'Vibe' : scoreContext === 'search' ? 'Search match' : 'Vibe match'}
           </span>
@@ -85,13 +85,13 @@ export const VibeMatchPopover = ({
             <span className="text-xs font-mono text-muted-foreground">{Math.round(Number(vibeScore.overall))}%</span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          {!vibeScore
-            ? "What our AI read from this listing's photos."
-            : scoreContext === 'search'
+        {vibeScore && (
+          <p className="text-xs text-muted-foreground mb-3">
+            {scoreContext === 'search'
               ? 'How well this home fits what you asked for.'
               : 'How this home aligns with your preferences.'}
-        </p>
+          </p>
+        )}
 
         {hasAttributes ? (
           <div className="space-y-2.5">

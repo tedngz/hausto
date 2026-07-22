@@ -584,74 +584,21 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         <>
           <p className="text-xs text-muted-foreground mb-2">{filtered.length} listings</p>
 
-          {/* Mobile: compact row list (same format as the landing preview);
-              the full comparison table doesn't fit a phone width */}
-          <div className="sm:hidden rounded-2xl border border-border bg-card/80 backdrop-blur-sm overflow-hidden shadow-sm">
-            {filtered.map((r) => {
-              const fresh = daysAgo(r.last_verified_at);
-              const isSel = selected.some((s) => s.id === r.id);
-              return (
-                <div
-                  key={r.id}
-                  onClick={() => setPreview(r)}
-                  className={`w-full flex items-center gap-3 px-3 py-3 border-b border-border last:border-b-0 transition-colors text-left cursor-pointer ${isSel ? 'bg-primary/5' : 'hover:bg-secondary/40'}`}
-                >
-                  <span onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
-                    <Checkbox
-                      checked={isSel}
-                      onCheckedChange={() => toggleSelect(r)}
-                      aria-label="Select for comparison"
-                    />
-                  </span>
-                  {r.images?.[0] && (
-                    <img
-                      src={r.images[0]}
-                      alt=""
-                      loading="lazy"
-                      className="w-16 h-12 rounded object-cover flex-shrink-0"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm line-clamp-1">{r.title}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <MapPin className="w-3 h-3 flex-shrink-0" />
-                      <span className="line-clamp-1">{districtOf(r.location)}</span>
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold whitespace-nowrap">
-                      {r.price_usd ? `$${r.price_usd.toLocaleString()}` : '-'}
-                      <span className="text-xs text-muted-foreground font-normal">/mo</span>
-                    </p>
-                    {fresh !== null && fresh <= 30 && (
-                      <p className="text-[11px] text-emerald-600 flex items-center justify-end gap-1 whitespace-nowrap">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        verified {fresh === 0 ? 'today' : `${fresh}d ago`}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {filtered.length === 0 && (
-              <p className="text-center py-12 text-sm text-muted-foreground">No listings match these filters.</p>
-            )}
-          </div>
 
-          {/* Desktop / tablet: full comparison table */}
-          <div className="hidden sm:block rounded-2xl border border-border bg-card/80 backdrop-blur-sm shadow-sm overflow-x-auto">
-            <Table>
+          {/* Full comparison table at every width — on phones it scrolls
+              horizontally rather than dropping columns */}
+          <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm shadow-sm overflow-x-auto [scrollbar-width:thin]">
+            <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8"><Scale className="w-3.5 h-3.5" /></TableHead>
                   <TableHead>Property</TableHead>
-                  <TableHead className="hidden md:table-cell">Location</TableHead>
-                  <SortHeader label="Rooms" k="rooms" className="hidden sm:table-cell" />
-                  <SortHeader label="Size" k="size" className="hidden sm:table-cell" />
+                  <TableHead>Location</TableHead>
+                  <SortHeader label="Rooms" k="rooms" />
+                  <SortHeader label="Size" k="size" />
                   <SortHeader label="Price" k="price_usd" />
                   <SortHeader label="Verified" k="last_verified_at" />
-                  <TableHead className="hidden sm:table-cell">Source</TableHead>
+                  <TableHead>Source</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -683,18 +630,14 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                           )}
                           <div className="min-w-0">
                             <p className="font-medium text-sm line-clamp-1">{r.title}</p>
-                            <p className="text-xs text-muted-foreground md:hidden flex items-center gap-1">
-                              <MapPin className="w-3 h-3 flex-shrink-0" />
-                              <span className="line-clamp-1">{districtOf(r.location)}</span>
-                            </p>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground max-w-[220px]">
+                      <TableCell className="text-sm text-muted-foreground max-w-[220px]">
                         <span className="line-clamp-1">{districtOf(r.location)}</span>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">{r.rooms || '-'}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">
+                      <TableCell className="text-sm whitespace-nowrap">{r.rooms || '-'}</TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">
                         {/* Source data sometimes puts room counts or "N/A" in size */}
                         {r.size && !/not specified|n\/a|bed/i.test(r.size) ? r.size : '-'}
                       </TableCell>
@@ -708,7 +651,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                           {verifiedLabel(r.last_verified_at)}
                         </span>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell" onClick={(e) => e.stopPropagation()}>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           const isHausto = r.source === 'hausto';
                           const info = isHausto

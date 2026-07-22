@@ -11,6 +11,7 @@ import { normalizeRepeatedTitle } from '@/utils/normalizeTitle';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
 import { formatSize } from '@/utils/propertySize';
 import { geocodeLocation } from '@/utils/geocoding';
+import { extractPropertyFeatures, propertyHasFeature, FEATURE_LABELS, type FeatureKey } from '@/lib/propertyFeatures';
 import { Apartment, UserPreferences } from '@/types';
 
 // Full listing card for the individual property page: a 16:9 gallery on top and
@@ -112,12 +113,36 @@ export const PropertyListingCard = ({
       .slice(0, 3);
   }, [apartment.vibe_analysis, apartment.vibe]);
 
-  // Signed-out visitors have nothing to match against, so the popover just lists
-  // the analysed style with no match flags.
-  const styleOnlyMatch = useMemo<VibeMatchAttributes | undefined>(
-    () => (vibeStyles.length > 0 ? { style: vibeStyles.map(label => ({ label, matched: false })), features: [] } : undefined),
-    [vibeStyles],
-  );
+  // Signed-out visitors have nothing to match against, so the popover shows what
+  // the AI read from the listing — style, what it's good for, and the concrete
+  // features — with no match flags.
+  const analysedVibe = useMemo<VibeMatchAttributes | undefined>(() => {
+    const va: any = apartment.vibe_analysis;
+    const style = vibeStyles.map(label => ({ label, matched: false }));
+
+    const lifestyle = (Array.isArray(va?.activities) ? va.activities : [])
+      .map((a: unknown) => String(a).replace(/_/g, ' ').trim())
+      .filter(Boolean)
+      .slice(0, 6)
+      .map((label: string) => ({ label, matched: false }));
+
+    const featureSource =
+      va?.features && typeof va.features === 'object'
+        ? va.features
+        : extractPropertyFeatures({
+            metrics: va,
+            amenities: apartment.amenities,
+            highlights: apartment.highlights,
+            description: apartment.description,
+            title: apartment.title,
+          });
+    const features = (Object.keys(FEATURE_LABELS) as FeatureKey[])
+      .filter(k => propertyHasFeature(featureSource, k))
+      .map(k => ({ label: FEATURE_LABELS[k], matched: false }));
+
+    if (style.length + lifestyle.length + features.length === 0) return undefined;
+    return { style, lifestyle, features };
+  }, [apartment, vibeStyles]);
 
   const description = useMemo(() => {
     const desc = apartment.description?.trim();
@@ -236,7 +261,7 @@ export const PropertyListingCard = ({
             {(ratingLabel || vibeStyles.length > 0) && (
               <VibeMatchPopover
                 vibeScore={vibeScore}
-                vibeMatch={vibeMatch ?? styleOnlyMatch}
+                vibeMatch={vibeMatch ?? analysedVibe}
                 note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
               >
                 <button

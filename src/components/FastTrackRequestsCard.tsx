@@ -10,7 +10,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { CalendarCheck, Loader2, Pencil, XCircle } from 'lucide-react';
+import { Archive, ArchiveRestore, CalendarCheck, Loader2, Pencil, Trash2, XCircle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // Renter-facing view of their Fast-Track viewing requests. Requests are
 // editable/cancellable while still pending (RLS enforces the same rule).
@@ -24,7 +34,12 @@ type RequestRow = {
   status: 'pending' | 'in_progress' | 'scheduled' | 'completed' | 'cancelled';
   scheduled_viewings: any[];
   created_at: string;
+  archived_at: string | null;
 };
+
+// Pending/cancelled requests are the renter's to delete outright; the rest are
+// live booking records, so those can only be archived out of the list.
+const isDeletable = (s: RequestRow['status']) => s === 'pending' || s === 'cancelled';
 
 const STATUS_COLOR: Record<RequestRow['status'], string> = {
   pending: 'bg-amber-100 text-amber-800',
@@ -50,6 +65,10 @@ export const FastTrackRequestsCard = () => {
   const [editTimes, setEditTimes] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<RequestRow | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['my-fast-track-requests', user?.id],
@@ -57,7 +76,7 @@ export const FastTrackRequestsCard = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('fast_track_requests')
-        .select('id, property_ids, preferred_dates, preferred_times, special_requirements, status, scheduled_viewings, created_at')
+        .select('id, property_ids, preferred_dates, preferred_times, special_requirements, status, scheduled_viewings, created_at, archived_at')
         .eq('renter_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -125,7 +144,49 @@ export const FastTrackRequestsCard = () => {
     else { toast.success('Request cancelled'); refetch(); }
   };
 
+  // Only pending/cancelled rows are deletable — RLS enforces the same rule, so
+  // a blocked delete comes back as 0 rows rather than an error.
+  const deleteRequest = async (req: RequestRow) => {
+    setDeletingId(req.id);
+    const { data, error } = await supabase
+      .from('fast_track_requests')
+      .delete()
+      .eq('id', req.id)
+      .select('id');
+    setDeletingId(null);
+    if (error) {
+      toast.error(`Could not delete: ${error.message}`);
+    } else if (!data || data.length === 0) {
+      toast.error('Could not delete this request. Please refresh and try again.');
+    } else {
+      toast.success('Request deleted');
+      refetch();
+    }
+  };
+
+  // Scheduled/in-progress/completed requests stay on record, so renters archive
+  // them out of the list instead.
+  const setArchived = async (req: RequestRow, archived: boolean) => {
+    setArchivingId(req.id);
+    const { data, error } = await supabase.rpc('set_fast_track_archived', {
+      _request_id: req.id,
+      _archived: archived,
+    });
+    setArchivingId(null);
+    if (error) {
+      toast.error(`Could not ${archived ? 'archive' : 'restore'}: ${error.message}`);
+    } else if (!data || (Array.isArray(data) && data.length === 0)) {
+      toast.error('Could not update this request. Please refresh and try again.');
+    } else {
+      toast.success(archived ? 'Request archived' : 'Request restored');
+      refetch();
+    }
+  };
+
   if (!user) return null;
+
+  const archivedCount = requests.filter((r) => r.archived_at).length;
+  const visible = showArchived ? requests : requests.filter((r) => !r.archived_at);
 
   return (
     <Card>
@@ -135,28 +196,57 @@ export const FastTrackRequestsCard = () => {
           Fast-Track viewing requests
         </CardTitle>
         <CardDescription>Hausto coordinates these viewings with the agents for you.</CardDescription>
+        {archivedCount > 0 && (
+          <Button
+            variant="link"
+            className="h-auto p-0 justify-start text-xs w-fit"
+            onClick={() => setShowArchived((v) => !v)}
+          >
+            {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin" /></div>
-        ) : requests.length === 0 ? (
+        ) : visible.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No viewing requests yet. Shortlist listings from Browse and hit "Request viewings".
+            {requests.length === 0
+              ? 'No viewing requests yet. Shortlist listings from Browse and hit "Request viewings".'
+              : 'No active viewing requests - the rest are archived.'}
           </p>
         ) : (
           <div className="space-y-3">
-            {requests.map((req) => (
-              <div key={req.id} className="rounded-lg border p-3 space-y-2">
+            {visible.map((req) => (
+              <div key={req.id} className={`rounded-lg border p-3 space-y-2 ${req.archived_at ? 'opacity-70' : ''}`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className={STATUS_COLOR[req.status]}>{STATUS_LABEL[req.status]}</Badge>
+                  {req.archived_at && <Badge variant="outline" className="text-xs">Archived</Badge>}
                   <span className="text-xs text-muted-foreground ml-auto">
                     {new Date(req.created_at).toLocaleDateString()}
                   </span>
                 </div>
                 <ul className="text-sm space-y-0.5">
-                  {req.property_ids.map((pid) => (
-                    <li key={pid} className="line-clamp-1">• {titles.get(pid) || 'Listing no longer available'}</li>
-                  ))}
+                  {req.property_ids.map((pid) => {
+                    const title = titles.get(pid);
+                    return (
+                      <li key={pid} className="line-clamp-1">
+                        •{' '}
+                        {title ? (
+                          <a
+                            href={`/property/${pid}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-primary underline decoration-border underline-offset-4 hover:decoration-primary transition-colors"
+                          >
+                            {title}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">Listing no longer available</span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <p className="text-xs text-muted-foreground">
                   Dates: {req.preferred_dates.join(', ')}
@@ -171,21 +261,74 @@ export const FastTrackRequestsCard = () => {
                     ))}
                   </div>
                 )}
-                {req.status === 'pending' && (
-                  <div className="flex gap-2 pt-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(req)}>
-                      <Pencil className="w-3 h-3 mr-1" /> Edit
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {req.status === 'pending' && (
+                    <>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(req)}>
+                        <Pencil className="w-3 h-3 mr-1" /> Change
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => cancelRequest(req)}>
+                        <XCircle className="w-3 h-3 mr-1" /> Cancel
+                      </Button>
+                    </>
+                  )}
+                  {isDeletable(req.status) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs text-destructive hover:text-destructive"
+                      disabled={deletingId === req.id}
+                      onClick={() => setConfirmDelete(req)}
+                    >
+                      {deletingId === req.id
+                        ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        : <Trash2 className="w-3 h-3 mr-1" />}
+                      Delete
                     </Button>
-                    <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => cancelRequest(req)}>
-                      <XCircle className="w-3 h-3 mr-1" /> Cancel
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={archivingId === req.id}
+                      onClick={() => setArchived(req, !req.archived_at)}
+                    >
+                      {archivingId === req.id
+                        ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        : req.archived_at
+                          ? <ArchiveRestore className="w-3 h-3 mr-1" />
+                          : <Archive className="w-3 h-3 mr-1" />}
+                      {req.archived_at ? 'Restore' : 'Archive'}
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
       </CardContent>
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this viewing request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete?.status === 'pending'
+                ? 'This withdraws the request and removes it for good. If you only want to stop it going ahead, use Cancel instead.'
+                : 'This removes the cancelled request from your list for good.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => { if (confirmDelete) deleteRequest(confirmDelete); setConfirmDelete(null); }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
         <DialogContent className="max-w-md">

@@ -195,7 +195,7 @@ export const EditorialPropertyCard = ({
 
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
-    shareProperty(apartment.id, displayTitle);
+    shareProperty(apartment.id, displayTitle, { openPage: true });
   };
 
   const handleLocationClick = async (e: React.MouseEvent) => {
