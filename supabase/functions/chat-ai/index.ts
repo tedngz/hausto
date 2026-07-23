@@ -1911,6 +1911,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
 
           if (imageAnalysisResponse.ok) {
             const analysisData = await imageAnalysisResponse.json();
+            logOpenAIUsage({ fn: 'chat-ai:user-image-analysis', model: 'gpt-4o-mini', usage: analysisData?.usage, images: validImages.length });
             let analysisContent = analysisData.choices?.[0]?.message?.content || '';
             analysisContent = normalizeAiResponse(analysisContent);
             
