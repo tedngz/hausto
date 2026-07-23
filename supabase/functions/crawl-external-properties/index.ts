@@ -348,6 +348,7 @@ Return ONLY valid JSON:
     }
     
     const data = await response.json();
+    logOpenAIUsage({ fn: 'crawl-external-properties:vibe', model: 'gpt-4o-mini', usage: data?.usage });
     let content = data.choices?.[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
