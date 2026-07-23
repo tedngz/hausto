@@ -343,7 +343,7 @@ async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: 
   if (!OPENAI_API_KEY || !propertyData.images || propertyData.images.length === 0) return false;
 
   try {
-    const imagesToAnalyze = propertyData.images.slice(0, 5);
+    const imagesToAnalyze = propertyData.images.slice(0, 3);
     console.log(`[scheduled-crawl] Running vibe analysis for "${propertyData.title}" (${imagesToAnalyze.length} images)`);
 
     const analyzeResponse = await fetch(`${SUPABASE_URL}/functions/v1/analyze-vibe`, {
