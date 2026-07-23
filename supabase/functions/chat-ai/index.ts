@@ -1782,6 +1782,7 @@ When analyzing property images, ONLY use tags from the standard list above.`;
       }
 
       const data = await response.json();
+      logOpenAIUsage({ fn: 'chat-ai:image-analysis', model: 'gpt-4o-mini', usage: data?.usage });
       const aiResponse = data.choices[0].message.content;
 
       if (canPersist) {
