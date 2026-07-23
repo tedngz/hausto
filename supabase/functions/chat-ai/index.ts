@@ -2561,6 +2561,7 @@ Maximum ${maxResults} properties in results.`;
     console.log(`[AI] OpenAI responded in ${Date.now() - t0}ms`);
 
     const aiData = await aiResponse.json();
+    logOpenAIUsage({ fn: 'chat-ai:main', model: 'gpt-4o-mini', usage: aiData?.usage });
     let responseContent = aiData.choices[0].message.content || '';
     
     console.log('[AI] Raw response length:', responseContent.length);
