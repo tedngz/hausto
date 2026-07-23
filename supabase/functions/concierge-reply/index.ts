@@ -283,6 +283,7 @@ Respond ONLY with JSON: {"action": "answer" | "escalate", "reply": string, "sugg
         throw new Error(`OpenAI error: ${aiRes.status}`);
       }
       const aiData = await aiRes.json();
+      logOpenAIUsage({ fn: 'concierge-reply', model: 'gpt-4o-mini', usage: aiData?.usage });
       try {
         decision = JSON.parse(aiData.choices[0].message.content);
       } catch {
