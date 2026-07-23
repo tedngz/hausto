@@ -962,6 +962,7 @@ async function summarizeConversation(
     });
     if (!resp.ok) return '';
     const data = await resp.json();
+    logOpenAIUsage({ fn: 'chat-ai:summary', model: 'gpt-4o-mini', usage: data?.usage });
     return (data.choices?.[0]?.message?.content || '').trim();
   } catch (e) {
     console.error('[Summary] Failed:', e);
