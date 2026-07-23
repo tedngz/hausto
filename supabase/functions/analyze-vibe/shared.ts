@@ -1,6 +1,7 @@
 // Quality-first per-image vibe analysis with Redis-backed TPM limiting
 // and exponential backoff. NO fake/generic highlight fallbacks — failures
 // are surfaced to the caller so the property stays in `pending` state.
+import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
