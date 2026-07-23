@@ -149,6 +149,7 @@ async function callAI(messages: any[], maxTokens = 2500): Promise<string | null>
     return null;
   }
   const data = await res.json();
+  logOpenAIUsage({ fn: 'recrawl-external-listing', model: 'gpt-4o-mini', usage: data?.usage });
   return data?.choices?.[0]?.message?.content || null;
 }
 
