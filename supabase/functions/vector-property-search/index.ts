@@ -117,6 +117,7 @@ serve(async (req) => {
     }
 
     const embeddingData = await embeddingResponse.json();
+    logOpenAIUsage({ fn: 'vector-property-search', model: 'text-embedding-3-small', usage: embeddingData?.usage });
     const queryEmbedding = embeddingData.data[0].embedding;
 
     console.log('[Vector Search] Generated query embedding, searching properties');
