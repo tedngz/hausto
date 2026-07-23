@@ -27,17 +27,18 @@ serve(async (req) => {
 
     console.log('[Batch Generate] Starting batch embedding generation');
 
-    // Fetch ALL internal properties (including inactive)
+    // Only embed ACTIVE properties to save cost
     const { data: internalProps, error: intError } = await supabaseAdmin
       .from('properties')
-      .select('id, title, description, location, price, vibe_analysis, amenities');
+      .select('id, title, description, location, price, vibe_analysis, amenities')
+      .eq('is_active', true);
 
     if (intError) throw intError;
 
-    // Fetch ALL external properties (including inactive/expired)
     const { data: externalProps, error: extError } = await supabaseAdmin
       .from('external_properties')
-      .select('id, title, description, location, price, vibe_analysis, amenities');
+      .select('id, title, description, location, price, vibe_analysis, amenities')
+      .eq('is_active', true);
 
     if (extError) throw extError;
 
