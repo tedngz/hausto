@@ -2,6 +2,8 @@
 // listings and a renter question, answer concisely from the listing data.
 // Deliberately separate from chat-ai (conversational search) - this endpoint
 // is stateless and cheap (gpt-4o-mini).
+import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
