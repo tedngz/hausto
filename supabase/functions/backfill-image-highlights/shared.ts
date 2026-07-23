@@ -135,6 +135,7 @@ async function callOpenAIWithBackoff(
     if (resp.ok) {
       const data = await resp.json();
       const content = data?.choices?.[0]?.message?.content;
+      logOpenAIUsage({ fn: 'backfill-image-highlights', model: 'gpt-4o-mini', usage: data?.usage, images: 1 });
       if (typeof content === 'string' && content.trim()) {
         return { ok: true, content };
       }
