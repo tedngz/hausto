@@ -980,7 +980,10 @@ const AdminTools = () => {
       </div>
 
 
+      <OpenAIUsagePanel />
+
       <FastTrackQueuePanel />
+
 
       <ImageConflictsPanel />
 
