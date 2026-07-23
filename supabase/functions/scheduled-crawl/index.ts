@@ -18,7 +18,7 @@ const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/scheduled-crawl`;
 
 const CONFIG_KEY = 'crawl:config';
 const DAILY_COUNT_KEY = 'crawl:daily_count';
-const MAX_DAILY_LISTINGS = 50;
+const MAX_DAILY_LISTINGS = 20;
 
 // ===== QStash signature verification =====
 async function verifyQStashSignature(signature: string, body: string): Promise<boolean> {
