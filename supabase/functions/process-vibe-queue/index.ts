@@ -18,6 +18,17 @@ const DEFAULT_BATCH = 4;
 const MIRROR_BUCKET = 'external-property-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+// ─── Listing-quality rules for crawled external properties ───────
+// Show at least MIN_DISPLAY_IMAGES real photos of the unit and keep up to
+// STORE_TARGET, but only pay for vision on the first ANALYZE_COUNT (cost
+// control — the rest still display, just without a per-image highlight).
+const MIN_DISPLAY_IMAGES = 5;
+const STORE_TARGET = 8;
+const ANALYZE_COUNT = 3;
+// Tiny source thumbnails render blurry when shown large; drop anything
+// narrower than this before it ever reaches the gallery.
+const MIN_IMAGE_WIDTH = 600;
+
 async function safeFolder(externalId: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(externalId));
   const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -25,35 +36,70 @@ async function safeFolder(externalId: string): Promise<string> {
   return `${readable}-${hex.substring(0, 16)}`;
 }
 
-async function mirrorOne(supabase: any, url: string, externalId: string, idx: number): Promise<string> {
+// Parse pixel width from JPEG SOF / PNG IHDR headers so we can reject tiny
+// source thumbnails before they reach the gallery (webp/unknown → don't block).
+function imageWidth(bytes: Uint8Array): number | null {
   try {
-    if (!url || url.includes(`/${MIRROR_BUCKET}/`)) return url;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 15000);
-    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 HaustoBot' } });
-    clearTimeout(t);
-    if (!res.ok) return url;
-    const ct = (res.headers.get('content-type') || 'image/jpeg').toLowerCase();
-    if (!ct.startsWith('image/')) return url;
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (!buf.byteLength || buf.byteLength > MAX_IMAGE_BYTES) return url;
-    const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
-    const folder = await safeFolder(externalId);
-    const path = `${folder}/${idx}.${ext}`;
-    const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, buf, { contentType: ct, upsert: true });
-    if (error) { console.warn('[mirror] upload failed:', error.message); return url; }
-    const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
-    return data?.publicUrl || url;
-  } catch (e) {
-    console.warn('[mirror] error:', String(e).substring(0, 200));
-    return url;
+    if (bytes[0] === 0xff && bytes[1] === 0xd8) { // JPEG
+      let i = 2;
+      while (i < bytes.length - 9) {
+        if (bytes[i] !== 0xff) { i++; continue; }
+        const marker = bytes[i + 1];
+        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+          return (bytes[i + 7] << 8) | bytes[i + 8];
+        }
+        i += 2 + ((bytes[i + 2] << 8) | bytes[i + 3]);
+      }
+      return null;
+    }
+    if (bytes[0] === 0x89 && bytes[1] === 0x50) { // PNG
+      return (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
-async function mirrorAll(supabase: any, urls: string[], externalId: string): Promise<string[]> {
-  const out: string[] = [];
-  for (let i = 0; i < urls.length; i++) out.push(await mirrorOne(supabase, urls[i], externalId, i));
-  return out;
+// Fetch each candidate once, drop non-image / too-large / low-res shots, mirror
+// the survivors to storage, and stop at `target`. Returns the mirrored public
+// URLs alongside the source URLs they came from (kept in order for recovery).
+async function mirrorQualityImages(
+  supabase: any, urls: string[], externalId: string, target: number,
+): Promise<{ mirrored: string[]; originals: string[] }> {
+  const mirrored: string[] = [];
+  const originals: string[] = [];
+  const folder = await safeFolder(externalId);
+  for (const url of urls) {
+    if (mirrored.length >= target) break;
+    if (!url) continue;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 HaustoBot' } });
+      clearTimeout(t);
+      if (!res.ok) continue;
+      const ct = (res.headers.get('content-type') || 'image/jpeg').toLowerCase();
+      if (!ct.startsWith('image/')) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (!bytes.byteLength || bytes.byteLength > MAX_IMAGE_BYTES) continue;
+      // Low-quality guard: reject tiny source thumbnails.
+      const w = imageWidth(bytes);
+      if (w !== null && w < MIN_IMAGE_WIDTH) continue;
+      const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
+      const path = `${folder}/${mirrored.length}.${ext}`;
+      const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, bytes, { contentType: ct, upsert: true });
+      if (error) { console.warn('[mirror] upload failed:', error.message); continue; }
+      const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
+      if (data?.publicUrl) {
+        mirrored.push(data.publicUrl);
+        originals.push(url);
+      }
+    } catch (e) {
+      console.warn('[mirror] error:', String(e).substring(0, 200));
+    }
+  }
+  return { mirrored, originals };
 }
 
 serve(async (req) => {
@@ -113,8 +159,28 @@ serve(async (req) => {
           continue;
         }
 
-        const images = prop.images.slice(0, 5);
-        const result = await analyzeImagesQualityFirst({ imageUrls: images, openaiKey });
+        // 1) Build the display set first: dimension-filtered + mirrored, capped
+        //    at STORE_TARGET. This is exactly what renters see in the gallery.
+        const mirrorKey = `${prop.source || 'src'}-${prop.external_id || prop.id}`;
+        const candidates = [...new Set(prop.images as string[])];
+        const { mirrored: displayImages, originals: keptOriginals } =
+          await mirrorQualityImages(supabase, candidates, mirrorKey, STORE_TARGET);
+
+        // Quality floor: a listing must clear MIN_DISPLAY_IMAGES real photos.
+        // If it can't, hold it (stays hidden) rather than shipping a thin gallery.
+        // This won't fix on retry, so fail the job outright.
+        if (displayImages.length < MIN_DISPLAY_IMAGES) {
+          await supabase
+            .from('vibe_analysis_queue')
+            .update({ status: 'failed', attempts: (job.attempts || 0) + 1, last_error: `insufficient_quality_images:${displayImages.length}` })
+            .eq('id', job.id);
+          results.push({ jobId: job.id, propertyId: prop.id, ok: false, reason: 'insufficient_quality_images', kept: displayImages.length });
+          continue;
+        }
+
+        // 2) Pay for vision on only the first ANALYZE_COUNT images (cost control).
+        const analyzeSet = displayImages.slice(0, ANALYZE_COUNT);
+        const result = await analyzeImagesQualityFirst({ imageUrls: analyzeSet, openaiKey });
 
         if (!result.allSucceeded) {
           const newAttempts = (job.attempts || 0) + 1;
@@ -165,19 +231,15 @@ serve(async (req) => {
           image_analyses: analyses,
         };
 
-        // Mirror images to storage so they survive source-listing removal
-        const mirrorKey = `${prop.source || 'src'}-${prop.external_id || prop.id}`;
-        const mirroredImages = await mirrorAll(supabase, images, mirrorKey);
-
-        // Persist pre-mirror URLs so we can recover if storage is corrupted
+        // Persist pre-mirror source URLs so we can recover if storage is corrupted
         const existingRaw = (prop as any).raw_data && typeof (prop as any).raw_data === 'object'
           ? (prop as any).raw_data : {};
-        const updatedRaw = { ...existingRaw, original_image_urls: images };
+        const updatedRaw = { ...existingRaw, original_image_urls: keptOriginals };
 
         const { error: updErr } = await supabase
           .from('external_properties')
           .update({
-            images: mirroredImages,
+            images: displayImages,
             vibe_analysis: aggregated,
             highlights: positionalHighlights,
             vibe_status: 'complete',
