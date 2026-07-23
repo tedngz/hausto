@@ -199,6 +199,7 @@ async function generatePropertyEmbedding(property: any): Promise<number[] | null
     }
     
     const data = await response.json();
+    logOpenAIUsage({ fn: 'crawl-external-properties:embedding', model: 'text-embedding-3-small', usage: data?.usage });
     return data.data?.[0]?.embedding || null;
   } catch (error) {
     console.error('Error generating embedding:', error);
