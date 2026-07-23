@@ -105,6 +105,7 @@ Description: ${property.description || 'No description'}`;
         }
 
         const embeddingData = await embeddingResponse.json();
+        logOpenAIUsage({ fn: 'batch-generate-embeddings', model: 'text-embedding-3-small', usage: embeddingData?.usage });
         const embeddings = embeddingData.data;
 
         // Store all embeddings in Redis via pipeline
