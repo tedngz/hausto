@@ -194,7 +194,7 @@ export async function analyzeImagesQualityFirst(args: AnalyzeArgs): Promise<Anal
         role: 'user',
         content: [
           { type: 'text', text: buildPrompt(i, imageUrls.length, previousHighlights) },
-          { type: 'image_url', image_url: { url: fetched.dataUrl, detail: 'auto' } },
+          { type: 'image_url', image_url: { url: fetched.dataUrl, detail: 'low' } },
         ],
       }],
       max_tokens: 500,
