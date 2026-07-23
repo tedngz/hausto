@@ -130,7 +130,7 @@ serve(async (req) => {
     const results: any[] = [];
     for (const prop of needsBackfill) {
       try {
-        const images = (prop.images || []).slice(0, 5);
+        const images = (prop.images || []).slice(0, 3);
         const result = await analyzeImagesQualityFirst({ imageUrls: images, openaiKey });
 
         if (!result.allSucceeded) {
