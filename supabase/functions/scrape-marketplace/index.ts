@@ -142,6 +142,7 @@ async function callAI(messages: { role: string; content: any }[], maxTokens: num
       });
       if (response.ok) {
         const data = await response.json();
+        logOpenAIUsage({ fn: 'scrape-marketplace', model: 'gpt-4o-mini', usage: data?.usage });
         return data.choices?.[0]?.message?.content || null;
       }
       console.warn('[callAI] OpenAI error:', response.status, await response.text());
