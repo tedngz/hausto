@@ -20,6 +20,7 @@ import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject
 import { RealtorApplicationsPanel } from "@/components/admin/RealtorApplicationsPanel";
 import { FastTrackQueuePanel } from "@/components/admin/FastTrackQueuePanel";
 import { ImageConflictsPanel } from "@/components/admin/ImageConflictsPanel";
+import { OpenAIUsagePanel } from "@/components/admin/OpenAIUsagePanel";
 
 function getTimeAgo(timestamp: string): string {
   const diff = Date.now() - new Date(timestamp).getTime();
