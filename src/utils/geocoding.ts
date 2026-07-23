@@ -143,6 +143,23 @@ const DISTRICT_ALIASES: Record<string, string> = {
 };
 
 /**
+ * Nominatim reads the digits in a numbered district ("Quận 1") as a house
+ * number and answers with unrelated buildings that happen to sit at number 1 —
+ * e.g. "Phường Tân Định, Quận 1, Hồ Chí Minh" resolved to a building in Thủ
+ * Đức, 3km across the river. Querying the ward against the city directly
+ * returns the proper administrative boundary, so try that first and keep the
+ * fully-qualified alias as a fallback. Named districts (Thủ Đức, Bình Thạnh)
+ * resolve fine and are left alone.
+ */
+function wardQueryVariants(alias: string): string[] {
+  const parts = alias.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 3 && /^quận\s+\d+$/i.test(parts[1])) {
+    return [`${parts[0]}, ${parts[parts.length - 1]}`, alias];
+  }
+  return [alias];
+}
+
+/**
  * Normalize a location string and find its Vietnamese equivalent for better geocoding.
  * Returns the best query string to use with Nominatim.
  */
@@ -155,7 +172,7 @@ function resolveLocationQuery(location: string): string[] {
   // 1. Try ward-level aliases first (most specific)
   for (const part of parts) {
     if (WARD_ALIASES[part]) {
-      queries.push(WARD_ALIASES[part]);
+      queries.push(...wardQueryVariants(WARD_ALIASES[part]));
       break;
     }
   }
@@ -163,7 +180,7 @@ function resolveLocationQuery(location: string): string[] {
   if (!queries.length) {
     for (const [key, val] of Object.entries(WARD_ALIASES)) {
       if (lower.includes(key)) {
-        queries.push(val);
+        queries.push(...wardQueryVariants(val));
         break;
       }
     }
@@ -241,6 +258,21 @@ function resolveLocationQuery(location: string): string[] {
 }
 
 /**
+ * A non-administrative hit is only trustworthy if it actually names the place
+ * we asked for — "Tan Dinh Market" for a Tân Định query is fine, a random
+ * office block is not.
+ */
+function namesTheQueriedPlace(result: any, query: string): boolean {
+  const head = query
+    .split(',')[0]
+    .trim()
+    .replace(/^(phường|quận|thành phố|huyện|xã|thị trấn)\s+/i, '')
+    .toLowerCase();
+  if (head.length < 3) return false;
+  return String(result?.display_name ?? '').toLowerCase().includes(head);
+}
+
+/**
  * Geocode a location string to coordinates using Nominatim.
  * Uses Vietnamese district name mappings for precise results.
  */
@@ -266,9 +298,13 @@ export async function geocodeLocation(location: string): Promise<{ lat: number; 
             r.class === 'boundary' || r.class === 'place' && r.type === 'suburb'
           ) || data.find((r: any) =>
             r.addresstype === 'suburb' || r.addresstype === 'city_district'
-          ) || data[0];
+          ) || data.find((r: any) => namesTheQueriedPlace(r, q));
 
-          return { lat: parseFloat(best.lat), lng: parseFloat(best.lon) };
+          // Deliberately no `|| data[0]`: when Nominatim can't match the
+          // locality it still returns whatever POI ranked first, which put pins
+          // kilometres from the address. Fall through to the next, broader
+          // query instead of trusting an unrelated hit.
+          if (best) return { lat: parseFloat(best.lat), lng: parseFloat(best.lon) };
         }
       } catch {
         continue;
