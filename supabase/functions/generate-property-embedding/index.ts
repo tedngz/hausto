@@ -78,6 +78,7 @@ Description: ${description || 'No description'}`;
     }
 
     const embeddingData = await embeddingResponse.json();
+    logOpenAIUsage({ fn: 'generate-property-embedding', model: 'text-embedding-3-small', usage: embeddingData?.usage });
     const embedding = embeddingData.data[0].embedding;
 
     console.log(`[Generate Embedding] Generated embedding with ${embedding.length} dimensions`);
