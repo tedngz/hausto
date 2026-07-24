@@ -91,7 +91,7 @@ export const ImageConflictsPanel = () => {
             {rows.map((r) => (
               <div key={r.id} className="flex items-center gap-3 rounded-lg border p-2">
                 {r.images?.[0] && (
-                  <img src={r.images[0]} alt="" className="w-14 h-10 rounded object-cover flex-shrink-0" />
+                  <img loading="lazy" src={r.images[0]} alt="" className="w-14 h-10 rounded object-cover flex-shrink-0" />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium line-clamp-1">{r.title}</p>

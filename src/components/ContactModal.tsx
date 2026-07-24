@@ -201,7 +201,7 @@ export const ContactModal = ({ apartment, userProfile, onClose }: ContactModalPr
         
         <div className="mb-4">
           <div className="flex items-center space-x-3 mb-3">
-            <img 
+            <img loading="lazy" 
               src={apartment.images[0]} 
               alt={apartment.title}
               className="w-16 h-16 object-cover rounded-lg"

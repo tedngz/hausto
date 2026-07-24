@@ -253,8 +253,8 @@ const PropertyDetail = () => {
         </Helmet>
       )}
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
-        <main className="container mx-auto px-4 py-8 max-w-4xl">
-          <div className="flex items-center justify-between gap-3 mb-6">
+        <main className="container mx-auto px-4 py-5 sm:py-8 max-w-4xl">
+          <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
             <Button
               variant="ghost"
               onClick={() => navigate('/')}

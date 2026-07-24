@@ -4,6 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { prepareForStorage } from "../_shared/mirror-image.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,8 @@ const corsHeaders = {
 
 const MIRROR_BUCKET = 'external-property-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Matches process-vibe-queue: a long CDN TTL keeps repeat views off origin.
+const MIRROR_CACHE_CONTROL = '604800'; // 7 days
 const DEFAULT_BATCH = 10;
 
 async function safeFolder(externalId: string): Promise<string> {
@@ -33,10 +36,11 @@ async function mirrorOne(supabase: any, url: string, externalId: string, idx: nu
     if (!ct.startsWith('image/')) return url;
     const buf = new Uint8Array(await res.arrayBuffer());
     if (!buf.byteLength || buf.byteLength > MAX_IMAGE_BYTES) return url;
-    const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
+    const prepared = await prepareForStorage(buf, ct);
     const folder = await safeFolder(externalId);
-    const path = `${folder}/${idx}.${ext}`;
-    const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, buf, { contentType: ct, upsert: true });
+    const path = `${folder}/${idx}.${prepared.ext}`;
+    const { error } = await supabase.storage.from(MIRROR_BUCKET)
+      .upload(path, prepared.bytes, { contentType: prepared.contentType, upsert: true, cacheControl: MIRROR_CACHE_CONTROL });
     if (error) { console.warn('[backfill] upload failed:', error.message); return url; }
     const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
     return data?.publicUrl || url;

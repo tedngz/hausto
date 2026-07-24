@@ -7,6 +7,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Same listing-quality rules as process-vibe-queue: a listing needs at least
+// MIN_DISPLAY_IMAGES photos to go live, and we only pay for vision on the first
+// ANALYZE_COUNT (the rest still display, just without a per-image highlight).
+const MIN_DISPLAY_IMAGES = 5;
+const ANALYZE_COUNT = 3;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -130,7 +136,24 @@ serve(async (req) => {
     const results: any[] = [];
     for (const prop of needsBackfill) {
       try {
-        const images = (prop.images || []).slice(0, 3);
+        // Quality floor: don't activate a thin gallery here. Route it to the
+        // vibe queue instead, which dimension-filters, mirrors and re-checks the
+        // MIN_DISPLAY_IMAGES minimum before flipping the listing live.
+        const allImages = Array.isArray(prop.images) ? prop.images : [];
+        if (allImages.length < MIN_DISPLAY_IMAGES) {
+          await supabase
+            .from('external_properties')
+            .update({ vibe_status: 'pending', is_active: false, updated_at: new Date().toISOString() })
+            .eq('id', prop.id);
+          await supabase
+            .from('vibe_analysis_queue')
+            .insert({ property_id: prop.id, status: 'queued', last_error: `insufficient_images:${allImages.length}` })
+            .then(() => {}, () => {});
+          results.push({ id: prop.id, title: prop.title, success: false, reason: 'insufficient_images_requeued', count: allImages.length });
+          continue;
+        }
+
+        const images = allImages.slice(0, ANALYZE_COUNT);
         const result = await analyzeImagesQualityFirst({ imageUrls: images, openaiKey });
 
         if (!result.allSucceeded) {

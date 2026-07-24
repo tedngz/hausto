@@ -91,7 +91,7 @@ export const LiveListingsPreview = () => {
               onClick={() => navigate(`/property/${r.id}`)}
             >
               {r.images?.[0] && (
-                <img
+                <img loading="lazy"
                   src={r.images[0]}
                   alt=""
                   loading="lazy"

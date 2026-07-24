@@ -111,7 +111,7 @@ export const ImageHighlightEditor = ({
   };
   return <div className="space-y-2">
       <div className="relative border rounded-lg overflow-hidden">
-        <img src={preview} alt={`Property ${index + 1}`} className="w-full h-24 object-cover" />
+        <img loading="lazy" src={preview} alt={`Property ${index + 1}`} className="w-full h-24 object-cover" />
         <div className="absolute top-1 left-1">
           <Badge variant="secondary" className="text-xs">
             {index + 1}

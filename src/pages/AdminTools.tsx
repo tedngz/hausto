@@ -2223,7 +2223,7 @@ const AdminTools = () => {
                                   onClick={() => setPreviewProperty(prop)}
                                 >
                                   {imageCount > 0 ? (
-                                    <img
+                                    <img loading="lazy"
                                       src={prop.images[0]}
                                       alt=""
                                       className="h-10 w-14 rounded object-cover shrink-0"
@@ -2385,7 +2385,7 @@ const AdminTools = () => {
                   {Array.isArray(r.sample_images) && r.sample_images.length > 0 && (
                     <div className="flex gap-1 overflow-x-auto pt-1">
                       {r.sample_images.slice(0, 4).map((img: string, i: number) => (
-                        <img
+                        <img loading="lazy"
                           key={i}
                           src={img}
                           alt=""
@@ -2428,7 +2428,7 @@ const AdminTools = () => {
                       const imgAnalysis = perImage[i];
                       return (
                         <div key={i} className="space-y-1">
-                          <img
+                          <img loading="lazy"
                             src={img}
                             alt={`Image ${i + 1}`}
                             className="w-full rounded-lg object-cover max-h-64"

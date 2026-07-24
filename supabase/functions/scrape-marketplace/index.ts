@@ -225,7 +225,7 @@ async function screenPropertyImages(
 ): Promise<{ has_interior: boolean; selected: string[]; reason?: string } | null> {
   if (images.length === 0) return { has_interior: false, selected: [], reason: 'no_images' };
 
-  const maxToCheck = Math.min(images.length, 10);
+  const maxToCheck = Math.min(images.length, 12);
   const imageContent: any[] = [];
   const validIndexes: number[] = [];
 
@@ -284,7 +284,7 @@ Set is_consistent=false ONLY if 3+ images clearly show DIFFERENT apartments (com
 Set is_authentic=false if the images are AI-generated, 3D renders, or stock/marketing photos rather than real photographs of the actual unit (telltales: impossible geometry, uncanny textures, watermark-free showroom perfection across every shot, developer render lighting).
 
 **SELECTION:**
-From the qualifying INTERIOR images only, select up to 5 best representative shots (rooms, kitchen, bathroom, living area, interior balcony view). Exclude:
+From the qualifying INTERIOR images only, select the 5-8 best representative shots covering DIFFERENT aspects of the unit (living area, each bedroom, kitchen, bathroom, dining area, interior balcony/view). Prefer breadth of coverage over near-duplicate angles. Exclude:
 - People (agents/tenants/portraits)
 - Building exteriors / facades / parking lots
 - Neighborhood / street / aerial photos
@@ -331,7 +331,7 @@ Return ONLY valid JSON, indexes 0-based matching shown order:
         .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length)
         .map((i: number) => images[validIndexes[i]])
         .filter(Boolean)
-        .slice(0, 5);
+        .slice(0, 8);
     }
 
     if (selected.length === 0) {
@@ -595,7 +595,7 @@ async function savePropertiesToDB(
         
         const updateData: Record<string, any> = {
           ...propertyData,
-          images: propertyData.images.slice(0, 5), // Keep existing limit for updates
+          images: propertyData.images.slice(0, 8), // Match the 5-8 display target
           last_verified_at: now,
           updated_at: now,
           expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
@@ -622,8 +622,9 @@ async function savePropertiesToDB(
           u.includes('batdongsan.com.vn') ? normalizeBatdongsanImageUrl(u) : u);
 
         if (rawMode) {
-          // Raw mode: skip OpenAI vision interior gate. Save up to 10 URL-filtered images.
-          finalImages = validImages.slice(0, 10);
+          // Raw mode: skip OpenAI vision interior gate. Keep a wide candidate pool
+          // (up to 12); the vibe queue dimension-filters and curates 5-8 for display.
+          finalImages = validImages.slice(0, 12);
           if (finalImages.length === 0) {
             filtered++;
             await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'raw_no_images', validImages);
@@ -1320,9 +1321,11 @@ RESPOND WITH VALID JSON ONLY:
 
     // Use AI-extracted images if available, otherwise use scraped images
     // Normalize batdongsan image URLs to full-size
+    // Keep a wide candidate pool (up to 12) so the downstream vision gate and
+    // vibe queue can curate 5-8 quality shots of different aspects.
     let finalImages = (Array.isArray(p.images) && p.images.length > 0 ? p.images : detailImages)
       .filter((img: string) => isValidPropertyImageUrl(img))
-      .slice(0, 5);
+      .slice(0, 12);
 
     if (marketplace === 'batdongsan') {
       finalImages = finalImages.map(normalizeBatdongsanImageUrl);
@@ -1341,13 +1344,13 @@ RESPOND WITH VALID JSON ONLY:
           })
       )];
       if (codeMatched.length > 0) {
-        // Keep up to 8 (gallery-ordered, hero first) so the downstream vision gate
-        // can curate the best 5; direct consumers slice to 5 themselves.
-        finalImages = codeMatched.slice(0, 8);
+        // Keep up to 12 (gallery-ordered, hero first) so the downstream vision gate
+        // and vibe queue can curate 5-8 quality shots of different aspects.
+        finalImages = codeMatched.slice(0, 12);
       } else {
         // No gallery images survived matching — keep whatever URL-valid, deduped
         // images we have rather than dropping the listing entirely.
-        finalImages = [...new Set(finalImages.map(normalizeHousingsgnImageUrl))].slice(0, 5);
+        finalImages = [...new Set(finalImages.map(normalizeHousingsgnImageUrl))].slice(0, 12);
       }
     }
 
@@ -1454,7 +1457,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
     }
 
     return Array.from(uniqueProps.values()).map((p: any, i: number) => {
-      const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 5);
+      const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 12);
       
       return {
         id: `external-${marketplace}-${Date.now()}-${i}`,

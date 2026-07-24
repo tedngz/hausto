@@ -803,7 +803,7 @@ export const RealtorDashboard = ({
               </div> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {realtorProperties.map(property => <Card key={property.id} className={`overflow-hidden border transition-shadow ${selectedPropertyIds.has(property.id) ? 'border-primary ring-2 ring-primary/20' : 'border-slate-200 hover:shadow-lg'}`}>
                     {property.images && property.images.length > 0 && <div className="relative">
-                        <img src={property.images[0]} alt={property.title} className="w-full h-32 md:h-48 object-cover" />
+                        <img loading="lazy" src={property.images[0]} alt={property.title} className="w-full h-32 md:h-48 object-cover" />
                         <div className="absolute top-2 left-2">
                           <Button
                             size="icon"
@@ -982,7 +982,7 @@ export const RealtorDashboard = ({
                     <Card key={listing.id} className={`overflow-hidden border transition-shadow ${selectedPropertyIds.has(`ext-${listing.id}`) ? 'border-primary ring-2 ring-primary/20' : listing.is_active ? 'border-slate-200 hover:shadow-lg' : 'border-slate-200 opacity-60'}`}>
                       {listing.images && listing.images.length > 0 && (
                         <div className="relative">
-                          <img src={listing.images[0]} alt={listing.title} className="w-full h-32 md:h-48 object-cover" />
+                          <img loading="lazy" src={listing.images[0]} alt={listing.title} className="w-full h-32 md:h-48 object-cover" />
                           <div className="absolute top-2 left-2">
                             <Button
                               size="icon"

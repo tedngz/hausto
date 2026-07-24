@@ -157,7 +157,11 @@ export const EditorialPropertyCard = ({
   }, [quoteFallback, apartment.vibe, apartment.description]);
 
   const quote = imageHighlight || fallbackQuote;
-  const spec = [apartment.rooms, formatSize(apartment.size)].filter(s => s && String(s).trim()).join(' · ');
+  // Some sources repeat the room count in the size field — show it once.
+  const spec = [apartment.rooms, formatSize(apartment.size)]
+    .map(s => String(s ?? '').trim())
+    .filter((s, i, all) => s && all.indexOf(s) === i)
+    .join(' · ');
   // Freshness chip: how recently the source listing was confirmed still live.
   // Claims "live on source", never "available" — availability is only settled at viewing time.
   const verifiedLabel = useMemo(() => {
@@ -229,7 +233,7 @@ export const EditorialPropertyCard = ({
       role={onCardClick ? 'button' : undefined}
     >
       {/* Slideshow image */}
-      <img
+      <img loading="lazy"
         src={images[current]}
         alt={`${displayTitle} — photo ${current + 1} of ${images.length}`}
         className="absolute inset-0 w-full h-full object-cover"

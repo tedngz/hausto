@@ -1121,7 +1121,7 @@ export const HaustoChat = ({
                       }`}
                     >
                       {prop.images?.[0] ? (
-                        <img
+                        <img loading="lazy"
                           src={prop.images[0]}
                           alt={prop.title || 'Property'}
                           className="w-[88px] h-16 object-cover rounded-lg shrink-0 shadow-sm"

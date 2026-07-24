@@ -229,7 +229,7 @@ export const PropertyHighlightEditor = ({
               return <div key={index} className="flex gap-4 p-4 border rounded-lg">
                       {/* Medium-sized image */}
                       <div className="flex-shrink-0">
-                        <img src={image} alt={`${property.title} - Image ${index + 1}`} className="w-32 h-24 object-cover rounded-md" />
+                        <img loading="lazy" src={image} alt={`${property.title} - Image ${index + 1}`} className="w-32 h-24 object-cover rounded-md" />
                       </div>
                       
                       {/* Highlight content */}

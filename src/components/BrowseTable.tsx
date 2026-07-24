@@ -147,7 +147,7 @@ const CompareImageCarousel = ({ images, alt }: { images: string[]; alt: string }
   };
   return (
     <div className="relative aspect-[4/3] rounded overflow-hidden group/carousel">
-      <img
+      <img loading="lazy"
         src={list[idx]}
         alt={alt}
         loading="lazy"
@@ -620,7 +620,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                       <TableCell>
                         <div className="flex items-center gap-3 min-w-[220px]">
                           {r.images?.[0] && (
-                            <img
+                            <img loading="lazy"
                               src={r.images[0]}
                               alt=""
                               loading="lazy"
@@ -666,7 +666,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                               title={info.name}
                               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                             >
-                              <img
+                              <img loading="lazy"
                                 src={info.logo}
                                 alt={info.name}
                                 className="h-6 w-auto max-w-[80px] rounded-sm object-contain flex-shrink-0"
