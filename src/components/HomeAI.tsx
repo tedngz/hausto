@@ -1025,15 +1025,16 @@ export const HomeAI = ({
                   size="sm"
                   title={isSearch ? 'Find listings' : 'Get advice'}
                   className={
-                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 ' +
+                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-start gap-1.5 ' +
+                    'max-w-full whitespace-normal text-left ' +
                     (isSearch
                       ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
                       : 'border-border text-foreground hover:bg-secondary')
                   }
                   onClick={() => handleSearch(text)}
                 >
-                  <Icon className="h-3 w-3" />
-                  <span>{text}</span>
+                  <Icon className="h-3 w-3 shrink-0 mt-0.5" />
+                  <span className="min-w-0">{text}</span>
                 </Button>
               );
             })}
