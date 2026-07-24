@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.4";
+import { logOpenAIUsage } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -77,6 +78,7 @@ Description: ${description || 'No description'}`;
     }
 
     const embeddingData = await embeddingResponse.json();
+    logOpenAIUsage({ fn: 'generate-property-embedding', model: 'text-embedding-3-small', usage: embeddingData?.usage });
     const embedding = embeddingData.data[0].embedding;
 
     console.log(`[Generate Embedding] Generated embedding with ${embedding.length} dimensions`);

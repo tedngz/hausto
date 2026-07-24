@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.4";
 import { Resend } from "npm:resend@2.0.0";
+import { logOpenAIUsage } from "../_shared/openai-usage.ts";
 
 // Hausto concierge: answers every renter message in a matched thread as a
 // clearly-labeled AI, or escalates to the realtor when the question needs a
@@ -282,6 +283,7 @@ Respond ONLY with JSON: {"action": "answer" | "escalate", "reply": string, "sugg
         throw new Error(`OpenAI error: ${aiRes.status}`);
       }
       const aiData = await aiRes.json();
+      logOpenAIUsage({ fn: 'concierge-reply', model: 'gpt-4o-mini', usage: aiData?.usage });
       try {
         decision = JSON.parse(aiData.choices[0].message.content);
       } catch {

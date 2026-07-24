@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.4";
+import { logOpenAIUsage } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,17 +27,18 @@ serve(async (req) => {
 
     console.log('[Batch Generate] Starting batch embedding generation');
 
-    // Fetch ALL internal properties (including inactive)
+    // Only embed ACTIVE properties to save cost
     const { data: internalProps, error: intError } = await supabaseAdmin
       .from('properties')
-      .select('id, title, description, location, price, vibe_analysis, amenities');
+      .select('id, title, description, location, price, vibe_analysis, amenities')
+      .eq('is_active', true);
 
     if (intError) throw intError;
 
-    // Fetch ALL external properties (including inactive/expired)
     const { data: externalProps, error: extError } = await supabaseAdmin
       .from('external_properties')
-      .select('id, title, description, location, price, vibe_analysis, amenities');
+      .select('id, title, description, location, price, vibe_analysis, amenities')
+      .eq('is_active', true);
 
     if (extError) throw extError;
 
@@ -104,6 +106,7 @@ Description: ${property.description || 'No description'}`;
         }
 
         const embeddingData = await embeddingResponse.json();
+        logOpenAIUsage({ fn: 'batch-generate-embeddings', model: 'text-embedding-3-small', usage: embeddingData?.usage });
         const embeddings = embeddingData.data;
 
         // Store all embeddings in Redis via pipeline

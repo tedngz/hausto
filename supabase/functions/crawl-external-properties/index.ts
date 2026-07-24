@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -198,6 +199,7 @@ async function generatePropertyEmbedding(property: any): Promise<number[] | null
     }
     
     const data = await response.json();
+    logOpenAIUsage({ fn: 'crawl-external-properties:embedding', model: 'text-embedding-3-small', usage: data?.usage });
     return data.data?.[0]?.embedding || null;
   } catch (error) {
     console.error('Error generating embedding:', error);
@@ -346,6 +348,7 @@ Return ONLY valid JSON:
     }
     
     const data = await response.json();
+    logOpenAIUsage({ fn: 'crawl-external-properties:vibe', model: 'gpt-4o-mini', usage: data?.usage });
     let content = data.choices?.[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;

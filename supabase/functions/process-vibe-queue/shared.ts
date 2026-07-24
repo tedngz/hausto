@@ -1,6 +1,7 @@
 // Quality-first per-image vibe analysis with Redis-backed TPM limiting
 // and exponential backoff. NO fake/generic highlight fallbacks — failures
 // are surfaced to the caller so the property stays in `pending` state.
+import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 import { Image } from 'https://deno.land/x/imagescript@1.2.15/mod.ts';
 
@@ -170,6 +171,7 @@ async function callOpenAIWithBackoff(
     if (resp.ok) {
       const data = await resp.json();
       const content = data?.choices?.[0]?.message?.content;
+      logOpenAIUsage({ fn: 'process-vibe-queue', model: 'gpt-4o-mini', usage: data?.usage, images: 1 });
       if (typeof content === 'string' && content.trim()) {
         return { ok: true, content };
       }
@@ -215,7 +217,7 @@ export async function analyzeImagesQualityFirst(args: AnalyzeArgs): Promise<Anal
         role: 'user',
         content: [
           { type: 'text', text: buildPrompt(i, imageUrls.length, previousHighlights) },
-          { type: 'image_url', image_url: { url: fetched.dataUrl, detail: 'auto' } },
+          { type: 'image_url', image_url: { url: fetched.dataUrl, detail: 'low' } },
         ],
       }],
       max_tokens: 500,

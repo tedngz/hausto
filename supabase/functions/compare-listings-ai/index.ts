@@ -2,6 +2,8 @@
 // listings and a renter question, answer concisely from the listing data.
 // Deliberately separate from chat-ai (conversational search) - this endpoint
 // is stateless and cheap (gpt-4o-mini).
+import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -79,6 +81,7 @@ Deno.serve(async (req) => {
       throw new Error(`AI request failed (${resp.status})`);
     }
     const data = await resp.json();
+    logOpenAIUsage({ fn: 'compare-listings-ai', model: 'gpt-4o-mini', usage: data?.usage });
     const answer = data.choices?.[0]?.message?.content?.trim() || 'Sorry, I could not analyze these listings.';
 
     return new Response(JSON.stringify({ answer }), {

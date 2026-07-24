@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { Redis } from "https://esm.sh/@upstash/redis@latest";
 import { detectLifestyleIntent, findRelevantKB, formatKBBlock, hasShoppingKeyword } from "../_shared/lifestyle-kb.ts";
+import { logOpenAIUsage } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -961,6 +962,7 @@ async function summarizeConversation(
     });
     if (!resp.ok) return '';
     const data = await resp.json();
+    logOpenAIUsage({ fn: 'chat-ai:summary', model: 'gpt-4o-mini', usage: data?.usage });
     return (data.choices?.[0]?.message?.content || '').trim();
   } catch (e) {
     console.error('[Summary] Failed:', e);
@@ -1780,6 +1782,7 @@ When analyzing property images, ONLY use tags from the standard list above.`;
       }
 
       const data = await response.json();
+      logOpenAIUsage({ fn: 'chat-ai:image-analysis', model: 'gpt-4o-mini', usage: data?.usage });
       const aiResponse = data.choices[0].message.content;
 
       if (canPersist) {
@@ -1908,6 +1911,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
 
           if (imageAnalysisResponse.ok) {
             const analysisData = await imageAnalysisResponse.json();
+            logOpenAIUsage({ fn: 'chat-ai:user-image-analysis', model: 'gpt-4o-mini', usage: analysisData?.usage, images: validImages.length });
             let analysisContent = analysisData.choices?.[0]?.message?.content || '';
             analysisContent = normalizeAiResponse(analysisContent);
             
@@ -2558,6 +2562,7 @@ Maximum ${maxResults} properties in results.`;
     console.log(`[AI] OpenAI responded in ${Date.now() - t0}ms`);
 
     const aiData = await aiResponse.json();
+    logOpenAIUsage({ fn: 'chat-ai:main', model: 'gpt-4o-mini', usage: aiData?.usage });
     let responseContent = aiData.choices[0].message.content || '';
     
     console.log('[AI] Raw response length:', responseContent.length);

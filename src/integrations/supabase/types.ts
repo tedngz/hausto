@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       ai_search_results: {
@@ -805,6 +780,45 @@ export type Database = {
         }
         Relationships: []
       }
+      openai_usage_log: {
+        Row: {
+          completion_tokens: number
+          created_at: string
+          estimated_usd: number
+          fn: string
+          id: number
+          images: number
+          metadata: Json | null
+          model: string
+          prompt_tokens: number
+          total_tokens: number
+        }
+        Insert: {
+          completion_tokens?: number
+          created_at?: string
+          estimated_usd?: number
+          fn: string
+          id?: number
+          images?: number
+          metadata?: Json | null
+          model: string
+          prompt_tokens?: number
+          total_tokens?: number
+        }
+        Update: {
+          completion_tokens?: number
+          created_at?: string
+          estimated_usd?: number
+          fn?: string
+          id?: number
+          images?: number
+          metadata?: Json | null
+          model?: string
+          prompt_tokens?: number
+          total_tokens?: number
+        }
+        Relationships: []
+      }
       post_likes: {
         Row: {
           created_at: string
@@ -1426,6 +1440,18 @@ export type Database = {
           name: string
         }[]
       }
+      get_openai_usage_summary: {
+        Args: { _days?: number }
+        Returns: {
+          calls: number
+          completion_tokens: number
+          day: string
+          estimated_usd: number
+          fn: string
+          images: number
+          prompt_tokens: number
+        }[]
+      }
       get_post_authors_profiles: {
         Args: { user_ids: string[] }
         Returns: {
@@ -1673,9 +1699,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user", "realtor"],

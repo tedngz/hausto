@@ -4,6 +4,7 @@
 // the new images. Admin-only.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -148,6 +149,7 @@ async function callAI(messages: any[], maxTokens = 2500): Promise<string | null>
     return null;
   }
   const data = await res.json();
+  logOpenAIUsage({ fn: 'recrawl-external-listing', model: 'gpt-4o-mini', usage: data?.usage });
   return data?.choices?.[0]?.message?.content || null;
 }
 
