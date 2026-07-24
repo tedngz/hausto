@@ -94,7 +94,12 @@ export const PropertyListingCard = ({
     return typeof text === 'string' && text.trim() ? text.trim() : '';
   }, [apartment.vibe_analysis, current]);
 
-  const sizeLine = [apartment.rooms, formatSize(apartment.size)].filter(s => s && String(s).trim()).join(' · ');
+  // Some sources put the room count in the size field too, which rendered as
+  // "3 Bedrooms · 3 Bedrooms" — drop the duplicate rather than show it twice.
+  const sizeLine = [apartment.rooms, formatSize(apartment.size)]
+    .map(s => String(s ?? '').trim())
+    .filter((s, i, all) => s && all.indexOf(s) === i)
+    .join(' · ');
   const amenities = getNormalizedAmenities(apartment.amenities, 9);
   const ratingLabel = vibeScore ? getVibeRatingLabel(Number(vibeScore.overall)) : null;
   const verified = verifiedLabel(apartment.last_verified_at);
@@ -308,19 +313,20 @@ export const PropertyListingCard = ({
             </button>
           </div>
 
-          {/* On mobile this drops below the location but stays right-aligned */}
-          <div className="flex flex-col items-end gap-1.5 sm:flex-shrink-0 text-right">
+          {/* Mobile: a full-width row under the title — price left, spec right —
+              so neither floats away from the text. Desktop: right-hand column. */}
+          <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3 sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:border-t-0 sm:pt-0 sm:flex-shrink-0 sm:text-right">
             <p className="font-serif font-semibold text-xl sm:text-[28px] leading-tight whitespace-nowrap">
               {formatPrice(apartment.price)}
               <span className="font-sans font-normal text-[13px] text-muted-foreground"> /mo</span>
             </p>
-            {sizeLine && <p className="text-[12.5px] text-muted-foreground whitespace-nowrap">{sizeLine}</p>}
+            {sizeLine && <p className="text-[12.5px] text-muted-foreground text-right">{sizeLine}</p>}
           </div>
         </div>
 
         {/* Description */}
         {description && (
-          <p className="border-t border-border pt-[18px] text-[13.5px] leading-[1.6] text-muted-foreground [text-wrap:pretty]">
+          <p className="border-t border-border pt-[18px] text-[13.5px] leading-[1.6] text-muted-foreground text-justify hyphens-auto [text-wrap:pretty]">
             {description}
           </p>
         )}
