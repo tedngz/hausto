@@ -964,7 +964,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                     {existingImages.map((img, index) => (
                       <div key={`existing-${index}`} className="relative group">
-                        <img 
+                        <img loading="lazy" 
                           src={img} 
                           alt={`Property ${index + 1}`} 
                           className="w-full h-24 object-cover rounded-lg"
@@ -979,7 +979,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
                     ))}
                     {newImagePreviews.map((img, index) => (
                       <div key={`new-${index}`} className="relative group">
-                        <img 
+                        <img loading="lazy" 
                           src={img} 
                           alt={`New ${index + 1}`} 
                           className="w-full h-24 object-cover rounded-lg"

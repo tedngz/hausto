@@ -154,7 +154,7 @@ export const PropertyCard = ({
   };
   return <Card className={`glass-card overflow-hidden group/card transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${className}`}>
       <div className="relative aspect-[4/3] sm:aspect-[16/9] w-full overflow-hidden">
-        <img src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'} alt={`${apartment.title} - Image ${currentImageIndex + 1}`} className="w-full h-full object-cover cursor-pointer transition-transform duration-700 group-hover/card:scale-105" onClick={() => setIsImageModalOpen(true)} />
+        <img loading="lazy" src={apartment.images[currentImageIndex] || '/placeholder-property.jpg'} alt={`${apartment.title} - Image ${currentImageIndex + 1}`} className="w-full h-full object-cover cursor-pointer transition-transform duration-700 group-hover/card:scale-105" onClick={() => setIsImageModalOpen(true)} />
         
         {/* Dark gradient scrim for text readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
@@ -270,7 +270,7 @@ export const PropertyCard = ({
                 return (
                   <div key={sliceIndex} className="space-y-2">
                     <div className="relative">
-                      <img
+                      <img loading="lazy"
                         src={image}
                         alt={`${apartment.title} - Image ${arrayIndex + 1}`}
                         className="w-full h-32 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform duration-200"
@@ -296,7 +296,7 @@ export const PropertyCard = ({
 
         {showRealtorInfo && <div className="flex items-center justify-between pt-3 border-t border-gray-200">
             <div className="flex items-center space-x-2">
-              {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? <img src={apartment.realtor.avatar} alt={apartment.realtor.name || 'Realtor'} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
+              {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? <img loading="lazy" src={apartment.realtor.avatar} alt={apartment.realtor.name || 'Realtor'} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
                   <User className="w-4 h-4 text-white" />
                 </div>}
               <div>

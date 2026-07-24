@@ -23,7 +23,20 @@ import ComplexMap from "./pages/ComplexMap";
 import RealtorApply from "./pages/RealtorApply";
 import OAuthConsent from "./pages/OAuthConsent";
 
-const queryClient = new QueryClient();
+// Listing data changes on a crawl cadence measured in hours, not seconds, so
+// the stock defaults (staleTime 0 + refetch on every window focus) meant a tab
+// switch re-pulled the entire listing set. Anything that genuinely needs to be
+// live overrides these per query.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <HelmetProvider>

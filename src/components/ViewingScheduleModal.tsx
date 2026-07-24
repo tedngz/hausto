@@ -232,7 +232,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
                     />
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       {property.images && property.images.length > 0 && (
-                        <img 
+                        <img loading="lazy" 
                           src={property.images[0]} 
                           alt={property.title}
                           className="w-16 h-16 object-cover rounded flex-shrink-0"

@@ -77,7 +77,7 @@ export const AIBlocks = ({ blocks, onFollowup }: AIBlocksProps) => {
             const inner = (
               <div className="flex items-stretch">
                 {block.heroImage && (
-                  <img
+                  <img loading="lazy"
                     src={block.heroImage}
                     alt={block.name}
                     className="w-28 sm:w-36 object-cover flex-shrink-0 group-hover:opacity-95 transition-opacity"

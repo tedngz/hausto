@@ -1,9 +1,9 @@
-// Computes perceptual (difference) hashes for listing photos so the dedupe
-// pass can match the same unit across agents regardless of listing text.
-// dHash: resize to 9x8 grayscale, compare adjacent pixels -> 64-bit hex.
-// Robust to recompression/resizing; no LLM cost.
+// Backfill-only hasher for listings whose photos were mirrored before
+// process-vibe-queue started hashing inline. Runs on demand, not on a cron:
+// every image it touches is a download from our own storage, which is metered
+// egress. New listings get their hashes for free during mirroring.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.4';
-import { Image } from 'https://deno.land/x/imagescript@1.2.15/mod.ts';
+import { dHashFromBytes } from '../_shared/dhash.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +11,7 @@ const corsHeaders = {
 };
 
 // Image decode is CPU/memory heavy for an edge function - small batches,
-// modest image sizes, let the 30-min cron grind through the backlog.
+// modest image sizes, invoke repeatedly to grind through a backlog.
 const LISTINGS_PER_RUN = 4;
 const IMAGES_PER_LISTING = 3;
 const FETCH_TIMEOUT_MS = 10_000;
@@ -25,24 +25,7 @@ async function dHash(url: string): Promise<string | null> {
     if (!res.ok) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
     if (buf.length === 0 || buf.length > MAX_IMAGE_BYTES) return null;
-    const img = await Image.decode(buf);
-    const small = img.resize(9, 8);
-    // Grayscale luma per pixel
-    const gray: number[] = [];
-    for (let y = 1; y <= 8; y++) {
-      for (let x = 1; x <= 9; x++) {
-        const [r, g, b] = Image.colorToRGB(small.getPixelAt(x, y));
-        gray.push(0.299 * r + 0.587 * g + 0.114 * b);
-      }
-    }
-    let bits = '';
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        const i = row * 9 + col;
-        bits += gray[i] < gray[i + 1] ? '1' : '0';
-      }
-    }
-    return BigInt('0b' + bits).toString(16).padStart(16, '0');
+    return await dHashFromBytes(buf);
   } catch {
     return null;
   }

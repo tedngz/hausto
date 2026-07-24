@@ -13,7 +13,7 @@ export function ComplexCard({ complex }: { complex: Complex }) {
       <Card className="overflow-hidden border-border/60 hover:border-primary/40 transition-all duration-300 hover:shadow-xl">
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
           {complex.hero_image && (
-            <img
+            <img loading="lazy"
               src={complex.hero_image}
               alt={complex.name}
               loading="lazy"

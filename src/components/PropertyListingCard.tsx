@@ -180,14 +180,14 @@ export const PropertyListingCard = ({
       {/* ===== Gallery — 3:2 so the photo carries the page ===== */}
       <div className="relative w-full aspect-[4/3] sm:aspect-[3/2] overflow-hidden bg-foreground">
         {/* Blurred fill behind letterboxed portrait photos */}
-        <img
+        <img loading="lazy"
           src={images[current]}
           alt=""
           aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover object-center scale-110"
           style={{ filter: 'blur(28px) brightness(0.7)', opacity: fit === 'contain' ? 1 : 0, transition: 'opacity 300ms ease' }}
         />
-        <img
+        <img loading="lazy"
           src={images[current]}
           alt={`${displayTitle} — photo ${current + 1} of ${images.length}`}
           className="absolute inset-0 w-full h-full"

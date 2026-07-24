@@ -1,0 +1,21 @@
+-- Egress reduction.
+--
+-- hash-listing-images re-downloaded mirrored photos from our own storage every
+-- 30 minutes purely to hash them - roughly 576 metered image fetches a day.
+-- process-vibe-queue now hashes during mirroring, while the bytes are still in
+-- memory, so the cron is dead weight. The function stays deployed for
+-- backfilling older listings on demand.
+SELECT cron.unschedule('hash-listing-images');
+
+-- Note on the other half of this fix: stored images are served with
+-- `max-age=3600`, so any view more than an hour apart is a fresh origin pull
+-- billed as uncached egress. New uploads now set a 7-day TTL (see
+-- process-vibe-queue and backfill-external-images).
+--
+-- Existing objects cannot be retagged from here: writing
+-- storage.objects.metadata->>'cacheControl' does NOT change what the CDN
+-- serves - verified by updating the column and observing cold CF MISSes still
+-- return `public, max-age=3600`. The column only mirrors the value the API
+-- recorded at upload time. Retagging in place needs an S3 CopyObject with
+-- MetadataDirective=REPLACE against the S3-compatible endpoint, which requires
+-- S3 access keys created from the dashboard.

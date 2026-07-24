@@ -12,6 +12,8 @@ const corsHeaders = {
 
 const MIRROR_BUCKET = 'external-property-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Matches process-vibe-queue: a long CDN TTL keeps repeat views off origin.
+const MIRROR_CACHE_CONTROL = '604800'; // 7 days
 const DEFAULT_BATCH = 10;
 
 async function safeFolder(externalId: string): Promise<string> {
@@ -36,7 +38,8 @@ async function mirrorOne(supabase: any, url: string, externalId: string, idx: nu
     const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
     const folder = await safeFolder(externalId);
     const path = `${folder}/${idx}.${ext}`;
-    const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, buf, { contentType: ct, upsert: true });
+    const { error } = await supabase.storage.from(MIRROR_BUCKET)
+      .upload(path, buf, { contentType: ct, upsert: true, cacheControl: MIRROR_CACHE_CONTROL });
     if (error) { console.warn('[backfill] upload failed:', error.message); return url; }
     const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
     return data?.publicUrl || url;

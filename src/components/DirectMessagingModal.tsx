@@ -356,7 +356,7 @@ export const DirectMessagingModal = ({ isOpen, onClose, initialMatchId }: Direct
                           className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-2 hover:border-purple-300 hover:shadow-sm transition-all group"
                         >
                           {property.images?.[0] && (
-                            <img 
+                            <img loading="lazy" 
                               src={property.images[0]} 
                               alt={property.title}
                               className="w-12 h-12 object-cover rounded"

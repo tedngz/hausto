@@ -229,7 +229,7 @@ export const EditorialPropertyCard = ({
       role={onCardClick ? 'button' : undefined}
     >
       {/* Slideshow image */}
-      <img
+      <img loading="lazy"
         src={images[current]}
         alt={`${displayTitle} — photo ${current + 1} of ${images.length}`}
         className="absolute inset-0 w-full h-full object-cover"

@@ -229,7 +229,8 @@ const AdminComplexes = () => {
     const path = `${user.id}/complexes/${selected.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const { error } = await supabase.storage
       .from("property-images")
-      .upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
+      // Path is unique per upload, so the file at it never changes - cache hard.
+      .upload(path, file, { cacheControl: "31536000", upsert: false, contentType: file.type });
     if (error) throw error;
     const { data } = supabase.storage.from("property-images").getPublicUrl(path);
     return data.publicUrl;
@@ -548,7 +549,7 @@ const AdminComplexes = () => {
                     />
                   </div>
                   {form.hero_image && (
-                    <img
+                    <img loading="lazy"
                       src={form.hero_image}
                       alt="Hero preview"
                       className="mt-2 h-32 w-full rounded-md object-cover"
@@ -586,7 +587,7 @@ const AdminComplexes = () => {
                           key={src + i}
                           className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
                         >
-                          <img
+                          <img loading="lazy"
                             src={src}
                             alt={`Gallery ${i + 1}`}
                             className="h-full w-full object-cover"

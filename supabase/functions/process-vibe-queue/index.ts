@@ -7,6 +7,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
+import { dHashFromBytes } from "../_shared/dhash.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +18,12 @@ const MAX_ATTEMPTS = 5;
 const DEFAULT_BATCH = 4;
 const MIRROR_BUCKET = 'external-property-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Mirrored photos never change in place except on a re-mirror, so a long CDN
+// TTL turns repeat views into cache hits instead of metered origin egress.
+const MIRROR_CACHE_CONTROL = '604800'; // 7 days
+// Hashes are computed for the first few photos only - enough for the dedupe
+// pass to match a unit, and it keeps decode cost bounded.
+const HASH_COUNT = 3;
 
 // ─── Listing-quality rules for crawled external properties ───────
 // Show at least MIN_DISPLAY_IMAGES real photos of the unit and keep up to
@@ -63,12 +70,15 @@ function imageWidth(bytes: Uint8Array): number | null {
 
 // Fetch each candidate once, drop non-image / too-large / low-res shots, mirror
 // the survivors to storage, and stop at `target`. Returns the mirrored public
-// URLs alongside the source URLs they came from (kept in order for recovery).
+// URLs alongside the source URLs they came from (kept in order for recovery),
+// plus the perceptual hashes of the first HASH_COUNT survivors - computed here
+// from the bytes we already hold rather than by re-downloading them later.
 async function mirrorQualityImages(
   supabase: any, urls: string[], externalId: string, target: number,
-): Promise<{ mirrored: string[]; originals: string[] }> {
+): Promise<{ mirrored: string[]; originals: string[]; hashes: string[] }> {
   const mirrored: string[] = [];
   const originals: string[] = [];
+  const hashes: string[] = [];
   const folder = await safeFolder(externalId);
   for (const url of urls) {
     if (mirrored.length >= target) break;
@@ -88,10 +98,15 @@ async function mirrorQualityImages(
       if (w !== null && w < MIN_IMAGE_WIDTH) continue;
       const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
       const path = `${folder}/${mirrored.length}.${ext}`;
-      const { error } = await supabase.storage.from(MIRROR_BUCKET).upload(path, bytes, { contentType: ct, upsert: true });
+      const { error } = await supabase.storage.from(MIRROR_BUCKET)
+        .upload(path, bytes, { contentType: ct, upsert: true, cacheControl: MIRROR_CACHE_CONTROL });
       if (error) { console.warn('[mirror] upload failed:', error.message); continue; }
       const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
       if (data?.publicUrl) {
+        if (hashes.length < HASH_COUNT) {
+          const h = await dHashFromBytes(bytes);
+          if (h) hashes.push(h);
+        }
         mirrored.push(data.publicUrl);
         originals.push(url);
       }
@@ -99,7 +114,7 @@ async function mirrorQualityImages(
       console.warn('[mirror] error:', String(e).substring(0, 200));
     }
   }
-  return { mirrored, originals };
+  return { mirrored, originals, hashes };
 }
 
 serve(async (req) => {
@@ -163,7 +178,7 @@ serve(async (req) => {
         //    at STORE_TARGET. This is exactly what renters see in the gallery.
         const mirrorKey = `${prop.source || 'src'}-${prop.external_id || prop.id}`;
         const candidates = [...new Set(prop.images as string[])];
-        const { mirrored: displayImages, originals: keptOriginals } =
+        const { mirrored: displayImages, originals: keptOriginals, hashes: imageHashes } =
           await mirrorQualityImages(supabase, candidates, mirrorKey, STORE_TARGET);
 
         // Quality floor: a listing must clear MIN_DISPLAY_IMAGES real photos.
@@ -240,6 +255,7 @@ serve(async (req) => {
           .from('external_properties')
           .update({
             images: displayImages,
+            image_hashes: imageHashes,
             vibe_analysis: aggregated,
             highlights: positionalHighlights,
             vibe_status: 'complete',

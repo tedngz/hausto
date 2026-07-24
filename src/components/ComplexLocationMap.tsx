@@ -82,7 +82,7 @@ export function ComplexLocationMap({ complex }: Props) {
             transformOrigin: '0 0',
           }}
         >
-          <img
+          <img loading="lazy"
             src={`/maps/${city}.svg`}
             alt=""
             aria-hidden
