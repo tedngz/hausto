@@ -2,8 +2,19 @@
 // and exponential backoff. NO fake/generic highlight fallbacks — failures
 // are surfaced to the caller so the property stays in `pending` state.
 
+import { Image } from 'https://deno.land/x/imagescript@1.2.15/mod.ts';
+
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
+
+// gpt-4o-mini with detail:'auto' resizes any image so its shortest side is
+// 768px before tiling, so shipping the full-resolution photo is pure upload
+// egress (and encode time) for bytes the model immediately throws away.
+// Capping the longest side at 1024 keeps the shortest side at ~768 for typical
+// 4:3 shots - i.e. exactly what the model works from - while cutting the
+// base64 we send to OpenAI to a fraction of the original.
+const OPENAI_MAX_EDGE = 1024;
+const OPENAI_JPEG_QUALITY = 82;
 
 // gpt-4o-mini Tier 1 TPM is 200K. Stay well under 80% to leave room
 // for other functions sharing the key. ~10K tokens per image-call.
@@ -44,6 +55,32 @@ async function tpmReserve(estimatedTokens: number): Promise<void> {
   }
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  let b64 = '';
+  const chunk = 8192;
+  for (let j = 0; j < bytes.length; j += chunk) {
+    b64 += String.fromCharCode.apply(null, Array.from(bytes.subarray(j, Math.min(j + chunk, bytes.length))));
+  }
+  return btoa(b64);
+}
+
+// Shrink to OPENAI_MAX_EDGE on the longest side and re-encode as JPEG. Returns
+// null (caller falls back to the original bytes) when the image is already
+// small enough or can't be decoded - e.g. webp, which imagescript doesn't read.
+async function downscaleForOpenAI(bytes: Uint8Array): Promise<{ dataUrl: string } | null> {
+  try {
+    const img = await Image.decode(bytes);
+    const longest = Math.max(img.width, img.height);
+    if (longest <= OPENAI_MAX_EDGE) return null;
+    const scale = OPENAI_MAX_EDGE / longest;
+    img.resize(Math.round(img.width * scale), Math.round(img.height * scale));
+    const jpeg = await img.encodeJPEG(OPENAI_JPEG_QUALITY);
+    return { dataUrl: `data:image/jpeg;base64,${bytesToBase64(jpeg)}` };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchAsBase64(url: string): Promise<{ dataUrl: string } | null> {
   try {
     const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
@@ -52,16 +89,15 @@ async function fetchAsBase64(url: string): Promise<{ dataUrl: string } | null> {
     const buf = await resp.arrayBuffer();
     const bytes = new Uint8Array(buf);
     if (bytes.length > 5 * 1024 * 1024) return null;
-    let b64 = '';
-    const chunk = 8192;
-    for (let j = 0; j < bytes.length; j += chunk) {
-      b64 += String.fromCharCode.apply(null, Array.from(bytes.subarray(j, Math.min(j + chunk, bytes.length))));
-    }
+    // Downscale before OpenAI; pass the original through if it's already small
+    // or in a format we can't decode.
+    const shrunk = await downscaleForOpenAI(bytes);
+    if (shrunk) return shrunk;
     let mime = 'image/jpeg';
     if (ct.includes('png')) mime = 'image/png';
     else if (ct.includes('webp')) mime = 'image/webp';
     else if (ct.includes('gif')) mime = 'image/gif';
-    return { dataUrl: `data:${mime};base64,${btoa(b64)}` };
+    return { dataUrl: `data:${mime};base64,${bytesToBase64(bytes)}` };
   } catch {
     return null;
   }
