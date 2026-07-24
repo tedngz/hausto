@@ -8,6 +8,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
 import { dHashFromBytes } from "../_shared/dhash.ts";
+import { prepareForStorage } from "../_shared/mirror-image.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -93,18 +94,20 @@ async function mirrorQualityImages(
       if (!ct.startsWith('image/')) continue;
       const bytes = new Uint8Array(await res.arrayBuffer());
       if (!bytes.byteLength || bytes.byteLength > MAX_IMAGE_BYTES) continue;
-      // Low-quality guard: reject tiny source thumbnails.
+      // Low-quality guard: reject tiny source thumbnails. Runs on the original
+      // bytes, before any downscale, so the dimension check is honest.
       const w = imageWidth(bytes);
       if (w !== null && w < MIN_IMAGE_WIDTH) continue;
-      const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
-      const path = `${folder}/${mirrored.length}.${ext}`;
+      // Cap resolution and re-encode before storing so repeat views stay light.
+      const prepared = await prepareForStorage(bytes, ct);
+      const path = `${folder}/${mirrored.length}.${prepared.ext}`;
       const { error } = await supabase.storage.from(MIRROR_BUCKET)
-        .upload(path, bytes, { contentType: ct, upsert: true, cacheControl: MIRROR_CACHE_CONTROL });
+        .upload(path, prepared.bytes, { contentType: prepared.contentType, upsert: true, cacheControl: MIRROR_CACHE_CONTROL });
       if (error) { console.warn('[mirror] upload failed:', error.message); continue; }
       const { data } = supabase.storage.from(MIRROR_BUCKET).getPublicUrl(path);
       if (data?.publicUrl) {
         if (hashes.length < HASH_COUNT) {
-          const h = await dHashFromBytes(bytes);
+          const h = await dHashFromBytes(prepared.bytes);
           if (h) hashes.push(h);
         }
         mirrored.push(data.publicUrl);
