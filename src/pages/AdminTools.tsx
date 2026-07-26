@@ -98,8 +98,13 @@ const AdminTools = () => {
 
   const loadMirrorStatus = useCallback(async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       setMirrorStatusLoading(true);
-      const { data, error } = await supabase.functions.invoke('mirror-status', { body: {} });
+      const { data, error } = await supabase.functions.invoke('mirror-status', {
+        body: {},
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
       if (error) throw error;
       setMirrorStatus(data?.totals || null);
     } catch (e: any) {
