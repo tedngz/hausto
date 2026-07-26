@@ -16,8 +16,8 @@ import {
 // mailed out is read back server-side with the service role. notified_at makes
 // the send idempotent so a replayed id cannot be used to spam the inbox.
 //
-// Both mails point back at hello@hausto.com's plus-addressed alias for this
-// inquiry, so replies from either side land in concierge-email-inbound and are
+// The renter replies to plain hello@hausto.com; the admin copy uses the
+// tokenised alias. Either way the reply lands in concierge-email-inbound and is
 // filed onto the thread the admin dashboard shows.
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -63,7 +63,9 @@ const handler = async (req: Request): Promise<Response> => {
     const complexName = complex?.name ?? "Unknown complex";
     const complexUrl = complex?.slug ? `https://hausto.com/complexes/${complex.slug}` : null;
     const budget = `$${inquiry.budget_usd_min.toLocaleString()} – $${inquiry.budget_usd_max.toLocaleString()}/mo`;
-    const threadAddress = replyAddress(inquiry.id);
+    // The renter replies to the plain concierge address; the admin's copy gets
+    // the tokenised one so a Gmail reply can still be tied back to this request.
+    const adminThreadAddress = replyAddress(inquiry.id);
     const subject = `Availability at ${complexName}`;
 
     const criteriaHtml = `
@@ -82,7 +84,7 @@ const handler = async (req: Request): Promise<Response> => {
     const adminEmail = await resend.emails.send({
       from: CONCIERGE_FROM,
       to: [ADMIN_EMAIL],
-      reply_to: [inquiry.email, threadAddress],
+      reply_to: [inquiry.email, adminThreadAddress],
       subject: `🏢 Availability request: ${complexName}`,
       html: `
         <h1>New concierge availability request</h1>
@@ -114,7 +116,7 @@ const handler = async (req: Request): Promise<Response> => {
     const renterEmail = await resend.emails.send({
       from: CONCIERGE_FROM,
       to: [inquiry.email],
-      reply_to: threadAddress,
+      reply_to: CONCIERGE_FROM,
       subject: `We're checking ${subject.toLowerCase()}`,
       html: `
         <h1>Your availability request is in</h1>

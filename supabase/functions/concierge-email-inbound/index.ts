@@ -183,15 +183,18 @@ serve(async (req) => {
         .maybeSingle();
       inquiry = data ?? null;
     }
+    // Renters reply to the plain concierge address, so their sender address is
+    // normally the only handle we have. Prefer their newest still-open request:
+    // a reply about a closed one almost always means they are chasing it again.
     if (!inquiry) {
       const { data } = await supabase
         .from("complex_inquiries")
         .select("id, full_name, email, status, complex_id, handled_at")
         .eq("email", mail.from)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      inquiry = data ?? null;
+        .limit(10);
+      const rows = data ?? [];
+      inquiry = rows.find((r) => r.status !== "closed") ?? rows[0] ?? null;
     }
 
     if (!inquiry) {

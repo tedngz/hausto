@@ -7,7 +7,6 @@ import {
   corsHeaders,
   esc,
   json,
-  replyAddress,
   textToHtml,
 } from "../_shared/concierge-email.ts";
 
@@ -84,7 +83,9 @@ serve(async (req) => {
       from: CONCIERGE_FROM,
       to: [inquiry.email],
       bcc: [ADMIN_EMAIL],
-      reply_to: replyAddress(inquiry.id),
+      // Renters see the plain concierge address; their reply is matched back to
+      // this request by sender address, not by a token in the recipient.
+      reply_to: CONCIERGE_FROM,
       subject: `Re: ${subject}`,
       headers,
       html: `

@@ -1,9 +1,15 @@
 // Shared plumbing for the concierge email thread on a complex availability
 // request (public.complex_inquiries + public.complex_inquiry_messages).
 //
-// Renters only ever see hello@hausto.com. Every message we send sets Reply-To
-// to a plus-addressed variant carrying the inquiry id, so an inbound mail can
-// be filed against the right request without guessing from the sender address.
+// Renters only ever see a plain "Hausto Concierge <hello@hausto.com>" - a
+// plus-addressed token in their Reply-To reads like spam in the client's To
+// line, so inbound mail from a renter is matched on their sender address
+// instead.
+//
+// The token is still used for the admin's own copy, where nobody but the admin
+// sees it: a Gmail reply comes from the admin's address, which matches no
+// renter, so the address is the only thing tying it to a request. It is wrapped
+// in a display name there too.
 
 export const CONCIERGE_FROM = "Hausto Concierge <hello@hausto.com>";
 export const CONCIERGE_INBOX = "hello@hausto.com";
@@ -27,9 +33,9 @@ export const esc = (value: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-/** hello+inq-<uuid without dashes>@hausto.com */
+/** Hausto Concierge <hello+inq-<uuid without dashes>@hausto.com> — admin copies only. */
 export function replyAddress(inquiryId: string): string {
-  return `hello+inq-${inquiryId.replace(/-/g, "")}@hausto.com`;
+  return `Hausto Concierge <hello+inq-${inquiryId.replace(/-/g, "")}@hausto.com>`;
 }
 
 /** Pull an inquiry id back out of any address in a To/Cc list. */
