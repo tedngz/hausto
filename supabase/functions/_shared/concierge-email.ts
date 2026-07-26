@@ -56,14 +56,21 @@ export function bareAddress(value: string | null | undefined): string {
   return (angled ? angled[1] : text).trim().toLowerCase();
 }
 
-/** Everything above the first quoted-reply marker, so threads stay readable. */
+/**
+ * Everything above the first quoted-reply marker, so threads stay readable.
+ * Gmail wraps its attribution line ("On Sun, 26 Jul 2026 at 12:32, Hausto
+ * Concierge <hello@hausto.com> wrote:") across two lines when the address is
+ * long, so an "On …" opener is matched against the next line as well.
+ */
 export function stripQuotedReply(text: string): string {
   const lines = String(text ?? "").replace(/\r\n/g, "\n").split("\n");
-  const cut = lines.findIndex((line) =>
+  const cut = lines.findIndex((line, i) =>
     /^\s*>/.test(line) ||
-    /^\s*On .+ wrote:\s*$/.test(line) ||
+    (/^\s*On\b/.test(line) &&
+      (/wrote:\s*$/.test(line.trim()) || /wrote:\s*$/.test(`${line} ${lines[i + 1] ?? ""}`.trim()))) ||
     /^\s*-{2,}\s*Original Message\s*-{2,}/i.test(line) ||
-    /^\s*_{10,}\s*$/.test(line)
+    /^\s*_{10,}\s*$/.test(line) ||
+    /^\s*Sent from my /i.test(line)
   );
   const kept = cut === -1 ? lines : lines.slice(0, cut);
   return kept.join("\n").trim();

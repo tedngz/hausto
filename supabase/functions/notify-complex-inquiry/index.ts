@@ -78,13 +78,13 @@ const handler = async (req: Request): Promise<Response> => {
           ${inquiry.additional_notes ? `<li><strong>Notes:</strong> ${esc(inquiry.additional_notes)}</li>` : ""}
         </ul>`;
 
-    // Admin copy. Reply-To carries the renter AND the thread alias, so hitting
-    // Reply in Gmail answers the renter and copies us — which is what puts the
-    // Gmail reply onto the dashboard thread.
+    // Admin copy. Reply-To is the thread alias only, never the renter: a Gmail
+    // reply must come back to us so we can relay it from hello@hausto.com.
+    // Putting the renter here would expose the admin's personal address.
     const adminEmail = await resend.emails.send({
       from: CONCIERGE_FROM,
       to: [ADMIN_EMAIL],
-      reply_to: [inquiry.email, adminThreadAddress],
+      reply_to: adminThreadAddress,
       subject: `🏢 Availability request: ${complexName}`,
       html: `
         <h1>New concierge availability request</h1>
@@ -106,8 +106,9 @@ const handler = async (req: Request): Promise<Response> => {
         <p><a href="https://hausto.com/admin-tools">Open the concierge queue in Admin Tools →</a></p>
 
         <p style="margin-top: 20px; padding: 15px; background-color: #f0f9ff; border-left: 4px solid #3b82f6;">
-          <strong>Just hit Reply</strong> to answer ${esc(inquiry.full_name)} directly — the reply is
-          copied to the concierge inbox and shows up on this request in Admin Tools.
+          <strong>Just hit Reply</strong> to answer ${esc(inquiry.full_name)} — we send your words on
+          from hello@hausto.com, so your own address stays private, and the reply shows up on this
+          request in Admin Tools.
         </p>
       `,
     });

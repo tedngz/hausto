@@ -220,9 +220,12 @@ serve(async (req) => {
       .maybeSingle();
 
     // A message from our own side (admin replying in Gmail) is outbound even
-    // though it arrived here as inbound mail.
+    // though it arrived here as inbound mail. Only our own addresses may be
+    // relayed onward as the concierge - anyone else who lands on the thread
+    // alias is recorded and shown to the admin, never spoken for.
     const fromRenter = mail.from === bareAddress(inquiry.email);
-    const direction = fromRenter ? "inbound" : "outbound";
+    const fromHausto = !fromRenter && (mail.from === ADMIN_EMAIL || mail.from.endsWith("@hausto.com"));
+    const direction = fromHausto ? "outbound" : "inbound";
     const body = stripQuotedReply(mail.body).slice(0, 20000) || "(empty message)";
     const now = new Date().toISOString();
 
@@ -247,30 +250,62 @@ serve(async (req) => {
       .from("complex_inquiries")
       .update({
         last_message_at: now,
-        ...(fromRenter ? { last_inbound_at: now } : {}),
-        ...(fromRenter
-          ? {}
-          : { status: inquiry.status === "closed" ? "closed" : "contacted", handled_at: inquiry.handled_at ?? now }),
+        ...(fromHausto
+          ? { status: inquiry.status === "closed" ? "closed" : "contacted", handled_at: inquiry.handled_at ?? now }
+          : { last_inbound_at: now }),
       })
       .eq("id", inquiry.id);
 
-    // Only forward the renter's own words - forwarding the admin's Gmail reply
-    // back to the admin would just be an echo.
-    if (fromRenter) {
+    // The admin replied from Gmail. Relay their words to the renter as the
+    // concierge so the renter never sees a personal address, and so the whole
+    // conversation stays on one sender.
+    if (fromHausto) {
+      const relay = await resend.emails.send({
+        from: CONCIERGE_FROM,
+        to: [inquiry.email],
+        reply_to: CONCIERGE_FROM,
+        // Never reuse the admin's subject line - it is our internal notification
+        // ("💬 Hoang replied · City Garden"), which the renter should never see.
+        subject: `Re: Availability at ${complex?.name ?? "your request"}`,
+        html: `
+          <p>Hi ${esc(inquiry.full_name)},</p>
+          <div>${textToHtml(body)}</div>
+          <p style="margin-top: 24px; color: #6b7280; font-size: 13px;">
+            Hausto Concierge · just reply to this email and we'll pick it up.
+          </p>
+        `,
+      });
+      if ((relay as any)?.error) {
+        console.error("Failed to relay admin reply to renter:", (relay as any).error);
+      }
+      return json({
+        success: true,
+        matched: true,
+        inquiryId: inquiry.id,
+        direction,
+        relayed: !(relay as any)?.error,
+      });
+    }
+
+    // Someone else's message - tell the admin. Reply-To is the thread alias
+    // only, so their answer comes back through here rather than going straight
+    // out from their personal mailbox.
+    {
       await resend.emails.send({
         from: CONCIERGE_FROM,
         to: [ADMIN_EMAIL],
-        reply_to: [inquiry.email, replyAddress(inquiry.id)],
-        subject: `💬 ${inquiry.full_name} replied · ${complex?.name ?? "availability request"}`,
+        reply_to: replyAddress(inquiry.id),
+        subject: `💬 ${fromRenter ? inquiry.full_name : mail.from} replied · ${complex?.name ?? "availability request"}`,
         html: `
-          <p><strong>${esc(inquiry.full_name)}</strong> (${esc(inquiry.email)}) replied about
+          <p><strong>${esc(fromRenter ? inquiry.full_name : mail.from)}</strong>
+          (${esc(mail.from)}) replied about
           <strong>${esc(complex?.name ?? "their availability request")}</strong>.</p>
           <div style="border-left: 3px solid #e5e7eb; padding-left: 12px; margin: 16px 0;">
             ${textToHtml(body.slice(0, 5000))}
           </div>
           <p style="padding: 12px; background-color: #f0f9ff; border-left: 4px solid #3b82f6;">
-            <strong>Hit Reply</strong> to answer them - your reply is copied to the concierge inbox
-            and lands on this request in
+            <strong>Hit Reply</strong> to answer ${esc(inquiry.full_name)} - we send your words on from
+            hello@hausto.com, so your own address stays private, and the reply lands on this request in
             <a href="https://hausto.com/admin-tools">Admin Tools</a>.
           </p>
         `,
