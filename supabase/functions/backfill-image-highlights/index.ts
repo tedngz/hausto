@@ -1,17 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
+import { MIN_DISPLAY_IMAGES, ANALYZE_COUNT, expectedHighlightCount } from "../_shared/vibe-policy.ts";
+import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Same listing-quality rules as process-vibe-queue: a listing needs at least
-// MIN_DISPLAY_IMAGES photos to go live, and we only pay for vision on the first
-// ANALYZE_COUNT (the rest still display, just without a per-image highlight).
-const MIN_DISPLAY_IMAGES = 5;
-const ANALYZE_COUNT = 3;
+// Listing-quality rules come from _shared/vibe-policy.ts — the same module
+// process-vibe-queue writes against, so "how many highlights we produce" and
+// "how many highlights we require" can never drift apart again.
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -71,7 +71,10 @@ serve(async (req) => {
       const images = Array.isArray(p.images) ? p.images : [];
       if (images.length === 0) return false; // nothing to analyze
       const highlights = Array.isArray(p.highlights) ? p.highlights.filter((h: any) => typeof h === 'string' && h.trim()) : [];
-      const expected = Math.min(images.length, 5);
+      // Listings holding fewer than MIN_DISPLAY_IMAGES photos are done at one
+      // highlight per image. They can never reach ANALYZE_COUNT, so requiring
+      // it would re-analyze them on every run and never converge.
+      const expected = expectedHighlightCount(images.length);
       if (highlights.length < expected) return true;
       return isPoisoned(p);
     };
@@ -118,7 +121,16 @@ serve(async (req) => {
     // Requeue mode: only mark as pending and enqueue, don't process here.
     if (requeue_only) {
       let enqueued = 0;
+      let skippedBelowFloor = 0;
       for (const prop of needsBackfill) {
+        // The vibe queue enforces MIN_DISPLAY_IMAGES and fails anything under
+        // it, so enqueueing a sub-floor legacy listing only burns attempts and
+        // hides it. Those are handled inline by a non-requeue run instead.
+        const imageCount = Array.isArray(prop.images) ? prop.images.length : 0;
+        if (imageCount < MIN_DISPLAY_IMAGES) {
+          skippedBelowFloor++;
+          continue;
+        }
         await supabase
           .from('external_properties')
           .update({ vibe_status: 'pending', is_active: false, updated_at: new Date().toISOString() })
@@ -128,48 +140,56 @@ serve(async (req) => {
           .insert({ property_id: prop.id, status: 'queued' });
         if (!qErr || qErr.code === '23505') enqueued++;
       }
-      return new Response(JSON.stringify({ success: true, enqueued, total: needsBackfill.length }), {
+      return new Response(JSON.stringify({ success: true, enqueued, skippedBelowFloor, total: needsBackfill.length }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (needsBackfill.length > 0 && await isOpenAIBudgetExhausted()) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'daily OpenAI budget reached', total: needsBackfill.length }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     const results: any[] = [];
     for (const prop of needsBackfill) {
       try {
-        // Quality floor: don't activate a thin gallery here. Route it to the
-        // vibe queue instead, which dimension-filters, mirrors and re-checks the
-        // MIN_DISPLAY_IMAGES minimum before flipping the listing live.
         const allImages = Array.isArray(prop.images) ? prop.images : [];
-        if (allImages.length < MIN_DISPLAY_IMAGES) {
-          await supabase
-            .from('external_properties')
-            .update({ vibe_status: 'pending', is_active: false, updated_at: new Date().toISOString() })
-            .eq('id', prop.id);
-          await supabase
-            .from('vibe_analysis_queue')
-            .insert({ property_id: prop.id, status: 'queued', last_error: `insufficient_images:${allImages.length}` })
-            .then(() => {}, () => {});
-          results.push({ id: prop.id, title: prop.title, success: false, reason: 'insufficient_images_requeued', count: allImages.length });
+        if (allImages.length === 0) {
+          results.push({ id: prop.id, title: prop.title, success: false, reason: 'no_images' });
           continue;
         }
+
+        // Only listings that clear the display floor are eligible to go live.
+        // Legacy listings below it can never reach it, so we analyze every image
+        // they do have and leave their live/hidden state exactly as found —
+        // deactivating them and routing them to the vibe queue only produced
+        // guaranteed insufficient_quality_images failures.
+        const meetsDisplayFloor = allImages.length >= MIN_DISPLAY_IMAGES;
 
         const images = allImages.slice(0, ANALYZE_COUNT);
         const result = await analyzeImagesQualityFirst({ imageUrls: images, openaiKey });
 
         if (!result.allSucceeded) {
           // Quality-first: leave as pending, enqueue for retry. NO fake highlights.
+          // Hiding on failure applies only to listings that could go live on the
+          // strength of their gallery; a sub-floor legacy listing keeps whatever
+          // state it already had.
           await supabase
             .from('external_properties')
             .update({
               vibe_status: 'pending',
-              is_active: false,
+              ...(meetsDisplayFloor ? { is_active: false } : {}),
               updated_at: new Date().toISOString(),
             })
             .eq('id', prop.id);
-          await supabase
-            .from('vibe_analysis_queue')
-            .insert({ property_id: prop.id, status: 'queued', last_error: JSON.stringify(result.failures).substring(0, 500) })
-            .then(() => {}, () => {});
+          if (meetsDisplayFloor) {
+            await supabase
+              .from('vibe_analysis_queue')
+              .insert({ property_id: prop.id, status: 'queued', last_error: JSON.stringify(result.failures).substring(0, 500) })
+              .then(() => {}, () => {});
+          }
           results.push({
             id: prop.id, title: prop.title, success: false,
             reason: 'partial_failure_requeued',
@@ -200,7 +220,7 @@ serve(async (req) => {
             vibe_analysis: updatedVibe,
             highlights: positionalHighlights,
             vibe_status: 'complete',
-            is_active: true,
+            ...(meetsDisplayFloor ? { is_active: true } : {}),
             updated_at: new Date().toISOString(),
           })
           .eq('id', prop.id);

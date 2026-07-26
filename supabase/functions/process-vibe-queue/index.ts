@@ -8,6 +8,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
 import { dHashFromBytes } from "../_shared/dhash.ts";
+import { MIN_DISPLAY_IMAGES, STORE_TARGET, ANALYZE_COUNT } from "../_shared/vibe-policy.ts";
+import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 import { prepareForStorage } from "../_shared/mirror-image.ts";
 
 const corsHeaders = {
@@ -27,12 +29,10 @@ const MIRROR_CACHE_CONTROL = '604800'; // 7 days
 const HASH_COUNT = 3;
 
 // ─── Listing-quality rules for crawled external properties ───────
-// Show at least MIN_DISPLAY_IMAGES real photos of the unit and keep up to
-// STORE_TARGET, but only pay for vision on the first ANALYZE_COUNT (cost
-// control — the rest still display, just without a per-image highlight).
-const MIN_DISPLAY_IMAGES = 5;
-const STORE_TARGET = 8;
-const ANALYZE_COUNT = 3;
+// Show at least MIN_DISPLAY_IMAGES real photos of the unit, keep up to
+// STORE_TARGET, and analyze every qualified image up to ANALYZE_COUNT.
+// Defined in _shared/vibe-policy.ts so the backfill's "still missing
+// highlights?" check derives from the same numbers this function writes.
 // Tiny source thumbnails render blurry when shown large; drop anything
 // narrower than this before it ever reaches the gallery.
 const MIN_IMAGE_WIDTH = 600;
@@ -152,6 +152,18 @@ serve(async (req) => {
       });
     }
 
+    // Spend guard. Checked before claiming anything: a batch that is claimed
+    // and then abandoned leaves rows stranded in 'processing', which the
+    // queued-only claim query never picks up again. Jobs simply stay queued
+    // and resume once the daily cap rolls over.
+    if (await isOpenAIBudgetExhausted()) {
+      console.warn('[process-vibe-queue] daily OpenAI budget reached — leaving batch queued');
+      return new Response(
+        JSON.stringify({ success: true, processed: 0, message: 'daily OpenAI budget reached' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     const claimedIds = queued.map((q: any) => q.id);
     await supabase
       .from('vibe_analysis_queue')
@@ -196,7 +208,9 @@ serve(async (req) => {
           continue;
         }
 
-        // 2) Pay for vision on only the first ANALYZE_COUNT images (cost control).
+        // 2) Analyze every qualified image, capped at ANALYZE_COUNT. The count
+        //    written here is what the backfill checks for, so both derive it
+        //    from expectedHighlightCount rather than hardcoding a number.
         const analyzeSet = displayImages.slice(0, ANALYZE_COUNT);
         const result = await analyzeImagesQualityFirst({ imageUrls: analyzeSet, openaiKey });
 
