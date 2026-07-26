@@ -179,6 +179,8 @@ export type Database = {
           admin_notes: string | null
           handled_at: string | null
           notified_at: string | null
+          last_message_at: string | null
+          last_inbound_at: string | null
           bedrooms_needed: number
           budget_usd_max: number
           budget_usd_min: number
@@ -200,6 +202,8 @@ export type Database = {
           admin_notes?: string | null
           handled_at?: string | null
           notified_at?: string | null
+          last_message_at?: string | null
+          last_inbound_at?: string | null
           bedrooms_needed: number
           budget_usd_max: number
           budget_usd_min: number
@@ -221,6 +225,8 @@ export type Database = {
           admin_notes?: string | null
           handled_at?: string | null
           notified_at?: string | null
+          last_message_at?: string | null
+          last_inbound_at?: string | null
           bedrooms_needed?: number
           budget_usd_max?: number
           budget_usd_min?: number
@@ -243,6 +249,56 @@ export type Database = {
             columns: ["complex_id"]
             isOneToOne: false
             referencedRelation: "complexes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complex_inquiry_messages: {
+        Row: {
+          body: string
+          created_at: string
+          direction: string
+          from_email: string
+          id: string
+          in_reply_to: string | null
+          inquiry_id: string
+          provider_message_id: string | null
+          source: string
+          subject: string | null
+          to_emails: string[]
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          direction: string
+          from_email: string
+          id?: string
+          in_reply_to?: string | null
+          inquiry_id: string
+          provider_message_id?: string | null
+          source?: string
+          subject?: string | null
+          to_emails?: string[]
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          direction?: string
+          from_email?: string
+          id?: string
+          in_reply_to?: string | null
+          inquiry_id?: string
+          provider_message_id?: string | null
+          source?: string
+          subject?: string | null
+          to_emails?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complex_inquiry_messages_inquiry_id_fkey"
+            columns: ["inquiry_id"]
+            isOneToOne: false
+            referencedRelation: "complex_inquiries"
             referencedColumns: ["id"]
           },
         ]

@@ -106,3 +106,9 @@ verify_jwt = false
 
 [functions.notify-complex-inquiry]
 verify_jwt = false
+
+[functions.concierge-email-inbound]
+verify_jwt = false
+
+[functions.concierge-email-reply]
+verify_jwt = true
