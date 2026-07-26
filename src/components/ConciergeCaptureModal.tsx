@@ -77,7 +77,11 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
 
   const submit = async () => {
     setSubmitting(true);
+    // Only admins can SELECT from complex_inquiries, so we can't read the id back
+    // after inserting - mint it here instead and hand it to the notifier.
+    const inquiryId = crypto.randomUUID();
     const { error } = await supabase.from('complex_inquiries').insert({
+      id: inquiryId,
       complex_id: complexId,
       user_id: user?.id ?? null,
       full_name: name.trim(),
@@ -91,11 +95,24 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
       has_pets: hasPets,
       additional_notes: notes.trim() || null,
     });
-    setSubmitting(false);
     if (error) {
+      setSubmitting(false);
       toast({ title: 'Could not submit', description: error.message, variant: 'destructive' });
       return;
     }
+
+    // Alert the concierge team + confirm to the renter. The request is already
+    // saved, so a mail failure must not look like a failed submission.
+    try {
+      const { error: notifyError } = await supabase.functions.invoke('notify-complex-inquiry', {
+        body: { inquiryId },
+      });
+      if (notifyError) throw notifyError;
+    } catch (e) {
+      console.error('[concierge] notification failed', e);
+    }
+
+    setSubmitting(false);
     setDone(true);
   };
 

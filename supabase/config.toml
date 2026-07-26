@@ -103,3 +103,6 @@ verify_jwt = false
 
 [functions.concierge-answer]
 verify_jwt = false
+
+[functions.notify-complex-inquiry]
+verify_jwt = false
