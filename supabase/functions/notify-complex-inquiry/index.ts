@@ -134,8 +134,10 @@ const handler = async (req: Request): Promise<Response> => {
     const now = new Date().toISOString();
 
     // Seed the thread with the renter's own request so the dashboard shows the
-    // full conversation from the top.
-    await supabase.from("complex_inquiry_messages").insert([
+    // full conversation from the top. Both rows must set created_at: a bulk
+    // insert sends one unified column list, so a key missing from any row is
+    // written as NULL rather than falling back to the column default.
+    const { error: threadError } = await supabase.from("complex_inquiry_messages").insert([
       {
         inquiry_id: inquiry.id,
         direction: "inbound",
@@ -160,15 +162,20 @@ const handler = async (req: Request): Promise<Response> => {
         subject: `We're checking ${subject.toLowerCase()}`,
         body: "Automatic confirmation sent: the concierge is checking availability and will reply within 24 hours.",
         provider_message_id: (renterEmail as any)?.data?.id ?? null,
+        created_at: now,
       },
     ]);
+
+    // The mail is already out, so a thread-logging failure must not fail the
+    // request - but it must be visible rather than swallowed.
+    if (threadError) console.error("Failed to seed inquiry thread:", threadError);
 
     await supabase
       .from("complex_inquiries")
       .update({ notified_at: now, last_message_at: now, last_inbound_at: inquiry.created_at ?? now })
       .eq("id", inquiry.id);
 
-    return json({ success: true });
+    return json({ success: true, threadLogged: !threadError, threadError: threadError?.message ?? null });
   } catch (error: any) {
     console.error("Error in notify-complex-inquiry function:", error);
     return json({ error: error.message }, 500);
