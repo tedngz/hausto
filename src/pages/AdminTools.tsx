@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject } from "@/data/hcmcApartmentProjects";
 import { RealtorApplicationsPanel } from "@/components/admin/RealtorApplicationsPanel";
 import { FastTrackQueuePanel } from "@/components/admin/FastTrackQueuePanel";
+import { ConciergeRequestsPanel } from "@/components/admin/ConciergeRequestsPanel";
 import { ImageConflictsPanel } from "@/components/admin/ImageConflictsPanel";
 import { OpenAIUsagePanel } from "@/components/admin/OpenAIUsagePanel";
 
@@ -983,6 +984,8 @@ const AdminTools = () => {
       <OpenAIUsagePanel />
 
       <FastTrackQueuePanel />
+
+      <ConciergeRequestsPanel />
 
 
       <ImageConflictsPanel />
@@ -2327,10 +2330,12 @@ const AdminTools = () => {
                   if (error) throw error;
                   const enq = data?.enqueued ?? 0;
                   const total = data?.total ?? 0;
+                  const skipped = data?.skippedBelowFloor ?? 0;
                   toast.success(
                     total === 0
                       ? 'No listings with missing highlights found'
-                      : `Enqueued ${enq} of ${total} listings missing highlights`,
+                      : `Enqueued ${enq} of ${total} listings missing highlights` +
+                        (skipped > 0 ? ` · ${skipped} below the image floor, run the backfill directly for those` : ''),
                     { id: t }
                   );
                   refetchVibeQueue();

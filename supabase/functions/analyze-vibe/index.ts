@@ -3,6 +3,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { analyzeImagesQualityFirst } from "./shared.ts";
 import { extractPropertyFeatures } from "../_shared/property-features.ts";
+import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,6 +48,12 @@ serve(async (req) => {
     if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
       return new Response(JSON.stringify({ error: 'No images provided for analysis' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+      });
+    }
+
+    if (await isOpenAIBudgetExhausted()) {
+      return new Response(JSON.stringify({ error: 'Daily OpenAI budget reached — try again tomorrow' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429,
       });
     }
 

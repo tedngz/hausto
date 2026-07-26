@@ -176,6 +176,9 @@ export type Database = {
       complex_inquiries: {
         Row: {
           additional_notes: string | null
+          admin_notes: string | null
+          handled_at: string | null
+          notified_at: string | null
           bedrooms_needed: number
           budget_usd_max: number
           budget_usd_min: number
@@ -194,6 +197,9 @@ export type Database = {
         }
         Insert: {
           additional_notes?: string | null
+          admin_notes?: string | null
+          handled_at?: string | null
+          notified_at?: string | null
           bedrooms_needed: number
           budget_usd_max: number
           budget_usd_min: number
@@ -212,6 +218,9 @@ export type Database = {
         }
         Update: {
           additional_notes?: string | null
+          admin_notes?: string | null
+          handled_at?: string | null
+          notified_at?: string | null
           bedrooms_needed?: number
           budget_usd_max?: number
           budget_usd_min?: number
@@ -1449,6 +1458,7 @@ export type Database = {
           estimated_usd: number
           fn: string
           images: number
+          model: string
           prompt_tokens: number
         }[]
       }

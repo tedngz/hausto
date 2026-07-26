@@ -41,7 +41,6 @@ export const LiveListingsPreview = () => {
   // Signed-in renters get the table inside Discover; visitors get the public page.
   const browsePath = user ? '/discover?view=browse' : '/browse';
   const [rows, setRows] = useState<PreviewRow[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
   const [verifiedThisWeek, setVerifiedThisWeek] = useState(0);
 
   useEffect(() => {
@@ -57,8 +56,6 @@ export const LiveListingsPreview = () => {
           (b.last_verified_at || '').localeCompare(a.last_verified_at || ''));
         if (!cancelled) {
           setRows(sorted.slice(0, PREVIEW_ROWS));
-          // Inventory-wide count (internal + external), not just this query's total
-          setTotal(data.stats?.total_active_listings ?? data.total ?? null);
           // Real inventory-wide count from the API, not a count of this sample
           setVerifiedThisWeek(data.stats?.verified_last_7_days ?? 0);
         }
@@ -74,7 +71,14 @@ export const LiveListingsPreview = () => {
   return (
     <div className="mt-12 text-left">
       <div className="mb-6 text-center">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Live Inventory</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 flex items-center justify-center gap-2">
+          {/* Pulsing dot: the inventory is refreshed by the crawler, say so visually. */}
+          <span className="relative flex w-2 h-2">
+            <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-500 opacity-70 animate-ping" />
+            <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+          </span>
+          Live Inventory
+        </p>
         <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Your curated rental hub</h2>
         <p className="text-muted-foreground mt-3 max-w-xl mx-auto text-sm md:text-base">
           Auto-curated from Vietnam's top rental platforms, verified fresh, no duplicates, dead listings removed.
@@ -91,7 +95,7 @@ export const LiveListingsPreview = () => {
               onClick={() => navigate(`/property/${r.id}`)}
             >
               {r.images?.[0] && (
-                <img loading="lazy"
+                <img
                   src={r.images[0]}
                   alt=""
                   loading="lazy"
@@ -131,11 +135,11 @@ export const LiveListingsPreview = () => {
         })}
       </div>
 
-      <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
+      {/* One number only — a count on the button next to a different count beside it
+          read as a contradiction. */}
+      <div className="mt-5 flex flex-col items-center justify-center gap-2">
         <Button asChild size="lg" className="px-8">
-          <Link to={browsePath}>
-            Browse {total ? `all ${total}` : 'all'} listings →
-          </Link>
+          <Link to={browsePath}>Browse all listings →</Link>
         </Button>
         {verifiedThisWeek > 0 && (
           <p className="text-xs text-muted-foreground">
