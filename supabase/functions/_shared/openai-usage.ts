@@ -34,7 +34,21 @@ export interface LogUsageArgs {
   metadata?: Record<string, unknown>;
 }
 
-export async function logOpenAIUsage(args: LogUsageArgs): Promise<void> {
+// Every call site invokes this fire-and-forget (no await) so cost tracking
+// never adds latency to a user-facing response. That means the isolate can be
+// torn down the moment the handler resolves, cancelling the insert mid-flight.
+// EdgeRuntime.waitUntil keeps the isolate alive for the background work, which
+// is what makes the un-awaited calls actually land.
+type WaitUntil = { waitUntil?: (p: Promise<unknown>) => void };
+
+export function logOpenAIUsage(args: LogUsageArgs): Promise<void> {
+  const task = sendUsage(args);
+  const rt = (globalThis as { EdgeRuntime?: WaitUntil }).EdgeRuntime;
+  rt?.waitUntil?.(task);
+  return task;
+}
+
+async function sendUsage(args: LogUsageArgs): Promise<void> {
   try {
     const prompt = args.usage?.prompt_tokens ?? 0;
     const completion = args.usage?.completion_tokens ?? 0;

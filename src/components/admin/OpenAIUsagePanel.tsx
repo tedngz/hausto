@@ -16,6 +16,7 @@ interface Row {
 
 export function OpenAIUsagePanel() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(7);
 
@@ -25,8 +26,14 @@ export function OpenAIUsagePanel() {
       setLoading(true);
       const { data, error } = await supabase.rpc("get_openai_usage_summary", { _days: days });
       if (!cancel) {
-        if (error) console.error("[OpenAIUsage]", error);
-        setRows((data as Row[]) || []);
+        if (error) {
+          console.error("[OpenAIUsage]", error);
+          setError(error.message);
+          setRows([]);
+        } else {
+          setError(null);
+          setRows((data as Row[]) || []);
+        }
         setLoading(false);
       }
     })();
@@ -65,6 +72,8 @@ export function OpenAIUsagePanel() {
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
+        ) : error ? (
+          <p className="text-sm text-destructive">Could not load usage: {error}</p>
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No usage recorded yet.</p>
         ) : (

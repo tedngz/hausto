@@ -1449,6 +1449,7 @@ export type Database = {
           estimated_usd: number
           fn: string
           images: number
+          model: string
           prompt_tokens: number
         }[]
       }
