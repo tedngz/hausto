@@ -177,10 +177,6 @@ export type Database = {
         Row: {
           additional_notes: string | null
           admin_notes: string | null
-          handled_at: string | null
-          notified_at: string | null
-          last_message_at: string | null
-          last_inbound_at: string | null
           bedrooms_needed: number
           budget_usd_max: number
           budget_usd_min: number
@@ -188,9 +184,13 @@ export type Database = {
           created_at: string
           email: string
           full_name: string
+          handled_at: string | null
           has_pets: boolean
           id: string
+          last_inbound_at: string | null
+          last_message_at: string | null
           lease_duration_months: number
+          notified_at: string | null
           phone: string | null
           status: string
           target_move_in_date: string
@@ -200,10 +200,6 @@ export type Database = {
         Insert: {
           additional_notes?: string | null
           admin_notes?: string | null
-          handled_at?: string | null
-          notified_at?: string | null
-          last_message_at?: string | null
-          last_inbound_at?: string | null
           bedrooms_needed: number
           budget_usd_max: number
           budget_usd_min: number
@@ -211,9 +207,13 @@ export type Database = {
           created_at?: string
           email: string
           full_name: string
+          handled_at?: string | null
           has_pets?: boolean
           id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string | null
           lease_duration_months: number
+          notified_at?: string | null
           phone?: string | null
           status?: string
           target_move_in_date: string
@@ -223,10 +223,6 @@ export type Database = {
         Update: {
           additional_notes?: string | null
           admin_notes?: string | null
-          handled_at?: string | null
-          notified_at?: string | null
-          last_message_at?: string | null
-          last_inbound_at?: string | null
           bedrooms_needed?: number
           budget_usd_max?: number
           budget_usd_min?: number
@@ -234,9 +230,13 @@ export type Database = {
           created_at?: string
           email?: string
           full_name?: string
+          handled_at?: string | null
           has_pets?: boolean
           id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string | null
           lease_duration_months?: number
+          notified_at?: string | null
           phone?: string | null
           status?: string
           target_move_in_date?: string
@@ -1620,6 +1620,7 @@ export type Database = {
         Returns: boolean
       }
       normalize_location: { Args: { location_text: string }; Returns: string }
+      openai_spend_today: { Args: never; Returns: number }
       set_fast_track_archived: {
         Args: { _archived: boolean; _request_id: string }
         Returns: {
