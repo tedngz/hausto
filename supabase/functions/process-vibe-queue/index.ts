@@ -8,7 +8,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
 import { dHashFromBytes } from "../_shared/dhash.ts";
-import { MIN_DISPLAY_IMAGES, STORE_TARGET, ANALYZE_COUNT } from "../_shared/vibe-policy.ts";
+import { MIN_DISPLAY_IMAGES, STORE_TARGET, expectedHighlightCount } from "../_shared/vibe-policy.ts";
 import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 import { prepareForStorage } from "../_shared/mirror-image.ts";
 
@@ -211,8 +211,14 @@ serve(async (req) => {
         // 2) Analyze every qualified image, capped at ANALYZE_COUNT. The count
         //    written here is what the backfill checks for, so both derive it
         //    from expectedHighlightCount rather than hardcoding a number.
-        const analyzeSet = displayImages.slice(0, ANALYZE_COUNT);
-        const result = await analyzeImagesQualityFirst({ imageUrls: analyzeSet, openaiKey });
+        // Hand over the whole gallery with a target: the analyzer stops at
+        // ANALYZE_COUNT successes, so a dead image is replaced by the next one
+        // down rather than failing the listing.
+        const result = await analyzeImagesQualityFirst({
+          imageUrls: displayImages,
+          openaiKey,
+          targetCount: expectedHighlightCount(displayImages.length),
+        });
 
         if (!result.allSucceeded) {
           const newAttempts = (job.attempts || 0) + 1;

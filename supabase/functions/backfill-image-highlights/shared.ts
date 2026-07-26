@@ -142,6 +142,11 @@ interface AnalyzeArgs {
   imageUrls: string[];
   openaiKey: string;
   propertyInfo?: any;
+  // Stop once this many images have been analyzed successfully. Pass the whole
+  // gallery with a target of ANALYZE_COUNT and unfetchable images cost nothing
+  // but a skip — the analyzer draws replacements from further down the list
+  // instead of giving up on the listing. Defaults to "every URL given".
+  targetCount?: number;
 }
 
 export interface AnalyzeResult {
@@ -196,10 +201,12 @@ async function callOpenAIWithBackoff(
 
 export async function analyzeImagesQualityFirst(args: AnalyzeArgs): Promise<AnalyzeResult> {
   const { imageUrls, openaiKey } = args;
+  const target = args.targetCount ?? imageUrls.length;
   const analyses: any[] = [];
   const failures: { image_index: number; reason: string }[] = [];
 
   for (let i = 0; i < imageUrls.length; i++) {
+    if (analyses.length >= target) break;
     const url = imageUrls[i];
     const fetched = await fetchAsBase64(url);
     if (!fetched) {
@@ -253,7 +260,9 @@ export async function analyzeImagesQualityFirst(args: AnalyzeArgs): Promise<Anal
   }
 
   return {
-    allSucceeded: failures.length === 0 && analyses.length === imageUrls.length,
+    // Reaching the target is what matters, not analyzing every URL. With no
+    // target this is the old rule: every image given must have succeeded.
+    allSucceeded: analyses.length >= target,
     analyses,
     failures,
   };

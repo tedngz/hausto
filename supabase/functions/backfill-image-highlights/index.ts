@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
-import { MIN_DISPLAY_IMAGES, ANALYZE_COUNT, expectedHighlightCount } from "../_shared/vibe-policy.ts";
+import { MIN_DISPLAY_IMAGES, expectedHighlightCount } from "../_shared/vibe-policy.ts";
 import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
@@ -67,9 +67,16 @@ serve(async (req) => {
       });
     };
 
+    // A listing whose images are permanently unfetchable is done as far as this
+    // job is concerned — chasing it costs money on every run and can never
+    // succeed. Re-crawling replaces `images` and clears the flag; passing
+    // explicit property_ids with missing_only=false forces a retry anyway.
+    const isUnfixable = (p: any): boolean => p.vibe_analysis?.image_backfill?.unfixable === true;
+
     const hasMissingHighlights = (p: any): boolean => {
       const images = Array.isArray(p.images) ? p.images : [];
       if (images.length === 0) return false; // nothing to analyze
+      if (isUnfixable(p)) return false;
       const highlights = Array.isArray(p.highlights) ? p.highlights.filter((h: any) => typeof h === 'string' && h.trim()) : [];
       // Listings holding fewer than MIN_DISPLAY_IMAGES photos are done at one
       // highlight per image. They can never reach ANALYZE_COUNT, so requiring
@@ -168,10 +175,56 @@ serve(async (req) => {
         // guaranteed insufficient_quality_images failures.
         const meetsDisplayFloor = allImages.length >= MIN_DISPLAY_IMAGES;
 
-        const images = allImages.slice(0, ANALYZE_COUNT);
-        const result = await analyzeImagesQualityFirst({ imageUrls: images, openaiKey });
+        // Hand over the whole gallery with a target: the analyzer stops at
+        // expectedHighlightCount successes, so a dead image is replaced by the
+        // next one down rather than failing the listing.
+        const target = expectedHighlightCount(allImages.length);
+        const result = await analyzeImagesQualityFirst({
+          imageUrls: allImages,
+          openaiKey,
+          targetCount: target,
+        });
 
         if (!result.allSucceeded) {
+          // Every image has now been tried and the shortfall is dead source
+          // URLs rather than a transient API problem, so this listing can never
+          // reach `target`. Keep the highlights we did get and stop selecting
+          // it — otherwise it is re-analyzed on every run forever, paying for
+          // the images that still work and never converging.
+          const exhausted = result.analyses.length + result.failures.length >= allImages.length;
+          const onlyDeadImages = result.failures.length > 0 &&
+            result.failures.every((f) => f.reason === 'fetch_failed');
+
+          if (exhausted && onlyDeadImages) {
+            const partialHighlights = result.analyses
+              .map((a) => String(a.image_highlight || '').trim())
+              .filter(Boolean);
+            await supabase
+              .from('external_properties')
+              .update({
+                vibe_analysis: {
+                  ...(prop.vibe_analysis || {}),
+                  image_analyses: result.analyses,
+                  image_backfill: {
+                    unfixable: true,
+                    reason: 'images_unfetchable',
+                    analyzed: result.analyses.length,
+                    expected: target,
+                    at: new Date().toISOString(),
+                  },
+                },
+                highlights: partialHighlights,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', prop.id);
+            results.push({
+              id: prop.id, title: prop.title, success: false,
+              reason: 'images_unfetchable_giving_up',
+              analyzed: result.analyses.length, expected: target,
+            });
+            continue;
+          }
+
           // Quality-first: leave as pending, enqueue for retry. NO fake highlights.
           // Hiding on failure applies only to listings that could go live on the
           // strength of their gallery; a sub-floor legacy listing keeps whatever
@@ -208,8 +261,11 @@ serve(async (req) => {
           if (Array.isArray(a.amenities)) a.amenities.forEach((x: string) => allAmenities.add(x));
         });
 
+        // Success clears any earlier give-up marker — a re-crawl may have
+        // replaced the dead images.
+        const { image_backfill: _cleared, ...priorVibe } = (prop.vibe_analysis || {});
         const updatedVibe = {
-          ...(prop.vibe_analysis || {}),
+          ...priorVibe,
           image_analyses: analyses,
           amenities: Array.from(allAmenities),
         };
