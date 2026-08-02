@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X, Share2, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VibeMatchPopover, type VibeScoreDetails, type VibeMatchAttributes } from '@/components/VibeMatchPopover';
@@ -67,7 +67,7 @@ interface EditorialPropertyCardProps {
   onSchedule?: () => void;
   initialImageIndex?: number;
   onImageIndexChange?: (index: number) => void;
-  /** Override the card's aspect ratio (default: editorial 380/560 portrait) */
+  /** Override the card's aspect ratio (default: 4:3) */
   aspectClass?: string;
   /** Smaller typography so the photo dominates (used in the AI chat's compact cards) */
   compact?: boolean;
@@ -77,6 +77,13 @@ interface EditorialPropertyCardProps {
 }
 
 const EASE = 'cubic-bezier(0.22,1,0.36,1)';
+
+// The description reveal grows the bottom stack upward. On a short card — the
+// 4:3 default at grid or phone widths — that pushes the title up over the
+// match/verified chips, so the reveal is only offered once the card is tall
+// enough to absorb it. Measured against the card, not the viewport: a card in a
+// 3-column grid is short even on a wide screen.
+const REVEAL_MIN_CARD_HEIGHT = 380;
 
 const RATING_DOT: Record<string, string> = {
   perfect: 'bg-emerald-400',
@@ -101,7 +108,7 @@ export const EditorialPropertyCard = ({
   onSchedule,
   initialImageIndex = 0,
   onImageIndexChange,
-  aspectClass = 'aspect-[380/560]',
+  aspectClass = 'aspect-[4/3]',
   compact = false,
   topRightActions,
   className = '',
@@ -115,7 +122,28 @@ export const EditorialPropertyCard = ({
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardHeight, setCardHeight] = useState(0);
   const { formatPrice } = useCurrency();
+
+  // Track the rendered card height so the description reveal can bow out on
+  // cards too short to host it (see REVEAL_MIN_CARD_HEIGHT). Measured up front
+  // in a layout effect rather than relying solely on ResizeObserver, whose
+  // callbacks ride the rendering steps and never arrive in a tab that isn't
+  // painting — which would silently drop the reveal.
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const measure = () => setCardHeight(el.getBoundingClientRect().height);
+    measure();
+    window.addEventListener('resize', measure);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
+  }, []);
 
   // Touch devices have no hover: keep the slideshow arrows visible.
   useEffect(() => {
@@ -176,6 +204,10 @@ export const EditorialPropertyCard = ({
   // on tap of the cover image instead of showing it permanently.
   const revealVisible = noHover ? tapReveal : hover;
   const isFirstImage = current === 0;
+  // Spacing keys off the card's own height, not the viewport: a card in a
+  // 3-column grid is short on a wide screen, and viewport breakpoints would
+  // hand it the roomy desktop treatment it has no space for.
+  const isShortCard = cardHeight > 0 && cardHeight < REVEAL_MIN_CARD_HEIGHT;
 
   // Full description, revealed on hover (touch devices have no hover, so it stays open).
   // Skip it when it merely repeats the title or the visible caption.
@@ -226,6 +258,7 @@ export const EditorialPropertyCard = ({
 
   return (
     <div
+      ref={cardRef}
       className={`group relative w-full ${aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -241,7 +274,7 @@ export const EditorialPropertyCard = ({
         onClick={e => {
           // On touch devices, tap the cover photo to reveal/hide the description
           // instead of showing it permanently. Let other taps fall through to onCardClick.
-          if (noHover && isFirstImage && revealText) {
+          if (noHover && isFirstImage && revealText && cardHeight >= REVEAL_MIN_CARD_HEIGHT) {
             e.stopPropagation();
             setTapReveal(v => !v);
           }
@@ -362,11 +395,11 @@ export const EditorialPropertyCard = ({
       )}
 
       {/* Bottom content stack — always visible, no hover needed */}
-      <div className={`absolute text-white text-left flex flex-col ${compact ? 'left-4 right-4 bottom-4 gap-1.5' : 'left-5 right-5 bottom-5 gap-2.5'}`}>
+      <div className={`absolute text-white text-left flex flex-col ${compact ? 'left-4 right-4 bottom-4 gap-1.5' : `left-5 right-5 bottom-5 ${isShortCard ? 'gap-2' : 'gap-2.5'}`}`}>
         {/* Title + location live on the cover (first image) only */}
         {isFirstImage && (
           <div className={`flex flex-col ${compact ? 'gap-1' : 'gap-1.5'}`}>
-            <h3 className={`font-serif font-medium leading-snug [text-wrap:pretty] ${compact ? 'text-sm line-clamp-1' : 'text-lg sm:text-xl line-clamp-2'}`}>
+            <h3 className={`font-serif font-medium leading-snug [text-wrap:pretty] ${compact ? 'text-sm line-clamp-1' : `line-clamp-2 ${isShortCard ? 'text-lg' : 'text-lg sm:text-xl'}`}`}>
               {displayTitle}
             </h3>
             <button
@@ -384,13 +417,15 @@ export const EditorialPropertyCard = ({
 
         {/* Current photo's highlight — plain italic caption, no quotes */}
         {quote && (
-          <p className={`font-serif italic leading-snug text-white/95 ${compact ? 'text-[13px] line-clamp-1' : 'text-[15px] line-clamp-2'}`}>
+          <p className={`font-serif italic leading-snug text-white/95 ${compact ? 'text-[13px] line-clamp-1' : `text-[15px] ${isShortCard ? 'line-clamp-1' : 'line-clamp-2'}`}`}>
             {quote}
           </p>
         )}
 
-        {/* Full description — cover (first image) only; hidden at rest, slides up on hover (always open on touch) */}
-        {isFirstImage && revealText && (
+        {/* Full description — cover (first image) only; hidden at rest, slides up
+            on hover (tap on touch). Skipped on short cards, where expanding it
+            would drive the title up into the badges. */}
+        {isFirstImage && revealText && cardHeight >= REVEAL_MIN_CARD_HEIGHT && (
           <div
             className="overflow-hidden"
             style={{
