@@ -58,7 +58,7 @@ export const ListingCardDialog = ({ propertyId, open, onOpenChange }: ListingCar
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
-      <DialogContent className="max-w-2xl p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
+      <DialogContent className="max-w-md p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
         <DialogTitle className="sr-only">{apartment?.title || 'Listing'}</DialogTitle>
         {isLoading ? (
           <div className="flex justify-center py-16">

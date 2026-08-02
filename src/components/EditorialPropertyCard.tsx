@@ -67,11 +67,7 @@ interface EditorialPropertyCardProps {
   onSchedule?: () => void;
   initialImageIndex?: number;
   onImageIndexChange?: (index: number) => void;
-  /**
-   * Override the card's aspect ratio. Default is 16:9, stepped down to 4:3 on
-   * phones — at a phone's width a 16:9 card is only ~200px tall and the bottom
-   * text stack collides with the match/verified chips.
-   */
+  /** Override the card's aspect ratio (default: editorial 380/560 portrait) */
   aspectClass?: string;
   /** Smaller typography so the photo dominates (used in the AI chat's compact cards) */
   compact?: boolean;
@@ -105,7 +101,7 @@ export const EditorialPropertyCard = ({
   onSchedule,
   initialImageIndex = 0,
   onImageIndexChange,
-  aspectClass = 'aspect-[4/3] sm:aspect-video',
+  aspectClass = 'aspect-[380/560]',
   compact = false,
   topRightActions,
   className = '',

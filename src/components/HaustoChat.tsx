@@ -1009,7 +1009,7 @@ export const HaustoChat = ({
 
         {/* Property detail: the editorial card (platform's current listing design) in a frameless dialog */}
         <Dialog open={!!detailModalApartment} onOpenChange={o => !o && setDetailModalApartment(null)}>
-          <DialogContent className="max-w-2xl w-[92vw] p-0 bg-transparent border-none shadow-none [&>button]:hidden">
+          <DialogContent className="max-w-[420px] w-[92vw] p-0 bg-transparent border-none shadow-none [&>button]:hidden">
             <DialogTitle className="sr-only">{detailModalApartment?.title || 'Property details'}</DialogTitle>
             <DialogDescription className="sr-only">Property listing details</DialogDescription>
             {detailModalApartment && (
