@@ -2231,7 +2231,7 @@ const AdminTools = () => {
                                   onClick={() => setPreviewProperty(prop)}
                                 >
                                   {imageCount > 0 ? (
-                                    <img loading="lazy"
+                                    <img
                                       src={prop.images[0]}
                                       alt=""
                                       className="h-10 w-14 rounded object-cover shrink-0"
@@ -2395,7 +2395,7 @@ const AdminTools = () => {
                   {Array.isArray(r.sample_images) && r.sample_images.length > 0 && (
                     <div className="flex gap-1 overflow-x-auto pt-1">
                       {r.sample_images.slice(0, 4).map((img: string, i: number) => (
-                        <img loading="lazy"
+                        <img
                           key={i}
                           src={img}
                           alt=""

@@ -200,7 +200,7 @@ export default function ComplexDetail() {
                         onClick={() => setLightbox(src)}
                         className={`group relative overflow-hidden rounded-lg bg-muted ${i === 0 ? 'col-span-2 row-span-2 aspect-square' : 'aspect-square'}`}
                       >
-                        <img loading="lazy"
+                        <img
                           src={src}
                           alt={`${complex.name} interior ${i + 1}`}
                           loading="lazy"
