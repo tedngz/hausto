@@ -703,7 +703,10 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         </div>
       )}
 
-      {/* In-place property preview: full editorial card with like, no page change */}
+      {/* In-place property preview: full editorial card with like, no page change.
+          4:3 here on desktop only — the wide dialog gives the photo room. The
+          rest of the app, and this modal on phones, keep the portrait card: at
+          a phone's width 4:3 is short enough that the text crowds the chips. */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
         <DialogContent className="max-w-2xl p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
@@ -734,6 +737,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   vibeScore={previewScore?.score}
                   vibeMatch={previewScore?.attrs}
                   scoreContext="preferences"
+                  aspectClass="aspect-[380/560] sm:aspect-[4/3]"
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
                   onClose={() => setPreview(null)}

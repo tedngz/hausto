@@ -768,6 +768,7 @@ export const HomeAI = ({
                                <EditorialPropertyCard
                                  key={property.id}
                                  apartment={property}
+                                 aspectClass="aspect-[4/5]"
                                  compact
                                  className="max-w-[300px] w-full mx-auto sm:mx-0"
                                  vibeScore={cardVibeScore(property)}
@@ -873,6 +874,7 @@ export const HomeAI = ({
                       <EditorialPropertyCard
                         key={property.id}
                         apartment={property}
+                        aspectClass="aspect-[4/5]"
                         compact
                         className="max-w-[300px] w-full mx-auto sm:mx-0"
                         vibeScore={cardVibeScore(property)}
