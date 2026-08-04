@@ -641,7 +641,6 @@ Deno.serve(async (req) => {
                       contact_name: property.sourceProviderName || null,
                       contact_phone: property.sourceProviderPhone || null,
                       crawled_at: new Date().toISOString(),
-                      expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                       is_active: true,
                       ...(geoLat !== null && geoLon !== null ? { latitude: geoLat, longitude: geoLon } : {}),
                     })
@@ -708,7 +707,6 @@ Deno.serve(async (req) => {
                   vibe: property.vibe || null,
                   vibe_analysis: property.vibe_analysis || {},
                   crawled_at: new Date().toISOString(),
-                  expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
                   is_active: true,
                   ...(geoLat !== null && geoLon !== null ? { latitude: geoLat, longitude: geoLon } : {}),
                 };

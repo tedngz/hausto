@@ -1612,7 +1612,6 @@ serve(async (req) => {
         .from('external_properties')
         .select('*')
         .eq('is_active', true)
-        .gt('expires_at', new Date().toISOString())
         .order('crawled_at', { ascending: false })
         .limit(500)
     ]);

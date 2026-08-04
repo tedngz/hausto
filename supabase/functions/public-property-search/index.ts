@@ -153,7 +153,6 @@ serve(async (req) => {
         .from('external_properties')
         .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
         .eq('is_active', true)
-        .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });
 
       if (city) {
@@ -253,13 +252,11 @@ serve(async (req) => {
         .from('external_properties')
         .select('id', { count: 'exact', head: true })
         .eq('is_active', true)
-        .gt('expires_at', new Date().toISOString())
         .gte('last_verified_at', sevenDaysAgo),
       supabase
         .from('external_properties')
         .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .gt('expires_at', new Date().toISOString()),
+        .eq('is_active', true),
       supabase
         .from('properties')
         .select('id', { count: 'exact', head: true })

@@ -85,7 +85,6 @@ export const useProperties = () => {
           .from('external_properties')
           .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
-          .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false }),
       ]);
 

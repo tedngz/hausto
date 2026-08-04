@@ -2099,7 +2099,7 @@ const AdminTools = () => {
           <div className="text-sm text-muted-foreground space-y-1 border-t pt-3">
             <p><strong>Deduplication:</strong> URL normalization + database check prevents duplicate entries.</p>
             <p><strong>Fake filter:</strong> Listings with price &lt;2M or &gt;200M VND, no images, sale keywords, or non-residential keywords are automatically rejected.</p>
-            <p><strong>Freshness:</strong> Skips locations crawled within the cooldown period (default 48h). Listings expire after 10 days.</p>
+            <p><strong>Freshness:</strong> Skips locations crawled within the cooldown period (default 48h). Listings stay active for as long as their source link is live - they are retired only when verification finds the source page gone.</p>
             <p><strong>Credit saving:</strong> Search pages use direct HTTP fetch; Firecrawl credits (max 5/run) reserved for detail pages only.</p>
           </div>
 

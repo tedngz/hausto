@@ -78,7 +78,6 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('id', id)
       .eq('is_active', true)
-      .gt('expires_at', new Date().toISOString())
       .maybeSingle();
 
     if (ext) {

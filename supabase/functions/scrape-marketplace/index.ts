@@ -598,7 +598,6 @@ async function savePropertiesToDB(
           images: propertyData.images.slice(0, 8), // Match the 5-8 display target
           last_verified_at: now,
           updated_at: now,
-          expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
         };
         
         // Don't overwrite good vibe data with empty scrape data
@@ -660,7 +659,6 @@ async function savePropertiesToDB(
           source: marketplace,
           source_url: normalizedUrl,
           crawled_at: now,
-          expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
           // Quality-first: hide listings until vibe analysis completes
           is_active: false,
           vibe_status: 'pending',
@@ -1763,14 +1761,14 @@ Deno.serve(async (req) => {
         if (refreshIds.length > 0) {
           await supabaseDedup
             .from('external_properties')
-            .update({ last_verified_at: now, updated_at: now, expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString() })
+            .update({ last_verified_at: now, updated_at: now })
             .eq('source', marketplace)
             .in('external_id', refreshIds);
         }
         if (refreshUrls.length > 0) {
           await supabaseDedup
             .from('external_properties')
-            .update({ last_verified_at: now, updated_at: now, expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString() })
+            .update({ last_verified_at: now, updated_at: now })
             .eq('source', marketplace)
             .in('source_url', refreshUrls);
         }

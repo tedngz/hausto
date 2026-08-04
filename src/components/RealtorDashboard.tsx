@@ -113,7 +113,7 @@ export const RealtorDashboard = ({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, external_id, source, source_url, title, location, location_normalized, city, price, price_display, size, description, highlights, amenities, images, vibe, vibe_analysis, crawled_at, expires_at, last_verified_at, is_active, created_at, updated_at, latitude, longitude, rooms, verification_failures, last_verification_status, last_verification_reason, deactivated_at, phone_extraction_attempts, vibe_status, raw_only, raw_data')
+        .select('id, external_id, source, source_url, title, location, location_normalized, city, price, price_display, size, description, highlights, amenities, images, vibe, vibe_analysis, crawled_at, last_verified_at, is_active, created_at, updated_at, latitude, longitude, rooms, verification_failures, last_verification_status, last_verification_reason, deactivated_at, phone_extraction_attempts, vibe_status, raw_only, raw_data')
         .eq('raw_only', showRawHarvested)
         .order('crawled_at', { ascending: false })
         .limit(500);
@@ -133,31 +133,8 @@ export const RealtorDashboard = ({
         }));
       }
 
-      // Auto-deactivate expired listings that still have is_active = true
-      const now = new Date();
-      const expiredActive = listings.filter(
-        (l: any) => l.is_active && l.expires_at && new Date(l.expires_at) < now
-      );
-      if (expiredActive.length > 0) {
-        console.log(`[CrawledListings] Auto-deactivating ${expiredActive.length} expired listings`);
-        const ids = expiredActive.map((l: any) => l.id);
-        supabase
-          .from('external_properties')
-          .update({ is_active: false, updated_at: now.toISOString() })
-          .in('id', ids)
-          .then(({ error: updateErr }) => {
-            if (updateErr) {
-              console.error('[CrawledListings] Failed to deactivate expired:', updateErr);
-            } else {
-              queryClient.invalidateQueries({ queryKey: ['crawled-listings'] });
-            }
-          });
-        // Return with corrected status immediately
-        return listings.map((l: any) =>
-          ids.includes(l.id) ? { ...l, is_active: false } : l
-        );
-      }
-
+      // Crawled listings have no expiry clock: they stay active until
+      // verify-external-listings finds their source URL dead.
       return listings;
     },
     enabled: isAdmin,
@@ -315,21 +292,15 @@ export const RealtorDashboard = ({
     return `${value} ${unit} remaining`;
   };
 
-  const getCrawledTimeRemaining = (expiresAt?: string): { value: number; unit: 'days' | 'hours' | 'minutes'; expired: boolean } => {
-    if (!expiresAt) return { value: 0, unit: 'days', expired: true };
-    const diffMs = new Date(expiresAt).getTime() - Date.now();
-    if (diffMs <= 0) return { value: 0, unit: 'days', expired: true };
+  // Crawled listings live as long as their source link does — surface the last
+  // liveness check instead of a countdown.
+  const formatLastVerified = (lastVerifiedAt?: string | null): string => {
+    if (!lastVerifiedAt) return 'Not verified yet';
+    const diffMs = Date.now() - new Date(lastVerifiedAt).getTime();
     const diffHours = diffMs / (1000 * 60 * 60);
-    const diffDays = diffHours / 24;
-    if (diffDays >= 1) return { value: Math.ceil(diffDays), unit: 'days', expired: false };
-    if (diffHours >= 1) return { value: Math.ceil(diffHours), unit: 'hours', expired: false };
-    return { value: Math.max(1, Math.ceil(diffMs / (1000 * 60))), unit: 'minutes', expired: false };
-  };
-
-  const formatCrawledTimeRemaining = (expiresAt?: string): string => {
-    const { value, unit, expired } = getCrawledTimeRemaining(expiresAt);
-    if (expired) return 'Expired';
-    return `${value} ${unit} remaining`;
+    if (diffHours < 1) return 'Verified just now';
+    if (diffHours < 24) return `Verified ${Math.floor(diffHours)}h ago`;
+    return `Verified ${Math.floor(diffHours / 24)}d ago`;
   };
 
   const handleBatchReanalyze = async () => {
@@ -604,8 +575,7 @@ export const RealtorDashboard = ({
 
     try {
       const now = new Date().toISOString();
-      const expiresAt = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
-      
+
       const promises: Promise<any>[] = [];
 
       // Reactivate internal properties
@@ -627,7 +597,7 @@ export const RealtorDashboard = ({
           (async () => {
             const { error } = await supabase
               .from('external_properties')
-              .update({ is_active: true, expires_at: expiresAt, updated_at: now })
+              .update({ is_active: true, updated_at: now })
               .in('id', crawledToReactivate.map((l: any) => l.id));
             if (error) throw error;
           })()
@@ -1051,8 +1021,8 @@ export const RealtorDashboard = ({
                             />
                           </div>
                           {listing.is_active && (
-                            <div className={`text-xs ${getCrawledTimeRemaining(listing.expires_at).expired ? 'text-red-500' : getCrawledTimeRemaining(listing.expires_at).value <= 1 && getCrawledTimeRemaining(listing.expires_at).unit !== 'days' ? 'text-orange-500' : 'text-slate-500'}`}>
-                              {formatCrawledTimeRemaining(listing.expires_at)}
+                            <div className={`text-xs ${listing.last_verified_at ? 'text-slate-500' : 'text-orange-500'}`}>
+                              {formatLastVerified(listing.last_verified_at)}
                             </div>
                           )}
                         </div>

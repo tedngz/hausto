@@ -115,7 +115,6 @@ export function useComplexListings(complex: Complex | null | undefined) {
         .join(',');
 
       const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
-      const now = new Date().toISOString();
 
       const [internalRes, externalRes] = await Promise.all([
         supabase
@@ -130,7 +129,6 @@ export function useComplexListings(complex: Complex | null | undefined) {
           .from('external_properties')
           .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
-          .gt('expires_at', now)
           .or(orExternal)
           .order('crawled_at', { ascending: false })
           .limit(12),

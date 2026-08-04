@@ -17,6 +17,7 @@ const CONCURRENCY = 2;
 const RECENT_LISTING_DAYS = 42;      // the 6-week lease window = high churn risk
 const RECENT_REVERIFY_DAYS = 2;      // inside the lease window: check every 2 days
 const OLD_REVERIFY_DAYS = 5;         // past the window: every 5 days
+const SUSPECT_REVERIFY_HOURS = 6;    // already failed once: confirm or clear it fast
 const MAX_UNVERIFIED_AGE_DAYS = 45;  // unconfirmed past the lease window + grace: archive
 
 type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string };
@@ -245,6 +246,7 @@ Deno.serve(async (req) => {
     const recentCrawlCutoff = new Date(nowMs - RECENT_LISTING_DAYS * dayMs).toISOString();
     const recentReverifyCutoff = new Date(nowMs - RECENT_REVERIFY_DAYS * dayMs).toISOString();
     const oldReverifyCutoff = new Date(nowMs - OLD_REVERIFY_DAYS * dayMs).toISOString();
+    const suspectReverifyCutoff = new Date(nowMs - SUSPECT_REVERIFY_HOURS * 60 * 60 * 1000).toISOString();
     const ageCapCutoff = new Date(nowMs - MAX_UNVERIFIED_AGE_DAYS * dayMs).toISOString();
 
     // Hard age cap: archive listings crawled >60 days ago that were never confirmed alive since
@@ -267,13 +269,16 @@ Deno.serve(async (req) => {
     }
 
     // Pull only listings due for a check, oldest-verified first (never-verified first).
-    // Due = never verified, OR recent listing not checked in 3 days, OR old listing not checked in 7 days.
+    // Due = never verified, OR one dead result already on record (confirm or clear
+    // it within hours rather than leaving a probably-gone listing up for days),
+    // OR recent listing past its 2-day cadence, OR old listing past its 5-day one.
     const { data: listings, error } = await supabase
       .from('external_properties')
       .select('id, source, source_url, external_id, verification_failures')
       .eq('is_active', true)
       .or(
         `last_verified_at.is.null,` +
+        `and(verification_failures.gte.1,last_verified_at.lte.${suspectReverifyCutoff}),` +
         `and(crawled_at.gte.${recentCrawlCutoff},last_verified_at.lte.${recentReverifyCutoff}),` +
         `last_verified_at.lte.${oldReverifyCutoff}`
       )

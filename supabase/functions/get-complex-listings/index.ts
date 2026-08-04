@@ -72,7 +72,6 @@ serve(async (req) => {
       .join(',');
 
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
-    const now = new Date().toISOString();
 
     // Explicit column lists — contact columns are intentionally excluded.
     const [internalRes, externalRes] = await Promise.all([
@@ -88,7 +87,6 @@ serve(async (req) => {
         .from('external_properties')
         .select('id, title, location, price, size, vibe, description, images, highlights, amenities, vibe_analysis, latitude, longitude, rooms, crawled_at, created_at')
         .eq('is_active', true)
-        .gt('expires_at', now)
         .or(orExternal)
         .order('crawled_at', { ascending: false })
         .limit(12),
