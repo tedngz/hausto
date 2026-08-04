@@ -65,6 +65,8 @@ interface EditorialPropertyCardProps {
   contactLabel?: string;
   /** Primary "Schedule viewing" CTA — when set, onContact renders as a secondary button */
   onSchedule?: () => void;
+  /** Label for the onSchedule button (default "Viewing") */
+  scheduleLabel?: string;
   initialImageIndex?: number;
   onImageIndexChange?: (index: number) => void;
   /** Override the card's aspect ratio (default: editorial 380/560 portrait) */
@@ -99,6 +101,7 @@ export const EditorialPropertyCard = ({
   onContact,
   contactLabel = 'Contact',
   onSchedule,
+  scheduleLabel = 'Viewing',
   initialImageIndex = 0,
   onImageIndexChange,
   aspectClass = 'aspect-[380/560]',
@@ -406,7 +409,9 @@ export const EditorialPropertyCard = ({
         )}
 
         {/* Size · amenities · price · contact — one level */}
-        <div className={`flex items-center justify-between gap-2 border-t border-white/30 ${compact ? 'pt-1.5' : 'pt-2.5'}`}>
+        {/* Wraps rather than squeezing: at phone widths a price plus two CTAs
+            (contact + schedule) doesn't fit on one line. */}
+        <div className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-t border-white/30 ${compact ? 'pt-1.5' : 'pt-2.5'}`}>
           <div className="flex items-center gap-2 min-w-0">
             <span className={`text-white/80 line-clamp-1 ${compact ? 'text-[11px]' : 'text-[13px]'}`}>{spec}</span>
             {hasAmenities && (
@@ -454,7 +459,7 @@ export const EditorialPropertyCard = ({
                   onSchedule();
                 }}
               >
-                Viewing
+                {scheduleLabel}
               </Button>
             )}
           </div>

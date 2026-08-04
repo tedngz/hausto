@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,14 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
+import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useSubscription } from '@/hooks/useSubscription';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { VibeMatchPopover } from '@/components/VibeMatchPopover';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { HaustoChat } from '@/components/HaustoChat';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
@@ -181,6 +183,50 @@ const CompareImageCarousel = ({ images, alt }: { images: string[]; alt: string }
   );
 };
 
+// The model is told to write plain text, but small models still slip in
+// **bold** and "### " headings - render those rather than leaking the syntax.
+const renderInline = (s: string) =>
+  s.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part));
+
+const AiText = ({ text }: { text: string }) => (
+  <div className="space-y-1.5">
+    {text.split('\n').map((raw, i) => {
+      const line = raw.replace(/^\s*#{1,6}\s+/, '').trimEnd();
+      if (!line.trim()) return null;
+      const isBullet = /^\s*[-*•]\s+/.test(line);
+      const content = line.replace(/^\s*[-*•]\s+/, '');
+      return isBullet ? (
+        <div key={i} className="flex gap-1.5">
+          <span aria-hidden="true" className="flex-shrink-0 text-muted-foreground">-</span>
+          <span>{renderInline(content)}</span>
+        </div>
+      ) : (
+        <p key={i}>{renderInline(content)}</p>
+      );
+    })}
+  </div>
+);
+
+type CompareChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+  /** Suggested next questions, returned with assistant replies */
+  followups?: string[];
+};
+
+const COMPARE_STARTERS = ['Which is the best value?', 'Which fits my preferences best?', 'What are the tradeoffs?'];
+
+// Shared by the opening starters and the per-reply follow-up suggestions.
+const SuggestionChip = ({ question, disabled, onAsk }: { question: string; disabled: boolean; onAsk: (q: string) => void }) => (
+  <button
+    className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-left text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors disabled:opacity-50"
+    disabled={disabled}
+    onClick={() => onAsk(question)}
+  >
+    {question}
+  </button>
+);
+
 interface BrowseTableProps {
   /** Where auth redirects should return to (default /browse) */
   returnTo?: string;
@@ -217,12 +263,19 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
   const [selected, setSelected] = useState<BrowseRow[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  /** Listings handed to the schedule modal - the compare selection, or one previewed listing */
+  const [scheduleTargets, setScheduleTargets] = useState<BrowseRow[]>([]);
+  // In-place chat: "Ask Hausto" opens the thread over browse, no navigation.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
+  const [chatPropertyId, setChatPropertyId] = useState<string | null>(null);
   const [preview, setPreview] = useState<BrowseRow | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [liking, setLiking] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const { user } = useAuth();
   const { createMatch } = useMatches();
+  const { getOrCreateConversation, setCurrentConversationId } = useDirectMessages();
   const { subscribed } = useSubscription();
   const { quota, refetchQuota } = useViewingQuota();
 
@@ -267,13 +320,10 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     }
   };
 
-  const handleLike = async (row: BrowseRow) => {
-    if (!user) {
-      navigate('/auth', { state: { returnTo } });
-      return;
-    }
-    if (likedIds.has(row.id) || liking) return;
-    setLiking(true);
+  // Creates the match if the renter doesn't have one yet. Resolves true once a
+  // match exists (new or pre-existing) so callers can carry on into the
+  // conversation; ALREADY_MATCHED is a success here, not a failure.
+  const ensureMatch = async (row: BrowseRow) => {
     try {
       if (row.source === 'hausto') {
         // Internal listing: match with its actual realtor
@@ -285,6 +335,20 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         // External listing: Hausto Agent handles the conversation
         await createMatch(row.id, HAUSTO_AGENT_ID, 'external');
       }
+    } catch (e) {
+      if ((e as Error)?.message !== 'ALREADY_MATCHED') throw e;
+    }
+  };
+
+  const handleLike = async (row: BrowseRow) => {
+    if (!user) {
+      navigate('/auth', { state: { returnTo } });
+      return;
+    }
+    if (likedIds.has(row.id) || liking) return;
+    setLiking(true);
+    try {
+      await ensureMatch(row);
       setLikedIds((cur) => new Set(cur).add(row.id));
       toast.success('Added to your matches', {
         description: 'Chat and schedule a viewing from the Matches tab.',
@@ -297,7 +361,45 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     }
   };
 
-  const openFastTrack = () => {
+  // Free intent-capture path off the preview card: match the listing and open
+  // the conversation right here, so the renter never leaves browse. Mirrors
+  // MatchesView's "Chat" flow - match, resolve the conversation, tag the property.
+  const handleAskHausto = async (row: BrowseRow) => {
+    if (!user) {
+      navigate('/auth', { state: { returnTo } });
+      return;
+    }
+    if (liking) return;
+    setLiking(true);
+    try {
+      await ensureMatch(row);
+      setLikedIds((cur) => new Set(cur).add(row.id));
+
+      // External listings talk to the Hausto Agent; internal ones to the realtor.
+      let realtorId: string = HAUSTO_AGENT_ID;
+      if (row.source === 'hausto') {
+        const { data } = await supabase.functions.invoke('get-public-property', { body: { id: row.id } });
+        realtorId = data?.property?.realtor_id || HAUSTO_AGENT_ID;
+      }
+      const conversationId = await getOrCreateConversation(user.id, realtorId);
+      if (!conversationId) throw new Error('Could not open the conversation');
+
+      setCurrentConversationId(conversationId);
+      setChatConversationId(conversationId);
+      setChatPropertyId(row.id);
+      setPreview(null);
+      setChatOpen(true);
+    } catch (e) {
+      console.error('Ask Hausto failed:', e);
+      toast.error('Could not start the conversation. Please try again.');
+    } finally {
+      setLiking(false);
+    }
+  };
+
+  // Targets are either the compare selection or the single previewed listing.
+  const openFastTrack = (targets: BrowseRow[]) => {
+    if (targets.length === 0) return;
     if (!user) {
       navigate('/auth', { state: { returnTo } });
       return;
@@ -313,6 +415,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       });
       return;
     }
+    setScheduleTargets(targets);
     setScheduleOpen(true);
   };
 
@@ -338,7 +441,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       try {
         const { data: profile } = await supabase
           .from('profiles').select('name, email').eq('id', user.id).single();
-        const chosen = selected.filter((r) => scheduleData.selectedPropertyIds.includes(r.id));
+        const chosen = scheduleTargets.filter((r) => scheduleData.selectedPropertyIds.includes(r.id));
         await supabase.functions.invoke('notify-fast-track-request', {
           body: {
             renterName: profile?.name || 'User',
@@ -359,7 +462,10 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
 
       refetchQuota();
       setScheduleOpen(false);
-      setSelected([]);
+      setPreview(null);
+      // Drop only what was actually booked so an in-progress compare survives a
+      // single-listing request made from the preview card.
+      setSelected((cur) => cur.filter((r) => !scheduleData.selectedPropertyIds.includes(r.id)));
       toast.success('Viewing request sent', {
         description: "We'll confirm availability with the agents and send you a schedule.",
       });
@@ -374,25 +480,33 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     const run = async () => {
       setLoading(true);
       setError(null);
+      setRows([]);
+      const collected: BrowseRow[] = [];
       try {
         const params = new URLSearchParams();
         if (city !== 'all') params.set('city', city);
         if (minBudget && Number(minBudget) > 0) params.set('min_budget', minBudget);
         if (maxBudget && Number(maxBudget) > 0) params.set('max_budget', maxBudget);
         params.set('limit', String(PAGE_SIZE));
-        const collected: BrowseRow[] = [];
-        // Page until the API runs dry so the table holds ALL listings
+        // Page until the API runs dry so the table holds ALL listings. That's up
+        // to 20 serial requests, so each page is painted as it lands rather than
+        // holding the whole table behind one spinner.
         for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
           params.set('offset', String(offset));
           const res = await fetch(`${SEARCH_URL}?${params}`);
           if (!res.ok) throw new Error(`Search failed (${res.status})`);
           const data = await res.json();
-          collected.push(...(data.results || []));
-          if ((data.results || []).length < PAGE_SIZE) break;
+          const page: BrowseRow[] = data.results || [];
+          collected.push(...page);
+          if (cancelled) return;
+          setRows([...collected]);
+          setLoading(false);
+          if (page.length < PAGE_SIZE) break;
         }
-        if (!cancelled) setRows(collected);
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        // A later page failing shouldn't blank out rows already on screen -
+        // only surface the error state when we got nothing at all.
+        if (!cancelled && collected.length === 0) setError((e as Error).message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -467,25 +581,43 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     { label: 'Verified live', get: (r) => verifiedLabel(r.last_verified_at) },
   ];
 
-  // Ask-AI helper inside the compare dialog
+  // Ask-AI thread inside the compare dialog - a back-and-forth, not one shot.
   const [aiQuestion, setAiQuestion] = useState('');
-  const [aiAnswer, setAiAnswer] = useState('');
+  const [aiMessages, setAiMessages] = useState<CompareChatMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const aiThreadEndRef = useRef<HTMLDivElement>(null);
+
+  // Option numbers in the thread refer to the current selection, so changing
+  // what's being compared invalidates the conversation.
+  const selectedKey = selected.map((r) => r.id).join(',');
+  useEffect(() => {
+    setAiMessages([]);
+  }, [selectedKey]);
+
+  useEffect(() => {
+    aiThreadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [aiMessages, aiLoading]);
 
   const askCompareAI = async (q?: string) => {
     const question = (q ?? aiQuestion).trim();
     if (!question || aiLoading || selected.length < 2) return;
+    const history = aiMessages;
+    setAiMessages([...history, { role: 'user', content: question }]);
+    setAiQuestion('');
     setAiLoading(true);
-    setAiAnswer('');
     try {
       const { data, error: fnError } = await supabase.functions.invoke('compare-listings-ai', {
-        body: { question, listings: selected, preferences: savedPreferences || undefined },
+        body: { question, listings: selected, preferences: savedPreferences || undefined, history },
       });
       if (fnError) throw fnError;
-      setAiAnswer(data?.answer || 'Sorry, I could not analyze these listings.');
+      setAiMessages((cur) => [...cur, {
+        role: 'assistant',
+        content: data?.answer || 'Sorry, I could not analyze these listings.',
+        followups: Array.isArray(data?.followups) ? data.followups : [],
+      }]);
     } catch (e) {
       console.error('Compare AI failed:', e);
-      setAiAnswer('Something went wrong - please try again.');
+      setAiMessages((cur) => [...cur, { role: 'assistant', content: 'Something went wrong - please try again.' }]);
     } finally {
       setAiLoading(false);
     }
@@ -651,28 +783,24 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                           {verifiedLabel(r.last_verified_at)}
                         </span>
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      {/* Provenance only. The outbound link lives in the preview
+                          modal, below the Hausto CTAs - a one-click exit on every
+                          row hands the lead to the source before we've made the
+                          case for booking through us. */}
+                      <TableCell>
                         {(() => {
-                          const isHausto = r.source === 'hausto';
-                          const info = isHausto
+                          const info = r.source === 'hausto'
                             ? { name: 'Hausto', logo: '/logos/hausto-wordmark.svg' }
                             : getPropertySourceLogo(r.source_url || r.source);
-                          const href = isHausto ? `/property/${r.id}` : (r.source_url || '#');
                           return (
-                            <a
-                              href={href}
-                              target={isHausto ? undefined : '_blank'}
-                              rel={isHausto ? undefined : 'noopener noreferrer'}
-                              title={info.name}
-                              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                            >
+                            <span title={info.name} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                               <img loading="lazy"
                                 src={info.logo}
                                 alt={info.name}
                                 className="h-6 w-auto max-w-[80px] rounded-sm object-contain flex-shrink-0"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                               />
-                            </a>
+                            </span>
                           );
                         })()}
                       </TableCell>
@@ -695,7 +823,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
           <Button size="sm" variant="secondary" className="rounded-full h-7" disabled={selected.length < 2} onClick={() => setCompareOpen(true)}>
             Compare
           </Button>
-          <Button size="sm" className="rounded-full h-7" onClick={openFastTrack}>
+          <Button size="sm" className="rounded-full h-7" onClick={() => openFastTrack(selected)}>
             <CalendarCheck className="w-3.5 h-3.5 mr-1.5" />
             Request viewings
           </Button>
@@ -712,6 +840,11 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         <DialogContent className="max-w-2xl p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
           {preview && (() => {
             const previewScore = vibeMatchOf(preview);
+            const isHausto = preview.source === 'hausto';
+            const sourceInfo = isHausto
+              ? { name: 'Hausto', logo: '/logos/hausto-wordmark.svg' }
+              : getPropertySourceLogo(preview.source_url || preview.source);
+            const originalHref = isHausto ? `/property/${preview.id}` : preview.source_url;
             return (
               <div>
                 <EditorialPropertyCard
@@ -741,7 +874,51 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
                   onClose={() => setPreview(null)}
+                  onContact={() => handleAskHausto(preview)}
+                  contactLabel="Ask Hausto"
+                  onSchedule={() => openFastTrack([preview])}
+                  scheduleLabel="Book viewing"
                 />
+
+                {/* Why book through Hausto instead of calling the source number.
+                    The CTAs above are the only forward path from this modal, so
+                    the offer has to be legible before the paywall, not after. */}
+                <div className="mt-2 rounded-2xl border border-border bg-background/95 backdrop-blur-sm px-4 py-3">
+                  <p className="text-sm font-medium">
+                    Let Hausto book the viewing for you - hassle-free, no language barriers, skip the endless back-and-forth.
+                  </p>
+                  <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
+                    {[
+                      'We confirm it is still available before you travel',
+                      'An English-speaking coordinator handles the agent',
+                      'Book several viewings into one trip',
+                    ].map((point) => (
+                      <li key={point} className="flex items-start gap-1.5">
+                        <Check className="w-3.5 h-3.5 mt-px flex-shrink-0 text-emerald-600" />
+                        <span>{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-border pt-2.5">
+                    <span className="text-xs text-muted-foreground">
+                      {subscribed
+                        ? quota?.unlimited
+                          ? 'Unlimited viewings active this month'
+                          : `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
+                        : 'Viewing coordination is a Premium feature'}
+                    </span>
+                    {originalHref && (
+                      <a
+                        href={originalHref}
+                        target={isHausto ? undefined : '_blank'}
+                        rel={isHausto ? undefined : 'noopener noreferrer'}
+                        className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground whitespace-nowrap"
+                      >
+                        View original on {sourceInfo.name}
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })()}
@@ -752,15 +929,15 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         isOpen={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
         onSubmit={submitFastTrack}
-        matchedProperties={selected.map((r) => ({
+        matchedProperties={scheduleTargets.map((r) => ({
           id: r.id, title: r.title, images: r.images,
           location: r.location, price: r.price_vnd || undefined,
         }))}
-        initialSelectedIds={selected.map((r) => r.id)}
+        initialSelectedIds={scheduleTargets.map((r) => r.id)}
         onPropertyClick={(id) => navigate(`/property/${id}`)}
       />
 
-      <Dialog open={compareOpen} onOpenChange={(o) => { setCompareOpen(o); if (!o) { setAiAnswer(''); setAiQuestion(''); } }}>
+      <Dialog open={compareOpen} onOpenChange={(o) => { setCompareOpen(o); if (!o) { setAiMessages([]); setAiQuestion(''); } }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Compare listings</DialogTitle></DialogHeader>
           {/* One card per listing: side by side on desktop, horizontal snap
@@ -828,38 +1005,84 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
               <Sparkles className="w-4 h-4 text-primary" />
               Ask AI to help you decide
             </p>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {['Which is the best value?', 'Which fits my preferences best?', 'What are the tradeoffs?'].map((q) => (
-                <button
-                  key={q}
-                  className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors"
-                  disabled={aiLoading}
-                  onClick={() => { setAiQuestion(q); askCompareAI(q); }}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
+            {/* Starters double as the empty state; once the thread is going they
+                make way for it so the conversation stays the focus. */}
+            {aiMessages.length === 0 ? (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {COMPARE_STARTERS.map((q) => (
+                  <SuggestionChip key={q} question={q} disabled={aiLoading} onAsk={askCompareAI} />
+                ))}
+              </div>
+            ) : (
+              <div className="mb-2 max-h-[40vh] overflow-y-auto pr-1 space-y-2 [scrollbar-width:thin]">
+                {aiMessages.map((m, i) => {
+                  if (m.role === 'user') {
+                    return (
+                      <div key={i} className="flex justify-end">
+                        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
+                          {m.content}
+                        </div>
+                      </div>
+                    );
+                  }
+                  // Chips hang off the newest reply only - keeping them on older
+                  // turns would offer questions the thread has already moved past.
+                  const isLatest = i === aiMessages.length - 1;
+                  return (
+                    <div key={i} className="flex flex-col items-start gap-1.5">
+                      <div className="max-w-[90%] rounded-2xl rounded-bl-sm bg-secondary/60 px-3 py-2 text-sm">
+                        <AiText text={m.content} />
+                      </div>
+                      {isLatest && !aiLoading && (m.followups?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {m.followups!.map((q) => (
+                            <SuggestionChip key={q} question={q} disabled={aiLoading} onAsk={askCompareAI} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {aiLoading && (
+                  <div className="flex justify-start">
+                    <div className="rounded-2xl rounded-bl-sm bg-secondary/60 px-3 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
+                <div ref={aiThreadEndRef} />
+              </div>
+            )}
             <div className="flex gap-2">
               <Input
                 value={aiQuestion}
                 onChange={(e) => setAiQuestion(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') askCompareAI(); }}
-                placeholder="e.g. Which one is best for working from home?"
+                placeholder={aiMessages.length === 0 ? 'e.g. Which one is best for working from home?' : 'Ask a follow-up...'}
                 className="bg-background"
               />
               <Button onClick={() => askCompareAI()} disabled={aiLoading || !aiQuestion.trim()}>
                 {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ask'}
               </Button>
             </div>
-            {aiAnswer && (
-              <div className="mt-3 rounded-lg bg-secondary/50 p-3 text-sm whitespace-pre-wrap">
-                {aiAnswer}
-              </div>
-            )}
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Opens over browse from the preview card's "Ask Hausto" - the renter
+          keeps their filters, scroll position and shortlist. */}
+      <HaustoChat
+        isOpen={chatOpen}
+        onClose={() => {
+          setChatOpen(false);
+          setChatConversationId(null);
+          setChatPropertyId(null);
+        }}
+        userPreferences={savedPreferences ?? undefined}
+        userType="renter"
+        initialMatchId={chatConversationId}
+        initialPropertyId={chatPropertyId}
+      />
 
       <SubscriptionModal isOpen={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
     </div>
