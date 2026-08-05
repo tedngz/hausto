@@ -176,7 +176,7 @@ serve(async (req) => {
       try {
         const { data: prop } = await supabase
           .from('external_properties')
-          .select('id, title, images, vibe_analysis, external_id, source, raw_data')
+          .select('id, title, images, vibe_analysis, external_id, source, raw_data, raw_only')
           .eq('id', job.property_id)
           .maybeSingle();
 
@@ -282,7 +282,10 @@ serve(async (req) => {
             vibe_analysis: aggregated,
             highlights: positionalHighlights,
             vibe_status: 'complete',
-            is_active: true,
+            // Raw-harvested rows skipped the ingest gates (price sanity, sale
+            // keywords, interior check) and still carry the source-language
+            // title, so passing vision QC alone must not publish them.
+            ...((prop as any).raw_only ? {} : { is_active: true }),
             raw_data: updatedRaw,
             updated_at: new Date().toISOString(),
           })

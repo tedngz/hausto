@@ -87,6 +87,7 @@ serve(async (req) => {
         .from('external_properties')
         .select('id, title, location, price, size, vibe, description, images, highlights, amenities, vibe_analysis, latitude, longitude, rooms, crawled_at, created_at')
         .eq('is_active', true)
+        .eq('raw_only', false)
         .or(orExternal)
         .order('crawled_at', { ascending: false })
         .limit(12),

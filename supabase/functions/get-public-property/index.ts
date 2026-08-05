@@ -78,6 +78,7 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('id', id)
       .eq('is_active', true)
+      .eq('raw_only', false)
       .maybeSingle();
 
     if (ext) {

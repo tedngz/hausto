@@ -85,6 +85,8 @@ export const useProperties = () => {
           .from('external_properties')
           .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
+          // Raw-harvested rows bypassed the ingest quality gates - never browse them
+          .eq('raw_only', false)
           .order('created_at', { ascending: false }),
       ]);
 

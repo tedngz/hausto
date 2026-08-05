@@ -1612,6 +1612,7 @@ serve(async (req) => {
         .from('external_properties')
         .select('*')
         .eq('is_active', true)
+        .eq('raw_only', false)
         .order('crawled_at', { ascending: false })
         .limit(500)
     ]);

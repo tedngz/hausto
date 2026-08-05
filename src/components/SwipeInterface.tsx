@@ -68,6 +68,7 @@ export const SwipeInterface = ({
         .from('external_properties')
         .select('id, title, location, price, size, vibe, description, highlights, amenities, images, vibe_analysis, rooms, source_url, source, latitude, longitude, created_at, is_active, crawled_at')
         .eq('is_active', true)
+        .eq('raw_only', false)
         .order('crawled_at', { ascending: false })
         .limit(100);
       if (error) {

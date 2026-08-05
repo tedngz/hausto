@@ -129,6 +129,7 @@ export function useComplexListings(complex: Complex | null | undefined) {
           .from('external_properties')
           .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
+          .eq('raw_only', false)
           .or(orExternal)
           .order('crawled_at', { ascending: false })
           .limit(12),
