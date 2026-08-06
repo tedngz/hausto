@@ -5,6 +5,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { isVideoOrAnimatedUrl, isMapOrDiagramUrl } from '../_shared/vibe-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -74,6 +75,8 @@ function extractImages(html: string, marketplace: string): string[] {
   let out = [...images].filter(u =>
     !/logo|icon|sprite|avatar|placeholder|banner|favicon/i.test(u)
     && /\.(jpe?g|png|webp|avif)/i.test(u)
+    && !isVideoOrAnimatedUrl(u)
+    && !isMapOrDiagramUrl(u)
   );
   if (marketplace === 'batdongsan') {
     out = out.map(u => u.replace(/\/std\//, '/lg/').replace(/_thumb\./, '.').replace(/_md\./, '_lg.'));

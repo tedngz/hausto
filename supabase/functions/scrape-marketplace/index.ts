@@ -5,6 +5,7 @@ const corsHeaders = {
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl } from '../_shared/vibe-policy.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -158,8 +159,10 @@ async function callAI(messages: { role: string; content: any }[], maxTokens: num
 function isValidPropertyImageUrl(url: string): boolean {
   if (!url || !url.startsWith('http')) return false;
   const lower = url.toLowerCase();
-  // Reject video formats
-  if (/\.(mp4|avi|mov|wmv|flv|mkv|webm|m3u8|ts)(\?|$)/i.test(lower)) return false;
+  // Reject video and animated formats (gif/apng are never unit photography)
+  if (isVideoOrAnimatedUrl(lower)) return false;
+  // Reject maps, floor plans and location diagrams
+  if (isMapOrDiagramUrl(lower)) return false;
   // Reject non-image content
   if (lower.includes('/video/') || lower.includes('/videos/')) return false;
   // Reject logos, icons, avatars, sprites, placeholders
@@ -173,7 +176,7 @@ function isValidPropertyImageUrl(url: string): boolean {
   // Reject WordPress thumbnails (e.g., -143x83.jpg, -525x328.jpg)
   if (/-\d{2,4}x\d{2,4}\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower)) return false;
   // Must have an image extension or be from known image CDN
-  if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower) && !lower.includes('batdongsan.com.vn') && !lower.includes('nhatot.com')) return false;
+  if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lower) && !lower.includes('batdongsan.com.vn') && !lower.includes('nhatot.com')) return false;
   return true;
 }
 
@@ -182,6 +185,22 @@ function isValidPropertyImageUrl(url: string): boolean {
 // almost always a tiny source thumbnail (e.g. batdongsan 283x141 crops), so
 // anything under this width is rejected before screening/mirroring.
 const MIN_IMAGE_WIDTH = 600;
+
+// Extension-less URLs (chotot and batdongsan both serve some) can still hand
+// back a GIF or a video container, so the magic bytes get the final say.
+function isAnimatedOrVideoBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  const ascii = (start: number, len: number) =>
+    String.fromCharCode(...Array.from(bytes.subarray(start, start + len)));
+  if (ascii(0, 4) === 'GIF8') return true;                       // GIF87a / GIF89a
+  if (ascii(4, 4) === 'ftyp') return true;                       // MP4 / MOV / 3GP
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true; // WebM/Matroska
+  // Animated WebP: RIFF....WEBP with a VP8X chunk carrying the animation flag
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP' && ascii(12, 4) === 'VP8X') {
+    return (bytes[16] & 0x02) !== 0;
+  }
+  return false;
+}
 
 function imageWidth(bytes: Uint8Array): number | null {
   try {
@@ -238,6 +257,9 @@ async function screenPropertyImages(
       const bytes = new Uint8Array(buf);
       if (bytes.length > 4 * 1024 * 1024) continue;
 
+      // Video / animated payloads served without a telltale extension
+      if (ct.startsWith('video/') || ct.includes('gif') || isAnimatedOrVideoBytes(bytes)) continue;
+
       // Tiny source thumbnails render blurry on the site - drop them here so
       // they can neither pass screening nor get mirrored.
       const w = imageWidth(bytes);
@@ -284,17 +306,23 @@ Set is_consistent=false ONLY if 3+ images clearly show DIFFERENT apartments (com
 Set is_authentic=false if the images are AI-generated, 3D renders, or stock/marketing photos rather than real photographs of the actual unit (telltales: impossible geometry, uncanny textures, watermark-free showroom perfection across every shot, developer render lighting).
 
 **SELECTION:**
-From the qualifying INTERIOR images only, select the 5-8 best representative shots covering DIFFERENT aspects of the unit (living area, each bedroom, kitchen, bathroom, dining area, interior balcony/view). Prefer breadth of coverage over near-duplicate angles. Exclude:
+Select the 5-8 best representative shots covering DIFFERENT aspects of the unit (living area, each bedroom, kitchen, bathroom, dining area, interior balcony/view). Prefer breadth of coverage over near-duplicate angles. Never select:
 - People (agents/tenants/portraits)
-- Building exteriors / facades / parking lots
-- Neighborhood / street / aerial photos
-- Floor plans, maps, diagrams
+- Floor plans, maps, diagrams, location graphics
 - Banners, watermarked promotional images
-- Stock-style amenity photos
+- Video thumbnails or animated images
 - Near-duplicate angles
 
+**INTERIOR vs OUTDOOR:**
+Split every index you selected into two lists. INTERIOR = shot from inside the
+unit (living room, bedroom, kitchen, bathroom, dining area, hallway, or the view
+looking out from inside). OUTDOOR = everything else: building facades, entrance
+lobbies, pools, gyms, gardens, streets, neighbourhood or aerial shots, and
+balcony photos taken from outside the unit. Every selected index must appear in
+exactly one of the two lists.
+
 Return ONLY valid JSON, indexes 0-based matching shown order:
-{"has_interior": true, "is_consistent": true, "is_quality_acceptable": true, "is_authentic": true, "reason": "brief explanation", "selected": [0,2,3]}`;
+{"has_interior": true, "is_consistent": true, "is_quality_acceptable": true, "is_authentic": true, "reason": "brief explanation", "selected": [0,2,3], "interior": [0,2], "outdoor": [3]}`;
 
   const content = await callAI([{
     role: 'user',
@@ -327,11 +355,34 @@ Return ONLY valid JSON, indexes 0-based matching shown order:
 
     let selected: string[] = [];
     if (Array.isArray(parsed.selected) && parsed.selected.length > 0) {
-      selected = parsed.selected
+      const interiorIdx = new Set<number>(
+        (Array.isArray(parsed.interior) ? parsed.interior : []).filter((i: any) => typeof i === 'number')
+      );
+      const outdoorIdx = new Set<number>(
+        (Array.isArray(parsed.outdoor) ? parsed.outdoor : []).filter((i: any) => typeof i === 'number')
+      );
+      const picked = parsed.selected
         .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length)
-        .map((i: number) => images[validIndexes[i]])
-        .filter(Boolean)
-        .slice(0, 8);
+        .map((i: number) => ({ url: images[validIndexes[i]], idx: i }))
+        .filter((p: { url: string }) => Boolean(p.url));
+
+      // An index the model listed as outdoor is outdoor; anything it failed to
+      // classify counts as interior only if it never appeared in the outdoor
+      // list AND the interior list is empty (i.e. the model skipped the split).
+      const noSplit = interiorIdx.size === 0 && outdoorIdx.size === 0;
+      const isInterior = (p: { idx: number }) =>
+        noSplit ? true : interiorIdx.has(p.idx) || (!outdoorIdx.has(p.idx) && !interiorIdx.has(p.idx));
+
+      // Interiors must outnumber outdoor shots, interiors first.
+      const balanced = interiorMajority(picked, isInterior);
+      if (balanced.length === 0) {
+        return { has_interior: false, selected: [], reason: 'no_interior_images' };
+      }
+      const dropped = picked.length - balanced.length;
+      if (dropped > 0) {
+        console.log(`[interiorGate] Dropped ${dropped} outdoor image(s) to keep interiors in the majority`);
+      }
+      selected = balanced.map((p: { url: string }) => p.url).slice(0, 8);
     }
 
     if (selected.length === 0) {

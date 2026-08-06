@@ -112,6 +112,12 @@ function buildPrompt(index: number, total: number, previousHighlights: string[])
 
 Look at this single image and return a concise JSON analysis.${prev}
 
+Rules for is_interior:
+- true when the photo was taken INSIDE the unit (living room, bedroom, kitchen,
+  bathroom, dining area, hallway, or the view looking out from inside)
+- false for building facades, lobbies, pools, gyms, gardens, streets,
+  neighbourhood or aerial shots, and balconies photographed from outside
+
 Rules for image_highlight:
 - 7-12 words, no period
 - MUST describe a specific feature visible in THIS image (visible furniture, materials, colors, layout, view)
@@ -130,6 +136,7 @@ Return ONLY valid JSON with this exact shape:
   "urban": 1-10,
   "rustic": 1-10,
   "elegant": 1-10,
+  "is_interior": true or false,
   "image_highlight": "specific phrase about what's in THIS image (7-12 words, no period)",
   "suggested_amenities": ["Amenity1", "Amenity2"],
   "amenities": ["all visible amenities"],

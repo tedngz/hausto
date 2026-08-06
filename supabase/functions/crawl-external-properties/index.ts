@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { isVideoOrAnimatedUrl, isMapOrDiagramUrl } from '../_shared/vibe-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -211,7 +212,9 @@ async function generatePropertyEmbedding(property: any): Promise<number[] | null
 function isValidPropertyImageUrl(url: string): boolean {
   if (!url || !url.startsWith('http')) return false;
   const lower = url.toLowerCase();
-  if (/\.(mp4|avi|mov|wmv|flv|mkv|webm|m3u8|ts)(\?|$)/i.test(lower)) return false;
+  // Video, animated (gif/apng) and map/floor-plan graphics are never unit photos
+  if (isVideoOrAnimatedUrl(lower)) return false;
+  if (isMapOrDiagramUrl(lower)) return false;
   if (lower.includes('/video/') || lower.includes('/videos/')) return false;
   if (/\b(logo|icon|avatar|sprite|placeholder|banner|ads?|advert|tracking|pixel|badge|button)\b/i.test(lower)) return false;
   if (/\b(facebook|twitter|zalo|share|social|og-image)\b/i.test(lower)) return false;
@@ -219,7 +222,7 @@ function isValidPropertyImageUrl(url: string): boolean {
   // Reject WordPress thumbnails (e.g., -143x83.jpg, -525x328.jpg) — these are the
   // small "Similar Properties" crops on housingsgn detail pages.
   if (/-\d{2,4}x\d{2,4}\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower)) return false;
-  if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lower) && !lower.includes('batdongsan.com.vn') && !lower.includes('nhatot.com')) return false;
+  if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lower) && !lower.includes('batdongsan.com.vn') && !lower.includes('nhatot.com')) return false;
   return true;
 }
 
