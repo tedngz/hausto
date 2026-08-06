@@ -278,10 +278,18 @@ serve(async (req) => {
         //     ANALYZE_COUNT went through the crawler's interior gate already
         //     and are left alone.
         const interiorFlag = new Map<number, boolean>();
+        const mapFlag = new Set<number>();
         for (const a of result.analyses) {
-          if (typeof a?.image_index === 'number') interiorFlag.set(a.image_index, a.is_interior !== false);
+          if (typeof a?.image_index !== 'number') continue;
+          interiorFlag.set(a.image_index, a.is_interior !== false);
+          if (a.is_map_or_diagram === true) mapFlag.add(a.image_index);
         }
-        const labelled = displayImages.map((url, i) => ({ url, i, interior: interiorFlag.get(i) ?? true }));
+        // Maps, plans and video frames the vision pass recognised by sight go
+        // first - they are not photos of the unit at any ratio.
+        const photos = displayImages
+          .map((url, i) => ({ url, i, interior: interiorFlag.get(i) ?? true }))
+          .filter(x => !mapFlag.has(x.i));
+        const labelled = photos;
         const keptIdx = new Set(interiorMajority(labelled, x => x.interior).map(x => x.i));
 
         if (keptIdx.size === 0 || keptIdx.size < MIN_DISPLAY_IMAGES) {

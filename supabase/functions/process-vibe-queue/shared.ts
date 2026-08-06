@@ -112,6 +112,16 @@ function buildPrompt(index: number, total: number, previousHighlights: string[])
 
 Look at this single image and return a concise JSON analysis.${prev}
 
+Rules for is_map_or_diagram:
+- true ONLY when the image is not a photograph at all: a drawn or rendered
+  graphic such as map artwork, a site plan, floor plan, elevation drawing,
+  directions graphic, price/promo card, text collage, or a frame grabbed from
+  a video or animation (play button, timecode, letterboxed thumbnail)
+- a real photograph is NEVER a map: drone and aerial photos, skyline or river
+  panoramas and balcony shots are photographs (is_map_or_diagram false,
+  is_interior false)
+- judge by what is visible in the image, not by the filename
+
 Rules for is_interior:
 - true when the photo was taken INSIDE the unit (living room, bedroom, kitchen,
   bathroom, dining area, hallway, or the view looking out from inside)
@@ -136,6 +146,7 @@ Return ONLY valid JSON with this exact shape:
   "urban": 1-10,
   "rustic": 1-10,
   "elegant": 1-10,
+  "is_map_or_diagram": true or false,
   "is_interior": true or false,
   "image_highlight": "specific phrase about what's in THIS image (7-12 words, no period)",
   "suggested_amenities": ["Amenity1", "Amenity2"],

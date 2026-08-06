@@ -313,6 +313,16 @@ Select the 5-8 best representative shots covering DIFFERENT aspects of the unit 
 - Video thumbnails or animated images
 - Near-duplicate angles
 
+**REJECT LIST (content, not filename):**
+List in "reject" the index of any image that is not a photograph at all, judged
+by what you can see: map artwork, site plans, floor plans, elevation drawings,
+location or directions graphics, price/promo cards, contact cards, collages of
+text, and frames grabbed from a video or an animation (visible play button,
+timecode, letterboxed 16:9 thumbnail with a logo).
+A real photograph is NEVER a reject: drone and aerial photos, skyline or river
+panoramas and balcony shots are photographs - classify those as outdoor.
+A rejected index must not appear in "selected".
+
 **INTERIOR vs OUTDOOR:**
 Split every index you selected into two lists. INTERIOR = shot from inside the
 unit (living room, bedroom, kitchen, bathroom, dining area, hallway, or the view
@@ -322,7 +332,7 @@ balcony photos taken from outside the unit. Every selected index must appear in
 exactly one of the two lists.
 
 Return ONLY valid JSON, indexes 0-based matching shown order:
-{"has_interior": true, "is_consistent": true, "is_quality_acceptable": true, "is_authentic": true, "reason": "brief explanation", "selected": [0,2,3], "interior": [0,2], "outdoor": [3]}`;
+{"has_interior": true, "is_consistent": true, "is_quality_acceptable": true, "is_authentic": true, "reason": "brief explanation", "selected": [0,2,3], "interior": [0,2], "outdoor": [3], "reject": [1,4]}`;
 
   const content = await callAI([{
     role: 'user',
@@ -361,8 +371,13 @@ Return ONLY valid JSON, indexes 0-based matching shown order:
       const outdoorIdx = new Set<number>(
         (Array.isArray(parsed.outdoor) ? parsed.outdoor : []).filter((i: any) => typeof i === 'number')
       );
+      // Maps, plans and video/animation frames the model recognised by sight -
+      // the URL filter cannot catch these when the filename says nothing.
+      const rejectIdx = new Set<number>(
+        (Array.isArray(parsed.reject) ? parsed.reject : []).filter((i: any) => typeof i === 'number')
+      );
       const picked = parsed.selected
-        .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length)
+        .filter((i: number) => typeof i === 'number' && i >= 0 && i < validIndexes.length && !rejectIdx.has(i))
         .map((i: number) => ({ url: images[validIndexes[i]], idx: i }))
         .filter((p: { url: string }) => Boolean(p.url));
 
