@@ -507,9 +507,11 @@ const USD_TO_VND = 25000;
 function extractHousingsgnPropertyCode(url: string): string | null {
   const m = url.match(/\/properties\/([^\/?#]+)/i);
   if (!m) return null;
-  const token = m[1].split('-')[0];
-  // Codes look like "khh0219", "sag0002", "tb0117" or numeric "030324".
-  return /^[a-z0-9]{2,10}$/i.test(token) ? token.toLowerCase() : null;
+  const slug = m[1].toLowerCase();
+  // Codes look like "khh0219", "sag0002", "tb0117" or numeric "030324", and
+  // are not always the first token ("apartment-for-rent-030221-...").
+  const token = slug.split('-').find(t => /^([a-z]{2,5}\d{3,6}|\d{6})$/.test(t));
+  return token ?? null;
 }
 
 // Strip WordPress thumbnail dimension suffix (e.g. -143x83, -525x328) to get
@@ -533,6 +535,14 @@ function extractUsdAmount(text: string): number | null {
 // orders by the trailing image index so the hero shot comes first.
 function extractHousingsgnGalleryImages(html: string, url: string): string[] {
   const code = extractHousingsgnPropertyCode(url);
+  // No code means this is not a single-property page - a project or district
+  // archive, say, which carries the hero shot of every unit listed on it.
+  // Without a code there is nothing to bind images to, so take none rather
+  // than assembling a listing out of other listings' photos.
+  if (!code) {
+    console.log(`[housingsgn] No property code in ${url.substring(0, 90)} - refusing to harvest its images`);
+    return [];
+  }
   const raw: string[] = [];
   const patterns = [
     /(?:src|data-src|data-lazy-src|data-original|href)=["'](https:\/\/[^"']*\/wp-content\/uploads\/[^"']+\.(?:jpe?g|png|webp))["']/gi,
@@ -556,10 +566,8 @@ function extractHousingsgnGalleryImages(html: string, url: string): string[] {
   const byUrl = new Map<string, string>();
   for (const u of raw) {
     const full = normalizeHousingsgnImageUrl(u);
-    if (code) {
-      const file = (full.split('/').pop() || '').toLowerCase();
-      if (!file.startsWith(code)) continue; // reject "Similar Properties" images
-    }
+    const file = (full.split('/').pop() || '').toLowerCase();
+    if (!file.startsWith(code)) continue; // reject "Similar Properties" images
     byUrl.set(full.toLowerCase(), full);
   }
 
@@ -597,6 +605,16 @@ async function savePropertiesToDB(
       if (/(mua-ban|nha-dat-ban|can-ban|ban-can-ho|ban-chung-cu|ban-nha|ban-dat|for-sale|\/ban-)/i.test(urlForCheck)) {
         filtered++;
         console.log(`[directSave] Filtered sale URL: ${urlForCheck.substring(0, 80)}`);
+        continue;
+      }
+
+      // housingsgn: only a /properties/<code>-<slug> page describes one unit.
+      // Project and district archives list many, and harvesting one produces a
+      // listing assembled from other listings' hero shots.
+      if (marketplace === 'housingsgn' && !extractHousingsgnPropertyCode(property.sourceUrl || '')) {
+        filtered++;
+        console.log(`[directSave] Filtered housingsgn non-property page: ${String(property.sourceUrl).substring(0, 90)}`);
+        await logCrawlerRejection(supabase, property.sourceUrl || '', marketplace, 'housingsgn_not_a_property_page', property.images || []);
         continue;
       }
 
@@ -1063,7 +1081,10 @@ async function extractListingUrls(
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
     nhatot: /nhatot\.com\/[^?#]*\/(thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
-    housingsgn: /housingsgn\.com\/properties\/[^\/\?#]+/i,
+    // Single properties only: /properties/<slug> carrying a property code.
+    // Project and district archives (/apartment-for-rent-in-one-verandah-thu-duc)
+    // are not listings, however much they look like one.
+    housingsgn: /housingsgn\.com\/properties\/[^\/?#]*(?:[a-z]{2,5}\d{3,6}|\d{6})[^\/?#]*/i,
   };
 
   // Exclude any URL that clearly points to a buy/sell listing
@@ -1104,10 +1125,18 @@ async function extractListingUrls(
         const parsed = JSON.parse(cleaned);
         
         for (const listing of (parsed.listings || [])) {
-          if (listing.url && !seen.has(listing.url)) {
-            seen.add(listing.url);
-            unique.push({ url: listing.url, title: listing.title, price: listing.price });
+          if (!listing.url || seen.has(listing.url)) continue;
+          // The model happily returns project/archive pages ("all apartments in
+          // One Verandah") as if they were listings. Those pages carry the hero
+          // shot of every unit on them, so crawling one invents a listing that
+          // does not exist. Hold AI suggestions to the same URL shape the regex
+          // requires.
+          if (!pattern.test(listing.url) || saleUrlPattern.test(listing.url)) {
+            console.log(`[Phase 1] Rejected AI-suggested non-listing URL: ${String(listing.url).substring(0, 90)}`);
+            continue;
           }
+          seen.add(listing.url);
+          unique.push({ url: listing.url, title: listing.title, price: listing.price });
         }
         console.log(`[Phase 1] AI found ${unique.length} total listing URLs`);
       }

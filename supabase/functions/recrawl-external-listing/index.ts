@@ -92,8 +92,10 @@ const USD_TO_VND = 25000;
 function extractHousingsgnPropertyCode(url: string): string | null {
   const m = url.match(/\/properties\/([^\/?#]+)/i);
   if (!m) return null;
-  const token = m[1].split('-')[0];
-  return /^[a-z0-9]{2,10}$/i.test(token) ? token.toLowerCase() : null;
+  // Codes look like "khh0219", "sag0002" or numeric "030324", and are not
+  // always the first token ("apartment-for-rent-030221-...").
+  const token = m[1].toLowerCase().split('-').find(t => /^([a-z]{2,5}\d{3,6}|\d{6})$/.test(t));
+  return token ?? null;
 }
 
 function normalizeHousingsgnImageUrl(url: string): string {
@@ -111,12 +113,15 @@ function extractUsdAmount(text: string): number | null {
 // Keep only full-size images belonging to THIS housingsgn listing (by code), deduped.
 function filterHousingsgnImages(images: string[], sourceUrl: string): string[] {
   const code = extractHousingsgnPropertyCode(sourceUrl);
+  // Without a code there is nothing to bind images to - the page is an archive
+  // of many units, not one listing. Take none rather than take everyone's.
+  if (!code) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of images) {
     if (!/wp-content\/uploads/i.test(raw)) continue;
     const full = normalizeHousingsgnImageUrl(raw);
-    if (code && !(full.split('/').pop() || '').toLowerCase().startsWith(code)) continue;
+    if (!(full.split('/').pop() || '').toLowerCase().startsWith(code)) continue;
     const key = full.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
