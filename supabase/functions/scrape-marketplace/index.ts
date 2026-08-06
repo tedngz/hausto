@@ -5,7 +5,10 @@ const corsHeaders = {
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
-import { interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl } from '../_shared/vibe-policy.ts';
+import {
+  interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl,
+  isBatchInventoryListing, isThumbnailUrl,
+} from '../_shared/vibe-policy.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -163,6 +166,8 @@ function isValidPropertyImageUrl(url: string): boolean {
   if (isVideoOrAnimatedUrl(lower)) return false;
   // Reject maps, floor plans and location diagrams
   if (isMapOrDiagramUrl(lower)) return false;
+  // Reject CDN thumbnails - they render blurry when blown up to card size
+  if (isThumbnailUrl(lower)) return false;
   // Reject non-image content
   if (lower.includes('/video/') || lower.includes('/videos/')) return false;
   // Reject logos, icons, avatars, sprites, placeholders
@@ -592,6 +597,18 @@ async function savePropertiesToDB(
       if (/(mua-ban|nha-dat-ban|can-ban|ban-can-ho|ban-chung-cu|ban-nha|ban-dat|for-sale|\/ban-)/i.test(urlForCheck)) {
         filtered++;
         console.log(`[directSave] Filtered sale URL: ${urlForCheck.substring(0, 80)}`);
+        continue;
+      }
+
+      // Agency portfolio ads ("giỏ hàng 500 căn", "chuyên cho thuê 1-2-3-4PN")
+      // describe an inventory, not a unit a renter can book, and illustrate it
+      // with promo cards. The source URL is checked too: the extraction step
+      // rewrites these into tidy single-unit English titles, but the slug keeps
+      // the giveaway. Applies in raw mode as well.
+      if (isBatchInventoryListing(property.sourceUrl, property.title, property.description)) {
+        filtered++;
+        console.log(`[directSave] Filtered batch-inventory ad: ${String(property.title).substring(0, 60)}`);
+        await logCrawlerRejection(supabase, property.sourceUrl || '', marketplace, 'batch_inventory_ad', property.images || []);
         continue;
       }
 
@@ -1767,13 +1784,22 @@ Deno.serve(async (req) => {
     console.log(`[Phase 1] Total from all pages: ${allLinks.length} links`);
 
     // ── Phase 2: Extract listing URLs and scrape detail pages ──
-    const listingLinks = await extractListingUrls(
+    const allListingLinks = await extractListingUrls(
       allMarkdown,
       allLinks,
       marketplace,
       effectiveMaxResults,
       rawMode,
     );
+
+    // Drop agency portfolio ads before the detail pages are scraped - their
+    // slugs and search-result titles already say what they are, so there is no
+    // reason to spend a Firecrawl credit and a vision pass finding out.
+    const listingLinks = allListingLinks.filter(l => !isBatchInventoryListing(l.url, (l as any).title));
+    const batchAdsSkipped = allListingLinks.length - listingLinks.length;
+    if (batchAdsSkipped > 0) {
+      console.log(`[Pre-scrape] Skipped ${batchAdsSkipped} batch-inventory ad(s)`);
+    }
 
     let properties: ExternalProperty[] = [];
 

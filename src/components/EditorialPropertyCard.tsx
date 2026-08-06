@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, Check, X, Share2, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VibeMatchPopover, type VibeScoreDetails, type VibeMatchAttributes } from '@/components/VibeMatchPopover';
@@ -80,6 +80,14 @@ interface EditorialPropertyCardProps {
 
 const EASE = 'cubic-bezier(0.22,1,0.36,1)';
 
+// A photo may be stretched this much to fill the frame before it starts to
+// look soft; past it, show it at its own size over a blurred backdrop.
+const MAX_UPSCALE = 1.2;
+// How much of a photo may be cropped away to fill the frame before we
+// letterbox it instead. The frame is responsive (portrait on mobile, 4:3 from
+// sm up), so this is measured against the frame actually on screen.
+const MAX_CROP = 0.2;
+
 const RATING_DOT: Record<string, string> = {
   perfect: 'bg-emerald-400',
   strong: 'bg-blue-400',
@@ -111,6 +119,8 @@ export const EditorialPropertyCard = ({
 }: EditorialPropertyCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(Math.min(initialImageIndex, images.length - 1));
+  const [fits, setFits] = useState<Record<number, 'cover' | 'contain'>>({});
+  const frameRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
   const [noHover, setNoHover] = useState(false);
   const [tapReveal, setTapReveal] = useState(false);
@@ -128,6 +138,52 @@ export const EditorialPropertyCard = ({
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
+
+  // Probe each photo as it comes into view and decide how it should sit in the
+  // frame. Two cases get letterboxed at their own size over a blurred copy of
+  // themselves rather than filling the card:
+  //   - shots whose shape differs enough from the frame that "cover" would
+  //     crop a fifth of them away (portrait photos in the 4:3 frame, mostly)
+  //   - small sources (some listings still carry 140x140 crop thumbs), which
+  //     "cover" would blow up several times over into a blurry mess
+  // Everything else keeps the full-bleed look. Measured against the frame on
+  // screen, since it is portrait on mobile and 4:3 from sm up.
+  useEffect(() => {
+    const src = images[current];
+    if (!src || fits[current]) return;
+    const probe = new Image();
+    probe.onload = () => {
+      const { naturalWidth: w, naturalHeight: h } = probe;
+      if (!w || !h) return;
+      const rect = frameRef.current?.getBoundingClientRect();
+      const fw = rect?.width || 380;
+      const fh = rect?.height || 560;
+      const coverScale = Math.max(fw / w, fh / h);
+      // Fraction of the photo that "cover" would push outside the frame
+      const cropped = 1 - (fw * fh) / (w * coverScale * h * coverScale);
+      const letterbox = cropped > MAX_CROP || coverScale > MAX_UPSCALE;
+      setFits(f => (f[current] ? f : { ...f, [current]: letterbox ? 'contain' : 'cover' }));
+    };
+    probe.src = src;
+  }, [current, images, fits]);
+
+  // The frame flips between portrait and 4:3 at the sm breakpoint, so a photo
+  // that fits one may not fit the other - re-measure when the card resizes.
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let last = el.getBoundingClientRect().width;
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width ?? last;
+      if (Math.abs(w - last) < 24) return;   // ignore scrollbar-level jitter
+      last = w;
+      setFits({});
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const fit = fits[current] ?? 'cover';
 
   const go = (delta: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -229,18 +285,34 @@ export const EditorialPropertyCard = ({
 
   return (
     <div
+      ref={frameRef}
       className={`group relative w-full ${aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={onCardClick}
       role={onCardClick ? 'button' : undefined}
     >
+      {/* Blurred fill behind letterboxed portrait photos */}
+      <img loading="lazy"
+        src={images[current]}
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover object-center scale-110"
+        style={{ filter: 'blur(28px) brightness(0.7)', opacity: fit === 'contain' ? 1 : 0, transition: 'opacity 300ms ease' }}
+      />
+
       {/* Slideshow image */}
       <img loading="lazy"
         src={images[current]}
         alt={`${displayTitle} — photo ${current + 1} of ${images.length}`}
-        className="absolute inset-0 w-full h-full object-cover"
-        style={{ transition: `transform 1200ms ${EASE}`, transform: hover ? 'scale(1.07)' : 'scale(1)' }}
+        className="absolute inset-0 w-full h-full"
+        style={{
+          objectFit: fit,
+          objectPosition: 'center',
+          transition: `transform 1200ms ${EASE}`,
+          // Zooming a letterboxed photo would crop it again - only cover zooms.
+          transform: hover && fit === 'cover' ? 'scale(1.07)' : 'scale(1)',
+        }}
         onClick={e => {
           // On touch devices, tap the cover photo to reveal/hide the description
           // instead of showing it permanently. Let other taps fall through to onCardClick.

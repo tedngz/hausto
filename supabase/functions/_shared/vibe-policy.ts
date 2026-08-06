@@ -43,6 +43,41 @@ export function interiorMajority<T>(items: T[], isInterior: (item: T) => boolean
   return [...interior, ...outdoor.slice(0, interior.length - 1)];
 }
 
+// ─── Batch-inventory ads ────────────────────────────────────────
+// Agencies post one ad for a whole portfolio of units ("giỏ hàng 500 căn",
+// "200 Apartments for Rent") illustrated with a promo card rather than photos
+// of one apartment. A renter cannot view or book any specific unit from these,
+// so they do not belong in the feed.
+//
+// The check runs over the SOURCE URL as well as the title and description: the
+// crawler's LLM rewrite turns "sàn giỏ hàng 500 cho thuê các loại hình studio
+// 1-2-3PN" into a tidy "Affordable Studio Apartment for Rent", but the slug
+// still carries the giveaway.
+const BATCH_INVENTORY_PATTERNS: RegExp[] = [
+  // Vietnamese, accented and slug forms
+  /gi(ỏ|o)[\s-]?h(à|a)ng/i,            // giỏ hàng / gio-hang (inventory basket)
+  /qu(ỹ|y)[\s-]?(c(ă|a)n|ch(í|i)nh[\s-]?ch(ủ|u)|nh(à|a))/i, // quỹ căn / quỹ chính chủ (unit pool)
+  /nhi(ề|e)u[\s-]?c(ă|a)n/i,           // nhiều căn (many units)
+  /chuy(ê|e)n[\s-]?cho[\s-]?thu(ê|e)/i, // chuyên cho thuê (agency portfolio)
+  /c(á|a)c[\s-]?lo(ạ|a)i[\s-]?h(ì|i)nh/i, // các loại hình (all unit types)
+  /tung[\s-]?ra[\s-]?th(ị|i)[\s-]?tr(ư|u)(ờ|o)ng/i,
+  /\d{3,}\s*(h(ộ|o)|c(ă|a)n)\b/i,      // "2000 hộ", "500 căn"
+  /(^|[\s-])(1|studio)[\s-]?[-,]?[\s-]?2[\s-]?[-,]?[\s-]?3([\s-]?[-,]?[\s-]?4)?[\s-]?(pn|phong[\s-]?ngu|ph(ò|o)ng[\s-]?ng(ủ|u))/i, // 1-2-3PN
+  // English, as produced by the extraction step
+  /\b\d{2,4}\s+(apartments|units)\b/i, // "200 Apartments"
+  /\brental apartments\b/i,
+  /\bapartments for rent\b/i,
+  /\ball (unit )?types\b/i,
+  /\bfrom studio to\b/i,
+  /\b(multiple|various|many) (units|apartments|layouts)\b/i,
+];
+
+export function isBatchInventoryListing(...texts: (string | null | undefined)[]): boolean {
+  const haystack = texts.filter(Boolean).join(' \n ');
+  if (!haystack) return false;
+  return BATCH_INVENTORY_PATTERNS.some(re => re.test(haystack));
+}
+
 // A vision model asked "is this a map?" will call an aerial photograph a map
 // view often enough to matter, and that label deletes an image. So the label
 // only counts when the model can name the drawn elements it saw, and that
@@ -70,6 +105,18 @@ export function isVideoOrAnimatedUrl(url: string): boolean {
   if (/\/(videos?|clips?|reels?|stories)\//i.test(lower)) return true;
   if (/(youtube\.com|youtu\.be|vimeo\.com|giphy\.com|tenor\.com)/i.test(lower)) return true;
   return false;
+}
+
+// Source CDNs encode the rendition size in the path (batdongsan serves
+// /crop/140x140/ next to /resize/1275x717/ of the same photo). A thumbnail
+// blown up to fill a card is the blurry-listing complaint, so anything under
+// the display width is rejected before it can be stored.
+const MIN_SOURCE_WIDTH = 600;
+
+export function isThumbnailUrl(url: string): boolean {
+  const m = url.toLowerCase().match(/\/(?:crop|resize|thumb|thumbs|w)\/(\d{2,4})x(\d{2,4})\//);
+  if (!m) return false;
+  return Number(m[1]) < MIN_SOURCE_WIDTH;
 }
 
 export function isMapOrDiagramUrl(url: string): boolean {
