@@ -10,7 +10,7 @@ import { analyzeImagesQualityFirst } from "./shared.ts";
 import { dHashFromBytes } from "../_shared/dhash.ts";
 import {
   MIN_DISPLAY_IMAGES, STORE_TARGET, expectedHighlightCount,
-  interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl,
+  interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel,
 } from "../_shared/vibe-policy.ts";
 import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 import { prepareForStorage } from "../_shared/mirror-image.ts";
@@ -282,7 +282,9 @@ serve(async (req) => {
         for (const a of result.analyses) {
           if (typeof a?.image_index !== 'number') continue;
           interiorFlag.set(a.image_index, a.is_interior !== false);
-          if (a.is_map_or_diagram === true) mapFlag.add(a.image_index);
+          if (isCredibleMapLabel(a.is_map_or_diagram === true, String(a.map_evidence || ''))) {
+            mapFlag.add(a.image_index);
+          }
         }
         // Maps, plans and video frames the vision pass recognised by sight go
         // first - they are not photos of the unit at any ratio.

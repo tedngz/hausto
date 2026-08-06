@@ -9,7 +9,10 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
-import { MIN_DISPLAY_IMAGES, interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl } from '../_shared/vibe-policy.ts';
+import {
+  MIN_DISPLAY_IMAGES, interiorMajority,
+  isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel,
+} from '../_shared/vibe-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,6 +70,10 @@ async function fetchImage(url: string, i: number): Promise<Fetched> {
   }
 }
 
+// The model reliably confuses "aerial photograph" with "map view", and a map
+// label deletes an image, so the label only counts when it can name the drawn
+// elements it saw - and that reason must not itself describe photography.
+// Anything unconvincing is demoted to "outdoor", where the ratio rule decides.
 async function labelGallery(
   openaiKey: string,
   items: { i: number; dataUrl: string }[],
@@ -83,13 +90,17 @@ For EACH image, judged only by what is visible in it (never by filename):
   A real photograph is NEVER a map, no matter what it shows. Drone and aerial
   photographs, skyline and river panoramas, and shots taken from a balcony or
   window are photographs - mark those map:false, interior:false.
+- "why": REQUIRED whenever map is true. Name the drawn elements you can
+  actually see that make it a graphic - "street names and pin markers",
+  "north arrow and scale bar", "floor plan line drawing", "price text card".
+  If you cannot name one, map is false.
 - "interior": true when the photo was taken INSIDE the unit (living room,
   bedroom, kitchen, bathroom, dining area, hallway, or the view looking out
   from inside). false for building facades, lobbies, pools, gyms, gardens,
   streets, neighbourhood or aerial shots, and balconies shot from outside.
 
 Images are given in order, index 0 first. Return ONLY valid JSON:
-{"images":[{"i":0,"interior":true,"map":false}]}`;
+{"images":[{"i":0,"interior":true,"map":false,"why":""}]}`;
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -124,7 +135,10 @@ Images are given in order, index 0 first. Return ONLY valid JSON:
     for (const row of parsed.images || []) {
       const pos = Number(row?.i);
       if (!Number.isInteger(pos) || pos < 0 || pos >= items.length) continue;
-      out.set(items[pos].i, { interior: row?.interior !== false, map: row?.map === true });
+      out.set(items[pos].i, {
+        interior: row?.interior !== false,
+        map: isCredibleMapLabel(row?.map === true, String(row?.why || '')),
+      });
     }
     return out.size > 0 ? out : null;
   } catch {

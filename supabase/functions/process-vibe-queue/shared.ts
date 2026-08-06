@@ -121,6 +121,9 @@ Rules for is_map_or_diagram:
   panoramas and balcony shots are photographs (is_map_or_diagram false,
   is_interior false)
 - judge by what is visible in the image, not by the filename
+- when true, map_evidence MUST name the drawn elements you can see ("street
+  names and pin markers", "floor plan line drawing", "price text card"). If
+  you cannot name one, is_map_or_diagram is false
 
 Rules for is_interior:
 - true when the photo was taken INSIDE the unit (living room, bedroom, kitchen,
@@ -147,6 +150,7 @@ Return ONLY valid JSON with this exact shape:
   "rustic": 1-10,
   "elegant": 1-10,
   "is_map_or_diagram": true or false,
+  "map_evidence": "drawn elements you see, required when is_map_or_diagram is true",
   "is_interior": true or false,
   "image_highlight": "specific phrase about what's in THIS image (7-12 words, no period)",
   "suggested_amenities": ["Amenity1", "Amenity2"],

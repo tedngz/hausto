@@ -43,6 +43,23 @@ export function interiorMajority<T>(items: T[], isInterior: (item: T) => boolean
   return [...interior, ...outdoor.slice(0, interior.length - 1)];
 }
 
+// A vision model asked "is this a map?" will call an aerial photograph a map
+// view often enough to matter, and that label deletes an image. So the label
+// only counts when the model can name the drawn elements it saw, and that
+// reason must not itself be describing photography. Anything unconvincing is
+// demoted to "outdoor", where the interior-majority rule decides its fate -
+// a wrongly demoted photo costs a gallery slot, a wrongly deleted one is gone.
+const PHOTO_WORDS = /\b(aerial|drone|bird'?s[- ]eye|skyline|panorama|photo|photograph|view of|rooftop|overlook|cityscape|landscape)\b/i;
+const GRAPHIC_WORDS = /\b(map|plan|drawing|diagram|render|icon|marker|pin|arrow|scale bar|legend|label|text|logo|watermark|chart|grid|blueprint|layout|timecode|play button|thumbnail|collage|card)\b/i;
+
+export function isCredibleMapLabel(flagged: boolean, why: string): boolean {
+  if (!flagged) return false;
+  const reason = (why || '').trim();
+  if (!reason) return false;
+  if (PHOTO_WORDS.test(reason)) return false;
+  return GRAPHIC_WORDS.test(reason);
+}
+
 // Video and animated formats are never property photography, and map/floor-plan
 // graphics are not photographs of the unit. Both are rejected on the URL before
 // anything is fetched. Kept here so every crawler applies the same rule.
