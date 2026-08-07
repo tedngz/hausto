@@ -119,6 +119,47 @@ export function isThumbnailUrl(url: string): boolean {
   return Number(m[1]) < MIN_SOURCE_WIDTH;
 }
 
+// Magic-byte sniffing for payloads that are not still photographs. Source CDNs
+// serve GIFs and video containers from extension-less URLs, so the bytes get
+// the final say. Defined once here: it used to be copy-pasted into three
+// functions, and the WebP branch was wrong in all three at the same time.
+//
+// WebP container layout (RIFF):
+//   0..3   "RIFF"        8..11  "WEBP"       12..15 first chunk fourcc
+//   16..19 chunk payload size (LE uint32)    20     VP8X flag byte
+// Only the extended form (VP8X) can be animated, and the animation flag is
+// bit 1 of the flag byte at offset 20. Offset 16 is the chunk size - always
+// 0x0000000A for VP8X - and 0x0A & 0x02 is non-zero, so reading offset 16
+// declares every WebP carrying alpha, ICC, EXIF or XMP to be animated.
+//
+// Even with the right offset, the flag alone does not delete a photo: an
+// animated WebP must also carry an ANIM chunk, so a stray flag bit costs
+// nothing.
+export function isAnimatedOrVideoBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  const ascii = (start: number, len: number) =>
+    String.fromCharCode(...Array.from(bytes.subarray(start, start + len)));
+
+  if (ascii(0, 4) === 'GIF8') return true;                       // GIF87a / GIF89a
+  if (ascii(4, 4) === 'ftyp') return true;                       // MP4 / MOV / 3GP
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true; // WebM/Matroska
+
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP') {
+    if (ascii(12, 4) !== 'VP8X') return false;   // plain VP8 / VP8L cannot animate
+    if (bytes.length < 21) return false;
+    if ((bytes[20] & 0x02) === 0) return false;  // animation flag clear
+    // Corroborate with the chunk that actually holds the frames.
+    const head = bytes.subarray(0, Math.min(bytes.length, 4096));
+    for (let i = 0; i <= head.length - 4; i++) {
+      if (head[i] === 0x41 && head[i + 1] === 0x4e && head[i + 2] === 0x49 && head[i + 3] === 0x4d) {
+        return true;                             // "ANIM"
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
 export function isMapOrDiagramUrl(url: string): boolean {
   const lower = url.toLowerCase();
   // Map providers and static-map endpoints

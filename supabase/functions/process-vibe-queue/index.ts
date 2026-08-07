@@ -11,6 +11,7 @@ import { dHashFromBytes } from "../_shared/dhash.ts";
 import {
   MIN_DISPLAY_IMAGES, STORE_TARGET, expectedHighlightCount,
   interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel,
+  isAnimatedOrVideoBytes,
 } from "../_shared/vibe-policy.ts";
 import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 import { prepareForStorage } from "../_shared/mirror-image.ts";
@@ -49,21 +50,6 @@ async function safeFolder(externalId: string): Promise<string> {
 
 // Parse pixel width from JPEG SOF / PNG IHDR headers so we can reject tiny
 // source thumbnails before they reach the gallery (webp/unknown → don't block).
-// Some source CDNs serve GIFs and video containers from extension-less URLs,
-// so the magic bytes get the final say before anything is mirrored.
-function isAnimatedOrVideoBytes(bytes: Uint8Array): boolean {
-  if (bytes.length < 12) return false;
-  const ascii = (start: number, len: number) =>
-    String.fromCharCode(...Array.from(bytes.subarray(start, start + len)));
-  if (ascii(0, 4) === 'GIF8') return true;                       // GIF87a / GIF89a
-  if (ascii(4, 4) === 'ftyp') return true;                       // MP4 / MOV / 3GP
-  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true; // WebM/Matroska
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP' && ascii(12, 4) === 'VP8X') {
-    return (bytes[16] & 0x02) !== 0;                             // animated WebP
-  }
-  return false;
-}
-
 function imageWidth(bytes: Uint8Array): number | null {
   try {
     if (bytes[0] === 0xff && bytes[1] === 0xd8) { // JPEG

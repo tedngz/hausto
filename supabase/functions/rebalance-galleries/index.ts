@@ -11,7 +11,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import {
   MIN_DISPLAY_IMAGES, interiorMajority,
-  isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel,
+  isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel, isAnimatedOrVideoBytes,
 } from '../_shared/vibe-policy.ts';
 
 const corsHeaders = {
@@ -31,20 +31,6 @@ function bytesToBase64(bytes: Uint8Array): string {
     out += String.fromCharCode(...Array.from(bytes.subarray(i, Math.min(i + chunk, bytes.length))));
   }
   return btoa(out);
-}
-
-// Magic-byte check: extension-less URLs can still serve a gif or a video.
-function isAnimatedOrVideoBytes(bytes: Uint8Array): boolean {
-  if (bytes.length < 12) return false;
-  const ascii = (start: number, len: number) =>
-    String.fromCharCode(...Array.from(bytes.subarray(start, start + len)));
-  if (ascii(0, 4) === 'GIF8') return true;
-  if (ascii(4, 4) === 'ftyp') return true;
-  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true;
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP' && ascii(12, 4) === 'VP8X') {
-    return (bytes[16] & 0x02) !== 0;
-  }
-  return false;
 }
 
 type Fetched = { i: number; dataUrl: string } | { i: number; drop: string };

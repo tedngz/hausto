@@ -7,7 +7,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import {
   interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl,
-  isBatchInventoryListing, isThumbnailUrl,
+  isBatchInventoryListing, isThumbnailUrl, isAnimatedOrVideoBytes,
 } from '../_shared/vibe-policy.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -190,22 +190,6 @@ function isValidPropertyImageUrl(url: string): boolean {
 // almost always a tiny source thumbnail (e.g. batdongsan 283x141 crops), so
 // anything under this width is rejected before screening/mirroring.
 const MIN_IMAGE_WIDTH = 600;
-
-// Extension-less URLs (chotot and batdongsan both serve some) can still hand
-// back a GIF or a video container, so the magic bytes get the final say.
-function isAnimatedOrVideoBytes(bytes: Uint8Array): boolean {
-  if (bytes.length < 12) return false;
-  const ascii = (start: number, len: number) =>
-    String.fromCharCode(...Array.from(bytes.subarray(start, start + len)));
-  if (ascii(0, 4) === 'GIF8') return true;                       // GIF87a / GIF89a
-  if (ascii(4, 4) === 'ftyp') return true;                       // MP4 / MOV / 3GP
-  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true; // WebM/Matroska
-  // Animated WebP: RIFF....WEBP with a VP8X chunk carrying the animation flag
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP' && ascii(12, 4) === 'VP8X') {
-    return (bytes[16] & 0x02) !== 0;
-  }
-  return false;
-}
 
 function imageWidth(bytes: Uint8Array): number | null {
   try {
