@@ -1652,8 +1652,10 @@ function buildRawProperty(
     vibe: undefined,
     vibe_analysis: undefined,
     // @ts-ignore - extra field carried into save payload
+    // Recovery anchors only. The scraped page text used to be kept here, but
+    // raw_data is readable by anon and those pages carry the agent's phone
+    // number - the very field contact_phone is column-locked to protect.
     raw_data: {
-      markdown: detailMarkdown.substring(0, 50000),
       images: detailImages.slice(0, 30),
       source_url: sourceUrl,
       scraped_at: new Date().toISOString(),
