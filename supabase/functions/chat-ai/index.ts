@@ -3043,10 +3043,49 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
-    // Strip owner/realtor contact info for anonymous callers
-    if (isAnonymous) {
-      try {
-        const parsed = JSON.parse(responseContent);
+    // Contact details leave this function under the same rule as
+    // get_external_property_contacts: admins and the renter matched to that
+    // listing. The model is handed provider contacts so it can answer questions
+    // about a match, so the release decision is made here - by asking the
+    // database as the caller rather than by trusting "is signed in". Anonymous
+    // callers keep the blanket strip, including internal listings.
+    try {
+      const parsed = JSON.parse(responseContent);
+      const items: any[] = [];
+      if (Array.isArray(parsed?.results)) items.push(...parsed.results);
+      if (Array.isArray(parsed?.blocks)) {
+        parsed.blocks.forEach((b: any) => {
+          if (Array.isArray(b?.properties)) items.push(...b.properties);
+        });
+      }
+
+      if (items.length > 0) {
+        // External listings carry a synthetic realtor id ("ext-<source>")
+        const isExternal = (r: any) => typeof r?.realtor_id === 'string' && r.realtor_id.startsWith('ext-');
+        const entitled = new Set<string>();
+
+        if (!isAnonymous && authHeader) {
+          const externalIds = [...new Set(items.filter(isExternal).map(r => r?.id).filter(Boolean))];
+          if (externalIds.length > 0) {
+            try {
+              const asUser = createClient(supabaseUrl, supabaseAnonKey, {
+                global: { headers: { Authorization: authHeader } },
+                auth: { persistSession: false },
+              });
+              const { data, error } = await asUser.rpc('get_external_property_contacts', {
+                _property_ids: externalIds,
+              });
+              if (error) {
+                console.warn('[chat-ai] contact RPC failed, withholding contacts:', error.message);
+              } else {
+                for (const row of (data as any[] | null) ?? []) entitled.add(row.id);
+              }
+            } catch (e) {
+              console.warn('[chat-ai] contact RPC threw, withholding contacts:', String(e).substring(0, 120));
+            }
+          }
+        }
+
         const stripContact = (r: any) => {
           if (r && typeof r === 'object') {
             r.providerName = null;
@@ -3057,13 +3096,13 @@ Maximum ${maxResults} properties in results.`;
             r.contact_phone = null;
           }
         };
-        if (Array.isArray(parsed?.results)) parsed.results.forEach(stripContact);
-        if (Array.isArray(parsed?.blocks)) parsed.blocks.forEach((b: any) => {
-          if (Array.isArray(b?.properties)) b.properties.forEach(stripContact);
-        });
+
+        for (const r of items) {
+          if (isAnonymous || (isExternal(r) && !entitled.has(r?.id))) stripContact(r);
+        }
         responseContent = JSON.stringify(parsed);
-      } catch { /* non-JSON content, leave as-is */ }
-    }
+      }
+    } catch { /* non-JSON content, leave as-is */ }
 
     return new Response(JSON.stringify({ response: responseContent }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

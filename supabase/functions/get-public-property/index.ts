@@ -27,17 +27,49 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Detect signed-in caller
+    // Detect signed-in caller and keep their token: contact details are
+    // released by asking the database as that user, not by deciding here.
     const authHeader = req.headers.get('authorization');
     let isAuthenticated = false;
+    let userToken: string | null = null;
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
       if (token !== anonKey && token.length > 100) {
         const authClient = createClient(supabaseUrl, anonKey);
         const { data, error } = await authClient.auth.getUser(token);
-        if (!error && data?.user) isAuthenticated = true;
+        if (!error && data?.user) {
+          isAuthenticated = true;
+          userToken = token;
+        }
       }
     }
+
+    // The single source of truth for who may see an external listing's contact
+    // details is get_external_property_contacts: admins, and the renter matched
+    // to that listing. This endpoint reads with the service role, which bypasses
+    // both RLS and the column grants, so it must not decide for itself - it
+    // calls the RPC as the caller and takes whatever comes back. Not entitled,
+    // or not signed in, means no rows and the fields stay null.
+    const contactsForCaller = async (propertyId: string) => {
+      if (!userToken) return null;
+      try {
+        const asUser = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: `Bearer ${userToken}` } },
+          auth: { persistSession: false },
+        });
+        const { data, error } = await asUser.rpc('get_external_property_contacts', {
+          _property_ids: [propertyId],
+        });
+        if (error) {
+          console.warn('[get-public-property] contact RPC failed:', error.message);
+          return null;
+        }
+        return (data as any[] | null)?.[0] ?? null;
+      } catch (e) {
+        console.warn('[get-public-property] contact RPC threw:', String(e).substring(0, 120));
+        return null;
+      }
+    };
 
     const db = createClient(supabaseUrl, serviceKey);
 
@@ -82,10 +114,17 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (ext) {
-      let payload: any = { source: 'external', property: ext };
-      if (!isAuthenticated) {
-        payload.property = stripContact(payload.property, ['contact_name', 'contact_phone']);
-      }
+      // Strip first, then hand back only what the RPC releases to this caller.
+      const contacts = await contactsForCaller(id);
+      const property = {
+        ...stripContact(ext as Record<string, unknown>, ['contact_name', 'contact_phone']),
+        ...(contacts
+          ? { contact_name: contacts.contact_name ?? null, contact_phone: contacts.contact_phone ?? null }
+          : {}),
+        // Crawler scratch space - never part of the public payload.
+        raw_data: undefined,
+      };
+      const payload: any = { source: 'external', property };
       return new Response(JSON.stringify(payload), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
