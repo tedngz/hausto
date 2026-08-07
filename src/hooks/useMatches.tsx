@@ -46,9 +46,13 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
   const internalIds = matches.filter(m => m.property_type !== 'external').map(m => m.property_id);
   const externalIds = matches.filter(m => m.property_type === 'external').map(m => m.property_id);
 
-  const [internalResult, externalResult, contactsResult] = await Promise.all([
+  // Contact details on both tables are column-locked and released by RPC:
+  // get_external_property_contacts for crawled listings,
+  // get_property_contacts for realtor listings. A matched renter is entitled
+  // to both, which is exactly who is looking at this screen.
+  const [internalResult, externalResult, contactsResult, internalContactsResult] = await Promise.all([
     internalIds.length > 0
-      ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, property_source_link, property_source_provider_name, property_source_provider_phone, amenities').in('id', internalIds)
+      ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, property_source_link, amenities').in('id', internalIds)
       : Promise.resolve({ data: [] }),
     externalIds.length > 0
       ? supabase.from('external_properties').select('id, title, location, price, vibe, images, description, highlights, size, vibe_analysis, amenities, source_url, source').in('id', externalIds)
@@ -56,13 +60,30 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
     externalIds.length > 0
       ? supabase.rpc('get_external_property_contacts', { _property_ids: externalIds })
       : Promise.resolve({ data: [] }),
+    internalIds.length > 0
+      ? supabase.rpc('get_property_contacts', { _property_ids: internalIds })
+      : Promise.resolve({ data: [] }),
   ]);
   const contactMap = new Map<string, { contact_name: string | null; contact_phone: string | null }>(
     ((contactsResult as any).data || []).map((c: any) => [c.id, { contact_name: c.contact_name, contact_phone: c.contact_phone }])
   );
+  const internalContactMap = new Map<string, { name: string | null; phone: string | null }>(
+    ((internalContactsResult as any).data || []).map((c: any) => [
+      c.id,
+      { name: c.property_source_provider_name, phone: c.property_source_provider_phone },
+    ])
+  );
 
   const propertyMap = new Map<string, any>();
-  (internalResult.data || []).forEach(p => propertyMap.set(p.id, { ...p, _type: 'internal' }));
+  (internalResult.data || []).forEach(p => {
+    const c = internalContactMap.get(p.id);
+    propertyMap.set(p.id, {
+      ...p,
+      property_source_provider_name: c?.name ?? null,
+      property_source_provider_phone: c?.phone ?? null,
+      _type: 'internal',
+    });
+  });
   (externalResult.data || []).forEach(p => {
     const c = contactMap.get(p.id) || { contact_name: null, contact_phone: null };
     propertyMap.set(p.id, {
