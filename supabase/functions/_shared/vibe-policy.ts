@@ -61,6 +61,12 @@ const BATCH_INVENTORY_PATTERNS: RegExp[] = [
   /chuy(ê|e)n[\s-]?cho[\s-]?thu(ê|e)/i, // chuyên cho thuê (agency portfolio)
   /c(á|a)c[\s-]?lo(ạ|a)i[\s-]?h(ì|i)nh/i, // các loại hình (all unit types)
   /tung[\s-]?ra[\s-]?th(ị|i)[\s-]?tr(ư|u)(ờ|o)ng/i,
+  // "chỉ từ 6.5 triệu" / "giá từ 4tr" - a starting price quotes a range of
+  // units, not the one being advertised
+  /(ch(ỉ|i)|gi(á|a))[\s-]?t(ừ|u)[\s-]?\d/i,
+  // Two or more prices in one ad ("1pn 18tr 2pn 29tr") is a portfolio, and
+  // whichever one we picked would be the wrong number for the photos shown
+  /\d{1,3}[\s-]?tr(?:ieu|iệu)?\b[\s\S]{1,40}?\d{1,3}[\s-]?tr(?:ieu|iệu)?\b/i,
   /\d{3,}\s*(h(ộ|o)|c(ă|a)n)\b/i,      // "2000 hộ", "500 căn"
   /(^|[\s-])(1|studio)[\s-]?[-,]?[\s-]?2[\s-]?[-,]?[\s-]?3([\s-]?[-,]?[\s-]?4)?[\s-]?(pn|phong[\s-]?ngu|ph(ò|o)ng[\s-]?ng(ủ|u))/i, // 1-2-3PN
   // English, as produced by the extraction step

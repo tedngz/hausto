@@ -185,6 +185,64 @@ function isValidPropertyImageUrl(url: string): boolean {
   return true;
 }
 
+// Upgrade a known CDN thumbnail rendition to its full-size equivalent. This
+// MUST run before isValidPropertyImageUrl, which rejects renditions under
+// 600px: filtering first throws away batdongsan /crop/562x284/ URLs that are
+// one string replacement away from the 1275x717 original. That ordering left
+// listings with one or two photos, and the vibe queue then failed them at the
+// display floor so they never went live.
+function toFullSizeImageUrl(url: string): string {
+  if (url.includes('batdongsan.com.vn')) return normalizeBatdongsanImageUrl(url);
+  if (url.includes('housingsgn.com')) return normalizeHousingsgnImageUrl(url);
+  return url;
+}
+
+// ─── Slug facts (deterministic cross-check on the LLM) ──────────
+// batdongsan slugs are written by the poster and carry the headline numbers:
+// ".../cho-cc-16-trieu-82m2-3pn-2wc-view-dep-..." or
+// ".../duplex-3pn-view-noi-khu-gia-60-trieu-tl-pr46119173". The detail page
+// also shows other units ("similar listings"), and the extraction step has
+// been picking numbers off those - a 60 triệu duplex was stored at 70M with
+// 4+ bedrooms. Where the slug states a figure, it wins: it belongs to this
+// listing and no model is involved.
+export function parseSlugFacts(url: string): { priceVnd?: number; rooms?: string; sizeM2?: number } {
+  const slug = (url.split('/').pop() || '').toLowerCase();
+  const out: { priceVnd?: number; rooms?: string; sizeM2?: number } = {};
+
+  // "16-trieu", "gia-60-trieu", "12-5-trieu" (12.5), "8tr5" is left alone.
+  // Skipped when the slug quotes a starting price ("chi-tu-6-5-trieu") or more
+  // than one price ("1pn-18tr-2pn-29tr"): both describe a range of units, so
+  // no single figure belongs to this listing. Those are batch ads and are
+  // rejected earlier anyway - this just refuses to guess if one slips through.
+  const priceTokens = slug.match(/\d{1,3}(?:-\d{1,2})?-tr(?:ieu)?(?:$|-)/g) || [];
+  const isStartingPrice = /(chi|gia)-tu-\d/.test(slug);
+  const price = priceTokens.length === 1 && !isStartingPrice
+    ? slug.match(/(?:^|-)(?:gia-)?(\d{1,3})(?:-(\d{1,2}))?-tr(?:ieu)?(?:$|-)/)
+    : null;
+  if (price) {
+    const whole = Number(price[1]);
+    const frac = price[2] ? Number(`0.${price[2]}`) : 0;
+    const vnd = Math.round((whole + frac) * 1_000_000);
+    if (vnd >= 1_000_000 && vnd <= 500_000_000) out.priceVnd = vnd;
+  }
+
+  const rooms = slug.match(/(?:^|-)(\d)-?pn(?:$|-)/) || slug.match(/(?:^|-)(\d)-phong-ngu(?:$|-)/);
+  if (rooms) {
+    const n = Number(rooms[1]);
+    if (n >= 1 && n <= 4) out.rooms = n === 1 ? '1 Bedroom' : `${n} Bedrooms`;
+    else if (n > 4) out.rooms = '4+ Bedrooms';
+  } else if (/(?:^|-)studio(?:$|-)/.test(slug)) {
+    out.rooms = 'Studio';
+  }
+
+  const size = slug.match(/(?:^|-)(\d{2,4})-?m2(?:$|-)/);
+  if (size) {
+    const m2 = Number(size[1]);
+    if (m2 >= 10 && m2 <= 1000) out.sizeM2 = m2;
+  }
+  return out;
+}
+
 // ─── Image dimension probe ──────────────────────────────────────
 // Parse pixel width from JPEG SOF / PNG IHDR headers. Blur on the site is
 // almost always a tiny source thumbnail (e.g. batdongsan 283x141 crops), so
@@ -614,6 +672,27 @@ async function savePropertiesToDB(
         continue;
       }
 
+      // The listing's own URL is the tie-breaker on the headline numbers.
+      const slugFacts = parseSlugFacts(property.sourceUrl || '');
+      if (slugFacts.priceVnd) {
+        const extracted = Number(property.price) || 0;
+        const off = extracted > 0 ? Math.abs(extracted - slugFacts.priceVnd) / slugFacts.priceVnd : 1;
+        if (off > 0.05) {
+          console.log(`[directSave] Price ${extracted} disagrees with slug ${slugFacts.priceVnd} - using the slug: ${String(property.sourceUrl).slice(-60)}`);
+          property.price = slugFacts.priceVnd;
+          property.priceDisplay = undefined;
+        }
+      }
+      if (slugFacts.rooms && property.rooms && property.rooms !== slugFacts.rooms) {
+        console.log(`[directSave] Rooms "${property.rooms}" disagrees with slug "${slugFacts.rooms}" - using the slug`);
+        property.rooms = slugFacts.rooms;
+      } else if (slugFacts.rooms && !property.rooms) {
+        property.rooms = slugFacts.rooms;
+      }
+      if (slugFacts.sizeM2 && !property.size) {
+        property.size = `${slugFacts.sizeM2}m²`;
+      }
+
       // In raw mode, only filter clearly non-residential or for-sale listings — title/price/images checks relaxed
       const check = isSuspiciousListing(property, minPrice);
       const skipForSuspicion = rawMode
@@ -665,7 +744,7 @@ async function savePropertiesToDB(
         description: property.description || null,
         highlights: property.highlights || [],
         amenities: property.amenities || [],
-        images: (property.images || []).filter(isValidPropertyImageUrl),
+        images: (property.images || []).map(toFullSizeImageUrl).filter(isValidPropertyImageUrl),
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
@@ -1418,12 +1497,11 @@ RESPOND WITH VALID JSON ONLY:
     // Keep a wide candidate pool (up to 12) so the downstream vision gate and
     // vibe queue can curate 5-8 quality shots of different aspects.
     let finalImages = (Array.isArray(p.images) && p.images.length > 0 ? p.images : detailImages)
+      .map(toFullSizeImageUrl)
       .filter((img: string) => isValidPropertyImageUrl(img))
       .slice(0, 12);
 
-    if (marketplace === 'batdongsan') {
-      finalImages = finalImages.map(normalizeBatdongsanImageUrl);
-    } else if (marketplace === 'housingsgn') {
+    if (marketplace === 'housingsgn') {
       // The LLM is unreliable at excluding "Similar Properties" images, so trust
       // the deterministic, property-code-matched gallery from scrapeDetailPage.
       // Match by property code to guarantee no cross-property mixing, and dedupe.
@@ -1551,7 +1629,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
     }
 
     return Array.from(uniqueProps.values()).map((p: any, i: number) => {
-      const imgs = (Array.isArray(p.images) ? p.images : []).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 12);
+      const imgs = (Array.isArray(p.images) ? p.images : []).map(toFullSizeImageUrl).filter((img: string) => isValidPropertyImageUrl(img)).slice(0, 12);
       
       return {
         id: `external-${marketplace}-${Date.now()}-${i}`,
@@ -1627,10 +1705,7 @@ function buildRawProperty(
   const size = sizeMatch ? `${sizeMatch[1]}m²` : null;
 
   // Filter images by URL only (no AI gate)
-  let images = detailImages.filter(isValidPropertyImageUrl);
-  if (marketplace === 'batdongsan') {
-    images = images.map(normalizeBatdongsanImageUrl);
-  }
+  let images = detailImages.map(toFullSizeImageUrl).filter(isValidPropertyImageUrl);
   images = [...new Set(images)].slice(0, 10);
 
   return {
