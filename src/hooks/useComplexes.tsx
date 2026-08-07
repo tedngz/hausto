@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { EXTERNAL_PROPERTY_PUBLIC_COLUMNS } from '@/lib/externalPropertyColumns';
+import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
 import { useAuth } from '@/hooks/useAuth';
 import type { Apartment } from '@/types';
 
@@ -119,7 +120,7 @@ export function useComplexListings(complex: Complex | null | undefined) {
       const [internalRes, externalRes] = await Promise.all([
         supabase
           .from('properties')
-          .select('*')
+          .select(PROPERTY_PUBLIC_COLUMNS)
           .eq('is_active', true)
           .gte('last_activated_at', tenDaysAgo)
           .or(orInternal)

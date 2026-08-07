@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
 import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
@@ -41,7 +42,7 @@ export const ListingCardDialog = ({ propertyId, open, onOpenChange }: ListingCar
     queryFn: async (): Promise<Apartment | null> => {
       const { data: internal } = await supabase
         .from('properties')
-        .select('*')
+        .select(PROPERTY_PUBLIC_COLUMNS)
         .eq('id', propertyId!)
         .maybeSingle();
       if (internal) return toApartment(internal, false);

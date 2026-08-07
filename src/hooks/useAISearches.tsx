@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -84,7 +85,7 @@ export const useAISearches = (conversationId?: string) => {
 
     // Fetch from both internal and external properties in parallel
     const [internalResult, externalResult] = await Promise.all([
-      supabase.from('properties').select('*').in('id', propertyIds),
+      supabase.from('properties').select(PROPERTY_PUBLIC_COLUMNS).in('id', propertyIds),
       supabase.from('external_properties').select('id, title, location, price, size, vibe, description, highlights, images, source, vibe_analysis').in('id', propertyIds),
     ]);
 

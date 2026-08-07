@@ -3065,23 +3065,27 @@ Maximum ${maxResults} properties in results.`;
         const entitled = new Set<string>();
 
         if (!isAnonymous && authHeader) {
-          const externalIds = [...new Set(items.filter(isExternal).map(r => r?.id).filter(Boolean))];
-          if (externalIds.length > 0) {
+          const asUser = createClient(supabaseUrl, supabaseAnonKey, {
+            global: { headers: { Authorization: authHeader } },
+            auth: { persistSession: false },
+          });
+          // Crawled listings and realtor listings have their own gatekeeper
+          // function; both answer the same question - is this caller entitled?
+          const lookups: [string, string[]][] = [
+            ['get_external_property_contacts', [...new Set(items.filter(isExternal).map(r => r?.id).filter(Boolean))]],
+            ['get_property_contacts', [...new Set(items.filter(r => !isExternal(r)).map(r => r?.id).filter(Boolean))]],
+          ];
+          for (const [rpc, ids] of lookups) {
+            if (ids.length === 0) continue;
             try {
-              const asUser = createClient(supabaseUrl, supabaseAnonKey, {
-                global: { headers: { Authorization: authHeader } },
-                auth: { persistSession: false },
-              });
-              const { data, error } = await asUser.rpc('get_external_property_contacts', {
-                _property_ids: externalIds,
-              });
+              const { data, error } = await asUser.rpc(rpc, { _property_ids: ids });
               if (error) {
-                console.warn('[chat-ai] contact RPC failed, withholding contacts:', error.message);
+                console.warn(`[chat-ai] ${rpc} failed, withholding contacts:`, error.message);
               } else {
                 for (const row of (data as any[] | null) ?? []) entitled.add(row.id);
               }
             } catch (e) {
-              console.warn('[chat-ai] contact RPC threw, withholding contacts:', String(e).substring(0, 120));
+              console.warn(`[chat-ai] ${rpc} threw, withholding contacts:`, String(e).substring(0, 120));
             }
           }
         }
@@ -3098,7 +3102,7 @@ Maximum ${maxResults} properties in results.`;
         };
 
         for (const r of items) {
-          if (isAnonymous || (isExternal(r) && !entitled.has(r?.id))) stripContact(r);
+          if (isAnonymous || !entitled.has(r?.id)) stripContact(r);
         }
         responseContent = JSON.stringify(parsed);
       }

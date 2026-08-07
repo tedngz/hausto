@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
 import { translateLocationToEnglish } from '@/utils/locationTranslation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -623,7 +624,7 @@ export const HomeAI = ({
       // Try to fetch full property details from database by ID
       const {
         data: fullProperty
-      } = await supabase.from('properties').select('*').eq('id', property.id).single();
+      } = await supabase.from('properties').select(PROPERTY_PUBLIC_COLUMNS).eq('id', property.id).single();
       if (fullProperty) {
         const enriched = {
           ...property,

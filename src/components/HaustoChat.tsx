@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -420,7 +421,7 @@ export const HaustoChat = ({
       // Try internal properties first
       const { data: fullProperty, error } = await supabase
         .from('properties')
-        .select('*')
+        .select(PROPERTY_PUBLIC_COLUMNS)
         .eq('id', propertyId)
         .maybeSingle();
 
@@ -773,7 +774,7 @@ export const HaustoChat = ({
                                               try {
                                                 const { data: fullProperty, error } = await supabase
                                                   .from('properties')
-                                                  .select('*')
+                                                  .select(PROPERTY_PUBLIC_COLUMNS)
                                                   .eq('id', matchedProperty.property_id)
                                                   .maybeSingle();
 

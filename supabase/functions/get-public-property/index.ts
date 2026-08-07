@@ -50,23 +50,21 @@ Deno.serve(async (req) => {
     // both RLS and the column grants, so it must not decide for itself - it
     // calls the RPC as the caller and takes whatever comes back. Not entitled,
     // or not signed in, means no rows and the fields stay null.
-    const contactsForCaller = async (propertyId: string) => {
+    const contactsForCaller = async (rpc: string, propertyId: string) => {
       if (!userToken) return null;
       try {
         const asUser = createClient(supabaseUrl, anonKey, {
           global: { headers: { Authorization: `Bearer ${userToken}` } },
           auth: { persistSession: false },
         });
-        const { data, error } = await asUser.rpc('get_external_property_contacts', {
-          _property_ids: [propertyId],
-        });
+        const { data, error } = await asUser.rpc(rpc, { _property_ids: [propertyId] });
         if (error) {
-          console.warn('[get-public-property] contact RPC failed:', error.message);
+          console.warn(`[get-public-property] ${rpc} failed:`, error.message);
           return null;
         }
         return (data as any[] | null)?.[0] ?? null;
       } catch (e) {
-        console.warn('[get-public-property] contact RPC threw:', String(e).substring(0, 120));
+        console.warn(`[get-public-property] ${rpc} threw:`, String(e).substring(0, 120));
         return null;
       }
     };
@@ -89,15 +87,33 @@ Deno.serve(async (req) => {
         .eq('id', (property as any).realtor_id)
         .maybeSingle();
 
-      let payload: any = { source: 'internal', property, realtor };
-      if (!isAuthenticated) {
-        payload.property = stripContact(payload.property, [
-          'property_source_provider_name',
-          'property_source_provider_phone',
-        ]);
-        if (payload.realtor) {
-          payload.realtor = { ...payload.realtor, phone: null, email: null };
-        }
+      // Same delegation as the external branch: the source contact on an
+      // internal listing is released by get_property_contacts - admin, the
+      // owning realtor, or the renter matched to it. The realtor's own phone
+      // and email ride along only for those callers, and only if they opted
+      // into sharing.
+      const internalContacts = await contactsForCaller('get_property_contacts', id);
+      const entitled = internalContacts !== null;
+
+      const payload: any = {
+        source: 'internal',
+        property: {
+          ...stripContact(property as Record<string, unknown>, [
+            'property_source_provider_name',
+            'property_source_provider_phone',
+          ]),
+          ...(entitled
+            ? {
+                property_source_provider_name: internalContacts.property_source_provider_name ?? null,
+                property_source_provider_phone: internalContacts.property_source_provider_phone ?? null,
+              }
+            : {}),
+        },
+        realtor,
+      };
+
+      if (payload.realtor && !(entitled && payload.realtor.allow_contact_sharing)) {
+        payload.realtor = { ...payload.realtor, phone: null, email: null };
       }
       return new Response(JSON.stringify(payload), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -115,7 +131,7 @@ Deno.serve(async (req) => {
 
     if (ext) {
       // Strip first, then hand back only what the RPC releases to this caller.
-      const contacts = await contactsForCaller(id);
+      const contacts = await contactsForCaller('get_external_property_contacts', id);
       const property = {
         ...stripContact(ext as Record<string, unknown>, ['contact_name', 'contact_phone']),
         ...(contacts
