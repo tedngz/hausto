@@ -8,6 +8,7 @@ import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import {
   interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl,
   isBatchInventoryListing, isThumbnailUrl, isAnimatedOrVideoBytes,
+  MIN_DISPLAY_IMAGES,
 } from '../_shared/vibe-policy.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -717,14 +718,14 @@ async function savePropertiesToDB(
       // Check for existing
       const { data: existingByUrl } = await supabase
         .from('external_properties')
-        .select('id, vibe_analysis')
+        .select('id, vibe_analysis, images, is_active')
         .eq('source', marketplace)
         .eq('source_url', normalizedUrl)
         .maybeSingle();
 
       const { data: existingById } = !existingByUrl ? await supabase
         .from('external_properties')
-        .select('id, vibe_analysis')
+        .select('id, vibe_analysis, images, is_active')
         .eq('source', marketplace)
         .eq('external_id', externalId)
         .maybeSingle() : { data: existingByUrl };
@@ -759,11 +760,30 @@ async function savePropertiesToDB(
         
         const updateData: Record<string, any> = {
           ...propertyData,
-          images: propertyData.images.slice(0, 8), // Match the 5-8 display target
           last_verified_at: now,
           updated_at: now,
         };
-        
+
+        // Whether a listing is live is the vibe queue's decision - it is the
+        // only step that checks the display floor. A re-crawl saying
+        // "is_active: true" was overriding that, which is how listings with
+        // one photo (and three with none at all) ended up on browse.
+        delete updateData.is_active;
+
+        // The stored gallery is mirrored and curated; a re-scrape that finds
+        // fewer images means the extraction went worse, not that the listing
+        // lost photos. Only replace it when the stored one is below the floor
+        // and the fresh scrape genuinely does better - and then send it back
+        // through the queue so the new images get mirrored and analysed.
+        const existingImages: string[] = Array.isArray((existing as any).images) ? (existing as any).images : [];
+        const freshImages = propertyData.images.slice(0, 8);
+        if (existingImages.length >= MIN_DISPLAY_IMAGES || freshImages.length <= existingImages.length) {
+          delete updateData.images;
+        } else {
+          updateData.images = freshImages;
+          updateData.vibe_status = 'pending';
+        }
+
         // Don't overwrite good vibe data with empty scrape data
         if (hasExistingImageAnalysis) {
           delete updateData.vibe_analysis;
@@ -794,6 +814,17 @@ async function savePropertiesToDB(
             continue;
           }
         } else {
+          // Cheapest possible rejection first: a listing that cannot reach the
+          // display floor can never go live, so paying for a vision pass on it
+          // is pure waste. The gate fetches and screens up to 12 photos, so
+          // this saves that call outright on every thin listing.
+          if (validImages.length < MIN_DISPLAY_IMAGES) {
+            filtered++;
+            console.log(`[directSave] Rejected before vision (${validImages.length} images < floor): ${String(property.title).substring(0, 50)}`);
+            await logCrawlerRejection(supabase, normalizedUrl, marketplace, `too_few_images:${validImages.length}`, validImages);
+            continue;
+          }
+
           // NEW LISTINGS: HARD interior gate. No interior shots → reject + log.
           try {
             const gate = await interiorGate(validImages);
