@@ -244,6 +244,32 @@ export function parseSlugFacts(url: string): { priceVnd?: number; rooms?: string
   return out;
 }
 
+// Link-level price sanity, so an obvious non-rental never costs a Firecrawl
+// credit. Deliberately conservative: only the clear-cut cases are rejected
+// here - a price in tỷ (billions) is a sale, and a monthly rent outside
+// 1M-200M VND is not a rental. The run's own minPrice is applied later, after
+// extraction, where the real figure is known. A slug with no price, a starting
+// price ("chỉ từ") or several prices tells us nothing and is left alone; those
+// are portfolio ads and the batch-ad filter already handles them.
+const SLUG_PRICE_FLOOR_VND = 1_000_000;
+
+export function slugPriceRejection(url: string): string | null {
+  const slug = (url.split('/').pop() || '').toLowerCase();
+
+  // "5-ty", "4-45-ty", "5ty" - billions, i.e. a sale price. "ty" also starts
+  // ordinary words though ("quan-7-ty-le" is Quận 7 + tỷ lệ, a ratio), so
+  // collocations that continue into another word are not prices.
+  if (/(?:^|-)\d{1,3}(?:-\d{1,3})?-?t(?:ỷ|y)(?:$|-(?!le|gia|phu|dong|usd|suat|trong|sat))/.test(slug)) {
+    return 'slug_price_in_billions';
+  }
+
+  const facts = parseSlugFacts(url);
+  if (!facts.priceVnd) return null;
+  if (facts.priceVnd > MAX_PRICE_VND) return `slug_price_above_band:${facts.priceVnd}`;
+  if (facts.priceVnd < SLUG_PRICE_FLOOR_VND) return `slug_price_below_floor:${facts.priceVnd}`;
+  return null;
+}
+
 // ─── Image dimension probe ──────────────────────────────────────
 // Parse pixel width from JPEG SOF / PNG IHDR headers. Blur on the site is
 // almost always a tiny source thumbnail (e.g. batdongsan 283x141 crops), so
@@ -1187,10 +1213,26 @@ async function extractListingUrls(
   const pattern = listingPatterns[marketplace];
   if (!pattern) return [];
 
+  let priceSkipped = 0;
   const listingUrls = links
-    .filter(link => pattern.test(link) && !saleUrlPattern.test(link))
+    .filter(link => {
+      if (!pattern.test(link) || saleUrlPattern.test(link)) return false;
+      // The poster writes the headline price into the slug, so an obvious
+      // non-rental can be dropped before it costs a detail fetch.
+      const priceReason = slugPriceRejection(link);
+      if (priceReason) {
+        priceSkipped++;
+        console.log(`[Phase 1] Skipped on slug price (${priceReason}): ${link.split('/').pop()?.substring(0, 70)}`);
+        return false;
+      }
+      return true;
+    })
     .map(url => ({ url }));
-  
+
+  if (priceSkipped > 0) {
+    console.log(`[Phase 1] ${priceSkipped} link(s) skipped on slug price before any detail fetch`);
+  }
+
   // Deduplicate by URL
   const seen = new Set<string>();
   const unique = listingUrls.filter(l => {
@@ -1227,6 +1269,11 @@ async function extractListingUrls(
           // requires.
           if (!pattern.test(listing.url) || saleUrlPattern.test(listing.url)) {
             console.log(`[Phase 1] Rejected AI-suggested non-listing URL: ${String(listing.url).substring(0, 90)}`);
+            continue;
+          }
+          const aiPriceReason = slugPriceRejection(listing.url);
+          if (aiPriceReason) {
+            console.log(`[Phase 1] Rejected AI-suggested URL on slug price (${aiPriceReason})`);
             continue;
           }
           seen.add(listing.url);
