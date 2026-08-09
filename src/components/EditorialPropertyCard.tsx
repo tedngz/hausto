@@ -71,12 +71,6 @@ interface EditorialPropertyCardProps {
   onImageIndexChange?: (index: number) => void;
   /** Override the card's aspect ratio (default: editorial 380/560 portrait) */
   aspectClass?: string;
-  /**
-   * Let the frame take the shape of the cover photo instead of the fixed
-   * aspect. Use where the card stands alone (a modal), not in a grid, where
-   * cards of differing heights would break the row rhythm.
-   */
-  adaptiveAspect?: boolean;
   /** Smaller typography so the photo dominates (used in the AI chat's compact cards) */
   compact?: boolean;
   /** Extra actions rendered in the top-right cluster, before the share/like buttons (e.g. a delete button) */
@@ -93,8 +87,6 @@ const MAX_UPSCALE = 1.2;
 // letterbox it instead. The frame is responsive (portrait on mobile, 4:3 from
 // sm up), so this is measured against the frame actually on screen.
 const MAX_CROP = 0.2;
-// Floor for an adaptive card: enough room for the overlaid text block.
-const MIN_CARD_HEIGHT = 336;
 
 const RATING_DOT: Record<string, string> = {
   perfect: 'bg-emerald-400',
@@ -121,7 +113,6 @@ export const EditorialPropertyCard = ({
   initialImageIndex = 0,
   onImageIndexChange,
   aspectClass = 'aspect-[380/560]',
-  adaptiveAspect = false,
   compact = false,
   topRightActions,
   className = '',
@@ -200,24 +191,6 @@ export const EditorialPropertyCard = ({
   // the first photo only, so flipping through the gallery doesn't resize the
   // card, and clamped so an extreme panorama or a tall portrait still reads as
   // a card. Grid callers leave this off and keep their fixed rhythm.
-  const [coverRatio, setCoverRatio] = useState<number | null>(null);
-  useEffect(() => {
-    if (!adaptiveAspect || !images[0]) return;
-    const probe = new Image();
-    probe.onload = () => {
-      if (!probe.naturalWidth || !probe.naturalHeight) return;
-      const ratio = Math.min(Math.max(probe.naturalWidth / probe.naturalHeight, 0.68), 1.5);
-      // The overlaid title, location, highlight and CTAs need roughly 190px,
-      // so the card gets a height floor. It is applied by capping the ratio
-      // rather than with min-height: the dialog lays its child out in a grid,
-      // where aspect-ratio plus min-height let the card size its own width
-      // from the height and overflow the dialog sideways.
-      const width = frameRef.current?.getBoundingClientRect().width ?? 0;
-      const maxRatioForFloor = width > 0 ? width / MIN_CARD_HEIGHT : ratio;
-      setCoverRatio(Math.min(ratio, maxRatioForFloor));
-    };
-    probe.src = images[0];
-  }, [adaptiveAspect, images]);
 
   const go = (delta: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -320,8 +293,7 @@ export const EditorialPropertyCard = ({
   return (
     <div
       ref={frameRef}
-      className={`group relative w-full ${coverRatio ? '' : aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
-      style={coverRatio ? { aspectRatio: String(coverRatio), maxWidth: '100%' } : undefined}
+      className={`group relative w-full ${aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={onCardClick}

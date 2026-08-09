@@ -876,7 +876,13 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   vibeMatch={previewScore?.attrs}
                   scoreContext="preferences"
                   aspectClass="aspect-[380/560] sm:aspect-[4/3]"
-                  adaptiveAspect
+                  /* The portrait card at a phone's width is ~525px tall, and
+                     with the booking panel under it the modal ran the full
+                     height of the screen - where the browser chrome and the
+                     home indicator sit over the ends of it. Capping the card
+                     at 55dvh leaves the panel and both CTAs clear of them.
+                     Uncapped from sm up, where the 4:3 frame is short anyway. */
+                  className="max-h-[55dvh] sm:max-h-none"
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
                   onClose={() => setPreview(null)}
