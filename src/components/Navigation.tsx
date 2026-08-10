@@ -40,9 +40,9 @@ export const Navigation = ({
                 className="w-6 h-6 md:w-6 md:h-6"
               />
               {/* Wordmark hidden on mobile so the centered nav icons never overlap it */}
-              <h1 className="hidden sm:block text-lg md:text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+              <div className="hidden sm:block text-lg md:text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
                 Hausto
-              </h1>
+              </div>
             </div>
           </div>
 
