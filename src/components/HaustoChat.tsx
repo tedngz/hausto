@@ -17,7 +17,6 @@ import { format } from 'date-fns';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/contexts/CurrencyContext';
-import { useSubscription } from '@/hooks/useSubscription';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
@@ -118,7 +117,6 @@ export const HaustoChat = ({
     },
   });
   const pendingQuestionCount = questionInfo.total;
-  const { subscription_tier } = useSubscription();
   const { quota } = useViewingQuota();
   const { toast } = useToast();
   const {
@@ -337,11 +335,11 @@ export const HaustoChat = ({
     }
   };
 
-  // "Schedule viewing" chip under AI messages: premium renters and holders of
-  // the $20 Unlimited Viewings add-on go straight to the Fast-Track modal;
-  // everyone else gets the subscription pitch.
+  // "Schedule viewing" chip under AI messages: anyone with an allowance left -
+  // premium, the $20 Unlimited Viewings add-on, or an unspent free trial - goes
+  // straight to the Fast-Track modal; everyone else gets the subscription pitch.
   const handleScheduleViewingChip = () => {
-    if (subscription_tier === 'premium' || quota?.unlimited) {
+    if (quota?.canBook) {
       setIsViewingScheduleModalOpen(true);
     } else {
       window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
@@ -693,7 +691,9 @@ export const HaustoChat = ({
                         variant="outline"
                         onClick={handleScheduleViewingChip}
                         className="h-8 text-xs rounded-full px-3 sm:px-4 bg-orange-50/80 hover:bg-orange-100 text-orange-700 border-orange-200 hover:border-orange-300 font-medium shadow-sm transition-colors"
-                        title="Skip the back-and-forth — Hausto books the viewings for you"
+                        title={quota?.trialAvailable
+                          ? 'Your first viewing coordination is free — Hausto books it for you'
+                          : 'Skip the back-and-forth — Hausto books the viewings for you'}
                       >
                         <span className="sm:hidden">⚡ Fast-Track</span>
                         <span className="hidden sm:inline">⚡ Fast-Track viewing</span>

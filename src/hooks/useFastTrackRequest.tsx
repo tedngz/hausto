@@ -35,8 +35,8 @@ export const useFastTrackRequest = () => {
   }): Promise<void> => {
     if (!user?.id) throw new Error('User not authenticated');
 
-    // Premium includes 3 bookings per cycle; the $20 add-on lifts the cap.
-    // Callers catch this error to show the add-on upsell.
+    // Free tier gets one trial coordination, premium 3 per cycle; the $20
+    // add-on lifts the cap. Callers catch this error to show the upsell.
     if (quota && !quota.canBook) {
       throw new Error('VIEWING_QUOTA_EXCEEDED');
     }

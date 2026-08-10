@@ -223,13 +223,23 @@ serve(async (req) => {
         return { role, content: `${aiLabel}${propLabel}${m.content}` };
       });
 
-    // Premium status (so the AI pitches Fast-Track appropriately)
-    const { data: sub } = await supabase
-      .from("subscribers")
-      .select("subscription_tier")
-      .eq("user_id", conv.renter_id)
-      .maybeSingle();
+    // Booking entitlement (so the AI pitches Fast-Track appropriately): premium
+    // includes coordination, and every other renter gets one free trial
+    // coordination until they've had one that wasn't cancelled.
+    const [{ data: sub }, { data: trial }] = await Promise.all([
+      supabase
+        .from("subscribers")
+        .select("subscription_tier")
+        .eq("user_id", conv.renter_id)
+        .maybeSingle(),
+      supabase
+        .from("viewing_trials")
+        .select("used_at")
+        .eq("renter_id", conv.renter_id)
+        .maybeSingle(),
+    ]);
     const isPremium = sub?.subscription_tier === "premium";
+    const hasFreeTrial = !isPremium && !trial;
 
     // Which listing the renter tagged via "Ask about this" — the LLM must be
     // told explicitly, or it has no way to know which matched property the
@@ -251,7 +261,9 @@ You are replying inside a renter's post-match conversation. Decide between:
 Set "suggest_fast_track" to true when scheduling a viewing is the natural next step.
 ${isPremium
   ? `The renter is on PREMIUM: Fast-Track viewing coordination is included — you may offer to have Hausto coordinate the viewing.`
-  : `The renter is on the FREE tier: Fast-Track viewing coordination is a PREMIUM feature they do NOT have. NEVER say you can coordinate, book, or fast-track a viewing for them, and never ask for their preferred times as if you will arrange it. If they ask about viewing, say viewings are arranged with the property contact, and that Hausto's Fast-Track service (we book everything for you) is available on the premium plan if they'd like to upgrade.`}
+  : hasFreeTrial
+    ? `The renter is on the FREE tier and still has their ONE free Fast-Track viewing coordination. You may offer it once, plainly — "your first viewing coordination is free" — and ask for their preferred dates and times. Do not promise a second free one: after this, coordination needs Premium or the unlimited-viewings add-on.`
+    : `The renter is on the FREE tier and has already used their one free viewing coordination. NEVER say you can coordinate, book, or fast-track a viewing for them, and never ask for their preferred times as if you will arrange it. If they ask about viewing, say viewings are arranged with the property contact, and that Hausto's Fast-Track service (we book everything for you) is available on the premium plan if they'd like to upgrade.`}
 
 Matched properties:
 ${propertyContext || "None on record."}

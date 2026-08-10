@@ -11,7 +11,7 @@ import { useMatches } from '@/hooks/useMatches';
 import { HaustoChat } from '@/components/HaustoChat';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useAuth } from '@/hooks/useAuth';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -50,7 +50,7 @@ export const MatchesView = ({
     setCurrentConversationId
   } = useDirectMessages();
   const { user } = useAuth();
-  const { subscription_tier } = useSubscription();
+  const { quota } = useViewingQuota();
   const { submitFastTrack } = useFastTrackRequest();
   const transformMatchToApartment = (match: any): Apartment | null => {
     // Filter out matches with null/undefined properties
@@ -138,17 +138,22 @@ export const MatchesView = ({
     }
   };
 
-  // Primary CTA: Hausto books the viewings (Fast-Track). Premium-gated —
-  // free users get the value story + upgrade modal.
+  // Primary CTA: Hausto books the viewings (Fast-Track). The first coordination
+  // is free; once the allowance is spent, the upgrade modal takes over.
   const handleScheduleViewing = async (apartment: Apartment) => {
     if (!user?.id) {
       setSelectedApartment(apartment);
       return;
     }
-    if (subscription_tier !== 'premium') {
-      toast.info('Hausto books the viewings for you', {
-        description: 'Skip the back-and-forth: pick times, and our team coordinates every viewing. Available on premium.',
-      });
+    if (!quota) {
+      toast.info('Checking your viewing allowance - one moment.');
+      return;
+    }
+    if (!quota.canBook) {
+      toast.info(
+        quota.trialUsed ? "You've used your free viewing coordination" : 'Viewing bookings used up for this cycle',
+        { description: 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.' },
+      );
       setIsSubscriptionModalOpen(true);
       return;
     }
@@ -283,6 +288,10 @@ export const MatchesView = ({
         initialSelectedIds={scheduleContext ? [scheduleContext.propertyId] : []}
       />
 
-      <SubscriptionModal isOpen={isSubscriptionModalOpen} onClose={() => setIsSubscriptionModalOpen(false)} />
+      <SubscriptionModal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+        reason={quota?.trialUsed ? 'viewings' : undefined}
+      />
     </div>;
 };

@@ -2,8 +2,9 @@ import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Heart, RotateCcw, Crown, MessageSquare } from 'lucide-react';
+import { CalendarCheck, Eye, Heart, RotateCcw, Crown, MessageSquare } from 'lucide-react';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
  
 export const UsageMeter = () => {
   const {
@@ -14,6 +15,7 @@ export const UsageMeter = () => {
     limits,
     refetchUsage,
   } = useUsageTracking();
+  const { quota } = useViewingQuota();
 
   useEffect(() => {
     const handler = () => {
@@ -100,6 +102,34 @@ export const UsageMeter = () => {
             </div>
           );
         })}
+
+        {/* Viewing coordination sits outside the map: it isn't unlimited on
+            premium (3 a cycle), and on the free tier it's the one-off trial. */}
+        {quota && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="h-4 w-4 text-orange-500" />
+                <span className="font-medium">
+                  {quota.isTrial ? 'Free viewing coordination' : 'Viewing coordinations'}
+                </span>
+              </div>
+              <span className={`font-mono ${!quota.unlimited && !quota.canBook ? 'text-red-500' : 'text-muted-foreground'}`}>
+                {quota.unlimited ? '∞' : `${Math.min(quota.used, quota.included)}/${quota.included}`}
+              </span>
+            </div>
+            {quota.unlimited ? (
+              <div className="h-2 bg-primary/20 rounded-full">
+                <div className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full animate-pulse"></div>
+              </div>
+            ) : (
+              <Progress
+                value={Math.min((quota.used / quota.included) * 100, 100)}
+                className={`h-2 ${!quota.canBook ? '[&>div]:bg-red-500' : ''}`}
+              />
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

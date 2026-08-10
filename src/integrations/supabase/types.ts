@@ -1453,6 +1453,24 @@ export type Database = {
         }
         Relationships: []
       }
+      viewing_trials: {
+        Row: {
+          renter_id: string
+          request_id: string | null
+          used_at: string
+        }
+        Insert: {
+          renter_id: string
+          request_id?: string | null
+          used_at?: string
+        }
+        Update: {
+          renter_id?: string
+          request_id?: string | null
+          used_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

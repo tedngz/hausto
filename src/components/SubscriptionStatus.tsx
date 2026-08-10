@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Crown, Calendar, RefreshCw, CreditCard } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -25,6 +26,7 @@ export const SubscriptionStatus = ({
     cancelSubscription,
     reactivateSubscription
   } = useSubscription();
+  const { quota } = useViewingQuota();
   const [cancelling, setCancelling] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -121,6 +123,20 @@ export const SubscriptionStatus = ({
                   </Button>
                 </div>}
           </div> : <div className="space-y-2.5">
+            {/* The free trial is the one benefit a free renter already has -
+                show its state before the upgrade pitch. */}
+            {quota && (
+              <div className={`rounded-lg border p-2.5 ${quota.trialAvailable ? 'border-emerald-200 bg-emerald-50' : 'border-border bg-secondary/40'}`}>
+                <div className={`text-sm font-medium ${quota.trialAvailable ? 'text-emerald-800' : 'text-foreground'}`}>
+                  {quota.trialAvailable ? 'Free viewing coordination available' : 'Free viewing coordination used'}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {quota.trialAvailable
+                    ? 'Pick a listing and your times - Hausto books the viewing for you, once, on the house.'
+                    : 'Premium includes 3 coordinated viewings a cycle.'}
+                </p>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               Upgrade to unlock unlimited access
             </p>

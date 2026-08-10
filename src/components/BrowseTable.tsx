@@ -404,15 +404,20 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       navigate('/auth', { state: { returnTo } });
       return;
     }
-    // Fast-Track coordination is a premium feature: free tier sees the upgrade modal
-    if (!subscribed) {
-      setSubscriptionOpen(true);
+    // Free tier gets one coordination on the house; after that (and after a
+    // premium cycle runs out) the upgrade path takes over.
+    if (!quota) {
+      toast.info('Checking your viewing allowance - one moment.');
       return;
     }
-    if (quota && !quota.canBook) {
-      toast.error('Viewing bookings used up for this cycle', {
-        description: 'Upgrade or purchase the unlimited add-on from your matches page to book more.',
-      });
+    if (!quota.canBook) {
+      if (quota.trialUsed) {
+        setSubscriptionOpen(true);
+      } else {
+        toast.error('Viewing bookings used up for this cycle', {
+          description: 'Upgrade or purchase the unlimited add-on from your matches page to book more.',
+        });
+      }
       return;
     }
     setScheduleTargets(targets);
@@ -908,11 +913,15 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   </ul>
                   <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-border pt-2.5">
                     <span className="text-xs text-muted-foreground">
-                      {subscribed
-                        ? quota?.unlimited
-                          ? 'Unlimited viewings active this month'
-                          : `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
-                        : `Included with Premium - ${INCLUDED_VIEWINGS_PER_CYCLE} viewings a cycle`}
+                      {quota?.unlimited
+                        ? 'Unlimited viewings active this month'
+                        : quota?.trialAvailable
+                          ? 'Your first viewing coordination is free'
+                          : quota?.trialUsed
+                            ? `Free trial used - Premium includes ${INCLUDED_VIEWINGS_PER_CYCLE} a cycle`
+                            : subscribed
+                              ? `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
+                              : 'Your first viewing coordination is free'}
                     </span>
                     {originalHref && (
                       <a
@@ -1091,7 +1100,11 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         initialPropertyId={chatPropertyId}
       />
 
-      <SubscriptionModal isOpen={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
+      <SubscriptionModal
+        isOpen={subscriptionOpen}
+        onClose={() => setSubscriptionOpen(false)}
+        reason={quota?.trialUsed ? 'viewings' : undefined}
+      />
     </div>
   );
 };

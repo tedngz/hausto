@@ -22,7 +22,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { invokeFunction } from '@/integrations/supabase/functions-client';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
-import { useSubscription } from '@/hooks/useSubscription';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { format } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
@@ -113,10 +112,10 @@ export const HomeAI = ({
   const {
     createMatch
   } = useMatches();
-  const { subscription_tier } = useSubscription();
-  const { quota } = useViewingQuota();
-  // Fast-Track access: Premium plan or the standalone $20 Unlimited Viewings add-on
-  const canFastTrack = subscription_tier === 'premium' || !!quota?.unlimited;
+  const { quota, refetchQuota } = useViewingQuota();
+  // Fast-Track access: the free trial booking, a Premium cycle allowance, or
+  // the standalone $20 Unlimited Viewings add-on.
+  const canFastTrack = !!quota?.canBook;
   const {
     canPerformAction,
     updateUsage,
@@ -406,6 +405,7 @@ export const HomeAI = ({
       sonnerToast.success('Viewing request sent!', {
         description: 'Hausto Agent will reach out shortly to confirm your viewings.',
       });
+      refetchQuota();
       setIsViewingScheduleOpen(false);
       setIsFastTrackBannerDismissed(true);
     } catch (error) {
@@ -928,9 +928,11 @@ export const HomeAI = ({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-tight">
-                {canFastTrack
-                  ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
-                  : 'Hausto books the viewings for you'}
+                {quota?.trialAvailable
+                  ? 'Your first viewing coordination is free'
+                  : canFastTrack
+                    ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
+                    : 'Hausto books the viewings for you'}
               </p>
               <p className="text-xs text-muted-foreground leading-tight mt-0.5">
                 {canFastTrack
@@ -967,7 +969,7 @@ export const HomeAI = ({
                 }
               }}
             >
-              {canFastTrack ? 'Schedule viewings' : 'Book my viewings'}
+              {quota?.trialAvailable ? 'Book my free viewing' : canFastTrack ? 'Schedule viewings' : 'Book my viewings'}
             </Button>
             <Button
               size="sm"

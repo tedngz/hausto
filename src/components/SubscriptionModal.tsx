@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  reason?: 'views' | 'matches' | 'quiz';
+  reason?: 'views' | 'matches' | 'quiz' | 'viewings';
 }
 export const SubscriptionModal = ({
   isOpen,
@@ -30,7 +30,8 @@ export const SubscriptionModal = ({
   const reasonMessages = {
     views: "You've reached your daily limit of 10 swipes.",
     matches: "You've reached your weekly limit of 20 matches.",
-    quiz: "You've used both weekly quiz retakes."
+    quiz: "You've used both weekly quiz retakes.",
+    viewings: "You've used your free viewing coordination."
   };
   const handleGoPremium = async () => {
     if (!user) {
@@ -65,7 +66,14 @@ export const SubscriptionModal = ({
       setAddonLoading(false);
     }
   };
-  const freeFeatures = ['10 swipes per day', '20 matches per week', '10 AI searches per day'];
+  const freeFeatures = [
+    '10 swipes per day',
+    '20 matches per week',
+    '10 AI searches per day',
+    quota?.trialUsed
+      ? '1 free viewing coordination (used)'
+      : '1 free viewing coordination - we book it for you',
+  ];
   const premiumFeatures = [
     'Unlimited swipes',
     'Unlimited matches',

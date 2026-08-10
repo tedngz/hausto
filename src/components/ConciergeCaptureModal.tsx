@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -23,6 +25,8 @@ interface Props {
 export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexName }: Props) {
   const { user } = useAuth();
   const { subscribed } = useSubscription();
+  const { quota } = useViewingQuota();
+  const navigate = useNavigate();
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +74,9 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
   }, [open, user, prefilled]);
 
   const close = () => { onOpenChange(false); setTimeout(reset, 300); };
+
+  // Signed-out visitors get the trial pitch too - a new account starts with one.
+  const trialPitch = user ? !!quota?.trialAvailable : true;
 
   const canNext1 = moveIn && lease > 0;
   const canNext2 = bedrooms > 0 && budget[0] >= 0 && budget[1] > budget[0];
@@ -131,10 +138,16 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
               <div className="rounded-lg border bg-secondary/40 p-4 text-left space-y-2">
                 <p className="text-sm font-medium">Want to see units in person?</p>
                 <p className="text-sm text-muted-foreground">
-                  Premium members can schedule in-person viewings — Hausto's Fast-Track team books the visits for you.
+                  {trialPitch
+                    ? "Your first viewing coordination is free - Hausto's Fast-Track team books the visit for you."
+                    : "Hausto's Fast-Track team books the visits for you. Premium includes 3 coordinated viewings a cycle."}
                 </p>
-                <Button size="sm" className="w-full" onClick={() => setShowUpgrade(true)}>
-                  Go Premium to schedule viewings
+                <Button
+                  size="sm"
+                  className="w-full"
+                  onClick={() => (trialPitch ? navigate('/browse') : setShowUpgrade(true))}
+                >
+                  {trialPitch ? 'Book my free viewing' : 'Go Premium to schedule viewings'}
                 </Button>
               </div>
             )}
