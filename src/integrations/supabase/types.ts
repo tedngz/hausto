@@ -1534,6 +1534,14 @@ export type Database = {
           name: string
         }[]
       }
+      get_property_contacts: {
+        Args: { _property_ids: string[] }
+        Returns: {
+          id: string
+          property_source_provider_name: string
+          property_source_provider_phone: string
+        }[]
+      }
       get_realtor_contact_for_renter: {
         Args: { realtor_id: string }
         Returns: {

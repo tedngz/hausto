@@ -38,4 +38,4 @@ Allow: /
 # OpenAPI spec: https://hausto.lovable.app/openapi.json
 # AI plugin: https://hausto.lovable.app/.well-known/ai-plugin.json
 
-Sitemap: https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/sitemap
+Sitemap: https://www.hausto.com/sitemap.xml

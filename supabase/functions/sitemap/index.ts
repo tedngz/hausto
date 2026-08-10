@@ -12,7 +12,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    const BASE_URL = 'https://hausto.lovable.app';
+    const BASE_URL = 'https://www.hausto.com';
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
 
     // Fetch active internal properties
