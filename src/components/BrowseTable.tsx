@@ -892,18 +892,13 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     the offer has to be legible before the paywall, not after. */}
                 <div className="mt-2 rounded-2xl border border-border bg-background/95 backdrop-blur-sm px-4 py-3">
                   <p className="text-sm font-medium">
-                    Ask us to arrange the viewing and we deal with the agent for you.
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Tell us when you are free. We call the agent in Vietnamese, check the
-                    apartment is still available at the price listed, and confirm a time
-                    back to you - usually the same day.
+                    Tell us when you are free - we handle the agent.
                   </p>
                   <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
                     {[
-                      'No Vietnamese needed, and no giving out your number',
-                      'Availability and price checked before you travel',
-                      'Several viewings arranged into one trip',
+                      'No language barrier',
+                      'No phone number exposed',
+                      'No back-and-forth messaging',
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-1.5">
                         <Check className="w-3.5 h-3.5 mt-px flex-shrink-0 text-emerald-600" />
