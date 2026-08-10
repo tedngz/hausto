@@ -159,6 +159,9 @@ const RealtorApply = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to home
         </Button>
 
+        <h1 className="text-2xl md:text-3xl font-bold mb-6">Apply to List Your Properties</h1>
+
+
         {existing ? (
           <Card>
             <CardHeader>
