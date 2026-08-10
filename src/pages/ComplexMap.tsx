@@ -21,6 +21,9 @@ export default function ComplexMap() {
 
       <main className="min-h-screen bg-[#FAF9F6]">
         <section className="container mx-auto px-6 py-12 md:py-20 max-w-6xl">
+          <h1 className="font-serif text-3xl md:text-4xl tracking-tight text-center mb-8">
+            Map of Vetted Luxury Complexes in Vietnam
+          </h1>
           {isLoading ? (
             <div className="flex justify-center py-32">
               <Loader2 className="h-8 w-8 animate-spin text-[#0D4F4A]/40" aria-hidden />

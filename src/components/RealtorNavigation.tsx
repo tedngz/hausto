@@ -43,9 +43,9 @@ export const RealtorNavigation = ({
                 alt="Hausto Logo"
                 className="w-5 h-5 md:w-6 md:h-6"
               />
-              <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+              <div className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
                 Hausto
-              </h1>
+              </div>
             </div>
           </div>
 
@@ -66,7 +66,7 @@ export const RealtorNavigation = ({
           <div className="flex items-center min-w-0 z-10">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="p-1.5 md:p-2 h-8 md:h-9">
+                <Button variant="ghost" size="sm" aria-label="Open menu" className="p-1.5 md:p-2 h-8 md:h-9">
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
