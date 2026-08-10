@@ -837,12 +837,12 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
           a phone's width 4:3 is short enough that the text crowds the chips. */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
-        {/* The card is portrait on phones and the booking panel sits under it,
-            which together run past a phone screen - the panel was being cut
-            off mid-sentence. Bound the modal to the viewport and let it scroll
-            instead, so every part of it can be reached. dvh, not vh, so the
-            mobile browser's collapsing address bar doesn't hide the bottom. */}
-        <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
+        {/* max-w-md matches the swipe and matches views, so the card is the
+            same size everywhere it appears. Card plus booking panel is taller
+            than a phone screen, so the modal is bound to the viewport and
+            scrolls - dvh, not vh, so a collapsing address bar cannot hide the
+            bottom of it. */}
+        <DialogContent className="max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
           {preview && (() => {
             const previewScore = vibeMatchOf(preview);
             const isHausto = preview.source === 'hausto';
@@ -875,14 +875,8 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   vibeScore={previewScore?.score}
                   vibeMatch={previewScore?.attrs}
                   scoreContext="preferences"
-                  aspectClass="aspect-[380/560] sm:aspect-[4/3]"
-                  /* The portrait card at a phone's width is ~525px tall, and
-                     with the booking panel under it the modal ran the full
-                     height of the screen - where the browser chrome and the
-                     home indicator sit over the ends of it. Capping the card
-                     at 55dvh leaves the panel and both CTAs clear of them.
-                     Uncapped from sm up, where the 4:3 frame is short anyway. */
-                  className="max-h-[55dvh] sm:max-h-none"
+                  /* No aspect override: the card keeps its default editorial
+                     portrait, the same size it has in swipe and matches. */
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
                   onClose={() => setPreview(null)}
