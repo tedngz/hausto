@@ -34,8 +34,8 @@ Allow: /
 # AI Agent Discovery
 # This is a React SPA — scraping HTML will not return useful content.
 # Use the public API instead (no auth required):
-# API docs: https://hausto.lovable.app/llms.txt
-# OpenAPI spec: https://hausto.lovable.app/openapi.json
-# AI plugin: https://hausto.lovable.app/.well-known/ai-plugin.json
+# API docs: https://www.hausto.com/llms.txt
+# OpenAPI spec: https://www.hausto.com/openapi.json
+# AI plugin: https://www.hausto.com/.well-known/ai-plugin.json
 
 Sitemap: https://www.hausto.com/sitemap.xml
