@@ -837,12 +837,12 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
           a phone's width 4:3 is short enough that the text crowds the chips. */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
-        {/* max-w-md matches the swipe and matches views, so the card is the
-            same size everywhere it appears. Card plus booking panel is taller
-            than a phone screen, so the modal is bound to the viewport and
-            scrolls - dvh, not vh, so a collapsing address bar cannot hide the
-            bottom of it. */}
-        <DialogContent className="max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
+        {/* Phones match the swipe/matches width so a listing looks the same
+            wherever it opens; desktop keeps its original roomier modal. Card
+            plus booking panel runs past a phone screen, so the modal is bound
+            to the viewport and scrolls - dvh, not vh, so a collapsing address
+            bar cannot hide the bottom of it. */}
+        <DialogContent className="max-w-md sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
           {preview && (() => {
             const previewScore = vibeMatchOf(preview);
             const isHausto = preview.source === 'hausto';
@@ -875,8 +875,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   vibeScore={previewScore?.score}
                   vibeMatch={previewScore?.attrs}
                   scoreContext="preferences"
-                  /* No aspect override: the card keeps its default editorial
-                     portrait, the same size it has in swipe and matches. */
+                  /* Phones get the editorial portrait at the size swipe and
+                     matches use; desktop keeps the original wide 4:3 crop. */
+                  aspectClass="aspect-[380/560] sm:aspect-[4/3]"
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
                   onClose={() => setPreview(null)}
@@ -891,13 +892,18 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     the offer has to be legible before the paywall, not after. */}
                 <div className="mt-2 rounded-2xl border border-border bg-background/95 backdrop-blur-sm px-4 py-3">
                   <p className="text-sm font-medium">
-                    Let Hausto book the viewing for you - hassle-free, no language barriers, skip the endless back-and-forth.
+                    Ask us to arrange the viewing and we deal with the agent for you.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Tell us when you are free. We call the agent in Vietnamese, check the
+                    apartment is still available at the price listed, and confirm a time
+                    back to you - usually the same day.
                   </p>
                   <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
                     {[
-                      'We confirm it is still available before you travel',
-                      'An English-speaking coordinator handles the agent',
-                      'Book several viewings into one trip',
+                      'No Vietnamese needed, and no giving out your number',
+                      'Availability and price checked before you travel',
+                      'Several viewings arranged into one trip',
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-1.5">
                         <Check className="w-3.5 h-3.5 mt-px flex-shrink-0 text-emerald-600" />
@@ -911,7 +917,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                         ? quota?.unlimited
                           ? 'Unlimited viewings active this month'
                           : `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
-                        : 'Viewing coordination is a Premium feature'}
+                        : `Included with Premium - ${INCLUDED_VIEWINGS_PER_CYCLE} viewings a cycle`}
                     </span>
                     {originalHref && (
                       <a

@@ -983,6 +983,73 @@ interface ListingLink {
   price?: string;
 }
 
+// ─── Card-level image availability ──────────────────────────────
+// Most of what we pay for and then throw away is listings with no usable
+// photos: `no_fetchable_images` is the single biggest rejection reason, and by
+// the time we learn it we have already spent a detail fetch, an extraction
+// call and a vision pass. The search page already shows each listing's
+// thumbnails, so a card with no photo at all can be skipped for free.
+//
+// Counting is positional: find where the listing's slug appears in the search
+// HTML and look for image URLs in the surrounding markup. Cards are a few KB,
+// and neighbouring cards overlapping the window can only ADD images - which
+// makes the check under-reject rather than over-reject, the safe direction.
+const CARD_WINDOW_CHARS = 2500;
+
+const CARD_IMAGE_HOST: Record<string, RegExp> = {
+  batdongsan: /file\d*\.batdongsan\.com\.vn\/[^\s"'<>]+\.(?:jpe?g|png|webp)/gi,
+  nhatot: /cdn\.chotot\.com\/[^\s"'<>]+/gi,
+  housingsgn: /housingsgn\.com\/wp-content\/uploads\/[^\s"'<>]+\.(?:jpe?g|png|webp)/gi,
+};
+
+export function countCardImages(html: string, urls: string[], marketplace: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  const hostRe = CARD_IMAGE_HOST[marketplace];
+  if (!html || !hostRe) return counts;
+
+  for (const url of urls) {
+    const slug = (url.split('/').pop() || '').split('?')[0];
+    if (!slug) continue;
+    let found = 0;
+    let from = 0;
+    // A listing can appear more than once on a page (e.g. a "featured" strip);
+    // any occurrence showing a photo counts.
+    while (from < html.length) {
+      const at = html.indexOf(slug, from);
+      if (at === -1) break;
+      const window = html.slice(Math.max(0, at - CARD_WINDOW_CHARS), at + CARD_WINDOW_CHARS);
+      const matches = window.match(hostRe);
+      found = Math.max(found, matches ? new Set(matches).size : 0);
+      from = at + slug.length;
+      if (found > 0) break;
+    }
+    counts.set(url, found);
+  }
+  return counts;
+}
+
+// The check is only worth trusting when it demonstrably works on this page.
+// Lazy-loaded or SPA-rendered search results carry no image URLs in the HTML
+// at all, and acting on that would skip every listing. So the signal is used
+// only if most cards do show photos; otherwise the crawl proceeds as before.
+const CARD_SIGNAL_MIN_COVERAGE = 0.5;
+
+export function cardsWithoutImages(
+  html: string,
+  urls: string[],
+  marketplace: string,
+): { skip: Set<string>; trusted: boolean; coverage: number } {
+  const counts = countCardImages(html, urls, marketplace);
+  if (counts.size === 0) return { skip: new Set(), trusted: false, coverage: 0 };
+  const withImages = [...counts.values()].filter(n => n > 0).length;
+  const coverage = withImages / counts.size;
+  if (coverage < CARD_SIGNAL_MIN_COVERAGE) {
+    return { skip: new Set(), trusted: false, coverage };
+  }
+  const skip = new Set([...counts.entries()].filter(([, n]) => n === 0).map(([u]) => u));
+  return { skip, trusted: true, coverage };
+}
+
 // ─── URL Building ────────────────────────────────────────────────
 const PAGES_TO_SCRAPE = 3; // Scrape pages 1-3 of search results
 
@@ -1530,7 +1597,7 @@ CRITICAL INSTRUCTIONS:
 2. This is a SINGLE property detail page - extract ONE property with complete details
 3. Include ALL main property images from the list above. CRITICAL: Do NOT include images of OTHER properties (e.g. from the "Similar Properties" or "Related Listings" sections). Filter out thumbnails (e.g., images ending in -143x83.jpg or -525x328.jpg) and logos/icons.
 4. **TITLE**: Write a vibe-focused, evocative title that captures the STYLE and ATMOSPHERE of the space (e.g., "Sun-Drenched Minimalist Loft with Panoramic City Views", "Cozy Industrial-Chic Studio in Vibrant District 1", "Serene Japanese-Inspired Apartment with Rooftop Garden"). Do NOT use generic titles like "Modern Apartment for Rent" or just repeat the address.
-5. **DESCRIPTION**: Write a lifestyle-focused description (150-300 words) that emphasizes the VIBE, DESIGN AESTHETIC, and LIVING EXPERIENCE. Describe the atmosphere, natural light, design style, color palette, textures, and how the space FEELS to live in. Mention how the layout supports daily rituals (morning coffee, remote work, hosting friends). Weave in practical details naturally. Think of it as a lifestyle magazine feature, not a real estate listing.
+5. **DESCRIPTION**: 2-3 sentences, no more. Lead with how the place feels to live in - light, materials, atmosphere - and work in the layout and one or two practical details. A renter skims this on a phone next to the photos, so every sentence has to earn its place. No preamble, no summary sentence at the end.
 6. Extract ONLY physical amenities/features of the property (e.g., Air Conditioning, WiFi, Balcony, Washing Machine, Parking, Pool, Gym, Elevator, Security Camera). Do NOT include: deposit amounts, rental terms, apartment type/category, number of rooms, price info, floor number, building name, payment terms, or any non-physical attribute
 7. Extract contact info (name, phone) if visible - note that phone numbers may be partially masked with ***
 8. **LOCATION IS CRITICAL**: Extract the COMPLETE, FULL address exactly as shown on the page. Include street name, ward/phường, district/quận, and city. Keep the Vietnamese location names as-is (do NOT translate location names).
@@ -1546,7 +1613,7 @@ RESPOND WITH VALID JSON ONLY:
   "size": "25m²",
   "rooms": "Studio",
   "images": ["url1", "url2", ...],
-  "description": "Lifestyle-focused English description emphasizing vibe and atmosphere...",
+  "description": "2-3 sentences on how the place feels to live in",
   "amenities": ["Air Conditioning", "WiFi", ...],
   "contactName": "...",
   "contactPhone": "..."
@@ -1673,7 +1740,7 @@ For EACH property:
 - size: m² if available
 - rooms: Apartment type, one of: "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room"
 - images: 3-5 image URLs from above (MUST belong to this specific property)
-- description: 100-200 word English description
+- description: English, 2-3 sentences, no more
 - amenities: English amenity names
 - sourceUrl: Listing URL
 - contactName, contactPhone: If available
@@ -1880,6 +1947,7 @@ Deno.serve(async (req) => {
     const allLinks: string[] = [];
     let allMarkdown = '';
     let allHtml = '';
+    let allCardHtml = '';   // every page's markup, for the card-image check
     let firstPageSuccess = false;
 
     for (let page = 1; page <= effectivePagesToScrape; page++) {
@@ -1931,6 +1999,7 @@ Deno.serve(async (req) => {
         allLinks.push(...pageLinks);
         allMarkdown += `\n--- PAGE ${page} ---\n` + pageMarkdown;
         if (page === 1) allHtml = html;
+        allCardHtml += html || '';
 
         console.log(`[Phase 1] Page ${page}: ${pageMarkdown.length} chars, ${pageLinks.length} links`);
 
@@ -1963,10 +2032,23 @@ Deno.serve(async (req) => {
     // Drop agency portfolio ads before the detail pages are scraped - their
     // slugs and search-result titles already say what they are, so there is no
     // reason to spend a Firecrawl credit and a vision pass finding out.
-    const listingLinks = allListingLinks.filter(l => !isBatchInventoryListing(l.url, (l as any).title));
-    const batchAdsSkipped = allListingLinks.length - listingLinks.length;
+    const notBatchAds = allListingLinks.filter(l => !isBatchInventoryListing(l.url, (l as any).title));
+    const batchAdsSkipped = allListingLinks.length - notBatchAds.length;
     if (batchAdsSkipped > 0) {
       console.log(`[Pre-scrape] Skipped ${batchAdsSkipped} batch-inventory ad(s)`);
+    }
+
+    // A listing whose search-result card shows no photo will not survive the
+    // image checks later, so skip it before it costs a detail fetch. Ignored
+    // when the page turns out not to carry card images at all.
+    const cardCheck = cardsWithoutImages(allCardHtml, notBatchAds.map(l => l.url), marketplace);
+    const listingLinks = cardCheck.trusted
+      ? notBatchAds.filter(l => !cardCheck.skip.has(l.url))
+      : notBatchAds;
+    if (cardCheck.trusted) {
+      console.log(`[Pre-scrape] Card images visible for ${Math.round(cardCheck.coverage * 100)}% of listings; skipped ${cardCheck.skip.size} with none`);
+    } else {
+      console.log(`[Pre-scrape] Card-image signal unusable (${Math.round(cardCheck.coverage * 100)}% coverage) - not filtering on it`);
     }
 
     let properties: ExternalProperty[] = [];

@@ -175,7 +175,7 @@ SOURCE URL: ${sourceUrl}
 INSTRUCTIONS:
 1. ALL text in ENGLISH (translate Vietnamese), but keep LOCATION names in Vietnamese.
 2. TITLE: vibe-focused, evocative (e.g. "Sun-Drenched Minimalist Loft with City Views"). Avoid generic titles.
-3. DESCRIPTION: 150-300 words, lifestyle/atmosphere-focused.
+3. DESCRIPTION: 2-3 sentences, no more - how the place feels to live in, plus a practical detail or two.
 4. AMENITIES: only physical features (Air Conditioning, WiFi, Balcony, Pool, Gym, Parking, Elevator). Exclude prices/terms/room counts/floor.
 5. LOCATION: full address (street, ward, district, city) in Vietnamese.
 6. ROOMS: must be one of "Studio", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms", "Penthouse", "Shared Room".

@@ -491,7 +491,7 @@ export const EditorialPropertyCard = ({
         {/* Wraps rather than squeezing: at phone widths a price plus two CTAs
             (contact + schedule) doesn't fit on one line. */}
         <div className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-t border-white/30 ${compact ? 'pt-1.5' : 'pt-2.5'}`}>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-shrink">
             <span className={`text-white/80 line-clamp-1 ${compact ? 'text-[11px]' : 'text-[13px]'}`}>{spec}</span>
             {hasAmenities && (
               <button
@@ -509,7 +509,11 @@ export const EditorialPropertyCard = ({
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
+          {/* When this group wraps onto its own line (phone widths), it spans
+              the row so the price sits under the spec on the left and the CTAs
+              stay on the right edge, rather than the two bunching together
+              mid-row. Inline and right-aligned once there is room for it. */}
+          <div className="flex items-center gap-3 flex-shrink-0 w-full justify-between sm:w-auto sm:justify-end">
             <span className={`font-semibold whitespace-nowrap ${compact ? 'text-sm' : 'text-lg'}`}>
               {formatPrice(apartment.price)}
               <span className={`font-normal text-white/80 ${compact ? 'text-[10px]' : 'text-xs'}`}> /mo</span>
