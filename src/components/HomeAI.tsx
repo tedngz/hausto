@@ -929,7 +929,7 @@ export const HomeAI = ({
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-tight">
                 {quota?.trialAvailable
-                  ? 'Your first viewing coordination is free'
+                  ? 'Your first viewing is on us'
                   : canFastTrack
                     ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
                     : 'Hausto books the viewings for you'}

@@ -88,6 +88,12 @@ const MAX_UPSCALE = 1.2;
 // sm up), so this is measured against the frame actually on screen.
 const MAX_CROP = 0.2;
 
+// Phone layout: the card is portrait here and the bottom text stack takes a
+// real share of it, which is what the letterbox inset below reacts to.
+const NARROW_QUERY = typeof window !== 'undefined'
+  ? window.matchMedia('(max-width: 639px)')
+  : ({ matches: false, addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList);
+
 const RATING_DOT: Record<string, string> = {
   perfect: 'bg-emerald-400',
   strong: 'bg-blue-400',
@@ -125,6 +131,13 @@ export const EditorialPropertyCard = ({
   const [noHover, setNoHover] = useState(false);
   const [tapReveal, setTapReveal] = useState(false);
   const [showAmenities, setShowAmenities] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentH, setContentH] = useState(0);
+  // Swipe bookkeeping: start point, and a flag so the tap that ends a swipe
+  // doesn't also open the card or toggle the description.
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipedRef = useRef(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -137,6 +150,29 @@ export const EditorialPropertyCard = ({
     const onChange = (e: MediaQueryListEvent) => setNoHover(e.matches);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // The card is portrait on phones and 4:3 from sm up; a few layout rules
+  // (see the letterbox inset below) only apply to the phone layout.
+  useEffect(() => {
+    const sync = () => setIsNarrow(NARROW_QUERY.matches);
+    sync();
+    NARROW_QUERY.addEventListener('change', sync);
+    return () => NARROW_QUERY.removeEventListener('change', sync);
+  }, []);
+
+  // Height of the bottom text stack, so a letterboxed photo can be kept clear of it.
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    // offsetHeight, not a bounding rect: the card can sit inside a scaled
+    // dialog, and a rect would report the scaled size instead of the layout one.
+    const measure = () => setContentH(el.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // Probe each photo as it comes into view and decide how it should sit in the
@@ -175,6 +211,10 @@ export const EditorialPropertyCard = ({
     let last = el.getBoundingClientRect().width;
     const ro = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width ?? last;
+      // Re-read the breakpoint here too: the card resizing is the signal that
+      // actually matters, and it arrives even where a media-query change event
+      // doesn't (emulated viewports, some in-app webviews).
+      setIsNarrow(NARROW_QUERY.matches);
       if (Math.abs(w - last) < 24) return;   // ignore scrollbar-level jitter
       last = w;
       setFits({});
@@ -192,14 +232,41 @@ export const EditorialPropertyCard = ({
   // card, and clamped so an extreme panorama or a tall portrait still reads as
   // a card. Grid callers leave this off and keep their fixed rhythm.
 
-  const go = (delta: number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const step = (delta: number) => {
     setTapReveal(false);
     setCurrent(c => {
       const next = (c + delta + images.length) % images.length;
       onImageIndexChange?.(next);
       return next;
     });
+  };
+
+  const go = (delta: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    step(delta);
+  };
+
+  // Horizontal swipe flips photos on touch devices. Vertical-leaning drags are
+  // left alone so the page/modal underneath still scrolls normally.
+  const SWIPE_MIN = 45;
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Cleared here rather than on the click that follows: a swipe does not
+    // always produce one, and a stale flag would swallow the next real tap.
+    swipedRef.current = false;
+    if (images.length < 2) return;
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) <= Math.abs(dy)) return;
+    swipedRef.current = true;
+    step(dx < 0 ? 1 : -1);
   };
 
   const displayTitle = useMemo(() => normalizeRepeatedTitle(apartment.title ?? ''), [apartment.title]);
@@ -237,6 +304,12 @@ export const EditorialPropertyCard = ({
     if (days === 0) return 'Verified live today';
     return `Verified live ${days}d ago`;
   }, [apartment.last_verified_at]);
+  // A letterboxed photo is centred in the card, which on a phone puts it right
+  // behind the title/caption block while dead space sits above. Shrink its box
+  // by the height of that block so the photo settles above the text instead.
+  const photoInset = isNarrow && fit === 'contain' && contentH > 0
+    ? contentH + (compact ? 16 : 20)   // matches the stack's own bottom offset
+    : 0;
   const arrowsVisible = hover || noHover;
   // Desktop reveals the description on hover; touch devices (no hover) reveal it
   // on tap of the cover image instead of showing it permanently.
@@ -296,7 +369,15 @@ export const EditorialPropertyCard = ({
       className={`group relative w-full ${aspectClass} overflow-hidden rounded-[20px] bg-foreground shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] select-none ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      onClick={onCardClick}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onClick={() => {
+        if (swipedRef.current) {
+          swipedRef.current = false;
+          return;
+        }
+        onCardClick?.();
+      }}
       role={onCardClick ? 'button' : undefined}
     >
       {/* Blurred fill behind letterboxed portrait photos */}
@@ -312,8 +393,11 @@ export const EditorialPropertyCard = ({
       <img loading="lazy"
         src={images[current]}
         alt={`${displayTitle} — photo ${current + 1} of ${images.length}`}
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-x-0 top-0 w-full"
         style={{
+          // An explicit height, not a `bottom` offset: a replaced element with
+          // auto height ignores `bottom` and just renders at its own aspect.
+          height: photoInset ? `calc(100% - ${photoInset}px)` : '100%',
           objectFit: fit,
           objectPosition: 'center',
           transition: `transform 1200ms ${EASE}`,
@@ -323,6 +407,7 @@ export const EditorialPropertyCard = ({
         onClick={e => {
           // On touch devices, tap the cover photo to reveal/hide the description
           // instead of showing it permanently. Let other taps fall through to onCardClick.
+          if (swipedRef.current) return;
           if (noHover && isFirstImage && revealText) {
             e.stopPropagation();
             setTapReveal(v => !v);
@@ -365,11 +450,11 @@ export const EditorialPropertyCard = ({
           >
             <button
               aria-label="View match scoring details"
-              className="flex items-center gap-1.5 rounded-full bg-black/35 backdrop-blur-md px-3 py-1.5 text-white hover:bg-black/55 transition-colors"
+              className={`flex items-center gap-1.5 rounded-full bg-black/35 backdrop-blur-md text-white/90 whitespace-nowrap hover:bg-black/55 transition-colors ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}
               onClick={e => e.stopPropagation()}
             >
-              <span className={`w-2 h-2 rounded-full ${RATING_DOT[ratingLabel] || 'bg-gray-300'}`} />
-              <span className="font-mono text-[11px] tracking-[0.14em] uppercase">{ratingLabel} match</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${RATING_DOT[ratingLabel] || 'bg-gray-300'}`} />
+              <span className="font-mono tracking-[0.14em] uppercase">{ratingLabel} match</span>
             </button>
           </VibeMatchPopover>
         ) : null}
@@ -444,7 +529,10 @@ export const EditorialPropertyCard = ({
       )}
 
       {/* Bottom content stack — always visible, no hover needed */}
-      <div className={`absolute text-white text-left flex flex-col ${compact ? 'left-4 right-4 bottom-4 gap-1.5' : 'left-5 right-5 bottom-5 gap-2.5'}`}>
+      <div
+        ref={contentRef}
+        className={`absolute text-white text-left flex flex-col ${compact ? 'left-4 right-4 bottom-4 gap-1.5' : 'left-5 right-5 bottom-5 gap-2.5'}`}
+      >
         {/* Title + location live on the cover (first image) only */}
         {isFirstImage && (
           <div className={`flex flex-col ${compact ? 'gap-1' : 'gap-1.5'}`}>

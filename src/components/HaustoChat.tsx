@@ -692,7 +692,7 @@ export const HaustoChat = ({
                         onClick={handleScheduleViewingChip}
                         className="h-8 text-xs rounded-full px-3 sm:px-4 bg-orange-50/80 hover:bg-orange-100 text-orange-700 border-orange-200 hover:border-orange-300 font-medium shadow-sm transition-colors"
                         title={quota?.trialAvailable
-                          ? 'Your first viewing coordination is free — Hausto books it for you'
+                          ? 'Your first viewing is on us - Hausto books it for you'
                           : 'Skip the back-and-forth — Hausto books the viewings for you'}
                       >
                         <span className="sm:hidden">⚡ Fast-Track</span>

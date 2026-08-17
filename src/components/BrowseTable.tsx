@@ -897,13 +897,13 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     the offer has to be legible before the paywall, not after. */}
                 <div className="mt-2 rounded-2xl border border-border bg-background/95 backdrop-blur-sm px-4 py-3">
                   <p className="text-sm font-medium">
-                    Tell us when you are free - we handle the agent.
+                    Book viewing with us - just pick a time. We'll arrange with the agent/owner.
                   </p>
                   <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
                     {[
-                      'No language barrier',
-                      'No phone number exposed',
-                      'No back-and-forth messaging',
+                      'English-speaking coordination',
+                      'Complete privacy - no spam or shared contact info',
+                      'Zero back-and-forth messaging',
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-1.5">
                         <Check className="w-3.5 h-3.5 mt-px flex-shrink-0 text-emerald-600" />
@@ -916,12 +916,12 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                       {quota?.unlimited
                         ? 'Unlimited viewings active this month'
                         : quota?.trialAvailable
-                          ? 'Your first viewing coordination is free'
+                          ? 'Your first viewing is on us'
                           : quota?.trialUsed
                             ? `Free trial used - Premium includes ${INCLUDED_VIEWINGS_PER_CYCLE} a cycle`
                             : subscribed
                               ? `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
-                              : 'Your first viewing coordination is free'}
+                              : 'Your first viewing is on us'}
                     </span>
                     {originalHref && (
                       <a
