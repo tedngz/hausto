@@ -836,10 +836,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         </div>
       )}
 
-      {/* In-place property preview: full editorial card with like, no page change.
-          4:3 here on desktop only — the wide dialog gives the photo room. The
-          rest of the app, and this modal on phones, keep the portrait card: at
-          a phone's width 4:3 is short enough that the text crowds the chips. */}
+      {/* In-place property preview: the platform's listing card with like, no
+          page change. The card sizes its own gallery and flows the details
+          below it, so this modal only has to decide how wide it gets. */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
         {/* Phones match the swipe/matches width so a listing looks the same
@@ -871,18 +870,21 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     highlights: preview.highlights,
                     amenities: preview.amenities,
                     last_verified_at: preview.last_verified_at,
-                    // Reconstruct per-image analyses so the card shows the
-                    // detailed highlight per photo, not just the vibe word.
-                    vibe_analysis: (preview.image_highlights && preview.image_highlights.length > 0)
-                      ? { image_analyses: preview.image_highlights.map((h, i) => ({ image_index: i, image_highlight: h })) }
+                    // Reconstruct the analysis the card reads: the style tags
+                    // behind its vibe badge, plus per-image analyses so it shows
+                    // the detailed highlight per photo, not just the vibe word.
+                    vibe_analysis: (preview.style_tags?.length || preview.image_highlights?.length)
+                      ? {
+                          ...(preview.style_tags?.length ? { styles: preview.style_tags } : {}),
+                          ...(preview.image_highlights?.length
+                            ? { image_analyses: preview.image_highlights.map((h, i) => ({ image_index: i, image_highlight: h })) }
+                            : {}),
+                        }
                       : undefined,
                   }}
                   vibeScore={previewScore?.score}
                   vibeMatch={previewScore?.attrs}
                   scoreContext="preferences"
-                  /* Phones get the editorial portrait at the size swipe and
-                     matches use; desktop keeps the original wide 4:3 crop. */
-                  aspectClass="aspect-[380/560] sm:aspect-[4/3]"
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
                   onClose={() => setPreview(null)}
@@ -897,7 +899,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                     the offer has to be legible before the paywall, not after. */}
                 <div className="mt-2 rounded-2xl border border-border bg-background/95 backdrop-blur-sm px-4 py-3">
                   <p className="text-sm font-medium">
-                    Book viewing with us - just pick a time. We'll arrange with the agent/owner.
+                    Book viewing with us - Just pick a time, we'll arrange with the agent/owner.
                   </p>
                   <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
                     {[
