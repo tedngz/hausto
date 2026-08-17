@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyListingCard } from '@/components/PropertyListingCard';
+import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { HaustoChat } from '@/components/HaustoChat';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { useMatches } from '@/hooks/useMatches';
@@ -29,6 +30,8 @@ const PropertyDetail = () => {
   const [showRealtorProfile, setShowRealtorProfile] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [source, setSource] = useState<'internal' | 'external'>('internal');
+  const [isRelist, setIsRelist] = useState(false);
+  const [firstSeenAt, setFirstSeenAt] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatConversationId, setChatConversationId] = useState<string | null>(null);
   const [isContacting, setIsContacting] = useState(false);
@@ -117,6 +120,8 @@ const PropertyDetail = () => {
           setApartment(transformedApartment);
         } else if (data.source === 'external') {
           const extProperty = data.property;
+          setIsRelist(!!extProperty.is_relist);
+          setFirstSeenAt(extProperty.created_at ?? null);
           const transformedApartment: Apartment = {
             id: extProperty.id,
             images: extProperty.images || [],
@@ -290,6 +295,13 @@ const PropertyDetail = () => {
               isContacting={isContacting}
             />
           </div>
+
+          <ListingHistoryNote
+            listingId={apartment.id}
+            enabled={source === 'external'}
+            firstSeenAt={firstSeenAt}
+            isRelist={isRelist}
+          />
 
           {!user && (
             <Card className="mt-4 max-w-[760px] mx-auto">

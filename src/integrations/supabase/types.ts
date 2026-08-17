@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ai_search_results: {
@@ -601,6 +626,7 @@ export type Database = {
           image_location_conflict: boolean
           images: string[] | null
           is_active: boolean | null
+          is_relist: boolean
           last_verification_reason: string | null
           last_verification_status: string | null
           last_verified_at: string | null
@@ -642,6 +668,7 @@ export type Database = {
           image_location_conflict?: boolean
           images?: string[] | null
           is_active?: boolean | null
+          is_relist?: boolean
           last_verification_reason?: string | null
           last_verification_status?: string | null
           last_verified_at?: string | null
@@ -683,6 +710,7 @@ export type Database = {
           image_location_conflict?: boolean
           images?: string[] | null
           is_active?: boolean | null
+          is_relist?: boolean
           last_verification_reason?: string | null
           last_verification_status?: string | null
           last_verified_at?: string | null
@@ -707,6 +735,53 @@ export type Database = {
           vibe_status?: string
         }
         Relationships: []
+      }
+      external_property_snapshots: {
+        Row: {
+          contact_phone_hash: string | null
+          content_hash: string
+          id: number
+          is_active: boolean
+          listing_id: string
+          observed_at: string
+          price: number | null
+          rooms: string | null
+          size: string | null
+          title: string | null
+        }
+        Insert: {
+          contact_phone_hash?: string | null
+          content_hash: string
+          id?: number
+          is_active?: boolean
+          listing_id: string
+          observed_at?: string
+          price?: number | null
+          rooms?: string | null
+          size?: string | null
+          title?: string | null
+        }
+        Update: {
+          contact_phone_hash?: string | null
+          content_hash?: string
+          id?: number
+          is_active?: boolean
+          listing_id?: string
+          observed_at?: string
+          price?: number | null
+          rooms?: string | null
+          size?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_property_snapshots_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "external_properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fast_track_requests: {
         Row: {
@@ -774,6 +849,7 @@ export type Database = {
         Row: {
           city: string | null
           created_at: string
+          first_seen_at: string | null
           id: string
           member_count: number
           price_max: number | null
@@ -782,11 +858,13 @@ export type Database = {
           representative_id: string | null
           rooms: string | null
           size_sqm: number | null
+          total_member_count: number
           updated_at: string
         }
         Insert: {
           city?: string | null
           created_at?: string
+          first_seen_at?: string | null
           id?: string
           member_count?: number
           price_max?: number | null
@@ -795,11 +873,13 @@ export type Database = {
           representative_id?: string | null
           rooms?: string | null
           size_sqm?: number | null
+          total_member_count?: number
           updated_at?: string
         }
         Update: {
           city?: string | null
           created_at?: string
+          first_seen_at?: string | null
           id?: string
           member_count?: number
           price_max?: number | null
@@ -808,6 +888,7 @@ export type Database = {
           representative_id?: string | null
           rooms?: string | null
           size_sqm?: number | null
+          total_member_count?: number
           updated_at?: string
         }
         Relationships: []
@@ -1480,6 +1561,10 @@ export type Database = {
         Args: { user_email: string }
         Returns: undefined
       }
+      can_create_fast_track_request: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       cleanup_expired_external_properties: { Args: never; Returns: undefined }
       deactivate_expired_properties: { Args: never; Returns: undefined }
       detect_city: { Args: { location_text: string }; Returns: string }
@@ -1647,6 +1732,7 @@ export type Database = {
       }
       normalize_location: { Args: { location_text: string }; Returns: string }
       openai_spend_today: { Args: never; Returns: number }
+      prune_orphan_listing_group_refs: { Args: never; Returns: number }
       set_fast_track_archived: {
         Args: { _archived: boolean; _request_id: string }
         Returns: {
@@ -1792,6 +1878,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user", "realtor"],

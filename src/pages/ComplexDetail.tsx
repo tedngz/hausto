@@ -16,6 +16,7 @@ import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
 import { useComplexes } from '@/hooks/useComplexes';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
+import { ComplexPriceBands } from '@/components/ComplexPriceBands';
 
 const ROOM_LABEL: Record<string, string> = {
   studio: 'Studio', '1br': '1 Bedroom', '2br': '2 Bedroom', '3br': '3 Bedroom', '4br': '4 Bedroom',
@@ -319,6 +320,12 @@ export default function ComplexDetail() {
                     <Badge variant="secondary">{listings.length} active</Badge>
                   )}
                 </div>
+
+                {!listingsLoading && (
+                  <div className="mb-4">
+                    <ComplexPriceBands listings={listings} complexName={complex.name} />
+                  </div>
+                )}
 
                 {listingsLoading ? (
                   <div className="grid sm:grid-cols-2 gap-4">
