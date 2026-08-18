@@ -1,0 +1,26 @@
+diff --git a/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.cjs b/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.cjs
+index c12d1cb..4cc6e4d 100644
+--- a/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.cjs
++++ b/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.cjs
+@@ -121,7 +121,7 @@ function externalizeBareAsNpm(versions) {
+     setup(pluginBuild) {
+       pluginBuild.onResolve({ filter: /.*/ }, (args) => {
+         const p = args.path;
+-        if (p.startsWith(".") || p.startsWith("/"))
++        if (p.startsWith(".") || p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\"))
+           return null;
+         if (/^(npm|node|jsr|https?|data):/.test(p))
+           return { path: p, external: true };
+diff --git a/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.js b/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.js
+index 6c2a266..5d29801 100644
+--- a/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.js
++++ b/node_modules/@lovable.dev/mcp-js/dist/stacks/supabase/vite.js
+@@ -87,7 +87,7 @@ function externalizeBareAsNpm(versions) {
+     setup(pluginBuild) {
+       pluginBuild.onResolve({ filter: /.*/ }, (args) => {
+         const p = args.path;
+-        if (p.startsWith(".") || p.startsWith("/"))
++        if (p.startsWith(".") || p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\"))
+           return null;
+         if (/^(npm|node|jsr|https?|data):/.test(p))
+           return { path: p, external: true };
