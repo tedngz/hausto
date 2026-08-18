@@ -7,8 +7,10 @@
 // counter shared by every isolate that survives restarts.
 //
 // Falls back to a per-isolate Map when Redis is unconfigured so local dev still
-// works; that fallback is the old weak behaviour, which is why the budget guard
-// in openai-usage.ts stays the real backstop.
+// works, but that fallback is close to no limit at all in production: ten
+// sequential requests to this project each booted their own isolate, so each
+// one would start from a clean counter. The budget guard in openai-usage.ts is
+// the real backstop.
 
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
 const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
@@ -16,20 +18,38 @@ const UPSTASH_REDIS_REST_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 /**
  * The client's IP as far as it can be trusted.
  *
- * The gateway APPENDS the real peer to whatever X-Forwarded-For the caller
- * sent, so the leftmost entry is attacker-controlled free text and the
- * rightmost is the one the platform wrote. Reading `[0]` - the usual idiom -
- * means a request can pick its own rate-limit bucket per call.
+ * Measured against the deployed edge runtime, one request looks like:
+ *
+ *   x-forwarded-for: "113.22.112.214,113.22.112.214, 99.82.173.50"
+ *   cf-connecting-ip: "113.22.112.214"
+ *
+ * Two things follow, and both are easy to get wrong:
+ *
+ * - The RIGHTMOST X-Forwarded-For entry is an AWS edge hop that changes on
+ *   every single request (99.82.173.50, then .49, then 99.83.104.110). Keying
+ *   on it hands each request its own bucket, so nothing is ever limited - it
+ *   looks like a working limiter and is not one.
+ * - Cloudflare sits in front and rewrites the chain, so a caller-supplied
+ *   X-Forwarded-For never reaches us (a request sent with 9.9.9.9 arrived with
+ *   the header above, unchanged).
+ *
+ * cf-connecting-ip is the one Cloudflare writes itself and cannot be forged
+ * from outside, so it leads. The X-Forwarded-For fallback takes the LEFTMOST
+ * entry, which is the real client on this path.
  */
 export function clientIp(req: Request): string {
+  const cf = req.headers.get('cf-connecting-ip');
+  if (cf) return cf.trim();
+
+  const real = req.headers.get('x-real-ip');
+  if (real) return real.trim();
+
   const xff = req.headers.get('x-forwarded-for');
   if (xff) {
-    const parts = xff.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length > 0) return parts[parts.length - 1];
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
   }
-  return req.headers.get('cf-connecting-ip')
-    || req.headers.get('x-real-ip')
-    || 'unknown';
+  return 'unknown';
 }
 
 async function redis(path: string): Promise<unknown> {
