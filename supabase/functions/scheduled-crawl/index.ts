@@ -107,32 +107,53 @@ function selfInvokeFallback(payload: Record<string, unknown>, delaySec = 5): boo
 }
 
 async function qstashPublish(payload: Record<string, unknown>, delaySec = 5): Promise<boolean> {
-  if (QSTASH_TOKEN) {
-    try {
-      const res = await fetch(`https://qstash.upstash.io/v2/publish/${FUNCTION_URL}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${QSTASH_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Upstash-Delay': `${delaySec}s`,
-          'Upstash-Retries': '2',
-        },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        console.log(`[scheduled-crawl] QStash self-chain published: messageId=${data.messageId}`);
-        return true;
-      }
-      console.error('[scheduled-crawl] QStash publish failed. Not falling back to self-invoke because QSTASH_TOKEN is configured:', data);
-      return false;
-    } catch (e) {
-      console.error('[scheduled-crawl] QStash publish error. Not falling back to self-invoke because QSTASH_TOKEN is configured:', e);
-      return false;
-    }
-  } else {
+  if (!QSTASH_TOKEN) {
     console.log('[scheduled-crawl] QSTASH_TOKEN not set, using self-invoke fallback');
     return selfInvokeFallback(payload, delaySec);
+  }
+
+  try {
+    const res = await fetch(`https://qstash.upstash.io/v2/publish/${FUNCTION_URL}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${QSTASH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Upstash-Delay': `${delaySec}s`,
+        'Upstash-Retries': '2',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      console.log(`[scheduled-crawl] QStash self-chain published: messageId=${data.messageId}`);
+      return true;
+    }
+
+    // A 4xx is QStash saying it did NOT take the message - a rejected token, a
+    // malformed target URL. Nothing is queued, so self-invoking cannot
+    // double-process the payload, and refusing to fall back only stalls the
+    // chain until the next cron tick. That is what a rotated QSTASH_TOKEN did
+    // here: every run logged one line and quietly dropped its continuation.
+    //
+    // 5xx and network errors keep the old no-fallback behaviour on purpose -
+    // there the message may well have been accepted before the response was
+    // lost, and self-invoking on top of it would run the work twice.
+    console.error(`[scheduled-crawl] QStash publish rejected (HTTP ${res.status}):`, data);
+    if (res.status === 401 || res.status === 403) {
+      console.error(
+        '[scheduled-crawl] QSTASH_TOKEN is set but Upstash rejects it. Rotate the token in the Upstash console '
+        + 'and re-set the secret; chaining is running on the self-invoke fallback until then.',
+      );
+    }
+    if (res.status >= 400 && res.status < 500) {
+      return selfInvokeFallback(payload, delaySec);
+    }
+    return false;
+  } catch (e) {
+    console.error(
+      '[scheduled-crawl] QStash publish error - not falling back, the message may have been accepted:', e,
+    );
+    return false;
   }
 }
 
