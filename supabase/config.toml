@@ -114,3 +114,6 @@ verify_jwt = false
 
 [functions.concierge-email-reply]
 verify_jwt = true
+
+[functions.ai-assistant]
+verify_jwt = true
