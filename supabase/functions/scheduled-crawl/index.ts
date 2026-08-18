@@ -74,6 +74,41 @@ async function verifyQStashSignature(signature: string, body: string): Promise<b
   return false;
 }
 
+// Never returns the secret itself - verify_cron_secret() is SECURITY DEFINER
+// and answers with a boolean, so the plaintext stays inside the database.
+async function isValidCronSecret(supabase: any, token: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc('verify_cron_secret', { _token: token });
+    if (error) {
+      console.error('[scheduled-crawl] cron secret check failed:', error.message);
+      return false;
+    }
+    return data === true;
+  } catch (e) {
+    console.error('[scheduled-crawl] cron secret check error:', e);
+    return false;
+  }
+}
+
+async function isAdminUser(supabase: any, token: string): Promise<boolean> {
+  if (!token || token === SUPABASE_SERVICE_ROLE_KEY) return false;
+  try {
+    const { data: userData } = await supabase.auth.getUser(token);
+    const userId = userData?.user?.id;
+    if (!userId) return false;
+    const { data: role } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+      .maybeSingle();
+    return !!role;
+  } catch (e) {
+    console.error('[scheduled-crawl] admin check error:', e);
+    return false;
+  }
+}
+
 // ===== QStash self-chaining: publish a follow-up message =====
 // Fallback fire-and-forget self-invocation (used when QStash isn't available)
 function selfInvokeFallback(payload: Record<string, unknown>, delaySec = 5): boolean {
@@ -556,31 +591,46 @@ Deno.serve(async (req) => {
   let body: Record<string, any> = {};
   try { body = JSON.parse(rawBody); } catch { /* empty body */ }
 
-  // ===== Authorization: QStash signature OR service role key =====
+  // ===== Authorization =====
+  // A run scrapes marketplaces and spends OpenAI budget on vibe analysis, so
+  // every caller has to prove it is one of the four legitimate ones:
+  //
+  //   pg_cron          x-cron-secret header, checked against Vault
+  //   QStash           signed message (self-chained continuations)
+  //   self-invoke      service-role key (the QStash fallback path)
+  //   admin tools page a signed-in user holding the admin role
+  //
+  // This used to end in `isAuthorized = true` for everything else, on the
+  // grounds that pg_cron authenticates with the anon key. The anon key is
+  // published in the client bundle, so that check could not tell pg_cron apart
+  // from any stranger with curl - the endpoint was open. pg_cron now sends a
+  // dedicated secret instead (20260818140000_scheduled_crawl_cron_auth.sql).
   const qstashSignature = req.headers.get('upstash-signature');
-  const authHeader = req.headers.get('authorization') || '';
-  let isAuthorized = false;
+  const cronSecret = req.headers.get('x-cron-secret') || '';
+  const authToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
 
   if (qstashSignature) {
-    // Verify QStash signature
-    isAuthorized = await verifyQStashSignature(qstashSignature, rawBody);
-    if (isAuthorized) {
-      console.log('[scheduled-crawl] Authorized via QStash signature');
-    } else {
+    const validSignature = await verifyQStashSignature(qstashSignature, rawBody);
+    if (!validSignature) {
       console.log('[scheduled-crawl] QStash signature verification failed');
       return new Response(JSON.stringify({ error: 'Invalid QStash signature' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-  } else if (authHeader.includes(SUPABASE_SERVICE_ROLE_KEY)) {
-    // Service role key (pg_cron, admin tools, manual triggers)
-    isAuthorized = true;
+    console.log('[scheduled-crawl] Authorized via QStash signature');
+  } else if (cronSecret && await isValidCronSecret(supabase, cronSecret)) {
+    console.log('[scheduled-crawl] Authorized via cron secret');
+  } else if (authToken && authToken === SUPABASE_SERVICE_ROLE_KEY) {
     console.log('[scheduled-crawl] Authorized via service role key');
+  } else if (await isAdminUser(supabase, authToken)) {
+    console.log('[scheduled-crawl] Authorized via admin user');
   } else {
-    // Allow anon key calls too (pg_cron uses anon key in some setups)
-    isAuthorized = true;
-    console.log('[scheduled-crawl] Accepting request (open access for pg_cron compatibility)');
+    console.warn('[scheduled-crawl] Rejected unauthorized request');
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -595,30 +645,15 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === 'set-config') {
-      // Config writes are privileged: service role or an admin-role user only.
-      // (The function is verify_jwt=false for cron/QStash, which previously
-      // left this endpoint writable by anyone.)
-      const authToken = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-      if (authToken !== SUPABASE_SERVICE_ROLE_KEY) {
-        const authed = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        const { data: userData } = await authed.auth.getUser(authToken);
-        const userId = userData?.user?.id;
-        let isAdmin = false;
-        if (userId) {
-          const { data: role } = await authed
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', userId)
-            .eq('role', 'admin')
-            .maybeSingle();
-          isAdmin = !!role;
-        }
-        if (!isAdmin) {
-          console.warn('[scheduled-crawl] Unauthorized set-config attempt');
-          return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
-            status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+      // Checked separately from the top-level gate on purpose: pg_cron is
+      // allowed to start a crawl and has no business rewriting the schedule
+      // while it is at it. Service role or an admin-role user only.
+      const configToken = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+      if (configToken !== SUPABASE_SERVICE_ROLE_KEY && !(await isAdminUser(supabase, configToken))) {
+        console.warn('[scheduled-crawl] Unauthorized set-config attempt');
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
       const currentConfig = await getConfig();
       const newConfig: CrawlConfig = {
