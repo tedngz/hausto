@@ -8,7 +8,7 @@
 // Audited listings are stamped so repeat runs skip them.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { logOpenAIUsage } from '../_shared/openai-usage.ts';
+import { logOpenAIUsage, isOpenAIBudgetExhausted } from '../_shared/openai-usage.ts';
 import {
   MIN_DISPLAY_IMAGES, interiorMajority,
   isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel, isAnimatedOrVideoBytes,
@@ -132,6 +132,31 @@ Images are given in order, index 0 first. Return ONLY valid JSON:
   }
 }
 
+type Gate = { ok: true } | { ok: false; status: number; error: string };
+
+async function requireServiceRoleOrAdmin(req: Request, supabase: any): Promise<Gate> {
+  const token = (req.headers.get('Authorization') || req.headers.get('authorization') || '')
+    .replace(/^Bearer\s+/i, '')
+    .trim();
+  if (!token) return { ok: false, status: 401, error: 'Unauthorized' };
+
+  if (token === (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')) return { ok: true };
+
+  // A bare anon/publishable key is public, so it is explicitly not enough.
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+  const publishableKey = Deno.env.get('VITE_SUPABASE_PUBLISHABLE_KEY') ?? '';
+  if (token === anonKey || (publishableKey && token === publishableKey)) {
+    return { ok: false, status: 403, error: 'Forbidden: admin required' };
+  }
+
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user) return { ok: false, status: 401, error: 'Unauthorized' };
+
+  const { data: isAdmin } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
+  if (!isAdmin) return { ok: false, status: 403, error: 'Forbidden: admin required' };
+  return { ok: true };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -140,6 +165,27 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     { auth: { persistSession: false } },
   );
+
+  // Ops-only. This is a back-catalogue maintenance pass that spends one vision
+  // call per listing, so it must never be reachable by a stranger: the anon key
+  // is published in the client bundle and does not count as a credential here.
+  // Callers are the service role (manual ops, any future cron) or a signed-in
+  // admin.
+  const gate = await requireServiceRoleOrAdmin(req, supabase);
+  if (!gate.ok) {
+    return new Response(JSON.stringify({ error: gate.error }), {
+      status: gate.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Same daily USD ceiling every other AI endpoint respects. A runaway loop
+  // here is expensive even when the caller is legitimate.
+  if (await isOpenAIBudgetExhausted()) {
+    return new Response(JSON.stringify({ error: 'Daily OpenAI budget reached - try again tomorrow' }), {
+      status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   const openaiKey = Deno.env.get('OPENAI_API_KEY');
   if (!openaiKey) {
     return new Response(JSON.stringify({ error: 'OPENAI_API_KEY not configured' }), {
