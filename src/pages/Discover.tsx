@@ -353,7 +353,10 @@ const Discover = () => {
           {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
         </main>
 
-        {userType && (currentView === 'swipe' || currentView === 'matches' || currentView === 'browse' || currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} badgeCount={pendingQuestions} />}
+        {/* Realtors keep the bottom-right launcher for their renter message
+            threads; renters use the platform-wide AI assistant (bottom-left)
+            and reach match conversations from the Matches view. */}
+        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} badgeCount={pendingQuestions} />}
 
         <HaustoChat isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} userPreferences={userPreferences} userType={userType || 'renter'} />
 
