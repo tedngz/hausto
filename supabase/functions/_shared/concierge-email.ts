@@ -18,8 +18,14 @@ export const ADMIN_EMAIL = "ted.ngz@gmail.com";
 // www, not the apex: hausto.com 302s to www, and a fair number of mail clients
 // will not follow a redirect to load an image.
 export const SITE_URL = "https://www.hausto.com";
-export const LOGO_URL = `${SITE_URL}/logos/hausto-mark.png`;
-export const TAGLINE = "Rental vibe check";
+// Served from Supabase Storage rather than public/ on the site. The site is
+// deployed by Lovable on merge, so an asset added alongside a function change
+// is not there yet when the first mail goes out - and a broken mark in a
+// renter's inbox is not worth the coupling. Storage is live the moment it is
+// uploaded and does not redirect.
+export const LOGO_URL =
+  "https://gbgrwjdmytaksrztcyzs.supabase.co/storage/v1/object/public/brand/hausto-mark.png";
+export const TAGLINE = "Vibe check your next home";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,9 +131,11 @@ export function stripQuotedReply(text: string): string {
   // Trailing marker lines are what a client leaves when it pads a reply above
   // the quote, and they read as a typo in the relayed copy. Gmail's is U+1427
   // (Canadian syllabics final middle dot) - visually a period, but not one, so
-  // it has to be matched explicitly rather than by any "punctuation" class.
-  const MARKER_ONLY = /^[\s.\-_·•ᐧ​͏]{1,3}$/;
-  while (kept.length && MARKER_ONLY.test(kept[kept.length - 1] ?? "")) {
+  // it is listed explicitly. Blank lines count as padding too: Gmail leaves one
+  // below the marker, and a trim that stopped at the blank would leave the
+  // marker stranded above it.
+  const PADDING_ONLY = /^[\s.\-_\u00b7\u2022\u1427\u200b\u034f]*$/;
+  while (kept.length && PADDING_ONLY.test(kept[kept.length - 1] ?? "")) {
     kept.pop();
   }
   return kept.join("\n").trim();
@@ -177,7 +185,7 @@ export function signature(note?: string): string {
         </td>
         <td style="vertical-align: middle; font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;">
           <a href="${SITE_URL}" style="color: #111111; font-size: 16px; font-weight: 700;
-             letter-spacing: -0.3px; text-decoration: none;">hausto</a>
+             letter-spacing: -0.3px; text-decoration: none;">Hausto</a>
           <div style="color: #6b7280; font-size: 12px; margin-top: 1px;">${esc(TAGLINE)}</div>
           <a href="${SITE_URL}" style="color: #F97316; font-size: 12px; text-decoration: none;"
              >www.hausto.com</a>
