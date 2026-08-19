@@ -888,6 +888,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   defaultExpanded
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
+                  onAskAI={() => handleAskHausto(preview)}
                   onClose={() => setPreview(null)}
                   onContact={() => handleAskHausto(preview)}
                   contactLabel="Ask Hausto"

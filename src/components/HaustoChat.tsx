@@ -5,10 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { X, Send, MessageCircle, MessageCircleQuestion, MapPin, ArrowLeft, Check, ChevronRight } from 'lucide-react';
+import { X, Send, MessageCircle, MessageCircleQuestion, MapPin, ArrowLeft, Check, ChevronRight, ChevronDown } from 'lucide-react';
 import { RenterQuestionsDialog } from '@/components/realtor/RenterQuestionsDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
@@ -513,7 +521,12 @@ export const HaustoChat = ({
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col bg-transparent overflow-hidden sm:rounded-2xl border-none shadow-2xl">
+      {/* Docked to the left edge rather than centred: the assistant is a
+          companion to whatever the renter is reading, so it sits beside the
+          page instead of covering the middle of it. The dialog's stock enter
+          animation already slides in from the left, so it needs no override -
+          and tailwind-merge cannot dedupe the animate plugin's classes. */}
+      <DialogContent className="w-full max-w-4xl h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col bg-transparent overflow-hidden sm:rounded-2xl border-none shadow-2xl left-0 sm:left-6 translate-x-0">
         {/* Glass Background */}
         <div className="absolute inset-0 glass-card bg-white/40 backdrop-blur-xl pointer-events-none -z-20" />
         
@@ -926,49 +939,87 @@ export const HaustoChat = ({
                </div>
 
               <div className="p-3 sm:p-4 border-t border-white/30 bg-white/40 backdrop-blur-md flex-shrink-0 relative z-10 space-y-2">
-                {/* "Asking about" context chip — always shown; tap it to pick
-                    which matched property questions are about */}
+                {/* Subject picker: which matched listing the questions are
+                    about. A dropdown rather than a chip so the renter can move
+                    between listings without leaving the thread; the full modal
+                    is still one click away for multi-select and details. */}
                 {userType === 'renter' && (() => {
                   const currentConv = conversations.find(c => c.id === selectedMatch);
-                  const activeProps = (currentConv?.properties || [])
-                    .filter(p => activePropertyIds.includes(p.property_id));
-                  const chipLabel = activeProps.length === 0
-                    ? 'Asking about: tap to pick properties'
+                  const props = currentConv?.properties || [];
+                  const activeProps = props.filter(p => activePropertyIds.includes(p.property_id));
+                  const label = activeProps.length === 0
+                    ? 'Asking about: pick a listing'
                     : activeProps.length === 1
                       ? `Asking about: ${activeProps[0].title || 'this property'}`
-                      : `Asking about: ${activeProps.length} properties`;
+                      : `Asking about: ${activeProps.length} listings`;
                   return (
-                    <div className="flex items-center">
-                      <Badge
-                        variant="secondary"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setShowPropertyList(true)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setShowPropertyList(true);
-                          }
-                        }}
-                        className="h-7 text-[11px] max-w-[280px] flex items-center gap-1 rounded-full px-3 cursor-pointer hover:bg-secondary/80 transition-colors"
-                        title="Choose which matched property you're asking about"
-                      >
-                        <span className="truncate">{chipLabel}</span>
-                        {activeProps.length > 0 ? (
-                          <button
-                            aria-label="Clear property context"
-                            onClick={e => {
-                              e.stopPropagation();
-                              setActivePropertyIds([]);
-                            }}
-                            className="shrink-0"
+                    <div className="flex items-center gap-1.5">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 max-w-[280px] rounded-full px-3 text-[11px] font-normal gap-1"
+                            title="Choose which matched listing you are asking about"
                           >
-                            <X className="w-3 h-3" />
-                          </button>
-                        ) : (
-                          <ChevronRight className="w-3 h-3 shrink-0" />
-                        )}
-                      </Badge>
+                            <span className="truncate">{label}</span>
+                            <ChevronDown className="w-3 h-3 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-[300px] max-h-[340px] overflow-y-auto">
+                          <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+                            Matched listings in this thread
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {props.length === 0 ? (
+                            <p className="px-2 py-3 text-[11px] text-muted-foreground">
+                              No matched listings here yet.
+                            </p>
+                          ) : props.map(prop => {
+                            const isActive = activePropertyIds.includes(prop.property_id);
+                            return (
+                              <DropdownMenuItem
+                                key={prop.property_id}
+                                className="gap-2.5 py-2 cursor-pointer"
+                                onSelect={() => setActivePropertyIds([prop.property_id])}
+                              >
+                                {prop.images?.[0] ? (
+                                  <img loading="lazy"
+                                    src={prop.images[0]}
+                                    alt=""
+                                    className="w-11 h-9 object-cover rounded shrink-0"
+                                    onError={e => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.onerror = null;
+                                      target.src = '/placeholder-property.jpg';
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-11 h-9 rounded bg-muted shrink-0" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium line-clamp-1">
+                                    {prop.title || 'Untitled property'}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground line-clamp-1">
+                                    {formatPrice(Number(prop.price || 0))} /mo
+                                  </p>
+                                </div>
+                                {isActive && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                              </DropdownMenuItem>
+                            );
+                          })}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-xs cursor-pointer" onSelect={() => setShowPropertyList(true)}>
+                            See details or ask about several
+                          </DropdownMenuItem>
+                          {activePropertyIds.length > 0 && (
+                            <DropdownMenuItem className="text-xs cursor-pointer" onSelect={() => setActivePropertyIds([])}>
+                              Clear the subject
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   );
                 })()}

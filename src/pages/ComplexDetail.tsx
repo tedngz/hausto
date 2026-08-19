@@ -6,6 +6,9 @@ import { ArrowLeft, Building2, CalendarCheck, Home, Loader2, MapPin, PawPrint, T
 import { useComplex, useComplexListings, CITY_LABEL } from '@/hooks/useComplexes';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
+import { useDirectMessages } from '@/hooks/useDirectMessages';
+import { HaustoChat } from '@/components/HaustoChat';
+import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import type { Apartment } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,6 +37,10 @@ export default function ComplexDetail() {
   const [modalOpen, setModalOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
+  const [chatPropertyId, setChatPropertyId] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const { getOrCreateConversation, setCurrentConversationId } = useDirectMessages();
 
   // Reflect properties the renter has already matched (e.g. liked in AI search)
   // so their heart shows filled here too.
@@ -73,6 +80,24 @@ export default function ComplexDetail() {
         });
       }
     }
+  };
+
+  // Sparkle on a listing card: open the assistant with that listing as the
+  // subject. External listings talk to the Hausto Agent, internal ones to the
+  // listing's own realtor - same split browse uses.
+  const handleAskAI = async (apartment: Apartment) => {
+    if (!user) {
+      navigate('/auth', { state: { returnTo: location.pathname } });
+      return;
+    }
+    const realtorId = apartment.realtor?.id;
+    const targetId = !realtorId || realtorId.startsWith('ext-') ? HAUSTO_AGENT_ID : realtorId;
+    const conversationId = await getOrCreateConversation(user.id, targetId);
+    if (!conversationId) return;
+    setCurrentConversationId(conversationId);
+    setChatConversationId(conversationId);
+    setChatPropertyId(apartment.id);
+    setChatOpen(true);
   };
 
   if (isLoading) {
@@ -340,6 +365,7 @@ export default function ComplexDetail() {
                         apartment={a}
                         liked={likedIds.has(a.id)}
                         onLike={() => handleLike(a)}
+                        onAskAI={() => handleAskAI(a)}
                       />
                     ))}
                   </div>
@@ -392,6 +418,19 @@ export default function ComplexDetail() {
           onOpenChange={setModalOpen}
           complexId={complex.id}
           complexName={complex.name}
+        />
+
+        {/* Opened by a listing card's sparkle, tagged with that listing */}
+        <HaustoChat
+          isOpen={chatOpen}
+          onClose={() => {
+            setChatOpen(false);
+            setChatConversationId(null);
+            setChatPropertyId(null);
+          }}
+          userType="renter"
+          initialMatchId={chatConversationId}
+          initialPropertyId={chatPropertyId}
         />
 
         {/* Image lightbox */}
