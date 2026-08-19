@@ -149,3 +149,31 @@ In order:
 - A body we could not fetch is recorded as "could not read the body" with a link
   to the message in Resend, not as "(empty message)". The two mean opposite
   things and only one of them is your problem.
+
+## Mail that matches no availability request
+
+A cold email has no `complex_inquiries` row, so there is no `hello+inq-…` alias
+to answer it through. Before August 2026 its notification carried
+`Reply-To: <the sender>`, which meant hitting Reply in Gmail sent **from the
+admin's personal address straight to a stranger**, quoting the internal
+notification - subject, "this sender has 2 requests on file", and all - and left
+no record anywhere.
+
+Such mail now gets a row in `public.concierge_mail_threads` and an alias of its
+own, `hello+box-<uuid>@hausto.com`, with a `[box-…]` copy in the subject. A
+reply comes back here, goes out as `hello@hausto.com` under the contact's own
+subject, and their answer lands back on the same thread.
+
+Threads are keyed on `(contact_email, subject_key)`, where `subject_key` is the
+subject with `Re:` and any token stripped, lowercased. A back-and-forth stays on
+one row; a genuinely new topic from the same person opens another.
+
+Only the edge functions read this table, via the service role. RLS is enabled
+with no policies, so nothing is reachable with an anon key.
+
+## Gmail's invisible trailing character
+
+Gmail appends U+1427 (Canadian syllabics final middle dot) to some replies. It
+looks exactly like a period and is not one, so it has to be matched explicitly -
+no punctuation class catches it. Left in, it relays to the renter as a stray "."
+on its own line. `stripQuotedReply` trims it along with U+200B and U+034F.

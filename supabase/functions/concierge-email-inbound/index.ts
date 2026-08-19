@@ -12,6 +12,9 @@ import {
   inquiryIdFromAddresses,
   inquiryIdFromText,
   json,
+  mailThreadAddress,
+  mailThreadIdFromText,
+  mailThreadToken,
   messageIdCandidates,
   normalizeSubject,
   replyAddress,
@@ -233,6 +236,140 @@ async function sendMail(payload: Record<string, unknown>) {
   return result;
 }
 
+/** Our own side of the conversation: the admin, or anything at the domain. */
+const fromUs = (address: string) => address === ADMIN_EMAIL || address.endsWith("@hausto.com");
+
+/**
+ * Mail that matches no availability request still needs somewhere to be
+ * answered from. A row in concierge_mail_threads gives it an alias, so the
+ * admin's reply comes back here to be relayed as the concierge instead of
+ * leaving their personal address on a stranger's screen.
+ */
+async function handleStandaloneMail(
+  supabase: any,
+  mail: ParsedMail,
+  senderInquiries: number,
+): Promise<Response> {
+  const body = stripQuotedReply(mail.body).slice(0, 20000) || "(empty message)";
+  const now = new Date().toISOString();
+  const knownId = mailThreadIdFromText(...mail.recipients, mail.subject);
+
+  let thread: { id: string; contact_email: string; contact_name: string | null; subject: string | null } | null = null;
+  if (knownId) {
+    const { data } = await supabase
+      .from("concierge_mail_threads")
+      .select("id, contact_email, contact_name, subject")
+      .eq("id", knownId)
+      .maybeSingle();
+    thread = data ?? null;
+  }
+
+  // The admin answering a cold email. Send it on as the concierge, under the
+  // contact's own subject - never ours, which is the internal notification
+  // ("📥 Unmatched mail to hello@hausto.com: GM") and would be quoted straight
+  // back at them along with everything it says about their record.
+  if (thread && fromUs(mail.from)) {
+    await sendMail({
+      from: CONCIERGE_FROM,
+      to: [thread.contact_email],
+      reply_to: CONCIERGE_FROM,
+      subject: `Re: ${String(thread.subject ?? "your message").replace(/^((re|fwd?)\s*:\s*)+/i, "")}`,
+      html: `
+        ${greeting(thread.contact_name, body)}
+        <div>${textToHtml(body)}</div>
+        ${signature("Just reply to this email and we'll pick it up.")}
+      `,
+    });
+    await supabase
+      .from("concierge_mail_threads")
+      .update({ last_message_at: now, status: "answered" })
+      .eq("id", thread.id);
+    console.log("Relayed admin reply on standalone thread", thread.id);
+    return json({ success: true, matched: true, threadId: thread.id, direction: "outbound", relayed: true });
+  }
+
+  // Our own notifications go out from hello@hausto.com. One arriving back with
+  // no alias to route it by means a loop, and answering it would keep the loop
+  // running - so that single case is dropped rather than replied to. A message
+  // that does carry an alias is handled above: that is the admin writing as the
+  // concierge from Gmail, which is a real reply and must go on.
+  if (mail.from === CONCIERGE_INBOX) {
+    console.warn("Dropping unroutable mail from our own inbox to avoid a loop:", mail.subject);
+    return json({ success: true, matched: false, reason: "self" });
+  }
+
+  // Admin mail carrying no alias - a reply whose subject was edited, or a
+  // forward. There is no contact to send it to, so say so rather than bouncing
+  // it back as though a stranger had written in.
+  if (fromUs(mail.from)) {
+    await alertAdmin(
+      "⚠️ Could not route your reply",
+      "This came from you but carries no thread alias, so there is nobody to send it on to. Reply to the original notification instead of composing a new message.",
+      body,
+    );
+    return json({ success: true, matched: false, reason: "unroutable_admin_mail" });
+  }
+
+  // Someone writing in. Reuse the thread for this conversation if they already
+  // have one, so a back-and-forth stays on a single row.
+  if (!thread) {
+    const subjectKey = normalizeSubject(mail.subject) || "(no subject)";
+    const { data: existing } = await supabase
+      .from("concierge_mail_threads")
+      .select("id, contact_email, contact_name, subject")
+      .eq("contact_email", mail.from)
+      .eq("subject_key", subjectKey)
+      .maybeSingle();
+    thread = existing ?? null;
+
+    if (!thread) {
+      const { data: created, error } = await supabase
+        .from("concierge_mail_threads")
+        .insert({
+          contact_email: mail.from,
+          subject: mail.subject,
+          subject_key: subjectKey,
+          last_message_at: now,
+        })
+        .select("id, contact_email, contact_name, subject")
+        .single();
+      if (error) throw error;
+      thread = created;
+    } else {
+      await supabase
+        .from("concierge_mail_threads")
+        .update({ last_message_at: now, status: "open" })
+        .eq("id", thread.id);
+    }
+  }
+
+  const context = senderInquiries
+    ? `<p>This sender has ${senderInquiries} availability request${senderInquiries > 1 ? "s" : ""} on file,
+       but nothing on them matches this subject, so it has been kept off those threads rather than
+       answered inside one about a different building.</p>`
+    : "";
+
+  await sendMail({
+    from: CONCIERGE_FROM,
+    to: [ADMIN_EMAIL],
+    reply_to: mailThreadAddress(thread!.id),
+    subject: `📥 ${mail.from}: ${mail.subject}${mailThreadToken(thread!.id)}`,
+    html: `
+      <p><strong>From:</strong> ${esc(mail.from)}</p>
+      ${context}
+      <div style="border-left: 3px solid #e5e7eb; padding-left: 12px; margin: 16px 0;">
+        ${textToHtml(body.slice(0, 5000))}
+      </div>
+      <p style="padding: 12px; background-color: #f0f9ff; border-left: 4px solid #3b82f6;">
+        <strong>Hit Reply</strong> - it comes back to us and goes out from ${esc(CONCIERGE_INBOX)},
+        so your own address stays private and their answer lands here too.
+      </p>
+    `,
+  });
+
+  return json({ success: true, matched: false, threadId: thread!.id });
+}
+
 /** Last resort for mail we could not file: a raw dump beats silence. */
 async function alertAdmin(subject: string, note: string, body: string) {
   await sendMail({
@@ -367,37 +504,11 @@ serve(async (req) => {
     }
 
     if (!inquiry) {
-      // Our own notifications are sent from hello@hausto.com. One arriving back
-      // here with nothing to file it against means a loop, and forwarding it
-      // would keep the loop running - so that single case is dropped instead.
-      if (mail.from === CONCIERGE_INBOX) {
-        console.warn("Dropping unmatched mail from our own inbox to avoid a loop:", mail.subject);
-        return json({ success: true, matched: false, reason: "self" });
-      }
-
       // Everything else gets forwarded - a real person emailed us and would
       // otherwise hear nothing back. This is the path a cold email takes, and
       // the one that carries confirmation codes for the Gmail send-as setup.
       console.warn("Inbound mail matched no inquiry:", mail.from);
-      // They may still be a renter we know - just writing about something other
-      // than the request they have open. Say so, rather than leaving it looking
-      // like a stranger wrote in.
-      const known = senderInquiries.length
-        ? `<p>This sender has ${senderInquiries.length} request${senderInquiries.length > 1 ? "s" : ""}
-           on file, but nothing on them matches this subject, so it has been left off those threads
-           rather than answered inside one about a different building.</p>`
-        : `<p>No availability request matches this sender, so it is not on any dashboard thread.</p>`;
-      await sendMail({
-        from: CONCIERGE_FROM,
-        to: [ADMIN_EMAIL],
-        reply_to: [mail.from],
-        subject: `📥 Unmatched mail to ${CONCIERGE_INBOX}: ${mail.subject}`,
-        html: `<p><strong>From:</strong> ${esc(mail.from)}</p>
-               ${known}
-               <p>Reply as <strong>${esc(CONCIERGE_INBOX)}</strong> and they never see your own address.</p>
-               <hr><div>${textToHtml(mail.body.slice(0, 5000))}</div>`,
-      });
-      return json({ success: true, matched: false });
+      return await handleStandaloneMail(supabase, mail, senderInquiries.length);
     }
 
     const { data: complex } = await supabase

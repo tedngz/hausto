@@ -18,8 +18,14 @@ export const ADMIN_EMAIL = "ted.ngz@gmail.com";
 // www, not the apex: hausto.com 302s to www, and a fair number of mail clients
 // will not follow a redirect to load an image.
 export const SITE_URL = "https://www.hausto.com";
-export const LOGO_URL = `${SITE_URL}/logos/hausto-mark.png`;
-export const TAGLINE = "Rental vibe check";
+// Served from Supabase Storage rather than public/ on the site. The site is
+// deployed by Lovable on merge, so an asset added alongside a function change
+// is not there yet when the first mail goes out - and a broken mark in a
+// renter's inbox is not worth the coupling. Storage is live the moment it is
+// uploaded and does not redirect.
+export const LOGO_URL =
+  "https://gbgrwjdmytaksrztcyzs.supabase.co/storage/v1/object/public/brand/hausto-mark.png";
+export const TAGLINE = "Vibe check your next home";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,10 +63,35 @@ export function subjectToken(inquiryId: string): string {
   return ` [inq-${inquiryId.replace(/-/g, "")}]`;
 }
 
+/**
+ * Hausto <hello+box-<uuid without dashes>@hausto.com> — the same trick as
+ * replyAddress, for mail that matches no availability request. Without it the
+ * only answerable address on a cold email is the sender's own, which sends the
+ * admin's personal address out and takes the conversation off the system.
+ */
+export function mailThreadAddress(threadId: string): string {
+  return `Hausto <hello+box-${threadId.replace(/-/g, "")}@hausto.com>`;
+}
+
+/** " [box-<uuid without dashes>]" — subject-line copy of the thread alias. */
+export function mailThreadToken(threadId: string): string {
+  return ` [box-${threadId.replace(/-/g, "")}]`;
+}
+
+/** Pull a standalone mail-thread id out of a recipient list or subject. */
+export function mailThreadIdFromText(...values: (string | null | undefined)[]): string | null {
+  return tokenFrom(/box-([0-9a-f]{32})/i, values);
+}
+
 /** Pull an inquiry id out of anything that might carry the token. */
 export function inquiryIdFromText(...values: (string | null | undefined)[]): string | null {
+  return tokenFrom(/inq-([0-9a-f]{32})/i, values);
+}
+
+/** Shared scan: first value carrying the token wins, rebuilt as a uuid. */
+function tokenFrom(pattern: RegExp, values: (string | null | undefined)[]): string | null {
   for (const raw of values) {
-    const match = String(raw ?? "").match(/inq-([0-9a-f]{32})/i);
+    const match = String(raw ?? "").match(pattern);
     if (!match) continue;
     const h = match[1].toLowerCase();
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
@@ -97,9 +128,16 @@ export function stripQuotedReply(text: string): string {
     /^\s*Sent from my /i.test(line)
   );
   const kept = cut === -1 ? lines : lines.slice(0, cut);
-  // Trailing lines of a single punctuation mark are what is left when a client
-  // pads a reply above the quote. They read as a typo in the relayed copy.
-  while (kept.length && /^\s*[.\-_·•]{1,3}\s*$/.test(kept[kept.length - 1] ?? "")) kept.pop();
+  // Trailing marker lines are what a client leaves when it pads a reply above
+  // the quote, and they read as a typo in the relayed copy. Gmail's is U+1427
+  // (Canadian syllabics final middle dot) - visually a period, but not one, so
+  // it is listed explicitly. Blank lines count as padding too: Gmail leaves one
+  // below the marker, and a trim that stopped at the blank would leave the
+  // marker stranded above it.
+  const PADDING_ONLY = /^[\s.\-_\u00b7\u2022\u1427\u200b\u034f]*$/;
+  while (kept.length && PADDING_ONLY.test(kept[kept.length - 1] ?? "")) {
+    kept.pop();
+  }
   return kept.join("\n").trim();
 }
 
@@ -147,7 +185,7 @@ export function signature(note?: string): string {
         </td>
         <td style="vertical-align: middle; font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;">
           <a href="${SITE_URL}" style="color: #111111; font-size: 16px; font-weight: 700;
-             letter-spacing: -0.3px; text-decoration: none;">hausto</a>
+             letter-spacing: -0.3px; text-decoration: none;">Hausto</a>
           <div style="color: #6b7280; font-size: 12px; margin-top: 1px;">${esc(TAGLINE)}</div>
           <a href="${SITE_URL}" style="color: #F97316; font-size: 12px; text-decoration: none;"
              >www.hausto.com</a>
