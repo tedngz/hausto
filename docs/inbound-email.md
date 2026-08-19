@@ -177,3 +177,31 @@ Gmail appends U+1427 (Canadian syllabics final middle dot) to some replies. It
 looks exactly like a period and is not one, so it has to be matched explicitly -
 no punctuation class catches it. Left in, it relays to the renter as a stray "."
 on its own line. `stripQuotedReply` trims it along with U+200B and U+034F.
+
+## Keeping one conversation in one Gmail thread
+
+Notifications about the same request used to arrive as separate Gmail
+conversations, so the history was scattered across the inbox. Two reasons, and
+both are handled:
+
+**Subject drift.** The standalone notification echoed the incoming subject, so
+the first notice read `📥 someone@example.com: GMGN [box-…]` and the reply notice
+read `📥 someone@example.com: Re: GMGN [box-…]`. Gmail strips a leading `Re:`
+but not one in the middle of a subject, so it saw two different subjects.
+Notifications now always use the thread's stored subject, never the incoming
+one.
+
+**No References chain.** We cannot reference our own sent mail: Resend rides on
+SES, which stamps its own `Message-Id` (`<…@ap-northeast-1.amazonses.com>`) and
+discards any we set, and the id Resend returns is unrelated to it. So every
+notice about a conversation instead points `In-Reply-To`/`References` at the
+same invented parent, `<inq-<hex>@hausto.com>` or `<box-<hex>@hausto.com>`.
+Nothing ever has that `Message-Id`; clients thread on a shared ancestor whether
+or not they hold it, the same way mailing lists do.
+
+The two are deliberately redundant. Gmail leans on References, other clients
+lean on subject, and either alone is enough.
+
+One consequence worth knowing: a request's first `🏢 Availability request` notice
+and every later `💬 … replied` notice now share a conversation, even though
+their subjects differ.

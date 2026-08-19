@@ -5,8 +5,10 @@ import {
   ADMIN_EMAIL,
   CONCIERGE_FROM,
   corsHeaders,
+  conversationHeaders,
   esc,
   firstName,
+  inqToken,
   json,
   replyAddress,
   signature,
@@ -89,6 +91,8 @@ const handler = async (req: Request): Promise<Response> => {
       to: [ADMIN_EMAIL],
       reply_to: adminThreadAddress,
       subject: `🏢 Availability request: ${complexName}${subjectToken(inquiry.id)}`,
+      // Opens the conversation that every later "💬 … replied" notice joins.
+      headers: conversationHeaders(inqToken(inquiry.id)),
       html: `
         <h1>New concierge availability request</h1>
         <p>A renter asked the concierge to check live availability at
