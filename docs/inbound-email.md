@@ -7,70 +7,93 @@ address. This is how that is wired.
 ## The path a message takes
 
 ```
-someone -> MX for hausto.com -> provider webhook -> concierge-email-inbound
-                                                         |
-                        matched to a complex_inquiries row?
-                        |                                |
-                       yes                               no
-                        |                                |
-        filed on the thread + "💬 X replied"     "📥 Unmatched mail"
-                        |                                |
-                        +---------> ted.ngz@gmail.com <--+
+someone -> MX for hausto.com -> Resend receiving -> email.received webhook
+                                                          |
+                                            concierge-email-inbound
+                                                          |
+                         matched to a complex_inquiries row?
+                         |                                |
+                        yes                               no
+                         |                                |
+         filed on the thread + "💬 X replied"     "📥 Unmatched mail"
+                         |                                |
+                         +---------> ted.ngz@gmail.com <--+
 ```
 
+The MX record is `inbound-smtp.ap-northeast-1.amazonaws.com` at priority 10.
+That is Resend's receiving host - Resend runs receiving on SES infrastructure -
+so it looks like a plain Amazon SES record but is not one. Do not "fix" it.
+
+## What broke in August 2026
+
+Mail stopped reaching `ted.ngz@gmail.com`. It turned out nothing was wrong with
+DNS, the domain, or the function: Resend had been receiving every message
+correctly, and the `email.received` webhook was pointed at `https://hausto.com/`
+- the marketing site root, which does nothing with a POST. Nine messages sat in
+Resend, received and delivered nowhere.
+
+Worth knowing for next time:
+
+- Resend stores received mail whether or not the webhook succeeds. `GET
+  /emails/receiving` lists it, so mail is recoverable even when the pipeline is
+  down. That listing is the fastest way to tell "nobody emailed us" apart from
+  "we lost it".
+- `scripts/setup-ses-inbound.sh` used to describe this pipeline as SES receipt
+  rule -> SNS -> function. That was never the live path, and chasing it wasted
+  the first hour of the investigation. The script has been removed.
+- A receipt rule may still exist in the AWS account from that attempt. It is
+  inert - Resend's account owns receiving for the domain - but worth deleting if
+  you are ever in there.
+
+## Secrets
+
+| Secret | Used for |
+| --- | --- |
+| `RESEND_API_KEY` | Sending. Send-only key, shared by every function. |
+| `RESEND_RECEIVING_API_KEY` | Reading received bodies. Needs **full access**. |
+| `RESEND_WEBHOOK_SECRET` | Verifying the Svix signature on the webhook. |
+| `CONCIERGE_INBOUND_SECRET` | Alternative auth as `?secret=` or `x-webhook-secret`. |
+
+The two API keys are separate on purpose. Resend grants either "sending" or
+"full" access with nothing in between, and reading a received body needs full;
+splitting them keeps the key every other function holds restricted to sending.
+A send-only key on the receiving endpoint returns
+`401 restricted_api_key: "This API key is restricted to only send emails"`,
+which surfaces as a message filed with no body.
+
 `concierge-email-inbound` runs without a JWT (mail providers cannot mint one),
-so every request must carry either:
-
-- `?secret=` or `x-webhook-secret` matching `CONCIERGE_INBOUND_SECRET`, or
-- Svix signature headers verified against `RESEND_WEBHOOK_SECRET`.
-
-Both are accepted, which is what lets the provider in front of the domain be
+so every request must carry either a valid Svix signature or the shared secret.
+Either is accepted, which is what lets the provider in front of the domain be
 swapped without a window where mail is dropped.
 
-## Why we are moving off SES
+## Rebuilding the webhook
 
-The original path was `MX -> SES -> SNS topic -> function`, set up by
-`scripts/setup-ses-inbound.sh`. It works, but it fails quietly in three ways:
+If the webhook is ever lost or repointed, create it via the API rather than the
+dashboard - the response is the only place the signing secret ever appears:
 
-1. The SNS HTTPS subscription has to be confirmed by hand, and the confirmation
-   token only appears in the function logs. Nothing tells you if it lapses.
-2. The subscription URL embeds `CONCIERGE_INBOUND_SECRET`. Rotating that secret
-   in Supabase silently 403s every delivery from then on.
-3. `SNSAction` inlines the message and caps out around 150KB. A message with an
-   attachment or an inline logo above that is dropped by SES with no
-   notification at all.
+```bash
+curl -X POST https://api.resend.com/webhooks \
+  -H "Authorization: Bearer $RESEND_FULL_ACCESS_KEY" \
+  -H "content-type: application/json" \
+  -d '{"endpoint":"https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/concierge-email-inbound","events":["email.received"]}'
+```
 
-Resend already sends every outbound mail for the domain, and the function
-already parses its inbound webhook, so receiving there removes a whole provider
-and its manual handshake.
+Then store the returned `signing_secret` as `RESEND_WEBHOOK_SECRET` in Supabase
+-> Edge Functions -> Secrets, and delete the old webhook so the event is not
+delivered twice.
 
-## Migrating inbound to Resend
+To check what is currently configured: `GET https://api.resend.com/webhooks`.
 
-1. **Add the receiving domain.** Resend dashboard -> Domains -> `hausto.com` ->
-   enable receiving. Resend shows an MX record specific to your account.
-2. **Swap the MX record.** Replace the current
-   `10 inbound-smtp.ap-northeast-1.amazonaws.com` on the root with the record
-   Resend shows. It must be the lowest-priority MX on the domain or Resend
-   receives nothing. DNS is on Namecheap (`dns1/dns2.registrar-servers.com`).
-   Leave `send.hausto.com` alone - that is the outbound Return-Path and its SPF
-   record is unrelated.
-3. **Add the webhook.** Resend dashboard -> Webhooks -> Add, event
-   `email.received`, endpoint:
+## Replaying mail that did not arrive
 
-   ```
-   https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/concierge-email-inbound?secret=<CONCIERGE_INBOUND_SECRET>
-   ```
+`email.received` payloads are metadata only, so a replay just needs the stored
+message's id from `GET /emails/receiving`. Sign it the Svix way - HMAC-SHA256
+over `<svix-id>.<svix-timestamp>.<body>`, keyed by the base64-decoded part of
+`whsec_…` after the prefix - and POST it at the function.
 
-   The secret can be revealed in Supabase -> Edge Functions -> Secrets.
-4. **Optional hardening.** Copy the signing secret Resend shows for the webhook
-   into a Supabase secret named `RESEND_WEBHOOK_SECRET`. The function then
-   verifies the signature and the `?secret=` in the URL becomes belt-and-braces.
-5. **Tear down the AWS side** once mail is arriving: delete the
-   `concierge-to-sns` receipt rule and the `hausto-concierge-inbound` SNS topic.
-
-Resend's `email.received` webhook carries metadata only, so the function fetches
-the body from `GET /emails/receiving/{email_id}` using `RESEND_API_KEY`. If that
-fetch fails the message is still filed and forwarded, just without its body.
+One caution: replaying a message **from** `ted.ngz@gmail.com` or any
+`@hausto.com` address takes the outbound branch, which relays it onward to the
+renter. Only replay renter mail unless you mean to send.
 
 ## Replying as hello@hausto.com from Gmail
 
@@ -82,10 +105,9 @@ Google's settings, so it cannot be scripted.
 2. Name `Hausto`, address `hello@hausto.com`. Untick "Treat as an alias" - this
    is a role address, not a second address for the same person.
 3. SMTP server `smtp.resend.com`, port `587`, username `resend`, password is a
-   Resend API key, TLS.
-4. Google emails a confirmation code to `hello@hausto.com`. It arrives with no
-   matching inquiry, so it comes through as a "📥 Unmatched mail" forward -
-   which means step 3 of the migration above has to be working first.
+   Resend API key (the send-only one is enough), TLS.
+4. Google emails a confirmation code to `hello@hausto.com`. It matches no
+   inquiry, so it arrives as a "📥 Unmatched mail" forward.
 5. Under "When replying to a message", pick "Reply from the same address the
    message was sent to" if you want replies to default to the concierge
    identity. Notifications are addressed to `ted.ngz@gmail.com`, so you will
@@ -101,10 +123,12 @@ starting a new conversation.
 
 In order:
 
-1. `hello+inq-<uuid>@hausto.com` in any recipient field.
+1. `hello+inq-<uuid>@hausto.com` in any recipient field, including
+   `received_for` - the envelope recipient, and the only place the alias shows
+   up when the header `To:` is the plain inbox.
 2. `[inq-<uuid>]` appended to the subject of admin notifications. Plus
    addressing depends on the provider treating `hello+tag@` as `hello@`, which
-   SES and Resend document differently; a subject tag survives Reply in every
+   is not documented for Resend receiving; a subject tag survives Reply in every
    client regardless. Renters never see it - their relayed copy is given a
    freshly written subject.
 3. The sender address, matched to their newest still-open request. This is the
@@ -122,3 +146,6 @@ In order:
 - Failures to send are raised, not logged. The Resend SDK reports a rejection
   in its result instead of throwing, so a plain `await` looks like success and
   the provider is told the mail was delivered.
+- A body we could not fetch is recorded as "could not read the body" with a link
+  to the message in Resend, not as "(empty message)". The two mean opposite
+  things and only one of them is your problem.

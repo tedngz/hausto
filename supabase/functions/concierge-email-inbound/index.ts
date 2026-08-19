@@ -34,6 +34,11 @@ import {
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const resend = new Resend(RESEND_API_KEY);
+// Reading a received email's body needs a full-access key: Resend only grants
+// "sending" or "full", and the sending key 401s on /emails/receiving with
+// restricted_api_key. Held separately so the key every other function uses can
+// stay send-only.
+const RESEND_RECEIVING_KEY = Deno.env.get("RESEND_RECEIVING_API_KEY") ?? RESEND_API_KEY;
 const INBOUND_SECRET = Deno.env.get("CONCIERGE_INBOUND_SECRET");
 const WEBHOOK_SECRET = Deno.env.get("RESEND_WEBHOOK_SECRET");
 
@@ -101,10 +106,10 @@ async function svixSignatureValid(req: Request, raw: string): Promise<boolean> {
  * (subject and sender alone are worth surfacing) rather than losing it.
  */
 async function fetchReceivedEmail(emailId: string): Promise<any | null> {
-  if (!RESEND_API_KEY) return null;
+  if (!RESEND_RECEIVING_KEY) return null;
   try {
     const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+      headers: { Authorization: `Bearer ${RESEND_RECEIVING_KEY}` },
     });
     if (!res.ok) {
       console.error("Resend receiving fetch failed:", res.status, await res.text());
@@ -182,19 +187,26 @@ async function parsePayload(payload: any): Promise<ParsedMail | null> {
   // shape, or a future payload that carries a body) is used as-is.
   let data = payload?.data ?? payload;
   if (!data) return null;
+  let fetchFailed = false;
   if (payload?.type === "email.received" && data.email_id && !data.text && !data.html) {
     const full = await fetchReceivedEmail(String(data.email_id));
     if (full) data = { ...data, ...(full.data ?? full) };
+    else fetchFailed = true;
   }
 
   const text = data.text ?? (data.html ? String(data.html).replace(/<[^>]+>/g, " ") : "");
+  // Say which of the two it was. "(empty message)" for a failed fetch reads as
+  // "they sent nothing", and sends you looking in the wrong place.
+  const fallback = fetchFailed
+    ? `(could not read the body from Resend - the message is at https://resend.com/emails/${data.email_id})`
+    : "(empty message)";
   return {
     from: bareAddress(data.from?.email ?? data.from),
     // received_for is the envelope recipient - the only place a plus-addressed
     // thread alias shows up when the header To: is the plain inbox.
     recipients: [...asList(data.to), ...asList(data.cc), ...asList(data.received_for)],
     subject: data.subject ?? "(no subject)",
-    body: text || "(empty message)",
+    body: text || fallback,
     messageId: data.message_id ?? data.messageId ?? headerValue(data.headers, "message-id"),
     inReplyTo: data.in_reply_to ?? headerValue(data.headers, "in-reply-to"),
   };
