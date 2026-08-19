@@ -5,12 +5,17 @@ import { Input } from '@/components/ui/input';
 import { Sparkles, Send, X, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
 
-// Hausto Assistant: platform-wide floating AI chat, docked at the bottom-left
-// so it sits alongside Browse / Swipe / Matches instead of covering them.
+// Hausto Assistant: platform-wide floating AI chat, docked at the bottom-right
+// so it sits alongside Browse / Swipe / Matches instead of covering them, and
+// opposite the Hausto messaging chat which docks left.
 // Opens straight into the AI conversation - advice, property info, and
 // owner/realtor contact reveals (10/day free, unlimited premium). It does not
 // return search results; that stays in the main AI Search view.
+
+// Every property card's sparkle fires ASSISTANT_OPEN_EVENT, so the assistant
+// needs no wiring on the surfaces that show cards.
 
 interface AssistantMessage {
   id: string;
@@ -39,6 +44,9 @@ export const AIAssistant = () => {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [contactsRemaining, setContactsRemaining] = useState<number | null>(null);
+  // Listing the conversation is about when the assistant was summoned from a
+  // card's sparkle. Takes precedence over the one read from the URL.
+  const [contextProperty, setContextProperty] = useState<AssistantOpenDetail | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const storageKey = user ? `haustoAssistant_${user.id}` : null;
 
@@ -71,8 +79,26 @@ export const AIAssistant = () => {
   }, [messages, isOpen]);
 
   // When the user is on a listing page, pass that property so "get me the
-  // contact for this one" resolves without naming it.
-  const contextPropertyId = location.pathname.match(/^\/property\/([^/]+)/)?.[1] ?? null;
+  // contact for this one" resolves without naming it. A card's sparkle names
+  // the listing explicitly, which wins over whatever page we happen to be on.
+  const urlPropertyId = location.pathname.match(/^\/property\/([^/]+)/)?.[1] ?? null;
+  const contextPropertyId = contextProperty?.propertyId ?? urlPropertyId;
+
+  // Opened from a property card's sparkle. Signed-out visitors have no
+  // assistant, so send them to sign in rather than clicking into nothing.
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<AssistantOpenDetail>).detail;
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
+      setContextProperty(detail?.propertyId ? detail : null);
+      setIsOpen(true);
+    };
+    window.addEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+  }, [user, navigate]);
 
   const sendMessage = useCallback(async (text?: string) => {
     const content = (text ?? input).trim();
@@ -131,12 +157,12 @@ export const AIAssistant = () => {
 
   return (
     <>
-      {/* Launcher - bottom-left, sparkle */}
+      {/* Launcher - bottom-right, sparkle */}
       {!isOpen && (
         <Button
           onClick={() => setIsOpen(true)}
           aria-label="Open Hausto Assistant"
-          className="fixed bottom-6 left-6 z-50 w-14 h-14 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 shadow-lg hover:shadow-xl transition-all duration-200"
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 shadow-lg hover:shadow-xl transition-all duration-200"
         >
           <Sparkles className="w-6 h-6 text-white" />
         </Button>
@@ -147,7 +173,7 @@ export const AIAssistant = () => {
         <div
           role="complementary"
           aria-label="Hausto Assistant chat"
-          className="fixed bottom-4 left-4 right-4 sm:right-auto sm:bottom-6 sm:left-6 z-50 sm:w-[380px] max-w-full h-[520px] max-h-[75vh] flex flex-col rounded-2xl border border-purple-200/60 bg-white shadow-2xl overflow-hidden"
+          className="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 sm:w-[380px] max-w-full h-[520px] max-h-[75vh] flex flex-col rounded-2xl border border-purple-200/60 bg-white shadow-2xl overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white flex-shrink-0">
@@ -174,6 +200,23 @@ export const AIAssistant = () => {
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Which listing the assistant was summoned about, when it was */}
+          {contextProperty?.propertyId && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border-b border-purple-100 flex-shrink-0">
+              <Sparkles className="w-3 h-3 text-purple-600 flex-shrink-0" />
+              <p className="flex-1 min-w-0 text-[11px] text-purple-900 truncate">
+                About: {contextProperty.title || 'this listing'}
+              </p>
+              <button
+                onClick={() => setContextProperty(null)}
+                aria-label="Stop asking about this listing"
+                className="p-0.5 rounded-full hover:bg-purple-200/60 transition-colors flex-shrink-0"
+              >
+                <X className="w-3 h-3 text-purple-700" />
+              </button>
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-purple-50/40 to-white">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getNormalizedAmenities } from '@/components/PropertyAmenities';
 import { MapViewModal } from '@/components/MapViewModal';
@@ -13,6 +13,7 @@ import { formatSize } from '@/utils/propertySize';
 import { geocodeLocation } from '@/utils/geocoding';
 import { extractPropertyFeatures, propertyHasFeature, FEATURE_LABELS, type FeatureKey } from '@/lib/propertyFeatures';
 import { Apartment, UserPreferences } from '@/types';
+import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
 
 // Full listing card for the individual property page: a 16:9 gallery on top and
 // a details panel below (badges, title/price, vibe tags, description, amenities).
@@ -81,6 +82,13 @@ export const PropertyListingCard = ({
   const fit = fits[current] ?? 'cover';
 
   const go = (delta: number) => setCurrent(c => (c + delta + images.length) % images.length);
+
+  // Same affordance the property cards carry, so asking about a listing works
+  // the same whether you met it in a list or on its own page.
+  const askAssistant = () => {
+    const detail: AssistantOpenDetail = { propertyId: apartment.id, title: displayTitle };
+    window.dispatchEvent(new CustomEvent(ASSISTANT_OPEN_EVENT, { detail }));
+  };
 
   const displayTitle = useMemo(() => normalizeRepeatedTitle(apartment.title ?? ''), [apartment.title]);
   const displayLocation = useMemo(() => translateLocationToEnglish(apartment.location), [apartment.location]);
@@ -223,6 +231,17 @@ export const PropertyListingCard = ({
             ))}
           </div>
         )}
+
+        {/* Ask the assistant about this listing */}
+        <button
+          type="button"
+          aria-label="Ask the AI assistant about this property"
+          title="Ask the Hausto Assistant about this property"
+          onClick={askAssistant}
+          className="absolute top-8 right-5 w-8 h-8 rounded-full bg-primary/85 text-primary-foreground backdrop-blur-md flex items-center justify-center hover:bg-primary transition-colors"
+        >
+          <Sparkles className="w-4 h-4" />
+        </button>
 
         {/* Arrows */}
         {images.length > 1 && (

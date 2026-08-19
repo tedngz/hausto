@@ -225,7 +225,6 @@ export const MatchesView = ({
                   apartment={apartment}
                   vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
                   vibeMatch={vibeMatch}
-                  onAskAI={() => handleContactRealtor(apartment)}
                   topRightActions={apartment.matchId ? (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>

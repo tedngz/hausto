@@ -13,6 +13,7 @@ import { formatSize } from '@/utils/propertySize';
 import { shareProperty } from '@/utils/shareProperty';
 import { geocodeLocation } from '@/utils/geocoding';
 import { extractPropertyFeatures, propertyHasFeature, FEATURE_LABELS, type FeatureKey } from '@/lib/propertyFeatures';
+import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
 
 // The property card used everywhere a listing appears in a list: browse, swipe,
 // matches, the AI chat, complex pages. Same anatomy as the listing page's card
@@ -65,10 +66,6 @@ interface EditorialPropertyCardProps {
   /** When set (card shown in an overlay), renders a close button inline with
    *  share/like at the same size and style, instead of a floating dialog X. */
   onClose?: () => void;
-  /** Opens the AI assistant with this listing as the subject. Renders a sparkle
-   *  in the action cluster when provided — the quick way to ask about the place
-   *  you are looking at, without leaving the surface you are on. */
-  onAskAI?: () => void;
   liked?: boolean;
   onLike?: () => void;
   onContact?: () => void;
@@ -119,7 +116,6 @@ export const EditorialPropertyCard = ({
   quoteFallback,
   onCardClick,
   onClose,
-  onAskAI,
   liked,
   onLike,
   onContact,
@@ -335,6 +331,14 @@ export const EditorialPropertyCard = ({
   const mapLat = hasCoords ? apartment.latitude! : geocodedCoords?.lat ?? 0;
   const mapLng = hasCoords ? apartment.longitude! : geocodedCoords?.lng ?? 0;
 
+  // The sparkle summons the platform assistant about this listing. Fired as an
+  // event rather than a prop so every card carries it without each surface
+  // having to own a chat.
+  const askAssistant = () => {
+    const detail: AssistantOpenDetail = { propertyId: apartment.id, title: displayTitle };
+    window.dispatchEvent(new CustomEvent(ASSISTANT_OPEN_EVENT, { detail }));
+  };
+
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
     shareProperty(apartment.id, displayTitle, { openPage: true });
@@ -431,24 +435,8 @@ export const EditorialPropertyCard = ({
         )}
 
         {/* Share / like / close cluster */}
-        {(topRightActions || onAskAI || onLike || onClose) && (
-          <div className={`absolute flex items-center gap-2 ${compact ? 'top-6 right-3.5' : 'top-8 right-5'}`}>
+        <div className={`absolute flex items-center gap-2 ${compact ? 'top-6 right-3.5' : 'top-8 right-5'}`}>
             {topRightActions}
-            {onAskAI && (
-              <Button
-                size="icon"
-                variant="secondary"
-                aria-label="Ask the AI assistant about this property"
-                title="Ask Hausto AI about this property"
-                className="w-8 h-8 rounded-full border-0 backdrop-blur-md transition-all bg-primary/85 text-primary-foreground hover:bg-primary"
-                onClick={e => {
-                  e.stopPropagation();
-                  onAskAI();
-                }}
-              >
-                <Sparkles className="w-4 h-4" />
-              </Button>
-            )}
             <Button
               size="icon"
               variant="secondary"
@@ -486,8 +474,20 @@ export const EditorialPropertyCard = ({
                 <X className="w-4 h-4" />
               </Button>
             )}
+            <Button
+              size="icon"
+              variant="secondary"
+              aria-label="Ask the AI assistant about this property"
+              title="Ask the Hausto Assistant about this property"
+              className="w-8 h-8 rounded-full border-0 backdrop-blur-md transition-all bg-primary/85 text-primary-foreground hover:bg-primary"
+              onClick={e => {
+                e.stopPropagation();
+                askAssistant();
+              }}
+            >
+              <Sparkles className="w-4 h-4" />
+            </Button>
           </div>
-        )}
 
         {/* Slideshow arrows */}
         {images.length > 1 && (
