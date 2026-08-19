@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Sparkles, Send, X, RotateCcw } from 'lucide-react';
+import { Sparkles, Send, X, RotateCcw, ChevronDown, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useMatches } from '@/hooks/useMatches';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
 
@@ -51,9 +52,12 @@ export const AIAssistant = () => {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [contactsRemaining, setContactsRemaining] = useState<number | null>(null);
-  // Listing the conversation is about when the assistant was summoned from a
-  // card's sparkle. Takes precedence over the one read from the URL.
-  const [contextProperty, setContextProperty] = useState<AssistantOpenDetail | null>(null);
+  // Listings the conversation is about: seeded by the card sparkle that
+  // summoned the assistant, and editable here from the renter's matches, so
+  // support can be asked for one place or several without leaving the chat.
+  const [subjects, setSubjects] = useState<AssistantOpenDetail[]>([]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const { renterMatches } = useMatches();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const storageKey = user ? `haustoAssistant_${user.id}` : null;
 
@@ -89,7 +93,29 @@ export const AIAssistant = () => {
   // contact for this one" resolves without naming it. A card's sparkle names
   // the listing explicitly, which wins over whatever page we happen to be on.
   const urlPropertyId = location.pathname.match(/^\/property\/([^/]+)/)?.[1] ?? null;
-  const contextPropertyId = contextProperty?.propertyId ?? urlPropertyId;
+  const contextPropertyIds = subjects.length > 0
+    ? subjects.map(s => s.propertyId!).filter(Boolean)
+    : (urlPropertyId ? [urlPropertyId] : []);
+  // Kept alongside the list so an assistant deploy that predates multi-subject
+  // support still gets the primary one.
+  const contextPropertyId = contextPropertyIds[0] ?? null;
+  const contextKey = contextPropertyIds.join(',');
+
+  // The renter's matches, as pickable subjects.
+  const matchOptions = (renterMatches || [])
+    .filter(m => m.properties?.id)
+    .map(m => ({
+      propertyId: m.properties!.id,
+      title: m.properties!.title,
+      location: m.properties!.location,
+      image: m.properties!.images?.[0],
+    }));
+
+  const toggleSubject = (option: { propertyId: string; title: string }) => {
+    setSubjects(prev => prev.some(s => s.propertyId === option.propertyId)
+      ? prev.filter(s => s.propertyId !== option.propertyId)
+      : [...prev, { propertyId: option.propertyId, title: option.title }]);
+  };
 
   // Opened from a property card's sparkle. Signed-out visitors have no
   // assistant, so send them to sign in rather than clicking into nothing.
@@ -100,7 +126,8 @@ export const AIAssistant = () => {
         navigate('/auth');
         return;
       }
-      setContextProperty(detail?.propertyId ? detail : null);
+      setSubjects(detail?.propertyId ? [detail] : []);
+      setIsPickerOpen(false);
       setIsOpen(true);
     };
     window.addEventListener(ASSISTANT_OPEN_EVENT, onOpen);
@@ -120,7 +147,7 @@ export const AIAssistant = () => {
         .slice(-16)
         .map(m => ({ role: m.role, content: m.content }));
       const { data, error } = await supabase.functions.invoke('ai-assistant', {
-        body: { messages: history, contextPropertyId },
+        body: { messages: history, contextPropertyId, contextPropertyIds },
       });
       if (error) throw error;
       setMessages(prev => [...prev, {
@@ -144,7 +171,9 @@ export const AIAssistant = () => {
     } finally {
       setIsSending(false);
     }
-  }, [input, isSending, messages, contextPropertyId]);
+    // contextKey stands in for the id list, which is a fresh array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, isSending, messages, contextPropertyId, contextKey]);
 
   const handleUpgrade = () => {
     if (location.pathname === '/discover') {
@@ -208,20 +237,76 @@ export const AIAssistant = () => {
             </button>
           </div>
 
-          {/* Which listing the assistant was summoned about, when it was */}
-          {contextProperty?.propertyId && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border-b border-purple-100 flex-shrink-0">
-              <Sparkles className="w-3 h-3 text-purple-600 flex-shrink-0" />
-              <p className="flex-1 min-w-0 text-[11px] text-purple-900 truncate">
-                About: {contextProperty.title || 'this listing'}
-              </p>
-              <button
-                onClick={() => setContextProperty(null)}
-                aria-label="Stop asking about this listing"
-                className="p-0.5 rounded-full hover:bg-purple-200/60 transition-colors flex-shrink-0"
-              >
-                <X className="w-3 h-3 text-purple-700" />
-              </button>
+          {/* What the conversation is about. Tap to pick from your matches -
+              one listing or several - so support is always scoped to something. */}
+          {(subjects.length > 0 || matchOptions.length > 0) && (
+            <div className="border-b border-purple-100 bg-purple-50 flex-shrink-0">
+              <div className="flex items-center gap-2 px-3 py-2">
+                <Sparkles className="w-3 h-3 text-purple-600 flex-shrink-0" />
+                <button
+                  onClick={() => setIsPickerOpen(o => !o)}
+                  aria-expanded={isPickerOpen}
+                  className="flex-1 min-w-0 flex items-center gap-1 text-left text-[11px] text-purple-900 hover:text-purple-700 transition-colors"
+                >
+                  <span className="truncate">
+                    {subjects.length === 0
+                      ? 'Pick the listings you want help with'
+                      : subjects.length === 1
+                        ? `About: ${subjects[0].title || 'this listing'}`
+                        : `About: ${subjects.length} listings`}
+                  </span>
+                  <ChevronDown className={`w-3 h-3 flex-shrink-0 transition-transform ${isPickerOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {subjects.length > 0 && (
+                  <button
+                    onClick={() => setSubjects([])}
+                    aria-label="Clear the listings in scope"
+                    className="p-0.5 rounded-full hover:bg-purple-200/60 transition-colors flex-shrink-0"
+                  >
+                    <X className="w-3 h-3 text-purple-700" />
+                  </button>
+                )}
+              </div>
+
+              {isPickerOpen && (
+                <div className="max-h-[168px] overflow-y-auto border-t border-purple-100 bg-white/70">
+                  {matchOptions.length === 0 ? (
+                    <p className="px-3 py-3 text-[11px] text-muted-foreground">
+                      No matched listings yet - like a place and it shows up here.
+                    </p>
+                  ) : matchOptions.map(option => {
+                    const picked = subjects.some(s => s.propertyId === option.propertyId);
+                    return (
+                      <button
+                        key={option.propertyId}
+                        onClick={() => toggleSubject(option)}
+                        aria-pressed={picked}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${picked ? 'bg-purple-100/70' : 'hover:bg-purple-50'}`}
+                      >
+                        {option.image ? (
+                          <img loading="lazy"
+                            src={option.image}
+                            alt=""
+                            className="w-9 h-7 rounded object-cover flex-shrink-0"
+                            onError={e => {
+                              const target = e.target as HTMLImageElement;
+                              target.onerror = null;
+                              target.src = '/placeholder-property.jpg';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-9 h-7 rounded bg-muted flex-shrink-0" />
+                        )}
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[11px] font-medium text-foreground truncate">{option.title}</span>
+                          <span className="block text-[10px] text-muted-foreground truncate">{option.location}</span>
+                        </span>
+                        {picked && <Check className="w-3.5 h-3.5 text-purple-700 flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -274,7 +359,7 @@ export const AIAssistant = () => {
           {/* Composer */}
           <div className="p-2.5 border-t border-purple-100 bg-white flex-shrink-0 space-y-2">
             <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {quickChips(contextProperty?.title).map(chip => (
+              {quickChips(subjects.length === 1 ? subjects[0].title : undefined).map(chip => (
                 <button
                   key={chip.label}
                   disabled={isSending}

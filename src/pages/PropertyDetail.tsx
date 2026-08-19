@@ -8,6 +8,10 @@ import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { HaustoChat } from '@/components/HaustoChat';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { useMatches } from '@/hooks/useMatches';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
+import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { toast } from '@/hooks/use-toast';
@@ -34,8 +38,14 @@ const PropertyDetail = () => {
   const [firstSeenAt, setFirstSeenAt] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatConversationId, setChatConversationId] = useState<string | null>(null);
-  const [isContacting, setIsContacting] = useState(false);
+  const [isBooking, setIsBooking] = useState(false);
+  // Set once the listing has a conversation to hang the request off; opening
+  // the schedule modal is what it gates.
+  const [scheduleContext, setScheduleContext] = useState<{ conversationId: string; realtorId: string } | null>(null);
+  const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
   const { createMatch } = useMatches();
+  const { quota } = useViewingQuota();
+  const { submitFastTrack } = useFastTrackRequest();
   const { getOrCreateConversation } = useDirectMessages();
 
   // Signed-in renters see how the listing matches their saved preferences
@@ -188,12 +198,22 @@ const PropertyDetail = () => {
   const vibeScore = preferences ? calculateVibeScore(apartment, preferences) : null;
   const vibeMatch = preferences ? getVibeAttributeMatch(apartment, preferences) : undefined;
 
-  // Contacting saves the listing to Matches and opens the existing Hausto chat
-  // with the realtor, rather than a one-off contact form. External listings have
+  // Booking saves the listing to Matches and opens Fast-Track coordination -
+  // the renter picks times and Hausto handles the owner. External listings have
   // no realtor account, so the Hausto agent is the counterpart.
-  const handleContact = async () => {
+  const handleBookViewing = async () => {
     if (!user || !apartment) return;
-    setIsContacting(true);
+    if (!quota) {
+      toast({ title: 'Checking your viewing allowance', description: 'One moment.' });
+      return;
+    }
+    // Free tier gets one coordination on the house; past that the upgrade path
+    // takes over rather than a dead button.
+    if (!quota.canBook) {
+      setIsSubscriptionOpen(true);
+      return;
+    }
+    setIsBooking(true);
     try {
       const isExternal = source === 'external';
       const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
@@ -201,26 +221,55 @@ const PropertyDetail = () => {
         await createMatch(apartment.id, realtorId, isExternal ? 'external' : 'internal');
       } catch (err) {
         // useMatches already toasts each case. Only an existing match should
-        // still open the chat; limits and real failures stop here.
+        // still proceed; limits and real failures stop here.
         if ((err as Error)?.message !== 'ALREADY_MATCHED') return;
       }
 
-      // Conversations are keyed by renter/realtor pair in match_conversations —
-      // resolve (or create) that thread so we continue the existing chat instead
-      // of opening an empty one.
+      // Conversations are keyed by renter/realtor pair in match_conversations -
+      // the request hangs off that thread so the coordination has somewhere to
+      // land and be followed up.
       const conversationId = await getOrCreateConversation(user.id, realtorId);
       if (!conversationId) {
         toast({
-          title: 'Could not open chat',
+          title: 'Could not start the request',
           description: 'The listing was saved to Matches but the conversation could not be opened. Try again from Matches.',
           variant: 'destructive',
         });
         return;
       }
-      setChatConversationId(conversationId);
-      setIsChatOpen(true);
+      setScheduleContext({ conversationId, realtorId });
     } finally {
-      setIsContacting(false);
+      setIsBooking(false);
+    }
+  };
+
+  const handleScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
+    if (!scheduleContext || !apartment) return;
+    try {
+      await submitFastTrack({
+        conversationId: scheduleContext.conversationId,
+        realtorId: scheduleContext.realtorId,
+        scheduleData,
+        properties: [{
+          id: apartment.id,
+          title: apartment.title,
+          location: apartment.location,
+          price: apartment.price,
+          imageUrl: apartment.images?.[0] || '',
+        }],
+      });
+      toast({
+        title: 'Viewing request sent',
+        description: 'Hausto will coordinate the viewing and get back to you soon.',
+      });
+      setScheduleContext(null);
+    } catch (error) {
+      console.error('Error submitting viewing schedule:', error);
+      toast({
+        title: 'Could not send the request',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -291,10 +340,30 @@ const PropertyDetail = () => {
               vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
               preferences={preferences}
               vibeMatch={vibeMatch}
-              onContact={user ? handleContact : undefined}
-              isContacting={isContacting}
+              onBookViewing={user ? handleBookViewing : undefined}
+              isBooking={isBooking}
             />
           </div>
+
+          <ViewingScheduleModal
+            isOpen={!!scheduleContext}
+            onClose={() => setScheduleContext(null)}
+            onSubmit={handleScheduleSubmit}
+            matchedProperties={[{
+              id: apartment.id,
+              title: apartment.title,
+              images: apartment.images,
+              location: apartment.location,
+              price: apartment.price,
+            }]}
+            initialSelectedIds={[apartment.id]}
+          />
+
+          <SubscriptionModal
+            isOpen={isSubscriptionOpen}
+            onClose={() => setIsSubscriptionOpen(false)}
+            reason={quota?.trialUsed ? 'viewings' : undefined}
+          />
 
           <ListingHistoryNote
             listingId={apartment.id}

@@ -65,10 +65,19 @@ serve(async (req) => {
       });
     }
 
-    const { messages, contextPropertyId } = await req.json() as {
+    const { messages, contextPropertyId, contextPropertyIds } = await req.json() as {
       messages: ClientMessage[];
       contextPropertyId?: string | null;
+      contextPropertyIds?: string[] | null;
     };
+    // The renter can scope the conversation to several matched listings at
+    // once; older clients send only the single id.
+    const subjectIds = Array.from(new Set(
+      (Array.isArray(contextPropertyIds) && contextPropertyIds.length > 0
+        ? contextPropertyIds
+        : [contextPropertyId])
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    )).slice(0, 8);
     if (!Array.isArray(messages) || messages.length === 0) {
       return json({ error: "messages are required" }, 400);
     }
@@ -118,16 +127,17 @@ serve(async (req) => {
       ...(externalRes.data || []),
     ];
 
-// The listing the user is asking about - the page they are on, or the card
-    // whose sparkle summoned the assistant - joins the context so "get me the
-    // contact for this one" resolves without a match.
-    if (contextPropertyId && !properties.some((p) => p.id === contextPropertyId)) {
-      const [{ data: internal }, { data: external }] = await Promise.all([
-        supabase.from("properties").select(INTERNAL_COLS).eq("id", contextPropertyId).maybeSingle(),
-        supabase.from("external_properties").select(EXTERNAL_COLS).eq("id", contextPropertyId).maybeSingle(),
+// The listings the user is asking about - the page they are on, the card
+    // whose sparkle summoned the assistant, or what they picked in the subject
+    // strip - join the context so "get me the contact for this one" resolves
+    // even when the listing was never matched.
+    const missingSubjectIds = subjectIds.filter((id) => !properties.some((p) => p.id === id));
+    if (missingSubjectIds.length > 0) {
+      const [{ data: internals }, { data: externals }] = await Promise.all([
+        supabase.from("properties").select(INTERNAL_COLS).in("id", missingSubjectIds),
+        supabase.from("external_properties").select(EXTERNAL_COLS).in("id", missingSubjectIds),
       ]);
-      if (internal) properties.unshift(internal);
-      else if (external) properties.unshift(external);
+      properties.unshift(...(internals || []), ...(externals || []));
     }
 
     // Complex knowledge matched against property titles/locations
@@ -147,24 +157,29 @@ serve(async (req) => {
     }
 
     const propertyContext = properties.map((p, i) => {
-      const marker = p.id === contextPropertyId ? " ← CURRENT SUBJECT" : "";
+      const marker = subjectIds.includes(String(p.id)) ? " ← CURRENT SUBJECT" : "";
       const hasContact = !!(p.property_source_provider_phone || p.property_source_provider_name || p.contact_phone || p.contact_name);
       return `Property ${i + 1} [id ${p.id}]${marker}: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? "size n/a"}, rooms: ${p.rooms ?? "n/a"}. Vibe: ${p.vibe ?? "n/a"}. Highlights: ${((p.highlights as string[]) || []).join(", ")}. Amenities: ${((p.amenities as string[]) || []).join(", ")}. Contact on file: ${hasContact ? "yes" : "no"}. ${p.description ? `Description: ${String(p.description).slice(0, 300)}` : ""}`;
     }).join("\n");
 
-    // Naming the subject on its own, above the list, is what stops the model
-    // asking "which property?" when the user has clearly already pointed at one
-    // by opening the assistant from its card.
-    const subject = contextPropertyId
-      ? properties.find((p) => p.id === contextPropertyId)
-      : undefined;
-    const subjectContext = subject
-      ? `CURRENT SUBJECT - the user opened this assistant from this listing, so any request that does not name a property ("get the owner's contact", "is it still available?", "can I view it?") is about THIS one. Act on it; do not ask them which property they mean.
-Property [id ${subject.id}]: ${subject.title} at ${subject.location}. Contact on file: ${
-          (subject.property_source_provider_phone || subject.property_source_provider_name ||
-            subject.contact_phone || subject.contact_name) ? "yes" : "no"
-        }.`
-      : "";
+    // Naming the subjects on their own, above the list, is what stops the model
+    // asking "which property?" when the renter has already pointed at them - by
+    // opening the assistant from a card, or by picking them in the chat.
+    const subjectProps = subjectIds
+      .map((id) => properties.find((p) => p.id === id))
+      .filter((p): p is Record<string, unknown> => !!p);
+    const describe = (p: Record<string, unknown>) =>
+      `Property [id ${p.id}]: ${p.title} at ${p.location}. Contact on file: ${
+        (p.property_source_provider_phone || p.property_source_provider_name ||
+          p.contact_phone || p.contact_name) ? "yes" : "no"
+      }.`;
+    const subjectContext = subjectProps.length === 1
+      ? `CURRENT SUBJECT - the user pointed this assistant at this listing, so any request that does not name a property ("get the owner's contact", "is it still available?", "can I view it?") is about THIS one. Act on it; do not ask them which property they mean.
+${describe(subjectProps[0])}`
+      : subjectProps.length > 1
+        ? `CURRENT SUBJECTS - the user scoped this conversation to these ${subjectProps.length} listings. A request that names no property is about all of them: answer for each. Only if one specific answer is needed and they genuinely differ, ask which of THESE they mean - never ask them to name a property from scratch.
+${subjectProps.map(describe).join("\n")}`
+        : "";
 
     const prefsContext = prefRow
       ? `User preferences on file: ${JSON.stringify(prefRow).slice(0, 500)}`
@@ -189,7 +204,7 @@ ${subjectContext}
 
 ${prefsContext}
 
-Matched properties${subject ? " (the current subject is marked)" : ""}:
+Matched properties${subjectProps.length > 0 ? " (subjects marked)" : ""}:
 ${propertyContext || "None on record yet - the user hasn't matched with any listings."}
 
 ${complexContext ? `Complex knowledge:\n${complexContext}` : ""}

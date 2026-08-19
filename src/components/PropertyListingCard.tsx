@@ -45,9 +45,10 @@ interface PropertyListingCardProps {
   preferences?: UserPreferences | null;
   /** Matched style/lifestyle/feature attributes shown in the vibe popover */
   vibeMatch?: VibeMatchAttributes;
-  onContact?: () => void;
-  /** Disables the contact CTA while a chat is being opened */
-  isContacting?: boolean;
+  /** Opens Fast-Track viewing coordination for this listing */
+  onBookViewing?: () => void;
+  /** Disables the CTA while the booking flow is being opened */
+  isBooking?: boolean;
 }
 
 export const PropertyListingCard = ({
@@ -55,8 +56,8 @@ export const PropertyListingCard = ({
   vibeScore,
   preferences,
   vibeMatch,
-  onContact,
-  isContacting = false,
+  onBookViewing,
+  isBooking = false,
 }: PropertyListingCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(0);
@@ -369,9 +370,9 @@ export const PropertyListingCard = ({
           </div>
         )}
 
-        {onContact && (
-          <Button className="w-full rounded-full mt-1" size="lg" onClick={onContact} disabled={isContacting}>
-            {isContacting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Contact'}
+        {onBookViewing && (
+          <Button className="w-full rounded-full mt-1" size="lg" onClick={onBookViewing} disabled={isBooking}>
+            {isBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Book viewing'}
           </Button>
         )}
       </div>
