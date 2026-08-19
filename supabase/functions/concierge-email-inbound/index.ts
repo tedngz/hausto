@@ -8,7 +8,10 @@ import {
   CONCIERGE_INBOX,
   corsHeaders,
   esc,
+  boxToken,
+  conversationHeaders,
   greeting,
+  inqToken,
   inquiryIdFromAddresses,
   inquiryIdFromText,
   json,
@@ -349,11 +352,18 @@ async function handleStandaloneMail(
        answered inside one about a different building.</p>`
     : "";
 
+  // The thread's own subject, never the incoming one. Echoing "Re: GMGN" back
+  // produced a second Gmail conversation next to the first, because the two
+  // subjects differ by a "Re:" that is not at the front and so is not stripped.
+  const threadSubject = String(thread!.subject ?? "(no subject)")
+    .replace(/^((re|fwd?)\s*:\s*)+/i, "");
+
   await sendMail({
     from: CONCIERGE_FROM,
     to: [ADMIN_EMAIL],
     reply_to: mailThreadAddress(thread!.id),
-    subject: `📥 ${mail.from}: ${mail.subject}${mailThreadToken(thread!.id)}`,
+    subject: `📥 ${thread!.contact_email}: ${threadSubject}${mailThreadToken(thread!.id)}`,
+    headers: conversationHeaders(boxToken(thread!.id)),
     html: `
       <p><strong>From:</strong> ${esc(mail.from)}</p>
       ${context}
@@ -625,6 +635,9 @@ serve(async (req) => {
         subject: `💬 ${fromRenter ? inquiry.full_name : mail.from} replied · ${
           complex?.name ?? "availability request"
         }${subjectToken(inquiry.id)}`,
+        // Groups with the original "🏢 Availability request" notice and every
+        // later reply, so one request reads as one conversation.
+        headers: conversationHeaders(inqToken(inquiry.id)),
         html: `
           <p><strong>${esc(fromRenter ? inquiry.full_name : mail.from)}</strong>
           (${esc(mail.from)}) replied about

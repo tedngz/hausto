@@ -78,6 +78,31 @@ export function mailThreadToken(threadId: string): string {
   return ` [box-${threadId.replace(/-/g, "")}]`;
 }
 
+/** "box-<hex>" / "inq-<hex>" — the bare token, for conversationHeaders. */
+export const boxToken = (threadId: string) => `box-${threadId.replace(/-/g, "")}`;
+export const inqToken = (inquiryId: string) => `inq-${inquiryId.replace(/-/g, "")}`;
+
+/**
+ * Headers that put every notice about one conversation in one Gmail thread.
+ *
+ * We cannot reference our own sent mail: Resend rides on SES, which stamps its
+ * own Message-Id (<…@ap-northeast-1.amazonses.com>) and discards any we set, and
+ * the id Resend hands back is unrelated to it. So instead every message about a
+ * conversation points at the same invented parent. Nothing ever has that
+ * Message-Id, which is fine - clients thread on a shared ancestor whether or not
+ * they hold it, the way mailing lists have always worked.
+ *
+ * Gmail also groups on an identical subject, so callers should keep the subject
+ * stable across a conversation rather than echoing each incoming "Re:" variant.
+ * Between the two, one of them lands.
+ *
+ * @param token "inq-<hex>" or "box-<hex>"
+ */
+export function conversationHeaders(token: string): Record<string, string> {
+  const root = `<${token}@hausto.com>`;
+  return { "In-Reply-To": root, "References": root };
+}
+
 /** Pull a standalone mail-thread id out of a recipient list or subject. */
 export function mailThreadIdFromText(...values: (string | null | undefined)[]): string | null {
   return tokenFrom(/box-([0-9a-f]{32})/i, values);
