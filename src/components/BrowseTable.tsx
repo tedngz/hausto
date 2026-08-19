@@ -890,8 +890,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   onLike={() => handleLike(preview)}
                   onAskAI={() => handleAskHausto(preview)}
                   onClose={() => setPreview(null)}
-                  onContact={() => handleAskHausto(preview)}
-                  contactLabel="Ask Hausto"
                   onSchedule={() => openFastTrack([preview])}
                   scheduleLabel="Book viewing"
                 />
