@@ -6,8 +6,10 @@ import {
   CONCIERGE_FROM,
   corsHeaders,
   esc,
+  firstName,
   json,
   replyAddress,
+  signature,
   subjectToken,
 } from "../_shared/concierge-email.ts";
 
@@ -122,15 +124,15 @@ const handler = async (req: Request): Promise<Response> => {
       subject: `We're checking ${subject.toLowerCase()}`,
       html: `
         <h1>Your availability request is in</h1>
-        <p>Hi ${esc(inquiry.full_name)},</p>
-        <p>Our concierge is checking live availability at <strong>${esc(complexName)}</strong>
+        <p>Hi ${esc(firstName(inquiry.full_name))},</p>
+        <p>We're checking live availability at <strong>${esc(complexName)}</strong>
         and will come back to you within 24 hours with vetted units.</p>
 
         <h2>What we're matching against</h2>
         ${criteriaHtml}
 
         <p>Anything to add? Just reply to this email.</p>
-        <p>Best regards,<br>The Hausto Team</p>
+        ${signature()}
       `,
     });
     console.log("Renter email sent:", renterEmail);
