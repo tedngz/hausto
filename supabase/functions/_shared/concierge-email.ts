@@ -38,15 +38,33 @@ export function replyAddress(inquiryId: string): string {
   return `Hausto Concierge <hello+inq-${inquiryId.replace(/-/g, "")}@hausto.com>`;
 }
 
-/** Pull an inquiry id back out of any address in a To/Cc list. */
-export function inquiryIdFromAddresses(addresses: string[]): string | null {
-  for (const raw of addresses) {
-    const match = String(raw).match(/inq-([0-9a-f]{32})/i);
+/**
+ * " [inq-<uuid without dashes>]" for the end of an admin notification subject.
+ *
+ * Plus addressing is not guaranteed to survive: it depends on the receiving
+ * provider treating hello+tag@ as hello@, which SES and Resend document
+ * differently. A subject tag rides along on every client's Reply regardless of
+ * provider, so the thread still resolves if the alias is ever dropped. Renters
+ * never see it - their relayed copy gets a freshly written subject.
+ */
+export function subjectToken(inquiryId: string): string {
+  return ` [inq-${inquiryId.replace(/-/g, "")}]`;
+}
+
+/** Pull an inquiry id out of anything that might carry the token. */
+export function inquiryIdFromText(...values: (string | null | undefined)[]): string | null {
+  for (const raw of values) {
+    const match = String(raw ?? "").match(/inq-([0-9a-f]{32})/i);
     if (!match) continue;
     const h = match[1].toLowerCase();
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
   }
   return null;
+}
+
+/** Pull an inquiry id back out of any address in a To/Cc list. */
+export function inquiryIdFromAddresses(addresses: string[]): string | null {
+  return inquiryIdFromText(...addresses);
 }
 
 /** "Jane Doe <jane@x.com>" -> "jane@x.com" */

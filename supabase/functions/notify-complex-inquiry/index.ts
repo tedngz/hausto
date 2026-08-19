@@ -8,6 +8,7 @@ import {
   esc,
   json,
   replyAddress,
+  subjectToken,
 } from "../_shared/concierge-email.ts";
 
 // Emails the concierge team when a renter asks us to check live availability at
@@ -85,7 +86,7 @@ const handler = async (req: Request): Promise<Response> => {
       from: CONCIERGE_FROM,
       to: [ADMIN_EMAIL],
       reply_to: adminThreadAddress,
-      subject: `🏢 Availability request: ${complexName}`,
+      subject: `🏢 Availability request: ${complexName}${subjectToken(inquiry.id)}`,
       html: `
         <h1>New concierge availability request</h1>
         <p>A renter asked the concierge to check live availability at

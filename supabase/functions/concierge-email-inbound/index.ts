@@ -9,9 +9,11 @@ import {
   corsHeaders,
   esc,
   inquiryIdFromAddresses,
+  inquiryIdFromText,
   json,
   replyAddress,
   stripQuotedReply,
+  subjectToken,
   textToHtml,
 } from "../_shared/concierge-email.ts";
 
@@ -19,16 +21,21 @@ import {
 // availability request, then pings ted.ngz@gmail.com so nothing sits unseen.
 //
 // Payload shapes accepted (whichever provider ends up in front of the domain):
-//   - Amazon SES -> SNS notification  { Type: "Notification", Message: "{...}" }
 //   - Resend inbound webhook          { type: "email.received", data: {...} }
+//   - Amazon SES -> SNS notification  { Type: "Notification", Message: "{...}" }
 //   - plain JSON                      { from, to, subject, text }
 //
-// Runs without a JWT because mail providers cannot mint one. Set
-// CONCIERGE_INBOUND_SECRET and pass it as ?secret= or x-webhook-secret to keep
-// strangers from writing to the thread.
+// Runs without a JWT because mail providers cannot mint one. Two ways in, so
+// the provider in front of the domain can be swapped without a window where
+// mail is dropped:
+//   - RESEND_WEBHOOK_SECRET + Svix signature headers (Resend's own scheme)
+//   - CONCIERGE_INBOUND_SECRET as ?secret= or x-webhook-secret
+// A request carrying neither is refused.
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const resend = new Resend(RESEND_API_KEY);
 const INBOUND_SECRET = Deno.env.get("CONCIERGE_INBOUND_SECRET");
+const WEBHOOK_SECRET = Deno.env.get("RESEND_WEBHOOK_SECRET");
 
 interface ParsedMail {
   from: string;
@@ -59,6 +66,57 @@ const asList = (value: unknown): string[] => {
   return String(value).split(",").map(bareAddress).filter(Boolean);
 };
 
+/**
+ * Resend signs webhooks the Svix way: HMAC-SHA256 over "<id>.<timestamp>.<body>"
+ * keyed by the part of whsec_… after the prefix, base64-decoded. Several
+ * signatures can be listed while a secret is being rotated, so any match passes.
+ */
+async function svixSignatureValid(req: Request, raw: string): Promise<boolean> {
+  const id = req.headers.get("svix-id");
+  const timestamp = req.headers.get("svix-timestamp");
+  const signatures = req.headers.get("svix-signature");
+  if (!WEBHOOK_SECRET || !id || !timestamp || !signatures) return false;
+
+  // Reject replays of an old capture; five minutes is Svix's own tolerance.
+  const skew = Math.abs(Date.now() / 1000 - Number(timestamp));
+  if (!Number.isFinite(skew) || skew > 300) return false;
+
+  const secret = WEBHOOK_SECRET.replace(/^whsec_/, "");
+  const key = await crypto.subtle.importKey(
+    "raw",
+    Uint8Array.from(atob(secret), (c) => c.charCodeAt(0)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${timestamp}.${raw}`));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
+
+  return signatures.split(" ").some((entry) => entry.split(",")[1] === expected);
+}
+
+/**
+ * Resend's email.received webhook carries metadata only - the body has to be
+ * fetched. Returns null on failure so the caller can still file the message
+ * (subject and sender alone are worth surfacing) rather than losing it.
+ */
+async function fetchReceivedEmail(emailId: string): Promise<any | null> {
+  if (!RESEND_API_KEY) return null;
+  try {
+    const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+    });
+    if (!res.ok) {
+      console.error("Resend receiving fetch failed:", res.status, await res.text());
+      return null;
+    }
+    return await res.json();
+  } catch (error) {
+    console.error("Resend receiving fetch threw:", error);
+    return null;
+  }
+}
+
 /** SES delivers the raw RFC822 message; pull the first text/plain part out. */
 function textFromRawMime(raw: string): string {
   const boundary = raw.match(/boundary="?([^";\s]+)"?/i)?.[1];
@@ -88,7 +146,7 @@ function textFromRawMime(raw: string): string {
   return decode(raw);
 }
 
-function parsePayload(payload: any): ParsedMail | null {
+async function parsePayload(payload: any): Promise<ParsedMail | null> {
   // Amazon SES via SNS
   if (payload?.Type === "Notification" && typeof payload.Message === "string") {
     let inner: any;
@@ -119,18 +177,53 @@ function parsePayload(payload: any): ParsedMail | null {
     };
   }
 
-  // Resend inbound webhook
-  const data = payload?.data ?? payload;
+  // Resend inbound webhook. The email.received event is metadata only, so the
+  // body comes from a follow-up call; anything already inlined (the plain-JSON
+  // shape, or a future payload that carries a body) is used as-is.
+  let data = payload?.data ?? payload;
   if (!data) return null;
+  if (payload?.type === "email.received" && data.email_id && !data.text && !data.html) {
+    const full = await fetchReceivedEmail(String(data.email_id));
+    if (full) data = { ...data, ...(full.data ?? full) };
+  }
+
   const text = data.text ?? (data.html ? String(data.html).replace(/<[^>]+>/g, " ") : "");
   return {
     from: bareAddress(data.from?.email ?? data.from),
-    recipients: [...asList(data.to), ...asList(data.cc)],
+    // received_for is the envelope recipient - the only place a plus-addressed
+    // thread alias shows up when the header To: is the plain inbox.
+    recipients: [...asList(data.to), ...asList(data.cc), ...asList(data.received_for)],
     subject: data.subject ?? "(no subject)",
     body: text || "(empty message)",
     messageId: data.message_id ?? data.messageId ?? headerValue(data.headers, "message-id"),
     inReplyTo: data.in_reply_to ?? headerValue(data.headers, "in-reply-to"),
   };
+}
+
+/**
+ * The Resend SDK reports a rejection in the result instead of throwing, so a
+ * plain await looks like success. Throwing here pushes the failure up to the
+ * 500 handler, which is what makes the provider retry rather than count the
+ * message as delivered and drop it.
+ */
+async function sendMail(payload: Record<string, unknown>) {
+  const result: any = await resend.emails.send(payload as any);
+  if (result?.error) {
+    throw new Error(`Resend rejected the message: ${result.error.message ?? JSON.stringify(result.error)}`);
+  }
+  return result;
+}
+
+/** Last resort for mail we could not file: a raw dump beats silence. */
+async function alertAdmin(subject: string, note: string, body: string) {
+  await sendMail({
+    from: CONCIERGE_FROM,
+    to: [ADMIN_EMAIL],
+    subject,
+    html: `<p>${esc(note)}</p>
+           <p>It is not on any dashboard thread, so this copy is the only record.</p>
+           <hr><pre style="white-space: pre-wrap; font-size: 12px;">${esc(body.slice(0, 5000))}</pre>`,
+  });
 }
 
 serve(async (req) => {
@@ -139,16 +232,25 @@ serve(async (req) => {
   }
 
   try {
-    if (INBOUND_SECRET) {
-      const url = new URL(req.url);
-      const provided = req.headers.get("x-webhook-secret") ?? url.searchParams.get("secret");
-      if (provided !== INBOUND_SECRET) {
-        console.warn("Rejected inbound mail: bad secret");
-        return json({ error: "Forbidden" }, 403);
-      }
+    // Read the body as text first: the Svix signature is over the exact bytes,
+    // so re-serialising the parsed JSON would not verify.
+    const raw = await req.text();
+
+    const url = new URL(req.url);
+    const provided = req.headers.get("x-webhook-secret") ?? url.searchParams.get("secret");
+    const sharedSecretOk = !!INBOUND_SECRET && provided === INBOUND_SECRET;
+    if (!sharedSecretOk && !(await svixSignatureValid(req, raw))) {
+      console.warn("Rejected inbound mail: no valid signature or secret");
+      return json({ error: "Forbidden" }, 403);
     }
 
-    const payload = await req.json();
+    let payload: any;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      await alertAdmin("📥 Unreadable inbound webhook", "The request body was not JSON.", raw);
+      return json({ success: true, matched: false, reason: "not_json" });
+    }
 
     // SNS asks us to confirm the subscription by fetching a URL it supplies.
     // We deliberately do not follow URLs that arrive in a request body - the
@@ -158,9 +260,17 @@ serve(async (req) => {
       return json({ success: true, action: "confirm_subscription_manually" });
     }
 
-    const mail = parsePayload(payload);
+    const mail = await parsePayload(payload);
     if (!mail || !mail.from) {
+      // Somebody's mail arrived in a shape we do not read. Forward the payload
+      // rather than returning a quiet 200 - a dropped message looks identical
+      // to no message at all from the outside.
       console.warn("Unrecognised inbound payload");
+      await alertAdmin(
+        `📥 Unrecognised mail to ${CONCIERGE_INBOX}`,
+        "An inbound webhook arrived in a shape this function does not parse.",
+        raw,
+      );
       return json({ success: true, matched: false, reason: "unparsable" });
     }
 
@@ -169,10 +279,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    // Prefer the inquiry id embedded in the plus address. A token that no
-    // longer resolves (deleted request, mangled address) falls back to the most
-    // recent request from that sender rather than dropping the mail silently.
-    const tokenId = inquiryIdFromAddresses(mail.recipients);
+    // Prefer the inquiry id embedded in the plus address, then the copy in the
+    // subject for the case where the provider did not keep the alias. A token
+    // that no longer resolves (deleted request, mangled address) falls back to
+    // the most recent request from that sender rather than dropping the mail.
+    const tokenId = inquiryIdFromAddresses(mail.recipients) ?? inquiryIdFromText(mail.subject);
     let inquiry: { id: string; full_name: string; email: string; status: string; complex_id: string; handled_at: string | null } | null = null;
 
     if (tokenId) {
@@ -198,16 +309,26 @@ serve(async (req) => {
     }
 
     if (!inquiry) {
-      // Still tell the admin - a real person emailed us and would otherwise
-      // hear nothing back. 200 so the provider does not retry forever.
+      // Our own notifications are sent from hello@hausto.com. One arriving back
+      // here with nothing to file it against means a loop, and forwarding it
+      // would keep the loop running - so that single case is dropped instead.
+      if (mail.from === CONCIERGE_INBOX) {
+        console.warn("Dropping unmatched mail from our own inbox to avoid a loop:", mail.subject);
+        return json({ success: true, matched: false, reason: "self" });
+      }
+
+      // Everything else gets forwarded - a real person emailed us and would
+      // otherwise hear nothing back. This is the path a cold email takes, and
+      // the one that carries confirmation codes for the Gmail send-as setup.
       console.warn("Inbound mail matched no inquiry:", mail.from);
-      await resend.emails.send({
+      await sendMail({
         from: CONCIERGE_FROM,
         to: [ADMIN_EMAIL],
         reply_to: [mail.from],
         subject: `📥 Unmatched mail to ${CONCIERGE_INBOX}: ${mail.subject}`,
         html: `<p><strong>From:</strong> ${esc(mail.from)}</p>
-               <p>No availability request matches this sender, so it is not on any dashboard thread.</p>
+               <p>No availability request matches this sender, so it is not on any dashboard thread.
+               Reply as <strong>${esc(CONCIERGE_INBOX)}</strong> and they never see your own address.</p>
                <hr><div>${textToHtml(mail.body.slice(0, 5000))}</div>`,
       });
       return json({ success: true, matched: false });
@@ -241,10 +362,14 @@ serve(async (req) => {
       in_reply_to: mail.inReplyTo,
     });
 
-    // 23505 = we already stored this message id; a duplicate delivery is a
-    // success from the provider's point of view.
+    // 23505 = we already stored this message id. Carry on to the notification
+    // rather than returning here: a redelivery is usually the provider retrying
+    // a request we failed *after* the insert, and the thing that failed is
+    // normally the notification itself. Stopping short would make the retry a
+    // no-op and lose the alert for good. A second copy is the safer error.
     if (insertError && insertError.code !== "23505") throw insertError;
-    if (insertError) return json({ success: true, duplicate: true });
+    const duplicate = !!insertError;
+    if (duplicate) console.warn("Redelivery of a stored message; re-running the notification.");
 
     await supabase
       .from("complex_inquiries")
@@ -260,42 +385,49 @@ serve(async (req) => {
     // concierge so the renter never sees a personal address, and so the whole
     // conversation stays on one sender.
     if (fromHausto) {
-      const relay = await resend.emails.send({
-        from: CONCIERGE_FROM,
-        to: [inquiry.email],
-        reply_to: CONCIERGE_FROM,
-        // Never reuse the admin's subject line - it is our internal notification
-        // ("💬 Hoang replied · City Garden"), which the renter should never see.
-        subject: `Re: Availability at ${complex?.name ?? "your request"}`,
-        html: `
-          <p>Hi ${esc(inquiry.full_name)},</p>
-          <div>${textToHtml(body)}</div>
-          <p style="margin-top: 24px; color: #6b7280; font-size: 13px;">
-            Hausto Concierge · just reply to this email and we'll pick it up.
-          </p>
-        `,
-      });
-      if ((relay as any)?.error) {
-        console.error("Failed to relay admin reply to renter:", (relay as any).error);
+      // The message row is already stored, so a 500 here would be retried into
+      // the duplicate guard and never relayed. Report the failure to the admin
+      // instead, while this request still ends as a success.
+      let relayed = true;
+      try {
+        await sendMail({
+          from: CONCIERGE_FROM,
+          to: [inquiry.email],
+          reply_to: CONCIERGE_FROM,
+          // Never reuse the admin's subject line - it is our internal notification
+          // ("💬 Hoang replied · City Garden"), which the renter should never see.
+          subject: `Re: Availability at ${complex?.name ?? "your request"}`,
+          html: `
+            <p>Hi ${esc(inquiry.full_name)},</p>
+            <div>${textToHtml(body)}</div>
+            <p style="margin-top: 24px; color: #6b7280; font-size: 13px;">
+              Hausto Concierge · just reply to this email and we'll pick it up.
+            </p>
+          `,
+        });
+      } catch (relayError: any) {
+        relayed = false;
+        console.error("Failed to relay admin reply to renter:", relayError);
+        await alertAdmin(
+          `⚠️ Your reply to ${inquiry.full_name} did not go out`,
+          `Relaying to ${inquiry.email} failed: ${relayError.message}. It is filed on the request in Admin Tools but the renter has not seen it.`,
+          body,
+        );
       }
-      return json({
-        success: true,
-        matched: true,
-        inquiryId: inquiry.id,
-        direction,
-        relayed: !(relay as any)?.error,
-      });
+      return json({ success: true, matched: true, inquiryId: inquiry.id, direction, relayed });
     }
 
     // Someone else's message - tell the admin. Reply-To is the thread alias
     // only, so their answer comes back through here rather than going straight
     // out from their personal mailbox.
     {
-      await resend.emails.send({
+      await sendMail({
         from: CONCIERGE_FROM,
         to: [ADMIN_EMAIL],
         reply_to: replyAddress(inquiry.id),
-        subject: `💬 ${fromRenter ? inquiry.full_name : mail.from} replied · ${complex?.name ?? "availability request"}`,
+        subject: `💬 ${fromRenter ? inquiry.full_name : mail.from} replied · ${
+          complex?.name ?? "availability request"
+        }${subjectToken(inquiry.id)}`,
         html: `
           <p><strong>${esc(fromRenter ? inquiry.full_name : mail.from)}</strong>
           (${esc(mail.from)}) replied about
@@ -312,7 +444,7 @@ serve(async (req) => {
       });
     }
 
-    return json({ success: true, matched: true, inquiryId: inquiry.id, direction });
+    return json({ success: true, matched: true, inquiryId: inquiry.id, direction, duplicate });
   } catch (error: any) {
     console.error("Error in concierge-email-inbound:", error);
     return json({ error: error.message }, 500);

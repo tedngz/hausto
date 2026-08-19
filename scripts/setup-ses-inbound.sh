@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# SUPERSEDED - inbound mail is moving to Resend. See docs/inbound-email.md for
+# why (silent SNS subscription lapses, the secret baked into the subscription
+# URL, and the ~150KB SNSAction ceiling) and for the migration steps. Kept for
+# as long as the SES path is still live.
+#
 # Wire inbound mail for hello@hausto.com into the concierge-email-inbound edge
 # function: SES receipt rule -> SNS topic -> HTTPS subscription.
 #
