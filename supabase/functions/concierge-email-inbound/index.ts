@@ -8,10 +8,14 @@ import {
   CONCIERGE_INBOX,
   corsHeaders,
   esc,
+  greeting,
   inquiryIdFromAddresses,
   inquiryIdFromText,
   json,
+  messageIdCandidates,
+  normalizeSubject,
   replyAddress,
+  signature,
   stripQuotedReply,
   subjectToken,
   textToHtml,
@@ -49,6 +53,7 @@ interface ParsedMail {
   body: string;
   messageId: string | null;
   inReplyTo: string | null;
+  references: string | null;
 }
 
 const headerValue = (headers: unknown, name: string): string | null => {
@@ -179,6 +184,7 @@ async function parsePayload(payload: any): Promise<ParsedMail | null> {
       body: decodedRaw ? textFromRawMime(decodedRaw) : "(message body unavailable)",
       messageId: mail.messageId ? `<${mail.messageId}>` : headerValue(headers, "message-id"),
       inReplyTo: headerValue(headers, "in-reply-to"),
+      references: headerValue(headers, "references"),
     };
   }
 
@@ -209,6 +215,7 @@ async function parsePayload(payload: any): Promise<ParsedMail | null> {
     body: text || fallback,
     messageId: data.message_id ?? data.messageId ?? headerValue(data.headers, "message-id"),
     inReplyTo: data.in_reply_to ?? headerValue(data.headers, "in-reply-to"),
+    references: data.references ?? headerValue(data.headers, "references"),
   };
 }
 
@@ -306,9 +313,35 @@ serve(async (req) => {
         .maybeSingle();
       inquiry = data ?? null;
     }
+    // A genuine reply quotes the message it answers. Match on that before
+    // anything to do with the sender.
+    if (!inquiry) {
+      const refs = messageIdCandidates(mail.inReplyTo, mail.references);
+      if (refs.length) {
+        const { data } = await supabase
+          .from("complex_inquiry_messages")
+          .select("inquiry_id")
+          .in("provider_message_id", refs)
+          .limit(1)
+          .maybeSingle();
+        if (data?.inquiry_id) {
+          const { data: row } = await supabase
+            .from("complex_inquiries")
+            .select("id, full_name, email, status, complex_id, handled_at")
+            .eq("id", data.inquiry_id)
+            .maybeSingle();
+          inquiry = row ?? null;
+        }
+      }
+    }
+
     // Renters reply to the plain concierge address, so their sender address is
-    // normally the only handle we have. Prefer their newest still-open request:
-    // a reply about a closed one almost always means they are chasing it again.
+    // often the only handle we have - but the address alone is not enough. A
+    // renter who writes to us about something new would otherwise be stapled
+    // onto whatever request they last had open, and the answer would arrive
+    // inside a thread about a different building. Require the subject to match
+    // one already on the thread before joining it on sender alone.
+    let senderInquiries: typeof inquiry[] = [];
     if (!inquiry) {
       const { data } = await supabase
         .from("complex_inquiries")
@@ -316,8 +349,21 @@ serve(async (req) => {
         .eq("email", mail.from)
         .order("created_at", { ascending: false })
         .limit(10);
-      const rows = data ?? [];
-      inquiry = rows.find((r) => r.status !== "closed") ?? rows[0] ?? null;
+      senderInquiries = data ?? [];
+
+      if (senderInquiries.length) {
+        const wanted = normalizeSubject(mail.subject);
+        const { data: priorMessages } = await supabase
+          .from("complex_inquiry_messages")
+          .select("inquiry_id, subject")
+          .in("inquiry_id", senderInquiries.map((r) => r!.id))
+          .order("created_at", { ascending: false })
+          .limit(200);
+        const hit = wanted
+          ? (priorMessages ?? []).find((m) => normalizeSubject(m.subject) === wanted)
+          : null;
+        inquiry = hit ? senderInquiries.find((r) => r!.id === hit.inquiry_id) ?? null : null;
+      }
     }
 
     if (!inquiry) {
@@ -333,14 +379,22 @@ serve(async (req) => {
       // otherwise hear nothing back. This is the path a cold email takes, and
       // the one that carries confirmation codes for the Gmail send-as setup.
       console.warn("Inbound mail matched no inquiry:", mail.from);
+      // They may still be a renter we know - just writing about something other
+      // than the request they have open. Say so, rather than leaving it looking
+      // like a stranger wrote in.
+      const known = senderInquiries.length
+        ? `<p>This sender has ${senderInquiries.length} request${senderInquiries.length > 1 ? "s" : ""}
+           on file, but nothing on them matches this subject, so it has been left off those threads
+           rather than answered inside one about a different building.</p>`
+        : `<p>No availability request matches this sender, so it is not on any dashboard thread.</p>`;
       await sendMail({
         from: CONCIERGE_FROM,
         to: [ADMIN_EMAIL],
         reply_to: [mail.from],
         subject: `📥 Unmatched mail to ${CONCIERGE_INBOX}: ${mail.subject}`,
         html: `<p><strong>From:</strong> ${esc(mail.from)}</p>
-               <p>No availability request matches this sender, so it is not on any dashboard thread.
-               Reply as <strong>${esc(CONCIERGE_INBOX)}</strong> and they never see your own address.</p>
+               ${known}
+               <p>Reply as <strong>${esc(CONCIERGE_INBOX)}</strong> and they never see your own address.</p>
                <hr><div>${textToHtml(mail.body.slice(0, 5000))}</div>`,
       });
       return json({ success: true, matched: false });
@@ -400,21 +454,41 @@ serve(async (req) => {
       // The message row is already stored, so a 500 here would be retried into
       // the duplicate guard and never relayed. Report the failure to the admin
       // instead, while this request still ends as a success.
+      // Thread onto the renter's own last message, so our answer lands inside
+      // the conversation they started rather than opening a second one next to
+      // it. Their client groups on References, so the subject has to be theirs
+      // too - and it must never be the admin's, which is our internal
+      // notification ("💬 Hoang replied · City Garden [inq-…]").
+      const { data: lastFromRenter } = await supabase
+        .from("complex_inquiry_messages")
+        .select("provider_message_id, subject")
+        .eq("inquiry_id", inquiry.id)
+        .eq("direction", "inbound")
+        .not("provider_message_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const threadSubject = lastFromRenter?.subject?.replace(/^((re|fwd?)\s*:\s*)+/i, "") ??
+        `Availability at ${complex?.name ?? "your request"}`;
+      const threadHeaders: Record<string, string> = {};
+      if (lastFromRenter?.provider_message_id) {
+        threadHeaders["In-Reply-To"] = lastFromRenter.provider_message_id;
+        threadHeaders["References"] = lastFromRenter.provider_message_id;
+      }
+
       let relayed = true;
       try {
         await sendMail({
           from: CONCIERGE_FROM,
           to: [inquiry.email],
           reply_to: CONCIERGE_FROM,
-          // Never reuse the admin's subject line - it is our internal notification
-          // ("💬 Hoang replied · City Garden"), which the renter should never see.
-          subject: `Re: Availability at ${complex?.name ?? "your request"}`,
+          subject: `Re: ${threadSubject}`,
+          headers: threadHeaders,
           html: `
-            <p>Hi ${esc(inquiry.full_name)},</p>
+            ${greeting(inquiry.full_name, body)}
             <div>${textToHtml(body)}</div>
-            <p style="margin-top: 24px; color: #6b7280; font-size: 13px;">
-              Hausto Concierge · just reply to this email and we'll pick it up.
-            </p>
+            ${signature("Just reply to this email and we'll pick it up.")}
           `,
         });
       } catch (relayError: any) {

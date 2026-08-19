@@ -1,7 +1,7 @@
 // Shared plumbing for the concierge email thread on a complex availability
 // request (public.complex_inquiries + public.complex_inquiry_messages).
 //
-// Renters only ever see a plain "Hausto Concierge <hello@hausto.com>" - a
+// Renters only ever see a plain "Hausto <hello@hausto.com>" - a
 // plus-addressed token in their Reply-To reads like spam in the client's To
 // line, so inbound mail from a renter is matched on their sender address
 // instead.
@@ -11,9 +11,15 @@
 // renter, so the address is the only thing tying it to a request. It is wrapped
 // in a display name there too.
 
-export const CONCIERGE_FROM = "Hausto Concierge <hello@hausto.com>";
+export const CONCIERGE_FROM = "Hausto <hello@hausto.com>";
 export const CONCIERGE_INBOX = "hello@hausto.com";
 export const ADMIN_EMAIL = "ted.ngz@gmail.com";
+
+// www, not the apex: hausto.com 302s to www, and a fair number of mail clients
+// will not follow a redirect to load an image.
+export const SITE_URL = "https://www.hausto.com";
+export const LOGO_URL = `${SITE_URL}/logos/hausto-mark.png`;
+export const TAGLINE = "Rental vibe check";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,9 +39,9 @@ export const esc = (value: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-/** Hausto Concierge <hello+inq-<uuid without dashes>@hausto.com> — admin copies only. */
+/** Hausto <hello+inq-<uuid without dashes>@hausto.com> — admin copies only. */
 export function replyAddress(inquiryId: string): string {
-  return `Hausto Concierge <hello+inq-${inquiryId.replace(/-/g, "")}@hausto.com>`;
+  return `Hausto <hello+inq-${inquiryId.replace(/-/g, "")}@hausto.com>`;
 }
 
 /**
@@ -91,9 +97,91 @@ export function stripQuotedReply(text: string): string {
     /^\s*Sent from my /i.test(line)
   );
   const kept = cut === -1 ? lines : lines.slice(0, cut);
+  // Trailing lines of a single punctuation mark are what is left when a client
+  // pads a reply above the quote. They read as a typo in the relayed copy.
+  while (kept.length && /^\s*[.\-_·•]{1,3}\s*$/.test(kept[kept.length - 1] ?? "")) kept.pop();
   return kept.join("\n").trim();
 }
 
 export function textToHtml(text: string): string {
   return esc(text).replace(/\n/g, "<br>");
+}
+
+/** "Hoang Nguyen" -> "Hoang". A first name reads like a person wrote it. */
+export function firstName(name: string | null | undefined): string {
+  return String(name ?? "").trim().split(/\s+/)[0] || "there";
+}
+
+/**
+ * Does the message already open with its own greeting?
+ *
+ * Renter-facing mail prepends "Hi <name>," for us, which reads as a stutter
+ * when whoever is replying has already typed one - "Hi Hoang, / Hi Hoang, how
+ * can we help?". Covers Vietnamese too: renters here get both languages.
+ */
+export function startsWithGreeting(body: string): boolean {
+  const first = String(body ?? "").trimStart().split("\n")[0] ?? "";
+  return /^\s*(hi|hello|hey|dear|good (morning|afternoon|evening)|ch[àa]o|xin ch[àa]o)\b/i.test(first);
+}
+
+/** The "Hi <name>," line, or nothing if the writer already wrote their own. */
+export function greeting(name: string | null | undefined, body: string): string {
+  return startsWithGreeting(body) ? "" : `<p>Hi ${esc(firstName(name))},</p>`;
+}
+
+/**
+ * Sign-off for renter-facing mail: the mark, the wordmark, the tagline, all
+ * linked to the site. Tables and inline styles because Gmail strips <style>
+ * blocks, and explicit width/height on the image so a blocked-image placeholder
+ * does not collapse the layout.
+ */
+export function signature(note?: string): string {
+  return `
+    ${note ? `<p style="margin: 24px 0 0; color: #6b7280; font-size: 13px;">${esc(note)}</p>` : ""}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"
+           style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+      <tr>
+        <td style="vertical-align: middle; padding-right: 12px;">
+          <a href="${SITE_URL}" style="text-decoration: none;"><img src="${LOGO_URL}" width="36" height="36"
+               alt="Hausto" style="display: block; width: 36px; height: 36px; border: 0;"></a>
+        </td>
+        <td style="vertical-align: middle; font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;">
+          <a href="${SITE_URL}" style="color: #111111; font-size: 16px; font-weight: 700;
+             letter-spacing: -0.3px; text-decoration: none;">hausto</a>
+          <div style="color: #6b7280; font-size: 12px; margin-top: 1px;">${esc(TAGLINE)}</div>
+          <a href="${SITE_URL}" style="color: #F97316; font-size: 12px; text-decoration: none;"
+             >www.hausto.com</a>
+        </td>
+      </tr>
+    </table>`;
+}
+
+/** "Re: Re: Availability at X [inq-…]" -> "availability at x", for comparing. */
+export function normalizeSubject(subject: string | null | undefined): string {
+  return String(subject ?? "")
+    .replace(/^((re|fwd?|sv|aw|tr)\s*:\s*)+/i, "")
+    .replace(/\s*\[inq-[0-9a-f]{32}\]\s*/i, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Message-ids from In-Reply-To / References, each kept both as sent and as its
+ * bare local part. Outbound rows store the id Resend returns, which is the uuid
+ * inside the Message-Id it stamps rather than the whole angle-bracketed header,
+ * so matching needs both forms.
+ */
+export function messageIdCandidates(...headers: (string | null | undefined)[]): string[] {
+  const out = new Set<string>();
+  for (const header of headers) {
+    for (const raw of String(header ?? "").match(/<[^>]+>/g) ?? []) {
+      out.add(raw);
+      const inner = raw.slice(1, -1);
+      out.add(inner);
+      const local = inner.split("@")[0];
+      if (local) out.add(local);
+    }
+  }
+  return [...out];
 }

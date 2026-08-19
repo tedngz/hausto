@@ -384,7 +384,7 @@ Respond ONLY with JSON: {"action": "answer" | "escalate", "reply": string, "sugg
         await resend.emails.send({
           from: "Hausto <hello@hausto.com>",
           to: [to],
-          subject: "❓ Renter question needs your reply — Hausto Concierge",
+          subject: "❓ Renter question needs your reply — Hausto",
           html: `
             <h1>A renter question was escalated to you</h1>
             <p><strong>Renter:</strong> ${renterProfile?.name || "A renter"}</p>

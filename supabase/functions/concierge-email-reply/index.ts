@@ -5,8 +5,9 @@ import {
   ADMIN_EMAIL,
   CONCIERGE_FROM,
   corsHeaders,
-  esc,
+  greeting,
   json,
+  signature,
   textToHtml,
 } from "../_shared/concierge-email.ts";
 
@@ -89,11 +90,9 @@ serve(async (req) => {
       subject: `Re: ${subject}`,
       headers,
       html: `
-        <p>Hi ${esc(inquiry.full_name)},</p>
+        ${greeting(inquiry.full_name, message)}
         <div>${textToHtml(message)}</div>
-        <p style="margin-top: 24px; color: #6b7280; font-size: 13px;">
-          Hausto Concierge · just reply to this email and we'll pick it up.
-        </p>
+        ${signature("Just reply to this email and we'll pick it up.")}
       `,
     });
     if ((sent as any)?.error) throw new Error((sent as any).error.message ?? "Resend rejected the message");
