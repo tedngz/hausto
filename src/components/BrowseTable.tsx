@@ -885,6 +885,7 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
                   vibeScore={previewScore?.score}
                   vibeMatch={previewScore?.attrs}
                   scoreContext="preferences"
+                  defaultExpanded
                   liked={likedIds.has(preview.id)}
                   onLike={() => handleLike(preview)}
                   onClose={() => setPreview(null)}

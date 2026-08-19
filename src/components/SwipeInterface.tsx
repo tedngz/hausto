@@ -717,6 +717,7 @@ export const SwipeInterface = ({
             vibeMatch={userPreferences ? getVibeAttributeMatch(currentApartment, userPreferences) : undefined}
             initialImageIndex={currentImageIndex}
             onImageIndexChange={i => setImageIndices(prev => ({ ...prev, [currentApartment.id]: i }))}
+            defaultExpanded
             className="mb-6"
           />
 
@@ -761,6 +762,7 @@ export const SwipeInterface = ({
             vibeMatch={userPreferences ? getVibeAttributeMatch(currentApartment, userPreferences) : undefined}
             initialImageIndex={currentImageIndex}
             onImageIndexChange={i => setImageIndices(prev => ({ ...prev, [currentApartment.id]: i }))}
+            defaultExpanded
             className="mb-6"
           />
 

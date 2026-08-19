@@ -19,9 +19,11 @@ import { extractPropertyFeatures, propertyHasFeature, FEATURE_LABELS, type Featu
 // (PropertyListingCard) — photo gallery on top, details panel below — so a
 // listing reads identically wherever a renter meets it.
 //
-// Where it differs from the page: a card can't spend the vertical space, so the
-// description is clamped to one line behind a "more" toggle and the amenities
-// live behind their own icon rather than an always-open grid.
+// Where it differs from the page: on a shelf of listings a card can't spend the
+// vertical space, so the description is clamped to one line behind a "more"
+// toggle and the amenities live behind their own icon rather than an always-open
+// grid. Surfaces showing one listing at a time pass defaultExpanded to open both
+// on mount and read like the page does.
 
 export interface EditorialApartment {
   id: string;
@@ -78,6 +80,10 @@ interface EditorialPropertyCardProps {
   aspectClass?: string;
   /** Smaller typography and padding so the photo dominates (used in the AI chat's compact cards) */
   compact?: boolean;
+  /** Open the description and amenities on mount. For surfaces built around a
+   *  single listing (browse, swipe, the listing page) where the renter is
+   *  reading one place rather than scanning a shelf of them. */
+  defaultExpanded?: boolean;
   /** Extra actions rendered in the top-right cluster, before the share/like buttons (e.g. a delete button) */
   topRightActions?: ReactNode;
   className?: string;
@@ -119,6 +125,7 @@ export const EditorialPropertyCard = ({
   onImageIndexChange,
   aspectClass = 'aspect-[4/3] sm:aspect-[3/2]',
   compact = false,
+  defaultExpanded = false,
   topRightActions,
   className = '',
 }: EditorialPropertyCardProps) => {
@@ -128,8 +135,8 @@ export const EditorialPropertyCard = ({
   const frameRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState(false);
   const [noHover, setNoHover] = useState(false);
-  const [descOpen, setDescOpen] = useState(false);
-  const [showAmenities, setShowAmenities] = useState(false);
+  const [descOpen, setDescOpen] = useState(defaultExpanded);
+  const [showAmenities, setShowAmenities] = useState(defaultExpanded);
   // Swipe bookkeeping: start point, and a flag so the tap that ends a swipe
   // doesn't also open the card.
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
