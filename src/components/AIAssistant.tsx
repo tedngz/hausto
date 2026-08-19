@@ -27,10 +27,17 @@ interface AssistantMessage {
 const GREETING =
   "Hi! I'm the Hausto Assistant ✨ Ask me anything about renting in Vietnam, your matched properties, or say \"get me the contact\" for a listing and I'll share the owner/realtor's details. (For finding new homes, use AI Search or Browse.)";
 
-const QUICK_CHIPS = [
-  '📞 Get an owner’s contact',
-  'Tips for my first viewing',
-  'What should I know about deposits?',
+// With a subject listing the chips name it, so the request carries the
+// property in the message rather than relying on the model to infer it from
+// context - and the transcript reads back clearly later.
+const quickChips = (subjectTitle?: string): { label: string; text: string }[] => [
+  subjectTitle
+    ? { label: '📞 Get this owner’s contact', text: `Get me the owner's contact for "${subjectTitle}"` }
+    : { label: '📞 Get an owner’s contact', text: 'Get an owner’s contact' },
+  subjectTitle
+    ? { label: 'Is it still available?', text: `Is "${subjectTitle}" still available?` }
+    : { label: 'Tips for my first viewing', text: 'Tips for my first viewing' },
+  { label: 'What should I know about deposits?', text: 'What should I know about deposits?' },
 ];
 
 const HISTORY_CAP = 40;
@@ -267,14 +274,14 @@ export const AIAssistant = () => {
           {/* Composer */}
           <div className="p-2.5 border-t border-purple-100 bg-white flex-shrink-0 space-y-2">
             <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {QUICK_CHIPS.map(chip => (
+              {quickChips(contextProperty?.title).map(chip => (
                 <button
-                  key={chip}
+                  key={chip.label}
                   disabled={isSending}
-                  onClick={() => sendMessage(chip)}
+                  onClick={() => sendMessage(chip.text)}
                   className="shrink-0 text-xs h-7 px-3 rounded-full border border-purple-200/70 bg-purple-50/60 hover:bg-purple-100 text-purple-700 transition-colors disabled:opacity-50"
                 >
-                  {chip}
+                  {chip.label}
                 </button>
               ))}
             </div>

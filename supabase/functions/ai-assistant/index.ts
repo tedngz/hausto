@@ -118,8 +118,9 @@ serve(async (req) => {
       ...(externalRes.data || []),
     ];
 
-    // The listing page the user is currently on (if any) joins the context so
-    // "get me the contact for this one" resolves without a match.
+// The listing the user is asking about - the page they are on, or the card
+    // whose sparkle summoned the assistant - joins the context so "get me the
+    // contact for this one" resolves without a match.
     if (contextPropertyId && !properties.some((p) => p.id === contextPropertyId)) {
       const [{ data: internal }, { data: external }] = await Promise.all([
         supabase.from("properties").select(INTERNAL_COLS).eq("id", contextPropertyId).maybeSingle(),
@@ -146,10 +147,24 @@ serve(async (req) => {
     }
 
     const propertyContext = properties.map((p, i) => {
-      const marker = p.id === contextPropertyId ? " ← THE LISTING THE USER IS CURRENTLY VIEWING" : "";
+      const marker = p.id === contextPropertyId ? " ← CURRENT SUBJECT" : "";
       const hasContact = !!(p.property_source_provider_phone || p.property_source_provider_name || p.contact_phone || p.contact_name);
       return `Property ${i + 1} [id ${p.id}]${marker}: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? "size n/a"}, rooms: ${p.rooms ?? "n/a"}. Vibe: ${p.vibe ?? "n/a"}. Highlights: ${((p.highlights as string[]) || []).join(", ")}. Amenities: ${((p.amenities as string[]) || []).join(", ")}. Contact on file: ${hasContact ? "yes" : "no"}. ${p.description ? `Description: ${String(p.description).slice(0, 300)}` : ""}`;
     }).join("\n");
+
+    // Naming the subject on its own, above the list, is what stops the model
+    // asking "which property?" when the user has clearly already pointed at one
+    // by opening the assistant from its card.
+    const subject = contextPropertyId
+      ? properties.find((p) => p.id === contextPropertyId)
+      : undefined;
+    const subjectContext = subject
+      ? `CURRENT SUBJECT - the user opened this assistant from this listing, so any request that does not name a property ("get the owner's contact", "is it still available?", "can I view it?") is about THIS one. Act on it; do not ask them which property they mean.
+Property [id ${subject.id}]: ${subject.title} at ${subject.location}. Contact on file: ${
+          (subject.property_source_provider_phone || subject.property_source_provider_name ||
+            subject.contact_phone || subject.contact_name) ? "yes" : "no"
+        }.`
+      : "";
 
     const prefsContext = prefRow
       ? `User preferences on file: ${JSON.stringify(prefRow).slice(0, 500)}`
@@ -166,13 +181,15 @@ What you do:
 What you do NOT do:
 - You cannot search for or recommend new listings. If the user asks you to find homes, point them to the AI Search ("Describe Your Dream Home") or the Browse page instead.
 - Never reveal contact details yourself in "reply". To share a contact, set "reveal_contact_property_id" to that property's id and the system will attach the contact (it enforces the user's daily reveal allowance). Only do this when the user clearly asks for a contact AND the property is identifiable from the data below. If the property has "Contact on file: no", say Hausto doesn't have a direct contact for it and suggest Fast-Track viewing coordination instead.
-- If the user asks for a contact but you cannot tell which property they mean, ask them to name the property (or open its listing page) - do not guess.
+- If the user asks for a contact but you cannot tell which property they mean, ask them to name the property (or open its listing page) - do not guess. This does not apply when a CURRENT SUBJECT is given below: that is the property they mean, so act on it rather than asking.
 
 Style: warm, concise (2-4 sentences), concrete. Prices in VND. The user is on the ${isPremium ? "PREMIUM" : "FREE"} plan.${isPremium ? "" : ` Free plan users can reveal up to ${FREE_DAILY_CONTACT_REVEALS} owner/realtor contacts per day; premium is unlimited. Only mention this when relevant.`}
 
+${subjectContext}
+
 ${prefsContext}
 
-Matched properties${contextPropertyId ? " and current listing" : ""}:
+Matched properties${subject ? " (the current subject is marked)" : ""}:
 ${propertyContext || "None on record yet - the user hasn't matched with any listings."}
 
 ${complexContext ? `Complex knowledge:\n${complexContext}` : ""}
