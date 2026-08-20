@@ -296,7 +296,7 @@ export const PropertyCard = ({
 
         {showRealtorInfo && <div className="flex items-center justify-between pt-3 border-t border-gray-200">
             <div className="flex items-center space-x-2">
-              {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? <img loading="lazy" src={apartment.realtor.avatar} alt={apartment.realtor.name || 'Realtor'} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
+              {apartment.realtor.avatar && apartment.realtor.avatar.trim() ? <img loading="lazy" src={apartment.realtor.avatar} alt={apartment.realtor.name || 'Realtor'} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 bg-gradient-to-r from-orange-400 to-pink-500 rounded-full flex items-center justify-center">
                   <User className="w-4 h-4 text-white" />
                 </div>}
               <div>

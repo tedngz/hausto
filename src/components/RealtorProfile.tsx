@@ -537,7 +537,7 @@ export const RealtorProfile = ({ userId }: RealtorProfileProps) => {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
-                    <Upload className="w-5 h-5 text-purple-500" />
+                    <Upload className="w-5 h-5 text-orange-500" />
                     Recent Properties
                   </CardTitle>
                 </CardHeader>
