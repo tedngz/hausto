@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A new push supersedes the run already in flight for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Type-check & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # --legacy-peer-deps is required: react-leaflet@5 pulls
+      # @react-leaflet/core@3, which demands React 19 while this project is on
+      # React 18. Without the flag the install fails outright. Drop it once
+      # that conflict is resolved properly.
+      # postinstall runs patch-package here, so this step also proves the
+      # @lovable.dev/mcp-js patch still applies (see patches/README.md).
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Type-check
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      - name: Build
+        run: npx vite build
+
+      # The Vite plugin regenerates this file on every build. It silently
+      # corrupted on Windows before the patch landed, so assert the committed
+      # output still matches what a clean build produces.
+      - name: Generated MCP function is in sync
+        run: |
+          if ! git diff --exit-code -- supabase/functions/mcp/index.ts; then
+            echo "::error file=supabase/functions/mcp/index.ts::Regenerated during the build and differs from the committed version."
+            echo "If you changed src/lib/mcp/**, commit the regenerated file."
+            echo "If the diff replaces the bundle with a single npm: import of a local path, the mcp-js patch did not apply - see patches/README.md."
+            exit 1
+          fi
