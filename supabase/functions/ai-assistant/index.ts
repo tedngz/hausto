@@ -17,6 +17,12 @@ const corsHeaders = {
 
 const HISTORY_LIMIT = 16;
 const FREE_DAILY_CONTACT_REVEALS = 10;
+// The admin account that owns crawled inventory; captured questions are filed
+// against it so they surface in the existing concierge queue.
+const HAUSTO_AGENT_ID = "734bd05c-a381-4267-b823-88a84c79a40e";
+// Ceiling on captured questions per user per day, so one frustrated session
+// cannot flood the queue.
+const MAX_DAILY_CAPTURES = 5;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -211,7 +217,9 @@ ${propertyContext || "None on record yet - the user hasn't matched with any list
 
 ${complexContext ? `Complex knowledge:\n${complexContext}` : ""}
 
-Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string | null}`;
+Set "capture_question" to true when the user asked something concrete that you could NOT answer from the data above - typically because only the owner knows (live availability, negotiability, deposit or contract specifics) or because Hausto simply lacks the detail. This is a silent signal for our team about missing information: it changes nothing the user sees, so never mention it, and never imply anyone will follow up. Leave it false for greetings, small talk, general renting advice, and anything you answered adequately.
+
+Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string | null, "capture_question": boolean}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -238,7 +246,7 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
     const aiData = await aiRes.json();
     logOpenAIUsage({ fn: "ai-assistant", model: "gpt-4o-mini", usage: aiData?.usage });
 
-    let decision: { reply?: string; reveal_contact_property_id?: string | null } = {};
+    let decision: { reply?: string; reveal_contact_property_id?: string | null; capture_question?: boolean } = {};
     try {
       decision = JSON.parse(aiData.choices[0].message.content);
     } catch {
@@ -325,11 +333,50 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
       }
     }
 
+    // ---- Capture what we could not answer ----
+    // Product signal only: the user is never told, because with crawled supply
+    // we often cannot get an answer and a promise would go unkept. Filed
+    // against the Hausto Agent so it lands in the existing concierge queue.
+    let captured = false;
+    if (decision.capture_question === true) {
+      const lastUserMessage = [...chatHistory].reverse().find((m) => m.role === "user")?.content?.trim();
+      if (lastUserMessage) {
+        try {
+          const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const { data: recent } = await supabase
+            .from("concierge_escalations")
+            .select("question")
+            .eq("renter_id", user.id)
+            .gte("created_at", since);
+          const alreadyAsked = (recent || []).some(
+            (r) => (r.question || "").trim().toLowerCase() === lastUserMessage.toLowerCase(),
+          );
+          if (!alreadyAsked && (recent || []).length < MAX_DAILY_CAPTURES) {
+            const { error: capErr } = await supabase.from("concierge_escalations").insert({
+              renter_id: user.id,
+              realtor_id: HAUSTO_AGENT_ID,
+              conversation_id: null,
+              property_id: subjectIds[0] ?? null,
+              question: lastUserMessage.slice(0, 2000),
+              status: "pending",
+              source: "assistant",
+            });
+            if (capErr) console.warn("[ai-assistant] capture failed:", capErr.message);
+            else captured = true;
+          }
+        } catch (e) {
+          // Never let the signal break the answer.
+          console.warn("[ai-assistant] capture error:", String(e).slice(0, 160));
+        }
+      }
+    }
+
     return json({
       reply,
       revealedPropertyId: revealProperty && !limitReached ? revealId : null,
       contactsRemaining, // null = unlimited (premium) or unknown
       limitReached,
+      captured, // internal signal; the client deliberately does not surface it
     });
   } catch (e) {
     console.error("[ai-assistant] error:", e);
