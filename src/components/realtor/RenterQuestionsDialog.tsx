@@ -89,8 +89,8 @@ export const RenterQuestionsDialog = ({ open, onOpenChange }: { open: boolean; o
   const [previewPropertyId, setPreviewPropertyId] = useState<string | null>(null);
   const pending = escalations.filter((e) => e.status === 'pending');
 
-  // Route answers through the edge function: it adds the question context + a
-  // property link to the chat message and emails the renter.
+  // Route answers through the edge function: it emails the renter the question
+  // context, the answer and a property link. Email is the only channel now.
   const answerEscalation = async (escalation: ConciergeEscalation, reply: string) => {
     const { data, error } = await supabase.functions.invoke('concierge-answer', {
       body: { escalationId: escalation.id, reply },
