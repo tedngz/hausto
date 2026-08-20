@@ -652,7 +652,7 @@ export const RealtorDashboard = ({
           {[
             { label: 'Listed Properties', value: realtorProperties.length, Icon: Upload, gradient: 'from-green-400 to-emerald-500' },
             { label: 'Total Matches', value: realtorMatches.length, Icon: User, gradient: 'from-orange-400 to-red-500' },
-            { label: 'Needs Your Reply', value: conciergePendingCount, Icon: MessageSquare, gradient: 'from-purple-400 to-pink-500', onClick: () => setShowQuestions(true) },
+            { label: 'Needs Your Reply', value: conciergePendingCount, Icon: MessageSquare, gradient: 'from-amber-400 to-orange-500', onClick: () => setShowQuestions(true) },
           ].map(({ label, value, Icon, gradient, onClick }) => (
             <Card
               key={label}
