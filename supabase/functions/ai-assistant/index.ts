@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.4";
 import { Redis } from "https://esm.sh/@upstash/redis@latest";
 import { logOpenAIUsage, isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
+import { Resend } from "npm:resend@2.0.0";
+import { ADMIN_EMAIL, CONCIERGE_FROM, esc, SITE_URL, textToHtml } from "../_shared/concierge-email.ts";
 
 // Hausto Assistant: the platform-wide floating AI chat. Answers renter
 // questions (advice, property info, rental process) grounded in the user's
@@ -33,6 +35,52 @@ const json = (body: unknown, status = 200) =>
 interface ClientMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+// Best-effort operator notice for a captured question. Never throws: a mail
+// failure must not cost us the capture or the user's reply.
+async function notifyAdmin(
+  question: string,
+  propertyId: string | null,
+  properties: Record<string, unknown>[],
+  renterEmail: string | null,
+): Promise<void> {
+  try {
+    const key = Deno.env.get("RESEND_API_KEY");
+    if (!key) return;
+    const p = propertyId ? properties.find((x) => x.id === propertyId) : undefined;
+    const name = (p?.property_source_provider_name ?? p?.contact_name) as string | null;
+    const phone = (p?.property_source_provider_phone ?? p?.contact_phone) as string | null;
+
+    const listing = p
+      ? `<p style="margin:16px 0 4px"><b>Listing:</b> <a href="${SITE_URL}/property/${esc(p.id)}">${esc(p.title)}</a><br>
+         <span style="color:#6b7280">${esc(p.location)}</span></p>`
+      : `<p style="margin:16px 0 4px;color:#6b7280">No listing in context.</p>`;
+
+    const contact = p
+      ? (phone || name
+          ? `<p style="margin:4px 0"><b>Call them:</b> ${esc(name ?? "Contact")} — <a href="tel:${esc(phone ?? "")}">${esc(phone ?? "not listed")}</a></p>`
+          : `<p style="margin:4px 0;color:#b45309">No contact on file for this listing.</p>`)
+      : "";
+
+    await new Resend(key).emails.send({
+      from: CONCIERGE_FROM,
+      to: [ADMIN_EMAIL],
+      subject: "Hausto AI couldn't answer a renter question",
+      html: `<p>A renter asked something the listing data does not cover:</p>
+        <blockquote style="border-left:3px solid #f97316;padding-left:12px;color:#374151;margin:12px 0">${textToHtml(question)}</blockquote>
+        ${listing}
+        ${contact}
+        <p style="margin-top:4px;color:#6b7280;font-size:13px">Renter: ${esc(renterEmail ?? "unknown")}</p>
+        <p style="margin-top:20px;color:#6b7280;font-size:13px">
+          They were given the contact and told calling is fastest - no reply was promised.
+          Answer only if you can add something, otherwise treat this as a gap in our data.
+          Unanswered questions close themselves after 7 days.
+        </p>`,
+    });
+  } catch (e) {
+    console.warn("[ai-assistant] admin notice failed:", String(e).slice(0, 160));
+  }
 }
 
 serve(async (req) => {
@@ -361,8 +409,16 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
               status: "pending",
               source: "assistant",
             });
-            if (capErr) console.warn("[ai-assistant] capture failed:", capErr.message);
-            else captured = true;
+            if (capErr) {
+              console.warn("[ai-assistant] capture failed:", capErr.message);
+            } else {
+              captured = true;
+              // Push it to the operator rather than waiting for someone to open
+              // the dashboard. The listing's phone number is inline because most
+              // captures are availability questions - the answer is a call away,
+              // and making that one step is the whole point.
+              await notifyAdmin(lastUserMessage, subjectIds[0] ?? null, properties, user.email ?? null);
+            }
           }
         } catch (e) {
           // Never let the signal break the answer.
