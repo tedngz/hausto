@@ -709,7 +709,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
               <Button
                 onClick={generateContent}
                 disabled={isGenerating || !location || !price || !size || imageFiles.length === 0}
-                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                className="w-full bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700"
               >
                 {isGenerating ? (
                   <>
@@ -737,7 +737,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                     size="sm"
                     onClick={regenerateTitle}
                     disabled={isRegeneratingTitle}
-                    className="text-purple-600 hover:text-purple-700"
+                    className="text-orange-600 hover:text-orange-700"
                   >
                     {isRegeneratingTitle ? (
                       <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -794,7 +794,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                         variant={selectedColors.includes(color) ? "default" : "outline"}
                         className={`cursor-pointer transition-colors ${
                           selectedColors.includes(color) 
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                            ? 'bg-gradient-to-r from-orange-500 to-pink-600 text-white' 
                             : 'hover:bg-gray-100'
                         }`}
                         onClick={() => {
@@ -951,7 +951,7 @@ export const PropertyUploadModal = ({ isOpen, onClose }: PropertyUploadModalProp
                     size="sm"
                     onClick={regenerateDescription}
                     disabled={isRegeneratingDescription}
-                    className="text-purple-600 hover:text-purple-700"
+                    className="text-orange-600 hover:text-orange-700"
                   >
                     {isRegeneratingDescription ? (
                       <Loader2 className="w-3 h-3 mr-1 animate-spin" />
