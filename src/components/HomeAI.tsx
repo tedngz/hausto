@@ -942,23 +942,6 @@ export const HomeAI = ({
           <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap pl-12 sm:pl-0">
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => {
-                // The messages modal lives on /discover; from the landing page,
-                // navigate there first and fire the open event once it mounts.
-                if (window.location.pathname.startsWith('/discover')) {
-                  window.dispatchEvent(new CustomEvent('openAIChat'));
-                } else {
-                  navigate('/discover');
-                  setTimeout(() => window.dispatchEvent(new CustomEvent('openAIChat')), 600);
-                }
-              }}
-            >
-              <MessageSquare className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
-              Chat with realtor
-            </Button>
-            <Button
-              size="sm"
               onClick={() => {
                 if (canFastTrack) {
                   openScheduleForIds(Array.from(likedProperties));
