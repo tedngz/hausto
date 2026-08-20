@@ -116,40 +116,23 @@ export const useConciergeQueue = () => {
     return map;
   };
 
-  // Reply lands in the renter's thread as a normal (human) realtor message,
-  // then the escalation flips to answered so the renter's chip updates.
+  // The renter has no in-app thread any more, so the answer goes out by email.
+  // concierge-answer owns delivery and flips the escalation to answered.
   const answerEscalationMutation = useMutation({
     mutationFn: async ({ escalation, replyText }: { escalation: ConciergeEscalation; replyText: string }) => {
       if (!user?.id) throw new Error('Not authenticated');
-      const { data: message, error: msgError } = await supabase
-        .from('direct_messages')
-        .insert({
-          conversation_id: escalation.conversation_id,
-          sender_id: user.id,
-          receiver_id: escalation.renter_id,
-          content: replyText,
-        })
-        .select()
-        .single();
-      if (msgError) throw msgError;
-
-      const { error: updateError } = await supabase
-        .from('concierge_escalations')
-        .update({ status: 'answered', answered_message_id: message.id })
-        .eq('id', escalation.id);
-      if (updateError) throw updateError;
-
-      await supabase
-        .from('match_conversations')
-        .update({
-          last_message_at: new Date().toISOString(),
-          last_message_preview: replyText.substring(0, 100),
-        })
-        .eq('id', escalation.conversation_id);
+      const { data, error } = await supabase.functions.invoke('concierge-answer', {
+        body: { escalationId: escalation.id, reply: replyText },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { emailDelivered?: boolean };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['concierge-queue-escalations'] });
-      toast.success('Reply sent to the renter.');
+      toast.success(data?.emailDelivered
+        ? 'Reply emailed to the renter.'
+        : 'Marked as answered, but the email could not be sent.');
     },
     onError: (error) => {
       console.error('Error answering escalation:', error);

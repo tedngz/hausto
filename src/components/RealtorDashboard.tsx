@@ -19,7 +19,6 @@ import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
 import { BulkUploadModal } from '@/components/BulkUploadModal';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
-import { HaustoChat } from '@/components/HaustoChat';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { BatchReanalyzeProgressModal } from '@/components/BatchReanalyzeProgressModal';
 import { useProperties, Property } from '@/hooks/useProperties';
@@ -1115,10 +1114,6 @@ export const RealtorDashboard = ({
         </div>
       )}
 
-      <HaustoChat isOpen={isChatModalOpen} onClose={() => {
-      setIsChatModalOpen(false);
-      setSelectedMatch(null);
-    }} userType="realtor" />
 
       {selectedMatch && <RenterProfileModal userId={selectedMatch.renter_id} isOpen={isProfileModalOpen} onClose={() => {
       setIsProfileModalOpen(false);

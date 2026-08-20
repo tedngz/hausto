@@ -4,12 +4,9 @@ import { Trash2 } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/types';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
-import { ContactModal } from '@/components/ContactModal';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
-import { HaustoChat } from '@/components/HaustoChat';
-import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useAuth } from '@/hooks/useAuth';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
@@ -27,16 +24,10 @@ export const MatchesView = ({
   userPreferences,
   userProfile
 }: MatchesViewProps) => {
-  const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null);
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  // Which listing the renter clicked "Ask" on — passed into HaustoChat so the
-  // conversation opens already tagged with that property.
-  const [chatPropertyId, setChatPropertyId] = useState<string | null>(null);
   // Fast-Track scheduling: which conversation/realtor the request belongs to,
   // and which property the renter clicked "Viewing" on.
-  const [scheduleContext, setScheduleContext] = useState<{ conversationId: string; realtorId: string; propertyId: string } | null>(null);
+  const [scheduleContext, setScheduleContext] = useState<{ realtorId: string; propertyId: string } | null>(null);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const {
     renterMatches,
@@ -44,11 +35,6 @@ export const MatchesView = ({
     removeMatch,
     isRemovingMatch
   } = useMatches();
-  const {
-    conversations,
-    getOrCreateConversation,
-    setCurrentConversationId
-  } = useDirectMessages();
   const { user } = useAuth();
   const { quota } = useViewingQuota();
   const { submitFastTrack } = useFastTrackRequest();
@@ -99,50 +85,11 @@ export const MatchesView = ({
     await removeMatch(matchId);
   };
 
-  const handleContactRealtor = async (apartment: Apartment) => {
-    if (!user?.id) {
-      setSelectedApartment(apartment);
-      return;
-    }
-
-    // For external properties, open messaging with Hausto Agent
-    const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;
-    const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
-
-    if (!isExternal) {
-      // Check if property is still available (only for internal properties)
-      const { data: property, error } = await supabase
-        .from('properties')
-        .select('id, is_active')
-        .eq('id', apartment.id)
-        .maybeSingle();
-
-      if (error || !property || !property.is_active) {
-        toast.info("Property No Longer Available", {
-          description: "This property is no longer listed. It may have been rented or removed by the owner."
-        });
-        return;
-      }
-    }
-
-    // Get or create conversation with the realtor (or Hausto Agent for external)
-    const conversationId = await getOrCreateConversation(user.id, realtorId);
-    
-    if (conversationId) {
-      setCurrentConversationId(conversationId);
-      setSelectedConversationId(conversationId);
-      setChatPropertyId(apartment.id);
-      setIsChatOpen(true);
-    } else {
-      setSelectedApartment(apartment);
-    }
-  };
-
   // Primary CTA: Hausto books the viewings (Fast-Track). The first coordination
   // is free; once the allowance is spent, the upgrade modal takes over.
   const handleScheduleViewing = async (apartment: Apartment) => {
     if (!user?.id) {
-      setSelectedApartment(apartment);
+      toast.info('Please sign in to book a viewing.');
       return;
     }
     if (!quota) {
@@ -159,12 +106,7 @@ export const MatchesView = ({
     }
     const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;
     const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
-    const conversationId = await getOrCreateConversation(user.id, realtorId);
-    if (!conversationId) {
-      toast.error('Could not start a viewing request. Please try again.');
-      return;
-    }
-    setScheduleContext({ conversationId, realtorId, propertyId: apartment.id });
+    setScheduleContext({ realtorId, propertyId: apartment.id });
   };
 
   const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
@@ -172,7 +114,6 @@ export const MatchesView = ({
     try {
       const realtorApartments = allApartments.filter(a => a.realtor.id === scheduleContext.realtorId);
       await submitFastTrack({
-        conversationId: scheduleContext.conversationId,
         realtorId: scheduleContext.realtorId,
         scheduleData,
         properties: realtorApartments.map(a => ({
@@ -262,15 +203,9 @@ export const MatchesView = ({
       })}
       </div>
 
-      {selectedApartment && <ContactModal apartment={selectedApartment} onClose={() => setSelectedApartment(null)} userProfile={userProfile} />}
 
       {selectedRealtorId && <RealtorProfileModal realtorId={selectedRealtorId} isOpen={!!selectedRealtorId} onClose={() => setSelectedRealtorId(null)} />}
 
-      <HaustoChat isOpen={isChatOpen} onClose={() => {
-      setIsChatOpen(false);
-      setSelectedConversationId(null);
-      setChatPropertyId(null);
-    }} userPreferences={userPreferences} userType="renter" initialMatchId={selectedConversationId} initialPropertyId={chatPropertyId} />
 
       <ViewingScheduleModal
         isOpen={!!scheduleContext}

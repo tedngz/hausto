@@ -5,14 +5,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyListingCard } from '@/components/PropertyListingCard';
 import { ListingHistoryNote } from '@/components/ListingHistoryNote';
-import { HaustoChat } from '@/components/HaustoChat';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { useMatches } from '@/hooks/useMatches';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
-import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -36,17 +34,14 @@ const PropertyDetail = () => {
   const [source, setSource] = useState<'internal' | 'external'>('internal');
   const [isRelist, setIsRelist] = useState(false);
   const [firstSeenAt, setFirstSeenAt] = useState<string | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
   const [isBooking, setIsBooking] = useState(false);
   // Set once the listing has a conversation to hang the request off; opening
   // the schedule modal is what it gates.
-  const [scheduleContext, setScheduleContext] = useState<{ conversationId: string; realtorId: string } | null>(null);
+  const [scheduleContext, setScheduleContext] = useState<{ realtorId: string } | null>(null);
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
   const { createMatch } = useMatches();
   const { quota } = useViewingQuota();
   const { submitFastTrack } = useFastTrackRequest();
-  const { getOrCreateConversation } = useDirectMessages();
 
   // Signed-in renters see how the listing matches their saved preferences
   // instead of the property's generic style badge. localStorage first for an
@@ -225,19 +220,7 @@ const PropertyDetail = () => {
         if ((err as Error)?.message !== 'ALREADY_MATCHED') return;
       }
 
-      // Conversations are keyed by renter/realtor pair in match_conversations -
-      // the request hangs off that thread so the coordination has somewhere to
-      // land and be followed up.
-      const conversationId = await getOrCreateConversation(user.id, realtorId);
-      if (!conversationId) {
-        toast({
-          title: 'Could not start the request',
-          description: 'The listing was saved to Matches but the conversation could not be opened. Try again from Matches.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      setScheduleContext({ conversationId, realtorId });
+      setScheduleContext({ realtorId });
     } finally {
       setIsBooking(false);
     }
@@ -247,7 +230,6 @@ const PropertyDetail = () => {
     if (!scheduleContext || !apartment) return;
     try {
       await submitFastTrack({
-        conversationId: scheduleContext.conversationId,
         realtorId: scheduleContext.realtorId,
         scheduleData,
         properties: [{
@@ -392,16 +374,6 @@ const PropertyDetail = () => {
           )}
         </main>
 
-        {user && (
-          <HaustoChat
-            isOpen={isChatOpen}
-            onClose={() => setIsChatOpen(false)}
-            userType="renter"
-            userPreferences={preferences}
-            initialMatchId={chatConversationId}
-            initialPropertyId={apartment.id}
-          />
-        )}
 
         {showRealtorProfile && apartment.realtor && (
           <RealtorProfileModal

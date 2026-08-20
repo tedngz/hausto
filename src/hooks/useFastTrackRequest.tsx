@@ -14,8 +14,8 @@ export interface FastTrackProperty {
 
 /**
  * Shared Fast-Track submission: inserts the fast_track_requests row and sends
- * the notification emails. Used by both HaustoChat (which additionally posts a
- * confirmation message into the thread) and MatchesView's "Schedule viewing" CTA.
+ * the notification emails. Used by the "Schedule viewing" CTAs in MatchesView,
+ * BrowseTable and the listing page.
  */
 export const useFastTrackRequest = () => {
   const { user } = useAuth();
@@ -27,8 +27,9 @@ export const useFastTrackRequest = () => {
     scheduleData,
     properties,
   }: {
-    conversationId: string;
-    realtorId: string;
+    /** Null since the chat was retired - the row stands on its own. */
+    conversationId?: string | null;
+    realtorId?: string | null;
     scheduleData: ViewingScheduleData;
     /** Full property info for the email; filtered to selectedPropertyIds internally. */
     properties: FastTrackProperty[];
@@ -42,9 +43,9 @@ export const useFastTrackRequest = () => {
     }
 
     const { error: requestError } = await supabase.from('fast_track_requests').insert({
-      conversation_id: conversationId,
+      conversation_id: conversationId ?? null,
       renter_id: user.id,
-      realtor_id: realtorId,
+      realtor_id: realtorId ?? null,
       property_ids: scheduleData.selectedPropertyIds,
       preferred_dates: scheduleData.dates.map(d => format(d, 'yyyy-MM-dd')),
       preferred_times: scheduleData.preferredTimes,

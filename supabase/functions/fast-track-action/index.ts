@@ -115,29 +115,6 @@ Deno.serve(async (req) => {
     const { error: updErr } = await admin.from('fast_track_requests').update(update).eq('id', requestId);
     if (updErr) return json({ error: `Update failed: ${updErr.message}` }, 500);
 
-    // ── Notify: chat thread (when the request came from a conversation) ──
-    let chatDelivered = false;
-    if (request.conversation_id) {
-      const senderId = request.realtor_id || actorId;
-      if (senderId) {
-        const content = chatMessage(action, message, schedule, titles);
-        const { error: msgErr } = await admin.from('direct_messages').insert({
-          conversation_id: request.conversation_id,
-          sender_id: senderId,
-          receiver_id: request.renter_id,
-          content,
-        });
-        if (!msgErr) {
-          chatDelivered = true;
-          await admin.from('match_conversations').update({
-            last_message_at: new Date().toISOString(),
-            last_message_preview: content.substring(0, 100),
-          }).eq('id', request.conversation_id);
-        } else {
-          console.warn('[fast-track-action] chat delivery failed:', msgErr.message);
-        }
-      }
-    }
 
     // ── Notify: email (best-effort) ──
     let emailDelivered = false;
@@ -151,7 +128,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ success: true, status: update.status, chatDelivered, emailDelivered });
+    // chatDelivered is retained as false: the in-app chat was retired, email is
+    // the only delivery channel now.
+    return json({ success: true, status: update.status, chatDelivered: false, emailDelivered });
   } catch (e) {
     console.error('[fast-track-action] Error:', e);
     return json({ error: (e as Error).message }, 500);
