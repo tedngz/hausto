@@ -52,27 +52,9 @@ Deno.serve(async (req) => {
       if (propTitle) propUrl = `${BASE_URL}/property/${esc.property_id}`;
     }
 
-    // Chat message: question context + answer + property link
-    const parts = [`Re: "${esc.question}"`, '', reply.trim()];
-    if (propUrl) parts.push('', `📍 ${propTitle}: ${propUrl}`);
-    const content = parts.join('\n');
-
-    const senderId = esc.realtor_id || actorId;
-    if (!senderId) return json({ error: 'No sender' }, 400);
-    const { data: message, error: msgErr } = await admin.from('direct_messages').insert({
-      conversation_id: esc.conversation_id,
-      sender_id: senderId,
-      receiver_id: esc.renter_id,
-      content,
-    }).select('id').single();
-    if (msgErr) return json({ error: `Message failed: ${msgErr.message}` }, 500);
-
+    // The in-app chat was retired, so email is the only delivery channel.
     await admin.from('concierge_escalations')
-      .update({ status: 'answered', answered_message_id: message.id }).eq('id', escalationId);
-    await admin.from('match_conversations').update({
-      last_message_at: new Date().toISOString(),
-      last_message_preview: content.substring(0, 100),
-    }).eq('id', esc.conversation_id);
+      .update({ status: 'answered' }).eq('id', escalationId);
 
     // Email the renter (best-effort)
     let emailDelivered = false;
@@ -99,7 +81,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ success: true, messageId: message.id, emailDelivered });
+    return json({ success: true, emailDelivered });
   } catch (e) {
     console.error('[concierge-answer] Error:', e);
     return json({ error: (e as Error).message }, 500);

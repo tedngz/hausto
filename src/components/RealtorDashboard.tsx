@@ -19,7 +19,6 @@ import { PropertyEditModal } from '@/components/PropertyEditModal';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
 import { BulkUploadModal } from '@/components/BulkUploadModal';
 import { PropertyPreviewModal } from '@/components/PropertyPreviewModal';
-import { HaustoChat } from '@/components/HaustoChat';
 import { RenterProfileModal } from '@/components/RenterProfileModal';
 import { BatchReanalyzeProgressModal } from '@/components/BatchReanalyzeProgressModal';
 import { useProperties, Property } from '@/hooks/useProperties';
@@ -27,6 +26,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMatches, PropertyMatch } from '@/hooks/useMatches';
 import { useConciergeQueue } from '@/hooks/useConciergeQueue';
 import { ConciergeQueue } from '@/components/realtor/ConciergeQueue';
+import { RenterQuestionsDialog } from '@/components/realtor/RenterQuestionsDialog';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -206,6 +206,9 @@ export const RealtorDashboard = ({
     setPreviewCrawledApartment(apartment);
   };
   const { pendingCount: conciergePendingCount } = useConciergeQueue();
+  // Questions the assistant could not answer. The dialog used to open from a
+  // banner inside the chat; with the chat retired the stat tile is the way in.
+  const [showQuestions, setShowQuestions] = useState(false);
   const handleEdit = (property: Property) => {
     setSelectedProperty(property);
     setIsEditingExternal(false);
@@ -649,9 +652,21 @@ export const RealtorDashboard = ({
           {[
             { label: 'Listed Properties', value: realtorProperties.length, Icon: Upload, gradient: 'from-green-400 to-emerald-500' },
             { label: 'Total Matches', value: realtorMatches.length, Icon: User, gradient: 'from-orange-400 to-red-500' },
-            { label: 'Needs Your Reply', value: conciergePendingCount, Icon: MessageSquare, gradient: 'from-purple-400 to-pink-500' },
-          ].map(({ label, value, Icon, gradient }) => (
-            <Card key={label} className="p-4 md:p-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
+            { label: 'Needs Your Reply', value: conciergePendingCount, Icon: MessageSquare, gradient: 'from-purple-400 to-pink-500', onClick: () => setShowQuestions(true) },
+          ].map(({ label, value, Icon, gradient, onClick }) => (
+            <Card
+              key={label}
+              {...(onClick ? {
+                role: 'button' as const,
+                tabIndex: 0,
+                onClick,
+                onKeyDown: (e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+                },
+                'aria-label': `${label}: ${value}. Open renter questions`,
+              } : {})}
+              className={`p-4 md:p-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg${onClick ? ' cursor-pointer transition-colors hover:bg-white hover:border-orange-300' : ''}`}
+            >
               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div
                   className={`order-first w-9 h-9 md:w-12 md:h-12 bg-gradient-to-r ${gradient} rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 sm:order-last`}
@@ -673,7 +688,7 @@ export const RealtorDashboard = ({
           <p className="text-slate-600 text-sm mb-4">
             Questions Hausto AI escalated to you, and viewing requests to coordinate.
           </p>
-          <ConciergeQueue />
+          <ConciergeQueue onOpenQuestions={() => setShowQuestions(true)} />
         </div>
 
         {/* My Properties */}
@@ -1115,10 +1130,6 @@ export const RealtorDashboard = ({
         </div>
       )}
 
-      <HaustoChat isOpen={isChatModalOpen} onClose={() => {
-      setIsChatModalOpen(false);
-      setSelectedMatch(null);
-    }} userType="realtor" />
 
       {selectedMatch && <RenterProfileModal userId={selectedMatch.renter_id} isOpen={isProfileModalOpen} onClose={() => {
       setIsProfileModalOpen(false);
@@ -1190,5 +1201,7 @@ export const RealtorDashboard = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <RenterQuestionsDialog open={showQuestions} onOpenChange={setShowQuestions} />
     </div>;
 };

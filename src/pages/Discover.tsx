@@ -9,10 +9,8 @@ import { Navigation } from '@/components/Navigation';
 import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';
 import { UserTypeSelector } from '@/components/UserTypeSelector';
-import { HaustoChat } from '@/components/HaustoChat';
 import { BrowseTable } from '@/components/BrowseTable';
 import { FastTrackRequestsCard } from '@/components/FastTrackRequestsCard';
-import { FloatingAIButton } from '@/components/FloatingAIButton';
 import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
@@ -26,7 +24,6 @@ import { UserPreferences } from '@/types';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { useMatches } from '@/hooks/useMatches';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
 import { dbToPreferences, preferencesToSearchQuery, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
 const Discover = () => {
@@ -41,25 +38,10 @@ const Discover = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Unresolved renter-question count for the chat launcher badge (realtors)
-  const { data: pendingQuestions = 0 } = useQuery({
-    queryKey: ['fab-pending-questions', user?.id],
-    enabled: !!user?.id && isRealtor,
-    refetchInterval: 30000,
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('concierge_escalations')
-        .select('id', { count: 'exact', head: true })
-        .eq('realtor_id', user!.id)
-        .eq('status', 'pending');
-      return count || 0;
-    },
-  });
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
 
   const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'browse'>('ai-chat');
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
-  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   // One-shot seed query for the quiz → AI-search handoff.
@@ -142,11 +124,6 @@ const Discover = () => {
     }
   }, [prefsResolved, userType, location.search]);
   useEffect(() => {
-    // Listen for AI chat opening event from SwipeInterface
-    const handleOpenAIChat = () => {
-      setIsAIChatOpen(true);
-    };
-
     // Listen for subscription modal opening event
     const handleOpenSubscriptionModal = (event: CustomEvent) => {
       setIsSubscriptionModalOpen(true);
@@ -156,11 +133,9 @@ const Discover = () => {
     const handleSwitchToAIChat = () => {
       setCurrentView('ai-chat');
     };
-    window.addEventListener('openAIChat', handleOpenAIChat);
     window.addEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
     window.addEventListener('switchToAIChat', handleSwitchToAIChat);
     return () => {
-      window.removeEventListener('openAIChat', handleOpenAIChat);
       window.removeEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
       window.removeEventListener('switchToAIChat', handleSwitchToAIChat);
     };
@@ -291,7 +266,7 @@ const Discover = () => {
           onRestartOnboarding={userType === 'renter' ? handleRestartOnboarding : undefined}
         />}
 
-        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatchesDb.length} onSwitchUserType={switchUserType} onOpenAIChat={() => setIsAIChatOpen(true)} onAddProperty={() => setIsUploadModalOpen(true)} />}
+        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatchesDb.length} onSwitchUserType={switchUserType} onAddProperty={() => setIsUploadModalOpen(true)} />}
 
         <main className="h-full overflow-y-auto pt-14">
           {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-4">
@@ -356,9 +331,7 @@ const Discover = () => {
         {/* Realtors keep the bottom-right launcher for their renter message
             threads; renters use the platform-wide AI assistant (bottom-left)
             and reach match conversations from the Matches view. */}
-        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <FloatingAIButton onClick={() => setIsAIChatOpen(true)} badgeCount={pendingQuestions} />}
 
-        <HaustoChat isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} userPreferences={userPreferences} userType={userType || 'renter'} />
 
         <PropertyUploadModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} />
 

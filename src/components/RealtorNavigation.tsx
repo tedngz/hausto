@@ -10,7 +10,6 @@ interface RealtorNavigationProps {
   setCurrentView: (view: 'dashboard' | 'profile') => void;
   matchCount: number;
   onSwitchUserType: () => void;
-  onOpenAIChat: () => void;
   onAddProperty?: () => void;
 }
 
@@ -19,7 +18,6 @@ export const RealtorNavigation = ({
   setCurrentView, 
   matchCount, 
   onSwitchUserType,
-  onOpenAIChat,
   onAddProperty
 }: RealtorNavigationProps) => {
   const { signOut } = useAuth();

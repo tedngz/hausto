@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.4";
 import { Redis } from "https://esm.sh/@upstash/redis@latest";
 import { logOpenAIUsage, isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
+import { Resend } from "npm:resend@2.0.0";
+import { ADMIN_EMAIL, CONCIERGE_FROM, esc, SITE_URL, textToHtml } from "../_shared/concierge-email.ts";
 
 // Hausto Assistant: the platform-wide floating AI chat. Answers renter
 // questions (advice, property info, rental process) grounded in the user's
@@ -17,6 +19,12 @@ const corsHeaders = {
 
 const HISTORY_LIMIT = 16;
 const FREE_DAILY_CONTACT_REVEALS = 10;
+// The admin account that owns crawled inventory; captured questions are filed
+// against it so they surface in the existing concierge queue.
+const HAUSTO_AGENT_ID = "734bd05c-a381-4267-b823-88a84c79a40e";
+// Ceiling on captured questions per user per day, so one frustrated session
+// cannot flood the queue.
+const MAX_DAILY_CAPTURES = 5;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -27,6 +35,52 @@ const json = (body: unknown, status = 200) =>
 interface ClientMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+// Best-effort operator notice for a captured question. Never throws: a mail
+// failure must not cost us the capture or the user's reply.
+async function notifyAdmin(
+  question: string,
+  propertyId: string | null,
+  properties: Record<string, unknown>[],
+  renterEmail: string | null,
+): Promise<void> {
+  try {
+    const key = Deno.env.get("RESEND_API_KEY");
+    if (!key) return;
+    const p = propertyId ? properties.find((x) => x.id === propertyId) : undefined;
+    const name = (p?.property_source_provider_name ?? p?.contact_name) as string | null;
+    const phone = (p?.property_source_provider_phone ?? p?.contact_phone) as string | null;
+
+    const listing = p
+      ? `<p style="margin:16px 0 4px"><b>Listing:</b> <a href="${SITE_URL}/property/${esc(p.id)}">${esc(p.title)}</a><br>
+         <span style="color:#6b7280">${esc(p.location)}</span></p>`
+      : `<p style="margin:16px 0 4px;color:#6b7280">No listing in context.</p>`;
+
+    const contact = p
+      ? (phone || name
+          ? `<p style="margin:4px 0"><b>Call them:</b> ${esc(name ?? "Contact")} — <a href="tel:${esc(phone ?? "")}">${esc(phone ?? "not listed")}</a></p>`
+          : `<p style="margin:4px 0;color:#b45309">No contact on file for this listing.</p>`)
+      : "";
+
+    await new Resend(key).emails.send({
+      from: CONCIERGE_FROM,
+      to: [ADMIN_EMAIL],
+      subject: "Hausto AI couldn't answer a renter question",
+      html: `<p>A renter asked something the listing data does not cover:</p>
+        <blockquote style="border-left:3px solid #f97316;padding-left:12px;color:#374151;margin:12px 0">${textToHtml(question)}</blockquote>
+        ${listing}
+        ${contact}
+        <p style="margin-top:4px;color:#6b7280;font-size:13px">Renter: ${esc(renterEmail ?? "unknown")}</p>
+        <p style="margin-top:20px;color:#6b7280;font-size:13px">
+          They were given the contact and told calling is fastest - no reply was promised.
+          Answer only if you can add something, otherwise treat this as a gap in our data.
+          Unanswered questions close themselves after 7 days.
+        </p>`,
+    });
+  } catch (e) {
+    console.warn("[ai-assistant] admin notice failed:", String(e).slice(0, 160));
+  }
 }
 
 serve(async (req) => {
@@ -192,10 +246,12 @@ What you do:
 - Give renting advice (neighborhoods, budgeting in VND, lease norms, deposits, what to check at viewings, living in Vietnam).
 - Answer questions about the user's matched properties and the listing they are viewing, using the data below.
 - Share the owner/realtor contact for a specific property when the user asks for it.
+- Hand people to the listing contact for anything only the owner can confirm. Hausto's inventory is listings gathered from across the market, so we do NOT hold live availability, price flexibility, or contract terms. For those, say so plainly and give them the contact so they can call - calling is genuinely the fastest route, so frame it as the better option rather than an apology.
 
 What you do NOT do:
 - You cannot search for or recommend new listings. If the user asks you to find homes, point them to the AI Search ("Describe Your Dream Home") or the Browse page instead.
-- Never reveal contact details yourself in "reply". To share a contact, set "reveal_contact_property_id" to that property's id and the system will attach the contact (it enforces the user's daily reveal allowance). Only do this when the user clearly asks for a contact AND the property is identifiable from the data below. If the property has "Contact on file: no", say Hausto doesn't have a direct contact for it and suggest Fast-Track viewing coordination instead.
+- Never reveal contact details yourself in "reply". To share a contact, set "reveal_contact_property_id" to that property's id and the system will attach the contact (it enforces the user's daily reveal allowance). Do this whenever the user asks for a contact, AND whenever the question needs the owner (availability, price negotiation, deposit or contract terms, move-in dates) and the property is identifiable - in that case answer what you can from the data, then attach the contact so they can call. If the property has "Contact on file: no", say Hausto doesn't have a direct contact for it and offer Fast-Track viewing coordination instead.
+- NEVER promise that Hausto will find out, check with the owner, get back to them, or pass anything to a team. There is no such queue - a promise like that is simply broken. Offer the contact, or Fast-Track when they want us to book a viewing for them.
 - If the user asks for a contact but you cannot tell which property they mean, ask them to name the property (or open its listing page) - do not guess. This does not apply when a CURRENT SUBJECT is given below: that is the property they mean, so act on it rather than asking.
 
 Style: warm, concise (2-4 sentences), concrete. Prices in VND. The user is on the ${isPremium ? "PREMIUM" : "FREE"} plan.${isPremium ? "" : ` Free plan users can reveal up to ${FREE_DAILY_CONTACT_REVEALS} owner/realtor contacts per day; premium is unlimited. Only mention this when relevant.`}
@@ -209,7 +265,9 @@ ${propertyContext || "None on record yet - the user hasn't matched with any list
 
 ${complexContext ? `Complex knowledge:\n${complexContext}` : ""}
 
-Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string | null}`;
+Set "capture_question" to true when the user asked something concrete that you could NOT answer from the data above - typically because only the owner knows (live availability, negotiability, deposit or contract specifics) or because Hausto simply lacks the detail. This is a silent signal for our team about missing information: it changes nothing the user sees, so never mention it, and never imply anyone will follow up. Leave it false for greetings, small talk, general renting advice, and anything you answered adequately.
+
+Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string | null, "capture_question": boolean}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -236,7 +294,7 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
     const aiData = await aiRes.json();
     logOpenAIUsage({ fn: "ai-assistant", model: "gpt-4o-mini", usage: aiData?.usage });
 
-    let decision: { reply?: string; reveal_contact_property_id?: string | null } = {};
+    let decision: { reply?: string; reveal_contact_property_id?: string | null; capture_question?: boolean } = {};
     try {
       decision = JSON.parse(aiData.choices[0].message.content);
     } catch {
@@ -323,11 +381,58 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
       }
     }
 
+    // ---- Capture what we could not answer ----
+    // Product signal only: the user is never told, because with crawled supply
+    // we often cannot get an answer and a promise would go unkept. Filed
+    // against the Hausto Agent so it lands in the existing concierge queue.
+    let captured = false;
+    if (decision.capture_question === true) {
+      const lastUserMessage = [...chatHistory].reverse().find((m) => m.role === "user")?.content?.trim();
+      if (lastUserMessage) {
+        try {
+          const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const { data: recent } = await supabase
+            .from("concierge_escalations")
+            .select("question")
+            .eq("renter_id", user.id)
+            .gte("created_at", since);
+          const alreadyAsked = (recent || []).some(
+            (r) => (r.question || "").trim().toLowerCase() === lastUserMessage.toLowerCase(),
+          );
+          if (!alreadyAsked && (recent || []).length < MAX_DAILY_CAPTURES) {
+            const { error: capErr } = await supabase.from("concierge_escalations").insert({
+              renter_id: user.id,
+              realtor_id: HAUSTO_AGENT_ID,
+              conversation_id: null,
+              property_id: subjectIds[0] ?? null,
+              question: lastUserMessage.slice(0, 2000),
+              status: "pending",
+              source: "assistant",
+            });
+            if (capErr) {
+              console.warn("[ai-assistant] capture failed:", capErr.message);
+            } else {
+              captured = true;
+              // Push it to the operator rather than waiting for someone to open
+              // the dashboard. The listing's phone number is inline because most
+              // captures are availability questions - the answer is a call away,
+              // and making that one step is the whole point.
+              await notifyAdmin(lastUserMessage, subjectIds[0] ?? null, properties, user.email ?? null);
+            }
+          }
+        } catch (e) {
+          // Never let the signal break the answer.
+          console.warn("[ai-assistant] capture error:", String(e).slice(0, 160));
+        }
+      }
+    }
+
     return json({
       reply,
       revealedPropertyId: revealProperty && !limitReached ? revealId : null,
       contactsRemaining, // null = unlimited (premium) or unknown
       limitReached,
+      captured, // internal signal; the client deliberately does not surface it
     });
   } catch (e) {
     console.error("[ai-assistant] error:", e);

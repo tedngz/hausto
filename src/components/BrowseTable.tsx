@@ -15,14 +15,12 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
-import { useDirectMessages } from '@/hooks/useDirectMessages';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { VibeMatchPopover } from '@/components/VibeMatchPopover';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
-import { HaustoChat } from '@/components/HaustoChat';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
@@ -266,16 +264,12 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
   /** Listings handed to the schedule modal - the compare selection, or one previewed listing */
   const [scheduleTargets, setScheduleTargets] = useState<BrowseRow[]>([]);
   // In-place chat: "Ask Hausto" opens the thread over browse, no navigation.
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
-  const [chatPropertyId, setChatPropertyId] = useState<string | null>(null);
   const [preview, setPreview] = useState<BrowseRow | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [liking, setLiking] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const { user } = useAuth();
   const { createMatch } = useMatches();
-  const { getOrCreateConversation, setCurrentConversationId } = useDirectMessages();
   const { subscribed } = useSubscription();
   const { quota, refetchQuota } = useViewingQuota();
 
@@ -361,43 +355,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
     }
   };
 
-  // Free intent-capture path off the preview card: match the listing and open
-  // the conversation right here, so the renter never leaves browse. Mirrors
-  // MatchesView's "Chat" flow - match, resolve the conversation, tag the property.
-  const handleAskHausto = async (row: BrowseRow) => {
-    if (!user) {
-      navigate('/auth', { state: { returnTo } });
-      return;
-    }
-    if (liking) return;
-    setLiking(true);
-    try {
-      await ensureMatch(row);
-      setLikedIds((cur) => new Set(cur).add(row.id));
-
-      // External listings talk to the Hausto Agent; internal ones to the realtor.
-      let realtorId: string = HAUSTO_AGENT_ID;
-      if (row.source === 'hausto') {
-        const { data } = await supabase.functions.invoke('get-public-property', { body: { id: row.id } });
-        realtorId = data?.property?.realtor_id || HAUSTO_AGENT_ID;
-      }
-      const conversationId = await getOrCreateConversation(user.id, realtorId);
-      if (!conversationId) throw new Error('Could not open the conversation');
-
-      setCurrentConversationId(conversationId);
-      setChatConversationId(conversationId);
-      setChatPropertyId(row.id);
-      setPreview(null);
-      setChatOpen(true);
-    } catch (e) {
-      console.error('Ask Hausto failed:', e);
-      toast.error('Could not start the conversation. Please try again.');
-    } finally {
-      setLiking(false);
-    }
-  };
-
-  // Targets are either the compare selection or the single previewed listing.
   const openFastTrack = (targets: BrowseRow[]) => {
     if (targets.length === 0) return;
     if (!user) {
@@ -1088,18 +1045,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
 
       {/* Opens over browse from the preview card's "Ask Hausto" - the renter
           keeps their filters, scroll position and shortlist. */}
-      <HaustoChat
-        isOpen={chatOpen}
-        onClose={() => {
-          setChatOpen(false);
-          setChatConversationId(null);
-          setChatPropertyId(null);
-        }}
-        userPreferences={savedPreferences ?? undefined}
-        userType="renter"
-        initialMatchId={chatConversationId}
-        initialPropertyId={chatPropertyId}
-      />
 
       <SubscriptionModal
         isOpen={subscriptionOpen}

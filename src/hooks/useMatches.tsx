@@ -268,29 +268,10 @@ export const useMatches = () => {
         } as any);
       if (error) throw error;
 
-      // For internal properties, ensure a conversation exists
-      if (propertyType === 'internal') {
-        const { error: convError } = await supabase
-          .from('match_conversations')
-          .upsert(
-            {
-              renter_id: user.id,
-              realtor_id: realtorId,
-              is_active: true,
-              last_message_at: new Date().toISOString(),
-            },
-            { onConflict: 'renter_id,realtor_id' }
-          );
-        if (convError) {
-          console.error('Failed to upsert match_conversations:', convError);
-        }
-      }
-      
       await updateUsage('match-with-view');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['renter-matches'] });
-      queryClient.invalidateQueries({ queryKey: ['match-conversations'] });
       toast({
         title: "Property liked!",
         description: "Property has been added to your matches.",
