@@ -165,8 +165,8 @@ serve(async (req) => {
     const internalIds = (matches || []).filter((m) => m.property_type !== "external").map((m) => m.property_id);
     const externalIds = (matches || []).filter((m) => m.property_type === "external").map((m) => m.property_id);
 
-    const INTERNAL_COLS = "id, title, location, price, size, rooms, vibe, description, highlights, amenities, property_source_provider_name, property_source_provider_phone, is_active";
-    const EXTERNAL_COLS = "id, title, location, price, size, vibe, description, highlights, amenities, contact_name, contact_phone, is_active";
+    const INTERNAL_COLS = "id, title, location, price, size, rooms, vibe, description, highlights, amenities, property_source_provider_name, property_source_provider_phone, property_source_link, is_active";
+    const EXTERNAL_COLS = "id, title, location, price, size, vibe, description, highlights, amenities, contact_name, contact_phone, source_url, is_active";
 
     const [internalRes, externalRes] = await Promise.all([
       internalIds.length > 0
@@ -213,7 +213,8 @@ serve(async (req) => {
     const propertyContext = properties.map((p, i) => {
       const marker = subjectIds.includes(String(p.id)) ? " ← CURRENT SUBJECT" : "";
       const hasContact = !!(p.property_source_provider_phone || p.property_source_provider_name || p.contact_phone || p.contact_name);
-      return `Property ${i + 1} [id ${p.id}]${marker}: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? "size n/a"}, rooms: ${p.rooms ?? "n/a"}. Vibe: ${p.vibe ?? "n/a"}. Highlights: ${((p.highlights as string[]) || []).join(", ")}. Amenities: ${((p.amenities as string[]) || []).join(", ")}. Contact on file: ${hasContact ? "yes" : "no"}. ${p.description ? `Description: ${String(p.description).slice(0, 300)}` : ""}`;
+      const sourceLink = (p.property_source_link ?? p.source_url) as string | null;
+      return `Property ${i + 1} [id ${p.id}]${marker}: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? "size n/a"}, rooms: ${p.rooms ?? "n/a"}. Vibe: ${p.vibe ?? "n/a"}. Highlights: ${((p.highlights as string[]) || []).join(", ")}. Amenities: ${((p.amenities as string[]) || []).join(", ")}. Contact on file: ${hasContact ? "yes" : "no"}. Original listing: ${sourceLink ?? "none on file"}. ${p.description ? `Description: ${String(p.description).slice(0, 300)}` : ""}`;
     }).join("\n");
 
     // Naming the subjects on their own, above the list, is what stops the model
@@ -246,6 +247,7 @@ What you do:
 - Give renting advice (neighborhoods, budgeting in VND, lease norms, deposits, what to check at viewings, living in Vietnam).
 - Answer questions about the user's matched properties and the listing they are viewing, using the data below.
 - Share the owner/realtor contact for a specific property when the user asks for it.
+- Share the original listing link when asked for it, or when someone wants to see the source posting, more photos, or check the listing themselves. Paste the "Original listing" URL from the data below exactly as it appears - never invent or guess one. If it says "none on file", say we don't have a source link for that listing rather than offering a substitute.
 - Hand people to the listing contact for anything only the owner can confirm. Hausto's inventory is listings gathered from across the market, so we do NOT hold live availability, price flexibility, or contract terms. For those, say so plainly and give them the contact so they can call - calling is genuinely the fastest route, so frame it as the better option rather than an apology.
 
 What you do NOT do:
