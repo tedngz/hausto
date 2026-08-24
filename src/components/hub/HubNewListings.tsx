@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 import { useNewListings } from '@/hooks/useNewListings';
 import { districtOf } from '@/utils/districts';
 
@@ -34,9 +35,11 @@ const sinceLabel = (seenAt: number): string => {
  */
 export const HubNewListings = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { listings, total, isScoped, seenAt, loading, markAllSeen } = useNewListings();
 
-  if (loading || listings.length === 0) return null;
+  // "New since you last looked" needs a last-looked, which needs an account.
+  if (!user || loading || listings.length === 0) return null;
 
   return (
     <section aria-label="New listings">

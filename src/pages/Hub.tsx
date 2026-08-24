@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { ChevronUp, Loader2, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronUp, Heart, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { BrowseTable, type BrowseTableFilters } from '@/components/BrowseTable';
+import { BrowseTable } from '@/components/BrowseTable';
 import { MatchesView } from '@/components/MatchesView';
+import { ComplexDirectory } from '@/components/ComplexDirectory';
+import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
+import { OnboardingQuiz } from '@/components/OnboardingQuiz';
+import { Profile } from '@/components/Profile';
+import { FastTrackRequestsCard } from '@/components/FastTrackRequestsCard';
+import { SubscriptionStatus } from '@/components/SubscriptionStatus';
+import { UsageMeter } from '@/components/UsageMeter';
 import { HomeAI } from '@/components/HomeAI';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HubNavigation } from '@/components/hub/HubNavigation';
@@ -14,40 +21,56 @@ import { HubNewListings } from '@/components/hub/HubNewListings';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
+import { useComplexes } from '@/hooks/useComplexes';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { cityForDistricts } from '@/utils/districts';
-import { normalizeSize } from '@/lib/preferences';
+import { preferencesToSearchQuery } from '@/lib/preferences';
 
-// The rate public-property-search compares VND listing prices against.
-const VND_PER_USD = 24500;
-
-// Quiz size answers, in the browse table's room-filter vocabulary.
-const SIZE_TO_ROOMS: Record<string, string> = {
-  studio: 'studio',
-  '1br': '1',
-  '2br': '2',
-  '3br+': '3',
-};
+/**
+ * Below this the page does not split into two panes at all.
+ *
+ * The comparison table has a hard 760px minimum, and a chat rail narrow enough
+ * to fit beside it at 1024px is too cramped to hold a conversation - both panes
+ * lose. 1280 is the first width where a usable rail (400px) and the full table
+ * (760 + 48 padding) both fit without either one scrolling sideways. Under it,
+ * the chat docks as a sheet and the table gets the whole width.
+ *
+ * Matches Tailwind's `xl`, which is what the breakpoint utilities below use.
+ */
+const RAIL_MIN_VIEWPORT = 1280;
 
 /**
  * The hub: one screen for the three things renters were bouncing between.
  *
  * Desktop is two panes - a mode-switched main pane (browse table / AI results /
- * matches) and a docked AI chat rail that never goes away. Below lg the rail
- * collapses to a bar that opens as a sheet, because the comparison table needs
- * every pixel of width it can get.
+ * matches) and a docked AI chat rail that never goes away. Narrower than
+ * RAIL_MIN_VIEWPORT the rail collapses to a bar that opens as a sheet, because
+ * the comparison table needs every pixel of width it can get.
  */
 const Hub = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { renterMatches } = useMatches();
-  const { preferences, isResolved: prefsResolved } = useUserPreferences();
+  const { data: complexes, isLoading: complexesLoading } = useComplexes();
+  const {
+    preferences,
+    isResolved: prefsResolved,
+    hasPreferences,
+    clearPreferences,
+  } = useUserPreferences();
 
-  const hasRail = useMediaQuery('(min-width: 1024px)');
+  const hasRail = useMediaQuery(`(min-width: ${RAIL_MIN_VIEWPORT}px)`);
   const [mode, setMode] = useState<HubMode>('browse');
+  // Profile is a full-pane detour rather than a tab - it is account admin, not
+  // part of the search loop the tabs describe.
+  const [showProfile, setShowProfile] = useState(false);
+  // Set once the quiz is done or dismissed, so it does not reappear while the
+  // saved preferences are still making their way back from the DB.
+  const [skippedOnboarding, setSkippedOnboarding] = useState(false);
+  // One-shot opening message for the quiz handoff.
+  const [seedQuery, setSeedQuery] = useState<string | undefined>(undefined);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
-  // Below lg the chat is a sheet rather than a column.
+  // Narrow viewports get the chat as a sheet rather than a column.
   const [isChatOpen, setIsChatOpen] = useState(false);
   // The chat renders its listings into this node. Held in state rather than a
   // ref so the first render after it mounts actually reaches HomeAI.
@@ -64,29 +87,9 @@ const Hub = () => {
     }
   }, [resultsCount]);
 
-  // The table opens on what the renter said they wanted rather than on all
-  // 1,400 listings. Seeded once, so their own filter changes stick afterwards -
-  // which means waiting for preferences before the table mounts.
-  const seedReady = prefsResolved || !!preferences;
-  const browseSeed = useMemo<BrowseTableFilters | undefined>(() => {
-    if (!preferences) return undefined;
-    const districts = preferences.location ?? [];
-    const [minVnd, maxVnd] = preferences.priceRange ?? [0, 0];
-    const size = normalizeSize(preferences.size);
-    return {
-      city: cityForDistricts(districts),
-      districts,
-      rooms: SIZE_TO_ROOMS[size] ?? 'all',
-      // The table's budget inputs are USD; preferences are VND. Same rate the
-      // search function uses to compare them.
-      minBudget: minVnd > 0 ? String(Math.round(minVnd / VND_PER_USD)) : '',
-      maxBudget: maxVnd > 0 ? String(Math.round(maxVnd / VND_PER_USD)) : '',
-    };
-  }, [preferences]);
-
-  useEffect(() => {
-    if (!loading && !user) navigate('/');
-  }, [user, loading, navigate]);
+  // No auth gate: the hub is the public front door. A visitor can browse the
+  // whole verified set, read building profiles and try the AI a few times;
+  // saving, matching and preferences are what ask them to sign in.
 
   // Quota walls raised from the table or the chat dispatch this - the hub has
   // to answer it too, or upgrading from here silently does nothing.
@@ -107,12 +110,34 @@ const Hub = () => {
     );
   }
 
-  if (!user) return null;
+  // Brand-new renters do the quiz first - it used to live on /discover, which
+  // renters no longer see. Held until preferences resolve so a returning renter
+  // never flashes the quiz on a slow query. Signed-out visitors skip it: the
+  // quiz has nowhere to save to, and demanding it before they can look at
+  // anything is exactly the wall this page is meant not to be.
+  if (user && prefsResolved && !hasPreferences && !skippedOnboarding) {
+    return (
+      <CurrencyProvider>
+        <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 via-white to-slate-100">
+          <OnboardingQuiz
+            onComplete={(prefs) => {
+              // Straight into the chat, pre-seeded with what they just told us,
+              // rather than dropping them on a cold table.
+              setSeedQuery(preferencesToSearchQuery(prefs));
+              setMode('ai');
+              setSkippedOnboarding(true);
+            }}
+            onSkip={() => setSkippedOnboarding(true)}
+          />
+        </div>
+      </CurrencyProvider>
+    );
+  }
 
   const userProfile = {
-    name: user.user_metadata?.name || '',
-    email: user.email || '',
-    phone: user.user_metadata?.phone || '',
+    name: user?.user_metadata?.name || '',
+    email: user?.email || '',
+    phone: user?.user_metadata?.phone || '',
   };
 
   // One chat instance, moved between the rail and the mobile sheet by which of
@@ -121,6 +146,8 @@ const Hub = () => {
     <HomeAI
       variant="rail"
       userPreferences={preferences ?? undefined}
+      initialQuery={seedQuery}
+      onInitialQueryConsumed={() => setSeedQuery(undefined)}
       resultsPortal={resultsPortal}
       onResultsCountChange={setResultsCount}
     />
@@ -139,11 +166,45 @@ const Hub = () => {
 
       <div className="flex h-[100dvh] flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
         <h1 className="sr-only">Your rental search on Hausto</h1>
-        <HubNavigation />
+        <HubNavigation
+          onViewProfile={() => setShowProfile(true)}
+          onRestartOnboarding={() => {
+            clearPreferences();
+            setSkippedOnboarding(false);
+            setShowProfile(false);
+          }}
+        />
 
         <div className="flex min-h-0 flex-1">
           {/* ---- Main pane ---- */}
-          <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:overflow-hidden lg:p-6">
+          <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:p-6 xl:overflow-hidden">
+            {showProfile ? (
+              <div className="mx-auto w-full max-w-6xl">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mb-4 h-9 px-2 text-muted-foreground"
+                  onClick={() => setShowProfile(false)}
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  Back to your search
+                </Button>
+                <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+                  <div className="flex flex-col gap-6 lg:col-span-2">
+                    <Profile userType="renter" />
+                    <FastTrackRequestsCard />
+                  </div>
+                  <div className="flex flex-col gap-6 lg:col-span-1">
+                    <SubscriptionStatus
+                      onUpgrade={() => setIsSubscriptionModalOpen(true)}
+                      showHistory
+                    />
+                    <UsageMeter />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
             <HubPreferenceBar onOpenSubscription={() => setIsSubscriptionModalOpen(true)} />
 
             <HubNewListings />
@@ -156,14 +217,11 @@ const Hub = () => {
               />
             </div>
 
-            <div className="min-h-0 flex-1 lg:overflow-y-auto">
-              {mode === 'browse' && (seedReady ? (
-                <BrowseTable returnTo="/hub" embedded initialFilters={browseSeed} />
-              ) : (
-                <div className="flex items-center justify-center py-24">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ))}
+            <div className="min-h-0 flex-1 xl:overflow-y-auto">
+              {/* Opens unfiltered: the whole verified set is the point of the
+                  Browse tab, and preference-shaped results are what the AI tab
+                  and the new-listings strip are for. */}
+              {mode === 'browse' && <BrowseTable returnTo="/hub" embedded />}
 
               {/* Always mounted, so the chat has somewhere to put results the
                   moment they arrive rather than only once this tab is opened. */}
@@ -180,55 +238,101 @@ const Hub = () => {
                 )}
               </div>
 
-              {mode === 'matches' && (
+              {mode === 'matches' && (user ? (
                 <MatchesView userPreferences={preferences ?? undefined} userProfile={userProfile} />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                  <Heart className="h-8 w-8 text-primary" aria-hidden="true" />
+                  <p className="font-serif text-xl">Keep the ones you like</p>
+                  <p className="max-w-sm text-sm text-muted-foreground">
+                    Sign in and every listing you save lands here, scored against what you're after.
+                  </p>
+                  <Button
+                    className="mt-1"
+                    onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
+                  >
+                    Sign in
+                  </Button>
+                </div>
+              ))}
+
+              {/* The vetted-complex directory. Embedded, so profiles open in a
+                  panel beside the chat and cards can be selected and asked
+                  about, rather than navigating away. */}
+              {mode === 'complexes' && <ComplexDirectory embedded />}
+
+              {mode === 'map' && (
+                <div className="pb-4">
+                  {complexesLoading ? (
+                    <div className="flex justify-center py-24">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+                    </div>
+                  ) : (
+                    <ComplexMapCanvas complexes={complexes ?? []} />
+                  )}
+                </div>
               )}
             </div>
+              </>
+            )}
           </main>
 
-          {/* ---- Chat rail (lg and up) ---- */}
+          {/* ---- Chat rail (xl and up) ---- */}
           {hasRail && (
-            <aside className="flex w-[420px] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
+            // Grows with the viewport rather than sitting at a fixed width: on
+            // a 1920 screen a 420px column of chat next to 1300px of table
+            // reads as an afterthought. Floor keeps it usable, ceiling stops it
+            // eating the table's width on ultrawide.
+            <aside className="flex w-[clamp(400px,30vw,560px)] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
               <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-                <span className="font-serif text-base">AI search</span>
+                <span className="font-serif text-base">AI chat</span>
               </div>
               <div className="min-h-0 flex-1">{chat}</div>
             </aside>
           )}
         </div>
 
-        {/* ---- Chat dock (below lg). Rendered instead of the rail, never
+        {/* ---- Chat dock (narrow viewports). Rendered instead of the rail, never
              alongside it - two mounted chats would be two conversations. ---- */}
         <div className={hasRail ? 'hidden' : 'shrink-0'}>
-          {!hasRail && (isChatOpen ? (
-            <div className="glass-card flex h-[70dvh] flex-col rounded-t-3xl">
-              <div className="flex h-12 shrink-0 items-center justify-between px-4">
-                <span className="flex items-center gap-2 font-serif text-base">
-                  <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-                  AI search
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-11 px-3"
-                  onClick={() => setIsChatOpen(false)}
-                >
-                  Close
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1">{chat}</div>
-            </div>
-          ) : (
-            <button
-              className="glass-card flex h-16 w-full items-center gap-3 rounded-t-3xl px-4 text-left"
-              onClick={() => setIsChatOpen(true)}
+          {!hasRail && (
+            <div
+              className={`glass-card flex flex-col rounded-t-3xl transition-[height] duration-200 ${
+                isChatOpen ? 'h-[70dvh]' : 'h-16'
+              }`}
             >
-              <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-              <span className="text-sm font-medium">Ask about what's on screen</span>
-              <ChevronUp className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </button>
-          ))}
+              <button
+                className="flex h-16 shrink-0 items-center gap-3 px-4 text-left"
+                aria-expanded={isChatOpen}
+                aria-controls="hub-chat-dock"
+                onClick={() => setIsChatOpen((open) => !open)}
+              >
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className="font-serif text-base">AI chat</span>
+                {!isChatOpen && (
+                  <span className="truncate text-xs text-muted-foreground">
+                    Ask about what&rsquo;s on screen
+                  </span>
+                )}
+                {isChatOpen ? (
+                  <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <ChevronUp className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                )}
+              </button>
+
+              {/* Collapsing hides the chat, it never unmounts it - tearing down
+                  HomeAI would take the conversation, the draft and the current
+                  results with it. */}
+              <div
+                id="hub-chat-dock"
+                className={`min-h-0 flex-1 ${isChatOpen ? '' : 'hidden'}`}
+              >
+                {chat}
+              </div>
+            </div>
+          )}
         </div>
 
         <SubscriptionModal

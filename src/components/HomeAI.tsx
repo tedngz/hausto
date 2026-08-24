@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart, CalendarCheck, Search, MessageCircle } from 'lucide-react';
+import { Send, MapPin, Home, DollarSign, Upload, X, MessageSquare, Plus, History, PlaneTakeoff, Heart, CalendarCheck, Search, MessageCircle, Check } from 'lucide-react';
 import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -29,6 +29,7 @@ import { toast as sonnerToast } from 'sonner';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AIBlocks } from '@/components/ai-blocks/AIBlocks';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
+import { ASSISTANT_COMPARE_EVENT, ASSISTANT_OPEN_EVENT, type AssistantCompareDetail, type AssistantOpenDetail } from '@/lib/assistantEvents';
 interface PropertyMatch {
   id: string;
   title: string;
@@ -116,6 +117,32 @@ export const parseAssistantMessage = (
   return { searchResults: null, displayContent: content };
 };
 
+// Free searches a signed-out visitor has used today. Kept next to the parser
+// rather than inside the component so the initial state can read it directly.
+const ANON_SEARCHES_KEY = 'haustoAnonSearches';
+
+const today = () => new Date().toISOString().split('T')[0];
+
+export const readAnonSearchCount = (): number => {
+  try {
+    const raw = localStorage.getItem(ANON_SEARCHES_KEY);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw) as { date?: string; count?: number };
+    // Yesterday's tally is not today's problem - matches the server's daily key.
+    return parsed.date === today() ? Number(parsed.count) || 0 : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const writeAnonSearchCount = (count: number) => {
+  try {
+    localStorage.setItem(ANON_SEARCHES_KEY, JSON.stringify({ date: today(), count }));
+  } catch {
+    // Private mode: the in-memory count still holds for this session.
+  }
+};
+
 interface HomeAIProps {
   userPreferences?: UserPreferences;
   /** When provided, HomeAI auto-sends this as the first message once (used for the
@@ -145,6 +172,11 @@ export const HomeAI = ({
   // Which reply's listings the main pane is showing. Follows the newest reply
   // that returned any, but an older one can be brought back from the thread.
   const [activeResultsIdx, setActiveResultsIdx] = useState<number | null>(null);
+  // Listings pinned to the conversation. Seeded by a property card's sparkle
+  // (ASSISTANT_OPEN_EVENT) and editable here from the renter's matches, so
+  // support can be asked about one place or several without leaving the chat.
+  const [subjects, setSubjects] = useState<AssistantOpenDetail[]>([]);
+  const [isSubjectPickerOpen, setIsSubjectPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -165,7 +197,10 @@ export const HomeAI = ({
   // Anonymous users get a few free searches before we ask them to sign up.
   // Follow-ups (chip taps) don't count against this so a conversation can breathe.
   const ANON_SEARCH_LIMIT = 3;
-  const [anonSearchCount, setAnonSearchCount] = useState(0);
+  // Persisted for the day, not just the session: as component state a reload
+  // handed out three more. The server caps per IP as well (chat-ai), so this is
+  // about the wall being honest rather than about enforcement.
+  const [anonSearchCount, setAnonSearchCount] = useState(() => readAnonSearchCount());
   const [wantsNewChat, setWantsNewChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialQuerySentRef = useRef(false);
@@ -182,7 +217,8 @@ export const HomeAI = ({
   // Derived here (not with the useState above) so it reads `user` after useAuth runs.
   const anonLimitReached = !user && anonSearchCount >= ANON_SEARCH_LIMIT;
   const {
-    createMatch
+    createMatch,
+    renterMatches
   } = useMatches();
   const { quota, refetchQuota } = useViewingQuota();
   // Fast-Track access: the free trial booking, a Premium cycle allowance, or
@@ -225,8 +261,65 @@ export const HomeAI = ({
     setActiveResultsIdx(latestResultsIdx);
   }, [latestResultsIdx]);
 
-  const activeResults =
-    activeResultsIdx !== null ? parsedMessages[activeResultsIdx]?.searchResults ?? null : null;
+  // Signed-in threads come from the DB; a signed-out visitor's one-shot search
+  // lives in local state instead. Both feed the main pane the same way.
+  const activeResults = user
+    ? (activeResultsIdx !== null ? parsedMessages[activeResultsIdx]?.searchResults ?? null : null)
+    : searchResults;
+
+  // A property card's sparkle fires this from anywhere on the page. In the rail
+  // it pins the listing rather than opening a second chat - which is the whole
+  // point of there being one chat now.
+  useEffect(() => {
+    if (!isRail) return;
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<AssistantOpenDetail>).detail;
+      if (!detail?.propertyId) return;
+      setSubjects((prev) =>
+        prev.some((s) => s.propertyId === detail.propertyId) ? prev : [...prev, detail],
+      );
+      setIsSubjectPickerOpen(false);
+    };
+    window.addEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+  }, [isRail]);
+
+  // The browse table's Compare button: pin the shortlist and ask about it in
+  // one go. The ids go straight into the send rather than via state, so there
+  // is no render to wait for between pinning and asking.
+  const handleSearchRef = useRef<typeof handleSearch | null>(null);
+  useEffect(() => {
+    if (!isRail) return;
+    const onCompare = (event: Event) => {
+      const detail = (event as CustomEvent<AssistantCompareDetail>).detail;
+      if (!detail?.properties?.length) return;
+      setSubjects(detail.properties);
+      setIsSubjectPickerOpen(false);
+      handleSearchRef.current?.(detail.prompt, {
+        subjectIds: detail.properties.map(p => p.propertyId).filter((id): id is string => !!id),
+      });
+    };
+    window.addEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
+    return () => window.removeEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
+  }, [isRail]);
+
+  // The renter's matches, as pickable subjects.
+  const subjectOptions = (renterMatches || [])
+    .filter((m) => m.properties?.id)
+    .map((m) => ({
+      propertyId: m.properties!.id,
+      title: m.properties!.title,
+      location: m.properties!.location,
+      image: m.properties!.images?.[0],
+    }));
+
+  const toggleSubject = (option: { propertyId: string; title: string }) => {
+    setSubjects((prev) =>
+      prev.some((s) => s.propertyId === option.propertyId)
+        ? prev.filter((s) => s.propertyId !== option.propertyId)
+        : [...prev, { propertyId: option.propertyId, title: option.title }],
+    );
+  };
 
   useEffect(() => {
     onResultsCountChange?.(activeResults?.results.length ?? 0);
@@ -538,9 +631,14 @@ export const HomeAI = ({
     handleSearch(augmented, { isFollowup: true });
   };
 
-  const handleSearch = async (searchQuery?: string, options?: { isFollowup?: boolean }) => {
+  const handleSearch = async (searchQuery?: string, options?: { isFollowup?: boolean; subjectIds?: string[] }) => {
     const queryToUse = searchQuery || query;
     const isFollowup = !!options?.isFollowup;
+    // Callers that pin listings and ask in the same breath (the compare flow)
+    // pass the ids in directly - reading them back out of state here would race
+    // the setSubjects that just happened.
+    const contextIds = options?.subjectIds
+      ?? subjects.map(s => s.propertyId).filter((id): id is string => !!id);
 
     // Prevent new messages while AI is processing for both user types
     if (isSendingMessage || isSearching) {
@@ -564,7 +662,7 @@ export const HomeAI = ({
         title: "Sign up to keep searching",
         description: "You've used your free searches. Create an account to keep going — your conversation is saved.",
       });
-      setTimeout(() => navigate('/auth', { state: { returnTo: '/discover' } }), 1500);
+      setTimeout(() => navigate('/auth', { state: { returnTo: '/hub' } }), 1500);
       return;
     }
     if (!queryToUse.trim() && uploadedImages.length === 0) {
@@ -583,7 +681,10 @@ export const HomeAI = ({
         message: queryToUse,
         userType: 'renter' as const,
         userPreferences,
-        propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []
+        propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : [],
+        // Pinned listings travel with every message, so "is this one still
+        // available?" resolves without the renter naming it again.
+        contextPropertyIds: contextIds
       };
       try {
         // Send message - this will create a conversation if needed
@@ -593,7 +694,7 @@ export const HomeAI = ({
             conversationId: currentConversationId
           });
         } else {
-          await sendMessageWithoutConversation(messageData.message, messageData.userType, messageData.userPreferences, messageData.propertyImages);
+          await sendMessageWithoutConversation(messageData.message, messageData.userType, messageData.userPreferences, messageData.propertyImages, messageData.contextPropertyIds);
         }
 
         // Note: AI search usage is now tracked server-side in chat-ai edge function
@@ -687,7 +788,11 @@ export const HomeAI = ({
         setHasSearched(true);
         // Only new searches count toward the anonymous cap; follow-ups are free.
         if (!isFollowup) {
-          setAnonSearchCount(count => count + 1);
+          setAnonSearchCount(count => {
+            const next = count + 1;
+            writeAnonSearchCount(next);
+            return next;
+          });
         }
         toast({
           title: "Search completed!",
@@ -708,6 +813,11 @@ export const HomeAI = ({
       }
     }
   };
+
+  // Kept current on every render so the compare listener above always calls
+  // the live handleSearch rather than the one from the render it was bound in.
+  handleSearchRef.current = handleSearch;
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -715,7 +825,7 @@ export const HomeAI = ({
     }
   };
   const handleBrowseAll = () => {
-    navigate('/discover');
+    navigate('/hub');
   };
   const handlePropertyClick = async (property: PropertyMatch) => {
     try {
@@ -940,8 +1050,10 @@ export const HomeAI = ({
               <AIBlocks blocks={(searchResults.blocks || []).filter((b: any) => b.type !== 'followups')} onFollowup={handleFollowup} />
               
               {searchResults.results.length > 0 && <div className="space-y-4 max-w-[680px]">
-                  {/* Same editorial cards as logged-in users see */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[640px]">
+                  {/* Same editorial cards as logged-in users see - unless the
+                      host is hoisting them into a wider pane, in which case the
+                      sign-up wall below is all that stays in the thread. */}
+                  <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[640px] ${hoistResults ? 'hidden' : ''}`}>
                     {searchResults.results.map(property => (
                       <EditorialPropertyCard
                         key={property.id}
@@ -958,7 +1070,7 @@ export const HomeAI = ({
                       />
                     ))}
                   </div>
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <p className={`flex items-center gap-1.5 text-xs text-muted-foreground ${hoistResults ? 'hidden' : ''}`}>
                     <Heart className="w-3.5 h-3.5 shrink-0 text-primary fill-primary" aria-hidden="true" />
                     Like a listing to match with its realtor — you can then chat and arrange a viewing.
                   </p>
@@ -971,7 +1083,7 @@ export const HomeAI = ({
                       </p>
                       <Button onClick={() => navigate('/auth', {
                     state: {
-                      returnTo: '/discover'
+                      returnTo: '/hub'
                     }
                   })} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
                         Sign up to keep searching
@@ -1037,8 +1149,86 @@ export const HomeAI = ({
         </div>
       )}
 
+      {/* Subject strip: which listings this conversation is about. Sits directly
+          above the composer so the scope is visible while typing. */}
+      {isRail && user && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {subjects.map((s) => (
+            <span
+              key={s.propertyId}
+              className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 py-1 pl-2.5 pr-1 text-xs text-primary"
+            >
+              <Home className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{s.title || 'This listing'}</span>
+              <button
+                aria-label={`Stop asking about ${s.title || 'this listing'}`}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-primary/20"
+                onClick={() => setSubjects((prev) => prev.filter((x) => x.propertyId !== s.propertyId))}
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+
+          {subjectOptions.length > 0 && (
+            <div className="relative">
+              <button
+                className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                aria-expanded={isSubjectPickerOpen}
+                onClick={() => setIsSubjectPickerOpen((open) => !open)}
+              >
+                <Plus className="h-3 w-3" aria-hidden="true" />
+                {subjects.length > 0 ? 'Add' : 'Ask about a match'}
+              </button>
+
+              {isSubjectPickerOpen && (
+                // Drops down, not up: opening upward covered the reply the
+                // renter was reading to decide which listing to ask about.
+                <div className="absolute top-full left-0 z-20 mt-2 max-h-64 w-72 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl">
+                  {subjectOptions.map((o) => {
+                    const picked = subjects.some((s) => s.propertyId === o.propertyId);
+                    return (
+                      <button
+                        key={o.propertyId}
+                        className="flex w-full items-center gap-2 rounded-lg p-1.5 text-left hover:bg-secondary"
+                        onClick={() => toggleSubject(o)}
+                      >
+                        {o.image ? (
+                          <img src={o.image} alt="" className="h-8 w-10 shrink-0 rounded object-cover" />
+                        ) : (
+                          <span className="h-8 w-10 shrink-0 rounded bg-secondary" />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium">{o.title}</span>
+                          <span className="block truncate text-[11px] text-muted-foreground">{o.location}</span>
+                        </span>
+                        {picked && <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Chat Input - Show for everyone until they search */}
       {(user || !anonLimitReached) && <div className="space-y-4">
+          {/* Signed-out visitors get a few searches before the wall - say how
+              many are left rather than springing it on them. */}
+          {!user && (
+            <p className="text-[11px] text-muted-foreground">
+              {ANON_SEARCH_LIMIT - anonSearchCount} free {ANON_SEARCH_LIMIT - anonSearchCount === 1 ? 'search' : 'searches'} left today &middot;{' '}
+              <button
+                className="underline underline-offset-2 hover:text-foreground"
+                onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
+              >
+                sign in
+              </button>{' '}
+              for more, and to save what you find.
+            </p>
+          )}
           <div className="relative">
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] sm:min-h-[104px] pr-20 resize-none bg-transparent" />
           <div className="absolute bottom-3 right-3 flex gap-2">

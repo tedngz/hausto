@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
@@ -18,7 +18,6 @@ import AdminComplexes from "./pages/AdminComplexes";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import SubscriptionCancel from "./pages/SubscriptionCancel";
 import AddonSuccess from "./pages/AddonSuccess";
-import Complexes from "./pages/Complexes";
 import ComplexDetail from "./pages/ComplexDetail";
 import ComplexMap from "./pages/ComplexMap";
 import RealtorApply from "./pages/RealtorApply";
@@ -55,7 +54,9 @@ const App = () => (
             <Route path="/hub" element={<Hub />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/property/:id" element={<PropertyDetail />} />
-            <Route path="/complexes" element={<Complexes />} />
+            {/* Retired: the hub owns the directory now. Kept as a redirect
+                so old links and indexed results are not dead ends. */}
+            <Route path="/complexes" element={<Navigate to="/hub" replace />} />
             <Route path="/complexes/:slug" element={<ComplexDetail />} />
             <Route path="/map" element={<ComplexMap />} />
             <Route path="/admin-tools" element={<AdminTools />} />

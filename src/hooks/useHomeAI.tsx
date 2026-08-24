@@ -31,6 +31,9 @@ interface SendMessageData {
   userType?: 'renter' | 'realtor';
   userPreferences?: any;
   propertyImages?: string[];
+  /** Listings pinned to the conversation - chat-ai answers about these and
+   *  can hand over their contact or source link under the daily allowance. */
+  contextPropertyIds?: string[];
 }
 
 export const useHomeAI = () => {
@@ -102,7 +105,7 @@ export const useHomeAI = () => {
   // Send message
   const sendMessageMutation = useMutation({
     mutationFn: async (messageData: SendMessageData) => {
-      const { message, conversationId, userType, userPreferences, propertyImages } = messageData;
+      const { message, conversationId, userType, userPreferences, propertyImages, contextPropertyIds } = messageData;
       
       if (!user?.id) {
         throw new Error('User not authenticated');
@@ -174,7 +177,8 @@ export const useHomeAI = () => {
           conversationId: actualConversationId,
           userType,
           userPreferences,
-          propertyImages: Array.isArray(propertyImages) ? propertyImages : []
+          propertyImages: Array.isArray(propertyImages) ? propertyImages : [],
+          contextPropertyIds: Array.isArray(contextPropertyIds) ? contextPropertyIds : []
         }
       });
 
@@ -267,13 +271,14 @@ export const useHomeAI = () => {
   });
 
   // Add function to send message without existing conversation
-  const sendMessageWithoutConversation = (message: string, userType?: 'renter' | 'realtor', userPreferences?: any, propertyImages?: string[]) => {
+  const sendMessageWithoutConversation = (message: string, userType?: 'renter' | 'realtor', userPreferences?: any, propertyImages?: string[], contextPropertyIds?: string[]) => {
     sendMessageMutation.mutate({
       message,
       conversationId: '', // Empty string will trigger conversation creation
       userType,
       userPreferences,
-      propertyImages
+      propertyImages,
+      contextPropertyIds
     });
   };
 

@@ -9,21 +9,6 @@ export const CITY_DISTRICTS: Record<string, string[]> = {
   danang: ['Hai Chau', 'Son Tra', 'Ngu Hanh Son', 'Thanh Khe', 'Lien Chieu', 'Cam Le'],
 };
 
-/**
- * Which city a set of saved districts belongs to, or 'all' when they span more
- * than one (or none are recognised). The browse table only offers its district
- * picker once a city is chosen, so seeding districts means seeding this too.
- */
-export const cityForDistricts = (districts: string[]): string => {
-  const cities = new Set<string>();
-  for (const d of districts) {
-    for (const [city, list] of Object.entries(CITY_DISTRICTS)) {
-      if (list.includes(d)) cities.add(city);
-    }
-  }
-  return cities.size === 1 ? [...cities][0] : 'all';
-};
-
 export const stripDiacritics = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 

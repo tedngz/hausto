@@ -28,6 +28,8 @@ import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
 import { CITY_DISTRICTS, districtOf, locationMatchesDistrict } from '@/utils/districts';
+import { ASSISTANT_COMPARE_EVENT, listSubjects, type AssistantCompareDetail } from '@/lib/assistantEvents';
+import { HUB_PANE_CENTRED, HUB_PANEL_POSITION } from '@/lib/hubLayout';
 import type { Apartment } from '@/types';
 
 // The verified-listings table. Public data from public-property-search (no
@@ -127,81 +129,25 @@ const CompareImageCarousel = ({ images, alt }: { images: string[]; alt: string }
   );
 };
 
-// The model is told to write plain text, but small models still slip in
-// **bold** and "### " headings - render those rather than leaking the syntax.
-const renderInline = (s: string) =>
-  s.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part));
-
-const AiText = ({ text }: { text: string }) => (
-  <div className="space-y-1.5">
-    {text.split('\n').map((raw, i) => {
-      const line = raw.replace(/^\s*#{1,6}\s+/, '').trimEnd();
-      if (!line.trim()) return null;
-      const isBullet = /^\s*[-*•]\s+/.test(line);
-      const content = line.replace(/^\s*[-*•]\s+/, '');
-      return isBullet ? (
-        <div key={i} className="flex gap-1.5">
-          <span aria-hidden="true" className="flex-shrink-0 text-muted-foreground">-</span>
-          <span>{renderInline(content)}</span>
-        </div>
-      ) : (
-        <p key={i}>{renderInline(content)}</p>
-      );
-    })}
-  </div>
-);
-
-type CompareChatMessage = {
-  role: 'user' | 'assistant';
-  content: string;
-  /** Suggested next questions, returned with assistant replies */
-  followups?: string[];
-};
-
-const COMPARE_STARTERS = ['Which is the best value?', 'Which fits my preferences best?', 'What are the tradeoffs?'];
-
-// Shared by the opening starters and the per-reply follow-up suggestions.
-const SuggestionChip = ({ question, disabled, onAsk }: { question: string; disabled: boolean; onAsk: (q: string) => void }) => (
-  <button
-    className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-left text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors disabled:opacity-50"
-    disabled={disabled}
-    onClick={() => onAsk(question)}
-  >
-    {question}
-  </button>
-);
-
-export interface BrowseTableFilters {
-  city?: string;
-  districts?: string[];
-  rooms?: string;
-  minBudget?: string;
-  maxBudget?: string;
-}
 
 interface BrowseTableProps {
   /** Where auth redirects should return to (default /browse) */
   returnTo?: string;
-  /**
-   * Starting filters. Applied once, on mount - the renter stays in charge of
-   * the controls afterwards, so this seeds rather than binds. The hub uses it
-   * to open the table on what the renter said they wanted instead of on all
-   * 1,400 listings.
-   */
-  initialFilters?: BrowseTableFilters;
-  /** Hides the component's own heading block when the page provides one. */
+  /** Adjusts for a host page that owns the bottom of the screen (the hub's
+   *  chat dock) so the compare bar does not sit underneath it. */
   embedded?: boolean;
 }
 
-export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = false }: BrowseTableProps) => {
+export const BrowseTable = ({ returnTo = '/browse', embedded = false }: BrowseTableProps) => {
   const navigate = useNavigate();
 
-  // Filters
-  const [city, setCity] = useState(initialFilters?.city ?? 'all');
-  const [districts, setDistricts] = useState<string[]>(initialFilters?.districts ?? []);
-  const [roomsFilter, setRoomsFilter] = useState(initialFilters?.rooms ?? 'all');
-  const [minBudget, setMinBudget] = useState(initialFilters?.minBudget ?? '');
-  const [maxBudget, setMaxBudget] = useState(initialFilters?.maxBudget ?? '');
+  // Filters. The table always opens on the full verified set - narrowing it is
+  // the renter's move, and preference-shaped results are the AI tab's job.
+  const [city, setCity] = useState('all');
+  const [districts, setDistricts] = useState<string[]>([]);
+  const [roomsFilter, setRoomsFilter] = useState('all');
+  const [minBudget, setMinBudget] = useState('');
+  const [maxBudget, setMaxBudget] = useState('');
   const [freshOnly, setFreshOnly] = useState(false);
 
   // City and budget are server-side filters (they change what gets fetched);
@@ -453,6 +399,23 @@ export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = f
     </TableHead>
   );
 
+  // Opens the side-by-side panel AND starts the conversation about it: the
+  // listings are pinned to the AI chat and the first question is asked, so the
+  // renter lands in a thread they can keep pulling on rather than a dead end.
+  const openCompare = () => {
+    setCompareOpen(true);
+    if (selected.length < 2) return;
+    window.dispatchEvent(
+      new CustomEvent<AssistantCompareDetail>(ASSISTANT_COMPARE_EVENT, {
+        detail: {
+          properties: selected.map((r) => ({ propertyId: r.id, title: r.title })),
+          // Named in the message, not just pinned by id - see listSubjects.
+          prompt: `Compare ${listSubjects(selected.map((r) => r.title))} for me - which fits me best, and what are the tradeoffs?`,
+        },
+      }),
+    );
+  };
+
   const compareFields: { label: string; get: (r: BrowseRow) => string }[] = [
     { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd.toLocaleString()}/mo` : '-') },
     { label: 'Rooms', get: (r) => r.rooms || '-' },
@@ -460,47 +423,6 @@ export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = f
     { label: 'Verified live', get: (r) => verifiedLabel(r.last_verified_at) },
   ];
 
-  // Ask-AI thread inside the compare dialog - a back-and-forth, not one shot.
-  const [aiQuestion, setAiQuestion] = useState('');
-  const [aiMessages, setAiMessages] = useState<CompareChatMessage[]>([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const aiThreadEndRef = useRef<HTMLDivElement>(null);
-
-  // Option numbers in the thread refer to the current selection, so changing
-  // what's being compared invalidates the conversation.
-  const selectedKey = selected.map((r) => r.id).join(',');
-  useEffect(() => {
-    setAiMessages([]);
-  }, [selectedKey]);
-
-  useEffect(() => {
-    aiThreadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [aiMessages, aiLoading]);
-
-  const askCompareAI = async (q?: string) => {
-    const question = (q ?? aiQuestion).trim();
-    if (!question || aiLoading || selected.length < 2) return;
-    const history = aiMessages;
-    setAiMessages([...history, { role: 'user', content: question }]);
-    setAiQuestion('');
-    setAiLoading(true);
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke('compare-listings-ai', {
-        body: { question, listings: selected, preferences: savedPreferences || undefined, history },
-      });
-      if (fnError) throw fnError;
-      setAiMessages((cur) => [...cur, {
-        role: 'assistant',
-        content: data?.answer || 'Sorry, I could not analyze these listings.',
-        followups: Array.isArray(data?.followups) ? data.followups : [],
-      }]);
-    } catch (e) {
-      console.error('Compare AI failed:', e);
-      setAiMessages((cur) => [...cur, { role: 'assistant', content: 'Something went wrong - please try again.' }]);
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   return (
     <div>
@@ -698,9 +620,15 @@ export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = f
       {/* Compare bar. Embedded on the hub, the chat dock owns the bottom of the
           screen below lg - so this sits above it rather than under it. */}
       {selected.length > 0 && (
-        <div className={`fixed ${embedded ? 'bottom-20 lg:bottom-6' : 'bottom-4'} left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full bg-foreground text-background px-5 py-2.5 shadow-lg`}>
+        <div className={`fixed left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full bg-foreground text-background px-5 py-2.5 shadow-lg ${
+          embedded
+            // Centred on the browse pane, not the viewport: at xl the chat rail
+            // owns the right-hand side, so a viewport-centred bar drifts under it.
+            ? `bottom-20 xl:bottom-6 ${HUB_PANE_CENTRED}`
+            : 'bottom-4'
+        }`}>
           <span className="text-sm">{selected.length} selected</span>
-          <Button size="sm" variant="secondary" className="rounded-full h-7" disabled={selected.length < 2} onClick={() => setCompareOpen(true)}>
+          <Button size="sm" variant="secondary" className="rounded-full h-7" disabled={selected.length < 2} onClick={openCompare}>
             Compare
           </Button>
           <Button size="sm" className="rounded-full h-7" onClick={() => openFastTrack(selected)}>
@@ -714,14 +642,27 @@ export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = f
       {/* In-place property preview: the platform's listing card with like, no
           page change. The card sizes its own gallery and flows the details
           below it, so this modal only has to decide how wide it gets. */}
-      <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
+      {/* On the hub this is deliberately NOT modal: the whole point of the chat
+          rail is being able to ask about the listing you are looking at, which
+          a scrim and a focus trap would prevent. Standalone it stays modal. */}
+      <Dialog open={!!preview} modal={!embedded} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
         {/* Phones match the swipe/matches width so a listing looks the same
             wherever it opens; desktop keeps its original roomier modal. Card
             plus booking panel runs past a phone screen, so the modal is bound
             to the viewport and scrolls - dvh, not vh, so a collapsing address
             bar cannot hide the bottom of it. */}
-        <DialogContent className="max-w-md sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
+        <DialogContent
+          overlayClassName={embedded ? 'hidden' : undefined}
+          className={`max-w-md sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
+            embedded
+              // Centred on the main pane rather than the viewport, so it does
+              // not sit half underneath the chat rail. Shift left by half the
+              // rail's width - the same clamp the rail itself uses.
+              ? HUB_PANEL_POSITION
+              : ''
+          }`}
+        >
           {preview && (() => {
             const previewScore = vibeMatchOf(preview);
             const isHausto = preview.source === 'hausto';
@@ -829,8 +770,21 @@ export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = f
         onPropertyClick={(id) => navigate(`/property/${id}`)}
       />
 
-      <Dialog open={compareOpen} onOpenChange={(o) => { setCompareOpen(o); if (!o) { setAiMessages([]); setAiQuestion(''); } }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      {/* Side-by-side facts only. Deciding between them is a conversation, and
+          that conversation now belongs in the AI chat, where it keeps the
+          listings pinned afterwards - see the Compare button above. */}
+      <Dialog open={compareOpen} modal={!embedded} onOpenChange={setCompareOpen}>
+        <DialogContent
+          overlayClassName={embedded ? 'hidden' : undefined}
+          className={`max-h-[90vh] overflow-y-auto ${
+            embedded
+              // Centred on the browse pane, not the viewport, and capped to its
+              // width - the whole point of comparing here is being able to ask
+              // the chat about it while you read.
+              ? `max-w-4xl ${HUB_PANEL_POSITION}`
+              : 'max-w-4xl'
+          }`}
+        >
           <DialogHeader><DialogTitle>Compare listings</DialogTitle></DialogHeader>
           {/* One card per listing: side by side on desktop, horizontal snap
               scroll on mobile so each card gets full width */}
@@ -891,73 +845,6 @@ export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = f
             })}
           </div>
 
-          {/* Ask AI to help decide */}
-          <div className="border-t pt-4 mt-2">
-            <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-primary" />
-              Ask AI to help you decide
-            </p>
-            {/* Starters double as the empty state; once the thread is going they
-                make way for it so the conversation stays the focus. */}
-            {aiMessages.length === 0 ? (
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {COMPARE_STARTERS.map((q) => (
-                  <SuggestionChip key={q} question={q} disabled={aiLoading} onAsk={askCompareAI} />
-                ))}
-              </div>
-            ) : (
-              <div className="mb-2 max-h-[40vh] overflow-y-auto pr-1 space-y-2 [scrollbar-width:thin]">
-                {aiMessages.map((m, i) => {
-                  if (m.role === 'user') {
-                    return (
-                      <div key={i} className="flex justify-end">
-                        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
-                          {m.content}
-                        </div>
-                      </div>
-                    );
-                  }
-                  // Chips hang off the newest reply only - keeping them on older
-                  // turns would offer questions the thread has already moved past.
-                  const isLatest = i === aiMessages.length - 1;
-                  return (
-                    <div key={i} className="flex flex-col items-start gap-1.5">
-                      <div className="max-w-[90%] rounded-2xl rounded-bl-sm bg-secondary/60 px-3 py-2 text-sm">
-                        <AiText text={m.content} />
-                      </div>
-                      {isLatest && !aiLoading && (m.followups?.length ?? 0) > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {m.followups!.map((q) => (
-                            <SuggestionChip key={q} question={q} disabled={aiLoading} onAsk={askCompareAI} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {aiLoading && (
-                  <div className="flex justify-start">
-                    <div className="rounded-2xl rounded-bl-sm bg-secondary/60 px-3 py-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    </div>
-                  </div>
-                )}
-                <div ref={aiThreadEndRef} />
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Input
-                value={aiQuestion}
-                onChange={(e) => setAiQuestion(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') askCompareAI(); }}
-                placeholder={aiMessages.length === 0 ? 'e.g. Which one is best for working from home?' : 'Ask a follow-up...'}
-                className="bg-background"
-              />
-              <Button onClick={() => askCompareAI()} disabled={aiLoading || !aiQuestion.trim()}>
-                {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ask'}
-              </Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
 

@@ -1,294 +1,99 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { OnboardingQuiz } from '@/components/OnboardingQuiz';
-import { SwipeInterface } from '@/components/SwipeInterface';
-import { MatchesView } from '@/components/MatchesView';
-import { HomeAI } from '@/components/HomeAI';
-import { Navigation } from '@/components/Navigation';
 import { RealtorDashboard } from '@/components/RealtorDashboard';
 import { RealtorNavigation } from '@/components/RealtorNavigation';
-import { UserTypeSelector } from '@/components/UserTypeSelector';
-import { BrowseTable } from '@/components/BrowseTable';
-import { FastTrackRequestsCard } from '@/components/FastTrackRequestsCard';
-import { Profile } from '@/components/Profile';
 import { RealtorProfile } from '@/components/RealtorProfile';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyUploadModal } from '@/components/PropertyUploadModal';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
-import { UsageMeter } from '@/components/UsageMeter';
-import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { Loader2 } from 'lucide-react';
-import { UserPreferences } from '@/types';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { useMatches } from '@/hooks/useMatches';
-import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { preferencesToSearchQuery } from '@/lib/preferences';
-import { toast } from 'sonner';
 
-// Views reachable by ?view= - used by the landing table preview and by the
-// hub's nav, which sends swipe and profile back here.
-const DEEP_LINK_VIEWS = ['browse', 'swipe', 'matches', 'profile'] as const;
-type DeepLinkView = (typeof DEEP_LINK_VIEWS)[number];
-
-const deepLinkView = (search: string): DeepLinkView | null => {
-  const v = new URLSearchParams(search).get('view');
-  return DEEP_LINK_VIEWS.includes(v as DeepLinkView) ? (v as DeepLinkView) : null;
-};
-
+/**
+ * The realtor workspace.
+ *
+ * This route used to be the whole signed-in app - an internal view switcher
+ * over the AI search, the browse table, the swipe deck, matches and the
+ * profile. All of those are the hub now (/hub), and the swipe deck is retired,
+ * so what is left here is the half that was never duplicated: the realtor
+ * dashboard and realtor profile.
+ *
+ * Renters who still have a link to /discover are sent to the hub.
+ */
 const Discover = () => {
-  const {
-    user,
-    loading
-  } = useAuth();
+  const { user, loading } = useAuth();
   const { isRealtor, isLoading: rolesLoading } = useUserRoles();
-  // DB-backed matches are the single source of truth for badge counts, so the
-  // renter/realtor nav badges stay in sync with what MatchesView actually shows.
-  const { renterMatches, realtorMatches: realtorMatchesDb } = useMatches();
-  const location = useLocation();
+  const { realtorMatches } = useMatches();
   const navigate = useNavigate();
 
-  const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
-
-  const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'browse'>('ai-chat');
-  // Preferences are shared state now - the quiz, the profile editor and the
-  // browse table all read and write the same cache entry.
-  const {
-    preferences: userPreferences,
-    isResolved: prefsResolved,
-    hasPreferences,
-    clearPreferences,
-  } = useUserPreferences();
+  const [currentView, setCurrentView] = useState<'dashboard' | 'profile'>('dashboard');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
-  // One-shot seed query for the quiz → AI-search handoff.
-  const [aiSeedQuery, setAiSeedQuery] = useState<string | undefined>(undefined);
-  // Set once the opening view has been chosen, so the deep-link and
-  // preference-driven routing below only fires on arrival, not on every change.
-  const [landed, setLanded] = useState(false);
 
-  // Redirect to home if not authenticated
   useEffect(() => {
-    if (!loading && !user) {
-      navigate('/');
-    }
-  }, [user, loading, navigate]);
+    if (loading || rolesLoading) return;
+    if (!user) navigate('/');
+    else if (!isRealtor) navigate('/hub', { replace: true });
+  }, [user, loading, rolesLoading, isRealtor, navigate]);
 
-  // Resolve which hat the user is wearing. Preferences hydrate separately, via
-  // the shared hook.
   useEffect(() => {
-    if (!user || rolesLoading) return;
-    const savedUserType = localStorage.getItem(`userType_${user.id}`);
-
-    // Force renter if stored type is realtor but role missing
-    const effectiveType: 'renter' | 'realtor' =
-      savedUserType === 'realtor' && isRealtor ? 'realtor' : 'renter';
-    setUserType(effectiveType);
-    localStorage.setItem(`userType_${user.id}`, effectiveType);
-
-    if (effectiveType === 'realtor') {
-      setCurrentView('dashboard');
-      setLanded(true);
-    }
-  }, [user, rolesLoading, isRealtor]);
-
-  // Pick the renter's opening view once we actually know whether they have
-  // preferences: brand-new renters go straight into the quiz rather than
-  // flashing the AI chat first, and ?view=browse (from the landing table
-  // preview) wins over both.
-  useEffect(() => {
-    if (landed || userType !== 'renter') return;
-    // A returning renter is routed off the cached answer without waiting on the
-    // DB round-trip; only someone who looks new to us has to wait, because
-    // guessing wrong there means dropping them into the quiz by mistake.
-    if (!hasPreferences && !prefsResolved) return;
-    const wanted = deepLinkView(location.search);
-    if (wanted) setCurrentView(wanted);
-    else if (hasPreferences) setCurrentView('ai-chat');
-    else setCurrentView('onboarding');
-    setLanded(true);
-  }, [landed, userType, prefsResolved, hasPreferences, location.search]);
-
-  // Later deep links (the landing preview or the hub nav while already on the
-  // page) still switch the view.
-  useEffect(() => {
-    if (!landed || userType !== 'renter') return;
-    const wanted = deepLinkView(location.search);
-    if (wanted) setCurrentView(wanted);
-  }, [landed, userType, location.search]);
-  useEffect(() => {
-    // Listen for subscription modal opening event
-    const handleOpenSubscriptionModal = (event: CustomEvent) => {
-      setIsSubscriptionModalOpen(true);
-    };
-
-    // Listen for AI chat switch event from SwipeInterface
-    const handleSwitchToAIChat = () => {
-      setCurrentView('ai-chat');
-    };
-    window.addEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
-    window.addEventListener('switchToAIChat', handleSwitchToAIChat);
-    return () => {
-      window.removeEventListener('openSubscriptionModal', handleOpenSubscriptionModal as EventListener);
-      window.removeEventListener('switchToAIChat', handleSwitchToAIChat);
-    };
+    const open = () => setIsSubscriptionModalOpen(true);
+    window.addEventListener('openSubscriptionModal', open);
+    return () => window.removeEventListener('openSubscriptionModal', open);
   }, []);
-  const handleUserTypeSelect = (type: 'renter' | 'realtor') => {
-    if (type === 'realtor' && !isRealtor) {
-      toast.info('Realtor access required', {
-        description: 'Submit an application to get realtor access.',
-      });
-      navigate('/realtor/apply');
-      return;
-    }
-    setUserType(type);
-    if (user) {
-      localStorage.setItem(`userType_${user.id}`, type);
-    }
-    setCurrentView(type === 'realtor' ? 'dashboard' : 'ai-chat');
-  };
-  const handleOnboardingComplete = (preferences: UserPreferences) => {
-    // The quiz has already persisted these through the shared hook.
-    // Hand off straight into the AI search, pre-seeded with what they just told us,
-    // so the quiz flows naturally into results instead of a cold swipe deck.
-    setAiSeedQuery(preferencesToSearchQuery(preferences));
-    setCurrentView('ai-chat');
-  };
-  const handleRestartOnboarding = () => {
-    clearPreferences();
-    setCurrentView('onboarding');
-  };
-  const switchUserType = () => {
-    const newType = userType === 'renter' ? 'realtor' : 'renter';
-    if (newType === 'realtor' && !isRealtor) {
-      toast.info('Realtor access required', {
-        description: 'Submit an application to get realtor access.',
-      });
-      navigate('/realtor/apply');
-      return;
-    }
-    setUserType(newType);
-    if (user) {
-      localStorage.setItem(`userType_${user.id}`, newType);
-    }
-    setCurrentView(newType === 'realtor' ? 'dashboard' : 'ai-chat');
-  };
-  // Hold the renter view until the opening view has been chosen, so brand-new
-  // renters go straight to the quiz without an ai-chat flash.
-  if (loading || rolesLoading || (userType === 'renter' && !landed)) {
-    return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
+
+  if (loading || rolesLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-orange-500" />
-          <p className="text-gray-600">Loading...</p>
+          <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading...</p>
         </div>
-      </div>;
+      </div>
+    );
   }
 
-  // Redirect to home if not authenticated
-  if (!user) {
-    return null;
-  }
-  return <CurrencyProvider>
+  // Redirecting; render nothing rather than flashing a dashboard they cannot use.
+  if (!user || !isRealtor) return null;
+
+  return (
+    <CurrencyProvider>
       <Helmet>
-        <title>Discover Rentals — Hausto AI Property Search</title>
-        <meta name="description" content="Discover rental apartments in Vietnam. Chat with AI, swipe through curated listings, and match with homes that fit your vibe." />
+        <title>Realtor dashboard - Hausto</title>
+        <meta name="description" content="Manage your listings, renter matches and viewing requests on Hausto." />
         <link rel="canonical" href="https://hausto.lovable.app/discover" />
-        <meta property="og:title" content="Discover Rentals on Hausto" />
-        <meta property="og:description" content="Chat with AI and swipe through curated rental listings in Vietnam." />
-        <meta property="og:url" content="https://hausto.lovable.app/discover" />
       </Helmet>
-      <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
-        <h1 className="sr-only">Discover Rental Apartments in Vietnam with Hausto</h1>
-        {userType && currentView !== 'onboarding' && currentView !== 'dashboard' && !(userType === 'realtor' && currentView === 'profile') && <Navigation
-          currentView={currentView}
-          setCurrentView={view => {
-            if (view === 'profile') {
-              setCurrentView('profile');
-            } else if (view === 'ai-chat') {
-              setCurrentView('ai-chat');
-            } else {
-              setCurrentView(view as 'swipe' | 'matches' | 'browse');
-            }
-          }}
-          matchCount={renterMatches.length}
-          userType={userType}
-          onSwitchUserType={switchUserType}
-          onOpenAIChat={() => setCurrentView('ai-chat')}
-          onRestartOnboarding={userType === 'renter' ? handleRestartOnboarding : undefined}
-        />}
 
-        {userType === 'realtor' && (currentView === 'dashboard' || currentView === 'profile') && <RealtorNavigation currentView={currentView as 'dashboard' | 'profile'} setCurrentView={view => setCurrentView(view)} matchCount={realtorMatchesDb.length} onSwitchUserType={switchUserType} onAddProperty={() => setIsUploadModalOpen(true)} />}
+      <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <h1 className="sr-only">Hausto realtor dashboard</h1>
+
+        <RealtorNavigation
+          currentView={currentView}
+          setCurrentView={(view) => setCurrentView(view)}
+          matchCount={realtorMatches.length}
+          onSwitchUserType={() => navigate('/hub')}
+          onAddProperty={() => setIsUploadModalOpen(true)}
+        />
 
         <main className="h-full overflow-y-auto pt-14">
-          {currentView === 'ai-chat' && userType && <div className="container mx-auto px-4 pt-4">
-              <h2 className="text-2xl mt-4 mb-8 text-center text-inherit font-serif font-normal">Describe Your Dream Home</h2>
-            </div>}
-          
-          {currentView === 'swipe' && userType && <div className="container mx-auto px-4 pt-4">
-              <h2 className="text-2xl mt-4 mb-4 text-center text-inherit font-serif font-normal">Swipe & Vibe</h2>
-            </div>}
-        
-          {!userType && <UserTypeSelector onSelect={handleUserTypeSelect} />}
-          
-          {userType === 'renter' && currentView === 'onboarding' && <OnboardingQuiz onComplete={handleOnboardingComplete} onSkip={() => setCurrentView('ai-chat')} />}
-          
-          {userType === 'renter' && currentView === 'swipe' && <SwipeInterface userPreferences={userPreferences} onMatch={() => {
-          // No-op: SwipeInterface persists the match via useMatches.createMatch,
-          // and the nav badge derives its count from that same DB query.
-        }} userProfile={{
-          name: user.user_metadata?.name || '',
-          email: user.email || '',
-          phone: user.user_metadata?.phone || ''
-        }} onRestartOnboarding={handleRestartOnboarding} />}
-          
-          {userType === 'renter' && currentView === 'browse' && <div className="container mx-auto px-4 pt-4 pb-12 max-w-6xl">
-              <h2 className="text-2xl mt-4 mb-2 text-center text-inherit font-serif font-normal">Browse All Listings</h2>
-              <p className="text-sm text-muted-foreground text-center mb-6">
-                Verified inventory - duplicates merged, dead listings removed.
-              </p>
-              <BrowseTable returnTo="/discover" />
-            </div>}
-
-          {userType === 'renter' && currentView === 'matches' && <MatchesView userPreferences={userPreferences} userProfile={{
-          name: user.user_metadata?.name || '',
-          email: user.email || '',
-          phone: user.user_metadata?.phone || ''
-        }} />}
-
-          {currentView === 'profile' && userType && (userType === 'realtor' ? <RealtorProfile /> : <div className="container mx-auto px-4 py-6 max-w-6xl">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                  {/* Left column (wider): Profile info + Preferences */}
-                  <div className="lg:col-span-2 flex flex-col gap-6">
-                    <Profile userType={userType} />
-                    <FastTrackRequestsCard />
-                  </div>
-                  {/* Right column (narrower): Subscription + Usage */}
-                  <div className="lg:col-span-1 flex flex-col gap-6">
-                    <SubscriptionStatus onUpgrade={() => setIsSubscriptionModalOpen(true)} showHistory={true} />
-                    <UsageMeter />
-                  </div>
-                </div>
-              </div>)}
-
-          {currentView === 'ai-chat' && userType && <HomeAI
-            userPreferences={userPreferences ?? undefined}
-            initialQuery={aiSeedQuery}
-            onInitialQueryConsumed={() => setAiSeedQuery(undefined)}
-          />}
-
-          {userType === 'realtor' && currentView === 'dashboard' && <RealtorDashboard onSwitchUserType={switchUserType} onViewProfile={() => setCurrentView('profile')} onOpenUploadModal={() => setIsUploadModalOpen(true)} />}
+          {currentView === 'dashboard' && (
+            <RealtorDashboard
+              onSwitchUserType={() => navigate('/hub')}
+              onViewProfile={() => setCurrentView('profile')}
+              onOpenUploadModal={() => setIsUploadModalOpen(true)}
+            />
+          )}
+          {currentView === 'profile' && <RealtorProfile />}
         </main>
 
-        {/* Realtors keep the bottom-right launcher for their renter message
-            threads; renters use the platform-wide AI assistant (bottom-left)
-            and reach match conversations from the Matches view. */}
-
-
         <PropertyUploadModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} />
-
         <SubscriptionModal isOpen={isSubscriptionModalOpen} onClose={() => setIsSubscriptionModalOpen(false)} />
       </div>
-    </CurrencyProvider>;
+    </CurrencyProvider>
+  );
 };
+
 export default Discover;

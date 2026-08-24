@@ -194,7 +194,7 @@ const Auth = () => {
       // Check if there's a pending search query to continue conversation
       const pendingQuery = localStorage.getItem('pendingSearchQuery');
       if (pendingQuery) {
-        const returnTo = location.state?.returnTo || '/discover';
+        const returnTo = location.state?.returnTo || '/hub';
         navigate(returnTo, { replace: true });
       } else {
         const returnTo = location.state?.returnTo || '/';

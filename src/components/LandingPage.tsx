@@ -27,11 +27,11 @@ export const LandingPage = () => {
   };
   const handleDiscover = () => {
     if (user) {
-      navigate('/discover');
+      navigate('/hub');
     } else {
       navigate('/auth', {
         state: {
-          returnTo: '/discover'
+          returnTo: '/hub'
         }
       });
     }
@@ -93,7 +93,7 @@ export const LandingPage = () => {
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Featured Complexes</p>
                 <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Vetted homes renters love</h2>
                 <Link
-                  to="/complexes"
+                  to="/hub"
                   className="inline-block mt-2 text-sm text-muted-foreground hover:text-primary underline-offset-4 hover:underline transition-colors"
                 >
                   Explore all vetted complexes →
