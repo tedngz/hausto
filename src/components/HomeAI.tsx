@@ -1214,7 +1214,7 @@ export const HomeAI = ({
       )}
 
       {/* Chat Input - Show for everyone until they search */}
-      {(user || !anonLimitReached) && <div className="space-y-4">
+      {(user || !anonLimitReached) && <div className={isRail ? 'shrink-0 space-y-2 xl:space-y-4' : 'space-y-4'}>
           {/* Signed-out visitors get a few searches before the wall - say how
               many are left rather than springing it on them. */}
           {!user && (
@@ -1230,7 +1230,7 @@ export const HomeAI = ({
             </p>
           )}
           <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className="min-h-[140px] sm:min-h-[104px] pr-20 resize-none bg-transparent" />
+            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className={`${isRail ? 'min-h-[68px] xl:min-h-[104px]' : 'min-h-[140px] sm:min-h-[104px]'} pr-20 resize-none bg-transparent`} />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" aria-label="Upload image" className="h-8 w-8 p-0">
@@ -1255,7 +1255,10 @@ export const HomeAI = ({
         {/* Starter suggestions — shown until the conversation has content, so
             first-time users learn the AI does both searches AND area advice */}
         {!hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !isSearching && !isSendingMessage && (
-          <div className="flex flex-wrap gap-2 animate-fade-in">
+          // Wrapped, these four chips are four stacked rows - most of the
+          // mobile dock's new height. Below xl they scroll sideways on one
+          // line instead; the rail proper still wraps.
+          <div className={`flex gap-2 animate-fade-in ${isRail ? 'overflow-x-auto pb-1 xl:flex-wrap xl:overflow-x-visible xl:pb-0' : 'flex-wrap'}`}>
             {([
               { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
               { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
@@ -1271,8 +1274,10 @@ export const HomeAI = ({
                   size="sm"
                   title={isSearch ? 'Find listings' : 'Get advice'}
                   className={
-                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-start gap-1.5 ' +
-                    'max-w-full whitespace-normal text-left ' +
+                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-start gap-1.5 text-left ' +
+                    (isRail
+                      ? 'shrink-0 whitespace-nowrap xl:max-w-full xl:shrink xl:whitespace-normal '
+                      : 'max-w-full whitespace-normal ') +
                     (isSearch
                       ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
                       : 'border-border text-foreground hover:bg-secondary')

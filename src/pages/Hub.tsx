@@ -299,7 +299,12 @@ const Hub = () => {
           {!hasRail && (
             <div
               className={`glass-card flex flex-col rounded-t-3xl transition-[height] duration-200 ${
-                isChatOpen ? 'h-[70dvh]' : 'h-16'
+                // A third of the viewport, not two thirds: on a phone the dock
+                // used to bury whatever the renter was asking about, so the
+                // answer arrived with no way to see what it referred to. The
+                // 15rem floor is the composer plus one line of reply - below
+                // that the sheet is open but useless.
+                isChatOpen ? 'h-[max(33dvh,15rem)]' : 'h-16'
               }`}
             >
               <button
