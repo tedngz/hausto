@@ -1,15 +1,27 @@
-import { Building2, Search, Sparkles } from 'lucide-react';
+
 import { useNavigate } from 'react-router-dom';
 import { UserMenu } from '@/components/UserMenu';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserRoles } from '@/hooks/useUserRoles';
+
+interface HubNavigationProps {
+  onViewProfile: () => void;
+  onRestartOnboarding: () => void;
+}
 
 /**
- * The hub's top bar. Same shell as the Discover nav, but the centred icons are
- * cross-page destinations rather than view switches - Browse, AI chat and
- * Matches all live inside the hub now, so what is left is the hub itself, the
- * swipe deck, and the building directory.
+ * The hub's top bar.
+ *
+ * There is almost nothing left to navigate to: browse, AI chat, matches,
+ * profile and onboarding all live on this page now, and the swipe deck is
+ * retired. What remains is the building directory, and - for accounts that have
+ * realtor access - the way back to the realtor dashboard.
  */
-export const HubNavigation = () => {
+export const HubNavigation = ({ onViewProfile, onRestartOnboarding }: HubNavigationProps) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { isRealtor } = useUserRoles();
 
   return (
     <nav className="relative flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white/80 px-4 backdrop-blur-md md:px-6">
@@ -28,38 +40,30 @@ export const HubNavigation = () => {
         </span>
       </button>
 
-      <div className="pointer-events-none absolute inset-x-0 flex items-center justify-center">
-        <div className="pointer-events-auto flex items-center gap-2 sm:gap-3">
-          <button
-            aria-label="Hub"
-            aria-current="page"
-            className="flex h-11 w-11 items-center justify-center rounded-md bg-primary text-primary-foreground sm:h-10 sm:w-10"
-          >
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
-          </button>
-          <button
-            aria-label="Swipe properties"
-            onClick={() => navigate('/discover?view=swipe')}
-            className="flex h-11 w-11 items-center justify-center rounded-md text-foreground hover:bg-accent hover:text-accent-foreground sm:h-10 sm:w-10"
-          >
-            <Search className="h-5 w-5" aria-hidden="true" />
-          </button>
-          <button
-            aria-label="Browse buildings"
-            onClick={() => navigate('/complexes')}
-            className="flex h-11 w-11 items-center justify-center rounded-md text-foreground hover:bg-accent hover:text-accent-foreground sm:h-10 sm:w-10"
-          >
-            <Building2 className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+      {/* No centred nav icons: everything they pointed at - search, browse,
+          matches, complexes, the map - is a tab on this page now. */}
 
       <div className="z-10 flex items-center">
-        <UserMenu
-          userType="renter"
-          onSwitchUserType={() => navigate('/discover')}
-          onViewProfile={() => navigate('/discover?view=profile')}
-        />
+        {user ? (
+          <UserMenu
+            userType="renter"
+            // Only offered to accounts that actually have realtor access - for
+            // everyone else /discover is not a place they can go any more.
+            onSwitchUserType={() => {
+              if (isRealtor) navigate('/discover');
+            }}
+            onViewProfile={onViewProfile}
+            onRestartOnboarding={onRestartOnboarding}
+          />
+        ) : (
+          <Button
+            size="sm"
+            className="h-9"
+            onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
+          >
+            Sign in
+          </Button>
+        )}
       </div>
     </nav>
   );

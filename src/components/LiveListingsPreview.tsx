@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MapPin } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
 
 // Landing-page preview of the browse table: the freshest verified listings,
 // rendered in the same row format so the landing "is" the product. Public
@@ -37,9 +36,9 @@ const districtOf = (location: string): string => {
 
 export const LiveListingsPreview = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  // Signed-in renters get the table inside Discover; visitors get the public page.
-  const browsePath = user ? '/discover?view=browse' : '/browse';
+  // The hub is the front door for everyone now - a signed-out visitor gets the
+  // same table there, minus the parts that need an account.
+  const browsePath = '/hub';
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [verifiedThisWeek, setVerifiedThisWeek] = useState(0);
 

@@ -26,7 +26,7 @@ const Browse = () => {
             <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="h-6 w-6 md:h-8 md:w-8" />
             <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
           </Link>
-          <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground" onClick={() => navigate('/discover')}>
+          <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground" onClick={() => navigate('/hub')}>
             <Sparkles className="w-4 h-4 mr-2" />
             Vibe match
           </Button>

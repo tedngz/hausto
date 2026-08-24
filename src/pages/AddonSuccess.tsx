@@ -63,7 +63,7 @@ const AddonSuccess = () => {
             <p className="text-muted-foreground mb-6">
               For the next 30 days, Hausto will coordinate as many viewings as you need — until you settle on a home.
             </p>
-            <Button onClick={() => navigate('/discover')} size="lg">
+            <Button onClick={() => navigate('/hub')} size="lg">
               Book a viewing
             </Button>
           </>
@@ -74,7 +74,7 @@ const AddonSuccess = () => {
             <p className="text-muted-foreground mb-6">
               If you completed the payment, your add-on will be activated shortly — contact us if it doesn't appear.
             </p>
-            <Button onClick={() => navigate('/discover')} size="lg">
+            <Button onClick={() => navigate('/hub')} size="lg">
               Back to Discover
             </Button>
           </>

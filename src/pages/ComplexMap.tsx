@@ -34,7 +34,7 @@ export default function ComplexMap() {
 
           <div className="mt-12 flex flex-wrap justify-center gap-3">
             <Button asChild variant="outline">
-              <Link to="/complexes">Browse the full directory</Link>
+              <Link to="/hub">Browse the full directory</Link>
             </Button>
             <Button asChild variant="ghost">
               <Link to="/">Back to home</Link>
