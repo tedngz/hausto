@@ -9,6 +9,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Browse from "./pages/Browse";
+import Hub from "./pages/Hub";
 import Auth from "./pages/Auth";
 import PropertyDetail from "./pages/PropertyDetail";
 import NotFound from "./pages/NotFound";
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/discover" element={<Discover />} />
             <Route path="/browse" element={<Browse />} />
+            <Route path="/hub" element={<Hub />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/property/:id" element={<PropertyDetail />} />
             <Route path="/complexes" element={<Complexes />} />

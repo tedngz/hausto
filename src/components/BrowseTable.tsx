@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useBrowseListings, type BrowseRow } from '@/hooks/useBrowseListings';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
@@ -26,39 +27,14 @@ import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
+import { CITY_DISTRICTS, districtOf, locationMatchesDistrict } from '@/utils/districts';
 import type { Apartment } from '@/types';
 
 // The verified-listings table. Public data from public-property-search (no
-// contact details); rendered standalone at /browse and embedded as the
-// Browse view inside Discover.
-const SEARCH_URL = 'https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search';
-const PAGE_SIZE = 50; // API max per request
-const MAX_ROWS = 1000; // safety cap; paging stops when the API runs dry
-
-export type BrowseRow = {
-  id: string;
-  title: string;
-  url: string;
-  source_url?: string;
-  location: string;
-  price_vnd: number | null;
-  price_usd: number | null;
-  rooms: string | null;
-  size: string | null;
-  vibe: string | null;
-  images: string[];
-  highlights?: string[];
-  amenities?: string[];
-  /** vibe_analysis.styles from the AI analysis - drives the Style match group */
-  style_tags?: string[];
-  /** Per-image AI highlight strings, indexed to images - the detailed captions */
-  image_highlights?: string[];
-  description?: string | null;
-  source: string;
-  listed_at: string;
-  last_verified_at?: string | null;
-  posting_count?: number;
-};
+// contact details); rendered standalone at /browse, as the Browse view inside
+// Discover, and as the hub's Browse tab. The listing set itself is fetched by
+// useBrowseListings, which the hub's new-listings strip shares.
+export type { BrowseRow };
 
 type SortKey = 'price_usd' | 'last_verified_at' | 'rooms' | 'size';
 
@@ -68,31 +44,6 @@ const CITIES = [
   { value: 'hanoi', label: 'Hanoi' },
   { value: 'danang', label: 'Da Nang' },
 ];
-
-// Renter-facing district lists per city (matches CityDistrictSelector naming)
-const CITY_DISTRICTS: Record<string, string[]> = {
-  hcmc: [
-    'District 1', 'District 2', 'District 3', 'District 4', 'District 5',
-    'District 6', 'District 7', 'District 8', 'District 10', 'District 11',
-    'Binh Thanh', 'Tan Binh', 'Tan Phu', 'Phu Nhuan', 'Go Vap', 'Thu Duc', 'Binh Tan',
-  ],
-  hanoi: ['Hoan Kiem', 'Ba Dinh', 'Cau Giay', 'Tay Ho', 'Dong Da', 'Hai Ba Trung', 'Long Bien', 'Nam Tu Liem'],
-  danang: ['Hai Chau', 'Son Tra', 'Ngu Hanh Son', 'Thanh Khe', 'Lien Chieu', 'Cam Le'],
-};
-
-const stripDiacritics = (s: string) =>
-  s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
-
-// Listings mix Vietnamese ("Quan Tan Binh") and English ("District 2") location
-// strings, so district matching is diacritic-stripped with a Quan/District alias.
-const locationMatchesDistrict = (location: string, district: string): boolean => {
-  const loc = stripDiacritics(location).toLowerCase();
-  const d = stripDiacritics(district).toLowerCase();
-  if (loc.includes(d)) return true;
-  const numbered = d.match(/^district (\d+)$/);
-  if (numbered) return new RegExp(`quan ${numbered[1]}(?!\\d)`).test(loc);
-  return false;
-};
 
 // Rating-dot colors, mirroring EditorialPropertyCard's chip
 const RATING_DOT: Record<string, string> = {
@@ -126,12 +77,6 @@ const verifiedLabel = (iso?: string | null): string => {
 const parseSizeNum = (size?: string | null): number | null => {
   const m = String(size ?? '').match(/(\d+(?:[.,]\d+)?)/);
   return m ? parseFloat(m[1].replace(',', '.')) : null;
-};
-
-const districtOf = (location: string): string => {
-  const parts = (location || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (parts.length <= 1) return location;
-  return parts.slice(0, -1).slice(-2).join(', ');
 };
 
 // Card-style image browser for the compare dialog: one photo at a time with
@@ -226,24 +171,42 @@ const SuggestionChip = ({ question, disabled, onAsk }: { question: string; disab
   </button>
 );
 
+export interface BrowseTableFilters {
+  city?: string;
+  districts?: string[];
+  rooms?: string;
+  minBudget?: string;
+  maxBudget?: string;
+}
+
 interface BrowseTableProps {
   /** Where auth redirects should return to (default /browse) */
   returnTo?: string;
+  /**
+   * Starting filters. Applied once, on mount - the renter stays in charge of
+   * the controls afterwards, so this seeds rather than binds. The hub uses it
+   * to open the table on what the renter said they wanted instead of on all
+   * 1,400 listings.
+   */
+  initialFilters?: BrowseTableFilters;
+  /** Hides the component's own heading block when the page provides one. */
+  embedded?: boolean;
 }
 
-export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
+export const BrowseTable = ({ returnTo = '/browse', initialFilters, embedded = false }: BrowseTableProps) => {
   const navigate = useNavigate();
-  const [rows, setRows] = useState<BrowseRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [city, setCity] = useState('all');
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [roomsFilter, setRoomsFilter] = useState('all');
-  const [minBudget, setMinBudget] = useState('');
-  const [maxBudget, setMaxBudget] = useState('');
+  const [city, setCity] = useState(initialFilters?.city ?? 'all');
+  const [districts, setDistricts] = useState<string[]>(initialFilters?.districts ?? []);
+  const [roomsFilter, setRoomsFilter] = useState(initialFilters?.rooms ?? 'all');
+  const [minBudget, setMinBudget] = useState(initialFilters?.minBudget ?? '');
+  const [maxBudget, setMaxBudget] = useState(initialFilters?.maxBudget ?? '');
   const [freshOnly, setFreshOnly] = useState(false);
+
+  // City and budget are server-side filters (they change what gets fetched);
+  // district, rooms and freshness are applied to the result below.
+  const { rows, loading, error } = useBrowseListings({ city, minBudget, maxBudget });
 
   const changeCity = (c: string) => {
     setCity(c);
@@ -430,46 +393,6 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
       toast.error('Could not send the request. Please try again.');
     }
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setLoading(true);
-      setError(null);
-      setRows([]);
-      const collected: BrowseRow[] = [];
-      try {
-        const params = new URLSearchParams();
-        if (city !== 'all') params.set('city', city);
-        if (minBudget && Number(minBudget) > 0) params.set('min_budget', minBudget);
-        if (maxBudget && Number(maxBudget) > 0) params.set('max_budget', maxBudget);
-        params.set('limit', String(PAGE_SIZE));
-        // Page until the API runs dry so the table holds ALL listings. That's up
-        // to 20 serial requests, so each page is painted as it lands rather than
-        // holding the whole table behind one spinner.
-        for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
-          params.set('offset', String(offset));
-          const res = await fetch(`${SEARCH_URL}?${params}`);
-          if (!res.ok) throw new Error(`Search failed (${res.status})`);
-          const data = await res.json();
-          const page: BrowseRow[] = data.results || [];
-          collected.push(...page);
-          if (cancelled) return;
-          setRows([...collected]);
-          setLoading(false);
-          if (page.length < PAGE_SIZE) break;
-        }
-      } catch (e) {
-        // A later page failing shouldn't blank out rows already on screen -
-        // only surface the error state when we got nothing at all.
-        if (!cancelled && collected.length === 0) setError((e as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    run();
-    return () => { cancelled = true; };
-  }, [city, minBudget, maxBudget]);
 
   const filtered = useMemo(() => {
     let out = rows;
@@ -772,9 +695,10 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
         </>
       )}
 
-      {/* Compare bar */}
+      {/* Compare bar. Embedded on the hub, the chat dock owns the bottom of the
+          screen below lg - so this sits above it rather than under it. */}
       {selected.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full bg-foreground text-background px-5 py-2.5 shadow-lg">
+        <div className={`fixed ${embedded ? 'bottom-20 lg:bottom-6' : 'bottom-4'} left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full bg-foreground text-background px-5 py-2.5 shadow-lg`}>
           <span className="text-sm">{selected.length} selected</span>
           <Button size="sm" variant="secondary" className="rounded-full h-7" disabled={selected.length < 2} onClick={() => setCompareOpen(true)}>
             Compare

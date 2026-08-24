@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
 import { translateLocationToEnglish } from '@/utils/locationTranslation';
 import { Button } from '@/components/ui/button';
@@ -61,18 +62,89 @@ interface SearchResult {
   totalMatches: number;
   blocks?: import('@/components/ai-blocks/AIBlocks').AIBlock[];
 }
+/**
+ * Assistant replies arrive as text, as JSON, or as JSON wrapped in
+ * `{ response: "<json string>" }` depending on which model answered - so every
+ * reply gets pulled apart the same way before it is rendered.
+ *
+ * Lifted out of the render so the hub can also parse the thread up front and
+ * decide which reply's listings belong in the main pane.
+ */
+export const parseAssistantMessage = (
+  content: string,
+): { searchResults: SearchResult | null; displayContent: string } => {
+  const asResults = (o: any): SearchResult | null => {
+    if (o?.results && Array.isArray(o.results)) return o as SearchResult;
+    if (o?.blocks && Array.isArray(o.blocks)) {
+      return { results: [], summary: o.summary || '', totalMatches: 0, blocks: o.blocks };
+    }
+    return null;
+  };
+
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.response && typeof parsed.response === 'string') {
+      try {
+        const inner = asResults(JSON.parse(parsed.response));
+        if (inner) return { searchResults: inner, displayContent: content };
+      } catch {
+        // inner payload is prose, not JSON
+      }
+      return { searchResults: null, displayContent: parsed.response };
+    }
+    const direct = asResults(parsed);
+    if (direct) return { searchResults: direct, displayContent: content };
+  } catch {
+    // Not JSON at all - usually plain prose, but small models sometimes emit a
+    // JSON payload with commentary wrapped around it.
+    if (/\{"results":|"summary":|"blocks":/.test(content)) {
+      const match = content.match(/\{[\s\S]*"(results|blocks)"[\s\S]*\}/);
+      if (match) {
+        try {
+          const extracted = asResults(JSON.parse(match[0]));
+          if (extracted) return { searchResults: extracted, displayContent: content };
+        } catch {
+          // fall through to the apology below
+        }
+      }
+      return {
+        searchResults: null,
+        displayContent: 'I found some properties that match your preferences! Let me show you the results.',
+      };
+    }
+  }
+  return { searchResults: null, displayContent: content };
+};
+
 interface HomeAIProps {
   userPreferences?: UserPreferences;
   /** When provided, HomeAI auto-sends this as the first message once (used for the
    *  quiz → AI-search handoff). Cleared by the parent after it fires. */
   initialQuery?: string;
   onInitialQueryConsumed?: () => void;
+  /** 'page' is the full-width Discover view; 'rail' fills a narrow docked
+   *  column on the hub - no card chrome, thread scrolls, composer pinned. */
+  variant?: 'page' | 'rail';
+  /** When set (rail only), listing results render into this node instead of
+   *  inside the chat thread, so they get the main pane's width. */
+  resultsPortal?: HTMLElement | null;
+  /** Fires with how many listings are currently on show in the portal. */
+  onResultsCountChange?: (count: number) => void;
 }
 export const HomeAI = ({
   userPreferences,
   initialQuery,
-  onInitialQueryConsumed
+  onInitialQueryConsumed,
+  variant = 'page',
+  resultsPortal,
+  onResultsCountChange
 }: HomeAIProps) => {
+  const isRail = variant === 'rail';
+  // True when listings belong in the main pane rather than in the thread.
+  const hoistResults = isRail && !!resultsPortal;
+  // Which reply's listings the main pane is showing. Follows the newest reply
+  // that returned any, but an older one can be brought back from the thread.
+  const [activeResultsIdx, setActiveResultsIdx] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -133,6 +205,32 @@ export const HomeAI = ({
     startFreshChat,
     isSendingMessage
   } = useHomeAI();
+
+  // Every assistant reply, pulled apart once per change rather than on each
+  // render - the thread, the main pane and the tab count all read from this.
+  const parsedMessages = useMemo(
+    () => messages.map((m) => (m.role === 'user' ? null : parseAssistantMessage(m.content))),
+    [messages],
+  );
+
+  // Follow the newest reply that actually returned listings.
+  const latestResultsIdx = useMemo(() => {
+    for (let i = parsedMessages.length - 1; i >= 0; i -= 1) {
+      if ((parsedMessages[i]?.searchResults?.results.length ?? 0) > 0) return i;
+    }
+    return null;
+  }, [parsedMessages]);
+
+  useEffect(() => {
+    setActiveResultsIdx(latestResultsIdx);
+  }, [latestResultsIdx]);
+
+  const activeResults =
+    activeResultsIdx !== null ? parsedMessages[activeResultsIdx]?.searchResults ?? null : null;
+
+  useEffect(() => {
+    onResultsCountChange?.(activeResults?.results.length ?? 0);
+  }, [activeResults, onResultsCountChange]);
 
   // Clear temporary message when user's message appears in database
   useEffect(() => {
@@ -647,8 +745,10 @@ export const HomeAI = ({
     }
     setShowPropertyModal(true);
   };
-  return <div className="w-full max-w-4xl mx-auto mt-4 px-1">
-      <div className="p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10">
+  return <div className={isRail ? 'w-full h-full flex flex-col min-h-0' : 'w-full max-w-4xl mx-auto mt-4 px-1'}>
+      <div className={isRail
+        ? 'flex-1 min-h-0 flex flex-col gap-2 p-3'
+        : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10'}>
       {/* Header — history / new-chat controls sit in normal flow so they reserve
           their own row and never overlap the composer in the compact state */}
       {user && <div className="flex justify-end gap-2 mb-2">
@@ -686,7 +786,7 @@ export const HomeAI = ({
         </Card>}
 
       {/* Chat Messages for Signed In Users — compact until there's content, then grows/scrolls */}
-      {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage) && <div className="space-y-4 mb-4 max-h-[calc(100dvh-16rem)] overflow-y-auto">
+      {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage) && <div className={`space-y-4 overflow-y-auto ${isRail ? 'flex-1 min-h-0' : 'mb-4 max-h-[calc(100dvh-16rem)]'}`}>
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-slide-up">
@@ -698,105 +798,77 @@ export const HomeAI = ({
                   </div>
                 </div>;
           } else {
-            // AI message - try to parse for property results
-            let searchResults: SearchResult | null = null;
-            let displayContent = message.content;
-            try {
-              let jsonContent = message.content;
+            const { searchResults, displayContent } = parsedMessages[index] ?? {
+              searchResults: null,
+              displayContent: message.content,
+            };
+            // Separate non-followup blocks (text/district/etc.) from followup chips
+            const topBlocks = (searchResults?.blocks || []).filter((b: any) => b.type !== 'followups');
+            const followupBlocks = (searchResults?.blocks || []).filter((b: any) => b.type === 'followups');
+            const cards = searchResults?.results ?? [];
+            const isShowing = hoistResults && activeResultsIdx === index;
+            return <div key={index} className="flex justify-start animate-slide-up">
+                  <div className="w-full space-y-4">
+                    {searchResults?.summary && <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
+                        <p className="text-sm text-left text-foreground/90 leading-relaxed">{searchResults.summary}</p>
+                      </div>}
 
-              // First try to parse - might be wrapped in { response: ... }
-              const parsed = JSON.parse(message.content);
+                    {/* Plain prose reply (advice, a clarifying question, a fallback) */}
+                    {!searchResults && <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
+                        <p className="text-sm whitespace-pre-wrap text-left text-foreground/90 leading-relaxed">{displayContent}</p>
+                      </div>}
 
-              // Check if it's wrapped in a response object
-              if (parsed.response && typeof parsed.response === 'string') {
-                jsonContent = parsed.response;
-                // Try to parse the inner response as JSON
-                try {
-                  const innerParsed = JSON.parse(parsed.response);
-                  if (innerParsed.results && Array.isArray(innerParsed.results)) {
-                    searchResults = innerParsed;
-                  } else if (innerParsed.blocks && Array.isArray(innerParsed.blocks)) {
-                    searchResults = { results: [], summary: innerParsed.summary || '', totalMatches: 0, blocks: innerParsed.blocks };
-                  } else {
-                    displayContent = parsed.response;
-                  }
-                } catch {
-                  displayContent = parsed.response;
-                }
-              } else if (parsed.results && Array.isArray(parsed.results)) {
-                // Direct JSON with results
-                searchResults = parsed;
-              } else if (parsed.blocks && Array.isArray(parsed.blocks)) {
-                searchResults = { results: [], summary: parsed.summary || '', totalMatches: 0, blocks: parsed.blocks };
-              }
-            } catch (e) {
-              // Not JSON, treat as regular text
-              // Clean up any JSON artifacts that might be visible
-              if (message.content.includes('{"results":') || message.content.includes('"summary":') || message.content.includes('"blocks":')) {
-                // Try one more time to extract JSON from the message
-                const jsonMatch = message.content.match(/\{[\s\S]*"(results|blocks)"[\s\S]*\}/);
-                if (jsonMatch) {
-                  try {
-                    const extracted = JSON.parse(jsonMatch[0]);
-                    if (extracted.results && Array.isArray(extracted.results)) {
-                      searchResults = extracted;
-                    } else if (extracted.blocks && Array.isArray(extracted.blocks)) {
-                      searchResults = { results: [], summary: extracted.summary || '', totalMatches: 0, blocks: extracted.blocks };
-                    }
-                  } catch {
-                    displayContent = "I found some properties that match your preferences! Let me show you the results.";
-                  }
-                } else {
-                  displayContent = "I found some properties that match your preferences! Let me show you the results.";
-                }
-              }
-            }
-            if (searchResults) {
-              // Separate non-followup blocks (text/district/etc.) from followup chips
-              const topBlocks = (searchResults.blocks || []).filter((b: any) => b.type !== 'followups');
-              const followupBlocks = (searchResults.blocks || []).filter((b: any) => b.type === 'followups');
-              return <div key={index} className="flex justify-start animate-slide-up">
-                    <div className="w-full space-y-4">
-                      {searchResults.summary && <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
-                          <p className="text-sm text-left text-foreground/90 leading-relaxed">{searchResults.summary}</p>
-                        </div>}
-                      {/* Text/info blocks shown ABOVE results */}
-                      <AIBlocks blocks={topBlocks} onFollowup={handleFollowup} />
-                      
-                      {searchResults.results.length > 0 && <>
+                    {/* Text/info blocks shown ABOVE results */}
+                    <AIBlocks blocks={topBlocks} onFollowup={handleFollowup} />
+
+                    {cards.length > 0 && (hoistResults ? (
+                      // The listings themselves are in the main pane; the thread
+                      // keeps a handle so an earlier search can be pulled back.
+                      <button
+                        type="button"
+                        onClick={() => setActiveResultsIdx(index)}
+                        disabled={isShowing}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                          isShowing
+                            ? 'border-primary/25 bg-primary/5 text-muted-foreground'
+                            : 'border-border bg-background hover:border-primary/50'
+                        }`}
+                      >
+                        <Home className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                        <span>
+                          {cards.length} {cards.length === 1 ? 'place' : 'places'}
+                          {isShowing ? ' - shown in the main pane' : ' - show these again'}
+                        </span>
+                      </button>
+                    ) : (
+                      <>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[640px]">
-                             {searchResults.results.map(property => (
-                               <EditorialPropertyCard
-                                 key={property.id}
-                                 apartment={property}
-                                 compact
-                                 className="max-w-[300px] w-full mx-auto sm:mx-0"
-                                 vibeScore={cardVibeScore(property)}
-                                 scoreContext="search"
-                                 vibeDetailsText={property.matchReason}
-                                 quoteFallback={property.matchReason}
-                                 liked={likedProperties.has(property.id)}
-                                 onLike={() => handleLikeProperty(property.id, property.realtor_id)}
-                               />
-                             ))}
+                          {cards.map(property => (
+                            <EditorialPropertyCard
+                              key={property.id}
+                              apartment={property}
+                              compact
+                              className="max-w-[300px] w-full mx-auto sm:mx-0"
+                              vibeScore={cardVibeScore(property)}
+                              scoreContext="search"
+                              vibeDetailsText={property.matchReason}
+                              quoteFallback={property.matchReason}
+                              liked={likedProperties.has(property.id)}
+                              onLike={() => handleLikeProperty(property.id, property.realtor_id)}
+                            />
+                          ))}
                         </div>
                         <p className="flex items-center gap-1.5 text-xs text-muted-foreground max-w-[640px]">
                           <Heart className="w-3.5 h-3.5 shrink-0 text-primary fill-primary" aria-hidden="true" />
                           Like a listing to match with its realtor — you can then chat and arrange a viewing.
                         </p>
-                      </>}
+                      </>
+                    ))}
 
-                      {/* Followup suggestions shown BELOW results */}
-                      {followupBlocks.length > 0 && <AIBlocks blocks={followupBlocks} onFollowup={handleFollowup} />}
-                    </div>
-                  </div>;
-              // Regular text message - use cleaned content
-              return <div key={index} className="flex justify-start animate-slide-up">
-                    <div className="glass p-4 rounded-2xl rounded-tl-sm max-w-[85%] sm:max-w-[70%] md:max-w-[60%] w-fit shadow-sm">
-                      <p className="text-sm whitespace-pre-wrap text-justify text-foreground/90 leading-relaxed">{displayContent}</p>
-                     </div>
-                   </div>;
-            }
+                    {/* Followup suggestions shown BELOW results */}
+                    {followupBlocks.length > 0 && <AIBlocks blocks={followupBlocks} onFollowup={handleFollowup} />}
+                  </div>
+                </div>;
           }
         })}
 
@@ -1026,6 +1098,41 @@ export const HomeAI = ({
         )}
 
         </div>}
+
+      {/* Listings for the hub's main pane. Rendered through a portal rather
+          than lifted into the parent so the like, vibe-score and detail-modal
+          wiring stays here, where the conversation that produced them lives. */}
+      {hoistResults && resultsPortal && activeResults && activeResults.results.length > 0 &&
+        createPortal(
+          <div className="space-y-4">
+            {activeResults.summary && (
+              <p className="max-w-3xl font-serif text-[15px] italic leading-relaxed text-muted-foreground">
+                {activeResults.summary}
+              </p>
+            )}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {activeResults.results.map(property => (
+                <EditorialPropertyCard
+                  key={property.id}
+                  apartment={property}
+                  compact
+                  vibeScore={cardVibeScore(property)}
+                  scoreContext="search"
+                  vibeDetailsText={property.matchReason}
+                  quoteFallback={property.matchReason}
+                  onCardClick={() => handlePropertyClick(property)}
+                  liked={likedProperties.has(property.id)}
+                  onLike={() => handleLikeProperty(property.id, property.realtor_id)}
+                />
+              ))}
+            </div>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Heart className="w-3.5 h-3.5 shrink-0 text-primary fill-primary" aria-hidden="true" />
+              Like a listing to match with its realtor — you can then chat and arrange a viewing.
+            </p>
+          </div>,
+          resultsPortal,
+        )}
 
       {/* Property Detail Modal */}
       <PropertyDetailModal apartment={selectedProperty ? {
