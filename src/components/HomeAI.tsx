@@ -857,7 +857,11 @@ export const HomeAI = ({
   };
   return <div className={isRail ? 'w-full h-full flex flex-col min-h-0' : 'w-full max-w-4xl mx-auto mt-4 px-1'}>
       <div className={isRail
-        ? 'flex-1 min-h-0 flex flex-col gap-2 p-3'
+        // Scrolls rather than spills: in the mobile dock (a third of the
+        // viewport) a signed-in renter with pinned listings adds a subject
+        // strip on top of the composer, and on a short phone that is taller
+        // than the sheet. Nothing to scroll while it fits.
+        ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto p-3'
         : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10'}>
       {/* Header — history / new-chat controls sit in normal flow so they reserve
           their own row and never overlap the composer in the compact state */}
