@@ -15,9 +15,8 @@ import { BudgetRangeSelector } from '@/components/BudgetRangeSelector';
 import { CityDistrictSelector } from '@/components/CityDistrictSelector';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
-import { preferencesToDb, normalizeSize } from '@/lib/preferences';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { normalizeSize } from '@/lib/preferences';
 import { MUST_HAVE_OPTIONS } from '@/lib/propertyFeatures';
 
 // Kept in sync with the (simplified) onboarding quiz options.
@@ -83,9 +82,8 @@ export const PreferencesEditModal = ({
 }: PreferencesEditModalProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { savePreferences, isSaving } = useUserPreferences();
   const [prefs, setPrefs] = useState<UserPreferences>(initial ?? DEFAULTS);
-  const [saving, setSaving] = useState(false);
 
   // Re-sync when the modal is (re)opened with fresh data.
   useEffect(() => {
@@ -108,16 +106,8 @@ export const PreferencesEditModal = ({
 
   const handleSave = async () => {
     if (!user?.id) return;
-    setSaving(true);
     try {
-      const { error } = await supabase
-        .from('user_preferences')
-        .upsert(preferencesToDb(prefs, user.id), { onConflict: 'user_id' });
-      if (error) throw error;
-
-      localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(prefs));
-      queryClient.invalidateQueries({ queryKey: ['user-preferences', user.id] });
-
+      await savePreferences(prefs);
       toast({
         title: 'Preferences updated',
         description: 'Your next AI search will use these.',
@@ -131,8 +121,6 @@ export const PreferencesEditModal = ({
         description: 'Please try again.',
         variant: 'destructive',
       });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -254,11 +242,11 @@ export const PreferencesEditModal = ({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             Save changes
           </Button>
         </DialogFooter>

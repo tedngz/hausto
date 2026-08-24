@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { dbToPreferences } from '@/lib/preferences';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { PreferencesEditModal } from '@/components/PreferencesEditModal';
 import { FEATURE_LABELS, FeatureKey } from '@/lib/propertyFeatures';
 interface ProfileProps {
@@ -32,35 +32,12 @@ interface UserProfile {
 }
 
 // Preferences card component for renters
-const PreferencesCard = ({
-  userId
-}: {
-  userId?: string;
-}) => {
+const PreferencesCard = () => {
   const {
     formatPrice
   } = useCurrency();
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const {
-    data: preferences,
-    isLoading
-  } = useQuery({
-    queryKey: ['user-preferences', userId],
-    queryFn: async () => {
-      if (!userId) return null;
-      // Source of truth is the DB; fall back to localStorage for older sessions.
-      const { data } = await supabase
-        .from('user_preferences')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      const dbPrefs = dbToPreferences(data as any);
-      if (dbPrefs) return dbPrefs;
-      const stored = localStorage.getItem(`userPreferences_${userId}`);
-      return stored ? JSON.parse(stored) : null;
-    },
-    enabled: !!userId
-  });
+  const { preferences, isLoading } = useUserPreferences();
   if (isLoading) {
     return <Card>
         <CardHeader>
@@ -547,6 +524,6 @@ export const Profile = ({
       </Card>
 
       {/* Preferences Card - stacked below profile info */}
-      {userType === 'renter' && <PreferencesCard userId={user?.id} />}
+      {userType === 'renter' && <PreferencesCard />}
     </div>;
 };

@@ -23,9 +23,20 @@ import { Loader2 } from 'lucide-react';
 import { UserPreferences } from '@/types';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { useMatches } from '@/hooks/useMatches';
-import { supabase } from '@/integrations/supabase/client';
-import { dbToPreferences, preferencesToSearchQuery, hasMeaningfulPreferences } from '@/lib/preferences';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { preferencesToSearchQuery } from '@/lib/preferences';
 import { toast } from 'sonner';
+
+// Views reachable by ?view= - used by the landing table preview and by the
+// hub's nav, which sends swipe and profile back here.
+const DEEP_LINK_VIEWS = ['browse', 'swipe', 'matches', 'profile'] as const;
+type DeepLinkView = (typeof DEEP_LINK_VIEWS)[number];
+
+const deepLinkView = (search: string): DeepLinkView | null => {
+  const v = new URLSearchParams(search).get('view');
+  return DEEP_LINK_VIEWS.includes(v as DeepLinkView) ? (v as DeepLinkView) : null;
+};
+
 const Discover = () => {
   const {
     user,
@@ -41,14 +52,21 @@ const Discover = () => {
   const [userType, setUserType] = useState<'renter' | 'realtor' | null>(null);
 
   const [currentView, setCurrentView] = useState<'onboarding' | 'ai-chat' | 'swipe' | 'matches' | 'dashboard' | 'profile' | 'browse'>('ai-chat');
-  const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
+  // Preferences are shared state now - the quiz, the profile editor and the
+  // browse table all read and write the same cache entry.
+  const {
+    preferences: userPreferences,
+    isResolved: prefsResolved,
+    hasPreferences,
+    clearPreferences,
+  } = useUserPreferences();
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   // One-shot seed query for the quiz → AI-search handoff.
   const [aiSeedQuery, setAiSeedQuery] = useState<string | undefined>(undefined);
-  // Gates the renter view until we know whether they have saved preferences
-  // (so brand-new renters land in the quiz without an ai-chat flash first).
-  const [prefsResolved, setPrefsResolved] = useState(false);
+  // Set once the opening view has been chosen, so the deep-link and
+  // preference-driven routing below only fires on arrival, not on every change.
+  const [landed, setLanded] = useState(false);
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -57,11 +75,11 @@ const Discover = () => {
     }
   }, [user, loading, navigate]);
 
-  // Load saved preferences from localStorage and default to renter
+  // Resolve which hat the user is wearing. Preferences hydrate separately, via
+  // the shared hook.
   useEffect(() => {
     if (!user || rolesLoading) return;
     const savedUserType = localStorage.getItem(`userType_${user.id}`);
-    const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
 
     // Force renter if stored type is realtor but role missing
     const effectiveType: 'renter' | 'realtor' =
@@ -70,59 +88,35 @@ const Discover = () => {
     localStorage.setItem(`userType_${user.id}`, effectiveType);
 
     if (effectiveType === 'realtor') {
-      setPrefsResolved(true);
       setCurrentView('dashboard');
-      return;
+      setLanded(true);
     }
-
-    // Hydrate preferences: localStorage first (instant), then reconcile with the
-    // DB so they follow the user across devices even if localStorage is empty.
-    // Brand-new renters (no prefs anywhere) are routed straight into the quiz.
-    let localPrefs: UserPreferences | null = null;
-    if (savedPreferences) {
-      try {
-        localPrefs = JSON.parse(savedPreferences);
-        setUserPreferences(localPrefs);
-      } catch (error) {
-        console.error('Error parsing saved preferences:', error);
-      }
-    }
-    // Deep link (?view=browse) wins over the default ai-chat view; without the
-    // guard the async DB reconciliation below would override it back.
-    const wantsBrowse = new URLSearchParams(location.search).get('view') === 'browse';
-    const defaultView = wantsBrowse ? 'browse' : 'ai-chat';
-    if (localPrefs && hasMeaningfulPreferences(localPrefs)) {
-      // Returning renter — no need to wait on the DB to pick a view.
-      setCurrentView(defaultView);
-      setPrefsResolved(true);
-    }
-    (async () => {
-      const { data: prefRow } = await supabase
-        .from('user_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      const dbPrefs = dbToPreferences(prefRow as any);
-      if (dbPrefs && hasMeaningfulPreferences(dbPrefs)) {
-        setUserPreferences(dbPrefs);
-        localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(dbPrefs));
-        setCurrentView(defaultView);
-      } else if (!(localPrefs && hasMeaningfulPreferences(localPrefs))) {
-        // Nothing saved anywhere → force onboarding for this new renter.
-        setCurrentView('onboarding');
-      }
-      setPrefsResolved(true);
-    })();
   }, [user, rolesLoading, isRealtor]);
 
-  // Deep link: /discover?view=browse (e.g. from the landing table preview)
-  // overrides the default view once preferences resolve.
+  // Pick the renter's opening view once we actually know whether they have
+  // preferences: brand-new renters go straight into the quiz rather than
+  // flashing the AI chat first, and ?view=browse (from the landing table
+  // preview) wins over both.
   useEffect(() => {
-    if (!prefsResolved || userType !== 'renter') return;
-    if (new URLSearchParams(location.search).get('view') === 'browse') {
-      setCurrentView('browse');
-    }
-  }, [prefsResolved, userType, location.search]);
+    if (landed || userType !== 'renter') return;
+    // A returning renter is routed off the cached answer without waiting on the
+    // DB round-trip; only someone who looks new to us has to wait, because
+    // guessing wrong there means dropping them into the quiz by mistake.
+    if (!hasPreferences && !prefsResolved) return;
+    const wanted = deepLinkView(location.search);
+    if (wanted) setCurrentView(wanted);
+    else if (hasPreferences) setCurrentView('ai-chat');
+    else setCurrentView('onboarding');
+    setLanded(true);
+  }, [landed, userType, prefsResolved, hasPreferences, location.search]);
+
+  // Later deep links (the landing preview or the hub nav while already on the
+  // page) still switch the view.
+  useEffect(() => {
+    if (!landed || userType !== 'renter') return;
+    const wanted = deepLinkView(location.search);
+    if (wanted) setCurrentView(wanted);
+  }, [landed, userType, location.search]);
   useEffect(() => {
     // Listen for subscription modal opening event
     const handleOpenSubscriptionModal = (event: CustomEvent) => {
@@ -152,44 +146,17 @@ const Discover = () => {
     if (user) {
       localStorage.setItem(`userType_${user.id}`, type);
     }
-    if (type === 'realtor') {
-      setCurrentView('dashboard');
-    } else {
-      if (user) {
-        const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
-        if (savedPreferences) {
-          try {
-            setUserPreferences(JSON.parse(savedPreferences));
-            setCurrentView('ai-chat');
-          } catch (error) {
-            console.error('Error parsing saved preferences:', error);
-            setCurrentView('ai-chat');
-          }
-        } else {
-          setCurrentView('ai-chat');
-        }
-      } else {
-        setCurrentView('ai-chat');
-      }
-    }
+    setCurrentView(type === 'realtor' ? 'dashboard' : 'ai-chat');
   };
   const handleOnboardingComplete = (preferences: UserPreferences) => {
-    setUserPreferences(preferences);
-    // Save preferences to localStorage
-    if (user) {
-      localStorage.setItem(`userPreferences_${user.id}`, JSON.stringify(preferences));
-    }
+    // The quiz has already persisted these through the shared hook.
     // Hand off straight into the AI search, pre-seeded with what they just told us,
     // so the quiz flows naturally into results instead of a cold swipe deck.
     setAiSeedQuery(preferencesToSearchQuery(preferences));
     setCurrentView('ai-chat');
   };
   const handleRestartOnboarding = () => {
-    setUserPreferences(null);
-    // Clear saved preferences
-    if (user) {
-      localStorage.removeItem(`userPreferences_${user.id}`);
-    }
+    clearPreferences();
     setCurrentView('onboarding');
   };
   const switchUserType = () => {
@@ -205,26 +172,11 @@ const Discover = () => {
     if (user) {
       localStorage.setItem(`userType_${user.id}`, newType);
     }
-    if (newType === 'realtor') {
-      setCurrentView('dashboard');
-    } else {
-      // Restore saved preferences if available
-      if (user) {
-        const savedPreferences = localStorage.getItem(`userPreferences_${user.id}`);
-        if (savedPreferences) {
-          try {
-            setUserPreferences(JSON.parse(savedPreferences));
-          } catch (error) {
-            console.error('Error parsing saved preferences:', error);
-          }
-        }
-      }
-      setCurrentView('ai-chat');
-    }
+    setCurrentView(newType === 'realtor' ? 'dashboard' : 'ai-chat');
   };
-  // Hold the renter view until we know whether they have saved preferences,
-  // so brand-new renters go straight to the quiz without an ai-chat flash.
-  if (loading || rolesLoading || (userType === 'renter' && !prefsResolved)) {
+  // Hold the renter view until the opening view has been chosen, so brand-new
+  // renters go straight to the quiz without an ai-chat flash.
+  if (loading || rolesLoading || (userType === 'renter' && !landed)) {
     return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-orange-500" />

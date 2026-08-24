@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
@@ -25,7 +26,7 @@ import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
-import type { Apartment, UserPreferences } from '@/types';
+import type { Apartment } from '@/types';
 
 // The verified-listings table. Public data from public-property-search (no
 // contact details); rendered standalone at /browse and embedded as the
@@ -274,16 +275,9 @@ export const BrowseTable = ({ returnTo = '/browse' }: BrowseTableProps) => {
   const { quota, refetchQuota } = useViewingQuota();
 
   // Saved vibe preferences (from the onboarding quiz) power the compare
-  // dialog's match scores; absent for users who skipped the quiz.
-  const savedPreferences = useMemo<UserPreferences | null>(() => {
-    if (!user) return null;
-    try {
-      const raw = localStorage.getItem(`userPreferences_${user.id}`);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }, [user]);
+  // dialog's match scores; absent for users who skipped the quiz. Read through
+  // the shared hook so an edit re-scores the table without a reload.
+  const { preferences: savedPreferences } = useUserPreferences();
 
   // Plain-language vibe match: overall score plus what specifically matched
   // on each dimension, shown inline (no popup).
