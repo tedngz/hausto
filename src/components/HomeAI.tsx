@@ -1156,7 +1156,10 @@ export const HomeAI = ({
       {/* Subject strip: which listings this conversation is about. Sits directly
           above the composer so the scope is visible while typing. */}
       {isRail && user && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        // mt-auto here, not on the composer: this strip and the composer are
+        // one group (it says what the conversation is about while you type),
+        // and two auto margins would split the slack between them.
+        <div className="mt-auto flex flex-wrap items-center gap-1.5">
           {subjects.map((s) => (
             <span
               key={s.propertyId}
@@ -1218,7 +1221,7 @@ export const HomeAI = ({
       )}
 
       {/* Chat Input - Show for everyone until they search */}
-      {(user || !anonLimitReached) && <div className={isRail ? 'shrink-0 space-y-2 xl:space-y-4' : 'space-y-4'}>
+      {(user || !anonLimitReached) && <div className={isRail ? `shrink-0 space-y-2 tall:space-y-4 xl:space-y-4${user ? '' : ' mt-auto'}` : 'space-y-4'}>
           {/* Signed-out visitors get a few searches before the wall - say how
               many are left rather than springing it on them. */}
           {!user && (
@@ -1234,7 +1237,7 @@ export const HomeAI = ({
             </p>
           )}
           <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className={`${isRail ? 'min-h-[68px] xl:min-h-[104px]' : 'min-h-[140px] sm:min-h-[104px]'} pr-20 resize-none bg-transparent`} />
+            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className={`${isRail ? 'min-h-[68px] tall:min-h-[104px] xl:min-h-[104px]' : 'min-h-[140px] sm:min-h-[104px]'} pr-20 resize-none bg-transparent`} />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" aria-label="Upload image" className="h-8 w-8 p-0">
