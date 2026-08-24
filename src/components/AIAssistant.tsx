@@ -36,12 +36,37 @@ const quickChips = (subjectTitle?: string): { label: string; text: string }[] =>
     ? { label: '📞 Get this owner’s contact', text: `Get me the owner's contact for "${subjectTitle}"` }
     : { label: '📞 Get an owner’s contact', text: 'Get an owner’s contact' },
   subjectTitle
+    ? { label: '🔗 Original listing', text: `Send me the original listing link for "${subjectTitle}"` }
+    : { label: '🔗 Original listing', text: 'Send me the original listing link' },
+  subjectTitle
     ? { label: 'Is it still available?', text: `Is "${subjectTitle}" still available?` }
     : { label: 'Tips for my first viewing', text: 'Tips for my first viewing' },
   { label: 'What should I know about deposits?', text: 'What should I know about deposits?' },
 ];
 
 const HISTORY_CAP = 40;
+
+// Listing links are a first-class answer here, so URLs have to be clickable
+// rather than something the reader retypes. Splits on http(s) runs and leaves
+// everything else as plain text.
+const renderWithLinks = (text: string, onDark: boolean) => {
+  if (!text) return text;
+  return text.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`underline underline-offset-2 break-all ${onDark ? 'text-white' : 'text-orange-600 hover:text-orange-700'}`}
+      >
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  );
+};
 
 export const AIAssistant = () => {
   const { user } = useAuth();
@@ -316,14 +341,14 @@ export const AIAssistant = () => {
                 {message.role === 'assistant' ? (
                   <div className="flex justify-start">
                     <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-white border border-orange-100 px-3 py-2 shadow-sm">
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{renderWithLinks(message.content, false)}</p>
                       {message.limitReached && (
                         <Button
                           size="sm"
                           onClick={handleUpgrade}
                           className="mt-2 h-7 text-xs rounded-full bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white"
                         >
-                          ✨ Upgrade for unlimited contacts
+                          ✨ Upgrade for unlimited unlocks
                         </Button>
                       )}
                     </div>
@@ -331,7 +356,7 @@ export const AIAssistant = () => {
                 ) : (
                   <div className="flex justify-end">
                     <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-gradient-to-br from-orange-500 to-pink-600 text-white px-3 py-2 shadow-sm">
-                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{renderWithLinks(message.content, true)}</p>
                     </div>
                   </div>
                 )}
@@ -388,7 +413,7 @@ export const AIAssistant = () => {
             </div>
             {contactsRemaining !== null && (
               <p className="text-[11px] text-gray-400 text-center leading-none">
-                {contactsRemaining} of 10 free contact reveals left today
+                {contactsRemaining} of 10 free listing unlocks left today
               </p>
             )}
           </div>
