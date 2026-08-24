@@ -44,3 +44,26 @@ on Windows exactly as it is on POSIX.
 
 Worth dropping upstream; if a release fixes it, delete this patch and bump the
 dependency.
+
+### Why the version is pinned exactly
+
+`package.json` pins `@lovable.dev/mcp-js` to an exact `0.20.0`, not `^0.20.0`.
+
+patch-package matches a patch to the installed version by the version in the
+patch FILENAME. If the dependency floats - a plain `npm install`, or any tool
+that re-resolves the range, such as `deno check --node-modules-dir=auto` - the
+installed version moves to 0.20.1, this patch no longer matches, and it is
+skipped. The build then silently regenerates the broken
+`supabase/functions/mcp/index.ts` again. 0.20.1 still carries the upstream bug,
+so floating buys nothing and costs the fix.
+
+`postinstall` runs `patch-package --error-on-warn` so a skipped patch fails the
+install instead of printing a warning nobody reads. Verified: with a
+deliberately mismatched patch filename, the flag exits 1 where the bare command
+exits 0.
+
+To move to a newer release: change the pin, run `npm install`, then re-check
+whether the guard in `dist/stacks/supabase/vite.js` and `vite.cjs` still needs
+widening. If it does, edit both files under `node_modules/` and run
+`npx patch-package @lovable.dev/mcp-js` to emit a patch named for the new
+version, deleting the old one.
