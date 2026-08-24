@@ -7,8 +7,11 @@ import { ADMIN_EMAIL, CONCIERGE_FROM, esc, SITE_URL, textToHtml } from "../_shar
 
 // Hausto Assistant: the platform-wide floating AI chat. Answers renter
 // questions (advice, property info, rental process) grounded in the user's
-// matched properties and complex knowledge, and reveals owner/realtor
-// contacts on request - free users get 10 reveals per day, premium unlimited.
+// matched properties and complex knowledge, and hands over owner/realtor
+// contacts and original listing links on request - free users get 10 listing
+// unlocks per day, premium unlimited. Both kinds of handover draw on that one
+// allowance, per listing, because the source posting carries the phone number
+// too: gating one and not the other would gate neither.
 // It deliberately does NOT search or recommend new listings; that stays in
 // the main AI Search experience.
 
@@ -213,8 +216,11 @@ serve(async (req) => {
     const propertyContext = properties.map((p, i) => {
       const marker = subjectIds.includes(String(p.id)) ? " ← CURRENT SUBJECT" : "";
       const hasContact = !!(p.property_source_provider_phone || p.property_source_provider_name || p.contact_phone || p.contact_name);
-      const sourceLink = (p.property_source_link ?? p.source_url) as string | null;
-      return `Property ${i + 1} [id ${p.id}]${marker}: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? "size n/a"}, rooms: ${p.rooms ?? "n/a"}. Vibe: ${p.vibe ?? "n/a"}. Highlights: ${((p.highlights as string[]) || []).join(", ")}. Amenities: ${((p.amenities as string[]) || []).join(", ")}. Contact on file: ${hasContact ? "yes" : "no"}. Original listing: ${sourceLink ?? "none on file"}. ${p.description ? `Description: ${String(p.description).slice(0, 300)}` : ""}`;
+      // Whether a source link EXISTS, never the URL itself: the model has to
+      // ask for it so the allowance below can be enforced. Putting the URL in
+      // context would let it paste one straight into a reply, ungated.
+      const hasSourceLink = !!(p.property_source_link ?? p.source_url);
+      return `Property ${i + 1} [id ${p.id}]${marker}: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? "size n/a"}, rooms: ${p.rooms ?? "n/a"}. Vibe: ${p.vibe ?? "n/a"}. Highlights: ${((p.highlights as string[]) || []).join(", ")}. Amenities: ${((p.amenities as string[]) || []).join(", ")}. Contact on file: ${hasContact ? "yes" : "no"}. Original listing on file: ${hasSourceLink ? "yes" : "no"}. ${p.description ? `Description: ${String(p.description).slice(0, 300)}` : ""}`;
     }).join("\n");
 
     // Naming the subjects on their own, above the list, is what stops the model
@@ -247,16 +253,17 @@ What you do:
 - Give renting advice (neighborhoods, budgeting in VND, lease norms, deposits, what to check at viewings, living in Vietnam).
 - Answer questions about the user's matched properties and the listing they are viewing, using the data below.
 - Share the owner/realtor contact for a specific property when the user asks for it.
-- Share the original listing link when asked for it, or when someone wants to see the source posting, more photos, or check the listing themselves. Paste the "Original listing" URL from the data below exactly as it appears - never invent or guess one. If it says "none on file", say we don't have a source link for that listing rather than offering a substitute.
+- Share the original listing link when asked for it, or when someone wants to see the source posting, more photos, or check the listing themselves.
 - Hand people to the listing contact for anything only the owner can confirm. Hausto's inventory is listings gathered from across the market, so we do NOT hold live availability, price flexibility, or contract terms. For those, say so plainly and give them the contact so they can call - calling is genuinely the fastest route, so frame it as the better option rather than an apology.
 
 What you do NOT do:
 - You cannot search for or recommend new listings. If the user asks you to find homes, point them to the AI Search ("Describe Your Dream Home") or the Browse page instead.
 - Never reveal contact details yourself in "reply". To share a contact, set "reveal_contact_property_id" to that property's id and the system will attach the contact (it enforces the user's daily reveal allowance). Do this whenever the user asks for a contact, AND whenever the question needs the owner (availability, price negotiation, deposit or contract terms, move-in dates) and the property is identifiable - in that case answer what you can from the data, then attach the contact so they can call. If the property has "Contact on file: no", say Hausto doesn't have a direct contact for it and offer Fast-Track viewing coordination instead.
+- Never write a listing URL yourself in "reply", and never guess one - you are not given them. To share the original listing, set "reveal_listing_link_property_id" to that property's id and the system will attach the link under the same daily allowance. If the property has "Original listing on file: no", say we don't have a source link for it rather than offering a substitute.
 - NEVER promise that Hausto will find out, check with the owner, get back to them, or pass anything to a team. There is no such queue - a promise like that is simply broken. Offer the contact, or Fast-Track when they want us to book a viewing for them.
 - If the user asks for a contact but you cannot tell which property they mean, ask them to name the property (or open its listing page) - do not guess. This does not apply when a CURRENT SUBJECT is given below: that is the property they mean, so act on it rather than asking.
 
-Style: warm, concise (2-4 sentences), concrete. Prices in VND. The user is on the ${isPremium ? "PREMIUM" : "FREE"} plan.${isPremium ? "" : ` Free plan users can reveal up to ${FREE_DAILY_CONTACT_REVEALS} owner/realtor contacts per day; premium is unlimited. Only mention this when relevant.`}
+Style: warm, concise (2-4 sentences), concrete. Prices in VND. The user is on the ${isPremium ? "PREMIUM" : "FREE"} plan.${isPremium ? "" : ` Free plan users can open up to ${FREE_DAILY_CONTACT_REVEALS} listings per day - a contact and a source link for the same listing count once between them; premium is unlimited. Only mention this when relevant.`}
 
 ${subjectContext}
 
@@ -269,7 +276,7 @@ ${complexContext ? `Complex knowledge:\n${complexContext}` : ""}
 
 Set "capture_question" to true when the user asked something concrete that you could NOT answer from the data above - typically because only the owner knows (live availability, negotiability, deposit or contract specifics) or because Hausto simply lacks the detail. This is a silent signal for our team about missing information: it changes nothing the user sees, so never mention it, and never imply anyone will follow up. Leave it false for greetings, small talk, general renting advice, and anything you answered adequately.
 
-Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string | null, "capture_question": boolean}`;
+Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string | null, "reveal_listing_link_property_id": string | null, "capture_question": boolean}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -296,7 +303,7 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
     const aiData = await aiRes.json();
     logOpenAIUsage({ fn: "ai-assistant", model: "gpt-4o-mini", usage: aiData?.usage });
 
-    let decision: { reply?: string; reveal_contact_property_id?: string | null; capture_question?: boolean } = {};
+    let decision: { reply?: string; reveal_contact_property_id?: string | null; reveal_listing_link_property_id?: string | null; capture_question?: boolean } = {};
     try {
       decision = JSON.parse(aiData.choices[0].message.content);
     } catch {
@@ -304,14 +311,14 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
     }
     let reply = (decision.reply || "").trim() || "Sorry, I didn't catch that - could you rephrase?";
 
-    // ---- Contact reveal with daily allowance ----
+    // ---- Contact and source-link handover, under one daily allowance ----
     let contactsRemaining: number | null = isPremium ? null : FREE_DAILY_CONTACT_REVEALS;
     let limitReached = false;
 
     const revealId = decision.reveal_contact_property_id || null;
     const revealProperty = revealId ? properties.find((p) => p.id === revealId) : null;
 
-    // Redis SET of property ids revealed today: re-revealing the same listing
+    // Redis SET of property ids unlocked today: re-opening the same listing
     // never consumes allowance. Fails open if Redis is down (best-effort, same
     // stance as the rest of usage tracking).
     const today = new Date().toISOString().split("T")[0];
@@ -336,50 +343,86 @@ Respond ONLY with JSON: {"reply": string, "reveal_contact_property_id": string |
       }
     }
 
+    // Spend a day's allowance on a listing, or report that it is exhausted.
+    //
+    // A contact and a source link are the same handover in practice - the
+    // source posting almost always carries the owner's phone number - so they
+    // draw on ONE allowance, keyed by listing. Whichever is asked for first
+    // spends it; the other is then free for that listing, as is asking again
+    // later today. Fails open if Redis is down, matching usage tracking
+    // elsewhere.
+    //
+    // `unlocked` covers the both-in-one-reply case. It records what actually
+    // succeeded rather than comparing the two property ids, because a listing
+    // with no contact on file never reaches the allowance at all - and its
+    // link, which is then the only route to the owner, still has to pay.
+    const unlocked = new Set<string>();
+
+    const spendReveal = async (propertyId: string): Promise<boolean> => {
+      if (unlocked.has(propertyId)) return true;
+      if (isPremium || !redis) {
+        unlocked.add(propertyId);
+        return true;
+      }
+      try {
+        if ((await redis.sismember(revealsKey, propertyId)) === 1) {
+          unlocked.add(propertyId);
+          return true;
+        }
+        if ((await redis.scard(revealsKey)) >= FREE_DAILY_CONTACT_REVEALS) {
+          limitReached = true;
+          contactsRemaining = 0;
+          return false;
+        }
+        await redis.sadd(revealsKey, propertyId);
+        await redis.expire(revealsKey, 60 * 60 * 48);
+        contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
+        unlocked.add(propertyId);
+        return true;
+      } catch (e) {
+        console.warn("[ai-assistant] redis allowance check failed (allowing):", String(e).slice(0, 160));
+        unlocked.add(propertyId);
+        return true;
+      }
+    };
+
+    // Appended at most once, even when both a contact and a link were refused.
+    let exhaustedNoted = false;
+    const noteExhausted = () => {
+      if (exhaustedNoted) return;
+      exhaustedNoted = true;
+      reply += `\n\nYou've used all ${FREE_DAILY_CONTACT_REVEALS} of today's free listing unlocks - a contact and its original listing link count as one. Upgrade to Premium for unlimited unlocks, or come back tomorrow.`;
+    };
+
     if (revealProperty) {
       const name = (revealProperty.property_source_provider_name ?? revealProperty.contact_name) as string | null;
       const phone = (revealProperty.property_source_provider_phone ?? revealProperty.contact_phone) as string | null;
 
       if (!name && !phone) {
         reply += `\n\nI don't have a direct owner/realtor contact on file for "${revealProperty.title}". Fast-Track viewing coordination can reach the listing provider for you.`;
+      } else if (await spendReveal(revealId!)) {
+        const lines = [`📞 Contact for "${revealProperty.title}":`];
+        if (name) lines.push(`Name: ${name}`);
+        lines.push(phone ? `Phone: ${phone}` : "Phone: not listed");
+        reply += `\n\n${lines.join("\n")}`;
       } else {
-        // Enforce the free-tier allowance server-side
-        let allowed = true;
-        let alreadyRevealed = false;
-        if (!isPremium && redis) {
-          try {
-            alreadyRevealed = (await redis.sismember(revealsKey, revealId!)) === 1;
-            if (!alreadyRevealed) {
-              const used = await redis.scard(revealsKey);
-              if (used >= FREE_DAILY_CONTACT_REVEALS) {
-                allowed = false;
-                limitReached = true;
-              }
-            }
-          } catch (e) {
-            console.warn("[ai-assistant] redis check failed (allowing):", String(e).slice(0, 160));
-          }
-        }
+        noteExhausted();
+      }
+    }
 
-        if (allowed) {
-          const lines = [`📞 Contact for "${revealProperty.title}":`];
-          if (name) lines.push(`Name: ${name}`);
-          lines.push(phone ? `Phone: ${phone}` : "Phone: not listed");
-          reply += `\n\n${lines.join("\n")}`;
-          if (!isPremium && redis && !alreadyRevealed) {
-            try {
-              await redis.sadd(revealsKey, revealId!);
-              await redis.expire(revealsKey, 60 * 60 * 48);
-              const used = await redis.scard(revealsKey);
-              contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - used);
-            } catch (e) {
-              console.warn("[ai-assistant] redis write failed:", String(e).slice(0, 160));
-            }
-          }
-        } else {
-          reply += `\n\nYou've used all ${FREE_DAILY_CONTACT_REVEALS} of today's free contact reveals. Upgrade to Premium for unlimited contact reveals, or come back tomorrow.`;
-          contactsRemaining = 0;
-        }
+    // ---- Source link, under the same allowance ----
+    const linkId = decision.reveal_listing_link_property_id || null;
+    const linkProperty = linkId ? properties.find((p) => p.id === linkId) : null;
+
+    if (linkProperty) {
+      const url = (linkProperty.property_source_link ?? linkProperty.source_url) as string | null;
+
+      if (!url) {
+        reply += `\n\nI don't have the original listing link on file for "${linkProperty.title}".`;
+      } else if (await spendReveal(linkId!)) {
+        reply += `\n\n🔗 Original listing: ${url}`;
+      } else {
+        noteExhausted();
       }
     }
 

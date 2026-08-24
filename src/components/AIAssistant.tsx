@@ -348,7 +348,7 @@ export const AIAssistant = () => {
                           onClick={handleUpgrade}
                           className="mt-2 h-7 text-xs rounded-full bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white"
                         >
-                          ✨ Upgrade for unlimited contacts
+                          ✨ Upgrade for unlimited unlocks
                         </Button>
                       )}
                     </div>
@@ -413,7 +413,7 @@ export const AIAssistant = () => {
             </div>
             {contactsRemaining !== null && (
               <p className="text-[11px] text-gray-400 text-center leading-none">
-                {contactsRemaining} of 10 free contact reveals left today
+                {contactsRemaining} of 10 free listing unlocks left today
               </p>
             )}
           </div>
