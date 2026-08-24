@@ -200,8 +200,12 @@ export const AIAssistant = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, isSending, messages, contextPropertyId, contextKey]);
 
+  // The hub docks its own AI chat in the rail. A second floating launcher on
+  // top of it is just two sparkles competing for the same job.
+  const isHub = location.pathname === '/hub';
+
   const handleUpgrade = () => {
-    if (location.pathname === '/discover') {
+    if (location.pathname === '/discover' || isHub) {
       window.dispatchEvent(new CustomEvent('openSubscriptionModal'));
     } else {
       navigate('/discover');
@@ -214,7 +218,7 @@ export const AIAssistant = () => {
     if (storageKey) localStorage.removeItem(storageKey);
   };
 
-  if (!user) return null;
+  if (!user || isHub) return null;
 
   return (
     <>

@@ -9,9 +9,8 @@ import { CityDistrictSelector } from '@/components/CityDistrictSelector';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { Sparkles, Home, MapPin, Calendar, DollarSign, Ruler, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { preferencesToDb } from '@/lib/preferences';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { MUST_HAVE_OPTIONS } from '@/lib/propertyFeatures';
 
 interface OnboardingQuizProps {
@@ -23,6 +22,7 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   // All hooks must be called before any conditional logic or early returns
   const { canPerformAction, updateUsage, getRemainingActions, subscriptionStatus } = useUsageTracking();
   const { user } = useAuth();
+  const { savePreferences } = useUserPreferences();
   const [currentStep, setCurrentStep] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showContent, setShowContent] = useState(true);
@@ -125,18 +125,11 @@ export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
       moveInDate: preferences.moveInDate as string
     };
 
-    // Save preferences to database if user is logged in
+    // Persist through the shared hook so the DB row, the device cache and every
+    // mounted consumer (Discover, the table's vibe scores) land together.
     if (user) {
       try {
-        const { error } = await supabase
-          .from('user_preferences')
-          .upsert(preferencesToDb(finalPreferences, user.id), {
-            onConflict: 'user_id',
-          });
-
-        if (error) {
-          console.error('Error saving preferences to database:', error);
-        }
+        await savePreferences(finalPreferences);
       } catch (err) {
         console.error('Failed to save preferences:', err);
       }
