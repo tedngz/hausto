@@ -18,6 +18,13 @@ export default {
 			}
 		},
 		extend: {
+			screens: {
+				// Height, not width: the hub's chat dock is a third of the
+				// viewport, so what it can hold depends on how tall the screen
+				// is. A portrait tablet clears this; a tablet turned landscape
+				// and every phone does not.
+				tall: { raw: '(min-height: 900px)' },
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
