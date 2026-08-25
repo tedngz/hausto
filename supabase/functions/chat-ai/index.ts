@@ -2958,7 +2958,16 @@ Maximum ${maxResults} properties in results.`;
     let validatedResults: any[] = [];
     
     const hasResultsArray = extractedJson && Array.isArray(extractedJson.results) && extractedJson.results.length > 0;
-    const aiFailedShopping = (shoppingOverride || !isPureLifestyle) && !isComplexInfoTurn && topProperties.length > 0 && !hasResultsArray;
+    // Turns where a reply with no listings is the CORRECT answer, not a model
+    // failure. Without the comparison turn in here, answering "which of these
+    // two suits me better" in prose - exactly what it is told to do - counted
+    // as a failed search, and the fallback below pasted five pre-scored
+    // properties over the answer ("Here are 5 matching apartments in Ho Chi
+    // Minh City under 20M VND/month"). Note this reads topProperties, which is
+    // still populated on such a turn even though promptProperties is emptied:
+    // the fallback was injecting listings the model was never shown.
+    const isInfoTurn = isPureLifestyle || isComplexInfoTurn || isSubjectComparison;
+    const aiFailedShopping = (shoppingOverride || !isInfoTurn) && !isComplexInfoTurn && topProperties.length > 0 && !hasResultsArray;
 
     if (hasResultsArray || aiFailedShopping) {
       if (hasResultsArray) {
@@ -2970,7 +2979,7 @@ Maximum ${maxResults} properties in results.`;
         if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
       }
       
-      if ((validatedResults.length === 0 || aiFailedShopping) && topProperties.length > 0 && !isPureLifestyle && !isComplexInfoTurn) {
+      if ((validatedResults.length === 0 || aiFailedShopping) && topProperties.length > 0 && !isInfoTurn) {
         console.log('[Validation] AI failed to provide valid shopping results, using fallback from pre-scored properties');
         usedFallback = true;
       } else if (hasResultsArray) {
@@ -3020,7 +3029,7 @@ Maximum ${maxResults} properties in results.`;
 
     
     // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
-    if (!searchData && topProperties.length > 0 && !isPureLifestyle && !isComplexInfoTurn) {
+    if (!searchData && topProperties.length > 0 && !isInfoTurn) {
       console.log('[Fallback] Generating results from pre-scored properties');
       usedFallback = true;
       
@@ -3139,6 +3148,43 @@ Maximum ${maxResults} properties in results.`;
         responseContent = responseContent.replace(/\*\*/g, '');
         console.log('[Response] Pure conversational response, no followups found');
       }
+    }
+
+    // With listings pinned the default flips: the renter is asking ABOUT those,
+    // not for more of them. "Compare these three" was coming back with a fresh
+    // search attached, which buries the answer. Only an explicit ask for
+    // something new brings results back.
+    //
+    // Deliberately not hasShoppingKeyword() - that matches the word "listings",
+    // which is exactly what someone says when they mean the pinned ones.
+    //
+    // Keyed off what was PINNED, not what resolved: an id we failed to look up
+    // (a complex, a listing since delisted) must still not turn "compare these"
+    // into a fresh search.
+    // Also fires on a process question: the prompt tells the model to answer
+    // those in prose, but "DEFAULT TO SHOPPING" is a strong pull and it was
+    // attaching listings anyway. Belt and braces on the one thing a renter
+    // notices immediately.
+    //
+    // Runs BEFORE the reply is persisted, not after. A signed-in renter's
+    // thread is rendered from chat_messages, not from this HTTP response, so
+    // stripping the response alone left the cards in the row the UI actually
+    // reads - the strip only ever worked for signed-out visitors. searchData
+    // is emptied with it so ai_searches doesn't record a search that was
+    // never shown, and previously-suggested context stays honest.
+    if ((subjectIds.length > 0 || isProcessQuestion || isSubjectComparison) && !/\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i.test(message)) {
+      try {
+        const parsed = JSON.parse(responseContent);
+        if (Array.isArray(parsed.results) && parsed.results.length > 0) {
+          console.log(`[chat-ai] dropping ${parsed.results.length} results: question is about ${subjectIds.length} pinned subject(s)${isSubjectComparison ? ' (advisory comparison)' : ''}`);
+          delete parsed.results;
+          responseContent = JSON.stringify(parsed);
+          if (searchData) {
+            searchData.results = [];
+            searchData.totalMatches = 0;
+          }
+        }
+      } catch { /* non-JSON reply, nothing to strip */ }
     }
 
     // Save response to database
@@ -3278,32 +3324,6 @@ Maximum ${maxResults} properties in results.`;
     // separate counters would just mean asking whichever one still had budget.
     let contactsRemaining: number | null = null;
     let limitReached = false;
-
-    // With listings pinned the default flips: the renter is asking ABOUT those,
-    // not for more of them. "Compare these three" was coming back with a fresh
-    // search attached, which buries the answer. Only an explicit ask for
-    // something new brings results back.
-    //
-    // Deliberately not hasShoppingKeyword() - that matches the word "listings",
-    // which is exactly what someone says when they mean the pinned ones.
-    //
-    // Keyed off what was PINNED, not what resolved: an id we failed to look up
-    // (a complex, a listing since delisted) must still not turn "compare these"
-    // into a fresh search.
-    // Also fires on a process question: the prompt tells the model to answer
-    // those in prose, but "DEFAULT TO SHOPPING" is a strong pull and it was
-    // attaching listings anyway. Belt and braces on the one thing a renter
-    // notices immediately.
-    if ((subjectIds.length > 0 || isProcessQuestion || isSubjectComparison) && !/\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i.test(message)) {
-      try {
-        const parsed = JSON.parse(responseContent);
-        if (Array.isArray(parsed.results) && parsed.results.length > 0) {
-          console.log(`[chat-ai] dropping ${parsed.results.length} results: question is about ${subjectIds.length} pinned subject(s)${isSubjectComparison ? ' (advisory comparison)' : ''}`);
-          delete parsed.results;
-          responseContent = JSON.stringify(parsed);
-        }
-      } catch { /* non-JSON reply, nothing to strip */ }
-    }
 
     if (user && subjectProperties.length > 0) {
       const { data: sub } = await supabase
