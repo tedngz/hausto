@@ -64,6 +64,15 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/614aa0f7-490d-413a-8576-174e6d3df45e) and click on Share -> Publish.
 
+That publishes the frontend. The Supabase edge functions under `supabase/functions`
+are deployed separately, by `.github/workflows/deploy-functions.yml`, which runs on
+every push to `main` that touches them. It needs one repository secret,
+`SUPABASE_ACCESS_TOKEN` (Settings -> Secrets and variables -> Actions); the project
+ref comes from `project_id` in `supabase/config.toml`. Without the secret the job
+skips with a notice rather than failing, and the functions stay on whatever version
+was last pushed by hand - which is worth knowing when a merged fix doesn't show up
+in the app.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!
