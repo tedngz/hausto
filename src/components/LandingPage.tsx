@@ -78,7 +78,9 @@ export const LandingPage = () => {
           </p>
           
           <div className="mb-4">
-            <HomeAI />
+            {/* The hero chat takes the question and hands it to the hub, which
+                answers it - results need the width and the tabs beside them. */}
+            <HomeAI handoffToHub />
           </div>
 
           {/* The verified-listings table is the center of the platform: it gets

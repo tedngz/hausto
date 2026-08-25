@@ -1,6 +1,6 @@
 // The contract for summoning the platform assistant from anywhere.
 //
-// Lives on its own rather than in AIAssistant so a leaf component - a property
+// Lives on its own rather than in the chat so a leaf component - a property
 // card, say - can ask for the assistant without importing it, and so the
 // direction of the dependency stays one-way.
 //
@@ -8,8 +8,10 @@
 //     detail: { propertyId, title },
 //   }));
 //
-// AIAssistant is mounted app-wide and listens for it. Signed-out visitors have
-// no assistant, so it routes them to sign in rather than swallowing the click.
+// The hub's chat listens for it directly and pins the listing in place.
+// Everywhere else AssistantHandoff, mounted app-wide, carries the listing to
+// the hub and follows it there; signed-out visitors are asked to sign in
+// rather than having the click swallowed.
 
 export const ASSISTANT_OPEN_EVENT = 'openHaustoAssistant';
 
@@ -28,6 +30,11 @@ export interface AssistantOpenDetail {
 //     detail: { properties, prompt },
 //   }));
 
+// Comparing is one gesture with two halves - the side-by-side panel and the
+// question about what is in it - so both surfaces that raise it open the panel
+// AND fire this. On the hub the chat hears it and asks in the rail while the
+// panel stays up beside it; off the hub AssistantHandoff carries the selection
+// there, where the panel reopens on arrival.
 export const ASSISTANT_COMPARE_EVENT = 'haustoAssistantCompare';
 
 export interface AssistantCompareDetail {

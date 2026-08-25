@@ -136,9 +136,20 @@ interface BrowseTableProps {
   /** Adjusts for a host page that owns the bottom of the screen (the hub's
    *  chat dock) so the compare bar does not sit underneath it. */
   embedded?: boolean;
+  /** A comparison started on another page and handed over (lib/chatHandoff):
+   *  the panel reopens on these listings as soon as the table has them. */
+  initialCompareIds?: string[];
+  /** Tells the host a compare panel is on screen, so it doesn't move the pane
+   *  out from under it - unmounting this table would close the panel. */
+  onCompareOpenChange?: (open: boolean) => void;
 }
 
-export const BrowseTable = ({ returnTo = '/browse', embedded = false }: BrowseTableProps) => {
+export const BrowseTable = ({
+  returnTo = '/browse',
+  embedded = false,
+  initialCompareIds,
+  onCompareOpenChange,
+}: BrowseTableProps) => {
   const navigate = useNavigate();
 
   // Filters. The table always opens on the full verified set - narrowing it is
@@ -415,6 +426,33 @@ export const BrowseTable = ({ returnTo = '/browse', embedded = false }: BrowseTa
       }),
     );
   };
+
+  // A comparison carried over from /browse: rebuild the selection out of the
+  // rows once they land, and open the panel on it. Once only - reopening it on
+  // every refresh would fight the renter closing it.
+  const carriedCompareRef = useRef(false);
+  useEffect(() => {
+    if (carriedCompareRef.current) return;
+    if (!initialCompareIds?.length) return;
+    const carried = initialCompareIds
+      .map((id) => rows.find((r) => r.id === id))
+      .filter((r): r is BrowseRow => !!r);
+    // Rows stream in a page at a time, so hold until they are all here or the
+    // fetch is done. Anything still missing then is outside what this table
+    // holds, and below two listings there is nothing to compare.
+    if (carried.length < initialCompareIds.length && loading) return;
+    carriedCompareRef.current = true;
+    if (carried.length < 2) return;
+    setSelected(carried);
+    setCompareOpen(true);
+  }, [initialCompareIds, rows, loading]);
+
+  // Mirrors up while the panel is open, and on the way out - a host left
+  // holding a stale `true` would never switch panes again.
+  useEffect(() => {
+    onCompareOpenChange?.(compareOpen);
+    return () => onCompareOpenChange?.(false);
+  }, [compareOpen, onCompareOpenChange]);
 
   const compareFields: { label: string; get: (r: BrowseRow) => string }[] = [
     { label: 'Price', get: (r) => (r.price_usd ? `$${r.price_usd.toLocaleString()}/mo` : '-') },

@@ -25,6 +25,7 @@ import { useComplexes } from '@/hooks/useComplexes';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { preferencesToSearchQuery } from '@/lib/preferences';
+import { clearChatHandoff, peekChatHandoff } from '@/lib/chatHandoff';
 
 /**
  * Below this the page does not split into two panes at all.
@@ -60,18 +61,45 @@ const Hub = () => {
   } = useUserPreferences();
 
   const hasRail = useMediaQuery(`(min-width: ${RAIL_MIN_VIEWPORT}px)`);
-  const [mode, setMode] = useState<HubMode>('browse');
+
+  // A renter who typed into the landing page's composer arrives with their
+  // message parked, not sent (see lib/chatHandoff). Read during the first
+  // render so the page opens in the shape that message needs - AI tab, chat
+  // open - and dropped in an effect once this instance owns it, so a later
+  // visit to the hub doesn't replay it.
+  const [handoff] = useState(peekChatHandoff);
+  useEffect(() => {
+    clearChatHandoff();
+  }, []);
+
+  // A carried-over comparison opens on Browse, not AI: the side-by-side panel
+  // belongs to the table, and the chat answers about it from the rail.
+  const [mode, setMode] = useState<HubMode>(
+    handoff?.compareIds ? 'browse' : handoff ? 'ai' : 'browse',
+  );
   // Profile is a full-pane detour rather than a tab - it is account admin, not
   // part of the search loop the tabs describe.
   const [showProfile, setShowProfile] = useState(false);
   // Set once the quiz is done or dismissed, so it does not reappear while the
-  // saved preferences are still making their way back from the DB.
-  const [skippedOnboarding, setSkippedOnboarding] = useState(false);
-  // One-shot opening message for the quiz handoff.
-  const [seedQuery, setSeedQuery] = useState<string | undefined>(undefined);
+  // saved preferences are still making their way back from the DB. A renter
+  // who arrives mid-sentence from home starts skipped: the quiz would swallow
+  // the message they just sent, and it is still one tap away in the nav menu.
+  const [skippedOnboarding, setSkippedOnboarding] = useState(!!handoff);
+  // One-shot opening message - from the quiz, or carried over from home.
+  const [seedQuery, setSeedQuery] = useState<string | undefined>(handoff?.query);
+  const [seedImages, setSeedImages] = useState<File[] | undefined>(handoff?.images);
+  // Read once by the chat when it mounts, so it is never cleared: crossing the
+  // rail breakpoint remounts the chat, and the pins should survive that.
+  const [seedSubjects] = useState(handoff?.subjects);
+  const [seedCompareIds] = useState(handoff?.compareIds);
+  // Set while either pane has a compare panel up. Both live inside a pane that
+  // is only mounted while its tab is active, so switching tabs closes them.
+  const [isComparing, setIsComparing] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
-  // Narrow viewports get the chat as a sheet rather than a column.
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  // Narrow viewports get the chat as a sheet rather than a column. Open from
+  // the start for a handed-over message, which is a conversation already in
+  // progress - collapsed, the reply would arrive behind a closed dock.
+  const [isChatOpen, setIsChatOpen] = useState(!!handoff);
   // The chat renders its listings into this node. Held in state rather than a
   // ref so the first render after it mounts actually reaches HomeAI.
   const [resultsPortal, setResultsPortal] = useState<HTMLDivElement | null>(null);
@@ -81,11 +109,15 @@ const Hub = () => {
   const hasSeenResults = useRef(false);
 
   useEffect(() => {
-    if (resultsCount > 0 && !hasSeenResults.current) {
-      hasSeenResults.current = true;
-      setMode('ai');
-    }
-  }, [resultsCount]);
+    if (resultsCount === 0 || hasSeenResults.current) return;
+    hasSeenResults.current = true;
+    // Not while a comparison is open. Those results are usually the answer to
+    // the comparison itself, and switching tabs to show them would unmount the
+    // panel being compared - the chat's reply is already in the rail, so the
+    // renter loses nothing by staying put.
+    if (isComparing) return;
+    setMode('ai');
+  }, [resultsCount, isComparing]);
 
   // No auth gate: the hub is the public front door. A visitor can browse the
   // whole verified set, read building profiles and try the AI a few times;
@@ -147,7 +179,12 @@ const Hub = () => {
       variant="rail"
       userPreferences={preferences ?? undefined}
       initialQuery={seedQuery}
-      onInitialQueryConsumed={() => setSeedQuery(undefined)}
+      initialImages={seedImages}
+      initialSubjects={seedSubjects}
+      onInitialQueryConsumed={() => {
+        setSeedQuery(undefined);
+        setSeedImages(undefined);
+      }}
       resultsPortal={resultsPortal}
       onResultsCountChange={setResultsCount}
     />
@@ -221,7 +258,14 @@ const Hub = () => {
               {/* Opens unfiltered: the whole verified set is the point of the
                   Browse tab, and preference-shaped results are what the AI tab
                   and the new-listings strip are for. */}
-              {mode === 'browse' && <BrowseTable returnTo="/hub" embedded />}
+              {mode === 'browse' && (
+                <BrowseTable
+                  returnTo="/hub"
+                  embedded
+                  initialCompareIds={seedCompareIds}
+                  onCompareOpenChange={setIsComparing}
+                />
+              )}
 
               {/* Always mounted, so the chat has somewhere to put results the
                   moment they arrive rather than only once this tab is opened. */}
@@ -259,7 +303,9 @@ const Hub = () => {
               {/* The vetted-complex directory. Embedded, so profiles open in a
                   panel beside the chat and cards can be selected and asked
                   about, rather than navigating away. */}
-              {mode === 'complexes' && <ComplexDirectory embedded />}
+              {mode === 'complexes' && (
+                <ComplexDirectory embedded onCompareOpenChange={setIsComparing} />
+              )}
 
               {mode === 'map' && (
                 <div className="pb-4">
@@ -287,7 +333,11 @@ const Hub = () => {
             // the chat at 22% of a 2560 screen, an afterthought beside 1240px
             // of table slack, which is what growing with the viewport was
             // supposed to avoid.
-            <aside className="flex w-[clamp(400px,33vw,calc(100vw_-_808px))] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
+            //
+            // The width itself is --hub-rail (src/index.css): every floating
+            // surface on this page positions itself against the same value,
+            // and it used to be spelled out in two files that disagreed.
+            <aside className="flex w-[var(--hub-rail)] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
               <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
                 <span className="font-serif text-base">AI chat</span>

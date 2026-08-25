@@ -22,7 +22,7 @@ import ComplexDetail from "./pages/ComplexDetail";
 import ComplexMap from "./pages/ComplexMap";
 import RealtorApply from "./pages/RealtorApply";
 import OAuthConsent from "./pages/OAuthConsent";
-import { AIAssistant } from "@/components/AIAssistant";
+import { AssistantHandoff } from "@/components/AssistantHandoff";
 
 // Listing data changes on a crawl cadence measured in hours, not seconds, so
 // the stock defaults (staleTime 0 + refetch on every window focus) meant a tab
@@ -69,9 +69,9 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-          {/* Platform-wide floating AI assistant (bottom-left); hides itself
-              when logged out */}
-          <AIAssistant />
+          {/* Carries a card's "ask about this" to the hub's chat, which is
+              the only chat there is now. Renders nothing. */}
+          <AssistantHandoff />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
