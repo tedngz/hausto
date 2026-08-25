@@ -10,8 +10,7 @@
 # promise once a hand-pushed version has drifted. Directories starting with an
 # underscore (_shared) are library code and are bundled into their callers, not
 # deployed - but a change to one still triggers this, because every function
-# importing it needs rebuilding. `mcp` is excluded; see EXCLUDE_FUNCTIONS on
-# the deploy step.
+# importing it needs rebuilding.
 #
 # SETUP - one secret:
 #   SUPABASE_ACCESS_TOKEN  a personal access token from
@@ -94,29 +93,39 @@ jobs:
       # the drift this workflow exists to end.
       #
       # So: deploy each, keep going, and fail the job at the end naming the ones
-      # that did not make it. EXCLUDE_FUNCTIONS holds the known-undeployable -
-      # `mcp` is over the size limit however often it is retried, and failing on
-      # it every time would train everyone to ignore a red deploy.
+      # that did not make it.
+      #
+      # `mcp` needs the other bundler. Its 7 KB source pulls three npm:
+      # specifiers - @lovable.dev/mcp-js, supabase-js, zod - and the local
+      # bundler inlines the whole npm graph, producing a 26 MB script that the
+      # update-function API refuses with 413. --use-api uploads the sources and
+      # bundles them server-side, so the request carries kilobytes instead of
+      # the artifact that was too big to send. API_BUNDLE_FUNCTIONS keeps that
+      # to the function that needs it: the rest deploy the way that already
+      # works, and if the server-side path ever fails, one function fails
+      # rather than the batch.
       - name: Deploy
         if: steps.guard.outputs.configured == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           PROJECT_REF: ${{ steps.project.outputs.ref }}
-          EXCLUDE_FUNCTIONS: mcp
+          API_BUNDLE_FUNCTIONS: mcp
         run: |
           set -uo pipefail
-          deployed=(); failed=(); skipped=()
+          deployed=(); failed=()
 
           for dir in supabase/functions/*/; do
             fn=$(basename "$dir")
             # _shared and friends are library code, bundled into their callers.
             case "$fn" in _*) continue ;; esac
-            if grep -qx "$fn" <<<"${EXCLUDE_FUNCTIONS// /$'\n'}"; then
-              skipped+=("$fn")
-              continue
+            flags=(--project-ref "$PROJECT_REF")
+            if grep -qx "$fn" <<<"${API_BUNDLE_FUNCTIONS// /$'\n'}"; then
+              flags+=(--use-api)
+              echo "::group::$fn (server-side bundle)"
+            else
+              echo "::group::$fn"
             fi
-            echo "::group::$fn"
-            if supabase functions deploy "$fn" --project-ref "$PROJECT_REF"; then
+            if supabase functions deploy "$fn" "${flags[@]}"; then
               deployed+=("$fn")
             else
               failed+=("$fn")
@@ -128,9 +137,8 @@ jobs:
           {
             echo "### Edge functions -> \`$PROJECT_REF\`"
             echo
-            echo "From \`${GITHUB_SHA:0:7}\`. Deployed **${#deployed[@]}**, failed **${#failed[@]}**, skipped **${#skipped[@]}**."
-            [ ${#failed[@]} -gt 0 ]  && { echo; echo "Failed: ${failed[*]}"; }
-            [ ${#skipped[@]} -gt 0 ] && { echo; echo "Skipped (EXCLUDE_FUNCTIONS): ${skipped[*]}"; }
+            echo "From \`${GITHUB_SHA:0:7}\`. Deployed **${#deployed[@]}**, failed **${#failed[@]}**."
+            [ ${#failed[@]} -gt 0 ] && { echo; echo "Failed: ${failed[*]}"; }
             echo
             echo "<details><summary>Deployed</summary>"
             echo
