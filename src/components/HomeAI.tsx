@@ -152,6 +152,9 @@ interface HomeAIProps {
   initialQuery?: string;
   /** Reference images that came with `initialQuery`, sent alongside it. */
   initialImages?: File[];
+  /** Listings pinned before the conversation's first message - what a sparkle
+   *  fired off the hub hands over (see components/AssistantHandoff). */
+  initialSubjects?: AssistantOpenDetail[];
   onInitialQueryConsumed?: () => void;
   /** 'page' is the full-width Discover view; 'rail' fills a narrow docked
    *  column on the hub - no card chrome, thread scrolls, composer pinned. */
@@ -172,6 +175,7 @@ export const HomeAI = ({
   userPreferences,
   initialQuery,
   initialImages,
+  initialSubjects,
   onInitialQueryConsumed,
   variant = 'page',
   resultsPortal,
@@ -184,10 +188,12 @@ export const HomeAI = ({
   // Which reply's listings the main pane is showing. Follows the newest reply
   // that returned any, but an older one can be brought back from the thread.
   const [activeResultsIdx, setActiveResultsIdx] = useState<number | null>(null);
-  // Listings pinned to the conversation. Seeded by a property card's sparkle
-  // (ASSISTANT_OPEN_EVENT) and editable here from the renter's matches, so
-  // support can be asked about one place or several without leaving the chat.
-  const [subjects, setSubjects] = useState<AssistantOpenDetail[]>([]);
+  // Listings pinned to the conversation. Seeded by a property card's sparkle -
+  // the event when it was fired on this page, `initialSubjects` when it was
+  // fired on another one and handed over - and editable here from the renter's
+  // matches, so support can be asked about one place or several without
+  // leaving the chat.
+  const [subjects, setSubjects] = useState<AssistantOpenDetail[]>(initialSubjects ?? []);
   const [isSubjectPickerOpen, setIsSubjectPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);

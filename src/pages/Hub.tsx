@@ -84,6 +84,9 @@ const Hub = () => {
   // One-shot opening message - from the quiz, or carried over from home.
   const [seedQuery, setSeedQuery] = useState<string | undefined>(handoff?.query);
   const [seedImages, setSeedImages] = useState<File[] | undefined>(handoff?.images);
+  // Read once by the chat when it mounts, so it is never cleared: crossing the
+  // rail breakpoint remounts the chat, and the pins should survive that.
+  const [seedSubjects] = useState(handoff?.subjects);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   // Narrow viewports get the chat as a sheet rather than a column. Open from
   // the start for a handed-over message, which is a conversation already in
@@ -165,6 +168,7 @@ const Hub = () => {
       userPreferences={preferences ?? undefined}
       initialQuery={seedQuery}
       initialImages={seedImages}
+      initialSubjects={seedSubjects}
       onInitialQueryConsumed={() => {
         setSeedQuery(undefined);
         setSeedImages(undefined);
