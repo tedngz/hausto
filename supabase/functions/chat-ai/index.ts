@@ -1032,6 +1032,34 @@ function detectComparisonQuery(message: string): boolean {
   return comparisonPatterns.some(p => p.test(message));
 }
 
+// Detect an ADVISORY comparison: the renter has listings (or buildings, or
+// districts) in mind and wants help DECIDING between them - "compare A and B,
+// which fits me best, what are the tradeoffs".
+//
+// Deliberately separate from detectComparisonQuery, which routes into the
+// strict filter path above and answers with cards. This one is the opposite:
+// the renter asked a question, so the answer is prose about the things they
+// named, and a grid of fresh listings buries it. Two ways it was being missed:
+//   - the phrasing the Compare button sends names the listings by title
+//     ("Compare Riverside Apartment ... and Chic Urban Retreat ...") rather
+//     than saying "these", so no comparison pattern matched; and
+//   - those titles contain the word "apartment", which trips the shopping
+//     keyword override and forces a SHOPPING TURN.
+function detectAdvisoryComparison(message: string): boolean {
+  const m = message || '';
+  return (
+    /\bcompare\b/i.test(m) ||
+    /\b(vs\.?|versus)\b/i.test(m) ||
+    /what'?s the difference/i.test(m) ||
+    /pros and cons/i.test(m) ||
+    /trade[- ]?offs?/i.test(m) ||
+    /which (one )?(fits|suits|works|is better|is best|would you)/i.test(m) ||
+    /(fits|suits) me best/i.test(m) ||
+    /should i (pick|choose|go with|take)/i.test(m) ||
+    /help me (decide|choose|pick)/i.test(m)
+  );
+}
+
 // ========== PROPERTY FILTERING & SCORING ==========
 interface PropertyWithScore {
   id: string;
@@ -1741,6 +1769,10 @@ serve(async (req) => {
     
     // Detect if user is asking to compare/filter previous results
     const isComparisonQuery = detectComparisonQuery(message.toLowerCase());
+    // ...and whether that comparison is a request for ADVICE rather than for a
+    // filtered shelf. An advisory compare answers in prose about what the
+    // renter named, never with a fresh search.
+    const isAdvisoryComparison = detectAdvisoryComparison(message);
 
     const sanitizedChatHistory = chatHistory.map(msg => {
       if (msg.role === 'assistant') {
@@ -1994,7 +2026,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
 
     // For comparison queries, we need to check previous properties first
     // Score the previously suggested properties to see which match the new criteria
-    const scoredPreviousProperties = isComparisonQuery && previouslySuggestedProperties.length > 0
+    const scoredPreviousProperties = (isComparisonQuery || isAdvisoryComparison) && previouslySuggestedProperties.length > 0
       ? filterAndScoreProperties(previouslySuggestedProperties, accContext)
       : [];
     
@@ -2002,7 +2034,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
 
     // ========== STRICT COMPARISON MODE ==========
     // If this is a comparison query and we have previous properties, return direct comparison without AI call
-    if (isComparisonQuery && previouslySuggestedProperties.length > 0) {
+    if (isComparisonQuery && !isAdvisoryComparison && previouslySuggestedProperties.length > 0) {
       console.log('[Comparison] STRICT MODE: Evaluating previous properties without AI call');
       
       // Check which previous properties match the new criteria (e.g., have TV, sofa, etc.)
@@ -2251,7 +2283,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
     }
 
     // Build previous properties section for comparison queries
-    const previousPropertiesSection = isComparisonQuery && scoredPreviousProperties.length > 0
+    const previousPropertiesSection = (isComparisonQuery || isAdvisoryComparison) && scoredPreviousProperties.length > 0
       ? `
 🔍 PREVIOUSLY SUGGESTED PROPERTIES (user is asking about these - CHECK THESE FIRST!):
 ${scoredPreviousProperties.map((p, i) => `
@@ -2334,7 +2366,10 @@ ${scoredPreviousProperties.map((p, i) => `
     if (askTagged && !intent.isLifestyle && !intent.isMixed) {
       intent.isLifestyle = true;
     }
-    const shoppingOverride = hasShoppingKeyword(message);
+    // An advisory compare is never shopping, whatever words the listing titles
+    // happen to contain - "Riverside Apartment" is the subject of the question,
+    // not a request for apartments.
+    const shoppingOverride = hasShoppingKeyword(message) && !isAdvisoryComparison;
 
     // PROCESS QUESTIONS: how renting here actually works - viewings, deposits,
     // contracts, agent fees, utilities, paperwork. The lifestyle detector is
@@ -2363,6 +2398,14 @@ ${scoredPreviousProperties.map((p, i) => `
       /\b\d+\s*(m|million|tr|trieu)\b/i.test(message) ||
       /\$\s*\d/.test(message);
     const isComplexInfoTurn = knownComplexes.length > 0 && !shoppingOverride && !hasShoppingNumeric;
+
+    // An advisory compare about listings we can actually name: ones pinned to
+    // the conversation, or ones already shown in it. This is the turn that has
+    // to answer in prose - the candidate shelf below would only bury it.
+    // Keyed off what was PINNED rather than what resolved, so an id we failed
+    // to look up still can't turn "compare these" into a fresh search.
+    const isSubjectComparison =
+      isAdvisoryComparison && (subjectIds.length > 0 || scoredPreviousProperties.length > 0);
     
     if (shoppingOverride && intent.isLifestyle) {
       intent.isMixed = true;
@@ -2380,7 +2423,7 @@ ${scoredPreviousProperties.map((p, i) => `
 
     // On pure lifestyle and complex-info turns, drop the property block from the
     // prompt to save tokens and prevent the model from forcing listings into the answer.
-    const promptProperties = (isPureLifestyle || isComplexInfoTurn) ? [] : topProperties;
+    const promptProperties = (isPureLifestyle || isComplexInfoTurn || isSubjectComparison) ? [] : topProperties;
 
     // ---- Subject listings: the "ask about this one" half of the chat ----
     // Loaded for their titles and for whether we hold a contact or a source
@@ -2391,7 +2434,10 @@ ${scoredPreviousProperties.map((p, i) => `
     // Pinned ids can also be COMPLEXES - the hub lets a renter pin a building
     // the same way they pin a listing, so both arrive on this one channel.
     let subjectComplexes: any[] = [];
-    if (subjectIds.length > 0 && user) {
+    // Loaded whether or not there is an account: a signed-out visitor can pin
+    // listings from the browse table's Compare button, and without their data
+    // the model has nothing to compare and falls back to searching.
+    if (subjectIds.length > 0) {
       const [{ data: internalSubjects }, { data: externalSubjects }, { data: complexSubjects }] = await Promise.all([
         supabase
           .from('properties')
@@ -2470,7 +2516,8 @@ ${previousPropertiesSection}
 ${isComplexInfoTurn ? `🏢 COMPLEX INFO TURN — The user is asking ABOUT a specific complex (${knownComplexes.map((c: any) => c.name).join(', ')}), NOT for listings. Respond using ONLY the "blocks" shape: a "text" block that DIRECTLY and COMPLETELY answers their exact question using KNOWN COMPLEXES above (if they ask about amenities, enumerate the amenities; if about pets, quote the pet policy; if a field is unknown, say so honestly — never invent), then a "followups" block mixing "[Ask]" and "[Search]" (e.g. "[Search] Show me apartments in ${knownComplexes[0]?.name || 'this complex'}"). A compact profile card for the complex is attached automatically by the system — do NOT emit a "complex" block yourself and do NOT pad the text with data the user didn't ask about. DO NOT return a "results" array — the user has not asked for listings yet.` : ''}
 ${isPureLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. You MUST include a separate block of type "followups" containing 2–4 suggestions mixing "[Ask]" and "[Search]". DO NOT put these suggestions inside the "text" block body.` : ''}
 ${intent.isMixed ? `🔀 MIXED TURN — The user wants BOTH lifestyle context AND listings. You MUST return a "results" array with matching property cards AND a "blocks" array. Inside "blocks", include a "text" block (2–4 sentences) AND a separate "followups" block. Both results and blocks are required.` : ''}
-${!isPureLifestyle && !intent.isMixed && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
+${isSubjectComparison ? `⚖️ COMPARISON TURN — The user is weighing up listings they already have in front of them (pinned above, and/or listed under PREVIOUSLY SUGGESTED PROPERTIES), and wants to know which one to take. Answer with the "blocks" shape only: a "text" block (3–6 sentences) that names each one, says what it is better and worse at on the things THIS user has said they care about, and ends with a clear recommendation and why. Do NOT hedge with "it depends" and stop there. You MUST NOT return a "results" array — they did not ask for more listings, and adding them buries the answer. Close with a "followups" block.` : ''}
+${!isPureLifestyle && !intent.isMixed && !isSubjectComparison && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
 
 📊 AVAILABLE PROPERTIES (${promptProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
@@ -2485,13 +2532,18 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : ((isPureLifestyle || isComplexInfoTurn) ? '(Skipped — info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
+`).join('\n') : ((isPureLifestyle || isComplexInfoTurn || isSubjectComparison) ? '(Skipped — info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
 
 
 🧠 CRITICAL INSTRUCTIONS:
 
 1. **COMPARE PREVIOUS RESULTS FIRST** (HIGHEST PRIORITY for comparison queries):
-   ${isComparisonQuery ? `
+   ${isSubjectComparison ? `
+   ⚠️ THIS IS AN ADVISORY COMPARISON - the user wants a recommendation between listings
+   they already have in front of them. Follow the COMPARISON TURN directive above:
+   weigh the ones named/pinned/previously shown against each other and recommend one.
+   Do NOT go looking for new properties - none are offered above, and none belong here.
+   ` : isComparisonQuery ? `
    ⚠️ THIS IS A COMPARISON QUERY - Follow these steps EXACTLY:
    a) Look at the "PREVIOUSLY SUGGESTED PROPERTIES" section above
    b) Check which of those properties have the feature the user is asking about
@@ -3242,11 +3294,11 @@ Maximum ${maxResults} properties in results.`;
     // those in prose, but "DEFAULT TO SHOPPING" is a strong pull and it was
     // attaching listings anyway. Belt and braces on the one thing a renter
     // notices immediately.
-    if ((subjectIds.length > 0 || isProcessQuestion) && !/\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i.test(message)) {
+    if ((subjectIds.length > 0 || isProcessQuestion || isSubjectComparison) && !/\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i.test(message)) {
       try {
         const parsed = JSON.parse(responseContent);
         if (Array.isArray(parsed.results) && parsed.results.length > 0) {
-          console.log(`[chat-ai] dropping ${parsed.results.length} results: question is about ${subjectIds.length} pinned subject(s)`);
+          console.log(`[chat-ai] dropping ${parsed.results.length} results: question is about ${subjectIds.length} pinned subject(s)${isSubjectComparison ? ' (advisory comparison)' : ''}`);
           delete parsed.results;
           responseContent = JSON.stringify(parsed);
         }

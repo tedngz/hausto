@@ -772,6 +772,10 @@ export const HomeAI = ({
           userPreferences: null,
           // Anonymous users don't have saved preferences
           propertyImages: imagesToUse.length > 0 ? await Promise.all(imagesToUse.map(async file => await convertImageToBase64(file))) : [],
+          // Pinned listings travel with a signed-out visitor's message too.
+          // Without them "compare these two" reached the server as a bare
+          // question with nothing pinned, and came back as a fresh search.
+          contextPropertyIds: contextIds,
           // Follow-up chip taps are exempt from the server's anon search limit.
           isFollowup
         };
@@ -1002,6 +1006,7 @@ export const HomeAI = ({
                               key={property.id}
                               apartment={property}
                               compact
+                              flat
                               className="max-w-[300px] w-full mx-auto sm:mx-0"
                               vibeScore={cardVibeScore(property)}
                               scoreContext="search"
@@ -1014,7 +1019,7 @@ export const HomeAI = ({
                         </div>
                         <p className="flex items-center gap-1.5 text-xs text-muted-foreground max-w-[640px]">
                           <Heart className="w-3.5 h-3.5 shrink-0 text-primary fill-primary" aria-hidden="true" />
-                          Like a listing to match with its realtor — you can then chat and arrange a viewing.
+                          Like a listing to save it.
                         </p>
                       </>
                     ))}
@@ -1103,6 +1108,7 @@ export const HomeAI = ({
                         key={property.id}
                         apartment={property}
                         compact
+                        flat
                         className="max-w-[300px] w-full mx-auto sm:mx-0"
                         vibeScore={cardVibeScore(property)}
                                  scoreContext="search"
@@ -1116,7 +1122,7 @@ export const HomeAI = ({
                   </div>
                   <p className={`flex items-center gap-1.5 text-xs text-muted-foreground ${hoistResults ? 'hidden' : ''}`}>
                     <Heart className="w-3.5 h-3.5 shrink-0 text-primary fill-primary" aria-hidden="true" />
-                    Like a listing to match with its realtor — you can then chat and arrange a viewing.
+                    Like a listing to save it.
                   </p>
 
                   {/* Sign-up wall — only once the anonymous search cap is reached */}
@@ -1358,6 +1364,7 @@ export const HomeAI = ({
                   key={property.id}
                   apartment={property}
                   compact
+                  flat
                   vibeScore={cardVibeScore(property)}
                   scoreContext="search"
                   vibeDetailsText={property.matchReason}
@@ -1370,7 +1377,7 @@ export const HomeAI = ({
             </div>
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Heart className="w-3.5 h-3.5 shrink-0 text-primary fill-primary" aria-hidden="true" />
-              Like a listing to match with its realtor — you can then chat and arrange a viewing.
+              Like a listing to save it.
             </p>
           </div>,
           resultsPortal,
