@@ -72,7 +72,11 @@ const Hub = () => {
     clearChatHandoff();
   }, []);
 
-  const [mode, setMode] = useState<HubMode>(handoff ? 'ai' : 'browse');
+  // A carried-over comparison opens on Browse, not AI: the side-by-side panel
+  // belongs to the table, and the chat answers about it from the rail.
+  const [mode, setMode] = useState<HubMode>(
+    handoff?.compareIds ? 'browse' : handoff ? 'ai' : 'browse',
+  );
   // Profile is a full-pane detour rather than a tab - it is account admin, not
   // part of the search loop the tabs describe.
   const [showProfile, setShowProfile] = useState(false);
@@ -87,6 +91,10 @@ const Hub = () => {
   // Read once by the chat when it mounts, so it is never cleared: crossing the
   // rail breakpoint remounts the chat, and the pins should survive that.
   const [seedSubjects] = useState(handoff?.subjects);
+  const [seedCompareIds] = useState(handoff?.compareIds);
+  // Set while either pane has a compare panel up. Both live inside a pane that
+  // is only mounted while its tab is active, so switching tabs closes them.
+  const [isComparing, setIsComparing] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   // Narrow viewports get the chat as a sheet rather than a column. Open from
   // the start for a handed-over message, which is a conversation already in
@@ -101,11 +109,15 @@ const Hub = () => {
   const hasSeenResults = useRef(false);
 
   useEffect(() => {
-    if (resultsCount > 0 && !hasSeenResults.current) {
-      hasSeenResults.current = true;
-      setMode('ai');
-    }
-  }, [resultsCount]);
+    if (resultsCount === 0 || hasSeenResults.current) return;
+    hasSeenResults.current = true;
+    // Not while a comparison is open. Those results are usually the answer to
+    // the comparison itself, and switching tabs to show them would unmount the
+    // panel being compared - the chat's reply is already in the rail, so the
+    // renter loses nothing by staying put.
+    if (isComparing) return;
+    setMode('ai');
+  }, [resultsCount, isComparing]);
 
   // No auth gate: the hub is the public front door. A visitor can browse the
   // whole verified set, read building profiles and try the AI a few times;
@@ -246,7 +258,14 @@ const Hub = () => {
               {/* Opens unfiltered: the whole verified set is the point of the
                   Browse tab, and preference-shaped results are what the AI tab
                   and the new-listings strip are for. */}
-              {mode === 'browse' && <BrowseTable returnTo="/hub" embedded />}
+              {mode === 'browse' && (
+                <BrowseTable
+                  returnTo="/hub"
+                  embedded
+                  initialCompareIds={seedCompareIds}
+                  onCompareOpenChange={setIsComparing}
+                />
+              )}
 
               {/* Always mounted, so the chat has somewhere to put results the
                   moment they arrive rather than only once this tab is opened. */}
@@ -284,7 +303,9 @@ const Hub = () => {
               {/* The vetted-complex directory. Embedded, so profiles open in a
                   panel beside the chat and cards can be selected and asked
                   about, rather than navigating away. */}
-              {mode === 'complexes' && <ComplexDirectory embedded />}
+              {mode === 'complexes' && (
+                <ComplexDirectory embedded onCompareOpenChange={setIsComparing} />
+              )}
 
               {mode === 'map' && (
                 <div className="pb-4">

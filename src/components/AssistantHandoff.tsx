@@ -2,7 +2,12 @@ import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { setChatHandoff } from '@/lib/chatHandoff';
-import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
+import {
+  ASSISTANT_COMPARE_EVENT,
+  ASSISTANT_OPEN_EVENT,
+  type AssistantCompareDetail,
+  type AssistantOpenDetail,
+} from '@/lib/assistantEvents';
 
 /**
  * "Ask the AI about this", fired from anywhere in the app, routed to the one
@@ -17,7 +22,9 @@ import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantE
  *
  * So a card's sparkle off the hub now parks the listing and follows it to the
  * hub, where the rail chat pins it - the same handoff the landing page's
- * composer does with a message.
+ * composer does with a message. Compare travels the same way, carrying the
+ * selection as well, because comparing is both halves at once: the panel in
+ * the main pane and the question about it in the rail.
  *
  * Headless: it renders nothing. On the hub it stands aside, because the rail
  * chat listens for the event itself and pins without anyone navigating.
@@ -45,8 +52,25 @@ export const AssistantHandoff = () => {
       navigate('/hub');
     };
 
+    const onCompare = (event: Event) => {
+      const detail = (event as CustomEvent<AssistantCompareDetail>).detail;
+      if (!detail?.properties?.length) return;
+      const ids = detail.properties
+        .map((p) => p.propertyId)
+        .filter((id): id is string => !!id);
+      // No sign-in wall on this one, unlike a bare sparkle: the prompt names
+      // the listings it is about, so the question still stands on its own for
+      // a signed-out visitor whose pins would not show.
+      setChatHandoff({ subjects: detail.properties, query: detail.prompt, compareIds: ids });
+      navigate('/hub');
+    };
+
     window.addEventListener(ASSISTANT_OPEN_EVENT, onOpen);
-    return () => window.removeEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+    window.addEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
+    return () => {
+      window.removeEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+      window.removeEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
+    };
   }, [user, navigate, location.pathname]);
 
   return null;

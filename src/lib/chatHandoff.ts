@@ -9,7 +9,10 @@ import type { AssistantOpenDetail } from '@/lib/assistantEvents';
  *    answer it - a reply on `/` has no results pane, no table and no matches
  *    beside it;
  *  - a card's sparkle anywhere off the hub, which used to open a floating
- *    assistant panel and now hands the listing over instead.
+ *    assistant panel and now hands the listing over instead;
+ *  - a comparison started off the hub, which needs both halves of the gesture
+ *    - the side-by-side panel and the question about it - and only the hub can
+ *    show them at once.
  *
  * Module state rather than router state or storage: the draft carries image
  * `File`s, which history state and localStorage both handle badly, and it only
@@ -24,6 +27,8 @@ export interface ChatHandoff {
   images?: File[];
   /** Listings or complexes to pin, so the conversation opens about them. */
   subjects?: AssistantOpenDetail[];
+  /** Listing ids the compare panel should reopen on once the table has them. */
+  compareIds?: string[];
 }
 
 let pending: ChatHandoff | null = null;

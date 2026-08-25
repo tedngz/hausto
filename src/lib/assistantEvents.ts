@@ -30,9 +30,11 @@ export interface AssistantOpenDetail {
 //     detail: { properties, prompt },
 //   }));
 
-// Only the hub's chat listens for this one. Off the hub, Compare opens the
-// side-by-side panel in place, and navigating the moment the renter opened it
-// would take that panel away with them.
+// Comparing is one gesture with two halves - the side-by-side panel and the
+// question about what is in it - so both surfaces that raise it open the panel
+// AND fire this. On the hub the chat hears it and asks in the rail while the
+// panel stays up beside it; off the hub AssistantHandoff carries the selection
+// there, where the panel reopens on arrival.
 export const ASSISTANT_COMPARE_EVENT = 'haustoAssistantCompare';
 
 export interface AssistantCompareDetail {
