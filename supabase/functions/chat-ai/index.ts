@@ -2958,7 +2958,16 @@ Maximum ${maxResults} properties in results.`;
     let validatedResults: any[] = [];
     
     const hasResultsArray = extractedJson && Array.isArray(extractedJson.results) && extractedJson.results.length > 0;
-    const aiFailedShopping = (shoppingOverride || !isPureLifestyle) && !isComplexInfoTurn && topProperties.length > 0 && !hasResultsArray;
+    // Turns where a reply with no listings is the CORRECT answer, not a model
+    // failure. Without the comparison turn in here, answering "which of these
+    // two suits me better" in prose - exactly what it is told to do - counted
+    // as a failed search, and the fallback below pasted five pre-scored
+    // properties over the answer ("Here are 5 matching apartments in Ho Chi
+    // Minh City under 20M VND/month"). Note this reads topProperties, which is
+    // still populated on such a turn even though promptProperties is emptied:
+    // the fallback was injecting listings the model was never shown.
+    const isInfoTurn = isPureLifestyle || isComplexInfoTurn || isSubjectComparison;
+    const aiFailedShopping = (shoppingOverride || !isInfoTurn) && !isComplexInfoTurn && topProperties.length > 0 && !hasResultsArray;
 
     if (hasResultsArray || aiFailedShopping) {
       if (hasResultsArray) {
@@ -2970,7 +2979,7 @@ Maximum ${maxResults} properties in results.`;
         if (sanitizedBlocks) extractedJson.blocks = sanitizedBlocks;
       }
       
-      if ((validatedResults.length === 0 || aiFailedShopping) && topProperties.length > 0 && !isPureLifestyle && !isComplexInfoTurn) {
+      if ((validatedResults.length === 0 || aiFailedShopping) && topProperties.length > 0 && !isInfoTurn) {
         console.log('[Validation] AI failed to provide valid shopping results, using fallback from pre-scored properties');
         usedFallback = true;
       } else if (hasResultsArray) {
@@ -3020,7 +3029,7 @@ Maximum ${maxResults} properties in results.`;
 
     
     // FALLBACK: If AI didn't return valid JSON or all results were rejected, use pre-scored properties
-    if (!searchData && topProperties.length > 0 && !isPureLifestyle && !isComplexInfoTurn) {
+    if (!searchData && topProperties.length > 0 && !isInfoTurn) {
       console.log('[Fallback] Generating results from pre-scored properties');
       usedFallback = true;
       
@@ -3141,13 +3150,41 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
-    // Save response to database
-    if (canPersist) {
-      await supabase.from('chat_messages').insert({
-        conversation_id: conversationId,
-        role: 'assistant',
-        content: responseContent
-      });
+    // With listings pinned the default flips: the renter is asking ABOUT those,
+    // not for more of them. "Compare these three" was coming back with a fresh
+    // search attached, which buries the answer. Only an explicit ask for
+    // something new brings results back.
+    //
+    // Deliberately not hasShoppingKeyword() - that matches the word "listings",
+    // which is exactly what someone says when they mean the pinned ones.
+    //
+    // Keyed off what was PINNED, not what resolved: an id we failed to look up
+    // (a complex, a listing since delisted) must still not turn "compare these"
+    // into a fresh search.
+    // Also fires on a process question: the prompt tells the model to answer
+    // those in prose, but "DEFAULT TO SHOPPING" is a strong pull and it was
+    // attaching listings anyway. Belt and braces on the one thing a renter
+    // notices immediately.
+    //
+    // Runs BEFORE the reply is persisted, not after. A signed-in renter's
+    // thread is rendered from chat_messages, not from this HTTP response, so
+    // stripping the response alone left the cards in the row the UI actually
+    // reads - the strip only ever worked for signed-out visitors. searchData
+    // is emptied with it so ai_searches doesn't record a search that was
+    // never shown, and previously-suggested context stays honest.
+    if ((subjectIds.length > 0 || isProcessQuestion || isSubjectComparison) && !/\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i.test(message)) {
+      try {
+        const parsed = JSON.parse(responseContent);
+        if (Array.isArray(parsed.results) && parsed.results.length > 0) {
+          console.log(`[chat-ai] dropping ${parsed.results.length} results: question is about ${subjectIds.length} pinned subject(s)${isSubjectComparison ? ' (advisory comparison)' : ''}`);
+          delete parsed.results;
+          responseContent = JSON.stringify(parsed);
+          if (searchData) {
+            searchData.results = [];
+            searchData.totalMatches = 0;
+          }
+        }
+      } catch { /* non-JSON reply, nothing to strip */ }
     }
 
     // Save search results for authenticated users
@@ -3279,135 +3316,133 @@ Maximum ${maxResults} properties in results.`;
     let contactsRemaining: number | null = null;
     let limitReached = false;
 
-    // With listings pinned the default flips: the renter is asking ABOUT those,
-    // not for more of them. "Compare these three" was coming back with a fresh
-    // search attached, which buries the answer. Only an explicit ask for
-    // something new brings results back.
-    //
-    // Deliberately not hasShoppingKeyword() - that matches the word "listings",
-    // which is exactly what someone says when they mean the pinned ones.
-    //
-    // Keyed off what was PINNED, not what resolved: an id we failed to look up
-    // (a complex, a listing since delisted) must still not turn "compare these"
-    // into a fresh search.
-    // Also fires on a process question: the prompt tells the model to answer
-    // those in prose, but "DEFAULT TO SHOPPING" is a strong pull and it was
-    // attaching listings anyway. Belt and braces on the one thing a renter
-    // notices immediately.
-    if ((subjectIds.length > 0 || isProcessQuestion || isSubjectComparison) && !/\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i.test(message)) {
-      try {
-        const parsed = JSON.parse(responseContent);
-        if (Array.isArray(parsed.results) && parsed.results.length > 0) {
-          console.log(`[chat-ai] dropping ${parsed.results.length} results: question is about ${subjectIds.length} pinned subject(s)${isSubjectComparison ? ' (advisory comparison)' : ''}`);
-          delete parsed.results;
-          responseContent = JSON.stringify(parsed);
+    try {
+      if (user && subjectProperties.length > 0) {
+        const { data: sub } = await supabase
+          .from('subscribers')
+          .select('subscribed, subscription_tier')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        const isPremium = !!sub?.subscribed && sub.subscription_tier === 'premium';
+        const today = new Date().toISOString().split('T')[0];
+        const revealsKey = `usage:${user.id}:${today}:contact-reveals`;
+        const unlocked = new Set<string>();
+        contactsRemaining = isPremium ? null : FREE_DAILY_CONTACT_REVEALS;
+
+        if (!isPremium) {
+          try {
+            contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
+          } catch (e) {
+            console.warn('[chat-ai] reveal count read failed:', String(e).slice(0, 160));
+            contactsRemaining = null;
+          }
         }
-      } catch { /* non-JSON reply, nothing to strip */ }
-    }
 
-    if (user && subjectProperties.length > 0) {
-      const { data: sub } = await supabase
-        .from('subscribers')
-        .select('subscribed, subscription_tier')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      const isPremium = !!sub?.subscribed && sub.subscription_tier === 'premium';
-      const today = new Date().toISOString().split('T')[0];
-      const revealsKey = `usage:${user.id}:${today}:contact-reveals`;
-      const unlocked = new Set<string>();
-      contactsRemaining = isPremium ? null : FREE_DAILY_CONTACT_REVEALS;
-
-      if (!isPremium) {
-        try {
-          contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
-        } catch (e) {
-          console.warn('[chat-ai] reveal count read failed:', String(e).slice(0, 160));
-          contactsRemaining = null;
-        }
-      }
-
-      // Records what actually succeeded rather than comparing ids: a listing
-      // with no contact on file never reaches the allowance, and its link -
-      // then the only route to the owner - still has to pay.
-      const spendReveal = async (propertyId: string): Promise<boolean> => {
-        if (unlocked.has(propertyId)) return true;
-        if (isPremium) { unlocked.add(propertyId); return true; }
-        try {
-          if ((await redis.sismember(revealsKey, propertyId)) === 1) {
+        // Records what actually succeeded rather than comparing ids: a listing
+        // with no contact on file never reaches the allowance, and its link -
+        // then the only route to the owner - still has to pay.
+        const spendReveal = async (propertyId: string): Promise<boolean> => {
+          if (unlocked.has(propertyId)) return true;
+          if (isPremium) { unlocked.add(propertyId); return true; }
+          try {
+            if ((await redis.sismember(revealsKey, propertyId)) === 1) {
+              unlocked.add(propertyId);
+              return true;
+            }
+            if ((await redis.scard(revealsKey)) >= FREE_DAILY_CONTACT_REVEALS) {
+              limitReached = true;
+              contactsRemaining = 0;
+              return false;
+            }
+            await redis.sadd(revealsKey, propertyId);
+            await redis.expire(revealsKey, 60 * 60 * 48);
+            contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
+            unlocked.add(propertyId);
+            return true;
+          } catch (e) {
+            console.warn('[chat-ai] allowance check failed (allowing):', String(e).slice(0, 160));
             unlocked.add(propertyId);
             return true;
           }
-          if ((await redis.scard(revealsKey)) >= FREE_DAILY_CONTACT_REVEALS) {
-            limitReached = true;
-            contactsRemaining = 0;
-            return false;
+        };
+
+        const handover: string[] = [];
+        let exhaustedNoted = false;
+        const noteExhausted = () => {
+          if (exhaustedNoted) return;
+          exhaustedNoted = true;
+          handover.push(`You've used all ${FREE_DAILY_CONTACT_REVEALS} of today's free listing unlocks - a contact and its original listing link count as one. Upgrade to Premium for unlimited unlocks, or come back tomorrow.`);
+        };
+
+        const decision = extractedJson ?? {};
+        const subjectById = (id: unknown) =>
+          typeof id === 'string' ? subjectProperties.find((p) => p.id === id) : undefined;
+
+        const contactTarget = subjectById(decision.reveal_contact_property_id);
+        if (contactTarget) {
+          const name = (contactTarget.property_source_provider_name ?? contactTarget.contact_name) as string | null;
+          const phone = (contactTarget.property_source_provider_phone ?? contactTarget.contact_phone) as string | null;
+          if (!name && !phone) {
+            handover.push(`I don't have a direct owner/realtor contact on file for "${contactTarget.title}". Fast-Track viewing coordination can reach the listing provider for you.`);
+          } else if (await spendReveal(contactTarget.id)) {
+            const lines = [`📞 Contact for "${contactTarget.title}":`];
+            if (name) lines.push(`Name: ${name}`);
+            lines.push(phone ? `Phone: ${phone}` : 'Phone: not listed');
+            handover.push(lines.join('\n'));
+          } else {
+            noteExhausted();
           }
-          await redis.sadd(revealsKey, propertyId);
-          await redis.expire(revealsKey, 60 * 60 * 48);
-          contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
-          unlocked.add(propertyId);
-          return true;
-        } catch (e) {
-          console.warn('[chat-ai] allowance check failed (allowing):', String(e).slice(0, 160));
-          unlocked.add(propertyId);
-          return true;
         }
-      };
 
-      const handover: string[] = [];
-      let exhaustedNoted = false;
-      const noteExhausted = () => {
-        if (exhaustedNoted) return;
-        exhaustedNoted = true;
-        handover.push(`You've used all ${FREE_DAILY_CONTACT_REVEALS} of today's free listing unlocks - a contact and its original listing link count as one. Upgrade to Premium for unlimited unlocks, or come back tomorrow.`);
-      };
+        const linkTarget = subjectById(decision.reveal_listing_link_property_id);
+        if (linkTarget) {
+          const url = (linkTarget.property_source_link ?? linkTarget.source_url) as string | null;
+          if (!url) {
+            handover.push(`I don't have the original listing link on file for "${linkTarget.title}".`);
+          } else if (await spendReveal(linkTarget.id)) {
+            handover.push(`🔗 Original listing: ${url}`);
+          } else {
+            noteExhausted();
+          }
+        }
 
-      const decision = extractedJson ?? {};
-      const subjectById = (id: unknown) =>
-        typeof id === 'string' ? subjectProperties.find((p) => p.id === id) : undefined;
-
-      const contactTarget = subjectById(decision.reveal_contact_property_id);
-      if (contactTarget) {
-        const name = (contactTarget.property_source_provider_name ?? contactTarget.contact_name) as string | null;
-        const phone = (contactTarget.property_source_provider_phone ?? contactTarget.contact_phone) as string | null;
-        if (!name && !phone) {
-          handover.push(`I don't have a direct owner/realtor contact on file for "${contactTarget.title}". Fast-Track viewing coordination can reach the listing provider for you.`);
-        } else if (await spendReveal(contactTarget.id)) {
-          const lines = [`📞 Contact for "${contactTarget.title}":`];
-          if (name) lines.push(`Name: ${name}`);
-          lines.push(phone ? `Phone: ${phone}` : 'Phone: not listed');
-          handover.push(lines.join('\n'));
-        } else {
-          noteExhausted();
+        // Appended as a text block so it renders as prose in the thread, the same
+        // way any other non-listing answer does.
+        if (handover.length > 0) {
+          try {
+            const parsed = JSON.parse(responseContent);
+            parsed.blocks = [
+              ...(Array.isArray(parsed.blocks) ? parsed.blocks : []),
+              { type: 'text', body: handover.join('\n\n') },
+            ];
+            responseContent = JSON.stringify(parsed);
+          } catch {
+            responseContent = `${responseContent}\n\n${handover.join('\n\n')}`;
+          }
         }
       }
+    } catch (handoverError) {
+      // A handover that falls over costs the renter the contact, not the whole
+      // answer - the reply is persisted and returned either way.
+      console.error('[chat-ai] handover failed:', handoverError);
+    }
 
-      const linkTarget = subjectById(decision.reveal_listing_link_property_id);
-      if (linkTarget) {
-        const url = (linkTarget.property_source_link ?? linkTarget.source_url) as string | null;
-        if (!url) {
-          handover.push(`I don't have the original listing link on file for "${linkTarget.title}".`);
-        } else if (await spendReveal(linkTarget.id)) {
-          handover.push(`🔗 Original listing: ${url}`);
-        } else {
-          noteExhausted();
-        }
-      }
-
-      // Appended as a text block so it renders as prose in the thread, the same
-      // way any other non-listing answer does.
-      if (handover.length > 0) {
-        try {
-          const parsed = JSON.parse(responseContent);
-          parsed.blocks = [
-            ...(Array.isArray(parsed.blocks) ? parsed.blocks : []),
-            { type: 'text', body: handover.join('\n\n') },
-          ];
-          responseContent = JSON.stringify(parsed);
-        } catch {
-          responseContent = `${responseContent}\n\n${handover.join('\n\n')}`;
-        }
-      }
+    // ---- Persist the reply, last ----
+    //
+    // Deliberately after everything that shapes it: the pinned-subject strip,
+    // the entitlement strip on contacts, and the handover block above all
+    // rewrite responseContent. A signed-in renter's thread renders from
+    // chat_messages rather than from this response, so a mutation made after
+    // the insert never reaches them - the revealed contact was missing from
+    // the thread while the reveal still spent their daily allowance, and
+    // contacts the caller was not entitled to were being written to the row.
+    if (canPersist) {
+      const { error: saveError } = await supabase.from('chat_messages').insert({
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: responseContent
+      });
+      if (saveError) console.error('[chat-ai] failed to persist assistant message:', saveError.message);
     }
 
     return new Response(JSON.stringify({ response: responseContent, contactsRemaining, limitReached }), {
