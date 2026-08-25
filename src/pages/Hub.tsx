@@ -333,7 +333,11 @@ const Hub = () => {
             // the chat at 22% of a 2560 screen, an afterthought beside 1240px
             // of table slack, which is what growing with the viewport was
             // supposed to avoid.
-            <aside className="flex w-[clamp(400px,33vw,calc(100vw_-_808px))] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
+            //
+            // The width itself is --hub-rail (src/index.css): every floating
+            // surface on this page positions itself against the same value,
+            // and it used to be spelled out in two files that disagreed.
+            <aside className="flex w-[var(--hub-rail)] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
               <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
                 <span className="font-serif text-base">AI chat</span>

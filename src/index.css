@@ -38,6 +38,15 @@ All colors MUST be HSL.
 
     --radius: 1rem;
 
+    /* Width of the hub's chat rail at xl and up. Defined here rather than on
+       the rail element because the hub's floating surfaces have to sit clear
+       of it and they are portaled to the body, out of reach of anything the
+       rail could carry. src/lib/hubLayout.ts does the arithmetic against this;
+       Hub.tsx applies it to the rail itself. Floor: narrow enough to hold a
+       conversation. Ceiling: what the comparison table needs beside it - its
+       760px minimum plus 48px of pane padding. */
+    --hub-rail: clamp(400px, 33vw, calc(100vw - 808px));
+
     --sidebar-background: 0 0% 98%;
 
     --sidebar-foreground: 240 5.3% 26.1%;
