@@ -4,8 +4,9 @@
 // the whole world here. Multi-turn: the client replays the thread as `history`,
 // so the endpoint itself stays stateless and cheap (gpt-4o-mini).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { logOpenAIUsage, isOpenAIBudgetExhausted } from '../_shared/openai-usage.ts';
+import { isOpenAIBudgetExhausted } from '../_shared/openai-usage.ts';
 import { identifyCaller, isRateLimited } from '../_shared/rate-limit.ts';
+import { askCompare } from '../_shared/compare-listings.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,85 +58,31 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Prior turns, oldest first. Capped so a long thread can't blow up the
-    // prompt; only the shapes we emit are trusted through.
-    const priorTurns = (Array.isArray(history) ? history : [])
-      .filter((m: any) => (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string')
-      .slice(-8)
-      .map((m: any) => ({ role: m.role, content: String(m.content).slice(0, 1500) }));
-
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openaiKey) throw new Error('OPENAI_API_KEY not configured');
 
-    const compact = listings.map((l: any, i: number) => ({
-      option: i + 1,
-      title: String(l.title || '').slice(0, 120),
-      location: String(l.location || '').slice(0, 120),
-      price_usd_per_month: l.price_usd ?? null,
-      rooms: l.rooms ?? null,
-      size: l.size ?? null,
-      vibe: l.vibe ?? null,
-      amenities: (l.amenities || []).slice(0, 20),
-      highlights: (l.highlights || []).slice(0, 8),
-      last_verified_at: l.last_verified_at ?? null,
-      postings_by_agents: l.posting_count ?? 1,
-    }));
-
-    // Listings live in the system message so they stay stable context across a
-    // multi-turn thread instead of being restated on every question.
-    const sys = `You are Hausto's rental comparison assistant for expats in Vietnam. The renter has shortlisted these listings and needs help deciding. Answer ONLY from the provided listing data - if something isn't in the data (exact fees, pet policy, availability), say so and suggest confirming at the viewing. Be concise: 3-6 sentences or a short bullet list. Refer to listings by their option number and short name. When a recommendation is asked for, give one, with the tradeoff stated plainly.
-
-This is an ongoing conversation - the renter may ask follow-ups that refer back to what you already said. Don't repeat a full comparison when they ask something narrow; just answer it.
-
-Write plain conversational text. Do NOT use markdown: no **bold**, no *italics*, no ### headings, no tables. For a list, start each line with "- ". Use "-" not em dashes.
-
-Reply with JSON only, shaped exactly:
-{"answer": "your reply", "followups": ["...", "..."]}
-"followups" holds 2-3 short questions the renter would plausibly ask next, in their voice ("Is Option 1 worth the extra $400?"), each under 45 characters. They must follow from what you just said and be answerable from the listing data. Never repeat a question already asked in this conversation. Use [] if nothing useful follows.
-
-Listings:
-${JSON.stringify(compact, null, 1)}${preferences ? `\n\nRenter preferences: ${JSON.stringify(preferences).slice(0, 600)}` : ''}`;
-
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: 500,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: sys },
-          ...priorTurns,
-          { role: 'user', content: String(question).slice(0, 500) },
-        ],
-      }),
+    // The prompt and the OpenAI call live in _shared/compare-listings.ts: the
+    // hub's chat answers the same question when a renter pins listings there,
+    // and one comparison should not have two definitions to drift apart.
+    const { answer, followups } = await askCompare({
+      question,
+      listings: listings.map((l: any) => ({
+        title: l.title,
+        location: l.location,
+        price_usd: l.price_usd ?? null,
+        rooms: l.rooms ?? null,
+        size: l.size ?? null,
+        vibe: l.vibe ?? null,
+        amenities: l.amenities ?? [],
+        highlights: l.highlights ?? [],
+        last_verified_at: l.last_verified_at ?? null,
+        posting_count: l.posting_count ?? null,
+      })),
+      preferences,
+      history,
+      openaiKey,
+      fn: 'compare-listings-ai',
     });
-    if (!resp.ok) {
-      const detail = await resp.text();
-      console.error('[compare-listings-ai] OpenAI error:', resp.status, detail.slice(0, 300));
-      throw new Error(`AI request failed (${resp.status})`);
-    }
-    const data = await resp.json();
-    logOpenAIUsage({ fn: 'compare-listings-ai', model: 'gpt-4o-mini', usage: data?.usage });
-    const raw = data.choices?.[0]?.message?.content?.trim() || '';
-
-    // JSON mode should guarantee the shape, but a malformed reply must still
-    // produce a usable answer rather than dumping braces into the chat.
-    let answer = '';
-    let followups: string[] = [];
-    try {
-      const parsed = JSON.parse(raw);
-      answer = String(parsed?.answer || '').trim();
-      followups = (Array.isArray(parsed?.followups) ? parsed.followups : [])
-        .filter((f: any) => typeof f === 'string' && f.trim())
-        .slice(0, 3)
-        .map((f: string) => f.trim().slice(0, 80));
-    } catch {
-      console.error('[compare-listings-ai] Non-JSON reply:', raw.slice(0, 200));
-      answer = raw;
-    }
-    if (!answer) answer = 'Sorry, I could not analyze these listings.';
 
     return new Response(JSON.stringify({ answer, followups }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
