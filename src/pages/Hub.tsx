@@ -25,6 +25,7 @@ import { useComplexes } from '@/hooks/useComplexes';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { preferencesToSearchQuery } from '@/lib/preferences';
+import { clearChatHandoff, peekChatHandoff } from '@/lib/chatHandoff';
 
 /**
  * Below this the page does not split into two panes at all.
@@ -60,18 +61,34 @@ const Hub = () => {
   } = useUserPreferences();
 
   const hasRail = useMediaQuery(`(min-width: ${RAIL_MIN_VIEWPORT}px)`);
-  const [mode, setMode] = useState<HubMode>('browse');
+
+  // A renter who typed into the landing page's composer arrives with their
+  // message parked, not sent (see lib/chatHandoff). Read during the first
+  // render so the page opens in the shape that message needs - AI tab, chat
+  // open - and dropped in an effect once this instance owns it, so a later
+  // visit to the hub doesn't replay it.
+  const [handoff] = useState(peekChatHandoff);
+  useEffect(() => {
+    clearChatHandoff();
+  }, []);
+
+  const [mode, setMode] = useState<HubMode>(handoff ? 'ai' : 'browse');
   // Profile is a full-pane detour rather than a tab - it is account admin, not
   // part of the search loop the tabs describe.
   const [showProfile, setShowProfile] = useState(false);
   // Set once the quiz is done or dismissed, so it does not reappear while the
-  // saved preferences are still making their way back from the DB.
-  const [skippedOnboarding, setSkippedOnboarding] = useState(false);
-  // One-shot opening message for the quiz handoff.
-  const [seedQuery, setSeedQuery] = useState<string | undefined>(undefined);
+  // saved preferences are still making their way back from the DB. A renter
+  // who arrives mid-sentence from home starts skipped: the quiz would swallow
+  // the message they just sent, and it is still one tap away in the nav menu.
+  const [skippedOnboarding, setSkippedOnboarding] = useState(!!handoff);
+  // One-shot opening message - from the quiz, or carried over from home.
+  const [seedQuery, setSeedQuery] = useState<string | undefined>(handoff?.query);
+  const [seedImages, setSeedImages] = useState<File[] | undefined>(handoff?.images);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
-  // Narrow viewports get the chat as a sheet rather than a column.
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  // Narrow viewports get the chat as a sheet rather than a column. Open from
+  // the start for a handed-over message, which is a conversation already in
+  // progress - collapsed, the reply would arrive behind a closed dock.
+  const [isChatOpen, setIsChatOpen] = useState(!!handoff);
   // The chat renders its listings into this node. Held in state rather than a
   // ref so the first render after it mounts actually reaches HomeAI.
   const [resultsPortal, setResultsPortal] = useState<HTMLDivElement | null>(null);
@@ -147,7 +164,11 @@ const Hub = () => {
       variant="rail"
       userPreferences={preferences ?? undefined}
       initialQuery={seedQuery}
-      onInitialQueryConsumed={() => setSeedQuery(undefined)}
+      initialImages={seedImages}
+      onInitialQueryConsumed={() => {
+        setSeedQuery(undefined);
+        setSeedImages(undefined);
+      }}
       resultsPortal={resultsPortal}
       onResultsCountChange={setResultsCount}
     />

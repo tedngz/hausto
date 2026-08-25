@@ -24,6 +24,7 @@ import { invokeFunction } from '@/integrations/supabase/functions-client';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
+import { setChatHandoff } from '@/lib/chatHandoff';
 import { format } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -146,8 +147,11 @@ const writeAnonSearchCount = (count: number) => {
 interface HomeAIProps {
   userPreferences?: UserPreferences;
   /** When provided, HomeAI auto-sends this as the first message once (used for the
-   *  quiz → AI-search handoff). Cleared by the parent after it fires. */
+   *  quiz → AI-search handoff, and for the landing page's). Cleared by the
+   *  parent after it fires. */
   initialQuery?: string;
+  /** Reference images that came with `initialQuery`, sent alongside it. */
+  initialImages?: File[];
   onInitialQueryConsumed?: () => void;
   /** 'page' is the full-width Discover view; 'rail' fills a narrow docked
    *  column on the hub - no card chrome, thread scrolls, composer pinned. */
@@ -157,14 +161,22 @@ interface HomeAIProps {
   resultsPortal?: HTMLElement | null;
   /** Fires with how many listings are currently on show in the portal. */
   onResultsCountChange?: (count: number) => void;
+  /** Makes this composer a doorway rather than a chat: the first message is
+   *  parked (see lib/chatHandoff) and the renter is sent to /hub, whose chat
+   *  sends it and owns the conversation. What the landing page hero uses -
+   *  answering on `/` left the renter reading results in a page with nowhere
+   *  to take them. */
+  handoffToHub?: boolean;
 }
 export const HomeAI = ({
   userPreferences,
   initialQuery,
+  initialImages,
   onInitialQueryConsumed,
   variant = 'page',
   resultsPortal,
-  onResultsCountChange
+  onResultsCountChange,
+  handoffToHub = false
 }: HomeAIProps) => {
   const isRail = variant === 'rail';
   // True when listings belong in the main pane rather than in the thread.
@@ -212,7 +224,8 @@ export const HomeAI = ({
     toast
   } = useToast();
   const {
-    user
+    user,
+    loading: authLoading
   } = useAuth();
   // Derived here (not with the useState above) so it reads `user` after useAuth runs.
   const anonLimitReached = !user && anonSearchCount >= ANON_SEARCH_LIMIT;
@@ -401,23 +414,28 @@ export const HomeAI = ({
       }
     }
   }, [user]);
-  // Quiz → AI-search handoff: auto-send the preference-derived query exactly once
-  // for a freshly landed logged-in user with an empty conversation.
+  // Opening message, auto-sent exactly once into an empty conversation: the
+  // quiz hands over a preference-derived query, the landing page hands over
+  // whatever the renter typed there.
+  //
+  // Waits on auth resolving rather than on there being a user - a signed-out
+  // visitor's handoff has to send too, and firing while `user` is still null
+  // would push a signed-in renter's first message down the anonymous path.
   useEffect(() => {
     if (!initialQuery || !initialQuery.trim()) return;
     if (initialQuerySentRef.current) return;
-    if (!user) return;
+    if (authLoading) return;
     if (messages.length > 0 || hasSearched) return;
     initialQuerySentRef.current = true;
     setQuery(initialQuery);
     // Defer so the input paints before the request fires.
     const t = setTimeout(() => {
-      handleSearch(initialQuery);
+      handleSearch(initialQuery, { images: initialImages });
       onInitialQueryConsumed?.();
     }, 150);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQuery, user, messages.length]);
+  }, [initialQuery, authLoading, messages.length]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -631,9 +649,13 @@ export const HomeAI = ({
     handleSearch(augmented, { isFollowup: true });
   };
 
-  const handleSearch = async (searchQuery?: string, options?: { isFollowup?: boolean; subjectIds?: string[] }) => {
+  const handleSearch = async (searchQuery?: string, options?: { isFollowup?: boolean; subjectIds?: string[]; images?: File[] }) => {
     const queryToUse = searchQuery || query;
     const isFollowup = !!options?.isFollowup;
+    // Same reasoning as the ids below: a caller handing the message over from
+    // somewhere else (the landing page) passes its attachments in directly
+    // rather than through the composer's state.
+    const imagesToUse = options?.images ?? uploadedImages;
     // Callers that pin listings and ask in the same breath (the compare flow)
     // pass the ids in directly - reading them back out of state here would race
     // the setSubjects that just happened.
@@ -642,6 +664,18 @@ export const HomeAI = ({
 
     // Prevent new messages while AI is processing for both user types
     if (isSendingMessage || isSearching) {
+      return;
+    }
+
+    // The doorway composer doesn't answer: park the message and let the hub's
+    // chat send it. Deliberately ahead of the limit checks below - the message
+    // is only spent where it is actually sent, so the allowance is counted once
+    // and the wall, when it comes, lands on the page the renter ends up on.
+    if (handoffToHub && (queryToUse.trim() || imagesToUse.length > 0)) {
+      setChatHandoff({ query: queryToUse, images: imagesToUse });
+      setQuery('');
+      setUploadedImages([]);
+      navigate('/hub');
       return;
     }
 
@@ -665,7 +699,7 @@ export const HomeAI = ({
       setTimeout(() => navigate('/auth', { state: { returnTo: '/hub' } }), 1500);
       return;
     }
-    if (!queryToUse.trim() && uploadedImages.length === 0) {
+    if (!queryToUse.trim() && imagesToUse.length === 0) {
       toast({
         title: "Please describe your ideal home or upload an image",
         description: "Tell us what you're looking for or show us a reference image",
@@ -676,12 +710,12 @@ export const HomeAI = ({
     if (user) {
       // Show user message immediately for logged-in users
       setTempUserMessageForLoggedIn(queryToUse);
-      setTempUserImages(uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []);
+      setTempUserImages(imagesToUse.length > 0 ? await Promise.all(imagesToUse.map(async file => await convertImageToBase64(file))) : []);
       const messageData = {
         message: queryToUse,
         userType: 'renter' as const,
         userPreferences,
-        propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : [],
+        propertyImages: imagesToUse.length > 0 ? await Promise.all(imagesToUse.map(async file => await convertImageToBase64(file))) : [],
         // Pinned listings travel with every message, so "is this one still
         // available?" resolves without the renter naming it again.
         contextPropertyIds: contextIds
@@ -723,7 +757,7 @@ export const HomeAI = ({
     } else {
       // Handle search for anonymous users - call AI chat directly
       setTempUserMessage(queryToUse); // Show user message immediately
-      setTempUserImages(uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : []);
+      setTempUserImages(imagesToUse.length > 0 ? await Promise.all(imagesToUse.map(async file => await convertImageToBase64(file))) : []);
       setIsSearching(true);
       try {
         const messageData = {
@@ -731,7 +765,7 @@ export const HomeAI = ({
           userType: 'renter' as const,
           userPreferences: null,
           // Anonymous users don't have saved preferences
-          propertyImages: uploadedImages.length > 0 ? await Promise.all(uploadedImages.map(async file => await convertImageToBase64(file))) : [],
+          propertyImages: imagesToUse.length > 0 ? await Promise.all(imagesToUse.map(async file => await convertImageToBase64(file))) : [],
           // Follow-up chip taps are exempt from the server's anon search limit.
           isFollowup
         };
