@@ -279,11 +279,15 @@ const Hub = () => {
 
           {/* ---- Chat rail (xl and up) ---- */}
           {hasRail && (
-            // Grows with the viewport rather than sitting at a fixed width: on
-            // a 1920 screen a 420px column of chat next to 1300px of table
-            // reads as an afterthought. Floor keeps it usable, ceiling stops it
-            // eating the table's width on ultrawide.
-            <aside className="flex w-[clamp(400px,30vw,560px)] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
+            // A third of the viewport, the same share the dock takes on a
+            // phone or tablet. The ceiling is what the table needs rather than
+            // a round number - its 760px minimum plus the main pane's padding
+            // - so it only binds just above RAIL_MIN_VIEWPORT, where the two
+            // genuinely compete for width. A fixed 560px ceiling instead left
+            // the chat at 22% of a 2560 screen, an afterthought beside 1240px
+            // of table slack, which is what growing with the viewport was
+            // supposed to avoid.
+            <aside className="flex w-[clamp(400px,33vw,calc(100vw_-_808px))] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
               <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
                 <span className="font-serif text-base">AI chat</span>
