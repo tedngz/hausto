@@ -1,0 +1,97 @@
+# Ships the Supabase edge functions when they change on main.
+#
+# Until this existed, nothing in the repo deployed supabase/functions - CI
+# type-checked and built the frontend, and the functions were pushed by hand.
+# A fix could sit merged on main for hours while the live function served the
+# old code, and there was no way to tell from the repo which was which.
+#
+# Deploys every function rather than only the ones in the diff: the point is
+# that main and the project agree afterwards, which a per-file deploy can't
+# promise once a hand-pushed version has drifted. Directories starting with an
+# underscore (_shared) are library code and are bundled into their callers, not
+# deployed - but a change to one still triggers this, because every function
+# importing it needs rebuilding.
+#
+# SETUP - one secret:
+#   SUPABASE_ACCESS_TOKEN  a personal access token from
+#                          https://supabase.com/dashboard/account/tokens
+# The project ref comes from `project_id` in supabase/config.toml, which is
+# already committed. Set the optional SUPABASE_PROJECT_REF secret to override
+# it (a staging project, say). Without the access token the job explains what
+# is missing and exits green rather than failing every push to main.
+name: Deploy edge functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/deploy-functions.yml'
+  # Redeploy on demand - after adding the secret, or to resync a project that
+  # was changed outside the repo.
+  workflow_dispatch:
+
+# One deploy at a time, and never cancel one midway: a half-applied deploy
+# leaves the project in a state no commit describes.
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: supabase functions deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the access token is configured
+        id: guard
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::SUPABASE_ACCESS_TOKEN is not set. Add it under Settings → Secrets and variables → Actions to deploy the edge functions on merge."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve the project ref
+        if: steps.guard.outputs.configured == 'true'
+        id: project
+        env:
+          OVERRIDE: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          if [ -n "$OVERRIDE" ]; then
+            ref="$OVERRIDE"
+            echo "Using SUPABASE_PROJECT_REF override."
+          else
+            # project_id = "abcdefghijklmnopqrst" - first match wins
+            ref=$(sed -n 's/^[[:space:]]*project_id[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' supabase/config.toml | head -1)
+            echo "Using project_id from supabase/config.toml."
+          fi
+          if [ -z "$ref" ]; then
+            echo "::error title=No project ref::supabase/config.toml has no project_id and SUPABASE_PROJECT_REF is not set."
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - uses: supabase/setup-cli@v1
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          version: latest
+
+      - name: Deploy
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy --project-ref "${{ steps.project.outputs.ref }}"
+
+      - name: Summary
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          echo "Deployed every function in supabase/functions to \`${{ steps.project.outputs.ref }}\` from ${GITHUB_SHA:0:7}." >> "$GITHUB_STEP_SUMMARY"
