@@ -28,3 +28,16 @@ supabase/.temp
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+
+# Database dumps: never commit these. The old Supabase export lived at the
+# repo root and carried auth.users rows (bcrypt hashes, refresh and
+# confirmation tokens) for real accounts. Migrations belong in
+# supabase/migrations, one-off SQL in scripts/sql.
+/*.sql
+
+# npm is the lockfile of record: CI runs `npm ci` and the README says npm.
+# Lovable's import left bun.lock and bun.lockb behind; a second lockfile
+# only invites the two drifting apart. deno.lock stays - it pins the edge
+# functions' remote imports.
+bun.lock
+bun.lockb
