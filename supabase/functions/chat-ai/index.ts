@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { Redis } from "https://esm.sh/@upstash/redis@latest";
 import { detectLifestyleIntent, findRelevantKB, formatKBBlock, hasShoppingKeyword } from "../_shared/lifestyle-kb.ts";
+import { askCompare } from "../_shared/compare-listings.ts";
 import { logOpenAIUsage } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
@@ -2454,6 +2455,89 @@ ${scoredPreviousProperties.map((p, i) => `
       ]);
       subjectProperties = [...(internalSubjects ?? []), ...(externalSubjects ?? [])];
       subjectComplexes = complexSubjects ?? [];
+    }
+
+    // ========== COMPARISON TURN: answered by the comparison engine ==========
+    // A renter weighing up listings they have pinned does not go through the
+    // prompt below. That prompt is built to sell a search - scored candidates,
+    // priority ordering, "DEFAULT TO SHOPPING" - and asked to compare, it kept
+    // answering with a fresh one. Guard after guard downstream only pulled the
+    // listings back off an answer that had already been written as a search.
+    //
+    // _shared/compare-listings.ts has no candidates in it and no "results"
+    // field to fill, so a comparison cannot come back as a search. Same engine
+    // the compare dialog's own endpoint uses.
+    //
+    // Needs at least two listings resolved: with one (or none, if the ids were
+    // stale) there is nothing to weigh, and the main prompt answers better.
+    // A request for the owner's number goes there too - the handover lives on
+    // that path, behind the renter's daily allowance.
+    const wantsHandover = /\b(contact|phone|number|call|whatsapp|zalo|owner|landlord|agent|realtor|link|url|listing page)\b/i.test(message);
+    if (isSubjectComparison && subjectProperties.length >= 2 && !wantsHandover) {
+      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+      if (OPENAI_API_KEY) {
+        try {
+          // Assistant turns are stored as the JSON the UI renders; the engine
+          // wants what the renter actually read, so pull the prose back out.
+          const compareHistory = chatHistory.slice(-6).map((m: any) => {
+            if (m.role !== 'assistant') return { role: m.role, content: String(m.content ?? '') };
+            let text = String(m.content ?? '');
+            try {
+              const parsed = JSON.parse(text);
+              const bodies = (Array.isArray(parsed?.blocks) ? parsed.blocks : [])
+                .filter((b: any) => b?.type === 'text' && b.body)
+                .map((b: any) => String(b.body));
+              text = [parsed?.summary, ...bodies].filter(Boolean).join('\n\n') || text;
+            } catch { /* plain prose already */ }
+            return { role: 'assistant', content: text };
+          });
+
+          const { answer, followups } = await askCompare({
+            question: message,
+            listings: subjectProperties.slice(0, 4).map((p: any) => ({
+              title: p.title,
+              location: p.location,
+              price_vnd: p.price != null ? Number(p.price) : null,
+              rooms: p.rooms ?? null,
+              size: p.size ?? null,
+              vibe: p.vibe ?? null,
+              amenities: (p.amenities as string[]) ?? [],
+              highlights: (p.highlights as string[]) ?? [],
+            })),
+            preferences: constraintsSummary.length > 0 ? { requirements: constraintsSummary } : undefined,
+            history: compareHistory,
+            openaiKey: OPENAI_API_KEY,
+            fn: 'chat-ai:compare',
+          });
+
+          const blocks: any[] = [{ type: 'text', body: answer }];
+          if (followups.length > 0) {
+            // Tagged so the UI renders them as questions rather than searches -
+            // every one of them is about the listings already pinned.
+            blocks.push({ type: 'followups', suggestions: followups.map((f) => `[Ask] ${f}`) });
+          }
+          const comparisonContent = JSON.stringify({ results: [], summary: '', totalMatches: 0, blocks });
+
+          if (canPersist) {
+            const { error: saveError } = await supabase.from('chat_messages').insert({
+              conversation_id: conversationId,
+              role: 'assistant',
+              content: comparisonContent,
+            });
+            if (saveError) console.error('[chat-ai:compare] failed to persist reply:', saveError.message);
+          }
+
+          console.log(`[chat-ai:compare] answered on ${subjectProperties.length} pinned listing(s), no search`);
+          return new Response(
+            JSON.stringify({ response: comparisonContent, contactsRemaining: null, limitReached: false }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+          );
+        } catch (compareError) {
+          // Fall through to the main path rather than failing the turn - it
+          // still answers, it just answers from the bigger prompt.
+          console.error('[chat-ai:compare] failed, falling back to the main prompt:', compareError);
+        }
+      }
     }
 
     const complexSubjectBlock = subjectComplexes.length === 0 ? '' : `
