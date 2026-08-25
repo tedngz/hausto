@@ -368,7 +368,7 @@ export const EditorialPropertyCard = ({
 
   return (
     <article
-      className={`group w-full overflow-hidden rounded-[22px] bg-card text-foreground border border-border/60 shadow-[0_28px_70px_-30px_rgba(0,0,0,0.45)] ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
+      className={`group w-full overflow-hidden rounded-[22px] bg-card text-foreground border border-border/60 ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onClick={() => {
         if (swipedRef.current) {
           swipedRef.current = false;
