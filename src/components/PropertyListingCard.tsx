@@ -190,7 +190,7 @@ export const PropertyListingCard = ({
   };
 
   return (
-    <article className="w-full overflow-hidden rounded-[22px] bg-card text-foreground border border-border/60 shadow-[0_28px_70px_-30px_rgba(0,0,0,0.45)]">
+    <article className="w-full overflow-hidden rounded-[22px] bg-card text-foreground border border-border/60">
       {/* ===== Gallery — 3:2 so the photo carries the page ===== */}
       <div className="relative w-full aspect-[4/3] sm:aspect-[3/2] overflow-hidden bg-foreground">
         {/* Blurred fill behind letterboxed portrait photos */}

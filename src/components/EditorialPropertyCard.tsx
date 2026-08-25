@@ -87,9 +87,6 @@ interface EditorialPropertyCardProps {
   defaultExpanded?: boolean;
   /** Extra actions rendered in the top-right cluster, before the share/like buttons (e.g. a delete button) */
   topRightActions?: ReactNode;
-  /** Drop the ambient drop shadow. For shelves where the cards already sit on
-   *  their own panel and the shadow reads as a grey smudge around each one. */
-  flat?: boolean;
   className?: string;
 }
 
@@ -131,7 +128,6 @@ export const EditorialPropertyCard = ({
   compact = false,
   defaultExpanded = false,
   topRightActions,
-  flat = false,
   className = '',
 }: EditorialPropertyCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
@@ -372,7 +368,7 @@ export const EditorialPropertyCard = ({
 
   return (
     <article
-      className={`group w-full overflow-hidden rounded-[22px] bg-card text-foreground border border-border/60 ${flat ? '' : 'shadow-[0_28px_70px_-30px_rgba(0,0,0,0.45)]'} ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
+      className={`group w-full overflow-hidden rounded-[22px] bg-card text-foreground border border-border/60 ${onCardClick ? 'cursor-pointer' : ''} ${className}`}
       onClick={() => {
         if (swipedRef.current) {
           swipedRef.current = false;

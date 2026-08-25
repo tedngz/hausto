@@ -1006,7 +1006,6 @@ export const HomeAI = ({
                               key={property.id}
                               apartment={property}
                               compact
-                              flat
                               className="max-w-[300px] w-full mx-auto sm:mx-0"
                               vibeScore={cardVibeScore(property)}
                               scoreContext="search"
@@ -1108,7 +1107,6 @@ export const HomeAI = ({
                         key={property.id}
                         apartment={property}
                         compact
-                        flat
                         className="max-w-[300px] w-full mx-auto sm:mx-0"
                         vibeScore={cardVibeScore(property)}
                                  scoreContext="search"
@@ -1364,7 +1362,6 @@ export const HomeAI = ({
                   key={property.id}
                   apartment={property}
                   compact
-                  flat
                   vibeScore={cardVibeScore(property)}
                   scoreContext="search"
                   vibeDetailsText={property.matchReason}
