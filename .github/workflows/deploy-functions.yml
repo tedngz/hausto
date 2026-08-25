@@ -10,7 +10,8 @@
 # promise once a hand-pushed version has drifted. Directories starting with an
 # underscore (_shared) are library code and are bundled into their callers, not
 # deployed - but a change to one still triggers this, because every function
-# importing it needs rebuilding.
+# importing it needs rebuilding. `mcp` is excluded; see EXCLUDE_FUNCTIONS on
+# the deploy step.
 #
 # SETUP - one secret:
 #   SUPABASE_ACCESS_TOKEN  a personal access token from
@@ -85,13 +86,57 @@ jobs:
         with:
           version: latest
 
+      # One function at a time, rather than `supabase functions deploy` with no
+      # arguments. That form stops at the first failure, and the first run hit
+      # one: `mcp` bundles to 26 MB (it inlines @lovable.dev/mcp-js) and the API
+      # rejects it with 413. Everything alphabetically after it was skipped
+      # without a word - a partial deploy that reads like a full one is exactly
+      # the drift this workflow exists to end.
+      #
+      # So: deploy each, keep going, and fail the job at the end naming the ones
+      # that did not make it. EXCLUDE_FUNCTIONS holds the known-undeployable -
+      # `mcp` is over the size limit however often it is retried, and failing on
+      # it every time would train everyone to ignore a red deploy.
       - name: Deploy
         if: steps.guard.outputs.configured == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy --project-ref "${{ steps.project.outputs.ref }}"
-
-      - name: Summary
-        if: steps.guard.outputs.configured == 'true'
+          PROJECT_REF: ${{ steps.project.outputs.ref }}
+          EXCLUDE_FUNCTIONS: mcp
         run: |
-          echo "Deployed every function in supabase/functions to \`${{ steps.project.outputs.ref }}\` from ${GITHUB_SHA:0:7}." >> "$GITHUB_STEP_SUMMARY"
+          set -uo pipefail
+          deployed=(); failed=(); skipped=()
+
+          for dir in supabase/functions/*/; do
+            fn=$(basename "$dir")
+            # _shared and friends are library code, bundled into their callers.
+            case "$fn" in _*) continue ;; esac
+            if grep -qx "$fn" <<<"${EXCLUDE_FUNCTIONS// /$'\n'}"; then
+              skipped+=("$fn")
+              continue
+            fi
+            echo "::group::$fn"
+            if supabase functions deploy "$fn" --project-ref "$PROJECT_REF"; then
+              deployed+=("$fn")
+            else
+              failed+=("$fn")
+              echo "::error title=Deploy failed::$fn was not deployed."
+            fi
+            echo "::endgroup::"
+          done
+
+          {
+            echo "### Edge functions -> \`$PROJECT_REF\`"
+            echo
+            echo "From \`${GITHUB_SHA:0:7}\`. Deployed **${#deployed[@]}**, failed **${#failed[@]}**, skipped **${#skipped[@]}**."
+            [ ${#failed[@]} -gt 0 ]  && { echo; echo "Failed: ${failed[*]}"; }
+            [ ${#skipped[@]} -gt 0 ] && { echo; echo "Skipped (EXCLUDE_FUNCTIONS): ${skipped[*]}"; }
+            echo
+            echo "<details><summary>Deployed</summary>"
+            echo
+            printf -- '- %s\n' "${deployed[@]}"
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          [ ${#failed[@]} -eq 0 ]
