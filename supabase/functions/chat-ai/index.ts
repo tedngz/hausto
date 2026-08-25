@@ -3187,15 +3187,6 @@ Maximum ${maxResults} properties in results.`;
       } catch { /* non-JSON reply, nothing to strip */ }
     }
 
-    // Save response to database
-    if (canPersist) {
-      await supabase.from('chat_messages').insert({
-        conversation_id: conversationId,
-        role: 'assistant',
-        content: responseContent
-      });
-    }
-
     // Save search results for authenticated users
     if (searchData && user?.id && canPersist) {
       try {
@@ -3325,109 +3316,133 @@ Maximum ${maxResults} properties in results.`;
     let contactsRemaining: number | null = null;
     let limitReached = false;
 
-    if (user && subjectProperties.length > 0) {
-      const { data: sub } = await supabase
-        .from('subscribers')
-        .select('subscribed, subscription_tier')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      const isPremium = !!sub?.subscribed && sub.subscription_tier === 'premium';
-      const today = new Date().toISOString().split('T')[0];
-      const revealsKey = `usage:${user.id}:${today}:contact-reveals`;
-      const unlocked = new Set<string>();
-      contactsRemaining = isPremium ? null : FREE_DAILY_CONTACT_REVEALS;
+    try {
+      if (user && subjectProperties.length > 0) {
+        const { data: sub } = await supabase
+          .from('subscribers')
+          .select('subscribed, subscription_tier')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        const isPremium = !!sub?.subscribed && sub.subscription_tier === 'premium';
+        const today = new Date().toISOString().split('T')[0];
+        const revealsKey = `usage:${user.id}:${today}:contact-reveals`;
+        const unlocked = new Set<string>();
+        contactsRemaining = isPremium ? null : FREE_DAILY_CONTACT_REVEALS;
 
-      if (!isPremium) {
-        try {
-          contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
-        } catch (e) {
-          console.warn('[chat-ai] reveal count read failed:', String(e).slice(0, 160));
-          contactsRemaining = null;
+        if (!isPremium) {
+          try {
+            contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
+          } catch (e) {
+            console.warn('[chat-ai] reveal count read failed:', String(e).slice(0, 160));
+            contactsRemaining = null;
+          }
         }
-      }
 
-      // Records what actually succeeded rather than comparing ids: a listing
-      // with no contact on file never reaches the allowance, and its link -
-      // then the only route to the owner - still has to pay.
-      const spendReveal = async (propertyId: string): Promise<boolean> => {
-        if (unlocked.has(propertyId)) return true;
-        if (isPremium) { unlocked.add(propertyId); return true; }
-        try {
-          if ((await redis.sismember(revealsKey, propertyId)) === 1) {
+        // Records what actually succeeded rather than comparing ids: a listing
+        // with no contact on file never reaches the allowance, and its link -
+        // then the only route to the owner - still has to pay.
+        const spendReveal = async (propertyId: string): Promise<boolean> => {
+          if (unlocked.has(propertyId)) return true;
+          if (isPremium) { unlocked.add(propertyId); return true; }
+          try {
+            if ((await redis.sismember(revealsKey, propertyId)) === 1) {
+              unlocked.add(propertyId);
+              return true;
+            }
+            if ((await redis.scard(revealsKey)) >= FREE_DAILY_CONTACT_REVEALS) {
+              limitReached = true;
+              contactsRemaining = 0;
+              return false;
+            }
+            await redis.sadd(revealsKey, propertyId);
+            await redis.expire(revealsKey, 60 * 60 * 48);
+            contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
+            unlocked.add(propertyId);
+            return true;
+          } catch (e) {
+            console.warn('[chat-ai] allowance check failed (allowing):', String(e).slice(0, 160));
             unlocked.add(propertyId);
             return true;
           }
-          if ((await redis.scard(revealsKey)) >= FREE_DAILY_CONTACT_REVEALS) {
-            limitReached = true;
-            contactsRemaining = 0;
-            return false;
+        };
+
+        const handover: string[] = [];
+        let exhaustedNoted = false;
+        const noteExhausted = () => {
+          if (exhaustedNoted) return;
+          exhaustedNoted = true;
+          handover.push(`You've used all ${FREE_DAILY_CONTACT_REVEALS} of today's free listing unlocks - a contact and its original listing link count as one. Upgrade to Premium for unlimited unlocks, or come back tomorrow.`);
+        };
+
+        const decision = extractedJson ?? {};
+        const subjectById = (id: unknown) =>
+          typeof id === 'string' ? subjectProperties.find((p) => p.id === id) : undefined;
+
+        const contactTarget = subjectById(decision.reveal_contact_property_id);
+        if (contactTarget) {
+          const name = (contactTarget.property_source_provider_name ?? contactTarget.contact_name) as string | null;
+          const phone = (contactTarget.property_source_provider_phone ?? contactTarget.contact_phone) as string | null;
+          if (!name && !phone) {
+            handover.push(`I don't have a direct owner/realtor contact on file for "${contactTarget.title}". Fast-Track viewing coordination can reach the listing provider for you.`);
+          } else if (await spendReveal(contactTarget.id)) {
+            const lines = [`📞 Contact for "${contactTarget.title}":`];
+            if (name) lines.push(`Name: ${name}`);
+            lines.push(phone ? `Phone: ${phone}` : 'Phone: not listed');
+            handover.push(lines.join('\n'));
+          } else {
+            noteExhausted();
           }
-          await redis.sadd(revealsKey, propertyId);
-          await redis.expire(revealsKey, 60 * 60 * 48);
-          contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
-          unlocked.add(propertyId);
-          return true;
-        } catch (e) {
-          console.warn('[chat-ai] allowance check failed (allowing):', String(e).slice(0, 160));
-          unlocked.add(propertyId);
-          return true;
         }
-      };
 
-      const handover: string[] = [];
-      let exhaustedNoted = false;
-      const noteExhausted = () => {
-        if (exhaustedNoted) return;
-        exhaustedNoted = true;
-        handover.push(`You've used all ${FREE_DAILY_CONTACT_REVEALS} of today's free listing unlocks - a contact and its original listing link count as one. Upgrade to Premium for unlimited unlocks, or come back tomorrow.`);
-      };
+        const linkTarget = subjectById(decision.reveal_listing_link_property_id);
+        if (linkTarget) {
+          const url = (linkTarget.property_source_link ?? linkTarget.source_url) as string | null;
+          if (!url) {
+            handover.push(`I don't have the original listing link on file for "${linkTarget.title}".`);
+          } else if (await spendReveal(linkTarget.id)) {
+            handover.push(`🔗 Original listing: ${url}`);
+          } else {
+            noteExhausted();
+          }
+        }
 
-      const decision = extractedJson ?? {};
-      const subjectById = (id: unknown) =>
-        typeof id === 'string' ? subjectProperties.find((p) => p.id === id) : undefined;
-
-      const contactTarget = subjectById(decision.reveal_contact_property_id);
-      if (contactTarget) {
-        const name = (contactTarget.property_source_provider_name ?? contactTarget.contact_name) as string | null;
-        const phone = (contactTarget.property_source_provider_phone ?? contactTarget.contact_phone) as string | null;
-        if (!name && !phone) {
-          handover.push(`I don't have a direct owner/realtor contact on file for "${contactTarget.title}". Fast-Track viewing coordination can reach the listing provider for you.`);
-        } else if (await spendReveal(contactTarget.id)) {
-          const lines = [`📞 Contact for "${contactTarget.title}":`];
-          if (name) lines.push(`Name: ${name}`);
-          lines.push(phone ? `Phone: ${phone}` : 'Phone: not listed');
-          handover.push(lines.join('\n'));
-        } else {
-          noteExhausted();
+        // Appended as a text block so it renders as prose in the thread, the same
+        // way any other non-listing answer does.
+        if (handover.length > 0) {
+          try {
+            const parsed = JSON.parse(responseContent);
+            parsed.blocks = [
+              ...(Array.isArray(parsed.blocks) ? parsed.blocks : []),
+              { type: 'text', body: handover.join('\n\n') },
+            ];
+            responseContent = JSON.stringify(parsed);
+          } catch {
+            responseContent = `${responseContent}\n\n${handover.join('\n\n')}`;
+          }
         }
       }
+    } catch (handoverError) {
+      // A handover that falls over costs the renter the contact, not the whole
+      // answer - the reply is persisted and returned either way.
+      console.error('[chat-ai] handover failed:', handoverError);
+    }
 
-      const linkTarget = subjectById(decision.reveal_listing_link_property_id);
-      if (linkTarget) {
-        const url = (linkTarget.property_source_link ?? linkTarget.source_url) as string | null;
-        if (!url) {
-          handover.push(`I don't have the original listing link on file for "${linkTarget.title}".`);
-        } else if (await spendReveal(linkTarget.id)) {
-          handover.push(`🔗 Original listing: ${url}`);
-        } else {
-          noteExhausted();
-        }
-      }
-
-      // Appended as a text block so it renders as prose in the thread, the same
-      // way any other non-listing answer does.
-      if (handover.length > 0) {
-        try {
-          const parsed = JSON.parse(responseContent);
-          parsed.blocks = [
-            ...(Array.isArray(parsed.blocks) ? parsed.blocks : []),
-            { type: 'text', body: handover.join('\n\n') },
-          ];
-          responseContent = JSON.stringify(parsed);
-        } catch {
-          responseContent = `${responseContent}\n\n${handover.join('\n\n')}`;
-        }
-      }
+    // ---- Persist the reply, last ----
+    //
+    // Deliberately after everything that shapes it: the pinned-subject strip,
+    // the entitlement strip on contacts, and the handover block above all
+    // rewrite responseContent. A signed-in renter's thread renders from
+    // chat_messages rather than from this response, so a mutation made after
+    // the insert never reaches them - the revealed contact was missing from
+    // the thread while the reveal still spent their daily allowance, and
+    // contacts the caller was not entitled to were being written to the row.
+    if (canPersist) {
+      const { error: saveError } = await supabase.from('chat_messages').insert({
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: responseContent
+      });
+      if (saveError) console.error('[chat-ai] failed to persist assistant message:', saveError.message);
     }
 
     return new Response(JSON.stringify({ response: responseContent, contactsRemaining, limitReached }), {
