@@ -193,11 +193,6 @@ export const HomeAI = ({
   // Which reply's listings the main pane is showing. Follows the newest reply
   // that returned any, but an older one can be brought back from the thread.
   const [activeResultsIdx, setActiveResultsIdx] = useState<number | null>(null);
-  // Set when the renter brings a particular reply's listings back themselves.
-  // A deliberate pick holds the pane: a later reply's results no longer swap
-  // themselves in over a set the renter chose to look at - the thread still
-  // offers them as a chip, so nothing is lost, it just isn't automatic.
-  const [pickedResultsIdx, setPickedResultsIdx] = useState<number | null>(null);
   // Listings pinned to the conversation. Seeded by a property card's sparkle -
   // the event when it was fired on this page, `initialSubjects` when it was
   // fired on another one and handed over - and editable here from the renter's
@@ -287,19 +282,8 @@ export const HomeAI = ({
   }, [parsedMessages]);
 
   useEffect(() => {
-    // A pick only holds while it still exists: switching conversations or
-    // starting a fresh chat reshuffles the thread, and a stale index would
-    // leave the main pane empty with no way back.
-    const pickHolds =
-      pickedResultsIdx !== null &&
-      (parsedMessages[pickedResultsIdx]?.searchResults?.results.length ?? 0) > 0;
-    if (pickHolds) {
-      setActiveResultsIdx(pickedResultsIdx);
-      return;
-    }
-    if (pickedResultsIdx !== null) setPickedResultsIdx(null);
     setActiveResultsIdx(latestResultsIdx);
-  }, [latestResultsIdx, pickedResultsIdx, parsedMessages]);
+  }, [latestResultsIdx]);
 
   // Signed-in threads come from the DB; a signed-out visitor's one-shot search
   // lives in local state instead. Both feed the main pane the same way.
@@ -359,7 +343,33 @@ export const HomeAI = ({
         ? prev.filter((s) => s.propertyId !== option.propertyId)
         : [...prev, { propertyId: option.propertyId, title: option.title }],
     );
+    // One pick, one decision: the list closes behind it rather than staying
+    // open over the thread. Asking about a second listing is what the chip -
+    // now reading "Add" - is for, and that is the renter's move to make.
+    setIsSubjectPickerOpen(false);
   };
+
+  // Anywhere else, or Escape: the picker is a menu, and a menu that only the
+  // chip can dismiss sits on top of the reply the renter is trying to read.
+  const subjectPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isSubjectPickerOpen) return;
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const el = subjectPickerRef.current;
+      if (el && !el.contains(event.target as Node)) setIsSubjectPickerOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsSubjectPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isSubjectPickerOpen]);
 
   useEffect(() => {
     onResultsCountChange?.(activeResults?.results.length ?? 0);
@@ -496,8 +506,6 @@ export const HomeAI = ({
     setTempUserImages([]);
     setLikedProperties(new Set());
     setIsFastTrackBannerDismissed(false);
-    // A different thread's reply sits at that index now, so the pick is void.
-    setPickedResultsIdx(null);
     // Clear any stored pending queries
     localStorage.removeItem('pendingSearchQuery');
   };
@@ -511,7 +519,6 @@ export const HomeAI = ({
     setTempUserMessageForLoggedIn(null);
     setTempUserImages([]);
     setSearchResults(null); // Clear anonymous search results
-    setPickedResultsIdx(null); // Belongs to the thread being left behind
 
     // Ensure the conversation has messages, if not, it might be an empty one
     const {
@@ -1019,10 +1026,7 @@ export const HomeAI = ({
                       // keeps a handle so an earlier search can be pulled back.
                       <button
                         type="button"
-                        onClick={() => {
-                          setActiveResultsIdx(index);
-                          setPickedResultsIdx(index);
-                        }}
+                        onClick={() => setActiveResultsIdx(index)}
                         disabled={isShowing}
                         className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
                           isShowing
@@ -1260,7 +1264,7 @@ export const HomeAI = ({
           ))}
 
           {subjectOptions.length > 0 && (
-            <div className="relative">
+            <div className="relative" ref={subjectPickerRef}>
               <button
                 className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground"
                 aria-expanded={isSubjectPickerOpen}
