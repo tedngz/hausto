@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { HaustoLogo } from "@/components/HaustoLogo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare, LogOut } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
@@ -41,10 +42,7 @@ export const LandingPage = () => {
       {/* Header */}
       <header className="container mx-auto px-4 py-4 md:py-6">
         <nav className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="h-6 w-6 md:h-8 md:w-8" />
-            <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
-          </div>
+          <HaustoLogo />
           <div className="flex items-center gap-2 md:gap-4">
             {user ? <>
                 <span className="hidden sm:block text-xs md:text-sm text-muted-foreground truncate max-w-32 md:max-w-none">
@@ -192,10 +190,7 @@ export const LandingPage = () => {
       {/* Footer */}
       <footer className="bg-card border-t border-border py-8">
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-center space-x-2">
-            <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="h-6 w-6" />
-            <span className="text-lg font-semibold text-foreground">Hausto</span>
-          </div>
+          <HaustoLogo size="sm" className="justify-center" />
           <p className="text-center text-muted-foreground mt-2">© 2025 Hausto. All rights reserved.</p>
           <p className="text-center text-muted-foreground mt-1">
             <a href="mailto:hello@hausto.com" className="hover:text-foreground transition-colors">hello@hausto.com</a>

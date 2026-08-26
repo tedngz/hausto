@@ -1224,7 +1224,7 @@ export const HomeAI = ({
                 className="underline underline-offset-2 hover:text-foreground"
                 onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
               >
-                sign in
+                Sign in
               </button>{' '}
               for more, and to save what you find.
             </p>

@@ -1,5 +1,6 @@
 
 import { useNavigate } from 'react-router-dom';
+import { HaustoLogo } from '@/components/HaustoLogo';
 import { UserMenu } from '@/components/UserMenu';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,14 +31,7 @@ export const HubNavigation = ({ onViewProfile, onRestartOnboarding }: HubNavigat
         onClick={() => navigate('/')}
         aria-label="Hausto home"
       >
-        <img
-          src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png"
-          alt=""
-          className="h-6 w-6"
-        />
-        <span className="hidden bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-xl font-bold text-transparent sm:block">
-          Hausto
-        </span>
+        <HaustoLogo size="sm" hideWordmarkOnMobile />
       </button>
 
       {/* No centred nav icons: everything they pointed at - search, browse,
