@@ -15,6 +15,7 @@ import {
   type AssistantOpenDetail,
   listSubjects,
 } from '@/lib/assistantEvents';
+import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION, HUB_PANE_CENTRED } from '@/lib/hubLayout';
 
 /** Rent bands are stored per unit type and quoted in USD, as on the profile. */
@@ -124,7 +125,7 @@ export const ComplexDirectory = ({ embedded = false, onCompareOpenChange }: Comp
 
   return (
     <>
-      <div className="mb-6 space-y-6">
+      <div className="mb-6">
         <ComplexFilters
           city={city} setCity={setCity}
           district={district} setDistrict={setDistrict}
@@ -181,6 +182,10 @@ export const ComplexDirectory = ({ embedded = false, onCompareOpenChange }: Comp
               </button>
             </div>
           )}
+
+          {/* Softens the grid behind the comparison, chat excluded - the same
+              scrim the browse table's compare panel gets. */}
+          <HubPanelScrim open={compareOpen} onDismiss={() => setCompareOpen(false)} />
 
           {/* Side-by-side facts only - the same division of labour the browse
               table's compare panel keeps. Which one to take is the question

@@ -8,6 +8,7 @@ import {
 } from '@/components/EditorialPropertyCard';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
+import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
 
 // The one way a listing opens over the page it was found on - browse, the AI's
@@ -108,43 +109,49 @@ export const ListingPreviewDialog = ({
   ) : null;
 
   return (
-    <Dialog open={open} modal={!embedded} onOpenChange={onOpenChange}>
-      {/* Close lives inline with share/like via the card's onClose - hide the
-          default dialog X. Phones match the swipe/matches width so a listing
-          looks the same wherever it opens; desktop keeps the roomier modal.
-          Bound to the viewport and scrolling, in dvh rather than vh, so a
-          collapsing address bar cannot hide the bottom of it. */}
-      <DialogContent
-        overlayClassName={embedded ? 'hidden' : undefined}
-        // A tap on the chat is not a tap to dismiss. Radix dismisses a
-        // non-modal panel on any interaction outside it, so reaching for the
-        // rail - or the dock, on a phone - closed the listing the renter was
-        // about to ask about. The card carries its own close button, and
-        // Escape still works.
-        onInteractOutside={embedded ? (e) => e.preventDefault() : undefined}
-        className={`max-w-md sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
-          embedded ? HUB_PANEL_POSITION : ''
-        }`}
-      >
-        <DialogTitle className="sr-only">{apartment?.title || 'Listing'}</DialogTitle>
-        {apartment && (
-          <EditorialPropertyCard
-            apartment={apartment}
-            vibeScore={vibeScore}
-            vibeMatch={vibeMatch}
-            vibeDetailsText={vibeDetailsText}
-            scoreContext={scoreContext}
-            quoteFallback={quoteFallback}
-            defaultExpanded
-            liked={liked}
-            onLike={onLike}
-            onClose={() => onOpenChange(false)}
-            onSchedule={onSchedule}
-            scheduleLabel="Book viewing"
-            footer={bookingOffer}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+    <>
+      {/* Only the embedded copy needs one: off the hub the dialog is modal and
+          brings its own overlay. */}
+      <HubPanelScrim open={embedded && open} onDismiss={() => onOpenChange(false)} />
+
+      <Dialog open={open} modal={!embedded} onOpenChange={onOpenChange}>
+        {/* Close lives inline with share/like via the card's onClose - hide the
+            default dialog X. Phones match the swipe/matches width so a listing
+            looks the same wherever it opens; desktop keeps the roomier modal.
+            Bound to the viewport and scrolling, in dvh rather than vh, so a
+            collapsing address bar cannot hide the bottom of it. */}
+        <DialogContent
+          overlayClassName={embedded ? 'hidden' : undefined}
+          // A tap on the chat is not a tap to dismiss. Radix dismisses a
+          // non-modal panel on any interaction outside it, so reaching for the
+          // rail - or the dock, on a phone - closed the listing the renter was
+          // about to ask about. The card carries its own close button, and
+          // Escape still works.
+          onInteractOutside={embedded ? (e) => e.preventDefault() : undefined}
+          className={`max-w-md sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
+            embedded ? HUB_PANEL_POSITION : ''
+          }`}
+        >
+          <DialogTitle className="sr-only">{apartment?.title || 'Listing'}</DialogTitle>
+          {apartment && (
+            <EditorialPropertyCard
+              apartment={apartment}
+              vibeScore={vibeScore}
+              vibeMatch={vibeMatch}
+              vibeDetailsText={vibeDetailsText}
+              scoreContext={scoreContext}
+              quoteFallback={quoteFallback}
+              defaultExpanded
+              liked={liked}
+              onLike={onLike}
+              onClose={() => onOpenChange(false)}
+              onSchedule={onSchedule}
+              scheduleLabel="Book viewing"
+              footer={bookingOffer}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

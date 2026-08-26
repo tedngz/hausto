@@ -28,6 +28,7 @@ import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
 import { CITY_DISTRICTS, districtOf, locationMatchesDistrict } from '@/utils/districts';
 import { ASSISTANT_COMPARE_EVENT, listSubjects, type AssistantCompareDetail } from '@/lib/assistantEvents';
+import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANE_CENTRED, HUB_PANEL_POSITION } from '@/lib/hubLayout';
 import { ListingPreviewDialog } from '@/components/ListingPreviewDialog';
 import type { Apartment } from '@/types';
@@ -742,6 +743,10 @@ export const BrowseTable = ({
         initialSelectedIds={scheduleTargets.map((r) => r.id)}
         onPropertyClick={(id) => navigate(`/property/${id}`)}
       />
+
+      {/* Softens the table behind the comparison without reaching the chat -
+          the panel is not modal, so nothing else does it. */}
+      <HubPanelScrim open={embedded && compareOpen} onDismiss={() => setCompareOpen(false)} />
 
       {/* Side-by-side facts only. Deciding between them is a conversation, and
           that conversation now belongs in the AI chat, where it keeps the

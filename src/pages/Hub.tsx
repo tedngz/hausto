@@ -26,6 +26,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { preferencesToSearchQuery } from '@/lib/preferences';
 import { clearChatHandoff, peekChatHandoff } from '@/lib/chatHandoff';
+import { ASSISTANT_COMPARE_EVENT, ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
 
 /**
  * Below this the page does not split into two panes at all.
@@ -128,6 +129,22 @@ const Hub = () => {
   // whole verified set, read building profiles and try the AI a few times;
   // saving, matching and preferences are what ask them to sign in.
 
+  // A card's sparkle pins the listing to the chat and the compare button asks
+  // about a shortlist outright. On the rail both land in a conversation that is
+  // already on screen; in the dock they landed inside a collapsed bar, so the
+  // gesture looked like it had done nothing and the reply arrived out of sight.
+  // Opening the sheet is the missing half of "ask about this one".
+  useEffect(() => {
+    if (hasRail) return;
+    const open = () => setIsChatOpen(true);
+    window.addEventListener(ASSISTANT_OPEN_EVENT, open);
+    window.addEventListener(ASSISTANT_COMPARE_EVENT, open);
+    return () => {
+      window.removeEventListener(ASSISTANT_OPEN_EVENT, open);
+      window.removeEventListener(ASSISTANT_COMPARE_EVENT, open);
+    };
+  }, [hasRail]);
+
   // How much of the bottom edge the chat is taking, published for the floating
   // panels (see lib/hubLayout). They are portaled to the body and cannot
   // measure this page, and a panel that assumed the collapsed height simply
@@ -136,14 +153,15 @@ const Hub = () => {
     const root = document.documentElement;
     root.style.setProperty(
       '--hub-dock',
-      hasRail ? '0px' : isChatOpen ? 'max(33dvh, 15rem)' : '4rem',
+      // Profile hides the chat entirely, so it takes no bottom edge there.
+      hasRail || showProfile ? '0px' : isChatOpen ? 'max(33dvh, 15rem)' : '4rem',
     );
     // The variable belongs to the hub, not the app: leaving it set would push
     // every other page's dialogs up off a dock that isn't there.
     return () => {
       root.style.removeProperty('--hub-dock');
     };
-  }, [hasRail, isChatOpen]);
+  }, [hasRail, isChatOpen, showProfile]);
 
   // Quota walls raised from the table or the chat dispatch this - the hub has
   // to answer it too, or upgrading from here silently does nothing.
@@ -360,7 +378,16 @@ const Hub = () => {
             // The width itself is --hub-rail (src/index.css): every floating
             // surface on this page positions itself against the same value,
             // and it used to be spelled out in two files that disagreed.
-            <aside className="flex w-[var(--hub-rail)] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl">
+            //
+            // Gone on the profile: account admin is not a conversation, and a
+            // chat rail beside a billing page is one more thing to ignore.
+            // Hidden rather than unmounted, so the thread, the draft and the
+            // pins are all still there on the way back.
+            <aside
+              className={`w-[var(--hub-rail)] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl ${
+                showProfile ? 'hidden' : 'flex'
+              }`}
+            >
               <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
                 <span className="font-serif text-base">AI chat</span>
@@ -376,7 +403,7 @@ const Hub = () => {
         {/* z-[60], not z-50: a panel portaled to the body is later in the
              document than this dock, so at an equal z-index the panel wins and
              the chat opens behind it. */}
-        <div className={hasRail ? 'hidden' : 'z-[60] shrink-0'}>
+        <div className={hasRail || showProfile ? 'hidden' : 'z-[60] shrink-0'}>
           {!hasRail && (
             <div
               className={`glass-card flex flex-col rounded-t-3xl transition-[height] duration-200 ${
