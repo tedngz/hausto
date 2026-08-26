@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
 import { translateLocationToEnglish } from '@/utils/locationTranslation';
+import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +12,7 @@ import { PropertyAmenities } from '@/components/PropertyAmenities';
 import { useNavigate } from 'react-router-dom';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useToast } from '@/components/ui/use-toast';
-import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { ListingPreviewDialog } from '@/components/ListingPreviewDialog';
 import { VibeScore } from '@/components/VibeScore';
 import { HighlightTags } from '@/components/HighlightTags';
 import { UserPreferences } from '@/types';
@@ -210,6 +211,10 @@ export const HomeAI = ({
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
   const [isViewingScheduleOpen, setIsViewingScheduleOpen] = useState(false);
   const [scheduleInitialIds, setScheduleInitialIds] = useState<string[]>([]);
+  // A listing booked straight from its preview. Liked listings are already in
+  // the scheduler's list; this one has to be put there by hand, and has to
+  // outlive the preview - which the renter can close behind the scheduler.
+  const [scheduleExtra, setScheduleExtra] = useState<PropertyMatch | null>(null);
   const [isFastTrackBannerDismissed, setIsFastTrackBannerDismissed] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
@@ -598,18 +603,19 @@ export const HomeAI = ({
     }
   };
 
-  // Properties available for the viewing scheduler (only those the user liked in this session)
+  // Properties available for the viewing scheduler: the ones liked in this
+  // session, plus whichever listing was booked from its own preview.
   const matchedPropertiesForSchedule = useMemo(() => {
-    return allResults
-      .filter(p => likedProperties.has(p.id))
-      .map(p => ({
-        id: p.id,
-        title: p.title,
-        images: p.images,
-        location: p.location,
-        price: p.price,
-      }));
-  }, [allResults, likedProperties]);
+    const rows = allResults.filter(p => likedProperties.has(p.id));
+    if (scheduleExtra && !rows.some(p => p.id === scheduleExtra.id)) rows.push(scheduleExtra);
+    return rows.map(p => ({
+      id: p.id,
+      title: p.title,
+      images: p.images,
+      location: p.location,
+      price: p.price,
+    }));
+  }, [allResults, likedProperties, scheduleExtra]);
 
   const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
     if (!user?.id) return;
@@ -902,6 +908,14 @@ export const HomeAI = ({
   const handleBrowseAll = () => {
     navigate('/hub');
   };
+  // The way out of the preview to the original posting: a Hausto listing points
+  // at its own page, a crawled one at the marketplace it came from.
+  const previewSourceOf = (property: PropertyMatch): { name: string; href?: string | null } => {
+    if (!property.isExternal) return { name: 'Hausto', href: `/property/${property.id}` };
+    const href = property.sourceUrl || property.property_source_link || null;
+    return { name: getPropertySourceLogo(href || property.source || '').name, href };
+  };
+
   const handlePropertyClick = async (property: PropertyMatch) => {
     try {
       // Try to fetch full property details from database by ID
@@ -1422,38 +1436,64 @@ export const HomeAI = ({
           resultsPortal,
         )}
 
-      {/* Property Detail Modal */}
-      <PropertyDetailModal apartment={selectedProperty ? {
-        id: selectedProperty.id,
-        title: selectedProperty.title,
-        location: selectedProperty.location,
-        price: selectedProperty.price,
-        size: selectedProperty.size,
-        vibe: selectedProperty.vibe,
-        description: selectedProperty.description,
-        highlights: selectedProperty.highlights,
-        images: selectedProperty.images,
-        amenities: selectedProperty.vibe_analysis?.amenities || selectedProperty.amenities || [],
-        rooms: selectedProperty.rooms || null,
-        property_source_link: selectedProperty.property_source_link || selectedProperty.sourceUrl || undefined,
-        property_source_provider_name: selectedProperty.sourceProviderName || undefined,
-        property_source_provider_phone: selectedProperty.sourceProviderPhone || undefined,
-        realtor: {
-          id: selectedProperty.realtor_id || "contact",
-          name: selectedProperty.sourceProviderName || "Match for contact details",
-          phone: selectedProperty.sourceProviderPhone || "",
-          email: ""
-        },
-        vibe_analysis: selectedProperty.vibe_analysis
-      } : null} userPreferences={userPreferences} isOpen={showPropertyModal} onClose={() => {
-        setShowPropertyModal(false);
-        setSelectedProperty(null);
-      }} onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined} isAnonymous={!user} />
+      {/* The same preview every other surface opens - see ListingPreviewDialog.
+          Non-modal in the rail so the chat that produced this listing is still
+          there to be asked about it. */}
+      <ListingPreviewDialog
+        open={showPropertyModal}
+        onOpenChange={(o) => {
+          if (!o) {
+            setShowPropertyModal(false);
+            setSelectedProperty(null);
+          }
+        }}
+        embedded={isRail}
+        apartment={selectedProperty ? {
+          id: selectedProperty.id,
+          images: selectedProperty.images || [],
+          title: selectedProperty.title,
+          location: selectedProperty.location,
+          price: selectedProperty.price,
+          size: selectedProperty.size,
+          rooms: selectedProperty.rooms || null,
+          vibe: selectedProperty.vibe,
+          description: selectedProperty.description,
+          highlights: selectedProperty.highlights,
+          amenities: selectedProperty.vibe_analysis?.amenities || selectedProperty.amenities || [],
+          vibe_analysis: selectedProperty.vibe_analysis,
+        } : null}
+        vibeScore={selectedProperty ? cardVibeScore(selectedProperty) : undefined}
+        scoreContext="search"
+        vibeDetailsText={selectedProperty?.matchReason}
+        quoteFallback={selectedProperty?.matchReason}
+        liked={selectedProperty ? likedProperties.has(selectedProperty.id) : false}
+        onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined}
+        // The same gate the chat's own fast-track banner keeps, so booking a
+        // listing behaves the same wherever the renter presses it: signed out
+        // goes to sign-in, out of allowance goes to the upgrade.
+        onSchedule={selectedProperty ? () => {
+          if (!user) {
+            navigate('/auth', { state: { returnTo: '/hub' } });
+            return;
+          }
+          if (!canFastTrack) {
+            setIsSubscriptionModalOpen(true);
+            return;
+          }
+          setScheduleExtra(selectedProperty);
+          setScheduleInitialIds([selectedProperty.id]);
+          setIsViewingScheduleOpen(true);
+        } : undefined}
+        source={selectedProperty ? previewSourceOf(selectedProperty) : undefined}
+      />
 
       {/* Viewing Schedule Modal — Hausto Fast-Track */}
       <ViewingScheduleModal
         isOpen={isViewingScheduleOpen}
-        onClose={() => setIsViewingScheduleOpen(false)}
+        onClose={() => {
+          setIsViewingScheduleOpen(false);
+          setScheduleExtra(null);
+        }}
         onSubmit={handleViewingScheduleSubmit}
         matchedProperties={matchedPropertiesForSchedule}
         initialSelectedIds={scheduleInitialIds}

@@ -9,16 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, Check, ChevronLeft, ChevronRight, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
-import { useSubscription } from '@/hooks/useSubscription';
 import { useBrowseListings, type BrowseRow } from '@/hooks/useBrowseListings';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { VibeMatchPopover } from '@/components/VibeMatchPopover';
@@ -30,6 +29,7 @@ import { getVibeRatingLabel } from '@/utils/vibeRating';
 import { CITY_DISTRICTS, districtOf, locationMatchesDistrict } from '@/utils/districts';
 import { ASSISTANT_COMPARE_EVENT, listSubjects, type AssistantCompareDetail } from '@/lib/assistantEvents';
 import { HUB_PANE_CENTRED, HUB_PANEL_POSITION } from '@/lib/hubLayout';
+import { ListingPreviewDialog } from '@/components/ListingPreviewDialog';
 import type { Apartment } from '@/types';
 
 // The verified-listings table. Public data from public-property-search (no
@@ -191,7 +191,6 @@ export const BrowseTable = ({
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const { user } = useAuth();
   const { createMatch } = useMatches();
-  const { subscribed } = useSubscription();
   const { quota, refetchQuota } = useViewingQuota();
 
   // Saved vibe preferences (from the onboarding quiz) power the compare
@@ -678,123 +677,59 @@ export const BrowseTable = ({
       )}
 
       {/* In-place property preview: the platform's listing card with like, no
-          page change. The card sizes its own gallery and flows the details
-          below it, so this modal only has to decide how wide it gets. */}
-      {/* On the hub this is deliberately NOT modal: the whole point of the chat
-          rail is being able to ask about the listing you are looking at, which
-          a scrim and a focus trap would prevent. Standalone it stays modal. */}
-      <Dialog open={!!preview} modal={!embedded} onOpenChange={(o) => { if (!o) setPreview(null); }}>
-        {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
-        {/* Phones match the swipe/matches width so a listing looks the same
-            wherever it opens; desktop keeps its original roomier modal. Card
-            plus booking panel runs past a phone screen, so the modal is bound
-            to the viewport and scrolls - dvh, not vh, so a collapsing address
-            bar cannot hide the bottom of it. */}
-        <DialogContent
-          overlayClassName={embedded ? 'hidden' : undefined}
-          className={`max-w-md sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
-            embedded
-              // Centred on the main pane rather than the viewport, so it does
-              // not sit half underneath the chat rail. Shift left by half the
-              // rail's width - the same clamp the rail itself uses.
-              ? HUB_PANEL_POSITION
-              : ''
-          }`}
-        >
-          {preview && (() => {
-            const previewScore = vibeMatchOf(preview);
-            const isHausto = preview.source === 'hausto';
-            const sourceInfo = isHausto
-              ? { name: 'Hausto', logo: '/logos/hausto-wordmark.svg' }
-              : getPropertySourceLogo(preview.source_url || preview.source);
-            const originalHref = isHausto ? `/property/${preview.id}` : preview.source_url;
-            return (
-              <div>
-                <EditorialPropertyCard
-                  apartment={{
-                    id: preview.id,
-                    images: preview.images || [],
-                    title: preview.title,
-                    location: preview.location,
-                    price: preview.price_vnd || 0,
-                    size: preview.size,
-                    rooms: preview.rooms,
-                    vibe: preview.vibe,
-                    description: preview.description,
-                    highlights: preview.highlights,
-                    amenities: preview.amenities,
-                    last_verified_at: preview.last_verified_at,
-                    // Reconstruct the analysis the card reads: the style tags
-                    // behind its vibe badge, plus per-image analyses so it shows
-                    // the detailed highlight per photo, not just the vibe word.
-                    vibe_analysis: (preview.style_tags?.length || preview.image_highlights?.length)
-                      ? {
-                          ...(preview.style_tags?.length ? { styles: preview.style_tags } : {}),
-                          ...(preview.image_highlights?.length
-                            ? { image_analyses: preview.image_highlights.map((h, i) => ({ image_index: i, image_highlight: h })) }
-                            : {}),
-                        }
-                      : undefined,
-                  }}
-                  vibeScore={previewScore?.score}
-                  vibeMatch={previewScore?.attrs}
-                  scoreContext="preferences"
-                  defaultExpanded
-                  liked={likedIds.has(preview.id)}
-                  onLike={() => handleLike(preview)}
-                  onClose={() => setPreview(null)}
-                  onSchedule={() => openFastTrack([preview])}
-                  scheduleLabel="Book viewing"
-                />
-
-                {/* Why book through Hausto instead of calling the source number.
-                    The CTAs above are the only forward path from this modal, so
-                    the offer has to be legible before the paywall, not after. */}
-                <div className="mt-2 rounded-2xl border border-border bg-background/95 backdrop-blur-sm px-4 py-3">
-                  <p className="text-sm font-medium">
-                    Book viewing with us - Just pick a time, we'll arrange with the agent/owner.
-                  </p>
-                  <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
-                    {[
-                      'English-speaking coordination',
-                      'Complete privacy - no spam or shared contact info',
-                      'Zero back-and-forth messaging',
-                    ].map((point) => (
-                      <li key={point} className="flex items-start gap-1.5">
-                        <Check className="w-3.5 h-3.5 mt-px flex-shrink-0 text-emerald-600" />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-border pt-2.5">
-                    <span className="text-xs text-muted-foreground">
-                      {quota?.unlimited
-                        ? 'Unlimited viewings active this month'
-                        : quota?.trialAvailable
-                          ? 'Your first viewing is on us'
-                          : quota?.trialUsed
-                            ? `Free trial used - Premium includes ${INCLUDED_VIEWINGS_PER_CYCLE} a cycle`
-                            : subscribed
-                              ? `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
-                              : 'Your first viewing is on us'}
-                    </span>
-                    {originalHref && (
-                      <a
-                        href={originalHref}
-                        target={isHausto ? undefined : '_blank'}
-                        rel={isHausto ? undefined : 'noopener noreferrer'}
-                        className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground whitespace-nowrap"
-                      >
-                        View original on {sourceInfo.name}
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+          page change. On the hub it is deliberately not modal - the whole point
+          of the chat is being able to ask about the listing you are looking at,
+          which a scrim and a focus trap would prevent. */}
+      {(() => {
+        // Derived outside the props so the dialog itself stays mounted while
+        // it closes - conditionally rendering it cuts the exit animation.
+        const previewScore = preview ? vibeMatchOf(preview) : undefined;
+        const isHausto = preview?.source === 'hausto';
+        const sourceName = !preview
+          ? ''
+          : isHausto
+            ? 'Hausto'
+            : getPropertySourceLogo(preview.source_url || preview.source).name;
+        return (
+          <ListingPreviewDialog
+            open={!!preview}
+            onOpenChange={(o) => { if (!o) setPreview(null); }}
+            embedded={embedded}
+            apartment={preview ? {
+              id: preview.id,
+              images: preview.images || [],
+              title: preview.title,
+              location: preview.location,
+              price: preview.price_vnd || 0,
+              size: preview.size,
+              rooms: preview.rooms,
+              vibe: preview.vibe,
+              description: preview.description,
+              highlights: preview.highlights,
+              amenities: preview.amenities,
+              last_verified_at: preview.last_verified_at,
+              // Reconstruct the analysis the card reads: the style tags behind
+              // its vibe badge, plus per-image analyses so it shows the detailed
+              // highlight per photo, not just the vibe word.
+              vibe_analysis: (preview.style_tags?.length || preview.image_highlights?.length)
+                ? {
+                    ...(preview.style_tags?.length ? { styles: preview.style_tags } : {}),
+                    ...(preview.image_highlights?.length
+                      ? { image_analyses: preview.image_highlights.map((h, i) => ({ image_index: i, image_highlight: h })) }
+                      : {}),
+                  }
+                : undefined,
+            } : null}
+            vibeScore={previewScore?.score}
+            vibeMatch={previewScore?.attrs}
+            scoreContext="preferences"
+            liked={!!preview && likedIds.has(preview.id)}
+            onLike={preview ? () => handleLike(preview) : undefined}
+            onSchedule={preview ? () => openFastTrack([preview]) : undefined}
+            source={preview ? { name: sourceName, href: isHausto ? `/property/${preview.id}` : preview.source_url } : undefined}
+          />
+        );
+      })()}
 
       <ViewingScheduleModal
         isOpen={scheduleOpen}
@@ -814,13 +749,18 @@ export const BrowseTable = ({
       <Dialog open={compareOpen} modal={!embedded} onOpenChange={setCompareOpen}>
         <DialogContent
           overlayClassName={embedded ? 'hidden' : undefined}
-          className={`max-h-[90vh] overflow-y-auto ${
+          // Reaching for the chat is not dismissing the comparison - see
+          // ListingPreviewDialog.
+          onInteractOutside={embedded ? (e) => e.preventDefault() : undefined}
+          className={`overflow-y-auto ${
             embedded
-              // Centred on the browse pane, not the viewport, and capped to its
-              // width - the whole point of comparing here is being able to ask
-              // the chat about it while you read.
+              // Centred on the browse pane, not the viewport, capped to its
+              // width, and held clear of the chat - the whole point of comparing
+              // here is being able to ask about it while you read. Its own
+              // max-height is left to HUB_PANEL_POSITION: a second one here beat
+              // that by stylesheet order and covered the dock.
               ? `max-w-4xl ${HUB_PANEL_POSITION}`
-              : 'max-w-4xl'
+              : 'max-w-4xl max-h-[90vh]'
           }`}
         >
           <DialogHeader><DialogTitle>Compare listings</DialogTitle></DialogHeader>

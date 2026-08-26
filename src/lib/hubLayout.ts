@@ -32,20 +32,30 @@ export const HUB_PANE_CENTRED =
  * Positioning for a non-modal panel (property preview, compare, complex
  * profile) inside the hub.
  *
- * Below xl it is anchored ABOVE the chat dock instead of centred on the
- * viewport - centred, it covered the dock completely, so the one thing the
- * panel exists to allow (asking about what you are looking at) became
- * unreachable. At xl it centres on the main pane and is capped to its width.
+ * Below xl it lives in the band between the top bar and the chat dock, rather
+ * than centred on the viewport. Centred, it covered both: the dock, so the one
+ * thing the panel exists to allow (asking about what you are looking at)
+ * became unreachable, and the nav, so there was no way back out of the page
+ * while a panel was up. Anchored to the dock and capped by the nav, it clears
+ * both - and because --hub-dock tracks the chat's CURRENT height, the panel
+ * lifts as the sheet opens rather than disappearing behind it.
+ *
+ * Only the bottom is anchored, deliberately. Pinning top AND bottom makes a
+ * fixed element stretch to fill the band whatever its content, and a
+ * transparent panel that big swallows taps on the table behind it.
+ *
+ * At xl it centres on the main pane and is capped to its width.
  *
  * The `!` matters: DialogContent's own `top-[50%] translate-y-[-50%]` is not
  * reliably beaten by a plain override, and a half-overridden panel hangs off
- * the top of the screen.
+ * the top of the screen. The same goes for max-height, which callers also set.
  */
 export const HUB_PANEL_POSITION = [
-  // Below xl: sit above the 64px dock, and never grow past the space left.
-  '!top-auto !bottom-20 !translate-y-0 max-h-[calc(100dvh-7rem)]',
+  // Below xl: sit above the chat, and never grow up into the nav bar.
+  '!top-auto !bottom-[calc(var(--hub-dock)+1rem)] !translate-y-0',
+  '!max-h-[calc(100dvh-var(--hub-nav)-var(--hub-dock)-2rem)]',
   // xl and up: the dock is gone, the rail is not.
-  'xl:!top-1/2 xl:!bottom-auto xl:!-translate-y-1/2 xl:max-h-[85dvh]',
+  'xl:!top-1/2 xl:!bottom-auto xl:!-translate-y-1/2 xl:!max-h-[85dvh]',
   'xl:left-[calc(50%-var(--hub-rail)/2)]',
   'xl:max-w-[calc(100vw-var(--hub-rail)-6rem)]',
 ].join(' ');

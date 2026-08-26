@@ -189,6 +189,9 @@ export const ComplexDirectory = ({ embedded = false, onCompareOpenChange }: Comp
           <Dialog open={compareOpen} modal={false} onOpenChange={setCompareOpen}>
             <DialogContent
               overlayClassName="hidden"
+              // Reaching for the chat is not dismissing the comparison - see
+              // ListingPreviewDialog.
+              onInteractOutside={(e) => e.preventDefault()}
               className={`max-w-4xl overflow-y-auto ${HUB_PANEL_POSITION}`}
             >
               <DialogHeader><DialogTitle>Compare complexes</DialogTitle></DialogHeader>
