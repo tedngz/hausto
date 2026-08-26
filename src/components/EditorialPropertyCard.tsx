@@ -87,6 +87,11 @@ interface EditorialPropertyCardProps {
   defaultExpanded?: boolean;
   /** Extra actions rendered in the top-right cluster, before the share/like buttons (e.g. a delete button) */
   topRightActions?: ReactNode;
+  /** Rendered inside the card, under the CTAs, behind a rule. For anything that
+   *  belongs to this listing but is not part of the listing - the booking offer
+   *  under the preview's CTA. Kept inside the card rather than stacked beneath
+   *  it so a renter reads one surface, not a card with a note taped under it. */
+  footer?: ReactNode;
   className?: string;
 }
 
@@ -128,6 +133,7 @@ export const EditorialPropertyCard = ({
   compact = false,
   defaultExpanded = false,
   topRightActions,
+  footer,
   className = '',
 }: EditorialPropertyCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
@@ -676,6 +682,12 @@ export const EditorialPropertyCard = ({
                 {scheduleLabel}
               </Button>
             )}
+          </div>
+        )}
+
+        {footer && (
+          <div className="border-t border-border/60 pt-3" onClick={e => e.stopPropagation()}>
+            {footer}
           </div>
         )}
       </div>

@@ -24,6 +24,9 @@ export const HubComplexPanel = ({ complex, onClose, onAskAI }: HubComplexPanelPr
   <Dialog open={!!complex} modal={false} onOpenChange={(o) => { if (!o) onClose(); }}>
     <DialogContent
       overlayClassName="hidden"
+      // Reaching for the chat is not dismissing the profile - see
+      // ListingPreviewDialog.
+      onInteractOutside={(e) => e.preventDefault()}
       className={`w-[min(100vw-2rem,56rem)] max-w-none overflow-y-auto p-0 [&>button]:hidden ${HUB_PANEL_POSITION}`}
     >
       {complex && (

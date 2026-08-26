@@ -128,6 +128,23 @@ const Hub = () => {
   // whole verified set, read building profiles and try the AI a few times;
   // saving, matching and preferences are what ask them to sign in.
 
+  // How much of the bottom edge the chat is taking, published for the floating
+  // panels (see lib/hubLayout). They are portaled to the body and cannot
+  // measure this page, and a panel that assumed the collapsed height simply
+  // vanished behind the sheet the moment the renter opened it.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty(
+      '--hub-dock',
+      hasRail ? '0px' : isChatOpen ? 'max(33dvh, 15rem)' : '4rem',
+    );
+    // The variable belongs to the hub, not the app: leaving it set would push
+    // every other page's dialogs up off a dock that isn't there.
+    return () => {
+      root.style.removeProperty('--hub-dock');
+    };
+  }, [hasRail, isChatOpen]);
+
   // Quota walls raised from the table or the chat dispatch this - the hub has
   // to answer it too, or upgrading from here silently does nothing.
   useEffect(() => {
@@ -356,7 +373,10 @@ const Hub = () => {
 
         {/* ---- Chat dock (narrow viewports). Rendered instead of the rail, never
              alongside it - two mounted chats would be two conversations. ---- */}
-        <div className={hasRail ? 'hidden' : 'shrink-0'}>
+        {/* z-[60], not z-50: a panel portaled to the body is later in the
+             document than this dock, so at an equal z-index the panel wins and
+             the chat opens behind it. */}
+        <div className={hasRail ? 'hidden' : 'z-[60] shrink-0'}>
           {!hasRail && (
             <div
               className={`glass-card flex flex-col rounded-t-3xl transition-[height] duration-200 ${
