@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  reason?: 'views' | 'matches' | 'quiz' | 'viewings';
+  reason?: 'matches' | 'quiz' | 'viewings';
 }
 export const SubscriptionModal = ({
   isOpen,
@@ -28,7 +28,6 @@ export const SubscriptionModal = ({
   const [loading, setLoading] = useState(false);
   const [addonLoading, setAddonLoading] = useState(false);
   const reasonMessages = {
-    views: "You've reached your daily limit of 10 swipes.",
     matches: "You've reached your weekly limit of 20 matches.",
     quiz: "You've used both weekly quiz retakes.",
     viewings: "You've used your free viewing coordination."
@@ -67,7 +66,6 @@ export const SubscriptionModal = ({
     }
   };
   const freeFeatures = [
-    '10 swipes per day',
     '20 matches per week',
     '10 AI searches per day',
     quota?.trialUsed
@@ -75,7 +73,6 @@ export const SubscriptionModal = ({
       : '1 free viewing coordination - we book it for you',
   ];
   const premiumFeatures = [
-    'Unlimited swipes',
     'Unlimited matches',
     'Unlimited AI searches',
     'Fast-Track: Hausto coordinates with realtors/owners to schedule up to 3 viewings per month for you',

@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 interface UsageLimits {
-  propertiesViewed: number;
   propertiesMatched: number;
   quizRetakes: number;
   aiSearches: number;
@@ -16,8 +15,10 @@ interface SubscriptionStatus {
   subscription_end?: string;
 }
 
+// No per-listing view budget: the swipe deck it metered is retired, and
+// nothing has counted a view since. The historical column stays in
+// daily_usage; only the live limit is gone.
 const FREE_TIER_LIMITS = {
-  dailyViews: 10,
   weeklyMatches: 20,
   dailyAiRequests: 10,
 };
@@ -25,17 +26,11 @@ const FREE_TIER_LIMITS = {
 export const useUsageTracking = () => {
   const { user, loading: authLoading } = useAuth();
   const [todayUsage, setTodayUsage] = useState<UsageLimits>({
-    propertiesViewed: 0,
     propertiesMatched: 0,
     quizRetakes: 0,
     aiSearches: 0,
   });
   const [weeklyMatches, setWeeklyMatches] = useState(0);
-  const [viewedPropertiesToday, setViewedPropertiesToday] = useState<Set<string>>(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const stored = localStorage.getItem(`viewedProperties_${today}`);
-    return stored ? new Set(JSON.parse(stored)) : new Set();
-  });
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>({
     subscribed: false,
     subscription_tier: 'free',
@@ -61,7 +56,6 @@ export const useUsageTracking = () => {
 
       if (todayData) {
         setTodayUsage({
-          propertiesViewed: todayData.properties_viewed,
           propertiesMatched: todayData.properties_matched,
           quizRetakes: todayData.quiz_retakes,
           aiSearches: todayData.ai_requests || 0,
@@ -93,18 +87,11 @@ export const useUsageTracking = () => {
     console.log('[Usage Tracking] Fetching usage via Redis for user:', user.id);
 
     try {
-      const today = new Date().toISOString().split('T')[0];
-
-      // Load viewed properties from localStorage
-      const stored = localStorage.getItem(`viewedProperties_${today}`);
-      const viewedSet = stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set<string>();
-      setViewedPropertiesToday(viewedSet);
-
-      // Clean up old localStorage entries
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('viewedProperties_') && key !== `viewedProperties_${today}`) {
-          localStorage.removeItem(key);
-        }
+      // Residue from the retired swipe deck, which parked the day's seen
+      // listings here so a second look did not count twice. Nothing writes
+      // them any more, so clear what a returning renter still has.
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('viewedProperties_')) localStorage.removeItem(key);
       });
 
       // Get current session to ensure auth headers are included
@@ -130,7 +117,6 @@ export const useUsageTracking = () => {
       console.log('[Usage Tracking] Retrieved usage from Redis:', usageData);
 
       setTodayUsage({
-        propertiesViewed: usageData.propertiesViewed || 0,
         propertiesMatched: usageData.propertiesMatched || 0,
         quizRetakes: usageData.quizRetakes || 0,
         aiSearches: usageData.aiSearches || 0,
@@ -195,138 +181,14 @@ export const useUsageTracking = () => {
     return () => window.removeEventListener('usage:updated', handler as EventListener);
   }, []);
 
-  const updatePropertyView = useCallback(async (propertyId: string) => {
-    if (!user?.id || !propertyId) {
-      console.error('[Usage Tracking] No user ID or property ID');
-      return false;
-    }
-
-    if (viewedPropertiesToday.has(propertyId)) {
-      console.log('[Usage Tracking] Property already viewed today:', propertyId);
-      return true;
-    }
-
-    // Check if user can view more properties BEFORE incrementing
-    const canView = subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium' 
-      ? true 
-      : todayUsage.propertiesViewed < FREE_TIER_LIMITS.dailyViews;
-
-    if (!canView) {
-      console.log('[Usage Tracking] View limit reached, cannot track view:', propertyId);
-      return false;
-    }
-
-    try {
-      console.log('[Usage Tracking] Tracking unique property view via Redis');
-
-      // Ensure we have an active session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.error('[Usage Tracking] No active session for view tracking');
-        return false;
-      }
-
-      const { data, error } = await supabase.functions.invoke(
-        'usage-tracking-redis',
-        {
-          body: {
-            action: 'increment',
-            type: 'view',
-            propertyId, // Pass propertyId to track unique views
-          },
-        }
-      );
-
-      if (error) {
-        console.error('[Usage Tracking] Error incrementing view:', error);
-        return false;
-      }
-
-      const serverCount = typeof data?.count === 'number' ? data.count : undefined;
-
-      // If server indicates limit reached, sync count and block further views
-      if (!subscriptionStatus.subscribed || subscriptionStatus.subscription_tier !== 'premium') {
-        if (serverCount !== undefined && serverCount >= FREE_TIER_LIMITS.dailyViews) {
-          console.log('[Usage Tracking] Server reports daily view limit reached:', serverCount);
-          setTodayUsage(prev => ({
-            ...prev,
-            propertiesViewed: serverCount,
-          }));
-          window.dispatchEvent(new CustomEvent('usage:updated', {
-            detail: {
-              todayUsage: {
-                ...todayUsage,
-                propertiesViewed: serverCount,
-              },
-            },
-          }));
-          return false;
-        }
-      }
-
-      // Update viewed properties set
-      const today = new Date().toISOString().split('T')[0];
-      const newSet = new Set(viewedPropertiesToday).add(propertyId);
-      setViewedPropertiesToday(newSet);
-      localStorage.setItem(`viewedProperties_${today}`, JSON.stringify(Array.from(newSet)));
-
-      // Update local state with new count (prefer server value if available)
-      setTodayUsage(prev => {
-        const newViewCount = serverCount !== undefined ? serverCount : prev.propertiesViewed + 1;
-        
-        // Broadcast update with new value
-        window.dispatchEvent(new CustomEvent('usage:updated', {
-          detail: {
-            todayUsage: {
-              ...prev,
-              propertiesViewed: newViewCount,
-            },
-          },
-        }));
-        
-        return {
-          ...prev,
-          propertiesViewed: newViewCount,
-        };
-      });
-
-      console.log('[Usage Tracking] Successfully tracked unique property view:', propertyId);
-      return true;
-    } catch (error) {
-      console.error('[Usage Tracking] Error updating property view:', error);
-      return false;
-    }
-  }, [user?.id, viewedPropertiesToday, subscriptionStatus, todayUsage.propertiesViewed]);
-
-  const updateUsage = async (
-    type: 'view' | 'match' | 'quiz' | 'ai-search' | 'match-with-view'
-  ) => {
+  const updateUsage = async (type: 'match' | 'quiz' | 'ai-search') => {
     if (!user?.id) {
       console.log('[Usage Tracking] Cannot update usage - no user');
       return;
     }
 
     try {
-      let redisType: string;
-      switch (type) {
-        case 'view':
-          redisType = 'view';
-          break;
-        case 'match':
-        case 'match-with-view':
-          redisType = 'match';
-          break;
-        case 'quiz':
-          redisType = 'quiz';
-          break;
-        case 'ai-search':
-          redisType = 'ai-search';
-          break;
-        default:
-          return;
-      }
-
-      console.log(`[Usage Tracking] Incrementing usage: ${redisType}`);
+      console.log(`[Usage Tracking] Incrementing usage: ${type}`);
 
       // Ensure we have an active session
       const { data: { session } } = await supabase.auth.getSession();
@@ -340,7 +202,7 @@ export const useUsageTracking = () => {
         {
           body: {
             action: 'increment',
-            type: redisType,
+            type,
           },
         }
       );
@@ -357,11 +219,7 @@ export const useUsageTracking = () => {
       setTodayUsage(prev => {
         const updated = { ...prev };
         switch (type) {
-          case 'view':
-            updated.propertiesViewed += 1;
-            break;
           case 'match':
-          case 'match-with-view':
             updated.propertiesMatched += 1;
             break;
           case 'quiz':
@@ -374,7 +232,7 @@ export const useUsageTracking = () => {
         return updated;
       });
 
-      if (type === 'match' || type === 'match-with-view') {
+      if (type === 'match') {
         setWeeklyMatches(prev => prev + 1);
       }
 
@@ -386,7 +244,7 @@ export const useUsageTracking = () => {
     }
   };
 
-  const canPerformAction = useCallback((type: 'view' | 'match' | 'quiz' | 'ai-search'): boolean => {
+  const canPerformAction = useCallback((type: 'match' | 'quiz' | 'ai-search'): boolean => {
     // Don't block actions while subscription status is still loading
     if (loading) {
       console.log('[Usage Tracking] Still loading subscription status - allowing action');
@@ -396,7 +254,6 @@ export const useUsageTracking = () => {
     console.log(`[Usage Tracking] Checking if can perform ${type}:`, {
       subscribed: subscriptionStatus.subscribed,
       tier: subscriptionStatus.subscription_tier,
-      todayViews: todayUsage.propertiesViewed,
       weeklyMatches,
       todayAiSearches: todayUsage.aiSearches
     });
@@ -407,10 +264,6 @@ export const useUsageTracking = () => {
     }
 
     switch (type) {
-      case 'view':
-        const canView = todayUsage.propertiesViewed < FREE_TIER_LIMITS.dailyViews;
-        console.log(`[Usage Tracking] Can view: ${canView} (${todayUsage.propertiesViewed}/${FREE_TIER_LIMITS.dailyViews})`);
-        return canView;
       case 'match':
         const canMatch = weeklyMatches < FREE_TIER_LIMITS.weeklyMatches;
         console.log(`[Usage Tracking] Can match: ${canMatch} (${weeklyMatches}/${FREE_TIER_LIMITS.weeklyMatches})`);
@@ -426,14 +279,12 @@ export const useUsageTracking = () => {
     }
   }, [subscriptionStatus, todayUsage, weeklyMatches, loading]);
 
-  const getRemainingActions = (type: 'view' | 'match' | 'quiz' | 'ai-search'): number => {
+  const getRemainingActions = (type: 'match' | 'quiz' | 'ai-search'): number => {
     if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
       return Infinity;
     }
 
     switch (type) {
-      case 'view':
-        return Math.max(0, FREE_TIER_LIMITS.dailyViews - todayUsage.propertiesViewed);
       case 'match':
         return Math.max(0, FREE_TIER_LIMITS.weeklyMatches - weeklyMatches);
       case 'quiz':
@@ -457,7 +308,6 @@ export const useUsageTracking = () => {
     loading,
     limits: FREE_TIER_LIMITS,
     updateUsage,
-    updatePropertyView,
     canPerformAction,
     getRemainingActions,
     refetchUsage,

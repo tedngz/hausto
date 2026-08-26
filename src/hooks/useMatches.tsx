@@ -268,7 +268,7 @@ export const useMatches = () => {
         } as any);
       if (error) throw error;
 
-      await updateUsage('match-with-view');
+      await updateUsage('match');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['renter-matches'] });

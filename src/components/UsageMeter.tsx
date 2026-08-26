@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { CalendarCheck, Eye, Heart, RotateCcw, Crown, MessageSquare } from 'lucide-react';
+import { CalendarCheck, Heart, RotateCcw, Crown, MessageSquare } from 'lucide-react';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
  
@@ -40,14 +40,9 @@ export const UsageMeter = () => {
 
   const isPremium = subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium';
 
+  // No swipe deck any more, so no per-listing view budget to report: the meter
+  // showed a bar that could only ever read 0/10.
   const usageItems = [
-    {
-      icon: Eye,
-      label: 'Daily swipes',
-      current: todayUsage.propertiesViewed,
-      limit: limits.dailyViews,
-      color: 'text-blue-500',
-    },
     {
       icon: Heart,
       label: 'Weekly matches',
