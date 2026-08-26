@@ -438,6 +438,7 @@ interface AccumulatedContext {
   amenities: string[];
   styles: string[];
   specificDistricts: string[];
+  excludedDistricts: string[];  // Areas the renter has asked to look OUTSIDE of ("somewhere else")
   requestedComplexes: string[]; // Specific named projects/complexes (e.g. "vinhomes golden river")
   rejections: string[];   // things the user said they didn't want
   likes: string[];        // things/properties the user reacted positively to
@@ -749,6 +750,78 @@ function extractSpecificDistricts(text: string): string[] {
   return districts;
 }
 
+// Sub-areas (wards) mapped to the district that contains them. Shared by the
+// scorer and by the "somewhere else" bookkeeping below, which both need to know
+// that Thao Dien is part of District 2.
+const DISTRICT_SUB_AREAS: Record<string, string[]> = {
+  'district 1': ['da kao', 'ben nghe', 'ben thanh', 'nguyen thai binh', 'pham ngu lao', 'tan dinh', 'cau kho', 'co giang'],
+  'district 2': ['thao dien', 'an phu', 'thu thiem', 'cat lai', 'thanh my loi', 'binh an', 'binh khanh', 'an khanh'],
+  'district 3': ['vo thi sau'],
+  'district 7': ['phu my hung', 'tan phong', 'tan phu d7', 'tan hung', 'tan kieng'],
+  'binh thanh': ['thanh da', 'binh quoi', 'hang xanh', 'van thanh'],
+};
+
+const MAIN_DISTRICT_NAMES = ['district 1', 'district 2', 'district 3', 'district 4', 'district 5',
+  'district 7', 'district 9', 'district 10', 'district 12', 'binh thanh', 'phu nhuan', 'thu duc',
+  'go vap', 'tan binh', 'tan phu', 'binh tan'];
+
+// Is this listing in `district`? `searchableText` is location + title, so a
+// complex name in the title counts as being in the area it names.
+function matchesArea(locLower: string, searchableText: string, district: string): boolean {
+  if (district === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'd1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1'))) return true;
+  if (district === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'd2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2'))) return true;
+  if (district === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'd3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3'))) return true;
+  if (district === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'd7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7'))) return true;
+  if (district === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
+  if (district === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
+  if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
+  if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
+  if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
+  if (district === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
+  if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
+  if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
+  if (district === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
+  // Complex/building name match (check both location and title)
+  if (searchableText.includes(district)) return true;
+  return matchesWord(locLower, district);
+}
+
+// Same question for a parent district, where only the address can answer it.
+function matchesParentArea(locLower: string, parent: string): boolean {
+  if (parent === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1') || matchesWord(locLower, 'd1'))) return true;
+  if (parent === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2') || matchesWord(locLower, 'd2'))) return true;
+  if (parent === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3') || matchesWord(locLower, 'd3'))) return true;
+  if (parent === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7') || matchesWord(locLower, 'd7'))) return true;
+  if (parent === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
+  if (parent === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
+  if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
+  if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
+  return matchesWord(locLower, parent);
+}
+
+// Canonical district tokens are lowercase ('binh thanh', 'district 2'); this is
+// how they are spelled back to the renter.
+function titleCaseArea(district: string): string {
+  return district.replace(/\b[a-z]/g, c => c.toUpperCase());
+}
+
+// "Somewhere else" — the renter wants the same kind of place in a DIFFERENT
+// part of town. Deliberately narrow: it has to name an AREA, so "a different
+// layout" or "another bedroom" don't uproot a search. Widening ("also show
+// nearby districts") is not this — that keeps the original area and adds to it.
+function wantsDifferentAreas(text: string): boolean {
+  // Deliberately no "places": "show me other places" is how renters ask for
+  // more LISTINGS, not for a different neighbourhood.
+  const AREA = '(?:areas?|districts?|neighbou?rhoods?|wards?|locations?|parts? of town|sides? of town)';
+  return [
+    new RegExp(`\\b(?:different|other|another|new|somewhere|anywhere|elsewhere)\\s+(?:\\w+\\s+){0,2}${AREA}\\b`, 'i'),
+    /\b(?:somewhere|anywhere) else\b/i,
+    /\belsewhere\b/i,
+    /\bout(?:side)? of (?:this|that|the) (?:area|district|neighbou?rhood)\b/i,
+    /\bnot in (?:this|that) (?:area|district|neighbou?rhood)\b/i,
+  ].some(re => re.test(text));
+}
+
 // Detect dislikes / rejections in a user message
 function extractRejections(text: string): string[] {
   const lower = text.toLowerCase();
@@ -856,6 +929,7 @@ function buildAccumulatedContext(
     amenities: [...(seed?.amenities ?? [])],
     styles: [...(seed?.styles ?? [])],
     specificDistricts: [],
+    excludedDistricts: [],
     requestedComplexes: [],
     rejections: [],
     likes: []
@@ -899,10 +973,24 @@ function buildAccumulatedContext(
       if (!context.styles.includes(s)) context.styles.push(s);
     }
     
-    // Extract specific districts (accumulate)
+    // Extract specific districts (accumulate). Read in order, because where
+    // the renter wants to look is a running answer: naming an area adds it,
+    // and asking for a DIFFERENT one moves everything named so far onto the
+    // avoid list. Without that second half the old district simply stuck, and
+    // "similar style in different areas" came back with the same streets.
     const specificDistricts = extractSpecificDistricts(text);
-    for (const d of specificDistricts) {
-      if (!context.specificDistricts.includes(d)) context.specificDistricts.push(d);
+    if (specificDistricts.length > 0) {
+      for (const d of specificDistricts) {
+        if (!context.specificDistricts.includes(d)) context.specificDistricts.push(d);
+      }
+      // Naming a place is a fresh start for it - somewhere they walked away
+      // from earlier is fair game again the moment they ask for it by name.
+      context.excludedDistricts = context.excludedDistricts.filter(d => !specificDistricts.includes(d));
+    } else if (wantsDifferentAreas(text)) {
+      for (const d of context.specificDistricts) {
+        if (!context.excludedDistricts.includes(d)) context.excludedDistricts.push(d);
+      }
+      context.specificDistricts = [];
     }
 
     // Rejections & likes (accumulate)
@@ -931,6 +1019,17 @@ function buildAccumulatedContext(
   const currentDistricts = extractSpecificDistricts(currentMessage);
   if (currentDistricts.length > 0) {
     context.specificDistricts = currentDistricts;
+  }
+
+  // Nowhere is both wanted and avoided. What the renter is asking for now wins,
+  // including a ward inside a district they walked away from earlier - "Thao
+  // Dien" after leaving District 2 is a request, not a contradiction.
+  if (context.excludedDistricts.length > 0 && context.specificDistricts.length > 0) {
+    const wanted = new Set(context.specificDistricts);
+    for (const [parent, subs] of Object.entries(DISTRICT_SUB_AREAS)) {
+      if (context.specificDistricts.some(d => d === parent || subs.includes(d))) wanted.add(parent);
+    }
+    context.excludedDistricts = context.excludedDistricts.filter(d => !wanted.has(d));
   }
 
   // Determine location tier based on center preference
@@ -1165,6 +1264,16 @@ function filterAndScoreProperties(
       }
     }
 
+    // 5. Areas the renter has asked to look OUTSIDE of (STRICT) — "somewhere
+    // else", "different areas". Scoring alone can't answer this: when the whole
+    // shortlist sits in one district, penalising it still returns that district.
+    if (context.excludedDistricts.length > 0) {
+      const haystack = `${locLower} ${titleLowerPre}`;
+      if (context.excludedDistricts.some(d => matchesArea(locLower, haystack, d))) {
+        console.log(`[Scoring] Property ${p.id} EXCLUDED - renter asked for a different area than ${p.location}`);
+        continue;
+      }
+    }
 
     // ========== SCORING ==========
     let score = 50; // Base score
@@ -1188,18 +1297,9 @@ function filterAndScoreProperties(
     let isExactSubAreaMatch = false;
     
     if (context.specificDistricts.length > 0) {
-      // Sub-areas mapped to parent districts
-      const districtSubAreas: Record<string, string[]> = {
-        'district 1': ['da kao', 'ben nghe', 'ben thanh', 'nguyen thai binh', 'pham ngu lao', 'tan dinh', 'cau kho', 'co giang'],
-        'district 2': ['thao dien', 'an phu', 'thu thiem', 'cat lai', 'thanh my loi', 'binh an', 'binh khanh', 'an khanh'],
-        'district 3': ['vo thi sau'],
-        'district 7': ['phu my hung', 'tan phong', 'tan phu d7', 'tan hung', 'tan kieng'],
-        'binh thanh': ['thanh da', 'binh quoi', 'hang xanh', 'van thanh'],
-      };
-      
       // Determine which parent districts user wants based on sub-areas mentioned
       const wantedParentDistricts = new Set<string>();
-      for (const [parent, subAreas] of Object.entries(districtSubAreas)) {
+      for (const [parent, subAreas] of Object.entries(DISTRICT_SUB_AREAS)) {
         if (context.specificDistricts.includes(parent)) {
           wantedParentDistricts.add(parent);
         }
@@ -1210,9 +1310,6 @@ function filterAndScoreProperties(
         }
       }
       // Also add directly mentioned main districts
-      const MAIN_DISTRICT_NAMES = ['district 1', 'district 2', 'district 3', 'district 4', 'district 5', 
-        'district 7', 'district 9', 'district 10', 'district 12', 'binh thanh', 'phu nhuan', 'thu duc', 
-        'go vap', 'tan binh', 'tan phu', 'binh tan'];
       for (const d of context.specificDistricts) {
         if (MAIN_DISTRICT_NAMES.includes(d)) {
           wantedParentDistricts.add(d);
@@ -1222,37 +1319,12 @@ function filterAndScoreProperties(
       // Check if property matches any requested specific area (exact match)
       // Also check location AND title for complex/building names (e.g. "Celadon City")
       const searchableText = `${locLower} ${titleLowerPre}`;
-      const matchesExactArea = context.specificDistricts.some(district => {
-        if (district === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'd1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1'))) return true;
-        if (district === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'd2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2'))) return true;
-        if (district === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'd3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3'))) return true;
-        if (district === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'd7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7'))) return true;
-        if (district === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
-        if (district === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
-        if (district === 'thao dien' && (locLower.includes('thao dien') || locLower.includes('thảo điền'))) return true;
-        if (district === 'da kao' && (locLower.includes('da kao') || locLower.includes('đa kao') || locLower.includes('dakao'))) return true;
-        if (district === 'an phu' && (locLower.includes('an phu') || locLower.includes('an phú'))) return true;
-        if (district === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
-        if (district === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
-        if (district === 'phu my hung' && (locLower.includes('phu my hung') || locLower.includes('phú mỹ hưng'))) return true;
-        if (district === 'thu thiem' && (locLower.includes('thu thiem') || locLower.includes('thủ thiêm'))) return true;
-        // Complex/building name match (check both location and title)
-        if (searchableText.includes(district)) return true;
-        return matchesWord(locLower, district);
-      });
-      
+      const matchesExactArea = context.specificDistricts.some(district =>
+        matchesArea(locLower, searchableText, district));
+
       // Check if property is in a parent district that user wants
-      const matchesParentDistrict = Array.from(wantedParentDistricts).some(parent => {
-        if (parent === 'district 1' && (matchesWord(locLower, 'district 1') || matchesWord(locLower, 'quan 1') || matchesWord(locLower, 'quận 1') || matchesWord(locLower, 'd1'))) return true;
-        if (parent === 'district 2' && (matchesWord(locLower, 'district 2') || matchesWord(locLower, 'quan 2') || matchesWord(locLower, 'quận 2') || matchesWord(locLower, 'd2'))) return true;
-        if (parent === 'district 3' && (matchesWord(locLower, 'district 3') || matchesWord(locLower, 'quan 3') || matchesWord(locLower, 'quận 3') || matchesWord(locLower, 'd3'))) return true;
-        if (parent === 'district 7' && (matchesWord(locLower, 'district 7') || matchesWord(locLower, 'quan 7') || matchesWord(locLower, 'quận 7') || matchesWord(locLower, 'd7'))) return true;
-        if (parent === 'tan phu' && (locLower.includes('tan phu') || locLower.includes('tân phú'))) return true;
-        if (parent === 'binh tan' && (locLower.includes('binh tan') || locLower.includes('bình tân'))) return true;
-        if (parent === 'binh thanh' && (locLower.includes('binh thanh') || locLower.includes('bình thạnh'))) return true;
-        if (parent === 'phu nhuan' && (locLower.includes('phu nhuan') || locLower.includes('phú nhuận'))) return true;
-        return matchesWord(locLower, parent);
-      });
+      const matchesParentDistrict = Array.from(wantedParentDistricts).some(parent =>
+        matchesParentArea(locLower, parent));
       
       // Check if property is an EXACT match to user's requested sub-area (e.g., "Thao Dien" when user asked for Thao Dien)
       const requestedSubAreas = context.specificDistricts.filter(d => 
@@ -2146,8 +2218,14 @@ Pick 1-3 styles and 1-2 colors that best match.`
 
     // Nothing fresh matches — say so instead of repeating the same results.
     if (wantsFreshResults && scoredProperties.length === 0) {
+      // Two different dead ends, and saying the wrong one is its own bug: an
+      // exhausted search is not the same as one that ran out of room the
+      // moment the renter asked to leave the area they had been looking in.
+      const leftBehind = accContext.excludedDistricts.map(titleCaseArea).join(', ');
       const noFreshResponse = {
-        summary: "You've already seen every listing I have that matches this search — nothing new is similar right now. I can widen the search if you like.",
+        summary: leftBehind
+          ? `I don't have anything else in that style outside ${leftBehind} right now. I can widen the search, or go back to ${leftBehind}.`
+          : "You've already seen every listing I have that matches this search — nothing new is similar right now. I can widen the search if you like.",
         results: [],
         blocks: [
           {
@@ -2155,7 +2233,9 @@ Pick 1-3 styles and 1-2 colors that best match.`
             suggestions: [
               '[Search] Widen to nearby districts',
               '[Search] Raise the budget a little',
-              '[Ask] Which areas are similar to this one?',
+              leftBehind
+                ? `[Search] Go back to ${leftBehind}`
+                : '[Ask] Which areas are similar to this one?',
             ],
           },
         ],
@@ -2214,6 +2294,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
     }
     if (accContext.wantsCenter) constraintsSummary.push(`Location: City center`);
     if (accContext.specificDistricts.length > 0) constraintsSummary.push(`Specific areas: ${accContext.specificDistricts.join(', ')}`);
+    if (accContext.excludedDistricts.length > 0) constraintsSummary.push(`Areas to AVOID: ${accContext.excludedDistricts.join(', ')} (STRICT — the renter asked for somewhere DIFFERENT. Never return a listing in these, and say which new areas you moved to)`);
     if (accContext.requestedComplexes.length > 0) constraintsSummary.push(`Specific project/complex: ${accContext.requestedComplexes.join(', ')} (STRICT — only recommend properties IN this exact project; do NOT suggest similarly-named projects in other districts)`);
     if (accContext.amenities.length > 0) constraintsSummary.push(`Required amenities: ${accContext.amenities.join(', ')}`);
     if (accContext.styles.length > 0) constraintsSummary.push(`Style preferences: ${accContext.styles.join(', ')}`);
@@ -3143,7 +3224,14 @@ Maximum ${maxResults} properties in results.`;
         sourceUrl: p.sourceUrl || null
       }));
       
-      // Generate a summary based on context
+      // Generate a summary based on context — described from the listings that
+      // are actually being shipped, not from the constraints they were picked
+      // against. The two are not the same thing the moment a strict filter
+      // (an area, a bedroom count) leaves nothing inside the budget.
+      const overBudget = accContext.maxPrice
+        ? fallbackResults.filter(r => Number(r.price) > accContext.maxPrice!)
+        : [];
+      const cityName = accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi';
       let summary = '';
       if (imageAnalysisResult) {
         summary += `I detected a ${imageAnalysisResult.styles.join(', ')} style with ${imageAnalysisResult.colors.join(', ')} tones from your image. `;
@@ -3152,15 +3240,23 @@ Maximum ${maxResults} properties in results.`;
         ? 'Here is 1 matching apartment'
         : `Here are ${fallbackResults.length} matching apartments`;
       if (accContext.city) {
-        summary += ` in ${accContext.city === 'hcm' ? 'Ho Chi Minh City' : 'Hanoi'}`;
+        summary += accContext.excludedDistricts.length > 0
+          ? ` in other parts of ${cityName}`
+          : ` in ${cityName}`;
       }
-      if (accContext.maxPrice) {
+      if (accContext.maxPrice && overBudget.length === 0) {
         summary += ` under ${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`;
       }
       if (accContext.wantsCenter && !topProperties.some(p => p.locationTier === 'center')) {
         summary += `. Note: No center properties matched your criteria, showing nearby alternatives`;
       }
       summary += '.';
+      if (accContext.maxPrice && overBudget.length > 0) {
+        const budgetLabel = `${(accContext.maxPrice/1000000).toFixed(0)}M VND/month`;
+        summary += overBudget.length === fallbackResults.length
+          ? ` Nothing under ${budgetLabel} matched the rest of what you asked for, so these are all above it.`
+          : ` ${overBudget.length} of them are above your ${budgetLabel} budget — those are marked on the card.`;
+      }
       
       const aiSummary = extractedJson?.summary || extractedJson?.text || extractedJson?.message || extractedJson?.content || extractedJson?.answer || '';
       const finalSummary = aiSummary ? `${aiSummary}\n\n${summary}` : summary;
@@ -3231,6 +3327,33 @@ Maximum ${maxResults} properties in results.`;
         // Still plain text with no followups — strip markdown bold markers
         responseContent = responseContent.replace(/\*\*/g, '');
         console.log('[Response] Pure conversational response, no followups found');
+      }
+    }
+
+    // Last word on the reply's own budget claim, wherever it came from - the
+    // model's summary, the fallback's, or a text block - checked against the
+    // prices actually being shipped. See correctBudgetClaim.
+    if (searchData && Array.isArray(searchData.results) && searchData.results.length > 0) {
+      let rewrote = false;
+      if (typeof searchData.summary === 'string' && searchData.summary) {
+        const corrected = correctBudgetClaim(searchData.summary, searchData.results);
+        if (corrected !== searchData.summary) {
+          searchData.summary = corrected;
+          rewrote = true;
+        }
+      }
+      if (Array.isArray(searchData.blocks)) {
+        searchData.blocks = searchData.blocks.map((b: any) => {
+          if (b?.type !== 'text' || typeof b.body !== 'string') return b;
+          const corrected = correctBudgetClaim(b.body, searchData.results);
+          if (corrected === b.body) return b;
+          rewrote = true;
+          return { ...b, body: corrected };
+        });
+      }
+      if (rewrote) {
+        responseContent = JSON.stringify(searchData);
+        console.log('[Validation] Rewrote a budget claim the listings did not keep');
       }
     }
 
@@ -3542,6 +3665,40 @@ Maximum ${maxResults} properties in results.`;
     );
   }
 });
+
+// A budget the listings underneath don't keep.
+//
+// The model is handed "Budget: under 20M VND/month" as a constraint and writes
+// it into its summary as if it were a result, and the fallback summary used to
+// be built the same way - straight from the constraint, never from the prices
+// it was about to ship. When a strict area or bedroom filter
+// leaves nothing under budget, the reply then read "Here are 5 matching
+// apartments under 20M VND/month" over cards at 30M and 45M.
+//
+// So the claim gets checked against the cards and, when they break it, rewritten
+// to the range actually on offer. A claim inside a negation ("nothing under
+// 20M matched") is already true and is left alone.
+function correctBudgetClaim(text: string, results: Array<{ price?: number }>): string {
+  if (!text) return text;
+  const prices = results
+    .map(r => Number(r?.price))
+    .filter(v => Number.isFinite(v) && v > 0);
+  if (prices.length === 0) return text;
+  const highest = Math.max(...prices);
+  const lowest = Math.min(...prices);
+  const fmt = (v: number) => `${(v / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+
+  return text.replace(
+    /\b(?:under|below|less than|up to|within)\s+(?:VND\s*)?(\d+(?:[.,]\d+)?)\s*(?:m\b|million\b|tr\b|triệu\b)(\s*VND)?(\s*\/\s*(?:month|mo)\b|\s+per month\b)?/gi,
+    (match: string, amount: string, vnd: string | undefined, per: string | undefined, offset: number) => {
+      const claimed = parseFloat(String(amount).replace(',', '.')) * 1000000;
+      if (!Number.isFinite(claimed) || claimed <= 0 || highest <= claimed) return match;
+      const before = text.slice(Math.max(0, offset - 48), offset).toLowerCase();
+      if (/(n't|\b(?:no|not|nothing|none|never|few|hardly|beyond|over|above|instead of)\b)/.test(before)) return match;
+      return `from ${fmt(lowest)} to ${fmt(highest)}${vnd ?? ' VND'}${per ?? '/month'}`;
+    },
+  );
+}
 
 // Helper to clean AI responses
 function normalizeAiResponse(content: string): string {

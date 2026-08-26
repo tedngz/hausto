@@ -164,6 +164,10 @@ interface HomeAIProps {
   resultsPortal?: HTMLElement | null;
   /** Fires with how many listings are currently on show in the portal. */
   onResultsCountChange?: (count: number) => void;
+  /** When set (rail only), the history and new-chat controls render into this
+   *  node instead of taking a row of their own above the thread - the hub puts
+   *  them on the same line as the "AI chat" heading. */
+  headerPortal?: HTMLElement | null;
   /** Makes this composer a doorway rather than a chat: the first message is
    *  parked (see lib/chatHandoff) and the renter is sent to /hub, whose chat
    *  sends it and owns the conversation. What the landing page hero uses -
@@ -180,6 +184,7 @@ export const HomeAI = ({
   variant = 'page',
   resultsPortal,
   onResultsCountChange,
+  headerPortal,
   handoffToHub = false
 }: HomeAIProps) => {
   const isRail = variant === 'rail';
@@ -188,6 +193,11 @@ export const HomeAI = ({
   // Which reply's listings the main pane is showing. Follows the newest reply
   // that returned any, but an older one can be brought back from the thread.
   const [activeResultsIdx, setActiveResultsIdx] = useState<number | null>(null);
+  // Set when the renter brings a particular reply's listings back themselves.
+  // A deliberate pick holds the pane: a later reply's results no longer swap
+  // themselves in over a set the renter chose to look at - the thread still
+  // offers them as a chip, so nothing is lost, it just isn't automatic.
+  const [pickedResultsIdx, setPickedResultsIdx] = useState<number | null>(null);
   // Listings pinned to the conversation. Seeded by a property card's sparkle -
   // the event when it was fired on this page, `initialSubjects` when it was
   // fired on another one and handed over - and editable here from the renter's
@@ -277,8 +287,19 @@ export const HomeAI = ({
   }, [parsedMessages]);
 
   useEffect(() => {
+    // A pick only holds while it still exists: switching conversations or
+    // starting a fresh chat reshuffles the thread, and a stale index would
+    // leave the main pane empty with no way back.
+    const pickHolds =
+      pickedResultsIdx !== null &&
+      (parsedMessages[pickedResultsIdx]?.searchResults?.results.length ?? 0) > 0;
+    if (pickHolds) {
+      setActiveResultsIdx(pickedResultsIdx);
+      return;
+    }
+    if (pickedResultsIdx !== null) setPickedResultsIdx(null);
     setActiveResultsIdx(latestResultsIdx);
-  }, [latestResultsIdx]);
+  }, [latestResultsIdx, pickedResultsIdx, parsedMessages]);
 
   // Signed-in threads come from the DB; a signed-out visitor's one-shot search
   // lives in local state instead. Both feed the main pane the same way.
@@ -475,6 +496,8 @@ export const HomeAI = ({
     setTempUserImages([]);
     setLikedProperties(new Set());
     setIsFastTrackBannerDismissed(false);
+    // A different thread's reply sits at that index now, so the pick is void.
+    setPickedResultsIdx(null);
     // Clear any stored pending queries
     localStorage.removeItem('pendingSearchQuery');
   };
@@ -488,6 +511,7 @@ export const HomeAI = ({
     setTempUserMessageForLoggedIn(null);
     setTempUserImages([]);
     setSearchResults(null); // Clear anonymous search results
+    setPickedResultsIdx(null); // Belongs to the thread being left behind
 
     // Ensure the conversation has messages, if not, it might be an empty one
     const {
@@ -899,6 +923,20 @@ export const HomeAI = ({
     }
     setShowPropertyModal(true);
   };
+
+  // Rendered either in the thread or into the host's heading row - the same
+  // two buttons either way, so the conversation they act on stays one thing.
+  const chatControls = (
+    <>
+      <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" aria-label="Chat history" className="h-8 w-8 p-0 hover:bg-secondary/50">
+        <History className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      <Button onClick={createNewChat} variant="ghost" size="sm" aria-label="New chat" className="h-8 w-8 p-0 hover:bg-secondary/50">
+        <Plus className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    </>
+  );
+
   return <div className={isRail ? 'w-full h-full flex flex-col min-h-0' : 'w-full max-w-4xl mx-auto mt-4 px-1'}>
       <div className={isRail
         // Scrolls rather than spills: in the mobile dock (a third of the
@@ -907,16 +945,13 @@ export const HomeAI = ({
         // than the sheet. Nothing to scroll while it fits.
         ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto p-3'
         : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10'}>
-      {/* Header — history / new-chat controls sit in normal flow so they reserve
-          their own row and never overlap the composer in the compact state */}
-      {user && <div className="flex justify-end gap-2 mb-2">
-          <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" aria-label="Chat history" className="h-8 w-8 p-0 hover:bg-secondary/50">
-            <History className="h-4 w-4" aria-hidden="true" />
-          </Button>
-          <Button onClick={createNewChat} variant="ghost" size="sm" aria-label="New chat" className="h-8 w-8 p-0 hover:bg-secondary/50">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>}
+      {/* Header — history / new-chat controls. Given a headerPortal they move up
+          onto the pane's own "AI chat" heading, which already has a half-empty
+          row; without one they sit in normal flow so they reserve their own row
+          and never overlap the composer in the compact state. */}
+      {user && (headerPortal
+        ? createPortal(chatControls, headerPortal)
+        : <div className="flex justify-end gap-2 mb-2">{chatControls}</div>)}
 
       {/* Chat History Dropdown */}
       {showHistory && user && <Card className="mb-3 border-border">
@@ -984,7 +1019,10 @@ export const HomeAI = ({
                       // keeps a handle so an earlier search can be pulled back.
                       <button
                         type="button"
-                        onClick={() => setActiveResultsIdx(index)}
+                        onClick={() => {
+                          setActiveResultsIdx(index);
+                          setPickedResultsIdx(index);
+                        }}
                         disabled={isShowing}
                         className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
                           isShowing
