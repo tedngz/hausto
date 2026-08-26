@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { HaustoLogo } from '@/components/HaustoLogo';
 import { Badge } from '@/components/ui/badge';
 import { Building, MessageSquare, User, Plus, ArrowLeftRight, LogOut, MoreVertical } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -32,19 +33,14 @@ export const RealtorNavigation = ({
       <div className="max-w-4xl mx-auto px-3 md:px-4 py-2 md:py-3">
         <div className="flex items-center justify-between relative">
           <div className="flex items-center min-w-0 z-10">
-            <div
-              className="flex items-center justify-center space-x-1.5 md:space-x-2 cursor-pointer"
+            <button
+              type="button"
+              className="flex items-center justify-center"
               onClick={() => navigate('/')}
+              aria-label="Hausto home"
             >
-              <img
-                src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png"
-                alt="Hausto Logo"
-                className="w-5 h-5 md:w-6 md:h-6"
-              />
-              <div className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-                Hausto
-              </div>
-            </div>
+              <HaustoLogo size="sm" />
+            </button>
           </div>
 
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

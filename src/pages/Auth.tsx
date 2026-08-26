@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
+import { HaustoLogo } from '@/components/HaustoLogo';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -307,8 +308,9 @@ const Auth = () => {
       </Helmet>
       <main className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent pb-1">
-            Hausto - {isRecoveryMode ? 'Reset Password' : 'Sign In'}
+          <HaustoLogo size="lg" className="justify-center" />
+          <h1 className="mt-4 text-2xl font-bold text-foreground">
+            {isRecoveryMode ? 'Reset your password' : 'Sign in'}
           </h1>
           <p className="text-muted-foreground mt-2">Find your perfect home match</p>
         </div>

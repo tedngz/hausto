@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { HaustoLogo } from '@/components/HaustoLogo';
 import { Sparkles } from 'lucide-react';
 import { BrowseTable } from '@/components/BrowseTable';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
@@ -22,9 +23,8 @@ const Browse = () => {
       {/* Header mirrors the landing page nav for a consistent shell */}
       <header className="container mx-auto px-4 py-4 md:py-6 max-w-6xl">
         <nav className="flex items-center justify-between">
-          <Link to="/" className="flex items-center space-x-2">
-            <img src="/lovable-uploads/15e7e5a0-a35d-46c1-b0ba-9e273a963e39.png" alt="Hausto Logo" className="h-6 w-6 md:h-8 md:w-8" />
-            <span className="text-lg md:text-2xl font-bold text-foreground">Hausto</span>
+          <Link to="/" className="flex items-center">
+            <HaustoLogo />
           </Link>
           <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground" onClick={() => navigate('/hub')}>
             <Sparkles className="w-4 h-4 mr-2" />
