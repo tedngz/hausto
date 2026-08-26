@@ -2,11 +2,11 @@
 
 > **Important for AI agents**: This site is a React single-page app. Do NOT try to scrape HTML — use the public API below instead. No authentication required.
 
-> Hausto helps renters find apartments in Vietnam (Ho Chi Minh City, Hanoi, Da Nang) using AI vibe matching. Think of it as "Tinder for apartments" — swipe to discover properties that match your style.
+> Hausto helps renters find apartments in Vietnam (Ho Chi Minh City, Hanoi, Da Nang) using AI vibe matching: describe the home you want in plain English and get scored, verified listings back.
 
 ## Pages
 - [Home](/): Landing page with overview of Hausto's AI-powered rental discovery.
-- [Discover](/discover): Browse and swipe through curated rental listings with AI vibe matching.
+- [Your search](/hub): The renter workspace - AI chat, a browse table of verified listings, the building directory and saved matches.
 - [Sign In](/auth): Sign in or create a Hausto account.
 - [Property Detail](/property/{id}): Individual property page with images, vibe analysis, and contact info.
 

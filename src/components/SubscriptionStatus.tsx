@@ -101,7 +101,6 @@ export const SubscriptionStatus = ({
                 Premium Benefits Active
               </div>
               <ul className="text-xs text-muted-foreground space-y-0.5">
-                <li>• Unlimited swipes</li>
                 <li>• Unlimited matches</li>
                 <li>• Unlimited AI searches</li>
                 <li>• Fast-Track: up to 3 viewings scheduled per month</li>
@@ -141,7 +140,6 @@ export const SubscriptionStatus = ({
               Upgrade to unlock unlimited access
             </p>
             <ul className="text-xs text-muted-foreground space-y-0.5">
-              <li>• Unlimited swipes</li>
               <li>• Unlimited matches</li>
               <li>• Unlimited AI searches</li>
               <li>• Fast-Track: up to 3 viewings scheduled per month</li>
@@ -163,7 +161,6 @@ export const SubscriptionStatus = ({
               <p>Your premium benefits will remain active until {subscription_end ? new Date(subscription_end).toLocaleDateString() : 'the end of your current billing period'}.</p>
               <p className="text-muted-foreground">After that date, you'll lose access to:</p>
               <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
-                <li>Unlimited swipes</li>
                 <li>Unlimited matches</li>
                 <li>Unlimited AI searches</li>
                 <li>Fast-Track viewing scheduling</li>

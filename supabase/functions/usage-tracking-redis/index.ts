@@ -6,8 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// No propertiesViewed: the swipe deck that spent that budget is retired, and
+// nothing has counted a view since. The daily_usage.properties_viewed column
+// keeps the history; this function no longer adds to it.
 interface UsageData {
-  propertiesViewed: number;
   propertiesMatched: number;
   aiSearches: number;
   quizRetakes: number;
@@ -64,23 +66,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, type, propertyId } = await req.json();
+    const { action, type } = await req.json();
     const today = new Date().toISOString().split('T')[0];
-    
-    // Determine subscription status (premium users have no limits)
-    const { data: subscription, error: subError } = await supabaseClient
-      .from('subscribers')
-      .select('subscribed, subscription_tier')
-      .eq('user_id', userId)
-      .maybeSingle();
 
-    if (subError) {
-      console.error('[Usage Tracking] Error fetching subscription status:', subError);
-    }
+    // No subscription lookup: the only server-side limit this function enforced
+    // was the daily view cap, which went with the swipe deck. Matches, AI
+    // searches and quiz retakes are metered by the client against the same
+    // counters this returns.
 
-    const isPremium = !!subscription?.subscribed && subscription.subscription_tier === 'premium';
-
-    
     // Calculate week start (7 days ago)
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 6);
@@ -90,13 +83,11 @@ Deno.serve(async (req) => {
 
     if (action === 'get') {
       // Get current usage from Redis
-      const viewsKey = `usage:${userId}:${today}:views`; // This is now a SET of unique property IDs
       const matchesKey = `usage:${userId}:${today}:matches`;
       const aiKey = `usage:${userId}:${today}:ai`;
       const quizKey = `usage:${userId}:${today}:quiz`;
 
-      const [views, matches, ai, quiz] = await Promise.all([
-        redis.scard(viewsKey), // Count unique properties in SET
+      const [matches, ai, quiz] = await Promise.all([
         redis.get(matchesKey),
         redis.get(aiKey),
         redis.get(quizKey),
@@ -116,7 +107,6 @@ Deno.serve(async (req) => {
       weeklyMatches = weeklyResults.reduce((sum, val) => sum + (Number(val) || 0), 0);
 
       const usageData: UsageData = {
-        propertiesViewed: Number(views) || 0,
         propertiesMatched: Number(matches) || 0,
         aiSearches: Number(ai) || 0,
         quizRetakes: Number(quiz) || 0,
@@ -135,33 +125,6 @@ Deno.serve(async (req) => {
       let dbField: string;
 
       switch (type) {
-        case 'view': {
-          // For views, track unique property IDs in a SET
-          if (!propertyId) {
-            return new Response(JSON.stringify({ error: 'propertyId required for view tracking' }), {
-              status: 400,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          
-          const viewsKey = `usage:${userId}:${today}:views`;
-
-          // Enforce daily view limit for non-premium users at the server level
-          const currentCount = await redis.scard(viewsKey);
-          if (!isPremium && currentCount >= 10) {
-            console.log(`[Usage Tracking] Daily view limit reached for user ${userId}: ${currentCount}`);
-            newCount = currentCount;
-            dbField = 'properties_viewed';
-            break;
-          }
-          
-          await redis.sadd(viewsKey, propertyId); // Add property ID to SET
-          await redis.expire(viewsKey, 60 * 60 * 48); // 48 hours
-          newCount = await redis.scard(viewsKey); // Get count of unique properties
-          dbField = 'properties_viewed';
-          console.log(`[Usage Tracking] Added property ${propertyId} to views, unique count: ${newCount}`);
-          break;
-        }
         case 'match': {
           const matchesKey = `usage:${userId}:${today}:matches`;
           newCount = await redis.incr(matchesKey);

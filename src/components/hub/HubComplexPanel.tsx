@@ -2,6 +2,7 @@ import { Sparkles, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ComplexProfile } from '@/components/ComplexProfile';
 import { type Complex } from '@/hooks/useComplexes';
+import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
 
 interface HubComplexPanelProps {
@@ -22,6 +23,9 @@ interface HubComplexPanelProps {
  */
 export const HubComplexPanel = ({ complex, onClose, onAskAI }: HubComplexPanelProps) => (
   <Dialog open={!!complex} modal={false} onOpenChange={(o) => { if (!o) onClose(); }}>
+    {/* Blurs the directory behind the profile without touching the chat. */}
+    <HubPanelScrim open={!!complex} onDismiss={onClose} />
+
     <DialogContent
       overlayClassName="hidden"
       // Reaching for the chat is not dismissing the profile - see

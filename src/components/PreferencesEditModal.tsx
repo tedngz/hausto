@@ -8,11 +8,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Save } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown, Loader2, Save } from 'lucide-react';
 import { UserPreferences } from '@/types';
 import { BudgetRangeSelector } from '@/components/BudgetRangeSelector';
 import { CityDistrictSelector } from '@/components/CityDistrictSelector';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -64,7 +65,7 @@ const Chip = ({
   <button
     type="button"
     onClick={onClick}
-    className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${
+    className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
       selected
         ? 'bg-primary text-primary-foreground border-primary'
         : 'bg-background border-border hover:border-primary/50'
@@ -73,6 +74,81 @@ const Chip = ({
     {label}
   </button>
 );
+
+/** A labelled run of chips. The label is small caps so it reads as a caption
+ *  rather than as another heading competing with the dialog title. */
+const Field = ({
+  title,
+  hint,
+  className = '',
+  children,
+}: {
+  title: string;
+  hint?: string;
+  className?: string;
+  children: React.ReactNode;
+}) => (
+  <section className={className}>
+    <h4 className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+      {title}
+      {hint && <span className="ml-2 normal-case tracking-normal opacity-70">{hint}</span>}
+    </h4>
+    <div className="flex flex-wrap gap-1.5">{children}</div>
+  </section>
+);
+
+/**
+ * A section folded away behind its own answer.
+ *
+ * Budget and areas are both full pickers - presets, a slider, a
+ * city-then-district drill-down - and laid out flat they were most of this
+ * dialog's height, which pushed the six one-tap questions above them off a
+ * laptop screen. Closed, each is a single line stating what it is currently set
+ * to, which is what someone opening the editor usually wants to check anyway.
+ */
+const Disclosure = ({
+  label,
+  summary,
+  children,
+}: {
+  label: string;
+  summary: string;
+  children: React.ReactNode;
+}) => (
+  <Collapsible className="rounded-lg border border-border">
+    <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 px-3 py-2 text-left">
+      <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </span>
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="truncate text-xs font-medium">{summary}</span>
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
+          aria-hidden="true"
+        />
+      </span>
+    </CollapsibleTrigger>
+    <CollapsibleContent className="border-t border-border px-3 py-3">
+      {children}
+    </CollapsibleContent>
+  </Collapsible>
+);
+
+/** Split out so the currency context is only read while the dialog is open. */
+const BudgetField = ({
+  value,
+  onChange,
+}: {
+  value: [number, number];
+  onChange: (v: [number, number]) => void;
+}) => {
+  const { formatPrice } = useCurrency();
+  return (
+    <Disclosure label="Budget" summary={`${formatPrice(value[0])} - ${formatPrice(value[1])}`}>
+      <BudgetRangeSelector value={value} onChange={onChange} />
+    </Disclosure>
+  );
+};
 
 export const PreferencesEditModal = ({
   isOpen,
@@ -125,22 +201,29 @@ export const PreferencesEditModal = ({
   };
 
   const size = normalizeSize(prefs.size);
+  const areas = prefs.location ?? [];
+  const areaSummary =
+    areas.length === 0
+      ? 'Anywhere'
+      : areas.length <= 2
+        ? areas.join(', ')
+        : `${areas.length} areas`;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit your preferences</DialogTitle>
-          <DialogDescription>
-            Tweak any part below — no need to redo the whole quiz.
+      <DialogContent className="max-w-2xl max-h-[85dvh] gap-3 overflow-y-auto p-4 sm:p-5">
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="text-base">Edit your preferences</DialogTitle>
+          <DialogDescription className="text-xs">
+            Tweak any part - no need to redo the whole quiz.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
-          {/* Styles */}
-          <section>
-            <h4 className="font-medium text-sm mb-2">Style</h4>
-            <div className="flex flex-wrap gap-2">
+        <div className="space-y-3">
+          {/* Two columns from sm up: these are all short chip runs, and stacked
+              they turned six quick questions into a long scroll. */}
+          <div className="grid gap-x-5 gap-y-3 sm:grid-cols-2">
+            <Field title="Style">
               {STYLE_OPTIONS.map((s) => (
                 <Chip
                   key={s}
@@ -149,29 +232,9 @@ export const PreferencesEditModal = ({
                   onClick={() => toggleMulti('styles', s)}
                 />
               ))}
-            </div>
-          </section>
+            </Field>
 
-          {/* Must-haves */}
-          <section>
-            <h4 className="font-medium text-sm mb-2">Must-haves</h4>
-            <p className="text-xs text-muted-foreground mb-2">Deal-breakers your top matches must have.</p>
-            <div className="flex flex-wrap gap-2">
-              {MUST_HAVE_OPTIONS.map((o) => (
-                <Chip
-                  key={o.id}
-                  label={o.label}
-                  selected={(prefs.mustHaves ?? []).includes(o.id)}
-                  onClick={() => toggleMulti('mustHaves', o.id)}
-                />
-              ))}
-            </div>
-          </section>
-
-          {/* Activities */}
-          <section>
-            <h4 className="font-medium text-sm mb-2">Home lifestyle</h4>
-            <div className="flex flex-wrap gap-2">
+            <Field title="Home lifestyle">
               {ACTIVITY_OPTIONS.map((a) => (
                 <Chip
                   key={a}
@@ -180,13 +243,25 @@ export const PreferencesEditModal = ({
                   onClick={() => toggleMulti('activities', a)}
                 />
               ))}
-            </div>
-          </section>
+            </Field>
 
-          {/* Size */}
-          <section>
-            <h4 className="font-medium text-sm mb-2">Size</h4>
-            <div className="flex flex-wrap gap-2">
+            {/* Nine options - it needs the full width whatever the column count */}
+            <Field
+              title="Must-haves"
+              hint="deal-breakers your top matches must have"
+              className="sm:col-span-2"
+            >
+              {MUST_HAVE_OPTIONS.map((o) => (
+                <Chip
+                  key={o.id}
+                  label={o.label}
+                  selected={(prefs.mustHaves ?? []).includes(o.id)}
+                  onClick={() => toggleMulti('mustHaves', o.id)}
+                />
+              ))}
+            </Field>
+
+            <Field title="Size">
               {SIZE_OPTIONS.map((o) => (
                 <Chip
                   key={o.id}
@@ -195,40 +270,9 @@ export const PreferencesEditModal = ({
                   onClick={() => setSingle('size', o.id)}
                 />
               ))}
-            </div>
-          </section>
+            </Field>
 
-          {/* Budget */}
-          <section>
-            <h4 className="font-medium text-sm mb-3">Budget</h4>
-            <BudgetRangeSelector
-              value={prefs.priceRange}
-              onChange={(v) => setPrefs((prev) => ({ ...prev, priceRange: v }))}
-            />
-          </section>
-
-          {/* Location */}
-          <section>
-            <h4 className="font-medium text-sm mb-2">Preferred areas</h4>
-            {(prefs.location ?? []).length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {prefs.location.map((l) => (
-                  <Badge key={l} variant="secondary" className="text-xs">
-                    {l}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <CityDistrictSelector
-              value={prefs.location ?? []}
-              onChange={(v) => setPrefs((prev) => ({ ...prev, location: v }))}
-            />
-          </section>
-
-          {/* Move-in */}
-          <section>
-            <h4 className="font-medium text-sm mb-2">Move-in timeline</h4>
-            <div className="flex flex-wrap gap-2">
+            <Field title="Move-in">
               {MOVE_IN_OPTIONS.map((o) => (
                 <Chip
                   key={o.id}
@@ -237,16 +281,28 @@ export const PreferencesEditModal = ({
                   onClick={() => setSingle('moveInDate', o.id)}
                 />
               ))}
-            </div>
-          </section>
+            </Field>
+          </div>
+
+          <BudgetField
+            value={prefs.priceRange}
+            onChange={(v) => setPrefs((prev) => ({ ...prev, priceRange: v }))}
+          />
+
+          <Disclosure label="Areas" summary={areaSummary}>
+            <CityDistrictSelector
+              value={areas}
+              onChange={(v) => setPrefs((prev) => ({ ...prev, location: v }))}
+            />
+          </Disclosure>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          <Button size="sm" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save changes
           </Button>
         </DialogFooter>
