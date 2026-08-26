@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ChevronDown, ChevronLeft, ChevronRight, Crown, Pencil, SlidersHorizontal, Zap } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Crown, SlidersHorizontal, Zap } from 'lucide-react';
 import { PreferencesEditModal } from '@/components/PreferencesEditModal';
 import { UsageMeter } from '@/components/UsageMeter';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -111,11 +111,21 @@ export const HubPreferenceBar = ({ onOpenSubscription }: HubPreferenceBarProps) 
 
   return (
     <>
-      <section className="flex items-center gap-2 rounded-full border border-border bg-white/70 py-1.5 pl-3 pr-1.5 backdrop-blur-xl">
-        <SlidersHorizontal
-          className="h-3.5 w-3.5 shrink-0 text-primary"
-          aria-hidden="true"
-        />
+      <section className="flex items-center gap-2 rounded-full border border-border bg-white/70 p-1.5 backdrop-blur-xl">
+        {/* The strip's own glyph is the way into the editor - it used to be
+            decoration with a pencil at the far end doing the work, which put
+            the control a whole bar away from the thing it edits. Signed out
+            there is nowhere to save to, so it asks for an account instead. */}
+        <button
+          type="button"
+          aria-label="Adjust your vibe preferences"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/10"
+          onClick={() =>
+            user ? setIsEditOpen(true) : navigate('/auth', { state: { returnTo: '/hub' } })
+          }
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
 
         {/* Steps the strip by roughly one screenful. Touch can swipe, but a
             mouse has nothing to grab once the scrollbar is hidden. */}
@@ -181,18 +191,6 @@ export const HubPreferenceBar = ({ onOpenSubscription }: HubPreferenceBarProps) 
         )}
 
         <div className="flex shrink-0 items-center gap-1">
-          {user && (
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="Edit your preferences"
-              className="h-8 w-8 p-0 text-muted-foreground"
-              onClick={() => setIsEditOpen(true)}
-            >
-              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
-          )}
-
           {user && (
           <Popover>
             <PopoverTrigger asChild>

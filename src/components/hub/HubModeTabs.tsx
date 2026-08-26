@@ -9,12 +9,15 @@ interface HubModeTabsProps {
   counts?: Partial<Record<HubMode, number | undefined>>;
 }
 
+// Ordered by how the inventory narrows: the three ways to look at everything
+// we have (the table, the buildings, the map) sit together on the left, and the
+// two panes that are about this renter in particular come after them.
 const TABS: { id: HubMode; label: string; icon: typeof Heart }[] = [
   { id: 'browse', label: 'Browse', icon: LayoutList },
-  { id: 'ai', label: 'AI results', icon: Sparkles },
-  { id: 'matches', label: 'Matches', icon: Heart },
   { id: 'complexes', label: 'Complexes', icon: Building2 },
   { id: 'map', label: 'Map', icon: Map },
+  { id: 'ai', label: 'AI results', icon: Sparkles },
+  { id: 'matches', label: 'Matches', icon: Heart },
 ];
 
 /**
@@ -22,7 +25,7 @@ const TABS: { id: HubMode; label: string; icon: typeof Heart }[] = [
  * icon buttons so the two read as the same control family.
  */
 export const HubModeTabs = ({ mode, onChange, counts }: HubModeTabsProps) => (
-  // Four tabs do not fit a phone at equal widths, so the strip scrolls rather
+  // Five tabs do not fit a phone at equal widths, so the strip scrolls rather
   // than squeezing the labels out.
   <div
     role="tablist"

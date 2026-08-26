@@ -164,6 +164,10 @@ interface HomeAIProps {
   resultsPortal?: HTMLElement | null;
   /** Fires with how many listings are currently on show in the portal. */
   onResultsCountChange?: (count: number) => void;
+  /** When set (rail only), the history and new-chat controls render into this
+   *  node instead of taking a row of their own above the thread - the hub puts
+   *  them on the same line as the "AI chat" heading. */
+  headerPortal?: HTMLElement | null;
   /** Makes this composer a doorway rather than a chat: the first message is
    *  parked (see lib/chatHandoff) and the renter is sent to /hub, whose chat
    *  sends it and owns the conversation. What the landing page hero uses -
@@ -180,6 +184,7 @@ export const HomeAI = ({
   variant = 'page',
   resultsPortal,
   onResultsCountChange,
+  headerPortal,
   handoffToHub = false
 }: HomeAIProps) => {
   const isRail = variant === 'rail';
@@ -338,7 +343,33 @@ export const HomeAI = ({
         ? prev.filter((s) => s.propertyId !== option.propertyId)
         : [...prev, { propertyId: option.propertyId, title: option.title }],
     );
+    // One pick, one decision: the list closes behind it rather than staying
+    // open over the thread. Asking about a second listing is what the chip -
+    // now reading "Add" - is for, and that is the renter's move to make.
+    setIsSubjectPickerOpen(false);
   };
+
+  // Anywhere else, or Escape: the picker is a menu, and a menu that only the
+  // chip can dismiss sits on top of the reply the renter is trying to read.
+  const subjectPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isSubjectPickerOpen) return;
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const el = subjectPickerRef.current;
+      if (el && !el.contains(event.target as Node)) setIsSubjectPickerOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsSubjectPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isSubjectPickerOpen]);
 
   useEffect(() => {
     onResultsCountChange?.(activeResults?.results.length ?? 0);
@@ -899,6 +930,20 @@ export const HomeAI = ({
     }
     setShowPropertyModal(true);
   };
+
+  // Rendered either in the thread or into the host's heading row - the same
+  // two buttons either way, so the conversation they act on stays one thing.
+  const chatControls = (
+    <>
+      <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" aria-label="Chat history" className="h-8 w-8 p-0 hover:bg-secondary/50">
+        <History className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      <Button onClick={createNewChat} variant="ghost" size="sm" aria-label="New chat" className="h-8 w-8 p-0 hover:bg-secondary/50">
+        <Plus className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    </>
+  );
+
   return <div className={isRail ? 'w-full h-full flex flex-col min-h-0' : 'w-full max-w-4xl mx-auto mt-4 px-1'}>
       <div className={isRail
         // Scrolls rather than spills: in the mobile dock (a third of the
@@ -907,16 +952,13 @@ export const HomeAI = ({
         // than the sheet. Nothing to scroll while it fits.
         ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto p-3'
         : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10'}>
-      {/* Header — history / new-chat controls sit in normal flow so they reserve
-          their own row and never overlap the composer in the compact state */}
-      {user && <div className="flex justify-end gap-2 mb-2">
-          <Button onClick={() => setShowHistory(!showHistory)} variant="ghost" size="sm" aria-label="Chat history" className="h-8 w-8 p-0 hover:bg-secondary/50">
-            <History className="h-4 w-4" aria-hidden="true" />
-          </Button>
-          <Button onClick={createNewChat} variant="ghost" size="sm" aria-label="New chat" className="h-8 w-8 p-0 hover:bg-secondary/50">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>}
+      {/* Header — history / new-chat controls. Given a headerPortal they move up
+          onto the pane's own "AI chat" heading, which already has a half-empty
+          row; without one they sit in normal flow so they reserve their own row
+          and never overlap the composer in the compact state. */}
+      {user && (headerPortal
+        ? createPortal(chatControls, headerPortal)
+        : <div className="flex justify-end gap-2 mb-2">{chatControls}</div>)}
 
       {/* Chat History Dropdown */}
       {showHistory && user && <Card className="mb-3 border-border">
@@ -1222,7 +1264,7 @@ export const HomeAI = ({
           ))}
 
           {subjectOptions.length > 0 && (
-            <div className="relative">
+            <div className="relative" ref={subjectPickerRef}>
               <button
                 className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground"
                 aria-expanded={isSubjectPickerOpen}

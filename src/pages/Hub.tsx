@@ -103,6 +103,11 @@ const Hub = () => {
   // The chat renders its listings into this node. Held in state rather than a
   // ref so the first render after it mounts actually reaches HomeAI.
   const [resultsPortal, setResultsPortal] = useState<HTMLDivElement | null>(null);
+  // The chat's own controls (history, new chat) render into this node, so they
+  // share the "AI chat" heading's row instead of taking one of their own off
+  // the top of the thread. Only ever one of the rail and the dock is mounted,
+  // so only one of them ever claims it.
+  const [chatHeaderPortal, setChatHeaderPortal] = useState<HTMLDivElement | null>(null);
   const [resultsCount, setResultsCount] = useState(0);
   // A search finishing while the renter is on another tab shouldn't yank them
   // away, but the first one should - otherwise their results land off-screen.
@@ -187,6 +192,7 @@ const Hub = () => {
       }}
       resultsPortal={resultsPortal}
       onResultsCountChange={setResultsCount}
+      headerPortal={chatHeaderPortal}
     />
   );
 
@@ -341,6 +347,7 @@ const Hub = () => {
               <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
                 <span className="font-serif text-base">AI chat</span>
+                <div ref={setChatHeaderPortal} className="ml-auto flex items-center gap-1" />
               </div>
               <div className="min-h-0 flex-1">{chat}</div>
             </aside>
@@ -361,25 +368,33 @@ const Hub = () => {
                 isChatOpen ? 'h-[max(33dvh,15rem)]' : 'h-16'
               }`}
             >
-              <button
-                className="flex h-16 shrink-0 items-center gap-3 px-4 text-left"
-                aria-expanded={isChatOpen}
-                aria-controls="hub-chat-dock"
-                onClick={() => setIsChatOpen((open) => !open)}
-              >
-                <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                <span className="font-serif text-base">AI chat</span>
-                {!isChatOpen && (
-                  <span className="truncate text-xs text-muted-foreground">
-                    Ask about what&rsquo;s on screen
-                  </span>
+              <div className="flex h-16 shrink-0 items-center gap-2 px-4">
+                <button
+                  className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left"
+                  aria-expanded={isChatOpen}
+                  aria-controls="hub-chat-dock"
+                  onClick={() => setIsChatOpen((open) => !open)}
+                >
+                  <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="font-serif text-base">AI chat</span>
+                  {!isChatOpen && (
+                    <span className="truncate text-xs text-muted-foreground">
+                      Ask about what&rsquo;s on screen
+                    </span>
+                  )}
+                  {isChatOpen ? (
+                    <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  ) : (
+                    <ChevronUp className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  )}
+                </button>
+                {/* Only while the sheet is open: collapsed, these would act on
+                    a thread nobody can see. Unclaimed, the chat keeps them in
+                    its own (hidden) header rather than dropping them. */}
+                {isChatOpen && (
+                  <div ref={setChatHeaderPortal} className="flex shrink-0 items-center gap-1" />
                 )}
-                {isChatOpen ? (
-                  <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                ) : (
-                  <ChevronUp className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                )}
-              </button>
+              </div>
 
               {/* Collapsing hides the chat, it never unmounts it - tearing down
                   HomeAI would take the conversation, the draft and the current
