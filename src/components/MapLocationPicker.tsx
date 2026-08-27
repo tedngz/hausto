@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { MapPin, X, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getBasemap } from '@/lib/basemap';
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -12,6 +13,8 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
+
+const basemap = getBasemap();
 
 interface MapLocationPickerProps {
   latitude: number | null;
@@ -102,9 +105,14 @@ export const MapLocationPicker = ({ latitude, longitude, onLocationChange, locat
       const map = L.map(mapRef.current).setView(center, latitude ? 15 : 12);
       mapInstanceRef.current = map;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      }).addTo(map);
+      for (const layer of basemap.layers) {
+        L.tileLayer(layer.url, {
+          attribution: layer.attribution,
+          subdomains: layer.subdomains ?? 'abc',
+          maxZoom: layer.maxZoom,
+          maxNativeZoom: layer.maxNativeZoom,
+        }).addTo(map);
+      }
 
       // Add existing marker
       if (latitude && longitude) {

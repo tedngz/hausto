@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import type { LatLngExpression, LayerGroup, Map as LeafletMap, Marker, PopupEvent } from 'leaflet';
 import type { Complex } from '@/hooks/useComplexes';
 import cityDistrictsData from '@/data/cityDistricts.json';
+import { getBasemap } from '@/lib/basemap';
 
 type City = 'ho_chi_minh' | 'hanoi';
+
+// Resolved once: the tile provider comes from build-time env, so it cannot
+// change while the app is running.
+const basemap = getBasemap();
 
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
   ho_chi_minh: { minLat: 10.68, maxLat: 10.90, minLng: 106.60, maxLng: 106.88 },
@@ -229,11 +234,14 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
       }) as LeafletMap & { __ro?: ResizeObserver };
       mapRef.current = map;
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      }).addTo(map);
+      for (const layer of basemap.layers) {
+        L.tileLayer(layer.url, {
+          attribution: layer.attribution,
+          subdomains: layer.subdomains ?? 'abc',
+          maxZoom: layer.maxZoom,
+          maxNativeZoom: layer.maxNativeZoom,
+        }).addTo(map);
+      }
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
       overlaysRef.current = L.layerGroup().addTo(map);
@@ -571,6 +579,13 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
           </span>
         </div>
       </div>
+
+      {/* Tile attribution. The map itself hides Leaflet's control to keep the
+          canvas clean, so the credit the providers require lives here. */}
+      <div
+        className="mt-3 text-center text-[9px] text-[#0D4F4A]/30 [&_a]:underline [&_a]:decoration-dotted"
+        dangerouslySetInnerHTML={{ __html: basemap.attribution }}
+      />
     </div>
   );
 }
