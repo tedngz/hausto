@@ -9,7 +9,9 @@ type City = 'ho_chi_minh' | 'hanoi';
 
 // Resolved once: the tile provider comes from build-time env, so it cannot
 // change while the app is running.
-const basemap = getBasemap();
+// This map paints its own English district labels, so the provider's Vietnamese
+// ones are left off - one name per district, ours.
+const basemap = getBasemap({ labels: false });
 
 const BBOX: Record<City, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
   ho_chi_minh: { minLat: 10.68, maxLat: 10.90, minLng: 106.60, maxLng: 106.88 },

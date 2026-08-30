@@ -61,7 +61,7 @@ const MAPTILER_ATTRIBUTION =
  * ships to z16, hence `maxNativeZoom` (Leaflet stretches the z16 tiles rather
  * than showing blank squares when someone zooms to a single building).
  */
-const esri = (): Basemap => ({
+const esri = (labels: boolean): Basemap => ({
   id: 'esri',
   attribution: ESRI_ATTRIBUTION,
   layers: [
@@ -71,12 +71,16 @@ const esri = (): Basemap => ({
       maxZoom: 19,
       maxNativeZoom: 16,
     },
-    {
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-      attribution: '',
-      maxZoom: 19,
-      maxNativeZoom: 16,
-    },
+    ...(labels
+      ? [
+          {
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+            attribution: '',
+            maxZoom: 19,
+            maxNativeZoom: 16,
+          },
+        ]
+      : []),
   ],
 });
 
@@ -93,12 +97,12 @@ const osm = (): Basemap => ({
   ],
 });
 
-const carto = (apiKey: string): Basemap => ({
+const carto = (apiKey: string, labels: boolean): Basemap => ({
   id: 'carto',
   attribution: CARTO_ATTRIBUTION,
   layers: [
     {
-      url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?api_key=${encodeURIComponent(apiKey)}`,
+      url: `https://{s}.basemaps.cartocdn.com/${labels ? 'light_all' : 'light_nolabels'}/{z}/{x}/{y}{r}.png?api_key=${encodeURIComponent(apiKey)}`,
       attribution: CARTO_ATTRIBUTION,
       subdomains: 'abcd',
       maxZoom: 20,
@@ -130,6 +134,19 @@ const maptiler = (apiKey: string): Basemap => ({
   ],
 });
 
+export interface BasemapOptions {
+  /**
+   * Keep the provider's own place labels. Maps that draw their own labels pass
+   * `false`: the provider's names are Vietnamese ("Quan 12", "Huyen Hoc Mon")
+   * and would double up with the English ones the overlay places.
+   *
+   * Only esri and carto can serve a label-free base - stadia's and maptiler's
+   * raster tiles bake the labels into the image, so those providers keep
+   * theirs regardless.
+   */
+  labels?: boolean;
+}
+
 /**
  * Resolve the basemap for this build.
  *
@@ -137,7 +154,7 @@ const maptiler = (apiKey: string): Basemap => ({
  * key falls through to the keyless default rather than rendering stamped or
  * 403ing tiles.
  */
-export function getBasemap(): Basemap {
+export function getBasemap({ labels = true }: BasemapOptions = {}): Basemap {
   const cartoKey = readEnv(import.meta.env.VITE_CARTO_API_KEY);
   const stadiaKey = readEnv(import.meta.env.VITE_STADIA_API_KEY);
   const maptilerKey = readEnv(import.meta.env.VITE_MAPTILER_API_KEY);
@@ -145,7 +162,7 @@ export function getBasemap(): Basemap {
 
   switch (requested) {
     case 'carto':
-      if (cartoKey) return carto(cartoKey);
+      if (cartoKey) return carto(cartoKey, labels);
       break;
     case 'stadia':
       if (stadiaKey) return stadia(stadiaKey);
@@ -156,11 +173,11 @@ export function getBasemap(): Basemap {
     case 'osm':
       return osm();
     case 'esri':
-      return esri();
+      return esri(labels);
   }
 
-  if (cartoKey) return carto(cartoKey);
+  if (cartoKey) return carto(cartoKey, labels);
   if (stadiaKey) return stadia(stadiaKey);
   if (maptilerKey) return maptiler(maptilerKey);
-  return esri();
+  return esri(labels);
 }
