@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 export const INCLUDED_VIEWINGS_PER_CYCLE = 3;
 /** Free tier gets one coordinated viewing on the house, once per account. */
 export const FREE_TRIAL_VIEWINGS = 1;
-/** One $20 viewing pack. Packs are bought outright and stack. */
+/** One $20 viewing pack: bought outright, stacks, and lapses after 30 days. */
 export const VIEWINGS_PER_PACK = 10;
 
 export interface ViewingQuota {
@@ -21,7 +21,9 @@ export interface ViewingQuota {
   baseRemaining: number;
   /** Unspent pack credits, across every pack bought. */
   packRemaining: number;
-  /** True once the renter has bought at least one pack. */
+  /** When the soonest-lapsing pack with credits left expires, if any. */
+  packExpiresAt: string | null;
+  /** True while the renter holds at least one live pack. */
   hasPack: boolean;
   /** True when the renter can book another viewing right now. */
   canBook: boolean;
@@ -39,7 +41,7 @@ export interface ViewingQuota {
  * - Free tier: one trial booking per account, ever. It's the only way to feel
  *   what coordination does before paying, so it doesn't reset.
  * - Premium: 3 bookings per subscription cycle.
- * - Viewing packs: $20 buys 10 bookings outright. They don't expire, they stack
+ * - Viewing packs: $20 buys 10 bookings outright. They last 30 days, they stack
  *   across repeat purchases, and they're only spent once the plan allowance
  *   above is exhausted - the same order the DB trigger consumes them in.
  *
@@ -97,16 +99,22 @@ export const useViewingQuota = () => {
         baseUsed = trial ? 1 : 0;
       }
 
-      // Packs are bought outright, so every row the renter owns counts - spent
-      // ones included, which is what makes the totals below add up.
+      // Only live packs count: a lapsed one's unspent credits are gone, so
+      // showing them would promise bookings the DB would refuse.
       const { data: packs } = await supabase
         .from('viewing_addons')
-        .select('credits, credits_used')
-        .eq('renter_id', user!.id);
+        .select('credits, credits_used, expires_at')
+        .eq('renter_id', user!.id)
+        .gt('expires_at', now.toISOString())
+        .order('expires_at', { ascending: true });
 
-      const packTotal = (packs ?? []).reduce((n, p) => n + p.credits, 0);
-      const packSpent = (packs ?? []).reduce((n, p) => n + p.credits_used, 0);
+      const livePacks = packs ?? [];
+      const packTotal = livePacks.reduce((n, p) => n + p.credits, 0);
+      const packSpent = livePacks.reduce((n, p) => n + p.credits_used, 0);
       const packRemaining = Math.max(0, packTotal - packSpent);
+      // The soonest deadline is the one worth warning about - credits are spent
+      // from that pack first.
+      const packExpiresAt = livePacks.find((p) => p.credits_used < p.credits)?.expires_at ?? null;
 
       const baseRemaining = Math.max(0, baseIncluded - baseUsed);
       const included = baseIncluded + packTotal;
@@ -121,6 +129,7 @@ export const useViewingQuota = () => {
         remaining,
         baseRemaining,
         packRemaining,
+        packExpiresAt,
         hasPack,
         canBook: remaining > 0,
         isTrial,

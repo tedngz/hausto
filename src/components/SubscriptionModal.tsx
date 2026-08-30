@@ -148,9 +148,18 @@ export const SubscriptionModal = ({
                 <Badge variant="secondary">$20 one-off</Badge>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                {VIEWINGS_PER_PACK} viewing coordination, yours to use whenever. No Premium plan required.
+                {VIEWINGS_PER_PACK} viewing coordination, good for 30 days. No Premium plan required.
                 {/* Packs stack, so the pitch is "buy another", never "already active". */}
-                {!!quota?.packRemaining && ` ${quota.packRemaining} left on your account.`}
+                {!!quota?.packRemaining && (
+                  <>
+                    {' '}
+                    {quota.packRemaining} left on your account
+                    {quota.packExpiresAt
+                      ? ` until ${new Date(quota.packExpiresAt).toLocaleDateString()}`
+                      : ''}
+                    .
+                  </>
+                )}
               </p>
             </div>
             <Button

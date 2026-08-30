@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 // Creates a $20 one-time PayPal order for a viewing pack (10 coordination,
-// bought outright). The renter approves on PayPal and is redirected to
+// good for 30 days). The renter approves on PayPal and is redirected to
 // /addon-success, which invokes capture-viewing-addon-order.
 
 const corsHeaders = {
@@ -78,7 +78,7 @@ serve(async (req) => {
         intent: "CAPTURE",
         purchase_units: [
           {
-            description: "Hausto viewing pack — 10 viewing coordination",
+            description: "Hausto viewing pack — 10 viewing coordination, valid 30 days",
             custom_id: user.id,
             amount: { currency_code: "USD", value: ADDON_PRICE_USD },
           },

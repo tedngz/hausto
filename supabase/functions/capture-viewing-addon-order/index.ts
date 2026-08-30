@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 // Captures an approved viewing-pack PayPal order and records the pack:
-// 10 viewing coordination, bought outright and never expiring. Idempotent via the
+// 10 viewing coordination, bought outright and good for 30 days. Idempotent via the
 // unique paypal_order_id constraint on viewing_addons.
 
 const corsHeaders = {
@@ -11,6 +11,7 @@ const corsHeaders = {
 };
 
 const CREDITS_PER_PACK = 10;
+const PACK_DAYS = 30;
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -107,20 +108,21 @@ serve(async (req) => {
 
     // One row per purchase: packs stack, so this is an insert, never an upsert
     // onto an existing pack.
+    const expiresAt = new Date(Date.now() + PACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
     const { error: insertError } = await supabaseClient.from("viewing_addons").insert({
       renter_id: user.id,
       paypal_order_id: orderId,
       amount_usd: 20,
       credits: CREDITS_PER_PACK,
-      expires_at: null,
+      expires_at: expiresAt,
     });
     // Unique-violation on paypal_order_id means a concurrent invoke won; fine.
     if (insertError && !String(insertError.message).includes("duplicate")) {
       throw insertError;
     }
-    logStep("Pack recorded", { userId: user.id, credits: CREDITS_PER_PACK });
+    logStep("Pack recorded", { userId: user.id, credits: CREDITS_PER_PACK, expiresAt });
 
-    return new Response(JSON.stringify({ success: true, credits: CREDITS_PER_PACK }), {
+    return new Response(JSON.stringify({ success: true, credits: CREDITS_PER_PACK, expiresAt }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });

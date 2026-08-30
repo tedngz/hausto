@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 // PayPal redirects here after the renter approves a $20 viewing-pack order
-// (?token=<orderId>). We capture the payment and record the pack of credits.
+// (?token=<orderId>). We capture the payment and record the pack: 10 credits,
+// good for 30 days.
 const AddonSuccess = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ const AddonSuccess = () => {
         // The hub reads the quota from cache, so the new credits need a nudge.
         refetchQuota();
         setStatus('success');
-        toast.success('Viewing pack added - 10 coordination on your account! 🎉');
+        toast.success('Viewing pack added - 10 coordination for the next 30 days! 🎉');
       } catch (err) {
         console.error('Failed to capture add-on order:', err);
         setStatus('error');
@@ -65,7 +66,7 @@ const AddonSuccess = () => {
             <CheckCircle className="h-16 w-16 text-primary mx-auto mb-4" />
             <h1 className="text-2xl font-bold mb-2">Viewing pack added! 🎉</h1>
             <p className="text-muted-foreground mb-6">
-              10 viewing coordination are now on your account. They do not expire, and you can buy another pack whenever you run out.
+              10 viewing coordination are now on your account, good for the next 30 days. You can buy another pack whenever you run out.
             </p>
             <Button onClick={() => navigate('/hub')} size="lg">
               Book a viewing

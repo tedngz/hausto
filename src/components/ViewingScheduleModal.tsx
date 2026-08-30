@@ -192,7 +192,8 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
             <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 flex items-center gap-2 text-sm text-emerald-800">
               <CalendarCheck className="h-4 w-4 shrink-0" />
               <span>
-                {quota.remaining} viewing coordination left, including {quota.packRemaining} from your viewing pack.
+                {quota.remaining} viewing coordination left, including {quota.packRemaining} from your viewing pack
+                {quota.packExpiresAt ? ` (until ${format(new Date(quota.packExpiresAt), 'MMM dd, yyyy')})` : ''}.
               </span>
             </div>
           ) : quota.trialAvailable ? (
