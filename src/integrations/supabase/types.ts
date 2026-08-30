@@ -1508,7 +1508,9 @@ export type Database = {
         Row: {
           amount_usd: number
           created_at: string
-          expires_at: string
+          credits: number
+          credits_used: number
+          expires_at: string | null
           id: string
           paypal_order_id: string
           renter_id: string
@@ -1517,7 +1519,9 @@ export type Database = {
         Insert: {
           amount_usd?: number
           created_at?: string
-          expires_at: string
+          credits?: number
+          credits_used?: number
+          expires_at?: string | null
           id?: string
           paypal_order_id: string
           renter_id: string
@@ -1526,7 +1530,9 @@ export type Database = {
         Update: {
           amount_usd?: number
           created_at?: string
-          expires_at?: string
+          credits?: number
+          credits_used?: number
+          expires_at?: string | null
           id?: string
           paypal_order_id?: string
           renter_id?: string

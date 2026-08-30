@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-// Creates a $20 one-time PayPal order for the "unlimited viewings for a month"
-// Fast-Track add-on. The renter approves on PayPal and is redirected to
+// Creates a $20 one-time PayPal order for a viewing pack (10 coordination,
+// good for 30 days). The renter approves on PayPal and is redirected to
 // /addon-success, which invokes capture-viewing-addon-order.
 
 const corsHeaders = {
@@ -64,7 +64,8 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/$/, '') || '';
     const returnUrl = `${origin}/addon-success`;
-    const cancelUrl = `${origin}/discover`;
+    // Backing out returns to the hub, where the pack is offered from.
+    const cancelUrl = `${origin}/hub`;
 
     const orderResponse = await fetch(`${apiBase}/v2/checkout/orders`, {
       method: "POST",
@@ -77,7 +78,7 @@ serve(async (req) => {
         intent: "CAPTURE",
         purchase_units: [
           {
-            description: "Hausto Fast-Track — unlimited viewing bookings for 30 days",
+            description: "Hausto viewing pack — 10 viewing coordination, valid 30 days",
             custom_id: user.id,
             amount: { currency_code: "USD", value: ADDON_PRICE_USD },
           },

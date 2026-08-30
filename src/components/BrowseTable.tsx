@@ -286,7 +286,7 @@ export const BrowseTable = ({
         setSubscriptionOpen(true);
       } else {
         toast.error('Viewing bookings used up for this cycle', {
-          description: 'Upgrade or purchase the unlimited add-on from your matches page to book more.',
+          description: 'Upgrade or buy a viewing pack from your matches page to book more.',
         });
       }
       return;

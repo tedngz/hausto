@@ -90,7 +90,7 @@ const handler = async (req: Request): Promise<Response> => {
       conversationId,
     }: FastTrackNotificationRequest = await req.json();
 
-    console.log("Sending fast track request notifications for:", renterEmail);
+    console.log("Sending viewing request notifications for:", renterEmail);
 
     // Format dates and times for email
     const datesText = preferredDates.join(", ");
@@ -115,10 +115,10 @@ const handler = async (req: Request): Promise<Response> => {
     const adminEmailResponse = await resend.emails.send({
       from: "Hausto <hello@hausto.com>",
       to: ["ted.ngz@gmail.com"],
-      subject: "🎯 New Fast Track Viewing Request",
+      subject: "🎯 New viewing coordination request",
       html: `
-        <h1>New Fast Track Viewing Request</h1>
-        <p>A renter has submitted a fast track viewing request that needs coordination:</p>
+        <h1>New viewing coordination request</h1>
+        <p>A renter has submitted a viewing request that needs coordination:</p>
         
         <h2>Renter Information:</h2>
         <ul>
@@ -151,11 +151,11 @@ const handler = async (req: Request): Promise<Response> => {
     const renterEmailResponse = await resend.emails.send({
       from: "Hausto <hello@hausto.com>",
       to: [renterEmail],
-      subject: "Fast Track Request Received - Hausto",
+      subject: "Viewing request received - Hausto",
       html: `
-        <h1>Your Fast Track Request Has Been Received!</h1>
+        <h1>Your viewing request has been received!</h1>
         <p>Hi ${renterName},</p>
-        <p>We've received your fast track viewing request and Hausto Agent is now working on coordinating viewings with the listing providers.</p>
+        <p>We've received your viewing request and Hausto Agent is now working on coordinating viewings with the listing providers.</p>
         
         <h2>Your Request Details:</h2>
         <ul>
@@ -180,7 +180,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: "Fast track notifications sent successfully",
+        message: "Viewing request notifications sent successfully",
       }),
       {
         status: 200,

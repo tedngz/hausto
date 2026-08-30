@@ -10,7 +10,7 @@ export const FastTrackQueuePanel = () => (
     <CardHeader>
       <CardTitle className="flex items-center gap-2">
         <CalendarCheck className="w-5 h-5" />
-        Fast-Track viewing queue
+        Viewing coordination queue
       </CardTitle>
       <CardDescription>
         Confirm schedules, suggest changes, or cancel - the renter is notified in

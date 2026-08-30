@@ -84,8 +84,8 @@ export const ListingPreviewDialog = ({
       </ul>
       <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-border/60 pt-2.5">
         <span className="text-xs text-muted-foreground">
-          {quota?.unlimited
-            ? 'Unlimited viewings active this month'
+          {quota?.hasPack
+            ? `${quota.remaining} viewing coordination left`
             : quota?.trialAvailable
               ? 'Your first viewing is on us'
               : quota?.trialUsed

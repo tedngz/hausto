@@ -139,8 +139,8 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
                 <p className="text-sm font-medium">Want to see units in person?</p>
                 <p className="text-sm text-muted-foreground">
                   {trialPitch
-                    ? "Your first viewing is on us - Hausto's Fast-Track team books the visit for you."
-                    : "Hausto's Fast-Track team books the visits for you. Premium includes 3 coordinated viewings a cycle."}
+                    ? "Your first viewing is on us - Hausto books the visit for you."
+                    : "Hausto books the visits for you. Premium includes 3 coordinated viewings a cycle."}
                 </p>
                 <Button
                   size="sm"

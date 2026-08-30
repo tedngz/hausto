@@ -193,7 +193,7 @@ export const FastTrackRequestsCard = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <CalendarCheck className="w-5 h-5" />
-          Fast-Track viewing requests
+          Viewing requests
         </CardTitle>
         <CardDescription>Hausto coordinates these viewings with the agents for you.</CardDescription>
         {archivedCount > 0 && (

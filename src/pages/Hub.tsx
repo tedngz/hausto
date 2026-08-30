@@ -27,6 +27,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { preferencesToSearchQuery } from '@/lib/preferences';
 import { clearChatHandoff, peekChatHandoff } from '@/lib/chatHandoff';
 import { ASSISTANT_COMPARE_EVENT, ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
+import { cn } from '@/lib/utils';
 
 /**
  * Below this the page does not split into two panes at all.
@@ -255,7 +256,14 @@ const Hub = () => {
 
         <div className="flex min-h-0 flex-1">
           {/* ---- Main pane ---- */}
-          <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:p-6 xl:overflow-hidden">
+          {/* The search view carries its own inner scroller at xl, so the pane
+              stops scrolling there - profile has none, so it keeps the pane's. */}
+          <main
+            className={cn(
+              'flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:p-6',
+              !showProfile && 'xl:overflow-hidden'
+            )}
+          >
             {showProfile ? (
               <div className="mx-auto w-full max-w-6xl">
                 <Button

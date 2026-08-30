@@ -98,8 +98,8 @@ export const UsageMeter = () => {
           );
         })}
 
-        {/* Viewing coordination sits outside the map: it isn't unlimited on
-            premium (3 a cycle), and on the free tier it's the one-off trial. */}
+        {/* Viewing coordination sits outside the map: it's 3 a cycle on premium,
+            10 a month on the viewing pack, and a one-off trial on the free tier. */}
         {quota && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
@@ -109,20 +109,14 @@ export const UsageMeter = () => {
                   {quota.isTrial ? 'Free viewing coordination' : 'Viewing coordinations'}
                 </span>
               </div>
-              <span className={`font-mono ${!quota.unlimited && !quota.canBook ? 'text-red-500' : 'text-muted-foreground'}`}>
-                {quota.unlimited ? '∞' : `${Math.min(quota.used, quota.included)}/${quota.included}`}
+              <span className={`font-mono ${!quota.canBook ? 'text-red-500' : 'text-muted-foreground'}`}>
+                {`${Math.min(quota.used, quota.included)}/${quota.included}`}
               </span>
             </div>
-            {quota.unlimited ? (
-              <div className="h-2 bg-primary/20 rounded-full">
-                <div className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full animate-pulse"></div>
-              </div>
-            ) : (
-              <Progress
-                value={Math.min((quota.used / quota.included) * 100, 100)}
-                className={`h-2 ${!quota.canBook ? '[&>div]:bg-red-500' : ''}`}
-              />
-            )}
+            <Progress
+              value={Math.min((quota.used / quota.included) * 100, 100)}
+              className={`h-2 ${!quota.canBook ? '[&>div]:bg-red-500' : ''}`}
+            />
           </div>
         )}
       </CardContent>

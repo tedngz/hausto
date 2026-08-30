@@ -2653,7 +2653,7 @@ HANDING OVER CONTACT DETAILS AND SOURCE LINKS:
 - To share the owner/realtor contact, set "reveal_contact_property_id" to that subject's id. The system attaches it and enforces the user's daily allowance.
 - To share the original listing, set "reveal_listing_link_property_id" to that subject's id. Same allowance.
 - Do this whenever the user asks, AND whenever the answer genuinely needs the owner (live availability, price negotiation, deposit or contract terms, move-in dates) - answer what you can from the data, then attach the contact so they can call.
-- If a subject says "Contact on file: no", say Hausto has no direct contact for it and offer Fast-Track viewing coordination instead. If it says "Original listing on file: no", say we don't have a source link rather than offering a substitute.
+- If a subject says "Contact on file: no", say Hausto has no direct contact for it and offer viewing coordination instead. If it says "Original listing on file: no", say we don't have a source link rather than offering a substitute.
 ` ;
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
@@ -3590,7 +3590,7 @@ Maximum ${maxResults} properties in results.`;
           const name = (contactTarget.property_source_provider_name ?? contactTarget.contact_name) as string | null;
           const phone = (contactTarget.property_source_provider_phone ?? contactTarget.contact_phone) as string | null;
           if (!name && !phone) {
-            handover.push(`I don't have a direct owner/realtor contact on file for "${contactTarget.title}". Fast-Track viewing coordination can reach the listing provider for you.`);
+            handover.push(`I don't have a direct owner/realtor contact on file for "${contactTarget.title}". Hausto viewing coordination can reach the listing provider for you.`);
           } else if (await spendReveal(contactTarget.id)) {
             const lines = [`📞 Contact for "${contactTarget.title}":`];
             if (name) lines.push(`Name: ${name}`);

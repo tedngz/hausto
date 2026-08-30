@@ -2,16 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-// PayPal redirects here after the renter approves the $20 unlimited-viewings
-// add-on order (?token=<orderId>). We capture the payment and record the add-on.
+// PayPal redirects here after the renter approves a $20 viewing-pack order
+// (?token=<orderId>). We capture the payment and record the pack: 10 credits,
+// good for 30 days.
 const AddonSuccess = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refetchQuota } = useViewingQuota();
   const [status, setStatus] = useState<'capturing' | 'success' | 'error'>('capturing');
   const capturedRef = useRef(false);
 
@@ -35,8 +38,10 @@ const AddonSuccess = () => {
           return;
         }
 
+        // The hub reads the quota from cache, so the new credits need a nudge.
+        refetchQuota();
         setStatus('success');
-        toast.success('Unlimited viewings unlocked for 30 days! 🎉');
+        toast.success('Viewing pack added - 10 coordination for the next 30 days! 🎉');
       } catch (err) {
         console.error('Failed to capture add-on order:', err);
         setStatus('error');
@@ -59,9 +64,9 @@ const AddonSuccess = () => {
         {status === 'success' && (
           <>
             <CheckCircle className="h-16 w-16 text-primary mx-auto mb-4" />
-            <h1 className="text-2xl font-bold mb-2">Unlimited viewings unlocked! 🎉</h1>
+            <h1 className="text-2xl font-bold mb-2">Viewing pack added! 🎉</h1>
             <p className="text-muted-foreground mb-6">
-              For the next 30 days, Hausto will coordinate as many viewings as you need — until you settle on a home.
+              10 viewing coordination are now on your account, good for the next 30 days. You can buy another pack whenever you run out.
             </p>
             <Button onClick={() => navigate('/hub')} size="lg">
               Book a viewing
@@ -72,10 +77,10 @@ const AddonSuccess = () => {
           <>
             <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
             <p className="text-muted-foreground mb-6">
-              If you completed the payment, your add-on will be activated shortly — contact us if it doesn't appear.
+              If you completed the payment, your pack will appear shortly — contact us if it doesn't.
             </p>
             <Button onClick={() => navigate('/hub')} size="lg">
-              Back to Discover
+              Back to your search
             </Button>
           </>
         )}

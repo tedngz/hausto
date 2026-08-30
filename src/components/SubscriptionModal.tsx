@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Check, Crown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { VIEWINGS_PER_PACK, useViewingQuota } from '@/hooks/useViewingQuota';
 import { toast } from 'sonner';
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -24,7 +24,7 @@ export const SubscriptionModal = ({
   const {
     createSubscription
   } = useSubscription();
-  const { quota, purchaseUnlimitedMonth } = useViewingQuota();
+  const { quota, purchaseViewingPack } = useViewingQuota();
   const [loading, setLoading] = useState(false);
   const [addonLoading, setAddonLoading] = useState(false);
   const reasonMessages = {
@@ -60,7 +60,7 @@ export const SubscriptionModal = ({
     }
     setAddonLoading(true);
     try {
-      await purchaseUnlimitedMonth();
+      await purchaseViewingPack();
     } finally {
       setAddonLoading(false);
     }
@@ -75,7 +75,7 @@ export const SubscriptionModal = ({
   const premiumFeatures = [
     'Unlimited matches',
     'Unlimited AI searches',
-    'Fast-Track: Hausto coordinates with realtors/owners to schedule up to 3 viewings per month for you',
+    '3 viewing coordination',
   ];
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -84,9 +84,9 @@ export const SubscriptionModal = ({
             <Crown className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             Upgrade to Premium
           </DialogTitle>
-          <DialogDescription className="text-sm sm:text-lg">
-            {reason && reasonMessages[reason]}
-            {" "}Unlock unlimited access with our premium plan.
+          {/* Only speaks up when there's a reason the renter landed here. */}
+          <DialogDescription className={`text-sm sm:text-lg ${reason ? '' : 'sr-only'}`}>
+            {reason ? reasonMessages[reason] : 'Compare the Hausto plans.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -121,7 +121,7 @@ export const SubscriptionModal = ({
                 <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 Premium Plan
               </CardTitle>
-              <CardDescription>Unlimited search, plus Fast-Track viewings</CardDescription>
+              <CardDescription>Unlimited search, plus viewing coordination</CardDescription>
               <div className="text-2xl sm:text-3xl font-bold">$10<span className="text-sm font-normal">/month</span></div>
               
             </CardHeader>
@@ -139,26 +139,36 @@ export const SubscriptionModal = ({
           </Card>
         </div>
 
-        {/* Unlimited viewing schedules: sold as a standalone $20 add-on, not bundled into Premium */}
+        {/* The viewing pack: a standalone one-off $20 purchase, not bundled into Premium */}
         <Card className="mt-4 sm:mt-6">
           <CardContent className="pt-4 sm:pt-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
             <div className="flex-1">
               <div className="font-semibold flex items-center gap-2">
-                Unlimited Viewings
-                <Badge variant="secondary">$20/month</Badge>
+                Viewing Pack
+                <Badge variant="secondary">$20 one-off</Badge>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                Book as many in-person viewings as you need for 30 days. Hausto coordinates every visit until you settle on a home. No Premium plan required.
-                {quota?.unlimited && ' Already active on your account.'}
+                {VIEWINGS_PER_PACK} viewing coordination, good for 30 days. No Premium plan required.
+                {/* Packs stack, so the pitch is "buy another", never "already active". */}
+                {!!quota?.packRemaining && (
+                  <>
+                    {' '}
+                    {quota.packRemaining} left on your account
+                    {quota.packExpiresAt
+                      ? ` until ${new Date(quota.packExpiresAt).toLocaleDateString()}`
+                      : ''}
+                    .
+                  </>
+                )}
               </p>
             </div>
             <Button
               variant="outline"
               onClick={handleBuyAddon}
-              disabled={addonLoading || quota?.unlimited}
+              disabled={addonLoading}
               className="shrink-0"
             >
-              {addonLoading ? 'Processing...' : quota?.unlimited ? 'Active' : 'Get unlimited viewings'}
+              {addonLoading ? 'Processing...' : quota?.hasPack ? 'Buy another pack' : 'Get the viewing pack'}
             </Button>
           </CardContent>
         </Card>
