@@ -23,34 +23,34 @@ const CITY_LABEL: Record<City, string> = {
   hanoi: 'Hanoi',
 };
 
-type Label = { name: string; lat: number; lng: number; kind: 'district' | 'water' };
+type Label = { name: string; lat: number; lng: number; kind: 'district' | 'area' | 'water'; minZoom: number };
 
-const LABELS: Record<City, Label[]> = {
+/**
+ * Sub-district places worth naming: expat enclaves and master plans people
+ * search by, none of which is a district of its own. Thao Dien, Thu Thiem, An
+ * Phu and Vinhomes Grand Park all sit inside Thu Duc (the 2021 merger of
+ * Districts 2, 9 and old Thu Duc); Phu My Hung sits inside District 7. They
+ * render one step quieter than the district names so the hierarchy reads.
+ */
+const AREA_LABELS: Record<City, Label[]> = {
   ho_chi_minh: [
-    { name: 'District 1', lat: 10.7757, lng: 106.7004, kind: 'district' },
-    { name: 'District 3', lat: 10.7847, lng: 106.6840, kind: 'district' },
-    { name: 'District 4', lat: 10.7578, lng: 106.7050, kind: 'district' },
-    { name: 'District 5', lat: 10.7540, lng: 106.6680, kind: 'district' },
-    { name: 'District 7 · PMH', lat: 10.7340, lng: 106.7220, kind: 'district' },
-    { name: 'Thao Dien', lat: 10.8050, lng: 106.7390, kind: 'district' },
-    { name: 'Thu Thiem', lat: 10.7770, lng: 106.7280, kind: 'district' },
-    { name: 'Grand Park', lat: 10.8415, lng: 106.8370, kind: 'district' },
-    { name: 'Thu Duc City', lat: 10.8520, lng: 106.7720, kind: 'district' },
-    { name: 'Tan Phu', lat: 10.7920, lng: 106.6280, kind: 'district' },
-    { name: 'Binh Thanh', lat: 10.8030, lng: 106.7070, kind: 'district' },
-    { name: 'Phu Nhuan', lat: 10.7960, lng: 106.6790, kind: 'district' },
-    { name: 'Saigon River', lat: 10.7920, lng: 106.7470, kind: 'water' },
+    { name: 'Thao Dien', lat: 10.8050, lng: 106.7390, kind: 'area', minZoom: 12 },
+    { name: 'An Phu', lat: 10.7930, lng: 106.7530, kind: 'area', minZoom: 12 },
+    { name: 'Thu Thiem', lat: 10.7770, lng: 106.7280, kind: 'area', minZoom: 12 },
+    { name: 'Grand Park', lat: 10.8415, lng: 106.8370, kind: 'area', minZoom: 12 },
+    { name: 'Phu My Hung', lat: 10.7290, lng: 106.7180, kind: 'area', minZoom: 12 },
+  ],
+  hanoi: [],
+};
+
+const WATER_LABELS: Record<City, Label[]> = {
+  ho_chi_minh: [
+    { name: 'Saigon River', lat: 10.7920, lng: 106.7470, kind: 'water', minZoom: 0 },
   ],
   hanoi: [
-    { name: 'Hoan Kiem', lat: 21.0277, lng: 105.8520, kind: 'district' },
-    { name: 'Ba Dinh', lat: 21.0341, lng: 105.8240, kind: 'district' },
-    { name: 'Tay Ho', lat: 21.0680, lng: 105.8200, kind: 'district' },
-    { name: 'Dong Da', lat: 21.0125, lng: 105.8290, kind: 'district' },
-    { name: 'Hai Ba Trung', lat: 21.0050, lng: 105.8570, kind: 'district' },
-    { name: 'Cau Giay', lat: 21.0310, lng: 105.7990, kind: 'district' },
-    { name: 'West Lake', lat: 21.0610, lng: 105.8180, kind: 'water' },
-    { name: 'Hoan Kiem Lake', lat: 21.0290, lng: 105.8525, kind: 'water' },
-    { name: 'Red River', lat: 21.0400, lng: 105.8870, kind: 'water' },
+    { name: 'West Lake', lat: 21.0610, lng: 105.8180, kind: 'water', minZoom: 0 },
+    { name: 'Hoan Kiem Lake', lat: 21.0290, lng: 105.8525, kind: 'water', minZoom: 0 },
+    { name: 'Red River', lat: 21.0400, lng: 105.8870, kind: 'water', minZoom: 0 },
   ],
 };
 
@@ -166,6 +166,41 @@ function centroidOfRings(rings: [number, number][][]): [number, number] {
 type DistrictData = Record<City, { name: string; rings: [number, number][][] }[]>;
 const DISTRICT_SHAPES = cityDistrictsData as DistrictData;
 
+/**
+ * Every drawn district gets exactly one name, derived from its own polygon.
+ * A hand-kept list used to drift from the shapes - Binh Tan, District 6, 8, 10,
+ * 11, 12, Tan Binh and Go Vap were outlined but never named - so the labels are
+ * generated from the shapes instead and cannot fall out of sync again.
+ */
+const LABELS: Record<City, Label[]> = {
+  ho_chi_minh: districtLabels('ho_chi_minh'),
+  hanoi: districtLabels('hanoi'),
+};
+
+function districtLabels(city: City): Label[] {
+  const shapes = DISTRICT_SHAPES[city] ?? [];
+  const districts = shapes.map((d): Label => {
+    const [lat, lng] = centroidOfRings(d.rings);
+    // Wide districts (Thu Duc, District 12, Binh Tan) have room for their name
+    // at the opening view; the small central ones would collide there, so they
+    // wait a zoom step or two.
+    const span = spanOfRings(d.rings);
+    const minZoom = span >= 0.05 ? 10 : span >= 0.04 ? 11 : 12;
+    return { name: d.name, lat, lng, kind: 'district', minZoom };
+  });
+  return [...districts, ...AREA_LABELS[city], ...WATER_LABELS[city]];
+}
+
+/** Longest side of a district's bounding box, in degrees. */
+function spanOfRings(rings: [number, number][][]): number {
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const r of rings) for (const [lat, lng] of r) {
+    minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+    minLng = Math.min(minLng, lng); maxLng = Math.max(maxLng, lng);
+  }
+  return Math.max(maxLat - minLat, maxLng - minLng);
+}
+
 function formatBracket(c: Complex): string | null {
   const b = c.average_rent_brackets;
   if (!b) return null;
@@ -206,6 +241,12 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<(LeafletMap & { __ro?: ResizeObserver }) | null>(null);
   const overlaysRef = useRef<LayerGroup | null>(null); // L.layerGroup for districts/labels/landmarks/complexes
+  // Naming every place at once turns the city-wide view into a pile of text,
+  // so each label carries the zoom it earns its space at: big outer districts
+  // from the opening view, small central ones and sub-district areas as you
+  // come in. Refilled on every overlay rebuild, read by the zoom handler.
+  const labelMarkersRef = useRef<{ marker: Marker; minZoom: number }[]>([]);
+  const applyLabelZoomRef = useRef<(() => void) | null>(null);
 
   const cityComplexes = useMemo(
     () => complexes.filter((c) => c.city === city && c.latitude != null && c.longitude != null),
@@ -247,6 +288,15 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
       overlaysRef.current = L.layerGroup().addTo(map);
+
+      const applyLabelZoom = () => {
+        const z = map.getZoom();
+        for (const { marker, minZoom } of labelMarkersRef.current) {
+          marker.setOpacity(z >= minZoom ? 1 : 0);
+        }
+      };
+      map.on('zoomend', applyLabelZoom);
+      applyLabelZoomRef.current = applyLabelZoom;
 
       // initial view
       if (focusLatLng) {
@@ -304,6 +354,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
     (async () => {
       const L = await import('leaflet');
       group.clearLayers();
+      labelMarkersRef.current = [];
 
       const refreshMap = () => {
         const el = mapElRef.current;
@@ -391,20 +442,27 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
         });
       });
 
-      // Place labels (districts + water)
+      // Place labels (districts + sub-district areas + water)
       LABELS[city].forEach((l) => {
-        const isWater = l.kind === 'water';
-        const cls = isWater
-          ? 'font-family:Georgia,serif;font-style:italic;color:rgba(13,79,74,0.55);font-size:11px;letter-spacing:0.05em;'
-          : 'font-weight:600;color:rgba(13,79,74,0.7);font-size:9px;text-transform:uppercase;letter-spacing:0.18em;';
+        const cls =
+          l.kind === 'water'
+            ? 'font-family:Georgia,serif;font-style:italic;color:rgba(13,79,74,0.55);font-size:11px;letter-spacing:0.05em;'
+            : l.kind === 'area'
+              ? 'font-weight:500;color:rgba(13,79,74,0.5);font-size:8px;text-transform:uppercase;letter-spacing:0.14em;'
+              : 'font-weight:600;color:rgba(13,79,74,0.7);font-size:9px;text-transform:uppercase;letter-spacing:0.18em;';
         const icon = L.divIcon({
           className: 'hausto-label',
-          html: `<span style="${cls}white-space:nowrap;text-shadow:0 1px 0 rgba(255,255,255,0.9),0 0 6px rgba(255,255,255,0.9);">${esc(l.name)}</span>`,
+          // Centred on the anchor rather than running right from it, so a name
+          // generated at its district's centroid sits inside that district.
+          html: `<span style="${cls}display:inline-block;transform:translate(-50%,-50%);white-space:nowrap;text-shadow:0 1px 0 rgba(255,255,255,0.9),0 0 6px rgba(255,255,255,0.9);">${esc(l.name)}</span>`,
           iconSize: [0, 0],
           iconAnchor: [0, 0],
         });
-        L.marker([l.lat, l.lng], { icon, interactive: false, keyboard: false }).addTo(group);
+        const marker = L.marker([l.lat, l.lng], { icon, interactive: false, keyboard: false });
+        group.addLayer(marker);
+        labelMarkersRef.current.push({ marker, minZoom: l.minZoom });
       });
+      applyLabelZoomRef.current?.();
 
       // Landmark pins
       LANDMARKS[city].forEach((lm) => {
