@@ -37,8 +37,10 @@ export const useFastTrackRequest = () => {
     if (!user?.id) throw new Error('User not authenticated');
 
     // Free tier gets one trial coordination, premium 3 per cycle; the $20
-    // add-on lifts the cap. Callers catch this error to show the upsell.
-    if (quota && !quota.canBook) {
+    // add-on lifts the cap. Each listing in the request costs one, so a
+    // multi-listing booking needs that many left. Callers catch this error to
+    // show the upsell.
+    if (quota && quota.remaining < Math.max(1, scheduleData.selectedPropertyIds.length)) {
       throw new Error('VIEWING_QUOTA_EXCEEDED');
     }
 

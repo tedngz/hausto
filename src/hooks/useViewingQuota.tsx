@@ -60,15 +60,19 @@ export const useViewingQuota = () => {
     queryFn: async () => {
       const now = new Date();
 
-      /** Requests that count against a windowed allowance. */
+      /**
+       * Listings booked against a windowed allowance. One coordination per
+       * listing, so a three-listing request spends three - the same sum the
+       * DB's base_viewing_allowance_remaining takes.
+       */
       const countSince = async (since: Date) => {
-        const { count } = await supabase
+        const { data } = await supabase
           .from('fast_track_requests')
-          .select('id', { count: 'exact', head: true })
+          .select('property_ids')
           .eq('renter_id', user!.id)
           .neq('status', 'cancelled')
           .gte('created_at', since.toISOString());
-        return count ?? 0;
+        return (data ?? []).reduce((n, r) => n + Math.max(1, r.property_ids?.length ?? 1), 0);
       };
 
       // What the plan itself covers, before any pack credit is touched.
