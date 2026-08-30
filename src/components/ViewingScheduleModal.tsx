@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CalendarIcon, X, Gift, CalendarCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,27 @@ interface Property {
   location?: string;
   price?: number;
 }
+
+// Half-hour slots from 8am to 8pm - the window realtors and owners actually
+// take visits in. Renters pick a range instead of typing free text.
+const TIME_OPTIONS = Array.from({ length: 25 }, (_, i) => {
+  const minutes = 8 * 60 + i * 30;
+  const hour24 = Math.floor(minutes / 60);
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  const label = `${hour12}:${minutes % 60 === 0 ? '00' : '30'} ${hour24 < 12 ? 'AM' : 'PM'}`;
+  return { value: String(minutes), label };
+});
+
+interface TimeRange {
+  start: string;
+  end: string;
+}
+
+const formatRange = (range: TimeRange) => {
+  const start = TIME_OPTIONS.find(o => o.value === range.start);
+  const end = TIME_OPTIONS.find(o => o.value === range.end);
+  return start && end ? `${start.label} - ${end.label}` : '';
+};
 
 interface ViewingScheduleModalProps {
   isOpen: boolean;
@@ -39,9 +60,9 @@ export interface ViewingScheduleData {
 
 export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedProperties, onPropertyClick, initialSelectedIds }: ViewingScheduleModalProps) => {
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
-  const [preferredTimes, setPreferredTimes] = useState<string[]>(['']);
+  const [timeRanges, setTimeRanges] = useState<TimeRange[]>([{ start: '', end: '' }]);
   const [specialRequirements, setSpecialRequirements] = useState('');
-  const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>(initialSelectedIds ?? []);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(initialSelectedIds?.[0] ?? '');
   const { toast } = useToast();
   const { quota, purchaseViewingPack } = useViewingQuota();
   const quotaExhausted = !!quota && !quota.canBook;
@@ -49,7 +70,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
   // Re-seed selection whenever modal opens or initial ids change
   useEffect(() => {
     if (isOpen) {
-      setSelectedPropertyIds((initialSelectedIds ?? []).slice(0, 3));
+      setSelectedPropertyId(initialSelectedIds?.[0] ?? '');
     }
   }, [isOpen, initialSelectedIds?.join(',')]);
 
@@ -79,35 +100,23 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
   };
 
   const handleAddTimeSlot = () => {
-    setPreferredTimes([...preferredTimes, '']);
+    setTimeRanges([...timeRanges, { start: '', end: '' }]);
   };
 
   const handleRemoveTimeSlot = (index: number) => {
-    setPreferredTimes(preferredTimes.filter((_, i) => i !== index));
+    setTimeRanges(timeRanges.filter((_, i) => i !== index));
   };
 
-  const handleTimeChange = (index: number, value: string) => {
-    const newTimes = [...preferredTimes];
-    newTimes[index] = value;
-    setPreferredTimes(newTimes);
-  };
-
-  const handlePropertyToggle = (propertyId: string) => {
-    setSelectedPropertyIds(prev => {
-      if (prev.includes(propertyId)) {
-        return prev.filter(id => id !== propertyId);
-      } else {
-        if (prev.length >= 3) {
-          toast({
-            title: "Maximum Properties Reached",
-            description: "You can select up to 3 properties per coordination request.",
-            variant: "destructive"
-          });
-          return prev;
-        }
-        return [...prev, propertyId];
+  const handleTimeChange = (index: number, field: keyof TimeRange, value: string) => {
+    setTimeRanges(timeRanges.map((range, i) => {
+      if (i !== index) return range;
+      const next = { ...range, [field]: value };
+      // An end at or before the start is not a range - clear the other half.
+      if (next.start && next.end && Number(next.end) <= Number(next.start)) {
+        return field === 'start' ? { ...next, end: '' } : { ...next, start: '' };
       }
-    });
+      return next;
+    }));
   };
 
   const handleSubmit = () => {
@@ -123,10 +132,10 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       return;
     }
 
-    if (selectedPropertyIds.length === 0) {
+    if (!selectedPropertyId) {
       toast({
-        title: "Properties Required",
-        description: "Please select at least one property for viewing.",
+        title: "Property Required",
+        description: "Please select the property you want to view.",
         variant: "destructive"
       });
       return;
@@ -141,11 +150,11 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       return;
     }
 
-    const filledTimes = preferredTimes.filter(t => t.trim() !== '');
+    const filledTimes = timeRanges.filter(r => r.start && r.end).map(formatRange);
     if (filledTimes.length === 0) {
       toast({
         title: "Time Required",
-        description: "Please provide at least one preferred time.",
+        description: "Please pick at least one preferred time range.",
         variant: "destructive"
       });
       return;
@@ -156,33 +165,30 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       dates: selectedDates,
       preferredTimes: filledTimes,
       specialRequirements: specialRequirements.trim(),
-      selectedPropertyIds
+      selectedPropertyIds: [selectedPropertyId]
     });
 
     // Reset form
     setSelectedDates([]);
-    setPreferredTimes(['']);
+    setTimeRanges([{ start: '', end: '' }]);
     setSpecialRequirements('');
-    setSelectedPropertyIds([]);
+    setSelectedPropertyId('');
     onClose();
   };
 
   const handleCancel = () => {
     setSelectedDates([]);
-    setPreferredTimes(['']);
+    setTimeRanges([{ start: '', end: '' }]);
     setSpecialRequirements('');
-    setSelectedPropertyIds([]);
+    setSelectedPropertyId('');
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>Schedule a viewing</DialogTitle>
-          <DialogDescription>
-            Hausto Agent will coordinate with up to 3 listing providers based on your preferences.
-          </DialogDescription>
+          <DialogTitle>Book viewing</DialogTitle>
         </DialogHeader>
 
         {/* Allowance: one free trial booking on the free tier, 3 per cycle on
@@ -225,63 +231,64 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
         )}
 
         <div className="space-y-6 py-4">
-          {/* Property Selection */}
+          {/* Property Selection - one listing per request, so the agent
+              coordinates a single visit at a time. */}
           <div className="space-y-2">
-            <Label>Select Properties (Up to 3) *</Label>
+            <Label>Select Property *</Label>
             <p className="text-xs text-muted-foreground">
-              Choose the properties you want to schedule viewings for
+              Choose the property you want to book a viewing for
             </p>
-            <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded-md p-3">
+            <div className="max-h-[200px] overflow-y-auto border rounded-md p-3">
               {matchedProperties.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No matched properties available
                 </p>
               ) : (
-                matchedProperties.map((property) => (
-                  <div key={property.id} className="flex items-start space-x-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                    <Checkbox
-                      id={`property-${property.id}`}
-                      checked={selectedPropertyIds.includes(property.id)}
-                      onCheckedChange={() => handlePropertyToggle(property.id)}
-                      className="mt-1"
-                    />
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      {property.images && property.images.length > 0 && (
-                        <img loading="lazy" 
-                          src={property.images[0]} 
-                          alt={property.title}
-                          className="w-16 h-16 object-cover rounded flex-shrink-0"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <label
-                          htmlFor={`property-${property.id}`}
-                          className="text-sm font-medium leading-tight cursor-pointer hover:text-primary block mb-1"
-                          onClick={(e) => {
-                            if (onPropertyClick) {
-                              e.preventDefault();
-                              onPropertyClick(property.id);
-                            }
-                          }}
-                        >
-                          {property.title}
-                        </label>
-                        {property.location && (
-                          <p className="text-xs text-muted-foreground line-clamp-1">
-                            {property.location}
-                          </p>
+                <RadioGroup
+                  value={selectedPropertyId}
+                  onValueChange={setSelectedPropertyId}
+                  className="space-y-2"
+                >
+                  {matchedProperties.map((property) => (
+                    <div key={property.id} className="flex items-start space-x-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
+                      <RadioGroupItem
+                        id={`property-${property.id}`}
+                        value={property.id}
+                        className="mt-1"
+                      />
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        {property.images && property.images.length > 0 && (
+                          <img loading="lazy"
+                            src={property.images[0]}
+                            alt={property.title}
+                            className="w-16 h-16 object-cover rounded flex-shrink-0"
+                          />
                         )}
+                        <div className="flex-1 min-w-0">
+                          <label
+                            htmlFor={`property-${property.id}`}
+                            className="text-sm font-medium leading-tight cursor-pointer hover:text-primary block mb-1"
+                            onClick={(e) => {
+                              if (onPropertyClick) {
+                                e.preventDefault();
+                                onPropertyClick(property.id);
+                              }
+                            }}
+                          >
+                            {property.title}
+                          </label>
+                          {property.location && (
+                            <p className="text-xs text-muted-foreground line-clamp-1">
+                              {property.location}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </RadioGroup>
               )}
             </div>
-            {selectedPropertyIds.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {selectedPropertyIds.length} of 3 properties selected
-              </p>
-            )}
           </div>
 
           {/* Date Selection */}
@@ -340,17 +347,42 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
           <div className="space-y-2">
             <Label>Preferred Times *</Label>
             <p className="text-xs text-muted-foreground">
-              e.g., "Morning (9-11 AM)", "Afternoon (2-4 PM)", "Evening (6-8 PM)"
+              Pick a time range you are free within, e.g. 9:00 AM - 11:00 AM
             </p>
-            {preferredTimes.map((time, index) => (
-              <div key={index} className="flex gap-2">
-                <Input
-                  placeholder="Enter preferred time"
-                  value={time}
-                  onChange={(e) => handleTimeChange(index, e.target.value)}
-                  maxLength={100}
-                />
-                {preferredTimes.length > 1 && (
+            {timeRanges.map((range, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Select
+                  value={range.start}
+                  onValueChange={(value) => handleTimeChange(index, 'start', value)}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="From" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIME_OPTIONS.slice(0, -1).map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">to</span>
+                <Select
+                  value={range.end}
+                  onValueChange={(value) => handleTimeChange(index, 'end', value)}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="To" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIME_OPTIONS.filter(o => !range.start || Number(o.value) > Number(range.start)).map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {timeRanges.length > 1 && (
                   <Button
                     type="button"
                     variant="outline"
@@ -369,7 +401,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
               onClick={handleAddTimeSlot}
               className="w-full"
             >
-              + Add Another Time Slot
+              + Add Another Time Range
             </Button>
           </div>
 
