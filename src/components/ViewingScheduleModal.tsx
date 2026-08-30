@@ -5,7 +5,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CalendarIcon, X, Gift, CalendarCheck } from 'lucide-react';
 import { format } from 'date-fns';
@@ -62,17 +62,20 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [timeRanges, setTimeRanges] = useState<TimeRange[]>([{ start: '', end: '' }]);
   const [specialRequirements, setSpecialRequirements] = useState('');
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(initialSelectedIds?.[0] ?? '');
+  const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>(initialSelectedIds ?? []);
   const { toast } = useToast();
   const { quota, purchaseViewingPack } = useViewingQuota();
   const quotaExhausted = !!quota && !quota.canBook;
+  // A renter can line up as many listings as they have coordination left to
+  // spend. Before the quota loads, assume the smallest allowance.
+  const maxSelectable = Math.max(1, quota?.remaining ?? 1);
 
   // Re-seed selection whenever modal opens or initial ids change
   useEffect(() => {
     if (isOpen) {
-      setSelectedPropertyId(initialSelectedIds?.[0] ?? '');
+      setSelectedPropertyIds((initialSelectedIds ?? []).slice(0, maxSelectable));
     }
-  }, [isOpen, initialSelectedIds?.join(',')]);
+  }, [isOpen, initialSelectedIds?.join(','), maxSelectable]);
 
   const handleAddDate = (date: Date | undefined) => {
     if (!date) return;
@@ -107,6 +110,23 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
     setTimeRanges(timeRanges.filter((_, i) => i !== index));
   };
 
+  const handlePropertyToggle = (propertyId: string) => {
+    setSelectedPropertyIds(prev => {
+      if (prev.includes(propertyId)) {
+        return prev.filter(id => id !== propertyId);
+      }
+      if (prev.length >= maxSelectable) {
+        toast({
+          title: "Viewing coordination limit",
+          description: `You have ${maxSelectable} viewing coordination left, so you can pick up to ${maxSelectable} propert${maxSelectable === 1 ? 'y' : 'ies'}. Get the viewing pack for more.`,
+          variant: "destructive"
+        });
+        return prev;
+      }
+      return [...prev, propertyId];
+    });
+  };
+
   const handleTimeChange = (index: number, field: keyof TimeRange, value: string) => {
     setTimeRanges(timeRanges.map((range, i) => {
       if (i !== index) return range;
@@ -132,10 +152,10 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       return;
     }
 
-    if (!selectedPropertyId) {
+    if (selectedPropertyIds.length === 0) {
       toast({
-        title: "Property Required",
-        description: "Please select the property you want to view.",
+        title: "Properties Required",
+        description: "Please select at least one property for viewing.",
         variant: "destructive"
       });
       return;
@@ -165,14 +185,14 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       dates: selectedDates,
       preferredTimes: filledTimes,
       specialRequirements: specialRequirements.trim(),
-      selectedPropertyIds: [selectedPropertyId]
+      selectedPropertyIds
     });
 
     // Reset form
     setSelectedDates([]);
     setTimeRanges([{ start: '', end: '' }]);
     setSpecialRequirements('');
-    setSelectedPropertyId('');
+    setSelectedPropertyIds([]);
     onClose();
   };
 
@@ -180,7 +200,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
     setSelectedDates([]);
     setTimeRanges([{ start: '', end: '' }]);
     setSpecialRequirements('');
-    setSelectedPropertyId('');
+    setSelectedPropertyIds([]);
     onClose();
   };
 
@@ -231,29 +251,25 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
         )}
 
         <div className="space-y-6 py-4">
-          {/* Property Selection - one listing per request, so the agent
-              coordinates a single visit at a time. */}
+          {/* Property Selection - as many listings as the renter has viewing
+              coordination left to spend, no more. */}
           <div className="space-y-2">
-            <Label>Select Property *</Label>
+            <Label>Select Properties (Up to {maxSelectable}) *</Label>
             <p className="text-xs text-muted-foreground">
-              Choose the property you want to book a viewing for
+              Choose the properties you want to book viewings for
             </p>
-            <div className="max-h-[200px] overflow-y-auto border rounded-md p-3">
+            <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded-md p-3">
               {matchedProperties.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No matched properties available
                 </p>
               ) : (
-                <RadioGroup
-                  value={selectedPropertyId}
-                  onValueChange={setSelectedPropertyId}
-                  className="space-y-2"
-                >
-                  {matchedProperties.map((property) => (
+                  matchedProperties.map((property) => (
                     <div key={property.id} className="flex items-start space-x-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                      <RadioGroupItem
+                      <Checkbox
                         id={`property-${property.id}`}
-                        value={property.id}
+                        checked={selectedPropertyIds.includes(property.id)}
+                        onCheckedChange={() => handlePropertyToggle(property.id)}
                         className="mt-1"
                       />
                       <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -285,10 +301,14 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
                         </div>
                       </div>
                     </div>
-                  ))}
-                </RadioGroup>
+                  ))
               )}
             </div>
+            {selectedPropertyIds.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {selectedPropertyIds.length} of {maxSelectable} propert{maxSelectable === 1 ? 'y' : 'ies'} selected
+              </p>
+            )}
           </div>
 
           {/* Date Selection */}
