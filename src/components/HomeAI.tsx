@@ -250,8 +250,8 @@ export const HomeAI = ({
     renterMatches
   } = useMatches();
   const { quota, refetchQuota } = useViewingQuota();
-  // Fast-Track access: the free trial booking, a Premium cycle allowance, or
-  // the standalone $20 Unlimited Viewings add-on.
+  // Viewing access: the free trial booking, a Premium cycle allowance, or
+  // the standalone $20 viewing pack.
   const canFastTrack = !!quota?.canBook;
   const {
     canPerformAction,
@@ -1205,7 +1205,7 @@ export const HomeAI = ({
         </div>}
 
 
-      {/* Fast-Track viewing banner — appears once a user has liked a property in this AI chat */}
+      {/* Viewing banner — appears once a user has liked a property in this AI chat */}
       {user && likedProperties.size > 0 && !isFastTrackBannerDismissed && (
         <div className="mb-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-3 flex flex-col sm:flex-row sm:items-center gap-3 animate-fade-in">
           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -1468,7 +1468,7 @@ export const HomeAI = ({
         quoteFallback={selectedProperty?.matchReason}
         liked={selectedProperty ? likedProperties.has(selectedProperty.id) : false}
         onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined}
-        // The same gate the chat's own fast-track banner keeps, so booking a
+        // The same gate the chat's own viewing banner keeps, so booking a
         // listing behaves the same wherever the renter presses it: signed out
         // goes to sign-in, out of allowance goes to the upgrade.
         onSchedule={selectedProperty ? () => {
@@ -1487,7 +1487,7 @@ export const HomeAI = ({
         source={selectedProperty ? previewSourceOf(selectedProperty) : undefined}
       />
 
-      {/* Viewing Schedule Modal — Hausto Fast-Track */}
+      {/* Viewing Schedule Modal */}
       <ViewingScheduleModal
         isOpen={isViewingScheduleOpen}
         onClose={() => {

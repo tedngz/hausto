@@ -7,11 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CalendarIcon, X, Gift, Infinity as InfinityIcon } from 'lucide-react';
+import { CalendarIcon, X, Gift, CalendarCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { VIEWINGS_PER_PACK, INCLUDED_VIEWINGS_PER_CYCLE, useViewingQuota } from '@/hooks/useViewingQuota';
 
 interface Property {
   id: string;
@@ -43,7 +43,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
   const [specialRequirements, setSpecialRequirements] = useState('');
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>(initialSelectedIds ?? []);
   const { toast } = useToast();
-  const { quota, purchaseUnlimitedMonth } = useViewingQuota();
+  const { quota, purchaseViewingPack } = useViewingQuota();
   const quotaExhausted = !!quota && !quota.canBook;
 
   // Re-seed selection whenever modal opens or initial ids change
@@ -100,7 +100,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
         if (prev.length >= 3) {
           toast({
             title: "Maximum Properties Reached",
-            description: "You can select up to 3 properties for fast track viewing.",
+            description: "You can select up to 3 properties per coordination request.",
             variant: "destructive"
           });
           return prev;
@@ -116,8 +116,8 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       toast({
         title: "Viewing limit reached",
         description: quota?.trialUsed
-          ? "You've used your free viewing coordination. Go Premium or get unlimited viewings for 30 days to keep booking."
-          : "You've used your 3 included viewings this cycle. Get unlimited viewings for 30 days to keep booking.",
+          ? "You've used your free viewing coordination. Go Premium or get the viewing pack to keep booking."
+          : `You've used all ${quota?.included ?? INCLUDED_VIEWINGS_PER_CYCLE} of your viewing coordination. Get the viewing pack to keep booking.`,
         variant: "destructive"
       });
       return;
@@ -179,20 +179,20 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
     <Dialog open={isOpen} onOpenChange={handleCancel}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Schedule Fast Track Viewing</DialogTitle>
+          <DialogTitle>Schedule a viewing</DialogTitle>
           <DialogDescription>
             Hausto Agent will coordinate with up to 3 listing providers based on your preferences.
           </DialogDescription>
         </DialogHeader>
 
         {/* Allowance: one free trial booking on the free tier, 3 per cycle on
-            premium; the $20 add-on lifts the cap for 30 days either way. */}
+            premium, plus whatever pack credits the renter has bought. */}
         {quota && (
-          quota.unlimited ? (
+          quota.packRemaining > 0 ? (
             <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 flex items-center gap-2 text-sm text-emerald-800">
-              <InfinityIcon className="h-4 w-4 shrink-0" />
+              <CalendarCheck className="h-4 w-4 shrink-0" />
               <span>
-                Unlimited viewings active until {quota.addonExpiresAt ? format(new Date(quota.addonExpiresAt), 'MMM dd, yyyy') : 'the end of your add-on'}.
+                {quota.remaining} viewing coordination left, including {quota.packRemaining} from your viewing pack.
               </span>
             </div>
           ) : quota.trialAvailable ? (
@@ -204,20 +204,20 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
             </div>
           ) : quota.remaining > 0 ? (
             <div className="rounded-lg border border-border bg-secondary/30 px-3 py-2 text-sm text-muted-foreground">
-              {quota.remaining} of {quota.included} included viewing bookings left this cycle.
+              {quota.remaining} of {quota.included} viewing bookings left.
             </div>
           ) : (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 space-y-2">
               <p>
                 {quota.trialUsed
                   ? "You've used your free viewing coordination."
-                  : `You've used your ${quota.included} included viewings this cycle.`}
+                  : `You've used all ${quota.included} of your viewing coordination.`}
               </p>
-              <Button size="sm" onClick={purchaseUnlimitedMonth}>
-                Unlimited viewings for 30 days — $20
+              <Button size="sm" onClick={purchaseViewingPack}>
+                Viewing pack - {VIEWINGS_PER_PACK} coordination for $20
               </Button>
               <p className="text-xs text-amber-800/80">
-                We'll coordinate as many viewings as you need until you settle on a home.
+                We'll book each visit with the realtor or owner for you.
               </p>
             </div>
           )

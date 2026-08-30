@@ -309,10 +309,16 @@ const Auth = () => {
       <main className="w-full max-w-md">
         <div className="text-center mb-8">
           <HaustoLogo size="lg" className="justify-center" />
-          <h1 className="mt-4 text-2xl font-bold text-foreground">
-            {isRecoveryMode ? 'Reset your password' : 'Sign in'}
+          {/* Signing in needs no visible heading - the card's own "Welcome"
+              already says it. The h1 stays for screen readers and search. */}
+          <h1
+            className={
+              isRecoveryMode ? 'mt-4 text-2xl font-bold text-foreground' : 'sr-only'
+            }
+          >
+            {isRecoveryMode ? 'Reset your password' : 'Sign in to Hausto'}
           </h1>
-          <p className="text-muted-foreground mt-2">Find your perfect home match</p>
+          <p className="text-muted-foreground mt-2">Vibe check your next home</p>
         </div>
 
         <Card>

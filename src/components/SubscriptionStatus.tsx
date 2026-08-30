@@ -103,7 +103,7 @@ export const SubscriptionStatus = ({
               <ul className="text-xs text-muted-foreground space-y-0.5">
                 <li>• Unlimited matches</li>
                 <li>• Unlimited AI searches</li>
-                <li>• Fast-Track: up to 3 viewings scheduled per month</li>
+                <li>• 3 viewing coordination per month</li>
               </ul>
             </div>
             
@@ -142,7 +142,7 @@ export const SubscriptionStatus = ({
             <ul className="text-xs text-muted-foreground space-y-0.5">
               <li>• Unlimited matches</li>
               <li>• Unlimited AI searches</li>
-              <li>• Fast-Track: up to 3 viewings scheduled per month</li>
+              <li>• 3 viewing coordination per month</li>
             </ul>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />
@@ -163,7 +163,7 @@ export const SubscriptionStatus = ({
               <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
                 <li>Unlimited matches</li>
                 <li>Unlimited AI searches</li>
-                <li>Fast-Track viewing scheduling</li>
+                <li>Viewing coordination</li>
               </ul>
             </div>
           </AlertDialogDescription>

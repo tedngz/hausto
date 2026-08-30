@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-// Captures an approved viewing-addon PayPal order and records the add-on:
-// unlimited Fast-Track viewing bookings for 30 days. Idempotent via the
+// Captures an approved viewing-pack PayPal order and records the pack:
+// 10 viewing coordination, bought outright and never expiring. Idempotent via the
 // unique paypal_order_id constraint on viewing_addons.
 
 const corsHeaders = {
@@ -10,7 +10,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ADDON_DAYS = 30;
+const CREDITS_PER_PACK = 10;
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -53,12 +53,12 @@ serve(async (req) => {
     // Already recorded? (double-invoke, refresh of the success page)
     const { data: existing } = await supabaseClient
       .from("viewing_addons")
-      .select("id, expires_at")
+      .select("id, credits")
       .eq("paypal_order_id", orderId)
       .maybeSingle();
     if (existing) {
-      logStep("Order already captured", { addonId: existing.id });
-      return new Response(JSON.stringify({ success: true, expiresAt: existing.expires_at, alreadyCaptured: true }), {
+      logStep("Order already captured", { packId: existing.id });
+      return new Response(JSON.stringify({ success: true, credits: existing.credits, alreadyCaptured: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
@@ -105,20 +105,22 @@ serve(async (req) => {
       throw new Error("Order does not belong to this user");
     }
 
-    const expiresAt = new Date(Date.now() + ADDON_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    // One row per purchase: packs stack, so this is an insert, never an upsert
+    // onto an existing pack.
     const { error: insertError } = await supabaseClient.from("viewing_addons").insert({
       renter_id: user.id,
       paypal_order_id: orderId,
       amount_usd: 20,
-      expires_at: expiresAt,
+      credits: CREDITS_PER_PACK,
+      expires_at: null,
     });
     // Unique-violation on paypal_order_id means a concurrent invoke won; fine.
     if (insertError && !String(insertError.message).includes("duplicate")) {
       throw insertError;
     }
-    logStep("Add-on recorded", { userId: user.id, expiresAt });
+    logStep("Pack recorded", { userId: user.id, credits: CREDITS_PER_PACK });
 
-    return new Response(JSON.stringify({ success: true, expiresAt }), {
+    return new Response(JSON.stringify({ success: true, credits: CREDITS_PER_PACK }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
