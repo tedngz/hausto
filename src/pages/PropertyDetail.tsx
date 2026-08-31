@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyListingCard } from '@/components/PropertyListingCard';
 import { ListingHistoryNote } from '@/components/ListingHistoryNote';
+import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { useMatches } from '@/hooks/useMatches';
 import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
@@ -330,6 +331,18 @@ const PropertyDetail = () => {
               onBookViewing={user ? handleBookViewing : undefined}
               isBooking={isBooking}
             />
+
+            {/* Only for signed-in renters: the read is written against their
+                preferences, so there is nothing to show an anonymous visitor. */}
+            {user && (
+              <div className="mt-4">
+                <DeepVibeAnalysis
+                  propertyId={apartment.id}
+                  propertyType={source}
+                  onRequestPass={() => setIsSubscriptionOpen(true)}
+                />
+              </div>
+            )}
           </div>
 
           <ViewingScheduleModal
