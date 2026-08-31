@@ -1504,6 +1504,36 @@ export type Database = {
         }
         Relationships: []
       }
+      listing_deep_analyses: {
+        Row: {
+          analysis: Json
+          created_at: string
+          id: string
+          preference_fingerprint: string
+          property_id: string
+          property_type: string
+          renter_id: string
+        }
+        Insert: {
+          analysis: Json
+          created_at?: string
+          id?: string
+          preference_fingerprint: string
+          property_id: string
+          property_type?: string
+          renter_id: string
+        }
+        Update: {
+          analysis?: Json
+          created_at?: string
+          id?: string
+          preference_fingerprint?: string
+          property_id?: string
+          property_type?: string
+          renter_id?: string
+        }
+        Relationships: []
+      }
       passes: {
         Row: {
           amount_usd: number
