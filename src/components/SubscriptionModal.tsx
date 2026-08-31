@@ -67,6 +67,7 @@ export const SubscriptionModal = ({
   const freeFeatures = [
     'Full curated English listing list',
     'Unlimited browsing, matches and quiz retakes',
+    'Basic vibe analysis on every listing',
     '10 AI requests per day',
     quota?.trialUsed
       ? '1 free viewing coordination (used)'
@@ -74,6 +75,8 @@ export const SubscriptionModal = ({
   ];
   const premiumFeatures = [
     'Everything in Free',
+    'Deep read on any listing - design, fit, honest downsides',
+    'Neighbourhood and commute rated against your preferences',
     'Unlimited AI requests',
     '3 viewing coordination',
   ];

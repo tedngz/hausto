@@ -21,6 +21,9 @@ verify_jwt = true
 [functions.check-paypal-subscription]
 verify_jwt = true
 
+[functions.deep-vibe-analysis]
+verify_jwt = true
+
 [functions.create-pass-order]
 verify_jwt = true
 
