@@ -5,13 +5,20 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Crown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useSubscription } from '@/hooks/useSubscription';
-import { VIEWINGS_PER_PACK, useViewingQuota } from '@/hooks/useViewingQuota';
+import {
+  PASS_DAYS,
+  PASS_PRICE_USD,
+  TOPUP_PRICE_USD,
+  TOPUP_VIEWINGS,
+  usePass,
+} from '@/hooks/usePass';
+import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { toast } from 'sonner';
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  reason?: 'matches' | 'quiz' | 'viewings';
+  /** Matches and quiz retakes no longer have a ceiling, so neither can send anyone here. */
+  reason?: 'viewings' | 'ai';
 }
 export const SubscriptionModal = ({
   isOpen,
@@ -21,60 +28,53 @@ export const SubscriptionModal = ({
   const {
     user
   } = useAuth();
-  const {
-    createSubscription
-  } = useSubscription();
-  const { quota, purchaseViewingPack } = useViewingQuota();
+  const { pass, purchasePass, purchaseTopUp } = usePass();
+  const { quota } = useViewingQuota();
   const [loading, setLoading] = useState(false);
   const [addonLoading, setAddonLoading] = useState(false);
   const reasonMessages = {
-    matches: "You've reached your weekly limit of 20 matches.",
-    quiz: "You've used both weekly quiz retakes.",
-    viewings: "You've used your free viewing coordination."
+    viewings: "You've used your free viewing coordination.",
+    ai: "You've used your 10 AI requests for today."
   };
-  const handleGoPremium = async () => {
+  // Both are one-off PayPal orders now - purchasePass/purchaseTopUp redirect to
+  // checkout themselves, so there's no approval URL to handle here.
+  const handleGetPass = async () => {
     if (!user) {
-      toast.error('Please log in to upgrade to premium');
+      toast.error('Please log in to get the Pass');
       return;
     }
     setLoading(true);
     try {
-      const approvalUrl = await createSubscription();
-      if (approvalUrl) {
-        // Redirect to PayPal checkout
-        window.location.href = approvalUrl;
-      } else {
-        toast.error('Failed to create subscription. Please try again.');
-      }
-    } catch (error: any) {
-      console.error('Error creating subscription:', error);
-      toast.error('Failed to process payment. Please try again.');
+      await purchasePass();
     } finally {
       setLoading(false);
     }
   };
-  const handleBuyAddon = async () => {
+  const handleTopUp = async () => {
     if (!user) {
-      toast.error('Please log in to purchase the add-on');
+      toast.error('Please log in to top up');
       return;
     }
     setAddonLoading(true);
     try {
-      await purchaseViewingPack();
+      await purchaseTopUp();
     } finally {
       setAddonLoading(false);
     }
   };
+  // Browsing the curated list, matching and quiz retakes are unlimited on both
+  // tiers now, so they're stated once as the shared floor rather than sold.
   const freeFeatures = [
-    '20 matches per week',
-    '10 AI searches per day',
+    'Full curated English listing list',
+    'Unlimited browsing, matches and quiz retakes',
+    '10 AI requests per day',
     quota?.trialUsed
       ? '1 free viewing coordination (used)'
       : '1 free viewing coordination - we book it for you',
   ];
   const premiumFeatures = [
-    'Unlimited matches',
-    'Unlimited AI searches',
+    'Everything in Free',
+    'Unlimited AI requests',
     '3 viewing coordination',
   ];
   return <Dialog open={isOpen} onOpenChange={onClose}>
@@ -119,11 +119,12 @@ export const SubscriptionModal = ({
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
                 <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                Premium Plan
+                Hausto Pass
               </CardTitle>
               <CardDescription>Unlimited search, plus viewing coordination</CardDescription>
-              <div className="text-2xl sm:text-3xl font-bold">$10<span className="text-sm font-normal">/month</span></div>
-              
+              <div className="text-2xl sm:text-3xl font-bold">
+                ${PASS_PRICE_USD}<span className="text-sm font-normal">/{PASS_DAYS} days</span>
+              </div>
             </CardHeader>
             <CardContent className="pt-0">
               <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
@@ -132,49 +133,44 @@ export const SubscriptionModal = ({
                     <span className="text-xs sm:text-sm font-medium">{feature}</span>
                   </li>)}
               </ul>
-              <Button onClick={handleGoPremium} disabled={loading} className="w-full" size="lg">
-                {loading ? 'Processing...' : 'Go Premium'}
+              <Button onClick={handleGetPass} disabled={loading} className="w-full" size="lg">
+                {loading ? 'Processing...' : pass?.active ? 'Extend by 30 days' : 'Get the Pass'}
               </Button>
             </CardContent>
           </Card>
         </div>
 
-        {/* The viewing pack: a standalone one-off $20 purchase, not bundled into Premium */}
-        <Card className="mt-4 sm:mt-6">
-          <CardContent className="pt-4 sm:pt-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-            <div className="flex-1">
-              <div className="font-semibold flex items-center gap-2">
-                Viewing Pack
-                <Badge variant="secondary">$20 one-off</Badge>
+        {/* The top-up only makes sense on top of a live pass, so it only shows
+            there - the $20/10 pack it replaces is retired, though credits
+            already bought stay spendable until they lapse. */}
+        {pass?.active && (
+          <Card className="mt-4 sm:mt-6">
+            <CardContent className="pt-4 sm:pt-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+              <div className="flex-1">
+                <div className="font-semibold flex items-center gap-2">
+                  Need more viewings?
+                  <Badge variant="secondary">${TOPUP_PRICE_USD} one-off</Badge>
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                  {TOPUP_VIEWINGS} more viewing coordination, running until your pass ends.
+                  {!!quota?.packRemaining && ` ${quota.packRemaining} left on your account.`}
+                </p>
               </div>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                {VIEWINGS_PER_PACK} viewing coordination, good for 30 days. No Premium plan required.
-                {/* Packs stack, so the pitch is "buy another", never "already active". */}
-                {!!quota?.packRemaining && (
-                  <>
-                    {' '}
-                    {quota.packRemaining} left on your account
-                    {quota.packExpiresAt
-                      ? ` until ${new Date(quota.packExpiresAt).toLocaleDateString()}`
-                      : ''}
-                    .
-                  </>
-                )}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={handleBuyAddon}
-              disabled={addonLoading}
-              className="shrink-0"
-            >
-              {addonLoading ? 'Processing...' : quota?.hasPack ? 'Buy another pack' : 'Get the viewing pack'}
-            </Button>
-          </CardContent>
-        </Card>
+              <Button
+                variant="outline"
+                onClick={handleTopUp}
+                disabled={addonLoading}
+                className="shrink-0"
+              >
+                {addonLoading ? 'Processing...' : 'Top up'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
-          <p>✓ Cancel anytime • ✓ Secure PayPal payment • ✓ Fast activation</p>
+          {/* No "cancel anytime" - nothing recurs, which is the better promise. */}
+          <p>✓ One-off payment, nothing recurring • ✓ Secure PayPal payment • ✓ Fast activation</p>
         </div>
       </DialogContent>
     </Dialog>;

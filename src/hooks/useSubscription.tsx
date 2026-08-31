@@ -69,25 +69,10 @@ export const useSubscription = () => {
     }
   };
 
-  const createSubscription = async () => {
-    if (!user) return null;
-
-    try {
-      const { data, error } = await supabase.functions.invoke('create-paypal-subscription', {
-        headers: {
-          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      return data.approvalUrl;
-    } catch (error) {
-      console.error('Error creating subscription:', error);
-      toast.error('Failed to create subscription');
-      return null;
-    }
-  };
+  // No createSubscription: the $10/mo plan is retired and nothing may start a
+  // new one. What's left here reads and winds down the cycles already running -
+  // cancel still has to work for anyone still being billed. Once the last cycle
+  // lapses, this hook can go with it.
 
   const reactivateSubscription = async () => {
     if (!user) return false;
@@ -143,7 +128,6 @@ export const useSubscription = () => {
   return {
     ...subscriptionStatus,
     checkSubscription,
-    createSubscription,
     cancelSubscription,
     reactivateSubscription,
   };

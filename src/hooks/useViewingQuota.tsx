@@ -2,11 +2,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
 
 export const INCLUDED_VIEWINGS_PER_CYCLE = 3;
 /** Free tier gets one coordinated viewing on the house, once per account. */
 export const FREE_TRIAL_VIEWINGS = 1;
+/** Matched listings needed before the free trial viewing unlocks. */
+export const MATCHES_FOR_TRIAL = 3;
 /** One $20 viewing pack: bought outright, stacks, and lapses after 30 days. */
 export const VIEWINGS_PER_PACK = 10;
 
@@ -33,20 +36,65 @@ export interface ViewingQuota {
   trialAvailable: boolean;
   /** True when the free trial has been spent and upgrading is the way forward. */
   trialUsed: boolean;
+  /** True when the trial is unspent but the intent gate hasn't been cleared yet. */
+  trialLocked: boolean;
+  /** What's still missing from the gate, so the UI can name it. */
+  trialGate: {
+    hasPreferences: boolean;
+    matchCount: number;
+    matchesNeeded: number;
+  };
 }
+
+/**
+ * Why a booking is blocked, in the words the renter needs.
+ *
+ * A locked trial and a spent one both read as "nothing left", but they want
+ * opposite pitches: one asks the renter to finish setting up, the other asks
+ * them to pay. Sending a locked renter to checkout would sell them a plan when
+ * the thing they need is free and two clicks away.
+ */
+export const describeViewingBlock = (quota: ViewingQuota) => {
+  if (quota.trialLocked) {
+    const { hasPreferences, matchCount, matchesNeeded } = quota.trialGate;
+    return {
+      title: 'Your free viewing is almost unlocked',
+      description: !hasPreferences
+        ? 'Answer a few preference questions and match 3 listings, and we book your first viewing for you.'
+        : `Match ${matchesNeeded - matchCount} more listing${matchesNeeded - matchCount === 1 ? '' : 's'} and we book your first viewing for you.`,
+      showPaywall: false,
+    };
+  }
+  return {
+    title: quota.trialUsed
+      ? "You've used your free viewing coordination"
+      : 'Viewing bookings used up for this cycle',
+    description: 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.',
+    showPaywall: true,
+  };
+};
 
 /**
  * Who can book a coordinated viewing, and how many are left.
  *
  * - Free tier: one trial booking per account, ever. It's the only way to feel
- *   what coordination does before paying, so it doesn't reset.
- * - Premium: 3 bookings per subscription cycle.
- * - Viewing packs: $20 buys 10 bookings outright. They last 30 days, they stack
- *   across repeat purchases, and they're only spent once the plan allowance
- *   above is exhausted - the same order the DB trigger consumes them in.
+ *   what coordination does before paying, so it doesn't reset. It has to be
+ *   earned first - preference quiz answered and 3 listings matched - because a
+ *   coordinator's hour is too expensive to hand every signup on arrival. The
+ *   same gate is enforced in SQL by free_viewing_trial_unlocked().
+ * - Hausto Pass: $25 buys 3 bookings for 30 days, and $10 tops that up by 2.
+ *   Passes stack across repeat purchases.
+ * - Legacy Premium ($10/mo, retired): 3 bookings per subscription cycle, until
+ *   the last paid-up cycle lapses.
+ * - Legacy viewing packs ($20 for 10, retired): still spendable until they
+ *   expire.
  *
- * Premium cycle window: subscription_end minus one month (the plan bills
- * monthly). Fallback when subscription_end is unavailable: a rolling 30 days.
+ * Credits are only spent once the plan allowance above is exhausted - the same
+ * order the DB trigger consumes them in.
+ *
+ * Legacy Premium cycle window: subscription_end minus one month (the plan
+ * billed monthly). Fallback when subscription_end is unavailable: a rolling 30
+ * days.
  */
 export const useViewingQuota = () => {
   const { user } = useAuth();
@@ -78,6 +126,11 @@ export const useViewingQuota = () => {
       // What the plan itself covers, before any pack credit is touched.
       let baseIncluded: number;
       let baseUsed: number;
+      // Only the free tier's trial is gated, so these stay at their "cleared"
+      // values for anyone on a paid allowance.
+      let hasPreferences = true;
+      let matchCount = MATCHES_FOR_TRIAL;
+      let trialSpent = false;
 
       if (isPremium) {
         baseIncluded = INCLUDED_VIEWINGS_PER_CYCLE;
@@ -95,12 +148,32 @@ export const useViewingQuota = () => {
         // The trial is tracked in its own ledger instead: cancelling or deleting
         // a request must not hand out a second free coordination.
         baseIncluded = FREE_TRIAL_VIEWINGS;
-        const { data: trial } = await supabase
-          .from('viewing_trials')
-          .select('used_at')
-          .eq('renter_id', user!.id)
-          .maybeSingle();
-        baseUsed = trial ? 1 : 0;
+        const [{ data: trial }, { data: prefsRow }, { count }] = await Promise.all([
+          supabase
+            .from('viewing_trials')
+            .select('used_at')
+            .eq('renter_id', user!.id)
+            .maybeSingle(),
+          supabase
+            .from('user_preferences')
+            .select('user_id, styles, activities, must_haves, price_range_min, price_range_max, size, location, move_in_date')
+            .eq('user_id', user!.id)
+            .maybeSingle(),
+          supabase
+            .from('property_matches')
+            .select('id', { count: 'exact', head: true })
+            .eq('renter_id', user!.id),
+        ]);
+
+        trialSpent = !!trial;
+        // Same test the SQL gate runs, kept in one place on the client.
+        hasPreferences = hasMeaningfulPreferences(dbToPreferences(prefsRow ?? null));
+        matchCount = count ?? 0;
+
+        // A locked trial spends its allowance up front: the booking would be
+        // refused by the INSERT policy anyway, so the quota must not promise it.
+        const unlocked = hasPreferences && matchCount >= MATCHES_FOR_TRIAL;
+        baseUsed = trialSpent || !unlocked ? 1 : 0;
       }
 
       // Only live packs count: a lapsed one's unspent credits are gone, so
@@ -112,7 +185,28 @@ export const useViewingQuota = () => {
         .gt('expires_at', now.toISOString())
         .order('expires_at', { ascending: true });
 
-      const livePacks = packs ?? [];
+      // Pass and top-up credits live in their own ledger but spend the same
+      // way, so they're folded in alongside the legacy packs.
+      const { data: passRows } = await supabase
+        .from('passes')
+        .select('viewings_included, viewings_used, expires_at')
+        .eq('renter_id', user!.id)
+        .gt('expires_at', now.toISOString())
+        .order('expires_at', { ascending: true });
+
+      const livePacks = [
+        ...(packs ?? []).map((p) => ({
+          credits: p.credits,
+          credits_used: p.credits_used,
+          expires_at: p.expires_at,
+        })),
+        ...(passRows ?? []).map((p) => ({
+          credits: p.viewings_included,
+          credits_used: p.viewings_used,
+          expires_at: p.expires_at,
+        })),
+      ].sort((a, b) => String(a.expires_at).localeCompare(String(b.expires_at)));
+
       const packTotal = livePacks.reduce((n, p) => n + p.credits, 0);
       const packSpent = livePacks.reduce((n, p) => n + p.credits_used, 0);
       const packRemaining = Math.max(0, packTotal - packSpent);
@@ -138,7 +232,16 @@ export const useViewingQuota = () => {
         canBook: remaining > 0,
         isTrial,
         trialAvailable: isTrial && remaining > 0,
-        trialUsed: isTrial && remaining === 0,
+        // "Used" and "locked" both read as zero remaining but want opposite
+        // pitches - one upgrades, the other finishes the quiz - so the ledger
+        // decides which, not the count.
+        trialUsed: isTrial && remaining === 0 && trialSpent,
+        trialLocked: isTrial && remaining === 0 && !trialSpent,
+        trialGate: {
+          hasPreferences,
+          matchCount,
+          matchesNeeded: MATCHES_FOR_TRIAL,
+        },
       };
     },
     // Waiting for the tier keeps a premium renter from being read as free tier
@@ -149,30 +252,13 @@ export const useViewingQuota = () => {
   const refetchQuota = () =>
     queryClient.invalidateQueries({ queryKey: ['viewing-quota'] });
 
-  /** Starts the $20 viewing-pack purchase; redirects to PayPal on success. */
-  const purchaseViewingPack = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('create-viewing-addon-order', {
-        headers: {
-          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        },
-      });
-      if (error || data?.error) throw new Error(data?.error || error?.message);
-      if (data?.approvalUrl) {
-        window.location.href = data.approvalUrl;
-      } else {
-        throw new Error('No approval URL returned');
-      }
-    } catch (err) {
-      console.error('Error starting add-on purchase:', err);
-      toast.error('Could not start the purchase. Please try again.');
-    }
-  };
+  // No purchase starter here any more: the $20 pack is retired, and the Pass
+  // and top-up are bought through usePass(). Credits from packs already sold
+  // stay spendable above until they lapse.
 
   return {
     quota,
     isLoading: quotaLoading || subscriptionLoading,
     refetchQuota,
-    purchaseViewingPack,
   };
 };

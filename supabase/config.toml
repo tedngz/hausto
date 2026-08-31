@@ -21,6 +21,12 @@ verify_jwt = true
 [functions.check-paypal-subscription]
 verify_jwt = true
 
+[functions.create-pass-order]
+verify_jwt = true
+
+[functions.capture-pass-order]
+verify_jwt = true
+
 [functions.handle-paypal-webhooks]
 verify_jwt = false
 

@@ -2,14 +2,13 @@ import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { CalendarCheck, Heart, RotateCcw, Crown, MessageSquare } from 'lucide-react';
+import { CalendarCheck, RotateCcw, Crown, MessageSquare } from 'lucide-react';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
  
 export const UsageMeter = () => {
   const {
     todayUsage,
-    weeklyMatches,
     subscriptionStatus,
     loading,
     limits,
@@ -40,16 +39,10 @@ export const UsageMeter = () => {
 
   const isPremium = subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium';
 
-  // No swipe deck any more, so no per-listing view budget to report: the meter
-  // showed a bar that could only ever read 0/10.
+  // Only AI searches carry a ceiling now. The per-listing view budget went with
+  // the swipe deck, and matches are uncapped on every tier - a bar that can
+  // never fill is worse than no bar.
   const usageItems = [
-    {
-      icon: Heart,
-      label: 'Weekly matches',
-      current: weeklyMatches,
-      limit: limits.weeklyMatches,
-      color: 'text-red-500',
-    },
     {
       icon: MessageSquare,
       label: 'Daily AI searches',
@@ -108,6 +101,14 @@ export const UsageMeter = () => {
                 <span className="font-medium">
                   {quota.isTrial ? 'Free viewing coordination' : 'Viewing coordinations'}
                 </span>
+                {/* Locked reads as 1/1 spent otherwise - say why it's not on offer yet. */}
+                {quota.trialLocked && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    {quota.trialGate.hasPreferences
+                      ? `${quota.trialGate.matchesNeeded - quota.trialGate.matchCount} more matches to unlock`
+                      : 'Finish your preferences to unlock'}
+                  </Badge>
+                )}
               </div>
               <span className={`font-mono ${!quota.canBook ? 'text-red-500' : 'text-muted-foreground'}`}>
                 {`${Math.min(quota.used, quota.included)}/${quota.included}`}
