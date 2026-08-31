@@ -1,68 +1,57 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Crown, Calendar, RefreshCw, CreditCard } from 'lucide-react';
+import { Crown, RefreshCw } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
+import { usePass, PASS_PRICE_USD, PASS_DAYS } from '@/hooks/usePass';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+
 interface SubscriptionStatusProps {
   onUpgrade?: () => void;
   showHistory?: boolean;
 }
-export const SubscriptionStatus = ({
-  onUpgrade,
-  showHistory = false
-}: SubscriptionStatusProps) => {
+
+/**
+ * Where the renter stands right now, in two lines and one button.
+ *
+ * The plan comparison lives in the upgrade modal, so this card doesn't repeat
+ * it - it answers "what have I got left, and what do I press next".
+ */
+export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
   const {
-    subscribed,
-    subscription_tier,
-    subscription_end,
     paypal_subscription_id,
     is_suspended,
     loading,
     checkSubscription,
-    cancelSubscription,
-    reactivateSubscription
+    cancelSubscription
   } = useSubscription();
+  const { pass } = usePass();
   const { quota } = useViewingQuota();
   const [cancelling, setCancelling] = useState(false);
-  const [reactivating, setReactivating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  // Premium status based on tier and subscription status
-  const isPremium = subscription_tier === 'premium' && subscribed;
-  
-  // Active subscription is ACTIVE on PayPal, suspended means user cancelled but can reactivate
-  const hasActiveSubscription = isPremium && !!paypal_subscription_id && !is_suspended;
-  const isSuspended = isPremium && is_suspended && !!paypal_subscription_id;
-  const isCancelled = isPremium && !paypal_subscription_id;
 
-  const handleReactivate = async () => {
-    setReactivating(true);
-    const success = await reactivateSubscription();
-    setReactivating(false);
-    if (!success) {
-      // Fallback to creating new subscription
-      onUpgrade?.();
-    }
-  };
+  const active = !!pass?.active;
+  // Nothing recurs on the Pass, so a cancel button only makes sense for the
+  // retired $10/mo plan while its PayPal subscription is still live.
+  const canCancelLegacy = active && pass.isLegacySubscription && !!paypal_subscription_id && !is_suspended;
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await checkSubscription();
     setRefreshing(false);
-    toast.success('Subscription status refreshed');
+    toast.success('Plan status refreshed');
   };
-  const handleCancelClick = () => {
-    setShowCancelDialog(true);
-  };
+
   const handleConfirmCancel = async () => {
     setShowCancelDialog(false);
     setCancelling(true);
     await cancelSubscription();
     setCancelling(false);
   };
+
   if (loading) {
     return <Card>
         <CardContent className="p-6">
@@ -73,105 +62,66 @@ export const SubscriptionStatus = ({
         </CardContent>
       </Card>;
   }
+
+  const viewingsLine = quota
+    ? `${quota.remaining} viewing coordination left`
+    : null;
+
   return <>
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2 text-lg">
-            {isPremium ? <>
-                <Crown className="h-4 w-4 text-primary" />
-                Premium Plan
-              </> : 'Free Plan'}
+            {active && <Crown className="h-4 w-4 text-primary" />}
+            {active ? 'Hausto Pass' : 'Free plan'}
           </span>
           <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-8 w-8 p-0">
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
         </CardTitle>
-        {isPremium && subscription_end && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-            <Calendar className="h-3 w-3" />
-            <span>
-              {(isCancelled || isSuspended) ? 'Cancelled · Effective until' : 'Next billing date:'} {new Date(subscription_end).toLocaleDateString()}
-            </span>
-          </div>}
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
-        {isPremium ? <div className="space-y-2.5">
-            <div className="p-2.5 bg-primary/5 rounded-lg border border-primary/20">
-              <div className="text-sm font-medium text-primary mb-1.5">
-                Premium Benefits Active
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-0.5">
-                <li>• Unlimited matches</li>
-                <li>• Unlimited AI searches</li>
-                <li>• 3 viewing coordination per month</li>
-              </ul>
-            </div>
-            
-            {hasActiveSubscription ? <Button variant="outline" onClick={handleCancelClick} disabled={cancelling} className="w-full h-9 text-sm" size="sm">
-                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
-                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button> : isSuspended ? <div className="space-y-2">
-                  <Button onClick={handleReactivate} disabled={reactivating} className="w-full h-9 text-sm" size="sm">
-                    <Crown className="h-3.5 w-3.5 mr-1.5" />
-                    {reactivating ? 'Reactivating...' : 'Reactivate Subscription'}
-                  </Button>
-                </div> : isCancelled && <div className="space-y-2">
-                  <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
-                    <Crown className="h-3.5 w-3.5 mr-1.5" />
-                    Reactivate Subscription
-                  </Button>
-                </div>}
-          </div> : <div className="space-y-2.5">
-            {/* The free trial is the one benefit a free renter already has -
-                show its state before the upgrade pitch. */}
-            {quota && (
-              <div className={`rounded-lg border p-2.5 ${quota.trialAvailable ? 'border-emerald-200 bg-emerald-50' : 'border-border bg-secondary/40'}`}>
-                <div className={`text-sm font-medium ${quota.trialAvailable ? 'text-emerald-800' : 'text-foreground'}`}>
-                  {quota.trialAvailable ? 'Free viewing coordination available' : 'Free viewing coordination used'}
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {quota.trialAvailable
-                    ? 'Pick a listing and your times - Hausto books the viewing for you, once, on the house.'
-                    : 'Premium includes 3 coordinated viewings a cycle.'}
-                </p>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Upgrade to unlock unlimited access
+        {active ? <>
+            <p className="text-sm text-muted-foreground">
+              {pass.daysLeft} day{pass.daysLeft === 1 ? '' : 's'} left
+              {viewingsLine ? ` · ${viewingsLine}` : ''}
             </p>
-            <ul className="text-xs text-muted-foreground space-y-0.5">
-              <li>• Unlimited matches</li>
-              <li>• Unlimited AI searches</li>
-              <li>• 3 viewing coordination per month</li>
-            </ul>
+            <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+              Extend by {PASS_DAYS} days
+            </Button>
+            {canCancelLegacy && (
+              <Button variant="ghost" onClick={() => setShowCancelDialog(true)} disabled={cancelling} className="w-full h-8 text-xs text-muted-foreground" size="sm">
+                {cancelling ? 'Cancelling...' : 'Cancel old monthly plan'}
+              </Button>
+            )}
+          </> : <>
+            <p className="text-sm text-muted-foreground">
+              {quota?.trialAvailable
+                ? 'Your free viewing coordination is ready - pick a listing and your times, and we book it for you.'
+                : quota?.trialLocked
+                  ? 'Answer the preference quiz and match 3 listings to unlock your free viewing coordination.'
+                  : 'Free viewing coordination used. The Pass unlocks deep reads and 3 more viewings.'}
+            </p>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />
-              Upgrade to Premium
+              Get the Pass - ${PASS_PRICE_USD} for {PASS_DAYS} days
             </Button>
-          </div>}
+          </>}
       </CardContent>
     </Card>
 
     <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Cancel Premium Subscription?</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              <p>Your premium benefits will remain active until {subscription_end ? new Date(subscription_end).toLocaleDateString() : 'the end of your current billing period'}.</p>
-              <p className="text-muted-foreground">After that date, you'll lose access to:</p>
-              <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 ml-2">
-                <li>Unlimited matches</li>
-                <li>Unlimited AI searches</li>
-                <li>Viewing coordination</li>
-              </ul>
-            </div>
+          <AlertDialogTitle>Cancel your monthly plan?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Your benefits stay active until {pass?.expiresAt ? new Date(pass.expiresAt).toLocaleDateString() : 'the end of the current cycle'}. After that you'll be back on the free plan - the Pass is always there if you need another search.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Keep Subscription</AlertDialogCancel>
+          <AlertDialogCancel>Keep it</AlertDialogCancel>
           <AlertDialogAction onClick={handleConfirmCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            Cancel Subscription
+            Cancel plan
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
