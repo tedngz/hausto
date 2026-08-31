@@ -88,7 +88,9 @@ export const ListingPreviewDialog = ({
             ? `${quota.remaining} viewing coordination left`
             : quota?.trialAvailable
               ? 'Your first viewing is on us'
-              : quota?.trialUsed
+              : quota?.trialLocked
+                ? 'Match 3 listings to unlock your free viewing'
+                : quota?.trialUsed
                 ? `Free trial used - Premium includes ${INCLUDED_VIEWINGS_PER_CYCLE} a cycle`
                 : subscribed
                   ? `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`

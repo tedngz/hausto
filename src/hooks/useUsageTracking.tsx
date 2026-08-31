@@ -15,11 +15,12 @@ interface SubscriptionStatus {
   subscription_end?: string;
 }
 
-// No per-listing view budget: the swipe deck it metered is retired, and
-// nothing has counted a view since. The historical column stays in
-// daily_usage; only the live limit is gone.
+// AI requests are the only metered thing left. The per-listing view budget went
+// with the swipe deck; the weekly match cap and the quiz retake cap went with
+// the plan rework - the curated list is what Hausto is for, so walling it off
+// was metering the promise. Matches and retakes are still counted into
+// daily_usage as telemetry, there is just no ceiling on either any more.
 const FREE_TIER_LIMITS = {
-  weeklyMatches: 20,
   dailyAiRequests: 10,
 };
 
@@ -264,10 +265,8 @@ export const useUsageTracking = () => {
     }
 
     switch (type) {
+      // Matching and retaking the quiz are unlimited on every tier.
       case 'match':
-        const canMatch = weeklyMatches < FREE_TIER_LIMITS.weeklyMatches;
-        console.log(`[Usage Tracking] Can match: ${canMatch} (${weeklyMatches}/${FREE_TIER_LIMITS.weeklyMatches})`);
-        return canMatch;
       case 'quiz':
         return true;
       case 'ai-search':
@@ -286,7 +285,6 @@ export const useUsageTracking = () => {
 
     switch (type) {
       case 'match':
-        return Math.max(0, FREE_TIER_LIMITS.weeklyMatches - weeklyMatches);
       case 'quiz':
         return Infinity;
       case 'ai-search':

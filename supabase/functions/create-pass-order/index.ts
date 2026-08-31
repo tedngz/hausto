@@ -1,0 +1,144 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+
+// Creates the PayPal order for a Hausto Pass ($25, 30 days) or a viewing
+// top-up ($10, 2 more coordination). One function for both because the flow is
+// identical - only the price, the copy and the eligibility check differ.
+//
+// A top-up is refused without a live pass: its credits would lapse the moment
+// they were bought, which is a charge for nothing.
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// The amount is what capture-pass-order reads back to decide what was bought,
+// so these two must stay distinct.
+const PRICES = {
+  pass: { value: "25.00", description: "Hausto Pass - 30 days of deep vibe analysis, unlimited AI and 3 viewing coordination" },
+  topup: { value: "10.00", description: "Hausto viewing top-up - 2 more viewing coordination, expires with your pass" },
+} as const;
+
+type Kind = keyof typeof PRICES;
+
+const logStep = (step: string, details?: unknown) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[CREATE-PASS-ORDER] ${step}${detailsStr}`);
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    logStep("Function started");
+
+    const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
+    const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
+    if (!clientId || !clientSecret) {
+      throw new Error("PayPal credentials not configured");
+    }
+    const apiBase = Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com";
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("No authorization header provided");
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    const user = userData.user;
+    if (!user?.email) throw new Error("User not authenticated or email not available");
+
+    const body = await req.json().catch(() => ({}));
+    const kind: Kind = body?.kind === 'topup' ? 'topup' : 'pass';
+    logStep("User authenticated", { userId: user.id, kind });
+
+    if (kind === 'topup') {
+      const { data: hasPass, error: passError } = await supabaseClient
+        .rpc('has_active_pass', { _user_id: user.id });
+      if (passError) throw passError;
+      if (!hasPass) {
+        return new Response(
+          JSON.stringify({ error: "A top-up needs a live Hausto Pass - its credits expire with the pass." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+        );
+      }
+    }
+
+    const authResponse = await fetch(`${apiBase}/v1/oauth2/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: "grant_type=client_credentials",
+    });
+    const authData = await authResponse.json();
+    if (!authResponse.ok) {
+      throw new Error(`PayPal auth failed: ${authData.error_description}`);
+    }
+    const accessToken = authData.access_token;
+
+    const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/$/, '') || '';
+    const returnUrl = `${origin}/pass-success`;
+    // Backing out returns to the hub, where the pass is offered from.
+    const cancelUrl = `${origin}/hub`;
+
+    const price = PRICES[kind];
+    const orderResponse = await fetch(`${apiBase}/v2/checkout/orders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+        "PayPal-Request-Id": `hausto-${kind}-${user.id}-${Date.now()}`,
+      },
+      body: JSON.stringify({
+        intent: "CAPTURE",
+        purchase_units: [
+          {
+            description: price.description,
+            custom_id: user.id,
+            amount: { currency_code: "USD", value: price.value },
+          },
+        ],
+        application_context: {
+          brand_name: "Hausto",
+          locale: "en-US",
+          shipping_preference: "NO_SHIPPING",
+          user_action: "PAY_NOW",
+          return_url: returnUrl,
+          cancel_url: cancelUrl,
+        },
+      }),
+    });
+    const orderData = await orderResponse.json();
+    if (!orderResponse.ok) {
+      throw new Error(`PayPal order creation failed: ${JSON.stringify(orderData)}`);
+    }
+    logStep("PayPal order created", { orderId: orderData.id, kind });
+
+    const approvalUrl = orderData.links?.find((link: { rel: string; href: string }) => link.rel === "approve")?.href;
+    if (!approvalUrl) {
+      throw new Error("No approval URL found in PayPal response");
+    }
+
+    return new Response(JSON.stringify({ orderId: orderData.id, approvalUrl, kind }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logStep("ERROR in create-pass-order", { message: errorMessage });
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+});

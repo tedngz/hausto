@@ -1504,6 +1504,42 @@ export type Database = {
         }
         Relationships: []
       }
+      passes: {
+        Row: {
+          amount_usd: number
+          expires_at: string
+          id: string
+          kind: string
+          paypal_order_id: string
+          purchased_at: string
+          renter_id: string
+          viewings_included: number
+          viewings_used: number
+        }
+        Insert: {
+          amount_usd: number
+          expires_at: string
+          id?: string
+          kind: string
+          paypal_order_id: string
+          purchased_at?: string
+          renter_id: string
+          viewings_included: number
+          viewings_used?: number
+        }
+        Update: {
+          amount_usd?: number
+          expires_at?: string
+          id?: string
+          kind?: string
+          paypal_order_id?: string
+          purchased_at?: string
+          renter_id?: string
+          viewings_included?: number
+          viewings_used?: number
+        }
+        Relationships: []
+      }
       viewing_addons: {
         Row: {
           amount_usd: number

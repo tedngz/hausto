@@ -11,7 +11,8 @@ import { CalendarIcon, X, Gift, CalendarCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { VIEWINGS_PER_PACK, INCLUDED_VIEWINGS_PER_CYCLE, useViewingQuota } from '@/hooks/useViewingQuota';
+import { INCLUDED_VIEWINGS_PER_CYCLE, describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
+import { PASS_PRICE_USD, PASS_VIEWINGS, TOPUP_PRICE_USD, TOPUP_VIEWINGS, usePass } from '@/hooks/usePass';
 
 interface Property {
   id: string;
@@ -64,7 +65,8 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
   const [specialRequirements, setSpecialRequirements] = useState('');
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>(initialSelectedIds ?? []);
   const { toast } = useToast();
-  const { quota, purchaseViewingPack } = useViewingQuota();
+  const { quota } = useViewingQuota();
+  const { pass, purchasePass, purchaseTopUp } = usePass();
   const quotaExhausted = !!quota && !quota.canBook;
   // A renter can line up as many listings as they have coordination left to
   // spend. Before the quota loads, assume the smallest allowance.
@@ -118,7 +120,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       if (prev.length >= maxSelectable) {
         toast({
           title: "Viewing coordination limit",
-          description: `You have ${maxSelectable} viewing coordination left, so you can pick up to ${maxSelectable} propert${maxSelectable === 1 ? 'y' : 'ies'}. Get the viewing pack for more.`,
+          description: `You have ${maxSelectable} viewing coordination left, so you can pick up to ${maxSelectable} propert${maxSelectable === 1 ? 'y' : 'ies'}. Buy a pass or top up for more.`,
           variant: "destructive"
         });
         return prev;
@@ -142,12 +144,17 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
   const handleSubmit = () => {
     // Validation
     if (quotaExhausted) {
+      // A locked trial isn't a limit reached - it's a setup step, and saying
+      // otherwise would sell a plan to someone whose free viewing is waiting.
+      const block = quota ? describeViewingBlock(quota) : null;
       toast({
-        title: "Viewing limit reached",
-        description: quota?.trialUsed
-          ? "You've used your free viewing coordination. Go Premium or get the viewing pack to keep booking."
-          : `You've used all ${quota?.included ?? INCLUDED_VIEWINGS_PER_CYCLE} of your viewing coordination. Get the viewing pack to keep booking.`,
-        variant: "destructive"
+        title: block && !block.showPaywall ? block.title : "Viewing limit reached",
+        description: block && !block.showPaywall
+          ? block.description
+          : quota?.trialUsed
+            ? "You've used your free viewing coordination. Get the Hausto Pass to keep booking."
+            : `You've used all ${quota?.included ?? INCLUDED_VIEWINGS_PER_CYCLE} of your viewing coordination. Top up to keep booking.`,
+        variant: block && !block.showPaywall ? "default" : "destructive"
       });
       return;
     }
@@ -236,13 +243,25 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
           ) : (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 space-y-2">
               <p>
-                {quota.trialUsed
-                  ? "You've used your free viewing coordination."
-                  : `You've used all ${quota.included} of your viewing coordination.`}
+                {quota.trialLocked
+                  ? describeViewingBlock(quota).description
+                  : quota.trialUsed
+                    ? "You've used your free viewing coordination."
+                    : `You've used all ${quota.included} of your viewing coordination.`}
               </p>
-              <Button size="sm" onClick={purchaseViewingPack}>
-                Viewing pack - {VIEWINGS_PER_PACK} coordination for $20
-              </Button>
+              {/* Nothing to sell a renter whose free viewing is still waiting.
+                  Otherwise: a pass holder tops up, everyone else buys the pass. */}
+              {!quota.trialLocked && (
+                pass?.active ? (
+                  <Button size="sm" onClick={purchaseTopUp}>
+                    Top up - {TOPUP_VIEWINGS} more coordination for ${TOPUP_PRICE_USD}
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={purchasePass}>
+                    Hausto Pass - {PASS_VIEWINGS} coordination, 30 days, ${PASS_PRICE_USD}
+                  </Button>
+                )
+              )}
               <p className="text-xs text-amber-800/80">
                 We'll book each visit with the realtor or owner for you.
               </p>

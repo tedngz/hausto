@@ -18,6 +18,7 @@ import AdminComplexes from "./pages/AdminComplexes";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import SubscriptionCancel from "./pages/SubscriptionCancel";
 import AddonSuccess from "./pages/AddonSuccess";
+import PassSuccess from "./pages/PassSuccess";
 import ComplexDetail from "./pages/ComplexDetail";
 import ComplexMap from "./pages/ComplexMap";
 import RealtorApply from "./pages/RealtorApply";
@@ -64,7 +65,9 @@ const App = () => (
             <Route path="/realtor/apply" element={<RealtorApply />} />
             <Route path="/subscription-success" element={<SubscriptionSuccess />} />
             <Route path="/subscription-cancel" element={<SubscriptionCancel />} />
+            {/* Legacy $20 pack captures still land on /addon-success; new purchases use /pass-success. */}
             <Route path="/addon-success" element={<AddonSuccess />} />
+            <Route path="/pass-success" element={<PassSuccess />} />
             <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

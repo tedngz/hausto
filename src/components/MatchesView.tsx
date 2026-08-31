@@ -8,7 +8,7 @@ import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
 import { useAuth } from '@/hooks/useAuth';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
 import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -97,11 +97,9 @@ export const MatchesView = ({
       return;
     }
     if (!quota.canBook) {
-      toast.info(
-        quota.trialUsed ? "You've used your free viewing coordination" : 'Viewing bookings used up for this cycle',
-        { description: 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.' },
-      );
-      setIsSubscriptionModalOpen(true);
+      const block = describeViewingBlock(quota);
+      toast.info(block.title, { description: block.description });
+      if (block.showPaywall) setIsSubscriptionModalOpen(true);
       return;
     }
     const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;

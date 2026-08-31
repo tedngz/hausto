@@ -7,7 +7,7 @@ import { PropertyListingCard } from '@/components/PropertyListingCard';
 import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { useMatches } from '@/hooks/useMatches';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
 import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -205,7 +205,12 @@ const PropertyDetail = () => {
     // Free tier gets one coordination on the house; past that the upgrade path
     // takes over rather than a dead button.
     if (!quota.canBook) {
-      setIsSubscriptionOpen(true);
+      const block = describeViewingBlock(quota);
+      if (block.showPaywall) {
+        setIsSubscriptionOpen(true);
+      } else {
+        toast({ title: block.title, description: block.description });
+      }
       return;
     }
     setIsBooking(true);

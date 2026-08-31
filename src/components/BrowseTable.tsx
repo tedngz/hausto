@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useBrowseListings, type BrowseRow } from '@/hooks/useBrowseListings';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
 import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { VibeMatchPopover } from '@/components/VibeMatchPopover';
@@ -282,12 +282,11 @@ export const BrowseTable = ({
       return;
     }
     if (!quota.canBook) {
-      if (quota.trialUsed) {
+      const block = describeViewingBlock(quota);
+      if (block.showPaywall) {
         setSubscriptionOpen(true);
       } else {
-        toast.error('Viewing bookings used up for this cycle', {
-          description: 'Upgrade or buy a viewing pack from your matches page to book more.',
-        });
+        toast.info(block.title, { description: block.description });
       }
       return;
     }
