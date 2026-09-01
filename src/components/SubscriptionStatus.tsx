@@ -89,11 +89,12 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
                 : `${pass.daysLeft} day${pass.daysLeft === 1 ? '' : 's'} left`}
               {viewingsLine ? ` · ${viewingsLine}` : ''}
             </p>
-            {!pass.isComplimentary && (
-              <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
-                Extend by {PASS_DAYS} days
-              </Button>
-            )}
+            {/* A complimentary pass has no cycle to extend, but its holder
+                still needs the way in to top up viewings - so the button
+                changes what it offers rather than disappearing. */}
+            <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+              {pass.isComplimentary ? 'Buy more viewings' : `Extend by ${PASS_DAYS} days`}
+            </Button>
             {canCancelLegacy && (
               <Button variant="ghost" onClick={() => setShowCancelDialog(true)} disabled={cancelling} className="w-full h-8 text-xs text-muted-foreground" size="sm">
                 {cancelling ? 'Cancelling...' : 'Cancel old monthly plan'}

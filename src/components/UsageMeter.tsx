@@ -9,7 +9,7 @@ import { useViewingQuota } from '@/hooks/useViewingQuota';
 export const UsageMeter = () => {
   const {
     todayUsage,
-    subscriptionStatus,
+    hasUnlimitedAi,
     loading,
     limits,
     refetchUsage,
@@ -37,8 +37,6 @@ export const UsageMeter = () => {
     );
   }
 
-  const isPremium = subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium';
-
   // Only AI searches carry a ceiling now. The per-listing view budget went with
   // the swipe deck, and matches are uncapped on every tier - a bar that can
   // never fill is worse than no bar.
@@ -62,8 +60,8 @@ export const UsageMeter = () => {
       <CardContent className="space-y-4">
         {usageItems.map((item) => {
           const Icon = item.icon;
-          const percentage = isPremium ? 0 : Math.min((item.current / item.limit) * 100, 100);
-          const isAtLimit = !isPremium && item.current >= item.limit;
+          const percentage = hasUnlimitedAi ? 0 : Math.min((item.current / item.limit) * 100, 100);
+          const isAtLimit = !hasUnlimitedAi && item.current >= item.limit;
           
           return (
             <div key={item.label} className="space-y-2">
@@ -73,16 +71,16 @@ export const UsageMeter = () => {
                   <span className="font-medium">{item.label}</span>
                 </div>
                 <span className={`font-mono ${isAtLimit ? 'text-red-500' : 'text-muted-foreground'}`}>
-                  {isPremium ? '∞' : `${item.current}/${item.limit}`}
+                  {hasUnlimitedAi ? '∞' : `${item.current}/${item.limit}`}
                 </span>
               </div>
-              {!isPremium && (
+              {!hasUnlimitedAi && (
                 <Progress 
                   value={percentage} 
                   className={`h-2 ${isAtLimit ? '[&>div]:bg-red-500' : ''}`}
                 />
               )}
-              {isPremium && (
+              {hasUnlimitedAi && (
                 <div className="h-2 bg-primary/20 rounded-full">
                   <div className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full animate-pulse"></div>
                 </div>
