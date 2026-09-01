@@ -25,14 +25,10 @@ jobs:
           node-version: '22'
           cache: npm
 
-      # --legacy-peer-deps is required: react-leaflet@5 pulls
-      # @react-leaflet/core@3, which demands React 19 while this project is on
-      # React 18. Without the flag the install fails outright. Drop it once
-      # that conflict is resolved properly.
       # postinstall runs patch-package here, so this step also proves the
       # @lovable.dev/mcp-js patch still applies (see patches/README.md).
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Type-check
         run: npx tsc -p tsconfig.app.json --noEmit
