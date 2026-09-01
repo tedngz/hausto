@@ -10,32 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
-  }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -418,66 +393,80 @@ export type Database = {
       concierge_escalations: {
         Row: {
           answered_message_id: string | null
-          conversation_id: string
+          conversation_id: string | null
           created_at: string
           id: string
           property_id: string | null
           question: string
-          realtor_id: string
+          realtor_id: string | null
           renter_id: string
+          source: string
           source_message_id: string | null
           status: Database["public"]["Enums"]["escalation_status"]
           updated_at: string
         }
         Insert: {
           answered_message_id?: string | null
-          conversation_id: string
+          conversation_id?: string | null
           created_at?: string
           id?: string
           property_id?: string | null
           question: string
-          realtor_id: string
+          realtor_id?: string | null
           renter_id: string
+          source?: string
           source_message_id?: string | null
           status?: Database["public"]["Enums"]["escalation_status"]
           updated_at?: string
         }
         Update: {
           answered_message_id?: string | null
-          conversation_id?: string
+          conversation_id?: string | null
           created_at?: string
           id?: string
           property_id?: string | null
           question?: string
-          realtor_id?: string
+          realtor_id?: string | null
           renter_id?: string
+          source?: string
           source_message_id?: string | null
           status?: Database["public"]["Enums"]["escalation_status"]
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "concierge_escalations_answered_message_id_fkey"
-            columns: ["answered_message_id"]
-            isOneToOne: false
-            referencedRelation: "direct_messages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "concierge_escalations_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "match_conversations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "concierge_escalations_source_message_id_fkey"
-            columns: ["source_message_id"]
-            isOneToOne: false
-            referencedRelation: "direct_messages"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      concierge_mail_threads: {
+        Row: {
+          contact_email: string
+          contact_name: string | null
+          created_at: string
+          id: string
+          last_message_at: string
+          status: string
+          subject: string | null
+          subject_key: string
+        }
+        Insert: {
+          contact_email: string
+          contact_name?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          status?: string
+          subject?: string | null
+          subject_key: string
+        }
+        Update: {
+          contact_email?: string
+          contact_name?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          status?: string
+          subject?: string | null
+          subject_key?: string
+        }
+        Relationships: []
       }
       crawler_rejections: {
         Row: {
@@ -562,50 +551,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      direct_messages: {
-        Row: {
-          content: string
-          conversation_id: string
-          created_at: string
-          deleted_by: string[] | null
-          id: string
-          metadata: Json | null
-          read_at: string | null
-          receiver_id: string
-          sender_id: string
-        }
-        Insert: {
-          content: string
-          conversation_id: string
-          created_at?: string
-          deleted_by?: string[] | null
-          id?: string
-          metadata?: Json | null
-          read_at?: string | null
-          receiver_id: string
-          sender_id: string
-        }
-        Update: {
-          content?: string
-          conversation_id?: string
-          created_at?: string
-          deleted_by?: string[] | null
-          id?: string
-          metadata?: Json | null
-          read_at?: string | null
-          receiver_id?: string
-          sender_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "direct_messages_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "match_conversations"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       external_properties: {
         Row: {
@@ -835,15 +780,37 @@ export type Database = {
           status?: Database["public"]["Enums"]["fast_track_status"]
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "fast_track_requests_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "match_conversations"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      listing_deep_analyses: {
+        Row: {
+          analysis: Json
+          created_at: string
+          id: string
+          preference_fingerprint: string
+          property_id: string
+          property_type: string
+          renter_id: string
+        }
+        Insert: {
+          analysis: Json
+          created_at?: string
+          id?: string
+          preference_fingerprint: string
+          property_id: string
+          property_type?: string
+          renter_id: string
+        }
+        Update: {
+          analysis?: Json
+          created_at?: string
+          id?: string
+          preference_fingerprint?: string
+          property_id?: string
+          property_type?: string
+          renter_id?: string
+        }
+        Relationships: []
       }
       listing_groups: {
         Row: {
@@ -893,39 +860,6 @@ export type Database = {
         }
         Relationships: []
       }
-      match_conversations: {
-        Row: {
-          created_at: string
-          id: string
-          is_active: boolean | null
-          last_message_at: string | null
-          last_message_preview: string | null
-          realtor_id: string
-          renter_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_active?: boolean | null
-          last_message_at?: string | null
-          last_message_preview?: string | null
-          realtor_id: string
-          renter_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_active?: boolean | null
-          last_message_at?: string | null
-          last_message_preview?: string | null
-          realtor_id?: string
-          renter_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       openai_usage_log: {
         Row: {
           completion_tokens: number
@@ -962,6 +896,42 @@ export type Database = {
           model?: string
           prompt_tokens?: number
           total_tokens?: number
+        }
+        Relationships: []
+      }
+      passes: {
+        Row: {
+          amount_usd: number
+          expires_at: string
+          id: string
+          kind: string
+          paypal_order_id: string
+          purchased_at: string
+          renter_id: string
+          viewings_included: number
+          viewings_used: number
+        }
+        Insert: {
+          amount_usd: number
+          expires_at: string
+          id?: string
+          kind: string
+          paypal_order_id: string
+          purchased_at?: string
+          renter_id: string
+          viewings_included: number
+          viewings_used?: number
+        }
+        Update: {
+          amount_usd?: number
+          expires_at?: string
+          id?: string
+          kind?: string
+          paypal_order_id?: string
+          purchased_at?: string
+          renter_id?: string
+          viewings_included?: number
+          viewings_used?: number
         }
         Relationships: []
       }
@@ -1504,72 +1474,6 @@ export type Database = {
         }
         Relationships: []
       }
-      listing_deep_analyses: {
-        Row: {
-          analysis: Json
-          created_at: string
-          id: string
-          preference_fingerprint: string
-          property_id: string
-          property_type: string
-          renter_id: string
-        }
-        Insert: {
-          analysis: Json
-          created_at?: string
-          id?: string
-          preference_fingerprint: string
-          property_id: string
-          property_type?: string
-          renter_id: string
-        }
-        Update: {
-          analysis?: Json
-          created_at?: string
-          id?: string
-          preference_fingerprint?: string
-          property_id?: string
-          property_type?: string
-          renter_id?: string
-        }
-        Relationships: []
-      }
-      passes: {
-        Row: {
-          amount_usd: number
-          expires_at: string
-          id: string
-          kind: string
-          paypal_order_id: string
-          purchased_at: string
-          renter_id: string
-          viewings_included: number
-          viewings_used: number
-        }
-        Insert: {
-          amount_usd: number
-          expires_at: string
-          id?: string
-          kind: string
-          paypal_order_id: string
-          purchased_at?: string
-          renter_id: string
-          viewings_included: number
-          viewings_used?: number
-        }
-        Update: {
-          amount_usd?: number
-          expires_at?: string
-          id?: string
-          kind?: string
-          paypal_order_id?: string
-          purchased_at?: string
-          renter_id?: string
-          viewings_included?: number
-          viewings_used?: number
-        }
-        Relationships: []
-      }
       viewing_addons: {
         Row: {
           amount_usd: number
@@ -1633,13 +1537,22 @@ export type Database = {
         Args: { user_email: string }
         Returns: undefined
       }
-      can_create_fast_track_request: {
+      active_pass_expires_at: { Args: { _user_id: string }; Returns: string }
+      base_viewing_allowance_remaining: {
         Args: { _user_id: string }
-        Returns: boolean
+        Returns: number
       }
+      can_create_fast_track_request:
+        | { Args: { _user_id: string }; Returns: boolean }
+        | { Args: { _needed: number; _user_id: string }; Returns: boolean }
       cleanup_expired_external_properties: { Args: never; Returns: undefined }
       deactivate_expired_properties: { Args: never; Returns: undefined }
       detect_city: { Args: { location_text: string }; Returns: string }
+      expire_stale_escalations: { Args: never; Returns: number }
+      free_viewing_trial_unlocked: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       get_conversation_properties: {
         Args: never
         Returns: {
@@ -1791,6 +1704,8 @@ export type Database = {
           subscription_tier: string
         }[]
       }
+      has_active_pass: { Args: { _user_id: string }; Returns: boolean }
+      has_complimentary_pass: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1804,6 +1719,10 @@ export type Database = {
       }
       normalize_location: { Args: { location_text: string }; Returns: string }
       openai_spend_today: { Args: never; Returns: number }
+      pass_viewing_credits_remaining: {
+        Args: { _user_id: string }
+        Returns: number
+      }
       prune_orphan_listing_group_refs: { Args: never; Returns: number }
       set_fast_track_archived: {
         Args: { _archived: boolean; _request_id: string }
@@ -1815,6 +1734,11 @@ export type Database = {
       user_liked_post: { Args: { post_uuid: string }; Returns: boolean }
       validate_email: { Args: { email_input: string }; Returns: boolean }
       validate_phone: { Args: { phone_input: string }; Returns: boolean }
+      verify_cron_secret: { Args: { _token: string }; Returns: boolean }
+      viewing_pack_credits_remaining: {
+        Args: { _user_id: string }
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "realtor"
@@ -1950,9 +1874,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user", "realtor"],
