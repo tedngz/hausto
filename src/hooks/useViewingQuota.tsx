@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useUserRoles } from '@/hooks/useUserRoles';
 import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
 
@@ -84,6 +85,8 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
  *   same gate is enforced in SQL by free_viewing_trial_unlocked().
  * - Hausto Pass: $25 buys 3 bookings for 30 days, and $10 tops that up by 2.
  *   Passes stack across repeat purchases.
+ * - Admins: a complimentary pass allowance, 3 bookings per rolling 30 days.
+ *   It stays metered because each booking is a real coordinator hour.
  * - Legacy Premium ($10/mo, retired): 3 bookings per subscription cycle, until
  *   the last paid-up cycle lapses.
  * - Legacy viewing packs ($20 for 10, retired): still spendable until they
@@ -99,12 +102,15 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
 export const useViewingQuota = () => {
   const { user } = useAuth();
   const { subscribed, subscription_tier, subscription_end, loading: subscriptionLoading } = useSubscription();
+  const { isAdmin, isLoading: rolesLoading } = useUserRoles();
   const queryClient = useQueryClient();
 
-  const isPremium = subscribed && subscription_tier === 'premium';
+  // An admin's complimentary pass spends on the same windowed allowance a paid
+  // plan does, so it takes the same branch below.
+  const hasPlanAllowance = (subscribed && subscription_tier === 'premium') || isAdmin;
 
   const { data: quota, isLoading: quotaLoading } = useQuery<ViewingQuota>({
-    queryKey: ['viewing-quota', user?.id, isPremium, subscription_end],
+    queryKey: ['viewing-quota', user?.id, hasPlanAllowance, subscription_end],
     queryFn: async () => {
       const now = new Date();
 
@@ -132,7 +138,7 @@ export const useViewingQuota = () => {
       let matchCount = MATCHES_FOR_TRIAL;
       let trialSpent = false;
 
-      if (isPremium) {
+      if (hasPlanAllowance) {
         baseIncluded = INCLUDED_VIEWINGS_PER_CYCLE;
         let cycleStart: Date;
         if (subscription_end) {
@@ -220,7 +226,7 @@ export const useViewingQuota = () => {
       const used = Math.max(0, included - remaining);
       const hasPack = packTotal > 0;
       // The trial is what's on offer only while neither paid route applies.
-      const isTrial = !isPremium && !hasPack;
+      const isTrial = !hasPlanAllowance && !hasPack;
       return {
         included,
         used,
@@ -246,7 +252,7 @@ export const useViewingQuota = () => {
     },
     // Waiting for the tier keeps a premium renter from being read as free tier
     // (and told their trial is spent) during the subscription check.
-    enabled: !!user?.id && !subscriptionLoading,
+    enabled: !!user?.id && !subscriptionLoading && !rolesLoading,
   });
 
   const refetchQuota = () =>
@@ -258,7 +264,7 @@ export const useViewingQuota = () => {
 
   return {
     quota,
-    isLoading: quotaLoading || subscriptionLoading,
+    isLoading: quotaLoading || subscriptionLoading || rolesLoading,
     refetchQuota,
   };
 };
