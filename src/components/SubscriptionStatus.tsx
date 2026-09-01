@@ -97,7 +97,7 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
           </> : <>
             <p className="text-sm text-muted-foreground">
               {quota?.trialAvailable
-                ? 'Your free viewing coordination is ready - pick a listing and your times, and we book it for you.'
+                ? 'Your first viewing is on us. The Pass adds 3 more, plus a deep read on any listing before you spend a Saturday on it.'
                 : quota?.trialLocked
                   ? 'Answer the preference quiz and match 3 listings to unlock your free viewing coordination.'
                   : 'Free viewing coordination used. The Pass unlocks deep reads and 3 more viewings.'}
