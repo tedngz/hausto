@@ -85,7 +85,7 @@ export const SubscriptionModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
             <Crown className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-            Upgrade to Premium
+            {pass?.active ? 'Your Hausto Pass' : 'Get the Hausto Pass'}
           </DialogTitle>
           {/* Only speaks up when there's a reason the renter landed here. */}
           <DialogDescription className={`text-sm sm:text-lg ${reason ? '' : 'sr-only'}`}>
@@ -99,7 +99,11 @@ export const SubscriptionModal = ({
             <CardHeader className="pb-4">
               <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <span>Free Plan</span>
-                <Badge variant="secondary">Current</Badge>
+                {/* Whichever plan is actually live wears this. It used to be
+                    nailed to the free card, so a pass holder - an admin's
+                    complimentary one included - was told Free was current
+                    while the other card offered to extend the pass they hold. */}
+                {!pass?.active && <Badge variant="secondary">Current</Badge>}
               </CardTitle>
               <CardDescription>Perfect for getting started</CardDescription>
               <div className="text-2xl sm:text-3xl font-bold">$0<span className="text-sm font-normal">/month</span></div>
@@ -114,15 +118,18 @@ export const SubscriptionModal = ({
             </CardContent>
           </Card>
 
-          {/* Premium Plan */}
+          {/* The Hausto Pass */}
           <Card className="relative border-primary bg-primary/5">
             <div className="absolute -top-2 left-1/2 -translate-x-1/2">
               <Badge className="bg-primary text-primary-foreground">Recommended</Badge>
             </div>
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2">
-                <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                Hausto Pass
+              <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                  Hausto Pass
+                </span>
+                {pass?.active && <Badge variant="secondary">Current</Badge>}
               </CardTitle>
               <CardDescription>Unlimited search, plus viewing coordination</CardDescription>
               <div className="text-2xl sm:text-3xl font-bold">

@@ -26,6 +26,7 @@ import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingS
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { setChatHandoff } from '@/lib/chatHandoff';
+import { DEEP_SCAN_EVENT, type DeepScanDetail } from '@/lib/deepScanEvents';
 import { format } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -157,6 +158,8 @@ interface HomeAIProps {
   /** Listings pinned before the conversation's first message - what a sparkle
    *  fired off the hub hands over (see components/AssistantHandoff). */
   initialSubjects?: AssistantOpenDetail[];
+  /** A Deep Scan asked for from a card elsewhere, read here on arrival. */
+  initialDeepScan?: DeepScanDetail;
   onInitialQueryConsumed?: () => void;
   /** 'page' is the full-width Discover view; 'rail' fills a narrow docked
    *  column on the hub - no card chrome, thread scrolls, composer pinned. */
@@ -182,6 +185,7 @@ export const HomeAI = ({
   initialQuery,
   initialImages,
   initialSubjects,
+  initialDeepScan,
   onInitialQueryConsumed,
   variant = 'page',
   resultsPortal,
@@ -207,6 +211,10 @@ export const HomeAI = ({
   const [isSearching, setIsSearching] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<PropertyMatch | null>(null);
   const [analysisProperty, setAnalysisProperty] = useState<PropertyMatch | null>(null);
+  // The scan a renter has actually asked for, which is the only one that reads
+  // itself on arrival. Opening a listing still pins its offer, but does not
+  // spend the scan for them.
+  const [scanRequest, setScanRequest] = useState<DeepScanDetail | null>(initialDeepScan ?? null);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -918,6 +926,18 @@ export const HomeAI = ({
     return { name: getPropertySourceLogo(href || property.source || '').name, href };
   };
 
+  // A Deep Scan asked for from a card on this page. The chat is already here,
+  // so the ask is answered in place rather than travelling through the handoff.
+  useEffect(() => {
+    const onScan = (event: Event) => {
+      const detail = (event as CustomEvent<DeepScanDetail>).detail;
+      if (!detail?.propertyId) return;
+      setScanRequest(detail);
+    };
+    window.addEventListener(DEEP_SCAN_EVENT, onScan);
+    return () => window.removeEventListener(DEEP_SCAN_EVENT, onScan);
+  }, []);
+
   const handlePropertyClick = async (property: PropertyMatch) => {
     try {
       // Try to fetch full property details from database by ID
@@ -1116,18 +1136,26 @@ export const HomeAI = ({
               </div>
             </div>}
 
-          {/* The read for the listing the renter opened, kept in the
-              conversation rather than under the preview: it is written against
-              their preferences, so it belongs where they can ask about it. It
-              stays after the preview is closed - that is the point of moving
-              it here - and is named, because a search returns several places. */}
-          {user && analysisProperty && (
+          {/* Where a Deep Scan is read. It is long, and written against the
+              renter's preferences, so it belongs in the conversation - with the
+              room to read it, the listing it read still on screen beside it,
+              and the AI that can be asked about what it says. A scan asked for
+              from a chip reads itself on arrival; opening a listing only pins
+              the offer, because spending the scan is the renter's call. */}
+          {user && (scanRequest || analysisProperty) && (
             <div className="animate-fade-in">
               <DeepVibeAnalysis
-                key={analysisProperty.id}
-                propertyId={analysisProperty.id}
-                propertyType={analysisProperty.isExternal ? 'external' : 'internal'}
-                title={analysisProperty.title}
+                key={scanRequest?.propertyId ?? analysisProperty!.id}
+                propertyId={scanRequest?.propertyId ?? analysisProperty!.id}
+                propertyType={
+                  scanRequest
+                    ? scanRequest.propertyType ?? 'internal'
+                    : analysisProperty!.isExternal
+                      ? 'external'
+                      : 'internal'
+                }
+                title={scanRequest?.title ?? analysisProperty!.title}
+                autoGenerate={!!scanRequest}
                 onRequestPass={() => setIsSubscriptionModalOpen(true)}
               />
             </div>

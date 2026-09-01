@@ -8,6 +8,7 @@ import {
   type AssistantCompareDetail,
   type AssistantOpenDetail,
 } from '@/lib/assistantEvents';
+import { DEEP_SCAN_EVENT, type DeepScanDetail } from '@/lib/deepScanEvents';
 
 /**
  * "Ask the AI about this", fired from anywhere in the app, routed to the one
@@ -65,10 +66,25 @@ export const AssistantHandoff = () => {
       navigate('/hub');
     };
 
+    // A Deep Scan asked for from a card off the hub. The scan is read in the
+    // chat, so the ask travels there the same way the sparkle does.
+    const onScan = (event: Event) => {
+      const detail = (event as CustomEvent<DeepScanDetail>).detail;
+      if (!detail?.propertyId) return;
+      if (!user) {
+        navigate('/auth', { state: { returnTo: '/hub' } });
+        return;
+      }
+      setChatHandoff({ subjects: [{ propertyId: detail.propertyId, title: detail.title }], deepScan: detail });
+      navigate('/hub');
+    };
+
     window.addEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+    window.addEventListener(DEEP_SCAN_EVENT, onScan);
     window.addEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
     return () => {
       window.removeEventListener(ASSISTANT_OPEN_EVENT, onOpen);
+      window.removeEventListener(DEEP_SCAN_EVENT, onScan);
       window.removeEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
     };
   }, [user, navigate, location.pathname]);

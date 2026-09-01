@@ -1,4 +1,5 @@
 import type { AssistantOpenDetail } from '@/lib/assistantEvents';
+import type { DeepScanDetail } from '@/lib/deepScanEvents';
 
 /**
  * What a renter carries with them to the hub, which is where the one chat
@@ -29,6 +30,8 @@ export interface ChatHandoff {
   subjects?: AssistantOpenDetail[];
   /** Listing ids the compare panel should reopen on once the table has them. */
   compareIds?: string[];
+  /** A Deep Scan asked for off the hub, to be read on arrival. */
+  deepScan?: DeepScanDetail;
 }
 
 let pending: ChatHandoff | null = null;

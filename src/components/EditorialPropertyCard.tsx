@@ -15,6 +15,7 @@ import { geocodeLocation } from '@/utils/geocoding';
 import { extractPropertyFeatures, propertyHasFeature, FEATURE_LABELS, type FeatureKey } from '@/lib/propertyFeatures';
 import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
 import { requestPass } from '@/lib/passEvents';
+import { openDeepScan } from '@/lib/deepScanEvents';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
@@ -584,15 +585,24 @@ export const EditorialPropertyCard = ({
             </PopoverTrigger>
             <PopoverContent
               align="start"
-              className="w-[min(24rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto p-4"
+              className="w-[calc(100vw-2rem)] max-w-sm p-4"
+              collisionPadding={12}
               onClick={e => e.stopPropagation()}
             >
               <DeepVibeAnalysis
                 bare
+                ctaOnly
                 propertyId={apartment.id}
                 propertyType={propertyType}
                 title={apartment.title}
                 onRequestPass={() => requestPass()}
+                onScan={() =>
+                  openDeepScan({
+                    propertyId: apartment.id,
+                    title: apartment.title,
+                    propertyType: propertyType,
+                  })
+                }
               />
             </PopoverContent>
           </Popover>
