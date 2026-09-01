@@ -32,14 +32,6 @@ const RATING_DOT: Record<string, string> = {
   casual: 'bg-muted-foreground/50',
 };
 
-const verifiedLabel = (iso?: string | null): string | null => {
-  if (!iso) return null;
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (!Number.isFinite(days) || days < 0) return null;
-  if (days === 0) return 'Verified live today';
-  if (days === 1) return 'Verified yesterday';
-  return `Verified ${days}d ago`;
-};
 
 interface PropertyListingCardProps {
   apartment: Apartment;
@@ -118,7 +110,6 @@ export const PropertyListingCard = ({
     .join(' · ');
   const amenities = getNormalizedAmenities(apartment.amenities, 9);
   const ratingLabel = vibeScore ? getVibeRatingLabel(Number(vibeScore.overall)) : null;
-  const verified = verifiedLabel(apartment.last_verified_at);
 
   // Overall vibe/style for the badge — the analysed styles when available,
   // else the display vibe string ("Modern, Elegant"). Not the per-image
@@ -349,12 +340,6 @@ export const PropertyListingCard = ({
               />
             </PopoverContent>
           </Popover>
-          {verified && (
-            <span className="flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 text-[11.5px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              {verified}
-            </span>
-          )}
           </div>
 
         {/* Title + location (left) · price + size (right), generously spaced so
@@ -380,7 +365,7 @@ export const PropertyListingCard = ({
 
           {/* Mobile: a full-width row under the title — price left, spec right —
               so neither floats away from the text. Desktop: right-hand column. */}
-          <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3 sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:border-t-0 sm:pt-0 sm:flex-shrink-0 sm:text-right">
+          <div className="flex items-baseline justify-between gap-3 sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:flex-shrink-0 sm:text-right">
             <p className="font-serif font-semibold text-xl sm:text-[28px] leading-tight whitespace-nowrap">
               {formatPrice(apartment.price)}
               <span className="font-sans font-normal text-[13px] text-muted-foreground"> /mo</span>

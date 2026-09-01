@@ -958,7 +958,28 @@ export const HomeAI = ({
         } as PropertyMatch;
         setSelectedProperty(enriched);
       } else {
-        setSelectedProperty(property);
+        // Not a Hausto listing, so it came from the crawler. Search truncates
+        // descriptions to keep the results payload small, which left a crawled
+        // listing's prose cut mid-sentence with nothing behind the "more"
+        // toggle - the full text only exists on the row itself.
+        const { data: external } = await supabase
+          .from('external_properties')
+          .select('description, highlights, images, size, vibe, vibe_analysis')
+          .eq('id', property.id)
+          .maybeSingle();
+        setSelectedProperty(
+          external
+            ? ({
+                ...property,
+                images: external.images?.length ? external.images : property.images,
+                description: external.description || property.description,
+                highlights: external.highlights?.length ? external.highlights : property.highlights,
+                size: external.size || property.size,
+                vibe: external.vibe || property.vibe,
+                vibe_analysis: external.vibe_analysis ?? property.vibe_analysis,
+              } as PropertyMatch)
+            : property,
+        );
       }
     } catch (e) {
       // Fallback to original result on error
@@ -1414,12 +1435,17 @@ export const HomeAI = ({
           </div>}
 
         {/* Starter suggestions — shown until the conversation has content, so
-            first-time users learn the AI does both searches AND area advice */}
-        {!hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !isSearching && !isSendingMessage && (
-          // Wrapped, these four chips are four stacked rows - most of the
-          // mobile dock's new height. Below xl they scroll sideways on one
-          // line instead; the rail proper still wraps.
-          <div className={`flex gap-2 animate-fade-in ${isRail ? 'overflow-x-auto pb-1 xl:flex-wrap xl:overflow-x-visible xl:pb-0' : 'flex-wrap'}`}>
+            first-time users learn the AI does both searches AND area advice. A
+            Deep Scan counts as content: in the mobile dock the chips plus the
+            composer fill the sheet, and the scan they were sent to read is left
+            with no height to render into. */}
+        {!hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !scanRequest && !analysisProperty && !isSearching && !isSendingMessage && (
+          // One line that scrolls sideways, everywhere. Wrapped, these four
+          // chips stack into four rows and eat the space the conversation is
+          // supposed to occupy - most of the mobile dock, and the top third of
+          // the rail. Scrolling costs a gesture to reach the last chip and
+          // gives the thread back the room.
+          <div className="flex gap-2 animate-fade-in overflow-x-auto pb-1">
             {([
               { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
               { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
@@ -1435,18 +1461,15 @@ export const HomeAI = ({
                   size="sm"
                   title={isSearch ? 'Find listings' : 'Get advice'}
                   className={
-                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-start gap-1.5 text-left ' +
-                    (isRail
-                      ? 'shrink-0 whitespace-nowrap xl:max-w-full xl:shrink xl:whitespace-normal '
-                      : 'max-w-full whitespace-normal ') +
+                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 text-left shrink-0 whitespace-nowrap ' +
                     (isSearch
                       ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
                       : 'border-border text-foreground hover:bg-secondary')
                   }
                   onClick={() => handleSearch(text)}
                 >
-                  <Icon className="h-3 w-3 shrink-0 mt-0.5" />
-                  <span className="min-w-0">{text}</span>
+                  <Icon className="h-3 w-3 shrink-0" />
+                  <span>{text}</span>
                 </Button>
               );
             })}

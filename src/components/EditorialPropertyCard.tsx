@@ -278,13 +278,6 @@ export const EditorialPropertyCard = ({
 
   // Freshness chip: how recently the source listing was confirmed still live.
   // Claims "live on source", never "available" — availability is only settled at viewing time.
-  const verifiedLabel = useMemo(() => {
-    if (!apartment.last_verified_at) return '';
-    const days = Math.floor((Date.now() - new Date(apartment.last_verified_at).getTime()) / 86_400_000);
-    if (days < 0 || days > 30) return '';
-    if (days === 0) return 'Verified live today';
-    return `Verified live ${days}d ago`;
-  }, [apartment.last_verified_at]);
 
   const arrowsVisible = hover || noHover;
 
@@ -613,12 +606,6 @@ export const EditorialPropertyCard = ({
               />
             </PopoverContent>
           </Popover>
-          {verifiedLabel && (
-            <span className={`flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 whitespace-nowrap ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-              {verifiedLabel}
-            </span>
-          )}
           </div>
 
         {/* Title + location */}
@@ -641,7 +628,7 @@ export const EditorialPropertyCard = ({
         </div>
 
         {/* Price · spec, with the amenities toggle alongside the spec */}
-        <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3">
+        <div className="flex items-baseline justify-between gap-3">
           <p className={`font-serif font-semibold leading-tight whitespace-nowrap ${compact ? 'text-base' : 'text-xl'}`}>
             {formatPrice(apartment.price)}
             <span className={`font-sans font-normal text-muted-foreground ${compact ? 'text-[11px]' : 'text-[13px]'}`}> /mo</span>
