@@ -7,7 +7,7 @@ import { PreferencesEditModal } from '@/components/PreferencesEditModal';
 import { UsageMeter } from '@/components/UsageMeter';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
-import { useSubscription } from '@/hooks/useSubscription';
+import { usePass } from '@/hooks/usePass';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { FEATURE_LABELS, FeatureKey } from '@/lib/propertyFeatures';
 import { normalizeSize } from '@/lib/preferences';
@@ -48,7 +48,7 @@ export const HubPreferenceBar = ({ onOpenSubscription }: HubPreferenceBarProps) 
   const navigate = useNavigate();
   const { preferences } = useUserPreferences();
   const { formatPrice } = useCurrency();
-  const { subscribed, subscription_tier: tier, subscription_end: endsAt } = useSubscription();
+  const { pass } = usePass();
   const [isEditOpen, setIsEditOpen] = useState(false);
 
   // Whether the chip strip overflows, and where in it we are - drives the
@@ -88,7 +88,10 @@ export const HubPreferenceBar = ({ onOpenSubscription }: HubPreferenceBarProps) 
   const mustHaves = (preferences?.mustHaves ?? [])
     .map((m) => FEATURE_LABELS[m as FeatureKey] || m)
     .slice(0, 2);
-  const isPremium = subscribed && tier === 'premium';
+  // Cover comes from the Pass, not the retired $10/mo plan: reading
+  // subscription state here left every pass holder - bought or complimentary -
+  // looking at a "Free" chip in the hub.
+  const hasPass = !!pass?.active;
 
   const chips: { label: string; value: string }[] = [];
   if ((preferences?.styles ?? []).length > 0) {
@@ -199,12 +202,12 @@ export const HubPreferenceBar = ({ onOpenSubscription }: HubPreferenceBarProps) 
                 size="sm"
                 className="h-8 rounded-full px-2.5 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
               >
-                {isPremium ? (
+                {hasPass ? (
                   <Crown className="h-3.5 w-3.5" aria-hidden="true" />
                 ) : (
                   <Zap className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
-                {isPremium ? 'Premium' : 'Free'}
+                {hasPass ? 'Pass' : 'Free'}
                 <ChevronDown className="h-3 w-3 opacity-60" aria-hidden="true" />
               </Button>
             </PopoverTrigger>
@@ -214,21 +217,24 @@ export const HubPreferenceBar = ({ onOpenSubscription }: HubPreferenceBarProps) 
                   someone opened to check how much they have left. */}
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">
-                  {isPremium ? 'Premium plan' : 'Free plan'}
+                  {hasPass ? 'Hausto Pass' : 'Free plan'}
                 </span>
-                {isPremium && endsAt && (
+                {/* A complimentary pass has no end date to count down to. */}
+                {hasPass && (
                   <span className="text-[11px] text-muted-foreground">
-                    Renews {new Date(endsAt).toLocaleDateString()}
+                    {pass!.isComplimentary
+                      ? 'Included with your admin account'
+                      : `${pass!.daysLeft} day${pass!.daysLeft === 1 ? '' : 's'} left`}
                   </span>
                 )}
               </div>
 
               <UsageMeter />
 
-              {!isPremium && (
+              {!hasPass && (
                 <Button className="w-full" size="sm" onClick={onOpenSubscription}>
                   <Crown className="h-3.5 w-3.5" aria-hidden="true" />
-                  Upgrade to Premium
+                  Get the Pass
                 </Button>
               )}
             </PopoverContent>

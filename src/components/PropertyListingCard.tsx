@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, MapPin, Loader2, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Loader2, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getNormalizedAmenities } from '@/components/PropertyAmenities';
 import { MapViewModal } from '@/components/MapViewModal';
@@ -278,39 +278,43 @@ export const PropertyListingCard = ({
       {/* ===== Details ===== */}
       <div className="flex flex-col gap-4 sm:gap-[18px] p-5 sm:px-6 sm:pt-[22px] sm:pb-6">
         {/* Badges */}
-        {(ratingLabel || vibeStyles.length > 0 || verified) && (
-          <div className="flex flex-wrap gap-2">
-            {/* Signed-in renters with preferences see how well it matches them;
-                everyone else sees the property's own analysed style. Either way
-                the badge opens the full vibe breakdown. */}
-            {(ratingLabel || vibeStyles.length > 0) && (
-              <VibeMatchPopover
-                vibeScore={vibeScore}
-                vibeMatch={vibeMatch ?? analysedVibe}
-                note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
+        <div className="flex flex-wrap gap-2">
+          {/* Signed-in renters with preferences see how well it matches them;
+              everyone else sees the property's own analysed style. Either way
+              the badge opens the full vibe breakdown. */}
+          {(ratingLabel || vibeStyles.length > 0) && (
+            <VibeMatchPopover
+              vibeScore={vibeScore}
+              vibeMatch={vibeMatch ?? analysedVibe}
+              note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
+            >
+              <button
+                type="button"
+                aria-label="View match scoring details"
+                className="flex items-center gap-[7px] rounded-full bg-secondary text-secondary-foreground px-3 py-1.5 font-mono text-[10.5px] tracking-[0.12em] uppercase hover:bg-secondary/70 transition-colors"
               >
-                <button
-                  type="button"
-                  aria-label="View match scoring details"
-                  className="flex items-center gap-[7px] rounded-full bg-secondary text-secondary-foreground px-3 py-1.5 font-mono text-[10.5px] tracking-[0.12em] uppercase hover:bg-secondary/70 transition-colors"
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      ratingLabel ? RATING_DOT[ratingLabel] || 'bg-muted-foreground/50' : 'bg-primary'
-                    }`}
-                  />
-                  {ratingLabel ? `${ratingLabel} match` : vibeStyles.join(' · ')}
-                </button>
-              </VibeMatchPopover>
-            )}
-            {verified && (
-              <span className="flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 text-[11.5px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                {verified}
-              </span>
-            )}
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    ratingLabel ? RATING_DOT[ratingLabel] || 'bg-muted-foreground/50' : 'bg-primary'
+                  }`}
+                />
+                {ratingLabel ? `${ratingLabel} match` : vibeStyles.join(' · ')}
+              </button>
+            </VibeMatchPopover>
+          )}
+          {/* Same marker the shelf cards carry, so a listing reads the same
+              on the page as it did in the list it was found in. */}
+          <span className="flex items-center gap-[5px] rounded-full bg-primary/10 text-primary px-3 py-1.5 text-[11.5px] whitespace-nowrap">
+            <Search className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+            Deep Scan
+          </span>
+          {verified && (
+            <span className="flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 text-[11.5px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {verified}
+            </span>
+          )}
           </div>
-        )}
 
         {/* Title + location (left) · price + size (right), generously spaced so
             a long title never crowds the price */}

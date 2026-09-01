@@ -57,7 +57,7 @@ interface VibeMatchPopoverProps {
   /** Shown under the header when there is no score (e.g. a sign-in nudge) */
   note?: string;
   align?: 'start' | 'center' | 'end';
-  /** Rendered under the breakdown, behind a rule. The Deep Analysis lives here
+  /** Rendered under the breakdown, behind a rule. The Deep Scan lives here
    *  on the surfaces that have one, so a renter reads the score and the read in
    *  the same place rather than as two stacked cards. */
   deepAnalysis?: ReactNode;

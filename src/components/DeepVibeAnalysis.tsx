@@ -71,7 +71,7 @@ export const DeepVibeAnalysis = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-                <span className="font-medium text-sm">Deep Analysis</span>
+                <span className="font-medium text-sm">Deep Scan</span>
               </div>
               {title && (
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">{title}</p>
@@ -163,7 +163,7 @@ export const DeepVibeAnalysis = ({
       <div className="flex-1">
         <div className="flex items-center gap-2 font-medium text-sm">
           <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-          Deep Analysis
+          Deep Scan
           {locked && (
             <Badge variant="secondary" className="text-[10px]">Pass</Badge>
           )}
@@ -182,7 +182,7 @@ export const DeepVibeAnalysis = ({
             Reading the photos...
           </>
         ) : (
-          'Get the Deep Analysis'
+          'Get the Deep Scan'
         )}
       </Button>
     </div>
