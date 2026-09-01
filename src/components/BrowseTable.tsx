@@ -727,6 +727,10 @@ export const BrowseTable = ({
             onLike={preview ? () => handleLike(preview) : undefined}
             onSchedule={preview ? () => openFastTrack([preview]) : undefined}
             source={preview ? { name: sourceName, href: isHausto ? `/property/${preview.id}` : preview.source_url } : undefined}
+            // Browse mixes both ledgers: a Hausto listing is a properties row,
+            // everything else came from the crawler.
+            propertyType={isHausto ? 'internal' : 'external'}
+            onRequestPass={() => setSubscriptionOpen(true)}
           />
         );
       })()}

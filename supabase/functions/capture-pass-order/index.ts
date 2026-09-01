@@ -140,11 +140,20 @@ serve(async (req) => {
       expiresAt = new Date(from + PASS_DAYS * 24 * 60 * 60 * 1000).toISOString();
     } else {
       // A top-up lapses with the pass that allowed it, so it never extends
-      // cover on its own. Without a live pass there's nothing to attach it to.
-      if (!passExpiry) {
-        throw new Error("No live pass to attach this top-up to");
+      // cover on its own. Without a live pass there's nothing to attach it to -
+      // except a complimentary pass, which is live but has no end date, so its
+      // top-up gets its own 30-day window rather than failing after payment.
+      if (passExpiry) {
+        expiresAt = new Date(passExpiry as string).toISOString();
+      } else {
+        const { data: complimentary, error: complimentaryError } = await supabaseClient
+          .rpc('has_complimentary_pass', { _user_id: user.id });
+        if (complimentaryError) throw complimentaryError;
+        if (!complimentary) {
+          throw new Error("No live pass to attach this top-up to");
+        }
+        expiresAt = new Date(Date.now() + PASS_DAYS * 24 * 60 * 60 * 1000).toISOString();
       }
-      expiresAt = new Date(passExpiry as string).toISOString();
     }
 
     // One row per purchase - the window is extended via expires_at above, so this

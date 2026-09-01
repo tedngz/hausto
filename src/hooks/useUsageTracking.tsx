@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePass } from '@/hooks/usePass';
 import { toast } from 'sonner';
 
 interface UsageLimits {
@@ -15,6 +16,9 @@ interface SubscriptionStatus {
   subscription_end?: string;
 }
 
+// The daily ceiling is the free tier's. Anyone covered - a live Hausto Pass, an
+// admin's complimentary pass, or a legacy Premium cycle - searches without one.
+//
 // AI requests are the only metered thing left. The per-listing view budget went
 // with the swipe deck; the weekly match cap and the quiz retake cap went with
 // the plan rework - the curated list is what Hausto is for, so walling it off
@@ -26,6 +30,7 @@ const FREE_TIER_LIMITS = {
 
 export const useUsageTracking = () => {
   const { user, loading: authLoading } = useAuth();
+  const { pass } = usePass();
   const [todayUsage, setTodayUsage] = useState<UsageLimits>({
     propertiesMatched: 0,
     quizRetakes: 0,
@@ -245,6 +250,13 @@ export const useUsageTracking = () => {
     }
   };
 
+  // The Pass replaced the $10/mo plan, so cover has to be read from the pass -
+  // keying on the retired subscription alone left pass holders (admins
+  // included) capped at the free tier's 10 searches a day.
+  const hasUnlimitedAi =
+    !!pass?.active ||
+    (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium');
+
   const canPerformAction = useCallback((type: 'match' | 'quiz' | 'ai-search'): boolean => {
     // Don't block actions while subscription status is still loading
     if (loading) {
@@ -259,8 +271,8 @@ export const useUsageTracking = () => {
       todayAiSearches: todayUsage.aiSearches
     });
 
-    if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
-      console.log('[Usage Tracking] Premium user - unlimited access');
+    if (hasUnlimitedAi) {
+      console.log('[Usage Tracking] Covered by a pass - unlimited access');
       return true;
     }
 
@@ -276,10 +288,10 @@ export const useUsageTracking = () => {
       default:
         return false;
     }
-  }, [subscriptionStatus, todayUsage, weeklyMatches, loading]);
+  }, [hasUnlimitedAi, subscriptionStatus, todayUsage, weeklyMatches, loading]);
 
   const getRemainingActions = (type: 'match' | 'quiz' | 'ai-search'): number => {
-    if (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium') {
+    if (hasUnlimitedAi) {
       return Infinity;
     }
 
@@ -303,6 +315,7 @@ export const useUsageTracking = () => {
     todayUsage,
     weeklyMatches,
     subscriptionStatus,
+    hasUnlimitedAi,
     loading,
     limits: FREE_TIER_LIMITS,
     updateUsage,

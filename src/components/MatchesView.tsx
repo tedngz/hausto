@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/types';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
+import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { UserProfile } from '@/components/LoginModal';
@@ -138,6 +139,15 @@ export const MatchesView = ({
       </div>;
   }
   const allApartments = renterMatches?.map(transformMatchToApartment).filter((apt): apt is Apartment => apt !== null) || [];
+  // Which ledger each match came from. The read is stored per listing and the
+  // two id spaces are separate, so the card alone can't say which to ask for -
+  // Apartment doesn't carry the type, the match row does.
+  const externalIds = new Set(
+    (renterMatches ?? [])
+      .filter((m: any) => m.property_type === 'external')
+      .map((m: any) => m.properties?.id)
+      .filter(Boolean),
+  );
   if (allApartments.length === 0) {
     return <div className="text-center py-12 animate-fade-in">
         <div className="w-24 h-24 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto mb-8 mt-20 shadow-xl animate-float">
@@ -197,6 +207,18 @@ export const MatchesView = ({
                     </AlertDialog>
                   ) : undefined}
                 />
+
+                {/* The same read the listing page and the preview modal offer.
+                    Signed-in only: it is written against their preferences. */}
+                {user && (
+                  <div className="mt-3">
+                    <DeepVibeAnalysis
+                      propertyId={apartment.id}
+                      propertyType={externalIds.has(apartment.id) ? 'external' : 'internal'}
+                      onRequestPass={() => setIsSubscriptionModalOpen(true)}
+                    />
+                  </div>
+                )}
             </div>;
       })}
       </div>
