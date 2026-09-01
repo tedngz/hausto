@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useUserRoles } from '@/hooks/useUserRoles';
 import { toast } from 'sonner';
 
 export const PASS_PRICE_USD = 25;
@@ -19,6 +20,8 @@ export interface PassStatus {
   daysLeft: number;
   /** True when cover comes from the retired $10/mo Premium plan, not a pass. */
   isLegacySubscription: boolean;
+  /** True when cover comes with the admin seat rather than a purchase. */
+  isComplimentary: boolean;
 }
 
 /**
@@ -28,6 +31,10 @@ export interface PassStatus {
  * is bought outright for 30 days and simply bought again if the search runs
  * long. Nothing recurs, so there is no cancel, no reactivate and no dunning.
  *
+ * Admins hold a pass by default so they can walk the paid product without
+ * buying one every 30 days. It never expires and is mirrored in SQL by
+ * has_complimentary_pass().
+ *
  * Renters still inside a $10/mo Premium cycle are honoured here as active until
  * their cycle ends - they paid for cover, and which product it came from isn't
  * their problem. Nothing new is sold into that plan; once the last cycle
@@ -35,6 +42,7 @@ export interface PassStatus {
  */
 export const usePass = () => {
   const { user } = useAuth();
+  const { isAdmin, isLoading: rolesLoading } = useUserRoles();
   const {
     subscribed,
     subscription_tier,
@@ -46,8 +54,18 @@ export const usePass = () => {
   const legacyActive = subscribed && subscription_tier === 'premium';
 
   const { data: pass, isLoading } = useQuery<PassStatus>({
-    queryKey: ['pass', user?.id, legacyActive, subscription_end],
+    queryKey: ['pass', user?.id, isAdmin, legacyActive, subscription_end],
     queryFn: async () => {
+      if (isAdmin) {
+        return {
+          active: true,
+          expiresAt: null,
+          daysLeft: 0,
+          isLegacySubscription: false,
+          isComplimentary: true,
+        };
+      }
+
       const { data } = await supabase
         .from('passes')
         .select('expires_at')
@@ -75,11 +93,14 @@ export const usePass = () => {
         expiresAt,
         daysLeft,
         isLegacySubscription: !passExpiry && !!legacyExpiry,
+        isComplimentary: false,
       };
     },
     // Waiting for the legacy check keeps a paid-up subscriber from being read
     // as uncovered during the subscription lookup.
-    enabled: !!user?.id && !subscriptionLoading,
+    // Waiting on roles too: reading an admin as uncovered for a moment would
+    // flash the paywall at them on every load.
+    enabled: !!user?.id && !subscriptionLoading && !rolesLoading,
   });
 
   const refetchPass = () => queryClient.invalidateQueries({ queryKey: ['pass'] });
@@ -111,7 +132,7 @@ export const usePass = () => {
 
   return {
     pass,
-    isLoading: isLoading || subscriptionLoading,
+    isLoading: isLoading || subscriptionLoading || rolesLoading,
     refetchPass,
     purchasePass: () => buy('pass'),
     purchaseTopUp: () => buy('topup'),

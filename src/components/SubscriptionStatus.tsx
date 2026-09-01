@@ -83,12 +83,17 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
       <CardContent className="space-y-3 pt-0">
         {active ? <>
             <p className="text-sm text-muted-foreground">
-              {pass.daysLeft} day{pass.daysLeft === 1 ? '' : 's'} left
+              {/* A complimentary pass has no end date, so there is nothing to count down to - and nothing to extend. */}
+              {pass.isComplimentary
+                ? 'Included with your admin account'
+                : `${pass.daysLeft} day${pass.daysLeft === 1 ? '' : 's'} left`}
               {viewingsLine ? ` · ${viewingsLine}` : ''}
             </p>
-            <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
-              Extend by {PASS_DAYS} days
-            </Button>
+            {!pass.isComplimentary && (
+              <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+                Extend by {PASS_DAYS} days
+              </Button>
+            )}
             {canCancelLegacy && (
               <Button variant="ghost" onClick={() => setShowCancelDialog(true)} disabled={cancelling} className="w-full h-8 text-xs text-muted-foreground" size="sm">
                 {cancelling ? 'Cancelling...' : 'Cancel old monthly plan'}
