@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUserRoles } from '@/hooks/useUserRoles';
+import { usePass, PASS_DAYS } from '@/hooks/usePass';
 import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
 
@@ -95,22 +96,35 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
  * Credits are only spent once the plan allowance above is exhausted - the same
  * order the DB trigger consumes them in.
  *
- * Legacy Premium cycle window: subscription_end minus one month (the plan
- * billed monthly). Fallback when subscription_end is unavailable: a rolling 30
- * days.
+ * Cycle windows, mirroring base_viewing_allowance_remaining in SQL - the client
+ * must not promise a booking the INSERT policy would refuse:
+ * - Bought pass: its own period, expires_at minus PASS_DAYS, so a booking is
+ *   charged to the pass that was live when it was made. Clamped to now() when
+ *   passes have been extended past one period: cover stacks, the allowance does
+ *   not.
+ * - Legacy Premium: subscription_end minus one month (the plan billed monthly).
+ * - Admin, or no end date to work from: a rolling 30 days.
  */
 export const useViewingQuota = () => {
   const { user } = useAuth();
   const { subscribed, subscription_tier, subscription_end, loading: subscriptionLoading } = useSubscription();
   const { isAdmin, isLoading: rolesLoading } = useUserRoles();
+  const { pass, isLoading: passLoading } = usePass();
   const queryClient = useQueryClient();
 
+  // A bought pass is the case this used to miss: it is neither a legacy
+  // subscription nor an admin seat, so a renter who paid for three viewings was
+  // dropped to the free tier's single trial one.
+  const boughtPassExpiry = pass?.active && !pass.isComplimentary && pass.expiresAt
+    ? pass.expiresAt
+    : null;
   // An admin's complimentary pass spends on the same windowed allowance a paid
   // plan does, so it takes the same branch below.
-  const hasPlanAllowance = (subscribed && subscription_tier === 'premium') || isAdmin;
+  const hasPlanAllowance =
+    (subscribed && subscription_tier === 'premium') || isAdmin || !!boughtPassExpiry;
 
   const { data: quota, isLoading: quotaLoading } = useQuery<ViewingQuota>({
-    queryKey: ['viewing-quota', user?.id, hasPlanAllowance, subscription_end],
+    queryKey: ['viewing-quota', user?.id, hasPlanAllowance, subscription_end, boughtPassExpiry],
     queryFn: async () => {
       const now = new Date();
 
@@ -141,7 +155,14 @@ export const useViewingQuota = () => {
       if (hasPlanAllowance) {
         baseIncluded = INCLUDED_VIEWINGS_PER_CYCLE;
         let cycleStart: Date;
-        if (subscription_end) {
+        if (boughtPassExpiry) {
+          // The pass's own period. Clamped to now() so an extended pass does
+          // not reach back and count bookings from before its current cycle.
+          cycleStart = new Date(
+            new Date(boughtPassExpiry).getTime() - PASS_DAYS * 24 * 60 * 60 * 1000,
+          );
+          if (cycleStart > now) cycleStart = now;
+        } else if (subscription_end) {
           cycleStart = new Date(subscription_end);
           cycleStart.setMonth(cycleStart.getMonth() - 1);
           // Guard against stale subscription_end producing a future cycle start.
@@ -252,7 +273,9 @@ export const useViewingQuota = () => {
     },
     // Waiting for the tier keeps a premium renter from being read as free tier
     // (and told their trial is spent) during the subscription check.
-    enabled: !!user?.id && !subscriptionLoading && !rolesLoading,
+    // Waiting on the pass too: reading a pass holder as free-tier for a moment
+    // would show them one viewing and the trial gate instead of their three.
+    enabled: !!user?.id && !subscriptionLoading && !rolesLoading && !passLoading,
   });
 
   const refetchQuota = () =>
