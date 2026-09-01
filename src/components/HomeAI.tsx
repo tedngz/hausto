@@ -1485,6 +1485,8 @@ export const HomeAI = ({
           setIsViewingScheduleOpen(true);
         } : undefined}
         source={selectedProperty ? previewSourceOf(selectedProperty) : undefined}
+        propertyType={selectedProperty?.isExternal ? 'external' : 'internal'}
+        onRequestPass={() => setIsSubscriptionModalOpen(true)}
       />
 
       {/* Viewing Schedule Modal */}
