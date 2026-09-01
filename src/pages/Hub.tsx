@@ -94,6 +94,8 @@ const Hub = () => {
   // rail breakpoint remounts the chat, and the pins should survive that.
   const [seedSubjects] = useState(handoff?.subjects);
   const [seedCompareIds] = useState(handoff?.compareIds);
+  // A Deep Scan asked for from a card elsewhere, read here on arrival.
+  const [seedDeepScan] = useState(handoff?.deepScan);
   // Set while either pane has a compare panel up. Both live inside a pane that
   // is only mounted while its tab is active, so switching tabs closes them.
   const [isComparing, setIsComparing] = useState(false);
@@ -222,6 +224,7 @@ const Hub = () => {
       initialQuery={seedQuery}
       initialImages={seedImages}
       initialSubjects={seedSubjects}
+      initialDeepScan={seedDeepScan}
       onInitialQueryConsumed={() => {
         setSeedQuery(undefined);
         setSeedImages(undefined);

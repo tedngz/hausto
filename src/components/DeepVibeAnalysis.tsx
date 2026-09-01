@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Loader2, MapPin, Sparkles, Train } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { usePass } from '@/hooks/usePass';
 import { useDeepAnalysis, type PropertyType } from '@/hooks/useDeepAnalysis';
 
@@ -17,6 +18,16 @@ interface DeepVibeAnalysisProps {
    *  is not adjacent to its listing - the AI chat, where a search returned
    *  several places - so it is never ambiguous which one was read. */
   title?: string;
+  /** Show only the offer, never the scan itself. For the chip's popover, which
+   *  is the wrong shape to read a scan in: it covers the card the scan is
+   *  about. Pressing the button calls onScan, which hands off to the chat. */
+  ctaOnly?: boolean;
+  /** Where a ctaOnly block sends the renter once they have asked for the scan. */
+  onScan?: () => void;
+  /** Start reading on mount. Set where the renter has already asked for the
+   *  scan elsewhere and this is where the answer was sent - so the ask is one
+   *  press, not one here and another on arrival. */
+  autoGenerate?: boolean;
 }
 
 /** Five dots rather than a number - it reads as a judgement, not a measurement. */
@@ -54,6 +65,9 @@ export const DeepVibeAnalysis = ({
   onRequestPass,
   bare = false,
   title,
+  ctaOnly = false,
+  onScan,
+  autoGenerate = false,
 }: DeepVibeAnalysisProps) => {
   const { pass } = usePass();
   const { analysis, generatedAt, isLoading, isGenerating, generate } = useDeepAnalysis(
@@ -61,10 +75,20 @@ export const DeepVibeAnalysis = ({
     propertyType,
   );
 
+  // Asked for elsewhere and answered here: read it once, on arrival. The ref
+  // keeps a re-render from asking twice.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoGenerate || isLoading || started.current) return;
+    if (analysis || !pass?.active) return;
+    started.current = true;
+    generate();
+  }, [autoGenerate, isLoading, analysis, pass?.active, generate]);
+
   if (isLoading) return null;
 
   // Already generated - readable whether or not the pass is still live.
-  if (analysis) {
+  if (analysis && !ctaOnly) {
     const body = (
       <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
@@ -152,7 +176,9 @@ export const DeepVibeAnalysis = ({
   // cannot judge whether the read is worth paying for from a blurred box - and
   // the pass is asked for at the press, not before it.
   const locked = !pass?.active;
-  const onPress = locked ? onRequestPass : generate;
+  // A pass holder asking from the chip is sent to the chat to read it; anywhere
+  // the scan is shown in place, the press reads it here.
+  const onPress = locked ? onRequestPass : ctaOnly ? onScan : generate;
 
   // Without a way to sell the pass there is nothing a locked renter can do
   // here, so the block stays off rather than offering a dead button.
@@ -175,7 +201,9 @@ export const DeepVibeAnalysis = ({
           <p className="text-xs font-medium text-foreground/80 mt-1 truncate">{title}</p>
         )}
         <p className="text-xs text-muted-foreground mt-1">
-          The layout and light, who it suits, the honest downsides, and how the area fits you.
+          {ctaOnly && analysis
+            ? 'Already read for you - open it in the chat, beside the listing it read.'
+            : 'The layout and light, who it suits, the honest downsides, and how the area fits you.'}
         </p>
       </div>
       <Button onClick={onPress} disabled={isGenerating} className={bare ? 'w-full' : 'shrink-0'}>
@@ -184,6 +212,8 @@ export const DeepVibeAnalysis = ({
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             Reading the photos...
           </>
+        ) : ctaOnly && analysis ? (
+          'Open the Deep Scan'
         ) : (
           'Get the Deep Scan'
         )}
