@@ -65,6 +65,9 @@ export const PropertyListingCard = ({
 }: PropertyListingCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(0);
+  // Controlled so pressing the Deep Scan CTA can close it: the scan is read
+  // in the chat, and a popover left open sits over the card it is about.
+  const [scanOpen, setScanOpen] = useState(false);
   const [fits, setFits] = useState<Record<number, 'cover' | 'contain'>>({});
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -310,7 +313,7 @@ export const PropertyListingCard = ({
               listing reads and behaves the same on the page as it did in the
               list it was found in. This page only ever shows Hausto listings,
               so the scan is always read from the internal ledger. */}
-          <Popover>
+          <Popover open={scanOpen} onOpenChange={setScanOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
@@ -331,14 +334,18 @@ export const PropertyListingCard = ({
                 ctaOnly
                 propertyId={apartment.id}
                 title={displayTitle}
-                onRequestPass={() => requestPass()}
-                onScan={() =>
+                onRequestPass={() => {
+                  setScanOpen(false);
+                  requestPass();
+                }}
+                onScan={() => {
+                  setScanOpen(false);
                   openDeepScan({
                     propertyId: apartment.id,
                     title: displayTitle,
                     propertyType: 'internal',
-                  })
-                }
+                  });
+                }}
               />
             </PopoverContent>
           </Popover>

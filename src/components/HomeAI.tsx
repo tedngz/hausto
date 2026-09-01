@@ -1023,7 +1023,11 @@ export const HomeAI = ({
         </Card>}
 
       {/* Chat Messages for Signed In Users — compact until there's content, then grows/scrolls */}
-      {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage) && <div className={`space-y-4 overflow-y-auto ${isRail ? 'flex-1 min-h-0' : 'mb-4 max-h-[calc(100dvh-16rem)]'}`}>
+      {/* A Deep Scan opens this too. It is read here, so it has to be able to
+          be the first thing in the thread - a renter can ask for one before
+          they have said anything to the AI, and an empty conversation used to
+          mean there was no thread for the scan to land in. */}
+      {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage || scanRequest || analysisProperty) && <div className={`space-y-4 overflow-y-auto ${isRail ? 'flex-1 min-h-0' : 'mb-4 max-h-[calc(100dvh-16rem)]'}`}>
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-slide-up">

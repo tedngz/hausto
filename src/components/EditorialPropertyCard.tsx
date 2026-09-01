@@ -159,6 +159,9 @@ export const EditorialPropertyCard = ({
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipedRef = useRef(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
+  // Controlled so pressing the Deep Scan CTA can close it: the scan is read
+  // in the chat, and a popover left open sits over the card it is about.
+  const [scanOpen, setScanOpen] = useState(false);
   const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const { formatPrice } = useCurrency();
@@ -571,7 +574,7 @@ export const EditorialPropertyCard = ({
               scan from the photos. Renters without a pass get the same panel and
               meet the paywall at its button, so what they are being asked to pay
               for is legible before they are asked. */}
-          <Popover>
+          <Popover open={scanOpen} onOpenChange={setScanOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
@@ -595,14 +598,18 @@ export const EditorialPropertyCard = ({
                 propertyId={apartment.id}
                 propertyType={propertyType}
                 title={apartment.title}
-                onRequestPass={() => requestPass()}
-                onScan={() =>
+                onRequestPass={() => {
+                  setScanOpen(false);
+                  requestPass();
+                }}
+                onScan={() => {
+                  setScanOpen(false);
                   openDeepScan({
                     propertyId: apartment.id,
                     title: apartment.title,
                     propertyType: propertyType,
-                  })
-                }
+                  });
+                }}
               />
             </PopoverContent>
           </Popover>
