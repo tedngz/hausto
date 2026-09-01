@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, X, Share2, LayoutGrid, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, X, Share2, LayoutGrid, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VibeMatchPopover, type VibeScoreDetails, type VibeMatchAttributes } from '@/components/VibeMatchPopover';
 import { getNormalizedAmenities } from '@/components/PropertyAmenities';
@@ -61,7 +61,7 @@ interface EditorialPropertyCardProps {
    *  title/explanation so renters understand why the two ratings can differ. */
   scoreContext?: 'search' | 'preferences';
   /** Rendered inside the vibe-match popover, under the breakdown. Used for the
-   *  Deep Analysis on the surfaces that offer it (matches, the AI chat). */
+   *  Deep Scan on the surfaces that offer it (matches, the AI chat). */
   deepAnalysis?: ReactNode;
   /** Caption shown when the current image has no per-image highlight */
   quoteFallback?: string;
@@ -533,43 +533,50 @@ export const EditorialPropertyCard = ({
       {/* ===== Details ===== */}
       <div className={`flex flex-col ${compact ? 'gap-2.5 p-4' : 'gap-3.5 p-5'}`}>
         {/* Badges */}
-        {(ratingLabel || vibeStyles.length > 0 || verifiedLabel) && (
-          <div className="flex flex-wrap gap-2">
-            {/* Renters with preferences see how well it matches them; everyone
-                else sees the property's own analysed style. Either way the
-                badge opens the full vibe breakdown. */}
-            {(ratingLabel || vibeStyles.length > 0) && (
-              <VibeMatchPopover
-                vibeScore={vibeScore}
-                vibeMatch={vibeMatch ?? analysedVibe}
-                vibeDetailsText={vibeDetailsText}
-                scoreContext={scoreContext}
-                deepAnalysis={deepAnalysis}
-                note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
+        <div className="flex flex-wrap gap-2">
+          {/* Renters with preferences see how well it matches them; everyone
+              else sees the property's own analysed style. Either way the
+              badge opens the full vibe breakdown. */}
+          {(ratingLabel || vibeStyles.length > 0) && (
+            <VibeMatchPopover
+              vibeScore={vibeScore}
+              vibeMatch={vibeMatch ?? analysedVibe}
+              vibeDetailsText={vibeDetailsText}
+              scoreContext={scoreContext}
+              deepAnalysis={deepAnalysis}
+              note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
+            >
+              <button
+                type="button"
+                aria-label="View match scoring details"
+                className={`flex items-center gap-[7px] rounded-full bg-secondary text-secondary-foreground font-mono tracking-[0.12em] uppercase hover:bg-secondary/70 transition-colors ${compact ? 'px-2.5 py-1 text-[9.5px]' : 'px-3 py-1.5 text-[10.5px]'}`}
+                onClick={e => e.stopPropagation()}
               >
-                <button
-                  type="button"
-                  aria-label="View match scoring details"
-                  className={`flex items-center gap-[7px] rounded-full bg-secondary text-secondary-foreground font-mono tracking-[0.12em] uppercase hover:bg-secondary/70 transition-colors ${compact ? 'px-2.5 py-1 text-[9.5px]' : 'px-3 py-1.5 text-[10.5px]'}`}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      ratingLabel ? RATING_DOT[ratingLabel] || 'bg-muted-foreground/50' : 'bg-primary'
-                    }`}
-                  />
-                  <span className="line-clamp-1">{ratingLabel ? `${ratingLabel} match` : vibeStyles.join(' · ')}</span>
-                </button>
-              </VibeMatchPopover>
-            )}
-            {verifiedLabel && (
-              <span className={`flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 whitespace-nowrap ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                {verifiedLabel}
-              </span>
-            )}
+                <span
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    ratingLabel ? RATING_DOT[ratingLabel] || 'bg-muted-foreground/50' : 'bg-primary'
+                  }`}
+                />
+                <span className="line-clamp-1">{ratingLabel ? `${ratingLabel} match` : vibeStyles.join(' · ')}</span>
+              </button>
+            </VibeMatchPopover>
+          )}
+          {/* Marks the listing as one the Deep Scan can read. It sits beside
+              the match chip because both answer "is this place for me" - the
+              score from the outside, the scan from the photos. */}
+          <span
+            className={`flex items-center gap-[5px] rounded-full bg-primary/10 text-primary whitespace-nowrap ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}
+          >
+            <Search className={`flex-shrink-0 ${compact ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} aria-hidden="true" />
+            Deep Scan
+          </span>
+          {verifiedLabel && (
+            <span className={`flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 whitespace-nowrap ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+              {verifiedLabel}
+            </span>
+          )}
           </div>
-        )}
 
         {/* Title + location */}
         <div className="flex flex-col gap-2 min-w-0">
