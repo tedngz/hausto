@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Loader2, Lock, MapPin, Sparkles, Train } from 'lucide-react';
+import { AlertTriangle, Loader2, MapPin, Sparkles, Train } from 'lucide-react';
 import { usePass } from '@/hooks/usePass';
 import { useDeepAnalysis, type PropertyType } from '@/hooks/useDeepAnalysis';
 
@@ -10,6 +10,9 @@ interface DeepVibeAnalysisProps {
   propertyType?: PropertyType;
   /** Opens the plan modal when the renter has no pass. */
   onRequestPass?: () => void;
+  /** Drops the card chrome so the block can sit inside another surface (the
+   *  vibe-match popover, the AI chat) without reading as a card in a card. */
+  bare?: boolean;
 }
 
 /** Five dots rather than a number - it reads as a judgement, not a measurement. */
@@ -37,14 +40,15 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 /**
  * The Pass's headline feature: an honest read of one listing for one renter.
  *
- * Three states, and the locked one is the pitch - it names what the read covers
- * rather than hiding behind "upgrade to see more", because a renter can't judge
- * whether it's worth $25 from a blurred box.
+ * Two states. Before it is generated everyone signed in - pass or not - sees the
+ * same offer naming what the read covers, because a renter can't judge whether
+ * it's worth $25 from a blurred box; the pass is asked for at the press.
  */
 export const DeepVibeAnalysis = ({
   propertyId,
   propertyType = 'internal',
   onRequestPass,
+  bare = false,
 }: DeepVibeAnalysisProps) => {
   const { pass } = usePass();
   const { analysis, generatedAt, isLoading, isGenerating, generate } = useDeepAnalysis(
@@ -56,13 +60,12 @@ export const DeepVibeAnalysis = ({
 
   // Already generated - readable whether or not the pass is still live.
   if (analysis) {
-    return (
-      <Card className="border-primary/30 bg-primary/[0.03]">
-        <CardContent className="pt-4 space-y-4">
+    const body = (
+      <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">Deep read</span>
+              <span className="font-medium text-sm">Deep Analysis</span>
             </div>
             {generatedAt && (
               <span className="text-[11px] text-muted-foreground">
@@ -123,60 +126,60 @@ export const DeepVibeAnalysis = ({
               {analysis.worth_viewing}
             </p>
           )}
-        </CardContent>
-      </Card>
+      </div>
     );
-  }
 
-  // Pass holder, nothing generated yet.
-  if (pass?.active) {
+    if (bare) return body;
+
     return (
-      <Card className="border-dashed">
-        <CardContent className="pt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 font-medium text-sm">
-              <Sparkles className="h-4 w-4 text-primary" />
-              Deep read
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              The layout and light, who it suits, the honest downsides, and how the area fits you.
-            </p>
-          </div>
-          <Button onClick={generate} disabled={isGenerating} className="shrink-0">
-            {isGenerating ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Reading the photos...
-              </>
-            ) : (
-              'Get the deep read'
-            )}
-          </Button>
-        </CardContent>
+      <Card className="border-primary/30 bg-primary/[0.03]">
+        <CardContent className="pt-4">{body}</CardContent>
       </Card>
     );
   }
 
-  // Locked. Name what's behind it - nobody buys a blurred box.
+  // Nothing generated yet. Everyone signed in sees the same offer - a renter
+  // cannot judge whether the read is worth paying for from a blurred box - and
+  // the pass is asked for at the press, not before it.
+  const locked = !pass?.active;
+  const onPress = locked ? onRequestPass : generate;
+
+  // Without a way to sell the pass there is nothing a locked renter can do
+  // here, so the block stays off rather than offering a dead button.
+  if (locked && !onRequestPass) return null;
+
+  const teaser = (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="flex-1">
+        <div className="flex items-center gap-2 font-medium text-sm">
+          <Sparkles className="h-4 w-4 text-primary" />
+          Deep Analysis
+          {locked && (
+            <Badge variant="secondary" className="text-[10px]">Pass</Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          The layout and light, who it suits, the honest downsides, and how the area fits you.
+        </p>
+      </div>
+      <Button onClick={onPress} disabled={isGenerating} className="shrink-0">
+        {isGenerating ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Reading the photos...
+          </>
+        ) : (
+          'Get the Deep Analysis'
+        )}
+      </Button>
+    </div>
+  );
+
+  if (bare) return teaser;
+
   return (
     <Card className="border-dashed">
-      <CardContent className="pt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 font-medium text-sm">
-            <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-            Deep read
-            <Badge variant="secondary" className="text-[10px]">Pass</Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            What the photos actually show - layout, light, finish quality - plus who the place
-            suits, the downsides the listing won't mention, and how the area and commute fit
-            what you're looking for.
-          </p>
-        </div>
-        <Button variant="outline" onClick={onRequestPass} className="shrink-0">
-          Unlock with a Pass
-        </Button>
-      </CardContent>
+      <CardContent className="pt-4">{teaser}</CardContent>
     </Card>
   );
 };

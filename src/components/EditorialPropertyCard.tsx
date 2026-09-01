@@ -60,6 +60,9 @@ interface EditorialPropertyCardProps {
    *  renter's saved preferences ('preferences', default). Changes the popover
    *  title/explanation so renters understand why the two ratings can differ. */
   scoreContext?: 'search' | 'preferences';
+  /** Rendered inside the vibe-match popover, under the breakdown. Used for the
+   *  Deep Analysis on the surfaces that offer it (matches, the AI chat). */
+  deepAnalysis?: ReactNode;
   /** Caption shown when the current image has no per-image highlight */
   quoteFallback?: string;
   onCardClick?: () => void;
@@ -118,6 +121,7 @@ export const EditorialPropertyCard = ({
   vibeMatch,
   vibeDetailsText,
   scoreContext = 'preferences',
+  deepAnalysis,
   quoteFallback,
   onCardClick,
   onClose,
@@ -540,6 +544,7 @@ export const EditorialPropertyCard = ({
                 vibeMatch={vibeMatch ?? analysedVibe}
                 vibeDetailsText={vibeDetailsText}
                 scoreContext={scoreContext}
+                deepAnalysis={deepAnalysis}
                 note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
               >
                 <button

@@ -169,11 +169,22 @@ export const MatchesView = ({
         {allApartments.map(apartment => {
         const vibeScore = userPreferences ? calculateVibeScore(apartment, userPreferences) : null;
         const vibeMatch = userPreferences ? getVibeAttributeMatch(apartment, userPreferences) : undefined;
+        // The read lives inside the vibe breakdown - it answers the same
+        // question the score raises, so the two sit in one panel rather than as
+        // a card taped under every match.
         return <div key={apartment.id} className="relative">
                 <EditorialPropertyCard
                   apartment={apartment}
                   vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
                   vibeMatch={vibeMatch}
+                  deepAnalysis={user ? (
+                    <DeepVibeAnalysis
+                      bare
+                      propertyId={apartment.id}
+                      propertyType={externalIds.has(apartment.id) ? 'external' : 'internal'}
+                      onRequestPass={() => setIsSubscriptionModalOpen(true)}
+                    />
+                  ) : undefined}
                   onSchedule={() => handleScheduleViewing(apartment)}
                   scheduleLabel="Book viewing"
                   topRightActions={apartment.matchId ? (
@@ -207,18 +218,6 @@ export const MatchesView = ({
                     </AlertDialog>
                   ) : undefined}
                 />
-
-                {/* The same read the listing page and the preview modal offer.
-                    Signed-in only: it is written against their preferences. */}
-                {user && (
-                  <div className="mt-3">
-                    <DeepVibeAnalysis
-                      propertyId={apartment.id}
-                      propertyType={externalIds.has(apartment.id) ? 'external' : 'internal'}
-                      onRequestPass={() => setIsSubscriptionModalOpen(true)}
-                    />
-                  </div>
-                )}
             </div>;
       })}
       </div>
