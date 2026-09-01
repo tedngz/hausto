@@ -7,6 +7,7 @@ import {
   type VibeMatchAttributes,
 } from '@/components/EditorialPropertyCard';
 import { useSubscription } from '@/hooks/useSubscription';
+import type { PropertyType } from '@/hooks/useDeepAnalysis';
 import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
@@ -40,6 +41,9 @@ interface ListingPreviewDialogProps {
   onSchedule?: () => void;
   /** Where the listing came from, as the way out to the original posting. */
   source?: { name: string; href?: string | null };
+  /** Which ledger the listing lives in, forwarded to the card so its Deep Scan
+   *  chip reads the right one. */
+  propertyType?: PropertyType;
 }
 
 const OFFER_POINTS = [
@@ -62,6 +66,7 @@ export const ListingPreviewDialog = ({
   onLike,
   onSchedule,
   source,
+  propertyType = 'internal',
 }: ListingPreviewDialogProps) => {
   const { subscribed } = useSubscription();
   const { quota } = useViewingQuota();
@@ -138,6 +143,7 @@ export const ListingPreviewDialog = ({
           {apartment && (
             <EditorialPropertyCard
               apartment={apartment}
+              propertyType={propertyType}
               vibeScore={vibeScore}
               vibeMatch={vibeMatch}
               vibeDetailsText={vibeDetailsText}

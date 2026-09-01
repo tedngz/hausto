@@ -1064,6 +1064,7 @@ export const HomeAI = ({
                             <EditorialPropertyCard
                               key={property.id}
                               apartment={property}
+                              propertyType={property.isExternal ? 'external' : 'internal'}
                               compact
                               className="max-w-[300px] w-full mx-auto sm:mx-0"
                               vibeScore={cardVibeScore(property)}
@@ -1182,6 +1183,7 @@ export const HomeAI = ({
                       <EditorialPropertyCard
                         key={property.id}
                         apartment={property}
+                        propertyType={property.isExternal ? 'external' : 'internal'}
                         compact
                         className="max-w-[300px] w-full mx-auto sm:mx-0"
                         vibeScore={cardVibeScore(property)}
@@ -1437,6 +1439,7 @@ export const HomeAI = ({
                 <EditorialPropertyCard
                   key={property.id}
                   apartment={property}
+                  propertyType={property.isExternal ? 'external' : 'internal'}
                   compact
                   vibeScore={cardVibeScore(property)}
                   scoreContext="search"
@@ -1505,6 +1508,7 @@ export const HomeAI = ({
           setIsViewingScheduleOpen(true);
         } : undefined}
         source={selectedProperty ? previewSourceOf(selectedProperty) : undefined}
+        propertyType={selectedProperty?.isExternal ? 'external' : 'internal'}
       />
 
       {/* Viewing Schedule Modal */}

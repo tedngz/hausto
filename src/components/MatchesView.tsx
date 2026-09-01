@@ -175,6 +175,7 @@ export const MatchesView = ({
         return <div key={apartment.id} className="relative">
                 <EditorialPropertyCard
                   apartment={apartment}
+                  propertyType={externalIds.has(apartment.id) ? 'external' : 'internal'}
                   vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
                   vibeMatch={vibeMatch}
                   deepAnalysis={user ? (

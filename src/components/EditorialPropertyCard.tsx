@@ -14,6 +14,10 @@ import { shareProperty } from '@/utils/shareProperty';
 import { geocodeLocation } from '@/utils/geocoding';
 import { extractPropertyFeatures, propertyHasFeature, FEATURE_LABELS, type FeatureKey } from '@/lib/propertyFeatures';
 import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
+import { requestPass } from '@/lib/passEvents';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
+import type { PropertyType } from '@/hooks/useDeepAnalysis';
 
 // The property card used everywhere a listing appears in a list: browse, swipe,
 // matches, the AI chat, complex pages. Same anatomy as the listing page's card
@@ -63,6 +67,10 @@ interface EditorialPropertyCardProps {
   /** Rendered inside the vibe-match popover, under the breakdown. Used for the
    *  Deep Scan on the surfaces that offer it (matches, the AI chat). */
   deepAnalysis?: ReactNode;
+  /** Which ledger the listing lives in. The scan is stored per listing and the
+   *  two id spaces can collide, so a wrong value would show one listing's scan
+   *  on another - surfaces carrying crawled listings must pass 'external'. */
+  propertyType?: PropertyType;
   /** Caption shown when the current image has no per-image highlight */
   quoteFallback?: string;
   onCardClick?: () => void;
@@ -122,6 +130,7 @@ export const EditorialPropertyCard = ({
   vibeDetailsText,
   scoreContext = 'preferences',
   deepAnalysis,
+  propertyType = 'internal',
   quoteFallback,
   onCardClick,
   onClose,
@@ -561,15 +570,37 @@ export const EditorialPropertyCard = ({
               </button>
             </VibeMatchPopover>
           )}
-          {/* Marks the listing as one the Deep Scan can read. It sits beside
-              the match chip because both answer "is this place for me" - the
-              score from the outside, the scan from the photos. */}
-          <span
-            className={`flex items-center gap-[5px] rounded-full bg-primary/10 text-primary whitespace-nowrap ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}
-          >
-            <Search className={`flex-shrink-0 ${compact ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} aria-hidden="true" />
-            Deep Scan
-          </span>
+          {/* Opens the scan itself. It sits beside the match chip because both
+              answer "is this place for me" - the score from the outside, the
+              scan from the photos. Renters without a pass get the same panel and
+              meet the paywall at its button, so what they are being asked to pay
+              for is legible before they are asked. */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Open the Deep Scan for this listing"
+                className={`flex items-center gap-[5px] rounded-full bg-primary/10 text-primary whitespace-nowrap transition-colors hover:bg-primary/20 ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}
+                onClick={e => e.stopPropagation()}
+              >
+                <Search className={`flex-shrink-0 ${compact ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} aria-hidden="true" />
+                Deep Scan
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-[min(24rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto p-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <DeepVibeAnalysis
+                bare
+                propertyId={apartment.id}
+                propertyType={propertyType}
+                title={apartment.title}
+                onRequestPass={() => requestPass()}
+              />
+            </PopoverContent>
+          </Popover>
           {verifiedLabel && (
             <span className={`flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 whitespace-nowrap ${compact ? 'px-2.5 py-1 text-[10.5px]' : 'px-3 py-1.5 text-[11.5px]'}`}>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />

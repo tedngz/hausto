@@ -1123,7 +1123,7 @@ export const RealtorDashboard = ({
             </div>
             <div className="p-4">
               <div className="max-w-sm mx-auto">
-                <EditorialPropertyCard apartment={previewCrawledApartment} />
+                <EditorialPropertyCard apartment={previewCrawledApartment} propertyType="external" />
               </div>
             </div>
           </Card>

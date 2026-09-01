@@ -24,6 +24,7 @@ import ComplexMap from "./pages/ComplexMap";
 import RealtorApply from "./pages/RealtorApply";
 import OAuthConsent from "./pages/OAuthConsent";
 import { AssistantHandoff } from "@/components/AssistantHandoff";
+import { PassGate } from "@/components/PassGate";
 
 // Listing data changes on a crawl cadence measured in hours, not seconds, so
 // the stock defaults (staleTime 0 + refetch on every window focus) meant a tab
@@ -75,6 +76,9 @@ const App = () => (
           {/* Carries a card's "ask about this" to the hub's chat, which is
               the only chat there is now. Renders nothing. */}
           <AssistantHandoff />
+          {/* Answers "get the Pass" from surfaces that have no modal of their
+              own - a card's Deep Scan chip, wherever that card is rendered. */}
+          <PassGate />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

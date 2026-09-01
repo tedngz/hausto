@@ -36,23 +36,23 @@ const toApartment = (p: any, external: boolean): Apartment => ({
 });
 
 export const ListingCardDialog = ({ propertyId, open, onOpenChange }: ListingCardDialogProps) => {
-  const { data: apartment, isLoading } = useQuery({
+  const { data: found, isLoading } = useQuery({
     queryKey: ['listing-card', propertyId],
     enabled: open && !!propertyId,
-    queryFn: async (): Promise<Apartment | null> => {
+    queryFn: async (): Promise<{ apartment: Apartment; external: boolean } | null> => {
       const { data: internal } = await supabase
         .from('properties')
         .select(PROPERTY_PUBLIC_COLUMNS)
         .eq('id', propertyId!)
         .maybeSingle();
-      if (internal) return toApartment(internal, false);
+      if (internal) return { apartment: toApartment(internal, false), external: false };
 
       const { data: external } = await supabase
         .from('external_properties')
         .select('*')
         .eq('id', propertyId!)
         .maybeSingle();
-      return external ? toApartment(external, true) : null;
+      return external ? { apartment: toApartment(external, true), external: true } : null;
     },
   });
 
@@ -60,13 +60,17 @@ export const ListingCardDialog = ({ propertyId, open, onOpenChange }: ListingCar
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Close lives inline with share/like via the card's onClose - hide the default dialog X */}
       <DialogContent className="max-w-md p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden">
-        <DialogTitle className="sr-only">{apartment?.title || 'Listing'}</DialogTitle>
+        <DialogTitle className="sr-only">{found?.apartment.title || 'Listing'}</DialogTitle>
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-white" />
           </div>
-        ) : apartment ? (
-          <EditorialPropertyCard apartment={apartment} onClose={() => onOpenChange(false)} />
+        ) : found ? (
+          <EditorialPropertyCard
+            apartment={found.apartment}
+            propertyType={found.external ? 'external' : 'internal'}
+            onClose={() => onOpenChange(false)}
+          />
         ) : (
           <div className="rounded-xl bg-card p-6 text-center text-sm text-muted-foreground">
             This listing is no longer available.
