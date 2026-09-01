@@ -27,6 +27,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { preferencesToSearchQuery } from '@/lib/preferences';
 import { clearChatHandoff, peekChatHandoff } from '@/lib/chatHandoff';
 import { ASSISTANT_COMPARE_EVENT, ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
+import { DEEP_SCAN_EVENT } from '@/lib/deepScanEvents';
 import { cn } from '@/lib/utils';
 
 /**
@@ -142,9 +143,14 @@ const Hub = () => {
     const open = () => setIsChatOpen(true);
     window.addEventListener(ASSISTANT_OPEN_EVENT, open);
     window.addEventListener(ASSISTANT_COMPARE_EVENT, open);
+    // A Deep Scan is read in the chat, so asking for one has to open it too -
+    // otherwise the scan is generated into a collapsed sheet and the press
+    // looks like it did nothing.
+    window.addEventListener(DEEP_SCAN_EVENT, open);
     return () => {
       window.removeEventListener(ASSISTANT_OPEN_EVENT, open);
       window.removeEventListener(ASSISTANT_COMPARE_EVENT, open);
+      window.removeEventListener(DEEP_SCAN_EVENT, open);
     };
   }, [hasRail]);
 
