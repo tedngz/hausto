@@ -75,7 +75,7 @@ export const SubscriptionModal = ({
   ];
   const premiumFeatures = [
     'Everything in Free',
-    'Deep read on any listing - design, fit, honest downsides',
+    'Deep Analysis on any listing - design, fit, honest downsides',
     'Neighbourhood and commute rated against your preferences',
     'Unlimited AI requests',
     '3 viewing coordination',

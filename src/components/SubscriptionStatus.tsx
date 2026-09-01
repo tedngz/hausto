@@ -103,10 +103,10 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
           </> : <>
             <p className="text-sm text-muted-foreground">
               {quota?.trialAvailable
-                ? 'Your first viewing is on us. The Pass adds 3 more, plus a deep read on any listing before you spend a Saturday on it.'
+                ? 'Your first viewing is on us. The Pass adds 3 more, plus a Deep Analysis on any listing before you spend a Saturday on it.'
                 : quota?.trialLocked
                   ? 'Answer the preference quiz and match 3 listings to unlock your free viewing coordination.'
-                  : 'Free viewing coordination used. The Pass unlocks deep reads and 3 more viewings.'}
+                  : 'Free viewing coordination used. The Pass unlocks Deep Analysis and 3 more viewings.'}
             </p>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />

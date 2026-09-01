@@ -43,11 +43,11 @@ interface ListingPreviewDialogProps {
   onSchedule?: () => void;
   /** Where the listing came from, as the way out to the original posting. */
   source?: { name: string; href?: string | null };
-  /** Which ledger the listing lives in - the deep read is stored per listing
+  /** Which ledger the listing lives in - the Deep Analysis is stored per listing
    *  and the two id spaces can collide, so a wrong value would show one
    *  listing's read on another. */
   propertyType?: PropertyType;
-  /** Opens the plan modal from the deep read's locked state. Without it the
+  /** Opens the plan modal from the Deep Analysis's locked state. Without it the
    *  read is left off entirely rather than offering a pass it can't sell. */
   onRequestPass?: () => void;
 }

@@ -31,6 +31,7 @@ import { toast as sonnerToast } from 'sonner';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AIBlocks } from '@/components/ai-blocks/AIBlocks';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
+import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import { ASSISTANT_COMPARE_EVENT, ASSISTANT_OPEN_EVENT, type AssistantCompareDetail, type AssistantOpenDetail } from '@/lib/assistantEvents';
 interface PropertyMatch {
   id: string;
@@ -1069,6 +1070,14 @@ export const HomeAI = ({
                               quoteFallback={property.matchReason}
                               liked={likedProperties.has(property.id)}
                               onLike={() => handleLikeProperty(property.id, property.realtor_id)}
+                              deepAnalysis={
+                                <DeepVibeAnalysis
+                                  bare
+                                  propertyId={property.id}
+                                  propertyType={property.isExternal ? 'external' : 'internal'}
+                                  onRequestPass={() => setIsSubscriptionModalOpen(true)}
+                                />
+                              }
                             />
                           ))}
                         </div>
