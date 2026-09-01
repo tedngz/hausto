@@ -14,6 +14,9 @@ import { geocodeLocation } from '@/utils/geocoding';
 import { extractPropertyFeatures, propertyHasFeature, FEATURE_LABELS, type FeatureKey } from '@/lib/propertyFeatures';
 import { Apartment, UserPreferences } from '@/types';
 import { ASSISTANT_OPEN_EVENT, type AssistantOpenDetail } from '@/lib/assistantEvents';
+import { requestPass } from '@/lib/passEvents';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 
 // Full listing card for the individual property page: a 16:9 gallery on top and
 // a details panel below (badges, title/price, vibe tags, description, amenities).
@@ -302,12 +305,33 @@ export const PropertyListingCard = ({
               </button>
             </VibeMatchPopover>
           )}
-          {/* Same marker the shelf cards carry, so a listing reads the same
-              on the page as it did in the list it was found in. */}
-          <span className="flex items-center gap-[5px] rounded-full bg-primary/10 text-primary px-3 py-1.5 text-[11.5px] whitespace-nowrap">
-            <Search className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
-            Deep Scan
-          </span>
+          {/* Same chip the shelf cards carry, opening the same scan, so a
+              listing reads and behaves the same on the page as it did in the
+              list it was found in. This page only ever shows Hausto listings,
+              so the scan is always read from the internal ledger. */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Open the Deep Scan for this listing"
+                className="flex items-center gap-[5px] rounded-full bg-primary/10 text-primary px-3 py-1.5 text-[11.5px] whitespace-nowrap transition-colors hover:bg-primary/20"
+              >
+                <Search className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                Deep Scan
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-[min(24rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto p-4"
+            >
+              <DeepVibeAnalysis
+                bare
+                propertyId={apartment.id}
+                title={displayTitle}
+                onRequestPass={() => requestPass()}
+              />
+            </PopoverContent>
+          </Popover>
           {verified && (
             <span className="flex items-center gap-[7px] rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 text-[11.5px]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

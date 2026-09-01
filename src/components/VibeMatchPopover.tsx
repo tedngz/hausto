@@ -57,10 +57,6 @@ interface VibeMatchPopoverProps {
   /** Shown under the header when there is no score (e.g. a sign-in nudge) */
   note?: string;
   align?: 'start' | 'center' | 'end';
-  /** Rendered under the breakdown, behind a rule. The Deep Scan lives here
-   *  on the surfaces that have one, so a renter reads the score and the read in
-   *  the same place rather than as two stacked cards. */
-  deepAnalysis?: ReactNode;
   /** The vibe badge that opens this popover */
   children: ReactNode;
 }
@@ -72,7 +68,6 @@ export const VibeMatchPopover = ({
   scoreContext = 'preferences',
   note,
   align = 'start',
-  deepAnalysis,
   children,
 }: VibeMatchPopoverProps) => {
   const hasAttributes =
@@ -81,11 +76,7 @@ export const VibeMatchPopover = ({
   return (
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent
-        className={`p-4 ${deepAnalysis ? 'w-[min(24rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto' : 'w-72'}`}
-        align={align}
-        onClick={e => e.stopPropagation()}
-      >
+      <PopoverContent className="w-72 p-4" align={align} onClick={e => e.stopPropagation()}>
         <div className={`flex items-center justify-between ${vibeScore ? 'mb-1' : 'mb-3'}`}>
           <span className="text-sm font-semibold text-foreground">
             {!vibeScore ? 'Vibe' : scoreContext === 'search' ? 'Search match' : 'Vibe match'}
@@ -167,10 +158,6 @@ export const VibeMatchPopover = ({
         )}
 
         {note && <p className="text-[11px] text-muted-foreground border-t border-border pt-2.5 mt-2.5">{note}</p>}
-
-        {deepAnalysis && (
-          <div className="border-t border-border pt-3 mt-3">{deepAnalysis}</div>
-        )}
       </PopoverContent>
     </Popover>
   );

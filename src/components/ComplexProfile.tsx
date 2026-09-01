@@ -329,6 +329,7 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
                       <EditorialPropertyCard
                         key={a.id}
                         apartment={a}
+                        propertyType={a.realtor?.id?.startsWith('ext-') ? 'external' : 'internal'}
                         liked={likedIds.has(a.id)}
                         onLike={() => handleLike(a)}
                       />

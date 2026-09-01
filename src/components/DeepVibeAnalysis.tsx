@@ -159,7 +159,10 @@ export const DeepVibeAnalysis = ({
   if (locked && !onRequestPass) return null;
 
   const teaser = (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+    // Bare means the block is inside something narrow - a popover on a card -
+    // where sm: is the viewport's width, not the container's, and the row
+    // layout would push the button out of the panel. Stack there.
+    <div className={bare ? 'flex flex-col gap-3' : 'flex flex-col sm:flex-row sm:items-center gap-3'}>
       <div className="flex-1">
         <div className="flex items-center gap-2 font-medium text-sm">
           <Sparkles className="h-4 w-4 shrink-0 text-primary" />
@@ -175,7 +178,7 @@ export const DeepVibeAnalysis = ({
           The layout and light, who it suits, the honest downsides, and how the area fits you.
         </p>
       </div>
-      <Button onClick={onPress} disabled={isGenerating} className="shrink-0">
+      <Button onClick={onPress} disabled={isGenerating} className={bare ? 'w-full' : 'shrink-0'}>
         {isGenerating ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
