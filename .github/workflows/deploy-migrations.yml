@@ -40,6 +40,10 @@ on:
         description: 'List pending migrations without applying them'
         type: boolean
         default: false
+      repair:
+        description: 'Reconcile the remote migration history with this repo before applying (see the Repair step)'
+        type: boolean
+        default: false
 
 # Never two at once, and never cancel one midway: a half-applied batch leaves
 # the database in a state no commit describes.
@@ -127,6 +131,74 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # A one-off reconciliation, run by hand and never on a push.
+      #
+      # This project was migrated through Lovable and by hand long before it was
+      # migrated from here, and the two histories never matched: the remote
+      # recorded ~120 versions whose timestamps sit seconds away from the
+      # filenames in git (the same migration, stamped when Lovable ran it rather
+      # than when the file landed), so the CLI sees a remote history full of
+      # versions it cannot find locally and refuses to push anything at all.
+      #
+      # Repair rewrites only the migration history table - it runs no DDL and
+      # changes no schema. Stale remote-only versions are marked reverted, and
+      # every local version is marked applied.
+      #
+      # Marking local versions applied asserts their SQL is already in the
+      # database. That holds here because every one of them was applied when it
+      # was written (through Lovable, or by hand in the SQL editor). It is the
+      # assumption to re-check if this is ever run again: a migration marked
+      # applied is one push will never run.
+      - name: Repair the migration history
+        if: >-
+          steps.guard.outputs.configured == 'true'
+          && github.event_name == 'workflow_dispatch'
+          && inputs.repair == true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          # `migration list` prints "  LOCAL | REMOTE | TIME", pipe-separated,
+          # with a blank cell where one side has nothing.
+          parse() {
+            sed -e 's/`//g' migration-list.txt \
+              | awk -F'|' '/^[[:space:]]*[0-9 ]*\|/ {
+                  gsub(/[[:space:]]/, "", $1); gsub(/[[:space:]]/, "", $2);
+                  print $1 "\t" $2
+                }'
+          }
+
+          local_versions=$(parse | cut -f1 | grep -E '^[0-9]+$' | sort -u || true)
+          remote_versions=$(parse | cut -f2 | grep -E '^[0-9]+$' | sort -u || true)
+          stale=$(comm -13 <(echo "$local_versions") <(echo "$remote_versions") || true)
+          unrecorded=$(comm -23 <(echo "$local_versions") <(echo "$remote_versions") || true)
+
+          echo "Local versions:      $(wc -w <<<"$local_versions")"
+          echo "Remote-only (stale): $(wc -w <<<"$stale")"
+          echo "Local unrecorded:    $(wc -w <<<"$unrecorded")"
+
+          # In batches: the whole history is ~120 versions either way, and one
+          # command per version would be 240 round trips.
+          if [ -n "${stale//[[:space:]]/}" ]; then
+            echo "::group::Marking stale remote versions reverted"
+            xargs -n 50 supabase migration repair --linked --status reverted <<<"$stale"
+            echo "::endgroup::"
+          fi
+          if [ -n "${unrecorded//[[:space:]]/}" ]; then
+            echo "::group::Marking local versions applied"
+            xargs -n 50 supabase migration repair --linked --status applied <<<"$unrecorded"
+            echo "::endgroup::"
+          fi
+
+          {
+            echo
+            echo "#### Repair"
+            echo
+            echo "Marked **$(wc -w <<<"$stale")** remote-only versions reverted and **$(wc -w <<<"$unrecorded")** local versions applied. Schema untouched."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # PRs and dry runs stop at the listing above: the diff is reviewable, the
       # schema change is not reversible.
       - name: Apply
@@ -144,4 +216,5 @@ jobs:
           # shows in the listing above, rather than being replayed blind onto a
           # schema that has moved on since.
           supabase db push --linked
+          supabase migration list --linked >> "$GITHUB_STEP_SUMMARY" || true
           echo "Applied from \`${GITHUB_SHA:0:7}\`." >> "$GITHUB_STEP_SUMMARY"
