@@ -6,11 +6,8 @@ import {
   type VibeScoreDetails,
   type VibeMatchAttributes,
 } from '@/components/EditorialPropertyCard';
-import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
-import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
-import type { PropertyType } from '@/hooks/useDeepAnalysis';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
 
@@ -43,13 +40,6 @@ interface ListingPreviewDialogProps {
   onSchedule?: () => void;
   /** Where the listing came from, as the way out to the original posting. */
   source?: { name: string; href?: string | null };
-  /** Which ledger the listing lives in - the Deep Analysis is stored per listing
-   *  and the two id spaces can collide, so a wrong value would show one
-   *  listing's read on another. */
-  propertyType?: PropertyType;
-  /** Opens the plan modal from the Deep Analysis's locked state. Without it the
-   *  read is left off entirely rather than offering a pass it can't sell. */
-  onRequestPass?: () => void;
 }
 
 const OFFER_POINTS = [
@@ -72,10 +62,7 @@ export const ListingPreviewDialog = ({
   onLike,
   onSchedule,
   source,
-  propertyType = 'internal',
-  onRequestPass,
 }: ListingPreviewDialogProps) => {
-  const { user } = useAuth();
   const { subscribed } = useSubscription();
   const { quota } = useViewingQuota();
 
@@ -164,19 +151,6 @@ export const ListingPreviewDialog = ({
               scheduleLabel="Book viewing"
               footer={bookingOffer}
             />
-          )}
-
-          {/* The same read the listing page offers, on the surface the renter
-              actually browses from. Signed-in only: it is written against
-              their preferences, so there is nothing to show anyone else. */}
-          {apartment && user && onRequestPass && (
-            <div className="mt-3">
-              <DeepVibeAnalysis
-                propertyId={apartment.id}
-                propertyType={propertyType}
-                onRequestPass={onRequestPass}
-              />
-            </div>
           )}
         </DialogContent>
       </Dialog>

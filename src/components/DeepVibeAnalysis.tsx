@@ -11,8 +11,12 @@ interface DeepVibeAnalysisProps {
   /** Opens the plan modal when the renter has no pass. */
   onRequestPass?: () => void;
   /** Drops the card chrome so the block can sit inside another surface (the
-   *  vibe-match popover, the AI chat) without reading as a card in a card. */
+   *  vibe-match popover) without reading as a card in a card. */
   bare?: boolean;
+  /** The listing's name, shown under the heading. For surfaces where the read
+   *  is not adjacent to its listing - the AI chat, where a search returned
+   *  several places - so it is never ambiguous which one was read. */
+  title?: string;
 }
 
 /** Five dots rather than a number - it reads as a judgement, not a measurement. */
@@ -49,6 +53,7 @@ export const DeepVibeAnalysis = ({
   propertyType = 'internal',
   onRequestPass,
   bare = false,
+  title,
 }: DeepVibeAnalysisProps) => {
   const { pass } = usePass();
   const { analysis, generatedAt, isLoading, isGenerating, generate } = useDeepAnalysis(
@@ -63,9 +68,14 @@ export const DeepVibeAnalysis = ({
     const body = (
       <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">Deep Analysis</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                <span className="font-medium text-sm">Deep Analysis</span>
+              </div>
+              {title && (
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">{title}</p>
+              )}
             </div>
             {generatedAt && (
               <span className="text-[11px] text-muted-foreground">
@@ -152,12 +162,15 @@ export const DeepVibeAnalysis = ({
     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
       <div className="flex-1">
         <div className="flex items-center gap-2 font-medium text-sm">
-          <Sparkles className="h-4 w-4 text-primary" />
+          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
           Deep Analysis
           {locked && (
             <Badge variant="secondary" className="text-[10px]">Pass</Badge>
           )}
         </div>
+        {title && (
+          <p className="text-xs font-medium text-foreground/80 mt-1 truncate">{title}</p>
+        )}
         <p className="text-xs text-muted-foreground mt-1">
           The layout and light, who it suits, the honest downsides, and how the area fits you.
         </p>

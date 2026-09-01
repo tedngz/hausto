@@ -206,6 +206,7 @@ export const HomeAI = ({
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<PropertyMatch | null>(null);
+  const [analysisProperty, setAnalysisProperty] = useState<PropertyMatch | null>(null);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -943,6 +944,7 @@ export const HomeAI = ({
       // Fallback to original result on error
       setSelectedProperty(property);
     }
+    setAnalysisProperty(prev => prev?.id === property.id ? prev : property);
     setShowPropertyModal(true);
   };
 
@@ -1070,14 +1072,6 @@ export const HomeAI = ({
                               quoteFallback={property.matchReason}
                               liked={likedProperties.has(property.id)}
                               onLike={() => handleLikeProperty(property.id, property.realtor_id)}
-                              deepAnalysis={
-                                <DeepVibeAnalysis
-                                  bare
-                                  propertyId={property.id}
-                                  propertyType={property.isExternal ? 'external' : 'internal'}
-                                  onRequestPass={() => setIsSubscriptionModalOpen(true)}
-                                />
-                              }
                             />
                           ))}
                         </div>
@@ -1120,6 +1114,23 @@ export const HomeAI = ({
                 </div>
               </div>
             </div>}
+
+          {/* The read for the listing the renter opened, kept in the
+              conversation rather than under the preview: it is written against
+              their preferences, so it belongs where they can ask about it. It
+              stays after the preview is closed - that is the point of moving
+              it here - and is named, because a search returns several places. */}
+          {user && analysisProperty && (
+            <div className="animate-fade-in">
+              <DeepVibeAnalysis
+                key={analysisProperty.id}
+                propertyId={analysisProperty.id}
+                propertyType={analysisProperty.isExternal ? 'external' : 'internal'}
+                title={analysisProperty.title}
+                onRequestPass={() => setIsSubscriptionModalOpen(true)}
+              />
+            </div>
+          )}
 
         </div>}
 
@@ -1494,8 +1505,6 @@ export const HomeAI = ({
           setIsViewingScheduleOpen(true);
         } : undefined}
         source={selectedProperty ? previewSourceOf(selectedProperty) : undefined}
-        propertyType={selectedProperty?.isExternal ? 'external' : 'internal'}
-        onRequestPass={() => setIsSubscriptionModalOpen(true)}
       />
 
       {/* Viewing Schedule Modal */}
