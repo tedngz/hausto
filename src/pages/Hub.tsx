@@ -42,6 +42,13 @@ import { cn } from '@/lib/utils';
  * Matches Tailwind's `xl`, which is what the breakpoint utilities below use.
  */
 const RAIL_MIN_VIEWPORT = 1280;
+// The dock's default, floor and ceiling, in px against the current viewport.
+// The floor is the composer plus one line of reply; below that the sheet is
+// open but useless. The ceiling leaves enough of the pane behind it to see
+// what the conversation is about.
+const DOCK_MIN_PX = 240;
+const dockDefaultPx = () => Math.max(Math.round(window.innerHeight * 0.33), DOCK_MIN_PX);
+const dockMaxPx = () => Math.round(window.innerHeight * 0.85);
 
 /**
  * The hub: one screen for the three things renters were bouncing between.
@@ -75,6 +82,45 @@ const Hub = () => {
     clearChatHandoff();
   }, []);
 
+  // Dragging the grabber resizes the sheet. Pointer events rather than touch
+  // events so the same handler serves a finger, a stylus and a mouse; capture
+  // keeps the drag alive when the finger slides off the 40px handle.
+  const startDockDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isChatOpen) return;
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = dockHeight ?? dockDefaultPx();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    setDragging(true);
+    const onMove = (ev: PointerEvent) => {
+      // Up is taller: the sheet grows from the bottom edge.
+      const next = startHeight + (startY - ev.clientY);
+      setDockHeight(Math.min(Math.max(next, DOCK_MIN_PX), dockMaxPx()));
+    };
+    const onUp = () => {
+      setDragging(false);
+      el.releasePointerCapture(e.pointerId);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+  };
+
+  // The same resize from the keyboard, since a drag handle nobody can tab to
+  // is a control half the renters do not have.
+  const nudgeDock = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowUp' ? 48 : e.key === 'ArrowDown' ? -48 : 0;
+    if (!step) return;
+    e.preventDefault();
+    setDockHeight((h) =>
+      Math.min(Math.max((h ?? dockDefaultPx()) + step, DOCK_MIN_PX), dockMaxPx()),
+    );
+  };
+
   // A carried-over comparison opens on Browse, not AI: the side-by-side panel
   // belongs to the table, and the chat answers about it from the rail.
   const [mode, setMode] = useState<HubMode>(
@@ -105,6 +151,12 @@ const Hub = () => {
   // the start for a handed-over message, which is a conversation already in
   // progress - collapsed, the reply would arrive behind a closed dock.
   const [isChatOpen, setIsChatOpen] = useState(!!handoff);
+  // How tall the renter has dragged the dock, in px. Null means "the default
+  // third of the viewport" - kept distinct so a rotation or a resize re-reads
+  // the default rather than freezing yesterday's pixels.
+  const [dockHeight, setDockHeight] = useState<number | null>(null);
+  // Suppresses the height transition mid-drag, which would otherwise lag the finger.
+  const [dragging, setDragging] = useState(false);
   // The chat renders its listings into this node. Held in state rather than a
   // ref so the first render after it mounts actually reaches HomeAI.
   const [resultsPortal, setResultsPortal] = useState<HTMLDivElement | null>(null);
@@ -158,19 +210,29 @@ const Hub = () => {
   // panels (see lib/hubLayout). They are portaled to the body and cannot
   // measure this page, and a panel that assumed the collapsed height simply
   // vanished behind the sheet the moment the renter opened it.
+  // Re-clamp a dragged height when the viewport changes, so a rotation cannot
+  // leave the dock taller than the screen.
+  useEffect(() => {
+    if (dockHeight === null) return;
+    const onResize = () => setDockHeight((h) => (h === null ? h : Math.min(h, dockMaxPx())));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [dockHeight]);
+
   useEffect(() => {
     const root = document.documentElement;
+    const openHeight = dockHeight === null ? 'max(33dvh, 15rem)' : `${dockHeight}px`;
     root.style.setProperty(
       '--hub-dock',
       // Profile hides the chat entirely, so it takes no bottom edge there.
-      hasRail || showProfile ? '0px' : isChatOpen ? 'max(33dvh, 15rem)' : '4rem',
+      hasRail || showProfile ? '0px' : isChatOpen ? openHeight : '4rem',
     );
     // The variable belongs to the hub, not the app: leaving it set would push
     // every other page's dialogs up off a dock that isn't there.
     return () => {
       root.style.removeProperty('--hub-dock');
     };
-  }, [hasRail, isChatOpen, showProfile]);
+  }, [hasRail, isChatOpen, showProfile, dockHeight]);
 
   // Quota walls raised from the table or the chat dispatch this - the hub has
   // to answer it too, or upgrading from here silently does nothing.
@@ -423,15 +485,36 @@ const Hub = () => {
         <div className={hasRail || showProfile ? 'hidden' : 'z-[60] shrink-0'}>
           {!hasRail && (
             <div
-              className={`glass-card flex flex-col rounded-t-3xl transition-[height] duration-200 ${
-                // A third of the viewport, not two thirds: on a phone the dock
-                // used to bury whatever the renter was asking about, so the
-                // answer arrived with no way to see what it referred to. The
-                // 15rem floor is the composer plus one line of reply - below
-                // that the sheet is open but useless.
-                isChatOpen ? 'h-[max(33dvh,15rem)]' : 'h-16'
-              }`}
+              className={`glass-card flex flex-col rounded-t-3xl ${dragging ? '' : 'transition-[height] duration-200'}`}
+              // A third of the viewport by default, not two thirds: on a phone
+              // the dock used to bury whatever the renter was asking about, so
+              // the answer arrived with no way to see what it referred to. A
+              // Deep Scan is longer than that third, though, so the renter can
+              // drag it taller - up to 85dvh - and the choice sticks.
+              style={{
+                height: isChatOpen
+                  ? dockHeight === null
+                    ? 'max(33dvh, 15rem)'
+                    : `${dockHeight}px`
+                  : '4rem',
+              }}
             >
+              {/* Grabber. Only while the sheet is open: collapsed, there is
+                  nothing to resize and the whole bar is already a toggle. */}
+              {isChatOpen && (
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize the chat"
+                  tabIndex={0}
+                  onPointerDown={startDockDrag}
+                  onKeyDown={nudgeDock}
+                  onDoubleClick={() => setDockHeight(null)}
+                  className="flex h-4 shrink-0 cursor-ns-resize touch-none items-end justify-center pb-1 focus-visible:outline-none"
+                >
+                  <span className="h-1 w-10 rounded-full bg-border" />
+                </div>
+              )}
               <div className="flex h-16 shrink-0 items-center gap-2 px-4">
                 <button
                   className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left"
