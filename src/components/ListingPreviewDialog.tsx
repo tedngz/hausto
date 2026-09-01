@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   EditorialPropertyCard,
@@ -71,6 +73,34 @@ export const ListingPreviewDialog = ({
   const { subscribed } = useSubscription();
   const { quota } = useViewingQuota();
 
+  // Search truncates descriptions to 300 characters to keep the results
+  // payload small, and both surfaces that open this preview - browse and the
+  // AI's results - are fed by it. So the prose arrived cut mid-sentence with
+  // nothing behind the card's "more" toggle. The full text only exists on the
+  // row, and this is the one preview both surfaces share, so it is topped up
+  // here rather than in each caller.
+  const { data: fullDescription } = useQuery({
+    queryKey: ['listing-description', propertyType, apartment?.id],
+    enabled: open && !!apartment?.id,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<string | null> => {
+      const table = propertyType === 'external' ? 'external_properties' : 'properties';
+      const { data } = await supabase
+        .from(table)
+        .select('description')
+        .eq('id', apartment!.id)
+        .maybeSingle();
+      return (data as { description?: string | null } | null)?.description ?? null;
+    },
+  });
+
+  // Only ever lengthens it: a row that is genuinely short must not be replaced
+  // by a stale or empty read.
+  const previewApartment =
+    apartment && fullDescription && fullDescription.length > (apartment.description?.length ?? 0)
+      ? { ...apartment, description: fullDescription }
+      : apartment;
+
   // Why book through Hausto rather than calling the number on the original
   // posting. Sits above the way out to that posting, deliberately: the offer
   // has to be legible before the exit is.
@@ -142,7 +172,7 @@ export const ListingPreviewDialog = ({
           <DialogTitle className="sr-only">{apartment?.title || 'Listing'}</DialogTitle>
           {apartment && (
             <EditorialPropertyCard
-              apartment={apartment}
+              apartment={previewApartment!}
               propertyType={propertyType}
               vibeScore={vibeScore}
               vibeMatch={vibeMatch}
