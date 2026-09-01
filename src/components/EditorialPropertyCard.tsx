@@ -64,9 +64,6 @@ interface EditorialPropertyCardProps {
    *  renter's saved preferences ('preferences', default). Changes the popover
    *  title/explanation so renters understand why the two ratings can differ. */
   scoreContext?: 'search' | 'preferences';
-  /** Rendered inside the vibe-match popover, under the breakdown. Used for the
-   *  Deep Scan on the surfaces that offer it (matches, the AI chat). */
-  deepAnalysis?: ReactNode;
   /** Which ledger the listing lives in. The scan is stored per listing and the
    *  two id spaces can collide, so a wrong value would show one listing's scan
    *  on another - surfaces carrying crawled listings must pass 'external'. */
@@ -129,7 +126,6 @@ export const EditorialPropertyCard = ({
   vibeMatch,
   vibeDetailsText,
   scoreContext = 'preferences',
-  deepAnalysis,
   propertyType = 'internal',
   quoteFallback,
   onCardClick,
@@ -552,7 +548,6 @@ export const EditorialPropertyCard = ({
               vibeMatch={vibeMatch ?? analysedVibe}
               vibeDetailsText={vibeDetailsText}
               scoreContext={scoreContext}
-              deepAnalysis={deepAnalysis}
               note={vibeScore ? undefined : 'Sign in and set your preferences to see how well this place matches you.'}
             >
               <button
