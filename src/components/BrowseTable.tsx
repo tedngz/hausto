@@ -410,7 +410,7 @@ export const BrowseTable = ({
   );
 
   // Opens the side-by-side panel AND starts the conversation about it: the
-  // listings are pinned to the AI chat and the first question is asked, so the
+  // listings are pinned to Hausto Agent and the first question is asked, so the
   // renter lands in a thread they can keep pulling on rather than a dead end.
   const openCompare = () => {
     setCompareOpen(true);
@@ -751,7 +751,7 @@ export const BrowseTable = ({
       <HubPanelScrim open={embedded && compareOpen} onDismiss={() => setCompareOpen(false)} />
 
       {/* Side-by-side facts only. Deciding between them is a conversation, and
-          that conversation now belongs in the AI chat, where it keeps the
+          that conversation now belongs in Hausto Agent, where it keeps the
           listings pinned afterwards - see the Compare button above. */}
       <Dialog open={compareOpen} modal={!embedded} onOpenChange={setCompareOpen}>
         <DialogContent

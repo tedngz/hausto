@@ -15,7 +15,7 @@ interface DeepVibeAnalysisProps {
    *  vibe-match popover) without reading as a card in a card. */
   bare?: boolean;
   /** The listing's name, shown under the heading. For surfaces where the read
-   *  is not adjacent to its listing - the AI chat, where a search returned
+   *  is not adjacent to its listing - Hausto Agent, where a search returned
    *  several places - so it is never ambiguous which one was read. */
   title?: string;
   /** Show only the offer, never the scan itself. For the chip's popover, which

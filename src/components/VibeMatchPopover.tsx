@@ -3,7 +3,7 @@ import { Check, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 // The single vibe-match popover used everywhere a vibe badge appears, so the
-// breakdown reads identically on the swipe/editorial cards, the AI chat and the
+// breakdown reads identically on the swipe/editorial cards, Hausto Agent and the
 // listing page. Callers supply their own badge as the trigger.
 
 export interface VibeScoreDetails {

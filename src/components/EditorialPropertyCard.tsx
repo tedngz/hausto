@@ -21,7 +21,7 @@ import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
 
 // The property card used everywhere a listing appears in a list: browse, swipe,
-// matches, the AI chat, complex pages. Same anatomy as the listing page's card
+// matches, Hausto Agent, complex pages. Same anatomy as the listing page's card
 // (PropertyListingCard) — photo gallery on top, details panel below — so a
 // listing reads identically wherever a renter meets it.
 //
@@ -88,7 +88,7 @@ interface EditorialPropertyCardProps {
   onImageIndexChange?: (index: number) => void;
   /** Override the gallery's aspect ratio (the details panel below it flows to its own height) */
   aspectClass?: string;
-  /** Smaller typography and padding so the photo dominates (used in the AI chat's compact cards) */
+  /** Smaller typography and padding so the photo dominates (used in the Hausto Agent's compact cards) */
   compact?: boolean;
   /** Open the description and amenities on mount. For surfaces built around a
    *  single listing (browse, swipe, the listing page) where the renter is
@@ -489,7 +489,7 @@ export const EditorialPropertyCard = ({
             <Button
               size="icon"
               variant="secondary"
-              aria-label="Ask the AI assistant about this property"
+              aria-label="Ask Hausto Agent about this property"
               title="Ask the Hausto Assistant about this property"
               className="w-8 h-8 rounded-full border-0 backdrop-blur-md transition-all bg-primary/85 text-primary-foreground hover:bg-primary"
               onClick={e => {

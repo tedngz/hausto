@@ -14,7 +14,7 @@ interface HubNavigationProps {
 /**
  * The hub's top bar.
  *
- * There is almost nothing left to navigate to: browse, AI chat, matches,
+ * There is almost nothing left to navigate to: browse, Hausto Agent, matches,
  * profile and onboarding all live on this page now, and the swipe deck is
  * retired. What remains is the building directory, and - for accounts that have
  * realtor access - the way back to the realtor dashboard.

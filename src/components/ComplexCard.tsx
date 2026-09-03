@@ -11,7 +11,7 @@ interface ComplexCardProps {
   /** Shows the select control; omit for a plain, non-selectable card. */
   onToggleSelect?: (complex: Complex) => void;
   selected?: boolean;
-  /** Shows the sparkle that pins this complex to the AI chat. */
+  /** Shows the sparkle that pins this complex to Hausto Agent. */
   onAskAI?: (complex: Complex) => void;
 }
 

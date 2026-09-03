@@ -686,7 +686,7 @@ export const RealtorDashboard = ({
         <div>
           <h2 className="text-lg md:text-xl font-semibold text-slate-900 mb-1">Concierge Queue</h2>
           <p className="text-slate-600 text-sm mb-4">
-            Questions Hausto AI escalated to you, and viewing requests to coordinate.
+            Questions Hausto Agent escalated to you, and viewing requests to coordinate.
           </p>
           <ConciergeQueue onOpenQuestions={() => setShowQuestions(true)} />
         </div>
