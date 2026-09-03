@@ -10,7 +10,7 @@ import { X } from 'lucide-react';
 import { useConciergeQueue, ConciergeEscalation } from '@/hooks/useConciergeQueue';
 import { ListingCardDialog } from '@/components/ListingCardDialog';
 
-// Renter questions escalated by Hausto AI, answered from inside the chat
+// Renter questions escalated by Hausto Agent, answered from inside the chat
 // surface (opened via the unresolved-questions banner) instead of cluttering
 // the realtor dashboard. Replies land straight in the renter's chat thread.
 
@@ -118,12 +118,12 @@ export const RenterQuestionsDialog = ({ open, onOpenChange }: { open: boolean; o
             )}
           </DialogTitle>
           <DialogDescription>
-            Questions Hausto AI escalated to you. Your reply lands in the renter's chat.
+            Questions Hausto Agent escalated to you. Your reply lands in the renter's chat.
           </DialogDescription>
         </DialogHeader>
         {pending.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
-            All caught up - Hausto AI is handling renter chats.
+            All caught up - Hausto Agent is handling renter chats.
           </p>
         ) : (
           <div className="space-y-3">

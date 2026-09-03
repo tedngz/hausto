@@ -171,7 +171,7 @@ interface HomeAIProps {
   onResultsCountChange?: (count: number) => void;
   /** When set (rail only), the history and new-chat controls render into this
    *  node instead of taking a row of their own above the thread - the hub puts
-   *  them on the same line as the "AI chat" heading. */
+   *  them on the same line as the "Hausto Agent" heading. */
   headerPortal?: HTMLElement | null;
   /** Makes this composer a doorway rather than a chat: the first message is
    *  parked (see lib/chatHandoff) and the renter is sent to /hub, whose chat
@@ -791,7 +791,7 @@ export const HomeAI = ({
         setWantsNewChat(false); // Reset new chat flag after successful search
         toast({
           title: "Message sent!",
-          description: "Your AI assistant is processing your request."
+          description: "Hausto Agent is processing your request."
         });
       } catch (error) {
         console.error('Search error:', error);
@@ -808,7 +808,7 @@ export const HomeAI = ({
         setUploadedImages([]);
       }
     } else {
-      // Handle search for anonymous users - call AI chat directly
+      // Handle search for anonymous users - call Hausto Agent directly
       setTempUserMessage(queryToUse); // Show user message immediately
       setTempUserImages(imagesToUse.length > 0 ? await Promise.all(imagesToUse.map(async file => await convertImageToBase64(file))) : []);
       setIsSearching(true);
@@ -1011,7 +1011,7 @@ export const HomeAI = ({
         ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto p-3'
         : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10'}>
       {/* Header — history / new-chat controls. Given a headerPortal they move up
-          onto the pane's own "AI chat" heading, which already has a half-empty
+          onto the pane's own "Hausto Agent" heading, which already has a half-empty
           row; without one they sit in normal flow so they reserve their own row
           and never overlap the composer in the compact state. */}
       {user && (headerPortal
@@ -1280,7 +1280,7 @@ export const HomeAI = ({
         </div>}
 
 
-      {/* Viewing banner — appears once a user has liked a property in this AI chat */}
+      {/* Viewing banner — appears once a user has liked a property in this chat */}
       {user && likedProperties.size > 0 && !isFastTrackBannerDismissed && (
         <div className="mb-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-3 flex flex-col sm:flex-row sm:items-center gap-3 animate-fade-in">
           <div className="flex items-center gap-3 flex-1 min-w-0">

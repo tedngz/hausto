@@ -234,7 +234,7 @@ export const PropertyListingCard = ({
         {/* Ask the assistant about this listing */}
         <button
           type="button"
-          aria-label="Ask the AI assistant about this property"
+          aria-label="Ask Hausto Agent about this property"
           title="Ask the Hausto Assistant about this property"
           onClick={askAssistant}
           className="absolute top-8 right-5 w-8 h-8 rounded-full bg-primary/85 text-primary-foreground backdrop-blur-md flex items-center justify-center hover:bg-primary transition-colors"

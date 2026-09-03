@@ -11,7 +11,7 @@ import { PASS_MODAL_EVENT, type PassModalDetail } from '@/lib/passEvents';
  * pass a callback down. That works while the ask lives on the page; it stops
  * working once a leaf component several levels down - the Deep Scan chip on a
  * property card - has to raise it, because the card is rendered by browse, the
- * swipe deck, matches, the AI chat, complex pages and the listing page, and
+ * swipe deck, matches, Hausto Agent, complex pages and the listing page, and
  * only some of them have a modal to hand it.
  *
  * So the ask travels as an event, the way "ask the AI about this" does, and

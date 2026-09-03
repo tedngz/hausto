@@ -54,7 +54,7 @@ const dockMaxPx = () => Math.round(window.innerHeight * 0.85);
  * The hub: one screen for the three things renters were bouncing between.
  *
  * Desktop is two panes - a mode-switched main pane (browse table / AI results /
- * matches) and a docked AI chat rail that never goes away. Narrower than
+ * matches) and a docked Hausto Agent chat rail that never goes away. Narrower than
  * RAIL_MIN_VIEWPORT the rail collapses to a bar that opens as a sheet, because
  * the comparison table needs every pixel of width it can get.
  */
@@ -161,7 +161,7 @@ const Hub = () => {
   // ref so the first render after it mounts actually reaches HomeAI.
   const [resultsPortal, setResultsPortal] = useState<HTMLDivElement | null>(null);
   // The chat's own controls (history, new chat) render into this node, so they
-  // share the "AI chat" heading's row instead of taking one of their own off
+  // share the "Hausto Agent" heading's row instead of taking one of their own off
   // the top of the thread. Only ever one of the rail and the dock is mounted,
   // so only one of them ever claims it.
   const [chatHeaderPortal, setChatHeaderPortal] = useState<HTMLDivElement | null>(null);
@@ -469,7 +469,7 @@ const Hub = () => {
             >
               <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-                <span className="font-serif text-base">AI chat</span>
+                <span className="font-serif text-base">Hausto Agent</span>
                 <div ref={setChatHeaderPortal} className="ml-auto flex items-center gap-1" />
               </div>
               <div className="min-h-0 flex-1">{chat}</div>
@@ -523,7 +523,7 @@ const Hub = () => {
                   onClick={() => setIsChatOpen((open) => !open)}
                 >
                   <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                  <span className="font-serif text-base">AI chat</span>
+                  <span className="font-serif text-base">Hausto Agent</span>
                   {!isChatOpen && (
                     <span className="truncate text-xs text-muted-foreground">
                       Ask about what&rsquo;s on screen
