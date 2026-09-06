@@ -5,7 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PropertyListingCard } from '@/components/PropertyListingCard';
 import { ListingHistoryNote } from '@/components/ListingHistoryNote';
-import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
+import { HomeAI } from '@/components/HomeAI';
+import { ChatDock, RAIL_MIN_VIEWPORT } from '@/components/chat/ChatDock';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { useMatches } from '@/hooks/useMatches';
 import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
@@ -23,6 +24,9 @@ import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
+import { DEEP_SCAN_EVENT } from '@/lib/deepScanEvents';
 
 const PropertyDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -43,6 +47,43 @@ const PropertyDetail = () => {
   const { createMatch } = useMatches();
   const { quota } = useViewingQuota();
   const { submitFastTrack } = useFastTrackRequest();
+
+  // The chat docks the same way it does on the hub: a rail beside the listing
+  // at desktop widths, a draggable sheet along the bottom below them.
+  const hasRail = useMediaQuery(`(min-width: ${RAIL_MIN_VIEWPORT}px)`);
+  // On narrow viewports the sheet starts collapsed - the listing is what the
+  // renter came for - and the card's own gestures open it (below).
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatHeaderPortal, setChatHeaderPortal] = useState<HTMLDivElement | null>(null);
+
+  // A Deep Scan or a sparkle fired from the card is answered in the chat, which
+  // on a phone is a collapsed bar: without this the press looks like it did
+  // nothing and the reply arrives out of sight. Same reasoning as the hub's.
+  // The sparkle is not a signed-in feature here. The chat already knows the
+  // listing this page is about and a signed-out visitor's message carries the
+  // pinned id like anyone else's, so asking about it just works - the free
+  // search allowance is what eventually asks them to sign in, not the gesture.
+  useEffect(() => {
+    const open = () => {
+      if (!hasRail) setIsChatOpen(true);
+    };
+    // The scan is the exception: it is written against saved preferences and
+    // only rendered for an account, so a press with no way to answer it should
+    // say so rather than open an empty sheet.
+    const scan = () => {
+      if (!user) {
+        navigate('/auth', { state: { returnTo: `/property/${id}` } });
+        return;
+      }
+      open();
+    };
+    window.addEventListener(ASSISTANT_OPEN_EVENT, open);
+    window.addEventListener(DEEP_SCAN_EVENT, scan);
+    return () => {
+      window.removeEventListener(ASSISTANT_OPEN_EVENT, open);
+      window.removeEventListener(DEEP_SCAN_EVENT, scan);
+    };
+  }, [hasRail, user, navigate, id]);
 
   // Signed-in renters see how the listing matches their saved preferences
   // instead of the property's generic style badge. localStorage first for an
@@ -284,6 +325,20 @@ const PropertyDetail = () => {
     ...(apartment.size && { "floorSize": { "@type": "QuantitativeValue", "value": apartment.size } }),
   } : null;
 
+  // One chat instance, moved between the rail and the sheet by which of the
+  // two ChatDock renders - never both, so the conversation is never doubled.
+  // It opens pinned to the listing on the page: that is what a renter reading
+  // this page is going to ask about, and a Deep Scan asked for from the card
+  // lands in the same thread.
+  const chat = (
+    <HomeAI
+      variant="rail"
+      userPreferences={preferences ?? undefined}
+      initialSubjects={[{ propertyId: apartment.id, title: apartment.title }]}
+      headerPortal={chatHeaderPortal}
+    />
+  );
+
   return (
     <CurrencyProvider>
       {jsonLd && (
@@ -294,7 +349,11 @@ const PropertyDetail = () => {
           <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
         </Helmet>
       )}
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
+      {/* The hub's two-pane shape: the listing scrolls in its own pane so the
+          chat beside it keeps its own scroll and its composer stays put. */}
+      <div className="flex h-[100dvh] flex-col bg-gradient-to-br from-orange-50 via-white to-red-50">
+        <div className="flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-y-auto">
         <main className="container mx-auto px-4 py-5 sm:py-8 max-w-4xl">
           <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
             <Button
@@ -332,17 +391,6 @@ const PropertyDetail = () => {
               isBooking={isBooking}
             />
 
-            {/* Only for signed-in renters: the read is written against their
-                preferences, so there is nothing to show an anonymous visitor. */}
-            {user && (
-              <div className="mt-4">
-                <DeepVibeAnalysis
-                  propertyId={apartment.id}
-                  propertyType={source}
-                  onRequestPass={() => setIsSubscriptionOpen(true)}
-                />
-              </div>
-            )}
           </div>
 
           <ViewingScheduleModal
@@ -375,23 +423,46 @@ const PropertyDetail = () => {
           {!user && (
             <Card className="mt-4 max-w-[760px] mx-auto">
               <CardContent className="pt-6">
-                <div className="text-center space-y-4">
-                  <p className="text-muted-foreground">
-                    Sign in to connect with the property owner and schedule a viewing.
-                  </p>
-                  <Button 
+                <div className="text-center">
+                  {/* The button says what it is for, so the line above it was
+                      saying the same thing twice. */}
+                  <Button
                     onClick={() => navigate('/auth')}
                     className="w-full"
                   >
                     <LogIn className="w-4 h-4 mr-2" />
-                    Sign In to Contact
+                    Sign in to book viewing
                   </Button>
                 </div>
               </CardContent>
             </Card>
           )}
         </main>
+        </div>
 
+          {hasRail && (
+            <ChatDock
+              hasRail
+              isOpen={isChatOpen}
+              onOpenChange={setIsChatOpen}
+              onHeaderPortalChange={setChatHeaderPortal}
+            >
+              {chat}
+            </ChatDock>
+          )}
+        </div>
+
+        {!hasRail && (
+          <ChatDock
+            hasRail={false}
+            isOpen={isChatOpen}
+            onOpenChange={setIsChatOpen}
+            collapsedHint="Ask about this listing"
+            onHeaderPortalChange={setChatHeaderPortal}
+          >
+            {chat}
+          </ChatDock>
+        )}
 
         {showRealtorProfile && apartment.realtor && (
           <RealtorProfileModal

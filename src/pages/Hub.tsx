@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronUp, Heart, Loader2, Sparkles } from 'lucide-react';
+import { ChevronLeft, Heart, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BrowseTable } from '@/components/BrowseTable';
 import { MatchesView } from '@/components/MatchesView';
@@ -13,6 +13,7 @@ import { FastTrackRequestsCard } from '@/components/FastTrackRequestsCard';
 import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { UsageMeter } from '@/components/UsageMeter';
 import { HomeAI } from '@/components/HomeAI';
+import { ChatDock, RAIL_MIN_VIEWPORT } from '@/components/chat/ChatDock';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HubNavigation } from '@/components/hub/HubNavigation';
 import { HubPreferenceBar } from '@/components/hub/HubPreferenceBar';
@@ -29,26 +30,6 @@ import { clearChatHandoff, peekChatHandoff } from '@/lib/chatHandoff';
 import { ASSISTANT_COMPARE_EVENT, ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
 import { DEEP_SCAN_EVENT } from '@/lib/deepScanEvents';
 import { cn } from '@/lib/utils';
-
-/**
- * Below this the page does not split into two panes at all.
- *
- * The comparison table has a hard 760px minimum, and a chat rail narrow enough
- * to fit beside it at 1024px is too cramped to hold a conversation - both panes
- * lose. 1280 is the first width where a usable rail (400px) and the full table
- * (760 + 48 padding) both fit without either one scrolling sideways. Under it,
- * the chat docks as a sheet and the table gets the whole width.
- *
- * Matches Tailwind's `xl`, which is what the breakpoint utilities below use.
- */
-const RAIL_MIN_VIEWPORT = 1280;
-// The dock's default, floor and ceiling, in px against the current viewport.
-// The floor is the composer plus one line of reply; below that the sheet is
-// open but useless. The ceiling leaves enough of the pane behind it to see
-// what the conversation is about.
-const DOCK_MIN_PX = 240;
-const dockDefaultPx = () => Math.max(Math.round(window.innerHeight * 0.33), DOCK_MIN_PX);
-const dockMaxPx = () => Math.round(window.innerHeight * 0.85);
 
 /**
  * The hub: one screen for the three things renters were bouncing between.
@@ -82,45 +63,6 @@ const Hub = () => {
     clearChatHandoff();
   }, []);
 
-  // Dragging the grabber resizes the sheet. Pointer events rather than touch
-  // events so the same handler serves a finger, a stylus and a mouse; capture
-  // keeps the drag alive when the finger slides off the 40px handle.
-  const startDockDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isChatOpen) return;
-    e.preventDefault();
-    const startY = e.clientY;
-    const startHeight = dockHeight ?? dockDefaultPx();
-    const el = e.currentTarget;
-    el.setPointerCapture(e.pointerId);
-    setDragging(true);
-    const onMove = (ev: PointerEvent) => {
-      // Up is taller: the sheet grows from the bottom edge.
-      const next = startHeight + (startY - ev.clientY);
-      setDockHeight(Math.min(Math.max(next, DOCK_MIN_PX), dockMaxPx()));
-    };
-    const onUp = () => {
-      setDragging(false);
-      el.releasePointerCapture(e.pointerId);
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
-    };
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
-  };
-
-  // The same resize from the keyboard, since a drag handle nobody can tab to
-  // is a control half the renters do not have.
-  const nudgeDock = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = e.key === 'ArrowUp' ? 48 : e.key === 'ArrowDown' ? -48 : 0;
-    if (!step) return;
-    e.preventDefault();
-    setDockHeight((h) =>
-      Math.min(Math.max((h ?? dockDefaultPx()) + step, DOCK_MIN_PX), dockMaxPx()),
-    );
-  };
-
   // A carried-over comparison opens on Browse, not AI: the side-by-side panel
   // belongs to the table, and the chat answers about it from the rail.
   const [mode, setMode] = useState<HubMode>(
@@ -151,12 +93,6 @@ const Hub = () => {
   // the start for a handed-over message, which is a conversation already in
   // progress - collapsed, the reply would arrive behind a closed dock.
   const [isChatOpen, setIsChatOpen] = useState(!!handoff);
-  // How tall the renter has dragged the dock, in px. Null means "the default
-  // third of the viewport" - kept distinct so a rotation or a resize re-reads
-  // the default rather than freezing yesterday's pixels.
-  const [dockHeight, setDockHeight] = useState<number | null>(null);
-  // Suppresses the height transition mid-drag, which would otherwise lag the finger.
-  const [dragging, setDragging] = useState(false);
   // The chat renders its listings into this node. Held in state rather than a
   // ref so the first render after it mounts actually reaches HomeAI.
   const [resultsPortal, setResultsPortal] = useState<HTMLDivElement | null>(null);
@@ -205,34 +141,6 @@ const Hub = () => {
       window.removeEventListener(DEEP_SCAN_EVENT, open);
     };
   }, [hasRail]);
-
-  // How much of the bottom edge the chat is taking, published for the floating
-  // panels (see lib/hubLayout). They are portaled to the body and cannot
-  // measure this page, and a panel that assumed the collapsed height simply
-  // vanished behind the sheet the moment the renter opened it.
-  // Re-clamp a dragged height when the viewport changes, so a rotation cannot
-  // leave the dock taller than the screen.
-  useEffect(() => {
-    if (dockHeight === null) return;
-    const onResize = () => setDockHeight((h) => (h === null ? h : Math.min(h, dockMaxPx())));
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [dockHeight]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const openHeight = dockHeight === null ? 'max(33dvh, 15rem)' : `${dockHeight}px`;
-    root.style.setProperty(
-      '--hub-dock',
-      // Profile hides the chat entirely, so it takes no bottom edge there.
-      hasRail || showProfile ? '0px' : isChatOpen ? openHeight : '4rem',
-    );
-    // The variable belongs to the hub, not the app: leaving it set would push
-    // every other page's dialogs up off a dock that isn't there.
-    return () => {
-      root.style.removeProperty('--hub-dock');
-    };
-  }, [hasRail, isChatOpen, showProfile, dockHeight]);
 
   // Quota walls raised from the table or the chat dispatch this - the hub has
   // to answer it too, or upgrading from here silently does nothing.
@@ -443,118 +351,43 @@ const Hub = () => {
             )}
           </main>
 
-          {/* ---- Chat rail (xl and up) ---- */}
+          {/* ---- Chat rail (xl and up). The ceiling on its width is what the
+               table needs rather than a round number - its 760px minimum plus
+               the main pane's padding - so it only binds just above
+               RAIL_MIN_VIEWPORT, where the two genuinely compete for width.
+
+               Gone on the profile: account admin is not a conversation, and a
+               chat rail beside a billing page is one more thing to ignore.
+               Hidden rather than unmounted, so the thread, the draft and the
+               pins are all still there on the way back. ---- */}
           {hasRail && (
-            // A third of the viewport, the same share the dock takes on a
-            // phone or tablet. The ceiling is what the table needs rather than
-            // a round number - its 760px minimum plus the main pane's padding
-            // - so it only binds just above RAIL_MIN_VIEWPORT, where the two
-            // genuinely compete for width. A fixed 560px ceiling instead left
-            // the chat at 22% of a 2560 screen, an afterthought beside 1240px
-            // of table slack, which is what growing with the viewport was
-            // supposed to avoid.
-            //
-            // The width itself is --hub-rail (src/index.css): every floating
-            // surface on this page positions itself against the same value,
-            // and it used to be spelled out in two files that disagreed.
-            //
-            // Gone on the profile: account admin is not a conversation, and a
-            // chat rail beside a billing page is one more thing to ignore.
-            // Hidden rather than unmounted, so the thread, the draft and the
-            // pins are all still there on the way back.
-            <aside
-              className={`w-[var(--hub-rail)] shrink-0 flex-col border-l border-border bg-white/70 backdrop-blur-xl ${
-                showProfile ? 'hidden' : 'flex'
-              }`}
+            <ChatDock
+              hasRail
+              hidden={showProfile}
+              isOpen={isChatOpen}
+              onOpenChange={setIsChatOpen}
+              onHeaderPortalChange={setChatHeaderPortal}
             >
-              <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-                <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-                <span className="font-serif text-base">Hausto Agent</span>
-                <div ref={setChatHeaderPortal} className="ml-auto flex items-center gap-1" />
-              </div>
-              <div className="min-h-0 flex-1">{chat}</div>
-            </aside>
+              {chat}
+            </ChatDock>
           )}
         </div>
 
-        {/* ---- Chat dock (narrow viewports). Rendered instead of the rail, never
-             alongside it - two mounted chats would be two conversations. ---- */}
-        {/* z-[60], not z-50: a panel portaled to the body is later in the
-             document than this dock, so at an equal z-index the panel wins and
-             the chat opens behind it. */}
-        <div className={hasRail || showProfile ? 'hidden' : 'z-[60] shrink-0'}>
-          {!hasRail && (
-            <div
-              className={`glass-card flex flex-col rounded-t-3xl ${dragging ? '' : 'transition-[height] duration-200'}`}
-              // A third of the viewport by default, not two thirds: on a phone
-              // the dock used to bury whatever the renter was asking about, so
-              // the answer arrived with no way to see what it referred to. A
-              // Deep Scan is longer than that third, though, so the renter can
-              // drag it taller - up to 85dvh - and the choice sticks.
-              style={{
-                height: isChatOpen
-                  ? dockHeight === null
-                    ? 'max(33dvh, 15rem)'
-                    : `${dockHeight}px`
-                  : '4rem',
-              }}
-            >
-              {/* Grabber. Only while the sheet is open: collapsed, there is
-                  nothing to resize and the whole bar is already a toggle. */}
-              {isChatOpen && (
-                <div
-                  role="separator"
-                  aria-orientation="horizontal"
-                  aria-label="Resize the chat"
-                  tabIndex={0}
-                  onPointerDown={startDockDrag}
-                  onKeyDown={nudgeDock}
-                  onDoubleClick={() => setDockHeight(null)}
-                  className="flex h-4 shrink-0 cursor-ns-resize touch-none items-end justify-center pb-1 focus-visible:outline-none"
-                >
-                  <span className="h-1 w-10 rounded-full bg-border" />
-                </div>
-              )}
-              <div className="flex h-16 shrink-0 items-center gap-2 px-4">
-                <button
-                  className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left"
-                  aria-expanded={isChatOpen}
-                  aria-controls="hub-chat-dock"
-                  onClick={() => setIsChatOpen((open) => !open)}
-                >
-                  <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                  <span className="font-serif text-base">Hausto Agent</span>
-                  {!isChatOpen && (
-                    <span className="truncate text-xs text-muted-foreground">
-                      Ask about what&rsquo;s on screen
-                    </span>
-                  )}
-                  {isChatOpen ? (
-                    <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  ) : (
-                    <ChevronUp className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  )}
-                </button>
-                {/* Only while the sheet is open: collapsed, these would act on
-                    a thread nobody can see. Unclaimed, the chat keeps them in
-                    its own (hidden) header rather than dropping them. */}
-                {isChatOpen && (
-                  <div ref={setChatHeaderPortal} className="flex shrink-0 items-center gap-1" />
-                )}
-              </div>
-
-              {/* Collapsing hides the chat, it never unmounts it - tearing down
-                  HomeAI would take the conversation, the draft and the current
-                  results with it. */}
-              <div
-                id="hub-chat-dock"
-                className={`min-h-0 flex-1 ${isChatOpen ? '' : 'hidden'}`}
-              >
-                {chat}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* ---- Chat dock (narrow viewports). Rendered instead of the rail,
+             never alongside it - two mounted chats would be two
+             conversations. ---- */}
+        {!hasRail && (
+          <ChatDock
+            hasRail={false}
+            hidden={showProfile}
+            isOpen={isChatOpen}
+            onOpenChange={setIsChatOpen}
+            collapsedHint="Ask about what’s on screen"
+            onHeaderPortalChange={setChatHeaderPortal}
+          >
+            {chat}
+          </ChatDock>
+        )}
 
         <SubscriptionModal
           isOpen={isSubscriptionModalOpen}

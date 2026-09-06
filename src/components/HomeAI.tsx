@@ -179,6 +179,9 @@ interface HomeAIProps {
    *  answering on `/` left the renter reading results in a page with nowhere
    *  to take them. */
   handoffToHub?: boolean;
+  /** Listings to pin on the far side of a `handoffToHub` message, so a chat
+   *  opened from a listing page arrives at the hub already about it. */
+  handoffSubjects?: AssistantOpenDetail[];
 }
 export const HomeAI = ({
   userPreferences,
@@ -191,7 +194,8 @@ export const HomeAI = ({
   resultsPortal,
   onResultsCountChange,
   headerPortal,
-  handoffToHub = false
+  handoffToHub = false,
+  handoffSubjects
 }: HomeAIProps) => {
   const isRail = variant === 'rail';
   // True when listings belong in the main pane rather than in the thread.
@@ -725,7 +729,7 @@ export const HomeAI = ({
     // is only spent where it is actually sent, so the allowance is counted once
     // and the wall, when it comes, lands on the page the renter ends up on.
     if (handoffToHub && (queryToUse.trim() || imagesToUse.length > 0)) {
-      setChatHandoff({ query: queryToUse, images: imagesToUse });
+      setChatHandoff({ query: queryToUse, images: imagesToUse, subjects: handoffSubjects });
       setQuery('');
       setUploadedImages([]);
       navigate('/hub');
@@ -1329,8 +1333,15 @@ export const HomeAI = ({
       )}
 
       {/* Subject strip: which listings this conversation is about. Sits directly
-          above the composer so the scope is visible while typing. */}
-      {isRail && user && (
+          above the composer so the scope is visible while typing.
+
+          Shown to a signed-out visitor too once something is pinned - their
+          messages carry the pinned ids the same way (see handleSearch), so the
+          strip is telling the truth, and on a listing's page it is the only
+          thing that says the chat already knows what they are looking at. The
+          picker below it needs an account for its matches, and hides itself
+          when there are none. */}
+      {isRail && (user || subjects.length > 0) && (
         // mt-auto here, not on the composer: this strip and the composer are
         // one group (it says what the conversation is about while you type),
         // and two auto margins would split the slack between them.
@@ -1396,7 +1407,11 @@ export const HomeAI = ({
       )}
 
       {/* Chat Input - Show for everyone until they search */}
-      {(user || !anonLimitReached) && <div className={isRail ? `shrink-0 space-y-2 tall:space-y-4 xl:space-y-4${user ? '' : ' mt-auto'}` : 'space-y-4'}>
+      {/* mt-auto belongs to whichever of the strip and this block comes first:
+          they are one group at the bottom of the rail, and two auto margins
+          split the slack between them - which is what left a signed-out
+          visitor's pin marooned halfway up the pane. */}
+      {(user || !anonLimitReached) && <div className={isRail ? `shrink-0 space-y-2 tall:space-y-4 xl:space-y-4${user || subjects.length > 0 ? '' : ' mt-auto'}` : 'space-y-4'}>
           {/* Signed-out visitors get a few searches before the wall - say how
               many are left rather than springing it on them. */}
           {!user && (

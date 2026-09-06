@@ -10,6 +10,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// What turns a question asked about pinned listings back into a search. The
+// intent test and the strip that enforces it both read this, so the prompt the
+// model is given and the results it is allowed to return cannot drift apart.
+//
+// Deliberately not hasShoppingKeyword() - that matches the word "listings",
+// which is exactly what someone says when they mean the pinned ones.
+const WANTS_OTHER_LISTINGS =
+  /\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i;
+
 // Listing unlocks a free renter gets per day - one per listing, covering both
 // the owner contact and the original listing link, because the source posting
 // carries the phone number too. Counted in Redis under
@@ -2488,6 +2497,20 @@ ${scoredPreviousProperties.map((p, i) => `
     // to look up still can't turn "compare these" into a fresh search.
     const isSubjectComparison =
       isAdvisoryComparison && (subjectIds.length > 0 || scoredPreviousProperties.length > 0);
+
+    // ---- "Ask about this one" ----
+    // A question asked with listings pinned is a question ABOUT those listings,
+    // unless it explicitly asks for others. This is the whole shape of the chat
+    // on a listing's own page, where the listing is pinned before a word is
+    // typed - and without it "what's good about this?" fell through to the
+    // shopping path: the model was handed a candidate shelf, the fallback
+    // pasted "Here are 3 matching apartments" over the answer, and the strip
+    // further down deleted the cards but not the summary. The renter was left
+    // reading a search result with its results missing.
+    //
+    // The comparison turn above is not enough on its own: it needs two things
+    // to weigh, and this is the far commoner single-subject question.
+    const isSubjectQuestion = subjectIds.length > 0 && !WANTS_OTHER_LISTINGS.test(message);
     
     if (shoppingOverride && intent.isLifestyle) {
       intent.isMixed = true;
@@ -2500,12 +2523,13 @@ ${scoredPreviousProperties.map((p, i) => `
     console.log(
       `[AI] intent: lifestyle=${intent.isLifestyle} mixed=${intent.isMixed} ` +
       `shoppingOverride=${shoppingOverride} pureLifestyle=${isPureLifestyle} ` +
+      `subjectQuestion=${isSubjectQuestion} pinned=${subjectIds.length} ` +
       `kb_hits=city:${kbLookup.cityEntries.length}/districts:${kbLookup.districtEntries.length}`
     );
 
     // On pure lifestyle and complex-info turns, drop the property block from the
     // prompt to save tokens and prevent the model from forcing listings into the answer.
-    const promptProperties = (isPureLifestyle || isComplexInfoTurn || isSubjectComparison) ? [] : topProperties;
+    const promptProperties = (isPureLifestyle || isComplexInfoTurn || isSubjectComparison || isSubjectQuestion) ? [] : topProperties;
 
     // ---- Subject listings: the "ask about this one" half of the chat ----
     // Loaded for their titles and for whether we hold a contact or a source
@@ -2681,8 +2705,9 @@ ${previousPropertiesSection}
 ${isComplexInfoTurn ? `🏢 COMPLEX INFO TURN — The user is asking ABOUT a specific complex (${knownComplexes.map((c: any) => c.name).join(', ')}), NOT for listings. Respond using ONLY the "blocks" shape: a "text" block that DIRECTLY and COMPLETELY answers their exact question using KNOWN COMPLEXES above (if they ask about amenities, enumerate the amenities; if about pets, quote the pet policy; if a field is unknown, say so honestly — never invent), then a "followups" block mixing "[Ask]" and "[Search]" (e.g. "[Search] Show me apartments in ${knownComplexes[0]?.name || 'this complex'}"). A compact profile card for the complex is attached automatically by the system — do NOT emit a "complex" block yourself and do NOT pad the text with data the user didn't ask about. DO NOT return a "results" array — the user has not asked for listings yet.` : ''}
 ${isPureLifestyle ? `💡 LIFESTYLE / INFO TURN — The user is asking for advice or local knowledge, NOT shopping. Respond using ONLY the "blocks" shape (text + optional district/complex/distance + followups). DO NOT return a "results" array. Keep prose conversational, 3–6 sentences, grounded in LIFESTYLE KNOWLEDGE above. You MUST include a separate block of type "followups" containing 2–4 suggestions mixing "[Ask]" and "[Search]". DO NOT put these suggestions inside the "text" block body.` : ''}
 ${intent.isMixed ? `🔀 MIXED TURN — The user wants BOTH lifestyle context AND listings. You MUST return a "results" array with matching property cards AND a "blocks" array. Inside "blocks", include a "text" block (2–4 sentences) AND a separate "followups" block. Both results and blocks are required.` : ''}
+${isSubjectQuestion && !isSubjectComparison ? `🏠 SUBJECT TURN — The user is asking about the listing(s) pinned above, which they are looking at right now. Answer THAT question with the "blocks" shape only: a "text" block (3–6 sentences) grounded in the pinned listing's own details - its price, size, rooms, amenities, style and location - and in what THIS user has said they care about. Say honestly when something is not in the data rather than inventing it. You MUST NOT return a "results" array: they did not ask for other listings, and adding them buries the answer to the question they did ask. Close with a "followups" block.` : ''}
 ${isSubjectComparison ? `⚖️ COMPARISON TURN — The user is weighing up listings they already have in front of them (pinned above, and/or listed under PREVIOUSLY SUGGESTED PROPERTIES), and wants to know which one to take. Answer with the "blocks" shape only: a "text" block (3–6 sentences) that names each one, says what it is better and worse at on the things THIS user has said they care about, and ends with a clear recommendation and why. Do NOT hedge with "it depends" and stop there. You MUST NOT return a "results" array — they did not ask for more listings, and adding them buries the answer. Close with a "followups" block.` : ''}
-${!isPureLifestyle && !intent.isMixed && !isSubjectComparison && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
+${!isPureLifestyle && !intent.isMixed && !isSubjectComparison && !isSubjectQuestion && promptProperties.length > 0 ? `🛒 SHOPPING TURN — Property candidates are listed below. You MUST include a "results" array with these properties (in the given priority order). Omit "results" ONLY if the user explicitly said "don't show listings" or "just tell me".` : ''}
 
 📊 AVAILABLE PROPERTIES (${promptProperties.length} matches from ${properties.length} total - SORTED BY PRIORITY, show in this exact order):
 ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
@@ -2697,7 +2722,7 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
    ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
-`).join('\n') : ((isPureLifestyle || isComplexInfoTurn || isSubjectComparison) ? '(Skipped — info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
+`).join('\n') : ((isPureLifestyle || isComplexInfoTurn || isSubjectComparison || isSubjectQuestion) ? '(Skipped — info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
 
 
 🧠 CRITICAL INSTRUCTIONS:
@@ -3131,7 +3156,7 @@ Maximum ${maxResults} properties in results.`;
     // Minh City under 20M VND/month"). Note this reads topProperties, which is
     // still populated on such a turn even though promptProperties is emptied:
     // the fallback was injecting listings the model was never shown.
-    const isInfoTurn = isPureLifestyle || isComplexInfoTurn || isSubjectComparison;
+    const isInfoTurn = isPureLifestyle || isComplexInfoTurn || isSubjectComparison || isSubjectQuestion;
     const aiFailedShopping = (shoppingOverride || !isInfoTurn) && !isComplexInfoTurn && topProperties.length > 0 && !hasResultsArray;
 
     if (hasResultsArray || aiFailedShopping) {
@@ -3358,16 +3383,9 @@ Maximum ${maxResults} properties in results.`;
     }
 
     // With listings pinned the default flips: the renter is asking ABOUT those,
-    // not for more of them. "Compare these three" was coming back with a fresh
-    // search attached, which buries the answer. Only an explicit ask for
-    // something new brings results back.
-    //
-    // Deliberately not hasShoppingKeyword() - that matches the word "listings",
-    // which is exactly what someone says when they mean the pinned ones.
-    //
-    // Keyed off what was PINNED, not what resolved: an id we failed to look up
-    // (a complex, a listing since delisted) must still not turn "compare these"
-    // into a fresh search.
+    // not for more of them (see isSubjectQuestion, which keys off what was
+    // PINNED rather than what resolved - an id we failed to look up must still
+    // not turn "compare these" into a fresh search).
     // Also fires on a process question: the prompt tells the model to answer
     // those in prose, but "DEFAULT TO SHOPPING" is a strong pull and it was
     // attaching listings anyway. Belt and braces on the one thing a renter
@@ -3379,7 +3397,7 @@ Maximum ${maxResults} properties in results.`;
     // reads - the strip only ever worked for signed-out visitors. searchData
     // is emptied with it so ai_searches doesn't record a search that was
     // never shown, and previously-suggested context stays honest.
-    if ((subjectIds.length > 0 || isProcessQuestion || isSubjectComparison) && !/\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i.test(message)) {
+    if (isSubjectQuestion || ((isProcessQuestion || isSubjectComparison) && !WANTS_OTHER_LISTINGS.test(message))) {
       try {
         const parsed = JSON.parse(responseContent);
         if (Array.isArray(parsed.results) && parsed.results.length > 0) {
