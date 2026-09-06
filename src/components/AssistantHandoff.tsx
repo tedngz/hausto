@@ -27,16 +27,19 @@ import { DEEP_SCAN_EVENT, type DeepScanDetail } from '@/lib/deepScanEvents';
  * selection as well, because comparing is both halves at once: the panel in
  * the main pane and the question about it in the rail.
  *
- * Headless: it renders nothing. On the hub it stands aside, because the rail
- * chat listens for the event itself and pins without anyone navigating.
+ * Headless: it renders nothing. It stands aside on any page that docks the
+ * chat itself - the hub, and a listing's own page - because the chat there
+ * listens for the event and answers in place, without anyone navigating.
  */
+const DOCKS_ITS_OWN_CHAT = (pathname: string) =>
+  pathname === '/hub' || pathname.startsWith('/property/');
 export const AssistantHandoff = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (location.pathname === '/hub') return;
+    if (DOCKS_ITS_OWN_CHAT(location.pathname)) return;
 
     const onOpen = (event: Event) => {
       const detail = (event as CustomEvent<AssistantOpenDetail>).detail;
