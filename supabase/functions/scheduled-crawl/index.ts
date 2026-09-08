@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { ANALYZE_COUNT } from '../_shared/vibe-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -386,20 +387,14 @@ function normalizeLocation(location: string): string {
   return location.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function detectCity(location: string): string {
-  const lower = location.toLowerCase();
-  if (/(ho chi minh|hcm|saigon|sài gòn|thủ đức|thu duc|quận [0-9]|quan [0-9]|district [0-9]|d[0-9]|bình thạnh|binh thanh|phú nhuận|phu nhuan|tân bình|tan binh|gò vấp|go vap|tân phú|tan phu|bình tân|binh tan|bình chánh|binh chanh|nhà bè|nha be|hóc môn|hoc mon|củ chi|cu chi|cần giờ|can gio)/i.test(lower)) return 'ho_chi_minh';
-  if (/(hà nội|ha noi|hanoi|ba đình|ba dinh|hoàn kiếm|hoan kiem|đống đa|dong da|cầu giấy|cau giay|hai bà trưng|hai ba trung|tây hồ|tay ho|long biên|long bien|thanh xuân|thanh xuan|hoàng mai|hoang mai|bắc từ liêm|nam từ liêm|hà đông|ha dong|gia lâm|gia lam|đông anh|dong anh|sóc sơn|soc son|thanh trì|thanh tri|hoài đức|hoai duc|mê linh|me linh|sơn tây|son tay)/i.test(lower)) return 'hanoi';
-  if (/(đà nẵng|da nang|hải châu|hai chau|thanh khê|thanh khe|sơn trà|son tra|ngũ hành sơn|ngu hanh son|liên chiểu|lien chieu|cẩm lệ|cam le|hòa vang|hoa vang)/i.test(lower)) return 'da_nang';
-  return 'other';
-}
 
 // Run vibe analysis for a property and update it
 async function runVibeAnalysis(supabase: any, propertyId: string, propertyData: any): Promise<boolean> {
   if (!OPENAI_API_KEY || !propertyData.images || propertyData.images.length === 0) return false;
 
   try {
-    const imagesToAnalyze = propertyData.images.slice(0, 3);
+    // One highlight per photo: analyse the whole stored gallery, not a sample.
+    const imagesToAnalyze = propertyData.images.slice(0, ANALYZE_COUNT);
     console.log(`[scheduled-crawl] Running vibe analysis for "${propertyData.title}" (${imagesToAnalyze.length} images)`);
 
     const analyzeResponse = await fetch(`${SUPABASE_URL}/functions/v1/analyze-vibe`, {

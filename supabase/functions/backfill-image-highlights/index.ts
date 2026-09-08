@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
-import { MIN_DISPLAY_IMAGES, expectedHighlightCount } from "../_shared/vibe-policy.ts";
+import { MIN_DISPLAY_IMAGES, ANALYZE_COUNT, expectedHighlightCount, highlightPolicyOf } from "../_shared/vibe-policy.ts";
 import { isOpenAIBudgetExhausted } from "../_shared/openai-usage.ts";
 
 const corsHeaders = {
@@ -78,10 +78,13 @@ serve(async (req) => {
       if (images.length === 0) return false; // nothing to analyze
       if (isUnfixable(p)) return false;
       const highlights = Array.isArray(p.highlights) ? p.highlights.filter((h: any) => typeof h === 'string' && h.trim()) : [];
-      // Listings holding fewer than MIN_DISPLAY_IMAGES photos are done at one
-      // highlight per image. They can never reach ANALYZE_COUNT, so requiring
-      // it would re-analyze them on every run and never converge.
-      const expected = expectedHighlightCount(images.length);
+      // Judged against the policy this listing was analysed under, not the
+      // current one: a listing finished when the target was 5 is still finished,
+      // so raising the target does not drag the whole catalogue back through
+      // vision. Listings holding fewer photos than the target are likewise done
+      // at one highlight per image - they can never reach it, and requiring it
+      // would re-analyze them on every run and never converge.
+      const expected = expectedHighlightCount(images.length, highlightPolicyOf(p.vibe_analysis));
       if (highlights.length < expected) return true;
       return isPoisoned(p);
     };
@@ -205,6 +208,7 @@ serve(async (req) => {
                 vibe_analysis: {
                   ...(prop.vibe_analysis || {}),
                   image_analyses: result.analyses,
+                  highlight_policy: ANALYZE_COUNT,
                   image_backfill: {
                     unfixable: true,
                     reason: 'images_unfetchable',
@@ -268,6 +272,7 @@ serve(async (req) => {
           ...priorVibe,
           image_analyses: analyses,
           amenities: Array.from(allAmenities),
+          highlight_policy: ANALYZE_COUNT,
         };
 
         const { error: updateErr } = await supabase

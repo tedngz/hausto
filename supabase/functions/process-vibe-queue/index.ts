@@ -9,7 +9,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { analyzeImagesQualityFirst } from "./shared.ts";
 import { dHashFromBytes } from "../_shared/dhash.ts";
 import {
-  MIN_DISPLAY_IMAGES, STORE_TARGET, expectedHighlightCount,
+  MIN_DISPLAY_IMAGES, STORE_TARGET, ANALYZE_COUNT, expectedHighlightCount,
   interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl, isCredibleMapLabel,
   isAnimatedOrVideoBytes,
 } from "../_shared/vibe-policy.ts";
@@ -22,7 +22,17 @@ const corsHeaders = {
 };
 
 const MAX_ATTEMPTS = 5;
-const DEFAULT_BATCH = 4;
+// How long a claim may be held before it is treated as abandoned. A run that
+// finishes normally flips its row to complete/failed/queued in seconds; one
+// that exceeds this was killed mid-job (function timeout, eviction) and is
+// never coming back to update it.
+const STALE_CLAIM_MS = 15 * 60 * 1000;
+// One listing per invocation. Images are fetched, mirrored and analysed one at
+// a time, so a full STORE_TARGET gallery is already a minute or two of wall
+// clock; four of those in one request would run past the function timeout and
+// strand the batch in 'processing'. The cron fires every 2 minutes, which
+// drains far more than the 20 listings a day the crawler adds.
+const DEFAULT_BATCH = 1;
 const MIRROR_BUCKET = 'external-property-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 // Mirrored photos never change in place except on a re-mirror, so a long CDN
@@ -129,6 +139,68 @@ async function mirrorQualityImages(
   return { mirrored, originals, hashes };
 }
 
+// A claim that never finishes leaves its row in 'processing', and the claim
+// query below only ever looks at 'queued' - so nothing reclaims it and the job
+// is stuck forever. 31 rows sat that way for a month before anyone noticed.
+//
+// Runs before every claim. Three outcomes per stale row:
+//   - the property is already analysed  -> complete (the run did its work and
+//     died before flipping the row; requeueing would pay for vision twice)
+//   - attempts exhausted                -> failed, so a job that reliably kills
+//     the function cannot cycle forever
+//   - otherwise                         -> queued, with the reclaim counted as
+//     an attempt
+async function reclaimStaleClaims(supabase: any): Promise<{ requeued: number; failed: number; reconciled: number }> {
+  const out = { requeued: 0, failed: 0, reconciled: 0 };
+  const cutoff = new Date(Date.now() - STALE_CLAIM_MS).toISOString();
+
+  const { data: stale, error } = await supabase
+    .from('vibe_analysis_queue')
+    .select('id, property_id, attempts')
+    .eq('status', 'processing')
+    .lt('updated_at', cutoff);
+  if (error) { console.warn('[reclaim] lookup failed:', error.message); return out; }
+  if (!stale || stale.length === 0) return out;
+
+  const { data: props } = await supabase
+    .from('external_properties')
+    .select('id, vibe_status')
+    .in('id', stale.map((r: any) => r.property_id));
+  const done = new Set((props || []).filter((p: any) => p.vibe_status === 'complete').map((p: any) => p.id));
+
+  const reconciled: string[] = [];
+  const failed: string[] = [];
+  const requeue: { id: string; attempts: number }[] = [];
+  for (const row of stale) {
+    if (done.has(row.property_id)) reconciled.push(row.id);
+    else if ((row.attempts || 0) + 1 >= MAX_ATTEMPTS) failed.push(row.id);
+    else requeue.push({ id: row.id, attempts: (row.attempts || 0) + 1 });
+  }
+
+  if (reconciled.length > 0) {
+    await supabase.from('vibe_analysis_queue')
+      .update({ status: 'complete', last_error: 'reconciled: property already vibe_status=complete' })
+      .in('id', reconciled);
+    out.reconciled = reconciled.length;
+  }
+  if (failed.length > 0) {
+    await supabase.from('vibe_analysis_queue')
+      .update({ status: 'failed', attempts: MAX_ATTEMPTS, last_error: 'stale_claim: attempts exhausted' })
+      .in('id', failed);
+    out.failed = failed.length;
+  }
+  // attempts differ per row, so these cannot go in one grouped update.
+  for (const row of requeue) {
+    await supabase.from('vibe_analysis_queue')
+      .update({ status: 'queued', attempts: row.attempts, last_error: 'stale_claim: reclaimed after timeout' })
+      .eq('id', row.id);
+    out.requeued++;
+  }
+
+  console.log(`[reclaim] ${stale.length} stale claim(s): ${out.requeued} requeued, ${out.failed} failed, ${out.reconciled} reconciled`);
+  return out;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -147,6 +219,8 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
     const { batchSize = DEFAULT_BATCH } = await req.json().catch(() => ({}));
 
+    const reclaimed = await reclaimStaleClaims(supabase);
+
     // Atomically claim a batch by flipping status queued → processing
     const { data: queued } = await supabase
       .from('vibe_analysis_queue')
@@ -156,7 +230,7 @@ serve(async (req) => {
       .limit(batchSize);
 
     if (!queued || queued.length === 0) {
-      return new Response(JSON.stringify({ success: true, processed: 0, message: 'queue empty' }), {
+      return new Response(JSON.stringify({ success: true, processed: 0, reclaimed, message: 'queue empty' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -346,6 +420,9 @@ serve(async (req) => {
           elegant: avg('elegant'),
           amenities: Array.from(allAmenities),
           image_analyses: analyses,
+          // The target this run analysed to. Read back by the backfill so a
+          // later increase does not reclassify this listing as unfinished.
+          highlight_policy: ANALYZE_COUNT,
         };
 
         // Persist pre-mirror source URLs so we can recover if storage is corrupted
@@ -394,7 +471,7 @@ serve(async (req) => {
     }
 
     const ok = results.filter(r => r.ok).length;
-    return new Response(JSON.stringify({ success: true, processed: results.length, completed: ok, results }), {
+    return new Response(JSON.stringify({ success: true, processed: results.length, completed: ok, reclaimed, results }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {

@@ -11,21 +11,43 @@
 // Listings that can never reach it are left alone, not retried.
 export const MIN_DISPLAY_IMAGES = 5;
 
-// Keep up to this many images in the gallery.
-export const STORE_TARGET = 8;
+// Keep up to this many images in the gallery. A source listing carries the
+// whole unit - every room, the building, the view - and truncating it at 8 threw
+// away photos a renter deciding on the place would want. The cap only exists so
+// one pathological listing cannot drag a crawl run out.
+export const STORE_TARGET = 20;
 
-// Analyze every qualified image, capped here. Since MIN_DISPLAY_IMAGES gates
-// what goes live, a live listing gets all 5 of its qualifying photos analyzed.
-export const ANALYZE_COUNT = 5;
+// Analyze every stored image. Highlights are positional - one per photo, shown
+// under it in the gallery - so anything below STORE_TARGET leaves later photos
+// captionless.
+export const ANALYZE_COUNT = STORE_TARGET;
+
+// The analysis target before galleries were kept whole. Rows analysed under
+// that policy carry no stamp, so this is what an unstamped row is judged
+// against.
+export const LEGACY_ANALYZE_COUNT = 5;
+
+// Every completed analysis records the target it ran under. Without it, raising
+// ANALYZE_COUNT would reclassify every already-finished listing as "missing
+// highlights" and put the whole table back through vision - a policy change
+// would cost a full re-analysis of the catalogue.
+export function highlightPolicyOf(vibeAnalysis: unknown): number {
+  const stamped = Number((vibeAnalysis as any)?.highlight_policy);
+  return Number.isFinite(stamped) && stamped > 0 ? stamped : LEGACY_ANALYZE_COUNT;
+}
 
 // How many highlights a listing is expected to have once fully processed.
 //
-// Legacy listings holding fewer than MIN_DISPLAY_IMAGES photos are complete at
-// one highlight per image — they can never reach 5, so demanding 5 would retry
-// them forever. This is the single definition of "done"; both the producer and
-// the backfill's missing-highlights check derive from it.
-export function expectedHighlightCount(imageCount: number): number {
-  return Math.min(imageCount, ANALYZE_COUNT);
+// Listings holding fewer than the target are complete at one highlight per
+// image — they can never reach it, so demanding the full count would retry them
+// forever. This is the single definition of "done"; both the producer and the
+// backfill's missing-highlights check derive from it.
+//
+// Producers pass no policy and so analyse to the current one. Consumers deciding
+// whether an EXISTING listing still needs work must pass highlightPolicyOf(row),
+// which grandfathers anything finished under an earlier policy.
+export function expectedHighlightCount(imageCount: number, policy: number = ANALYZE_COUNT): number {
+  return Math.min(imageCount, policy);
 }
 
 // A gallery must show more of the unit than of its surroundings: interior shots
