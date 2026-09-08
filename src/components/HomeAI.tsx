@@ -264,8 +264,8 @@ export const HomeAI = ({
     renterMatches
   } = useMatches();
   const { quota, refetchQuota } = useViewingQuota();
-  // Viewing access: the free trial booking, a Premium cycle allowance, or
-  // the standalone $20 viewing pack.
+  // Viewing access: the free trial booking, or a live Hausto Pass and any
+  // top-ups bought against it.
   const canFastTrack = !!quota?.canBook;
   const {
     canPerformAction,

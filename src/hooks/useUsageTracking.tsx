@@ -10,14 +10,8 @@ interface UsageLimits {
   aiSearches: number;
 }
 
-interface SubscriptionStatus {
-  subscribed: boolean;
-  subscription_tier: string;
-  subscription_end?: string;
-}
-
-// The daily ceiling is the free tier's. Anyone covered - a live Hausto Pass, an
-// admin's complimentary pass, or a legacy Premium cycle - searches without one.
+// The daily ceiling is the free tier's. Anyone covered - a live Hausto Pass or
+// an admin's complimentary pass - searches without one.
 //
 // AI requests are the only metered thing left. The per-listing view budget went
 // with the swipe deck; the weekly match cap and the quiz retake cap went with
@@ -37,10 +31,6 @@ export const useUsageTracking = () => {
     aiSearches: 0,
   });
   const [weeklyMatches, setWeeklyMatches] = useState(0);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>({
-    subscribed: false,
-    subscription_tier: 'free',
-  });
   const [loading, setLoading] = useState(true);
 
   // Fallback to database if Redis is unavailable
@@ -129,30 +119,6 @@ export const useUsageTracking = () => {
       });
 
       setWeeklyMatches(usageData.weeklyMatches || 0);
-
-      // Get subscription status
-      const { data: subData, error: subError } = await supabase
-        .from('subscribers')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (subError) {
-        console.error('[Usage Tracking] Error fetching subscription:', subError);
-      }
-
-      if (subData) {
-        setSubscriptionStatus({
-          subscribed: subData.subscribed,
-          subscription_tier: subData.subscription_tier,
-          subscription_end: subData.subscription_end,
-        });
-      } else {
-        setSubscriptionStatus({
-          subscribed: false,
-          subscription_tier: 'free',
-        });
-      }
     } catch (error) {
       console.error('[Usage Tracking] Error in fetchUsage:', error);
     } finally {
@@ -250,23 +216,18 @@ export const useUsageTracking = () => {
     }
   };
 
-  // The Pass replaced the $10/mo plan, so cover has to be read from the pass -
-  // keying on the retired subscription alone left pass holders (admins
-  // included) capped at the free tier's 10 searches a day.
-  const hasUnlimitedAi =
-    !!pass?.active ||
-    (subscriptionStatus.subscribed && subscriptionStatus.subscription_tier === 'premium');
+  // A live pass - bought or complimentary - is the whole of cover now.
+  const hasUnlimitedAi = !!pass?.active;
 
   const canPerformAction = useCallback((type: 'match' | 'quiz' | 'ai-search'): boolean => {
-    // Don't block actions while subscription status is still loading
+    // Don't block actions while the usage read is still in flight
     if (loading) {
-      console.log('[Usage Tracking] Still loading subscription status - allowing action');
+      console.log('[Usage Tracking] Still loading usage - allowing action');
       return true;
     }
 
     console.log(`[Usage Tracking] Checking if can perform ${type}:`, {
-      subscribed: subscriptionStatus.subscribed,
-      tier: subscriptionStatus.subscription_tier,
+      hasPass: hasUnlimitedAi,
       weeklyMatches,
       todayAiSearches: todayUsage.aiSearches
     });
@@ -288,7 +249,7 @@ export const useUsageTracking = () => {
       default:
         return false;
     }
-  }, [hasUnlimitedAi, subscriptionStatus, todayUsage, weeklyMatches, loading]);
+  }, [hasUnlimitedAi, todayUsage, weeklyMatches, loading]);
 
   const getRemainingActions = (type: 'match' | 'quiz' | 'ai-search'): number => {
     if (hasUnlimitedAi) {
@@ -314,7 +275,6 @@ export const useUsageTracking = () => {
   return {
     todayUsage,
     weeklyMatches,
-    subscriptionStatus,
     hasUnlimitedAi,
     loading,
     limits: FREE_TIER_LIMITS,

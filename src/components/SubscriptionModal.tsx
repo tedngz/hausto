@@ -36,7 +36,7 @@ export const SubscriptionModal = ({
     viewings: "You've used your free viewing coordination.",
     ai: "You've used your 10 AI requests for today."
   };
-  // Both are one-off PayPal orders now - purchasePass/purchaseTopUp redirect to
+  // Both are one-off Polar checkouts now - purchasePass/purchaseTopUp redirect to
   // checkout themselves, so there's no approval URL to handle here.
   const handleGetPass = async () => {
     if (!user) {
@@ -180,7 +180,7 @@ export const SubscriptionModal = ({
 
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
           {/* No "cancel anytime" - nothing recurs, which is the better promise. */}
-          <p>✓ One-off payment, nothing recurring • ✓ Secure PayPal payment • ✓ Fast activation</p>
+          <p>✓ One-off payment, nothing recurring • ✓ Secure checkout by Polar • ✓ Fast activation</p>
         </div>
       </DialogContent>
     </Dialog>;

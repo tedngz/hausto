@@ -8,9 +8,9 @@ import {
   type VibeScoreDetails,
   type VibeMatchAttributes,
 } from '@/components/EditorialPropertyCard';
-import { useSubscription } from '@/hooks/useSubscription';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
 import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
+import { usePass } from '@/hooks/usePass';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
 
@@ -70,7 +70,7 @@ export const ListingPreviewDialog = ({
   source,
   propertyType = 'internal',
 }: ListingPreviewDialogProps) => {
-  const { subscribed } = useSubscription();
+  const { pass } = usePass();
   const { quota } = useViewingQuota();
 
   // Search truncates descriptions to 300 characters to keep the results
@@ -126,8 +126,8 @@ export const ListingPreviewDialog = ({
               : quota?.trialLocked
                 ? 'Match 3 listings to unlock your free viewing'
                 : quota?.trialUsed
-                ? `Free trial used - Premium includes ${INCLUDED_VIEWINGS_PER_CYCLE} a cycle`
-                : subscribed
+                ? `Free trial used - the Pass includes ${INCLUDED_VIEWINGS_PER_CYCLE}`
+                : pass?.active
                   ? `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
                   : 'Your first viewing is on us'}
         </span>

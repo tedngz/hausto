@@ -1,26 +1,31 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-// Creates the PayPal order for a Hausto Pass ($25, 30 days) or a viewing
-// top-up ($10, 2 more coordination). One function for both because the flow is
-// identical - only the price, the copy and the eligibility check differ.
+// Opens the Polar checkout session for a Hausto Pass ($25, 30 days) or a
+// viewing top-up ($10, 2 more coordination). One function for both because the
+// flow is identical - only the product, the copy and the eligibility check
+// differ.
 //
 // A top-up is refused without a live pass: its credits would lapse the moment
 // they were bought, which is a charge for nothing.
+//
+// Price lives on the Polar product, not here. Polar is the merchant of record,
+// so the amount it charges (plus whatever tax it collects) is the one that
+// matters; restating it in this file would only create a second number to drift.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// The amount is what capture-pass-order reads back to decide what was bought,
-// so these two must stay distinct.
-const PRICES = {
-  pass: { value: "25.00", description: "Hausto Pass - 30 days of deep vibe analysis, unlimited AI and 3 viewing coordination" },
-  topup: { value: "10.00", description: "Hausto viewing top-up - 2 more viewing coordination, expires with your pass" },
-} as const;
+type Kind = 'pass' | 'topup';
 
-type Kind = keyof typeof PRICES;
+// Which Polar product each kind maps to. Set per environment so sandbox and
+// production can point at their own products.
+const PRODUCT_ENV_VAR: Record<Kind, string> = {
+  pass: "POLAR_PRODUCT_PASS_ID",
+  topup: "POLAR_PRODUCT_TOPUP_ID",
+};
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -35,12 +40,11 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
-    const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
-    if (!clientId || !clientSecret) {
-      throw new Error("PayPal credentials not configured");
+    const accessToken = Deno.env.get("POLAR_ACCESS_TOKEN");
+    if (!accessToken) {
+      throw new Error("Polar credentials not configured");
     }
-    const apiBase = Deno.env.get("PAYPAL_API_BASE") ?? "https://api-m.sandbox.paypal.com";
+    const apiBase = Deno.env.get("POLAR_API_BASE") ?? "https://sandbox-api.polar.sh";
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -60,6 +64,11 @@ serve(async (req) => {
     const kind: Kind = body?.kind === 'topup' ? 'topup' : 'pass';
     logStep("User authenticated", { userId: user.id, kind });
 
+    const productId = Deno.env.get(PRODUCT_ENV_VAR[kind]);
+    if (!productId) {
+      throw new Error(`${PRODUCT_ENV_VAR[kind]} is not configured`);
+    }
+
     if (kind === 'topup') {
       const { data: hasPass, error: passError } = await supabaseClient
         .rpc('has_active_pass', { _user_id: user.id });
@@ -72,64 +81,39 @@ serve(async (req) => {
       }
     }
 
-    const authResponse = await fetch(`${apiBase}/v1/oauth2/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-      },
-      body: "grant_type=client_credentials",
-    });
-    const authData = await authResponse.json();
-    if (!authResponse.ok) {
-      throw new Error(`PayPal auth failed: ${authData.error_description}`);
-    }
-    const accessToken = authData.access_token;
-
     const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/$/, '') || '';
-    const returnUrl = `${origin}/pass-success`;
-    // Backing out returns to the hub, where the pass is offered from.
-    const cancelUrl = `${origin}/hub`;
+    // Polar substitutes {CHECKOUT_ID} at redirect time; /pass-success reads it
+    // back and asks capture-pass-order to confirm the session.
+    const successUrl = `${origin}/pass-success?checkout_id={CHECKOUT_ID}`;
 
-    const price = PRICES[kind];
-    const orderResponse = await fetch(`${apiBase}/v2/checkout/orders`, {
+    const checkoutResponse = await fetch(`${apiBase}/v1/checkouts/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${accessToken}`,
-        "PayPal-Request-Id": `hausto-${kind}-${user.id}-${Date.now()}`,
       },
       body: JSON.stringify({
-        intent: "CAPTURE",
-        purchase_units: [
-          {
-            description: price.description,
-            custom_id: user.id,
-            amount: { currency_code: "USD", value: price.value },
-          },
-        ],
-        application_context: {
-          brand_name: "Hausto",
-          locale: "en-US",
-          shipping_preference: "NO_SHIPPING",
-          user_action: "PAY_NOW",
-          return_url: returnUrl,
-          cancel_url: cancelUrl,
-        },
+        products: [productId],
+        success_url: successUrl,
+        customer_email: user.email,
+        // Ties the Polar customer to the Supabase user, so a repeat buyer is
+        // recognised and a refund can be traced back to an account.
+        external_customer_id: user.id,
+        // Set here and read back from Polar's API on capture - never from the
+        // client - so what was bought is decided server-side on both ends.
+        metadata: { kind, renter_id: user.id },
       }),
     });
-    const orderData = await orderResponse.json();
-    if (!orderResponse.ok) {
-      throw new Error(`PayPal order creation failed: ${JSON.stringify(orderData)}`);
+    const checkout = await checkoutResponse.json();
+    if (!checkoutResponse.ok) {
+      throw new Error(`Polar checkout creation failed: ${JSON.stringify(checkout)}`);
     }
-    logStep("PayPal order created", { orderId: orderData.id, kind });
-
-    const approvalUrl = orderData.links?.find((link: { rel: string; href: string }) => link.rel === "approve")?.href;
-    if (!approvalUrl) {
-      throw new Error("No approval URL found in PayPal response");
+    if (!checkout?.url) {
+      throw new Error("No checkout URL found in Polar response");
     }
+    logStep("Polar checkout created", { checkoutId: checkout.id, kind });
 
-    return new Response(JSON.stringify({ orderId: orderData.id, approvalUrl, kind }), {
+    return new Response(JSON.stringify({ checkoutId: checkout.id, checkoutUrl: checkout.url, kind }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });

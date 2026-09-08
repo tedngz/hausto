@@ -12,15 +12,6 @@ verify_jwt = true
 [functions.batch-reanalyze-properties]
 verify_jwt = true
 
-[functions.create-paypal-subscription]
-verify_jwt = true
-
-[functions.cancel-paypal-subscription]
-verify_jwt = true
-
-[functions.check-paypal-subscription]
-verify_jwt = true
-
 [functions.deep-vibe-analysis]
 verify_jwt = true
 
@@ -29,9 +20,6 @@ verify_jwt = true
 
 [functions.capture-pass-order]
 verify_jwt = true
-
-[functions.handle-paypal-webhooks]
-verify_jwt = false
 
 [functions.hausto-ai-assist]
 verify_jwt = false
@@ -63,17 +51,8 @@ verify_jwt = false
 [functions.crawl-external-properties]
 verify_jwt = false
 
-[functions.expire-subscriptions]
-verify_jwt = false
-
 [functions.batch-geocode-properties]
 verify_jwt = false
-
-[functions.activate-paypal-subscription]
-verify_jwt = false
-
-[functions.reactivate-paypal-subscription]
-verify_jwt = true
 
 [functions.scheduled-crawl]
 verify_jwt = false
