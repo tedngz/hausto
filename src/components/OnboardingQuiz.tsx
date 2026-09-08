@@ -20,7 +20,7 @@ interface OnboardingQuizProps {
 
 export const OnboardingQuiz = ({ onComplete, onSkip }: OnboardingQuizProps) => {
   // All hooks must be called before any conditional logic or early returns
-  const { canPerformAction, updateUsage, getRemainingActions, subscriptionStatus } = useUsageTracking();
+  const { canPerformAction, updateUsage, getRemainingActions } = useUsageTracking();
   const { user } = useAuth();
   const { savePreferences } = useUserPreferences();
   const [currentStep, setCurrentStep] = useState(0);

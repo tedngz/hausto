@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useSubscription } from '@/hooks/useSubscription';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { usePass } from '@/hooks/usePass';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ interface Props {
 
 export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexName }: Props) {
   const { user } = useAuth();
-  const { subscribed } = useSubscription();
+  const { pass } = usePass();
   const { quota } = useViewingQuota();
   const navigate = useNavigate();
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -134,24 +134,24 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
             <DialogDescription className="text-base">
               Our concierge will reach out within 24 hours with vetted availability at <strong>{complexName}</strong>.
             </DialogDescription>
-            {!subscribed && (
+            {!pass?.active && (
               <div className="rounded-lg border bg-secondary/40 p-4 text-left space-y-2">
                 <p className="text-sm font-medium">Want to see units in person?</p>
                 <p className="text-sm text-muted-foreground">
                   {trialPitch
                     ? "Your first viewing is on us - Hausto books the visit for you."
-                    : "Hausto books the visits for you. Premium includes 3 coordinated viewings a cycle."}
+                    : "Hausto books the visits for you. The Pass includes 3 coordinated viewings."}
                 </p>
                 <Button
                   size="sm"
                   className="w-full"
                   onClick={() => (trialPitch ? navigate('/browse') : setShowUpgrade(true))}
                 >
-                  {trialPitch ? 'Book my free viewing' : 'Go Premium to schedule viewings'}
+                  {trialPitch ? 'Book my free viewing' : 'Get the Pass to schedule viewings'}
                 </Button>
               </div>
             )}
-            <Button variant={subscribed ? 'default' : 'ghost'} onClick={close} className="mt-2">Close</Button>
+            <Button variant={pass?.active ? 'default' : 'ghost'} onClick={close} className="mt-2">Close</Button>
           </div>
         ) : (
           <>

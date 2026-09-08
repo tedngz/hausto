@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useSubscription } from '@/hooks/useSubscription';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { usePass, PASS_DAYS } from '@/hooks/usePass';
 import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
@@ -88,10 +87,9 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
  *   Passes stack across repeat purchases.
  * - Admins: a complimentary pass allowance, 3 bookings per rolling 30 days.
  *   It stays metered because each booking is a real coordinator hour.
- * - Legacy Premium ($10/mo, retired): 3 bookings per subscription cycle, until
- *   the last paid-up cycle lapses.
  * - Legacy viewing packs ($20 for 10, retired): still spendable until they
- *   expire.
+ *   expire. None are live, but the ledger is still read so a stray one would
+ *   be honoured rather than silently swallowed.
  *
  * Credits are only spent once the plan allowance above is exhausted - the same
  * order the DB trigger consumes them in.
@@ -102,29 +100,23 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
  *   charged to the pass that was live when it was made. Clamped to now() when
  *   passes have been extended past one period: cover stacks, the allowance does
  *   not.
- * - Legacy Premium: subscription_end minus one month (the plan billed monthly).
  * - Admin, or no end date to work from: a rolling 30 days.
  */
 export const useViewingQuota = () => {
   const { user } = useAuth();
-  const { subscribed, subscription_tier, subscription_end, loading: subscriptionLoading } = useSubscription();
   const { isAdmin, isLoading: rolesLoading } = useUserRoles();
   const { pass, isLoading: passLoading } = usePass();
   const queryClient = useQueryClient();
 
-  // A bought pass is the case this used to miss: it is neither a legacy
-  // subscription nor an admin seat, so a renter who paid for three viewings was
-  // dropped to the free tier's single trial one.
   const boughtPassExpiry = pass?.active && !pass.isComplimentary && pass.expiresAt
     ? pass.expiresAt
     : null;
-  // An admin's complimentary pass spends on the same windowed allowance a paid
-  // plan does, so it takes the same branch below.
-  const hasPlanAllowance =
-    (subscribed && subscription_tier === 'premium') || isAdmin || !!boughtPassExpiry;
+  // An admin's complimentary pass spends on the same windowed allowance a
+  // bought one does, so it takes the same branch below.
+  const hasPlanAllowance = isAdmin || !!boughtPassExpiry;
 
   const { data: quota, isLoading: quotaLoading } = useQuery<ViewingQuota>({
-    queryKey: ['viewing-quota', user?.id, hasPlanAllowance, subscription_end, boughtPassExpiry],
+    queryKey: ['viewing-quota', user?.id, hasPlanAllowance, boughtPassExpiry],
     queryFn: async () => {
       const now = new Date();
 
@@ -162,11 +154,6 @@ export const useViewingQuota = () => {
             new Date(boughtPassExpiry).getTime() - PASS_DAYS * 24 * 60 * 60 * 1000,
           );
           if (cycleStart > now) cycleStart = now;
-        } else if (subscription_end) {
-          cycleStart = new Date(subscription_end);
-          cycleStart.setMonth(cycleStart.getMonth() - 1);
-          // Guard against stale subscription_end producing a future cycle start.
-          if (cycleStart > now) cycleStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         } else {
           cycleStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         }
@@ -271,11 +258,9 @@ export const useViewingQuota = () => {
         },
       };
     },
-    // Waiting for the tier keeps a premium renter from being read as free tier
-    // (and told their trial is spent) during the subscription check.
-    // Waiting on the pass too: reading a pass holder as free-tier for a moment
+    // Waiting on the pass: reading a pass holder as free-tier for a moment
     // would show them one viewing and the trial gate instead of their three.
-    enabled: !!user?.id && !subscriptionLoading && !rolesLoading && !passLoading,
+    enabled: !!user?.id && !rolesLoading && !passLoading,
   });
 
   const refetchQuota = () =>
@@ -287,7 +272,7 @@ export const useViewingQuota = () => {
 
   return {
     quota,
-    isLoading: quotaLoading || subscriptionLoading || rolesLoading,
+    isLoading: quotaLoading || rolesLoading || passLoading,
     refetchQuota,
   };
 };

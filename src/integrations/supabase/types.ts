@@ -905,7 +905,8 @@ export type Database = {
           expires_at: string
           id: string
           kind: string
-          paypal_order_id: string
+          provider: string
+          provider_order_id: string
           purchased_at: string
           renter_id: string
           viewings_included: number
@@ -916,7 +917,8 @@ export type Database = {
           expires_at: string
           id?: string
           kind: string
-          paypal_order_id: string
+          provider?: string
+          provider_order_id: string
           purchased_at?: string
           renter_id: string
           viewings_included: number
@@ -927,7 +929,8 @@ export type Database = {
           expires_at?: string
           id?: string
           kind?: string
-          paypal_order_id?: string
+          provider?: string
+          provider_order_id?: string
           purchased_at?: string
           renter_id?: string
           viewings_included?: number

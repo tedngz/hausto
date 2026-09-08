@@ -8,23 +8,23 @@ import { CheckCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-// PayPal redirects here after the renter approves a Hausto Pass or a viewing
-// top-up (?token=<orderId>). Which one it was is decided server-side from the
-// captured amount, so this page reports back rather than assuming.
+// Polar redirects here after the renter pays for a Hausto Pass or a viewing
+// top-up (?checkout_id=<id>). Which one it was is decided server-side from the
+// checkout's metadata, so this page reports back rather than assuming.
 const PassSuccess = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { refetchPass } = usePass();
   const { refetchQuota } = useViewingQuota();
-  const [status, setStatus] = useState<'capturing' | 'success' | 'error'>('capturing');
+  const [status, setStatus] = useState<'capturing' | 'success' | 'pending' | 'error'>('capturing');
   const [kind, setKind] = useState<'pass' | 'topup'>('pass');
   const capturedRef = useRef(false);
 
   useEffect(() => {
     const captureOrder = async () => {
-      const orderId = searchParams.get('token');
-      if (!user || !orderId || capturedRef.current) return;
+      const checkoutId = searchParams.get('checkout_id');
+      if (!user || !checkoutId || capturedRef.current) return;
       capturedRef.current = true;
 
       try {
@@ -32,12 +32,20 @@ const PassSuccess = () => {
           headers: {
             Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
           },
-          body: { orderId },
+          body: { checkoutId },
         });
 
         if (error || data?.error) {
           console.error('Capture error:', error || data?.error);
           setStatus('error');
+          return;
+        }
+
+        // Polar has the money but hasn't finished settling the session. Nothing
+        // is lost - reloading calls this again with the same checkout id - so
+        // say so rather than claiming a failure.
+        if (data?.pending) {
+          setStatus('pending');
           return;
         }
 
@@ -83,6 +91,19 @@ const PassSuccess = () => {
             </p>
             <Button onClick={() => navigate('/hub')} size="lg">
               Back to your search
+            </Button>
+          </>
+        )}
+        {status === 'pending' && (
+          <>
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+            <h1 className="text-2xl font-bold mb-2">Your payment is going through</h1>
+            <p className="text-muted-foreground mb-6">
+              We have your payment - it just needs a moment to settle. Refresh this page in a few
+              seconds and your pass will be there.
+            </p>
+            <Button onClick={() => window.location.reload()} size="lg">
+              Refresh
             </Button>
           </>
         )}
