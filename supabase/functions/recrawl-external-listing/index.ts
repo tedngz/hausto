@@ -5,7 +5,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
-import { isVideoOrAnimatedUrl, isMapOrDiagramUrl } from '../_shared/vibe-policy.ts';
+import { isVideoOrAnimatedUrl, isMapOrDiagramUrl, STORE_TARGET } from '../_shared/vibe-policy.ts';
+import { fetchNhatotMedia, type PropertyVideo } from '../_shared/nhatot.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -268,6 +269,14 @@ Deno.serve(async (req) => {
     }
 
     let scrapedImages = extractImages(html, marketplace);
+    let scrapedVideos: PropertyVideo[] = [];
+    // nhatot's gallery is client-rendered, so the fetched HTML holds one
+    // preview image at best. Its public ad API holds the whole gallery.
+    if (marketplace === 'nhatot') {
+      const media = await fetchNhatotMedia(row.source_url);
+      if (media.images.length > 0) scrapedImages = media.images;
+      scrapedVideos = media.videos;
+    }
     // For housingsgn, deterministically keep only THIS listing's gallery images
     // (matched by property code) so we never mix in "Similar Properties" photos.
     if (marketplace === 'housingsgn') {
@@ -284,13 +293,18 @@ Deno.serve(async (req) => {
     let candidateImages: string[] = Array.isArray(extracted.images) && extracted.images.length > 0
       ? extracted.images
       : scrapedImages;
+    // For nhatot the API gallery is the listing's own, in its own order - more
+    // reliable than asking the model to pick image URLs out of page text.
+    if (marketplace === 'nhatot' && scrapedImages.length > 0) {
+      candidateImages = scrapedImages;
+    }
     if (marketplace === 'housingsgn') {
       const matched = filterHousingsgnImages(candidateImages, row.source_url);
       candidateImages = matched.length > 0 ? matched : scrapedImages;
     }
     const finalImages: string[] = candidateImages
       .filter((u: any) => typeof u === 'string' && u.startsWith('http'))
-      .slice(0, 5);
+      .slice(0, STORE_TARGET);
 
     let priceNum = typeof extracted.price === 'number'
       ? extracted.price
@@ -324,6 +338,7 @@ Deno.serve(async (req) => {
       description: extracted.description || undefined,
       amenities: Array.isArray(extracted.amenities) ? extracted.amenities : undefined,
       images: finalImages.length > 0 ? finalImages : undefined,
+      videos: marketplace === 'nhatot' ? scrapedVideos : undefined,
       contact_name: extracted.contactName || undefined,
       contact_phone: extracted.contactPhone || undefined,
       raw_data: newRaw,

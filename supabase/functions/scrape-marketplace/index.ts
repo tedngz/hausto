@@ -8,8 +8,10 @@ import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import {
   interiorMajority, isVideoOrAnimatedUrl, isMapOrDiagramUrl,
   isBatchInventoryListing, isThumbnailUrl, isAnimatedOrVideoBytes,
-  MIN_DISPLAY_IMAGES,
+  MIN_DISPLAY_IMAGES, STORE_TARGET,
 } from '../_shared/vibe-policy.ts';
+import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
+import { fetchNhatotMedia, type PropertyVideo } from '../_shared/nhatot.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -318,7 +320,7 @@ async function screenPropertyImages(
 ): Promise<{ has_interior: boolean; selected: string[]; reason?: string } | null> {
   if (images.length === 0) return { has_interior: false, selected: [], reason: 'no_images' };
 
-  const maxToCheck = Math.min(images.length, 12);
+  const maxToCheck = Math.min(images.length, STORE_TARGET);
   const imageContent: any[] = [];
   const validIndexes: number[] = [];
 
@@ -649,13 +651,6 @@ function extractHousingsgnGalleryImages(html: string, url: string): string[] {
   return imgs;
 }
 
-function detectCity(location: string): string {
-  const lower = location.toLowerCase();
-  if (/(ho chi minh|hcm|saigon|sài gòn|thủ đức|thu duc|quận [0-9]|quan [0-9]|district [0-9]|d[0-9]|bình thạnh|binh thanh|phú nhuận|phu nhuan|tân bình|tan binh|gò vấp|go vap|tân phú|tan phu|bình tân|binh tan|bình chánh|binh chanh|nhà bè|nha be|hóc môn|hoc mon|củ chi|cu chi|cần giờ|can gio)/i.test(lower)) return 'ho_chi_minh';
-  if (/(hà nội|ha noi|hanoi|ba đình|ba dinh|hoàn kiếm|hoan kiem|đống đa|dong da|cầu giấy|cau giay|hai bà trưng|hai ba trung|tây hồ|tay ho|long biên|long bien|thanh xuân|thanh xuan|hoàng mai|hoang mai|bắc từ liêm|nam từ liêm|hà đông|ha dong|gia lâm|gia lam|đông anh|dong anh|sóc sơn|soc son|thanh trì|thanh tri|hoài đức|hoai duc|mê linh|me linh|sơn tây|son tay)/i.test(lower)) return 'hanoi';
-  if (/(đà nẵng|da nang|hải châu|hai chau|thanh khê|thanh khe|sơn trà|son tra|ngũ hành sơn|ngu hanh son|liên chiểu|lien chieu|cẩm lệ|cam le|hòa vang|hoa vang)/i.test(lower)) return 'da_nang';
-  return 'other';
-}
 
 async function savePropertiesToDB(
   properties: ExternalProperty[],
@@ -674,6 +669,19 @@ async function savePropertiesToDB(
       if (/(mua-ban|nha-dat-ban|can-ban|ban-can-ho|ban-chung-cu|ban-nha|ban-dat|for-sale|\/ban-)/i.test(urlForCheck)) {
         filtered++;
         console.log(`[directSave] Filtered sale URL: ${urlForCheck.substring(0, 80)}`);
+        continue;
+      }
+
+      // Coverage scope. Hausto serves HCMC, Hanoi and Da Nang; a district
+      // query on a marketplace still returns neighbouring provinces, and the
+      // cross-city filter upstream only rejects a listing whose city it can
+      // name. Checking here catches every path into the table - raw mode,
+      // re-crawls and the fallback search-page extraction included - which is
+      // how Nha Trang, Binh Duong and Hai Phong listings got in.
+      if (isOutOfScopeLocation(property.location, property.sourceUrl)) {
+        filtered++;
+        console.log(`[directSave] Filtered out-of-scope location: ${String(property.location).substring(0, 70)}`);
+        await logCrawlerRejection(supabase, property.sourceUrl || '', marketplace, 'out_of_scope_location', property.images || []);
         continue;
       }
 
@@ -772,6 +780,7 @@ async function savePropertiesToDB(
         highlights: property.highlights || [],
         amenities: property.amenities || [],
         images: (property.images || []).map(toFullSizeImageUrl).filter(isValidPropertyImageUrl),
+        videos: property.videos || [],
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
         vibe: property.vibe || null,
@@ -796,13 +805,19 @@ async function savePropertiesToDB(
         // one photo (and three with none at all) ended up on browse.
         delete updateData.is_active;
 
+        // A re-scrape that found no video means this pass did not look for one
+        // (the search-page fallback never does), not that the listing lost it.
+        if (!Array.isArray(updateData.videos) || updateData.videos.length === 0) {
+          delete updateData.videos;
+        }
+
         // The stored gallery is mirrored and curated; a re-scrape that finds
         // fewer images means the extraction went worse, not that the listing
         // lost photos. Only replace it when the stored one is below the floor
         // and the fresh scrape genuinely does better - and then send it back
         // through the queue so the new images get mirrored and analysed.
         const existingImages: string[] = Array.isArray((existing as any).images) ? (existing as any).images : [];
-        const freshImages = propertyData.images.slice(0, 8);
+        const freshImages = propertyData.images.slice(0, STORE_TARGET);
         if (existingImages.length >= MIN_DISPLAY_IMAGES || freshImages.length <= existingImages.length) {
           delete updateData.images;
         } else {
@@ -831,9 +846,9 @@ async function savePropertiesToDB(
           u.includes('batdongsan.com.vn') ? normalizeBatdongsanImageUrl(u) : u);
 
         if (rawMode) {
-          // Raw mode: skip OpenAI vision interior gate. Keep a wide candidate pool
-          // (up to 12); the vibe queue dimension-filters and curates 5-8 for display.
-          finalImages = validImages.slice(0, 12);
+          // Raw mode: skip OpenAI vision interior gate. Keep the whole candidate
+          // pool; the vibe queue dimension-filters and curates the display set.
+          finalImages = validImages.slice(0, STORE_TARGET);
           if (finalImages.length === 0) {
             filtered++;
             await logCrawlerRejection(supabase, normalizedUrl, marketplace, 'raw_no_images', validImages);
@@ -949,6 +964,7 @@ interface ExternalProperty {
   size: string;
   rooms: string;
   images: string[];
+  videos?: PropertyVideo[];
   description: string;
   highlights: string[];
   amenities: string[];
@@ -1503,11 +1519,13 @@ function htmlToBasicMarkdown(html: string): string {
 async function scrapeDetailPage(url: string, marketplace: string): Promise<{
   markdown: string;
   images: string[];
+  videos: PropertyVideo[];
   links: string[];
 } | null> {
   try {
     let html = '';
     let images: string[] = [];
+    let videos: PropertyVideo[] = [];
     let links: string[] = [];
     let markdown = '';
     
@@ -1527,6 +1545,11 @@ async function scrapeDetailPage(url: string, marketplace: string): Promise<{
       images = extractBatdongsanGalleryImages(html);
     } else if (marketplace === 'housingsgn') {
       images = extractHousingsgnGalleryImages(html, url);
+    } else if (marketplace === 'nhatot') {
+      // The rendered page holds one preview image; the ad API holds the gallery.
+      const media = await fetchNhatotMedia(url);
+      images = media.images.filter(isValidPropertyImageUrl);
+      videos = media.videos;
     }
 
     // Fallback to generic extraction
@@ -1536,7 +1559,7 @@ async function scrapeDetailPage(url: string, marketplace: string): Promise<{
     
     if (!markdown || markdown.length < 100) return null;
     
-    return { markdown, images, links };
+    return { markdown, images, videos, links };
   } catch (e) {
     console.error(`[Phase 2] Error scraping ${url}:`, e);
     return null;
@@ -1851,7 +1874,7 @@ function buildRawProperty(
 
   // Filter images by URL only (no AI gate)
   let images = detailImages.map(toFullSizeImageUrl).filter(isValidPropertyImageUrl);
-  images = [...new Set(images)].slice(0, 10);
+  images = [...new Set(images)].slice(0, STORE_TARGET);
 
   return {
     id: `external-${marketplace}-raw-${Date.now()}-${index}`,
@@ -2138,7 +2161,7 @@ Deno.serve(async (req) => {
           
           if (rawMode) {
             console.log(`[Phase 3-RAW] Building raw record for detail page ${globalIdx + 1}: ${detail.markdown.length} chars, ${detail.images.length} images`);
-            return buildRawProperty(
+            const rawProp = buildRawProperty(
               detail.markdown,
               detail.images,
               listing.url,
@@ -2148,17 +2171,21 @@ Deno.serve(async (req) => {
               listing.title,
               listing.price,
             );
+            if (rawProp) rawProp.videos = detail.videos;
+            return rawProp;
           }
 
           console.log(`[Phase 3] Extracting property data from detail page ${globalIdx + 1}: ${detail.markdown.length} chars, ${detail.images.length} images`);
 
-          return extractPropertyFromDetailPage(
+          const prop = await extractPropertyFromDetailPage(
             detail.markdown,
             detail.images,
             listing.url,
             marketplace,
             globalIdx
           );
+          if (prop) prop.videos = detail.videos;
+          return prop;
         });
         
         const batchResults = await Promise.all(batchPromises);
@@ -2173,19 +2200,22 @@ Deno.serve(async (req) => {
 
       // ── Cross-city filtering: reject listings from wrong city ──
       const targetCity = detectCity(crawlLocation || location || query);
-      if (targetCity !== 'other') {
-        for (const prop of rawProperties) {
-          const propCity = detectCity(prop.location);
-          if (propCity !== 'other' && propCity !== targetCity) {
-            console.log(`[Cross-city] Rejected "${prop.title?.substring(0, 40)}" (${propCity}) - target: ${targetCity}`);
-          } else {
-            properties.push(prop);
-          }
+      for (const prop of rawProperties) {
+        const propCity = detectCity(prop.location);
+        // A listing we cannot place is kept - district-only addresses like
+        // "Phuong 6" are common and harmless. One that names a province we do
+        // not cover is not a near miss, it is a different market.
+        if (isOutOfScopeLocation(prop.location, prop.sourceUrl)) {
+          console.log(`[Cross-city] Rejected "${prop.title?.substring(0, 40)}" - out of coverage: ${String(prop.location).substring(0, 60)}`);
+          continue;
         }
-        console.log(`[Cross-city] Kept ${properties.length}/${rawProperties.length} properties matching target city ${targetCity}`);
-      } else {
-        properties = rawProperties;
+        if (targetCity !== 'other' && propCity !== 'other' && propCity !== targetCity) {
+          console.log(`[Cross-city] Rejected "${prop.title?.substring(0, 40)}" (${propCity}) - target: ${targetCity}`);
+          continue;
+        }
+        properties.push(prop);
       }
+      console.log(`[Cross-city] Kept ${properties.length}/${rawProperties.length} properties (target city ${targetCity})`);
 
       console.log(`[Phase 3] Successfully extracted ${properties.length} properties from detail pages`);
     }

@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import { isVideoOrAnimatedUrl, isMapOrDiagramUrl, isThumbnailUrl } from '../_shared/vibe-policy.ts';
+import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -123,20 +124,6 @@ function normalizeSourceUrl(url: string): string {
   }
 }
 
-// Detect city from location string
-function detectCity(location: string): string {
-  const lower = location.toLowerCase();
-  if (/(ho chi minh|hcm|saigon|sài gòn|quan [0-9]|district [0-9]|d[0-9]|binh thanh|phu nhuan|tan binh|go vap|thu duc)/i.test(lower)) {
-    return 'ho_chi_minh';
-  }
-  if (/(ha noi|hanoi|hà nội|ba dinh|hoan kiem|dong da|cau giay|hai ba trung)/i.test(lower)) {
-    return 'hanoi';
-  }
-  if (/(da nang|đà nẵng)/i.test(lower)) {
-    return 'da_nang';
-  }
-  return 'other';
-}
 
 // Inline geocoding for crawled properties using Nominatim
 async function geocodeLocation(location: string): Promise<{ lat: number; lon: number } | null> {
@@ -584,6 +571,13 @@ Deno.serve(async (req) => {
           if (storeInDatabase) {
             for (const property of filteredProperties) {
               try {
+                // Coverage scope: HCMC, Hanoi and Da Nang. A district query
+                // still returns neighbouring provinces, and this path writes
+                // rows directly rather than through scrape-marketplace's save.
+                if (isOutOfScopeLocation(property.location, property.sourceUrl)) {
+                  console.log(`[crawl-external-properties] Skipping out-of-scope listing: ${String(property.location).substring(0, 70)}`);
+                  continue;
+                }
                 const locationNormalized = normalizeLocation(property.location || location);
                 const detectedCity = detectCity(property.location || location);
                 const rawSourceUrl = property.sourceUrl || `https://${marketplace}.com.vn`;
