@@ -51,7 +51,6 @@ export const RealtorDashboard = ({
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewCrawledApartment, setPreviewCrawledApartment] = useState<Apartment | null>(null);
   const [showRawHarvested, setShowRawHarvested] = useState(false);
-  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<PropertyMatch | null>(null);
@@ -257,10 +256,6 @@ export const RealtorDashboard = ({
   const handleViewProfile = (match: PropertyMatch) => {
     setSelectedMatch(match);
     setIsProfileModalOpen(true);
-  };
-  const handleChat = (match: PropertyMatch) => {
-    setSelectedMatch(match);
-    setIsChatModalOpen(true);
   };
   const handleToggleActive = (property: Property) => {
     toggleProperty({
