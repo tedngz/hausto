@@ -90,30 +90,6 @@ export type Database = {
           },
         ]
       }
-      anonymous_chat_attempts: {
-        Row: {
-          attempt_count: number
-          created_at: string
-          id: string
-          ip_address: unknown
-          last_attempt_at: string
-        }
-        Insert: {
-          attempt_count?: number
-          created_at?: string
-          id?: string
-          ip_address: unknown
-          last_attempt_at?: string
-        }
-        Update: {
-          attempt_count?: number
-          created_at?: string
-          id?: string
-          ip_address?: unknown
-          last_attempt_at?: string
-        }
-        Relationships: []
-      }
       chat_conversations: {
         Row: {
           created_at: string
@@ -531,27 +507,6 @@ export type Database = {
         }
         Relationships: []
       }
-      declined_properties: {
-        Row: {
-          created_at: string
-          id: string
-          property_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          property_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          property_id?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       external_properties: {
         Row: {
           amenities: string[] | null
@@ -938,68 +893,6 @@ export type Database = {
         }
         Relationships: []
       }
-      post_likes: {
-        Row: {
-          created_at: string
-          id: string
-          post_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          post_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          post_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "post_likes_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      posts: {
-        Row: {
-          comments_count: number | null
-          content: string
-          created_at: string
-          id: string
-          images: string[] | null
-          likes_count: number | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          comments_count?: number | null
-          content: string
-          created_at?: string
-          id?: string
-          images?: string[] | null
-          likes_count?: number | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          comments_count?: number | null
-          content?: string
-          created_at?: string
-          id?: string
-          images?: string[] | null
-          likes_count?: number | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           allow_contact_sharing: boolean | null
@@ -1144,48 +1037,6 @@ export type Database = {
         }
         Relationships: []
       }
-      property_translations: {
-        Row: {
-          created_at: string
-          description_translated: string | null
-          highlights_translated: string[] | null
-          id: string
-          location_translated: string | null
-          property_id: string
-          property_type: string
-          target_language: string
-          title_translated: string | null
-          updated_at: string
-          vibe_translated: string | null
-        }
-        Insert: {
-          created_at?: string
-          description_translated?: string | null
-          highlights_translated?: string[] | null
-          id?: string
-          location_translated?: string | null
-          property_id: string
-          property_type?: string
-          target_language?: string
-          title_translated?: string | null
-          updated_at?: string
-          vibe_translated?: string | null
-        }
-        Update: {
-          created_at?: string
-          description_translated?: string | null
-          highlights_translated?: string[] | null
-          id?: string
-          location_translated?: string | null
-          property_id?: string
-          property_type?: string
-          target_language?: string
-          title_translated?: string | null
-          updated_at?: string
-          vibe_translated?: string | null
-        }
-        Relationships: []
-      }
       realtor_applications: {
         Row: {
           admin_notes: string | null
@@ -1288,54 +1139,6 @@ export type Database = {
           table_name?: string
           user_agent?: string | null
           user_id?: string | null
-        }
-        Relationships: []
-      }
-      support_conversations: {
-        Row: {
-          created_at: string
-          id: string
-          title: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          title: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          title?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      support_messages: {
-        Row: {
-          content: string
-          conversation_id: string
-          created_at: string
-          id: string
-          role: string
-        }
-        Insert: {
-          content: string
-          conversation_id: string
-          created_at?: string
-          id?: string
-          role: string
-        }
-        Update: {
-          content?: string
-          conversation_id?: string
-          created_at?: string
-          id?: string
-          role?: string
         }
         Relationships: []
       }
@@ -1537,14 +1340,6 @@ export type Database = {
           prompt_tokens: number
         }[]
       }
-      get_post_authors_profiles: {
-        Args: { user_ids: string[] }
-        Returns: {
-          id: string
-          name: string
-        }[]
-      }
-      get_post_like_count: { Args: { post_uuid: string }; Returns: number }
       get_profiles_for_admin: {
         Args: { _user_ids: string[] }
         Returns: {
@@ -1662,7 +1457,6 @@ export type Database = {
           id: string
         }[]
       }
-      user_liked_post: { Args: { post_uuid: string }; Returns: boolean }
       validate_email: { Args: { email_input: string }; Returns: boolean }
       validate_phone: { Args: { phone_input: string }; Returns: boolean }
       verify_cron_secret: { Args: { _token: string }; Returns: boolean }
