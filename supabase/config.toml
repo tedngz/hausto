@@ -21,6 +21,10 @@ verify_jwt = true
 [functions.capture-pass-order]
 verify_jwt = true
 
+[functions.handle-polar-webhooks]
+# Polar signs with its own webhook secret; it cannot present a Supabase JWT.
+verify_jwt = false
+
 [functions.hausto-ai-assist]
 verify_jwt = false
 
