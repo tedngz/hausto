@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRoles } from '@/hooks/useUserRoles';
-import { usePass, PASS_DAYS } from '@/hooks/usePass';
+import { usePass } from '@/hooks/usePass';
 import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
 import { toast } from 'sonner';
 
@@ -94,13 +94,17 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
  * Credits are only spent once the plan allowance above is exhausted - the same
  * order the DB trigger consumes them in.
  *
- * Cycle windows, mirroring base_viewing_allowance_remaining in SQL - the client
+ * Each entitlement is counted once, and only once, which is the rule this got
+ * wrong: a bought pass draws purely on the passes ledger, never on a windowed
+ * allowance as well. Granting both handed out six coordinations for a
+ * three-viewing product, because the two are independent mechanisms that each
+ * believed they owned the same three.
+ *
+ * The windowed allowance therefore survives only where there is no ledger row
+ * to spend from, mirroring base_viewing_allowance_remaining in SQL - the client
  * must not promise a booking the INSERT policy would refuse:
- * - Bought pass: its own period, expires_at minus PASS_DAYS, so a booking is
- *   charged to the pass that was live when it was made. Clamped to now() when
- *   passes have been extended past one period: cover stacks, the allowance does
- *   not.
- * - Admin, or no end date to work from: a rolling 30 days.
+ * - Complimentary (admin) cover: a rolling 30 days. It writes no passes row.
+ * - Free tier: the one-off trial, tracked in viewing_trials.
  */
 export const useViewingQuota = () => {
   const { user } = useAuth();
@@ -111,9 +115,13 @@ export const useViewingQuota = () => {
   const boughtPassExpiry = pass?.active && !pass.isComplimentary && pass.expiresAt
     ? pass.expiresAt
     : null;
-  // An admin's complimentary pass spends on the same windowed allowance a
-  // bought one does, so it takes the same branch below.
-  const hasPlanAllowance = isAdmin || !!boughtPassExpiry;
+  // Complimentary cover is the only thing that still draws on a windowed
+  // allowance: it writes no passes row, so there is no ledger to spend from.
+  // A bought pass carries its viewings in that ledger instead, and counting a
+  // window for it too was handing out - and the DB was allowing - double.
+  const hasComplimentaryAllowance = isAdmin;
+  // Still "on a paid footing" for the trial copy below, whichever route.
+  const hasPlanAllowance = hasComplimentaryAllowance || !!boughtPassExpiry;
 
   const { data: quota, isLoading: quotaLoading } = useQuery<ViewingQuota>({
     queryKey: ['viewing-quota', user?.id, hasPlanAllowance, boughtPassExpiry],
@@ -144,20 +152,15 @@ export const useViewingQuota = () => {
       let matchCount = MATCHES_FOR_TRIAL;
       let trialSpent = false;
 
-      if (hasPlanAllowance) {
+      if (hasComplimentaryAllowance) {
         baseIncluded = INCLUDED_VIEWINGS_PER_CYCLE;
-        let cycleStart: Date;
-        if (boughtPassExpiry) {
-          // The pass's own period. Clamped to now() so an extended pass does
-          // not reach back and count bookings from before its current cycle.
-          cycleStart = new Date(
-            new Date(boughtPassExpiry).getTime() - PASS_DAYS * 24 * 60 * 60 * 1000,
-          );
-          if (cycleStart > now) cycleStart = now;
-        } else {
-          cycleStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        }
-        baseUsed = await countSince(cycleStart);
+        baseUsed = await countSince(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+      } else if (boughtPassExpiry) {
+        // Nothing here: every viewing the pass bought is a row in the passes
+        // ledger, folded in with the packs below. Mirrors the SQL, which
+        // returns 0 from base_viewing_allowance_remaining for the same reason.
+        baseIncluded = 0;
+        baseUsed = 0;
       } else {
         // The trial is tracked in its own ledger instead: cancelling or deleting
         // a request must not hand out a second free coordination.
