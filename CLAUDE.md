@@ -46,6 +46,28 @@ echo "SELECT pg_get_functiondef(p.oid) FROM pg_proc p
       WHERE n.nspname='public' AND p.proname='<name>';" | bash scripts/supabase-sql.sh
 ```
 
+**`DROP FUNCTION IF EXISTS` matches on the argument list, not the name.** Naming
+a function with empty parens when it takes arguments drops nothing, succeeds,
+and reports success - so the drop looks done and the function is still there:
+
+```sql
+DROP FUNCTION IF EXISTS public.get_post_authors_profiles();            -- no-op
+DROP FUNCTION IF EXISTS public.get_post_authors_profiles(uuid[]);      -- drops it
+```
+
+Get the signatures first, and check afterwards that they are gone. Overloads
+mean one name can need several drops:
+
+```sh
+echo "SELECT p.proname, pg_get_function_identity_arguments(p.oid)
+      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname ILIKE '%<name>%';" | bash scripts/supabase-sql.sh
+```
+
+More generally: `scripts/supabase-sql.sh` returns `[]` for any statement with no
+result set, so `[]` means "nothing to report", never "it worked". Confirm
+destructive SQL by re-reading the catalog rather than by its exit code.
+
 ## Edge functions: deployed by CI, never by hand
 
 `.github/workflows/deploy-functions.yml` deploys on merge to `main` when
@@ -119,6 +141,32 @@ fetch(u,{headers:{Authorization:'Bearer '+process.env.TOKEN}}).then(r=>r.json())
 ```
 
 The access token is at `~/.supabase/access-token`, not under `$APPDATA`.
+
+## Stacked pull requests
+
+A PR whose base is another PR's branch is **closed automatically when that base
+branch is deleted** - and `gh pr merge --delete-branch` deletes it. The stacked
+PR does not retarget itself; it closes, and a closed PR cannot have its base
+changed, so it cannot simply be reopened onto `main`.
+
+Merging the bottom of a stack, in order:
+
+```sh
+gh pr edit <top> --base main      # retarget FIRST, while the base still exists
+gh pr merge <bottom> --squash --delete-branch
+```
+
+If it has already happened, nothing is lost - the branch and its commits
+survive. Replay just the commits that were not in the merge, then open a fresh
+PR:
+
+```sh
+git rebase --onto origin/main <sha of the merged tip> <your branch>
+```
+
+Avoiding the stack is usually easier: unrelated work belongs on its own branch
+cut from `main`. Stacking is worth it only when the second change genuinely does
+not compile or apply without the first.
 
 ## Payments
 
