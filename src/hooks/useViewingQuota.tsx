@@ -11,8 +11,6 @@ export const INCLUDED_VIEWINGS_PER_CYCLE = 3;
 export const FREE_TRIAL_VIEWINGS = 1;
 /** Matched listings needed before the free trial viewing unlocks. */
 export const MATCHES_FOR_TRIAL = 3;
-/** One $20 viewing pack: bought outright, stacks, and lapses after 30 days. */
-export const VIEWINGS_PER_PACK = 10;
 
 export interface ViewingQuota {
   /** Everything the account has to spend: plan allowance plus every pack bought. */
@@ -87,9 +85,9 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
  *   Passes stack across repeat purchases.
  * - Admins: a complimentary pass allowance, 3 bookings per rolling 30 days.
  *   It stays metered because each booking is a real coordinator hour.
- * - Legacy viewing packs ($20 for 10, retired): still spendable until they
- *   expire. None are live, but the ledger is still read so a stray one would
- *   be honoured rather than silently swallowed.
+ *
+ * The retired $20/10-viewing pack is gone entirely - viewing_addons was empty
+ * and has been dropped, so passes is the only credit ledger left.
  *
  * Credits are only spent once the plan allowance above is exhausted - the same
  * order the DB trigger consumes them in.
@@ -193,17 +191,8 @@ export const useViewingQuota = () => {
         baseUsed = trialSpent || !unlocked ? 1 : 0;
       }
 
-      // Only live packs count: a lapsed one's unspent credits are gone, so
+      // Only live rows count: a lapsed pass's unspent credits are gone, so
       // showing them would promise bookings the DB would refuse.
-      const { data: packs } = await supabase
-        .from('viewing_addons')
-        .select('credits, credits_used, expires_at')
-        .eq('renter_id', user!.id)
-        .gt('expires_at', now.toISOString())
-        .order('expires_at', { ascending: true });
-
-      // Pass and top-up credits live in their own ledger but spend the same
-      // way, so they're folded in alongside the legacy packs.
       const { data: passRows } = await supabase
         .from('passes')
         .select('viewings_included, viewings_used, expires_at')
@@ -212,11 +201,6 @@ export const useViewingQuota = () => {
         .order('expires_at', { ascending: true });
 
       const livePacks = [
-        ...(packs ?? []).map((p) => ({
-          credits: p.credits,
-          credits_used: p.credits_used,
-          expires_at: p.expires_at,
-        })),
         ...(passRows ?? []).map((p) => ({
           credits: p.viewings_included,
           credits_used: p.viewings_used,
