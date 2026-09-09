@@ -3543,18 +3543,21 @@ Maximum ${maxResults} properties in results.`;
 
     try {
       if (user && subjectProperties.length > 0) {
-        const { data: sub } = await supabase
-          .from('subscribers')
-          .select('subscribed, subscription_tier')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        const isPremium = !!sub?.subscribed && sub.subscription_tier === 'premium';
+        // Cover is a live Hausto Pass, or the complimentary one an admin holds -
+        // not the retired $10/mo plan. This read was still asking `subscribers`
+        // for a premium tier nobody can hold any more, so every Pass holder was
+        // capped at the free allowance: paying for unlimited and getting three.
+        const [{ data: boughtPass }, { data: complimentary }] = await Promise.all([
+          supabase.rpc('has_active_pass', { _user_id: user.id }),
+          supabase.rpc('has_complimentary_pass', { _user_id: user.id }),
+        ]);
+        const hasPass = boughtPass === true || complimentary === true;
         const today = new Date().toISOString().split('T')[0];
         const revealsKey = `usage:${user.id}:${today}:contact-reveals`;
         const unlocked = new Set<string>();
-        contactsRemaining = isPremium ? null : FREE_DAILY_CONTACT_REVEALS;
+        contactsRemaining = hasPass ? null : FREE_DAILY_CONTACT_REVEALS;
 
-        if (!isPremium) {
+        if (!hasPass) {
           try {
             contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
           } catch (e) {
@@ -3568,7 +3571,7 @@ Maximum ${maxResults} properties in results.`;
         // then the only route to the owner - still has to pay.
         const spendReveal = async (propertyId: string): Promise<boolean> => {
           if (unlocked.has(propertyId)) return true;
-          if (isPremium) { unlocked.add(propertyId); return true; }
+          if (hasPass) { unlocked.add(propertyId); return true; }
           try {
             if ((await redis.sismember(revealsKey, propertyId)) === 1) {
               unlocked.add(propertyId);

@@ -1291,42 +1291,6 @@ export type Database = {
         }
         Relationships: []
       }
-      subscribers: {
-        Row: {
-          created_at: string
-          email: string
-          id: string
-          paypal_subscription_id: string | null
-          subscribed: boolean
-          subscription_end: string | null
-          subscription_tier: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          email: string
-          id?: string
-          paypal_subscription_id?: string | null
-          subscribed?: boolean
-          subscription_end?: string | null
-          subscription_tier?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          email?: string
-          id?: string
-          paypal_subscription_id?: string | null
-          subscribed?: boolean
-          subscription_end?: string | null
-          subscription_tier?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       support_conversations: {
         Row: {
           created_at: string
@@ -1474,42 +1438,6 @@ export type Database = {
           property_id?: string
           status?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      viewing_addons: {
-        Row: {
-          amount_usd: number
-          created_at: string
-          credits: number
-          credits_used: number
-          expires_at: string | null
-          id: string
-          paypal_order_id: string
-          renter_id: string
-          starts_at: string
-        }
-        Insert: {
-          amount_usd?: number
-          created_at?: string
-          credits?: number
-          credits_used?: number
-          expires_at?: string | null
-          id?: string
-          paypal_order_id: string
-          renter_id: string
-          starts_at?: string
-        }
-        Update: {
-          amount_usd?: number
-          created_at?: string
-          credits?: number
-          credits_used?: number
-          expires_at?: string | null
-          id?: string
-          paypal_order_id?: string
-          renter_id?: string
-          starts_at?: string
         }
         Relationships: []
       }
