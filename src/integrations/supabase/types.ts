@@ -1296,7 +1296,8 @@ export type Database = {
           created_at: string
           email: string
           id: string
-          paypal_subscription_id: string | null
+          provider: string | null
+          provider_subscription_id: string | null
           subscribed: boolean
           subscription_end: string | null
           subscription_tier: string
@@ -1307,7 +1308,8 @@ export type Database = {
           created_at?: string
           email: string
           id?: string
-          paypal_subscription_id?: string | null
+          provider?: string | null
+          provider_subscription_id?: string | null
           subscribed?: boolean
           subscription_end?: string | null
           subscription_tier?: string
@@ -1318,7 +1320,8 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
-          paypal_subscription_id?: string | null
+          provider?: string | null
+          provider_subscription_id?: string | null
           subscribed?: boolean
           subscription_end?: string | null
           subscription_tier?: string
@@ -1485,7 +1488,8 @@ export type Database = {
           credits_used: number
           expires_at: string | null
           id: string
-          paypal_order_id: string
+          provider: string
+          provider_order_id: string
           renter_id: string
           starts_at: string
         }
@@ -1496,7 +1500,8 @@ export type Database = {
           credits_used?: number
           expires_at?: string | null
           id?: string
-          paypal_order_id: string
+          provider?: string | null
+          provider_order_id: string
           renter_id: string
           starts_at?: string
         }
@@ -1507,7 +1512,8 @@ export type Database = {
           credits_used?: number
           expires_at?: string | null
           id?: string
-          paypal_order_id?: string
+          provider?: string | null
+          provider_order_id?: string
           renter_id?: string
           starts_at?: string
         }
