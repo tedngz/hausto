@@ -29,19 +29,6 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/**
- * Polar signs webhooks to the Standard Webhooks spec: HMAC-SHA256 over
- * "<id>.<timestamp>.<body>", the result base64-encoded, listed in
- * webhook-signature as one or more "v1,<sig>" entries.
- *
- * The key depends on when the secret was minted, and Polar changed this on
- * 8 September 2026. Newer secrets are base64 and are decoded to key bytes the
- * way the spec says; older "Polar HMAC" ones are used as their own raw UTF-8
- * bytes - which is what polar-js does when it base64-encodes the secret before
- * handing it to the standardwebhooks library. Both derivations are tried
- * because either is legitimate depending on the secret's age, and an attacker
- * who knows neither secret cannot forge either MAC.
- */
 async function hmacBase64(keyBytes: Uint8Array, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -54,35 +41,86 @@ async function hmacBase64(keyBytes: Uint8Array, message: string): Promise<string
   return btoa(String.fromCharCode(...new Uint8Array(mac)));
 }
 
-async function signatureValid(req: Request, raw: string): Promise<boolean> {
+/** base64, accepting the URL-safe alphabet and missing padding. atob takes neither. */
+function decodeBase64(value: string): Uint8Array | null {
+  const normalised = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalised + "=".repeat((4 - (normalised.length % 4)) % 4);
+  try {
+    return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Polar signs webhooks to the Standard Webhooks spec: HMAC-SHA256 over
+ * "<id>.<timestamp>.<body>", base64-encoded, listed in webhook-signature as one
+ * or more "v1,<sig>" entries.
+ *
+ * How the key is derived from the secret is the part that varies, so every
+ * plausible derivation is tried rather than assuming one:
+ *
+ *  - Standard Webhooks (Polar's format since 8 September 2026): the secret is
+ *    base64 and decodes to the key. It may carry a whsec_ prefix, and may use
+ *    the URL-safe alphabet, which atob rejects outright.
+ *  - Legacy "Polar HMAC": the secret's own UTF-8 bytes are the key - what
+ *    polar-js produces when it base64-encodes the secret before handing it to
+ *    the standardwebhooks library.
+ *
+ * Trying all of them costs four HMACs and cannot weaken anything: an attacker
+ * who does not hold the secret can forge none of them. Getting it wrong the
+ * other way silently drops paid orders, which is the expensive direction.
+ */
+async function verifySignature(
+  req: Request,
+  raw: string,
+): Promise<{ ok: boolean; why?: string; via?: string }> {
   const id = req.headers.get("webhook-id");
   const timestamp = req.headers.get("webhook-timestamp");
   const signatures = req.headers.get("webhook-signature");
-  if (!POLAR_WEBHOOK_SECRET || !id || !timestamp || !signatures) return false;
+  if (!id || !timestamp || !signatures) {
+    return { ok: false, why: `missing headers (id=${!!id} ts=${!!timestamp} sig=${!!signatures})` };
+  }
 
-  // Reject replays of an old delivery; five minutes is the spec's tolerance.
-  const skew = Math.abs(Date.now() / 1000 - Number(timestamp));
-  if (!Number.isFinite(skew) || skew > 300) return false;
+  // Reject replays; five minutes is the spec's tolerance. The spec says seconds,
+  // but a millisecond timestamp would read as wildly out of tolerance and drop
+  // every delivery, so both are accepted and measured on their own scale.
+  const ts = Number(timestamp);
+  const nowSec = Date.now() / 1000;
+  const skew = Number.isFinite(ts)
+    ? Math.min(Math.abs(nowSec - ts), Math.abs(nowSec - ts / 1000))
+    : NaN;
+  if (!Number.isFinite(skew) || skew > 300) {
+    return { ok: false, why: `timestamp out of tolerance (skew=${Math.round(skew)}s)` };
+  }
+
+  const secret = (POLAR_WEBHOOK_SECRET ?? "").trim();
+  const bare = secret.replace(/^(whsec_|polar_whsec_)/, "");
+
+  const encoder = new TextEncoder();
+  const candidates: Array<[string, Uint8Array | null]> = [
+    ["base64(bare)", decodeBase64(bare)],
+    ["base64(whole)", decodeBase64(secret)],
+    ["utf8(whole)", encoder.encode(secret)],
+    ["utf8(bare)", encoder.encode(bare)],
+  ];
 
   const signed = `${id}.${timestamp}.${raw}`;
-  const bare = POLAR_WEBHOOK_SECRET.replace(/^whsec_/, "");
-
-  const candidates: Uint8Array[] = [];
-  // Standard Webhooks: the secret is base64, decoded to the key.
-  try {
-    candidates.push(Uint8Array.from(atob(bare), (c) => c.charCodeAt(0)));
-  } catch {
-    // Not valid base64 - it can only be a legacy secret.
-  }
-  // Legacy Polar HMAC: the secret's own bytes are the key.
-  candidates.push(new TextEncoder().encode(POLAR_WEBHOOK_SECRET));
-
   const offered = signatures.split(" ").map((entry) => entry.split(",")[1]).filter(Boolean);
-  for (const keyBytes of candidates) {
+
+  for (const [label, keyBytes] of candidates) {
+    if (!keyBytes || keyBytes.length === 0) continue;
     const expected = await hmacBase64(keyBytes, signed);
-    if (offered.some((sig) => safeEqual(sig, expected))) return true;
+    if (offered.some((sig) => safeEqual(sig, expected))) return { ok: true, via: label };
   }
-  return false;
+
+  // Nothing about the secret itself is logged - only the shape of what arrived,
+  // which is what tells a misconfigured secret apart from a real forgery.
+  return {
+    ok: false,
+    why: `no derivation matched (offered=${offered.length}, secretLen=${secret.length}, ` +
+      `prefixed=${secret !== bare}, trimmed=${secret !== (POLAR_WEBHOOK_SECRET ?? "")})`,
+  };
 }
 
 serve(async (req) => {
@@ -101,10 +139,12 @@ serve(async (req) => {
     return new Response("Webhook secret not configured", { status: 500 });
   }
 
-  if (!(await signatureValid(req, raw))) {
-    logStep("Rejected: bad signature");
+  const verified = await verifySignature(req, raw);
+  if (!verified.ok) {
+    logStep("Rejected: bad signature", { why: verified.why });
     return new Response("Invalid signature", { status: 401 });
   }
+  logStep("Signature verified", { via: verified.via });
 
   let event: { type?: string; data?: Record<string, unknown> };
   try {
