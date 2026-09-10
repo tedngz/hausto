@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { fetchNhatotAd, buildNhatotListing } from '../_shared/nhatot.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,7 @@ const RECENT_LISTING_DAYS = 42;      // the 6-week lease window = high churn ris
 const RECENT_REVERIFY_DAYS = 2;      // inside the lease window: check every 2 days
 const OLD_REVERIFY_DAYS = 5;         // past the window: every 5 days
 const SUSPECT_REVERIFY_HOURS = 6;    // already failed once: confirm or clear it fast
+const RESURRECTION_BATCH = 20;       // dead nhatot rows re-probed per run - see resurrectNhatotAds
 const MAX_UNVERIFIED_AGE_DAYS = 45;  // unconfirmed past the lease window + grace: archive
 
 type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string };
@@ -206,6 +208,66 @@ async function verifyViaChototApi(url: string): Promise<DeadResult> {
   }
 }
 
+// Deactivation used to be a one-way door. Everything here selects on
+// is_active = true, so once a listing was marked dead nothing looked at it
+// again - and chotot ads do not stay dead. They expire, the seller bumps or
+// reposts, and the SAME list id serves a live ad again. Probing 56 dead ids
+// found 11% live, several reposted within hours of being written off.
+//
+// So the cheapest supply in the index is the part already written off: one
+// gateway call per row, no crawling and no HTML. Rows come back newest-dead
+// first, because a listing that died yesterday is far likelier to have been
+// reposted than one that died in March.
+//
+// This is not the same thing as `is_relist`, which dedupe-external-listings
+// sets when the same property reappears under a DIFFERENT id.
+// deno-lint-ignore no-explicit-any
+async function resurrectNhatotAds(supabase: any, summary: { resurrected: number }): Promise<void> {
+  const { data: buried, error } = await supabase
+    .from('external_properties')
+    .select('id, source_url')
+    .eq('source', 'nhatot')
+    .eq('is_active', false)
+    .eq('last_verification_reason', 'gateway_not_found')
+    .order('deactivated_at', { ascending: false, nullsFirst: false })
+    .limit(RESURRECTION_BATCH);
+
+  if (error || !buried?.length) return;
+
+  for (const row of buried as { id: string; source_url: string }[]) {
+    const ad = await fetchNhatotAd(row.source_url);
+    if (!ad) continue;
+    const listing = buildNhatotListing(ad, row.source_url);
+    // A repost that no longer clears the display floor is not worth reviving:
+    // it would only be hidden again by the next pass.
+    if (!listing || listing.images.length < 5) continue;
+
+    const now = new Date().toISOString();
+    await supabase.from('external_properties').update({
+      is_active: true,
+      deactivated_at: null,
+      last_verified_at: now,
+      last_verification_status: 'alive',
+      last_verification_reason: null,
+      verification_failures: 0,
+      // The repost is a new ad in every respect but its id - price and gallery
+      // are refreshed from it rather than trusting what we stored months ago.
+      price: listing.price,
+      price_display: listing.priceDisplay,
+      images: listing.images,
+      videos: listing.videos,
+      updated_at: now,
+    }).eq('id', row.id);
+
+    summary.resurrected++;
+    console.log(`[verify-external-listings] Resurrected ${row.id} - reposted at ${listing.priceDisplay}`);
+  }
+
+  if (summary.resurrected > 0) {
+    console.log(`[verify-external-listings] Resurrection sweep: ${summary.resurrected}/${buried.length} back from the dead`);
+  }
+}
+
 async function verifyListing(source: string, url: string, externalId?: string): Promise<DeadResult> {
   const kind = detectSource(source, url);
   // housingsgn property codes look like "CAL0223" - when the external_id is
@@ -238,7 +300,7 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } }
   );
 
-  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, stale_archived: 0, errors: 0, deactivated_ids: [] as string[] };
+  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, stale_archived: 0, errors: 0, resurrected: 0, deactivated_ids: [] as string[] };
 
   try {
     const nowMs = Date.now();
@@ -267,6 +329,10 @@ Deno.serve(async (req) => {
     if (staleArchived > 0) {
       console.log(`[verify-external-listings] Age cap: archived ${staleArchived} stale listings`);
     }
+
+    // Run before the "nothing due" early return below: the sweep looks at rows
+    // the verification pass by definition never selects.
+    await resurrectNhatotAds(supabase, summary);
 
     // Pull only listings due for a check, oldest-verified first (never-verified first).
     // Due = never verified, OR one dead result already on record (confirm or clear
@@ -342,7 +408,7 @@ Deno.serve(async (req) => {
     }
 
     // Invalidate discovery cache if we deactivated anything
-    if (summary.deactivated > 0 || summary.stale_archived > 0) {
+    if (summary.deactivated > 0 || summary.stale_archived > 0 || summary.resurrected > 0) {
       try {
         await supabase.functions.invoke('property-discovery-cache', { body: { action: 'invalidate' } });
       } catch (e) {
