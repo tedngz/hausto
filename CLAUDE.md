@@ -210,6 +210,27 @@ echo "SELECT p.proname, pg_get_function_identity_arguments(p.oid)
       WHERE n.nspname='public' AND p.proname ILIKE '%<name>%';" | bash scripts/supabase-sql.sh
 ```
 
+**A migration cannot touch a cron job owned by another role.** `db push` runs as
+`postgres`, and `cron.unschedule(name)` only matches jobs whose owner is the
+calling role. Against a job owned by anyone else it fails with a message that
+reads like the job does not exist:
+
+```
+ERROR: could not find valid entry for job 'auto-crawl-v2' (SQLSTATE XX000)
+```
+
+Deleting the row directly is no better - `cron.job` is owned by `supabase_admin`
+and `postgres` has no `DELETE` on it. Check the owner before writing the
+migration, and if it is not `postgres`, unschedule from the dashboard instead:
+
+```sh
+echo "SELECT jobid, jobname, username FROM cron.job ORDER BY jobname;" | bash scripts/supabase-sql.sh
+```
+
+A failing statement aborts the whole push, so **the migrations queued behind it
+never run** - and they are not recorded, so the next push retries them. Wrap
+anything that can fail on permissions in a `DO ... EXCEPTION` block.
+
 More generally: `scripts/supabase-sql.sh` returns `[]` for any statement with no
 result set, so `[]` means "nothing to report", never "it worked". Confirm
 destructive SQL by re-reading the catalog rather than by its exit code.

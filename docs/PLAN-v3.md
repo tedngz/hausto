@@ -89,10 +89,12 @@ of them was true. Check `crawler_rejections` (`reason`, `sample_images`,
 `rejected_at`) before believing a source has gone quiet.
 
 The cron is also firing **twice**: `auto-crawl-v2` and `auto-crawl-v3` are both
-active on `*/30 * * * *`, both POSTing `scheduled-crawl`. v2 sends the anon key,
-which matches none of the four auth branches in that function, so it has been
-401ing 48 times a day since `20260818140000` closed the endpoint to it. A lot of
-green-looking cron history that never did anything.
+active on `*/30 * * * *`, both aimed at `scheduled-crawl`. v2 never reaches it -
+it is owned by `supabase_read_only_user` and dies inside the database on
+"permission denied for function http_post", 96 times in the last two days alone.
+It is log noise rather than a live second crawler, and it cannot be unscheduled
+by any role available to us - see the comment in
+`20260910090000_drop_duplicate_crawl_cron.sql`.
 
 **B. nhatot ads come back from the dead, and nothing looks.** 383 of 425 nhatot
 rows carry `last_verification_reason = 'gateway_not_found'`. Probed against
