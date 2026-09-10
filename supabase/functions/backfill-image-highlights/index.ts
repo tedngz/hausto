@@ -233,20 +233,32 @@ serve(async (req) => {
           // Hiding on failure applies only to listings that could go live on the
           // strength of their gallery; a sub-floor legacy listing keeps whatever
           // state it already had.
+          // Enqueue BEFORE hiding, and only hide if the enqueue took.
+          //
+          // This used to hide the listing first and then enqueue fire-and-forget,
+          // swallowing the insert error. When the insert failed the listing was
+          // left is_active = false with nothing scheduled to look at it again,
+          // and nothing to notice: 45 rows sat hidden that way for two months,
+          // their analysis already complete. A listing we cannot schedule a
+          // retry for is better left visible than hidden and forgotten.
+          let requeued = true;
+          if (meetsDisplayFloor) {
+            const { error: queueError } = await supabase
+              .from('vibe_analysis_queue')
+              .insert({ property_id: prop.id, status: 'queued', last_error: JSON.stringify(result.failures).substring(0, 500) });
+            if (queueError) {
+              requeued = false;
+              console.warn(`[backfill] Could not requeue ${prop.id}, leaving it visible:`, queueError.message);
+            }
+          }
           await supabase
             .from('external_properties')
             .update({
               vibe_status: 'pending',
-              ...(meetsDisplayFloor ? { is_active: false } : {}),
+              ...(meetsDisplayFloor && requeued ? { is_active: false } : {}),
               updated_at: new Date().toISOString(),
             })
             .eq('id', prop.id);
-          if (meetsDisplayFloor) {
-            await supabase
-              .from('vibe_analysis_queue')
-              .insert({ property_id: prop.id, status: 'queued', last_error: JSON.stringify(result.failures).substring(0, 500) })
-              .then(() => {}, () => {});
-          }
           results.push({
             id: prop.id, title: prop.title, success: false,
             reason: 'partial_failure_requeued',

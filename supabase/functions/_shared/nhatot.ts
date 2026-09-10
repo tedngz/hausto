@@ -23,12 +23,16 @@ export function extractNhatotAdId(url: string): string | null {
   return url.match(/\/(\d{5,})\.htm/i)?.[1] ?? null;
 }
 
-export async function fetchNhatotMedia(
-  url: string,
-): Promise<{ images: string[]; videos: PropertyVideo[] }> {
-  const empty = { images: [] as string[], videos: [] as PropertyVideo[] };
+// The ad payload, fetched once. Callers that want media and callers that want
+// the structured fields share this so a listing costs one request, not two.
+// Loosely typed on purpose: chotot adds keys without warning, and the fields
+// we read are pulled out defensively below.
+// deno-lint-ignore no-explicit-any
+export type NhatotAd = Record<string, any>;
+
+export async function fetchNhatotAd(url: string): Promise<NhatotAd | null> {
   const adId = extractNhatotAdId(url);
-  if (!adId) return empty;
+  if (!adId) return null;
   try {
     const res = await fetch(`${CHOTOT_AD_API}/${adId}`, {
       headers: { 'User-Agent': 'Mozilla/5.0 HaustoBot' },
@@ -36,31 +40,128 @@ export async function fetchNhatotMedia(
     });
     if (!res.ok) {
       console.warn(`[nhatot] ad-listing API returned ${res.status} for ${adId}`);
-      return empty;
+      return null;
     }
     const ad = (await res.json())?.ad;
-    if (!ad) return empty;
-
-    // `images` is the gallery in listing order; `image` is the cover, which is
-    // usually already in it. Appended rather than assumed, then deduped.
-    const images = [...new Set(
-      (Array.isArray(ad.images) ? ad.images : [])
-        .concat(typeof ad.image === 'string' ? [ad.image] : [])
-        .filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http')),
-    )].filter(u => !isVideoOrAnimatedUrl(u) && !isMapOrDiagramUrl(u));
-
-    const videos: PropertyVideo[] = (Array.isArray(ad.videos) ? ad.videos : [])
-      .filter((v: any) => v && typeof v.url === 'string')
-      .map((v: any) => ({
-        url: v.url,
-        thumbnail: typeof v.thumbnail === 'string' ? v.thumbnail : null,
-        source: 'nhatot',
-      }));
-
-    console.log(`[nhatot] ad ${adId}: ${images.length} gallery image(s), ${videos.length} video(s) from the public API`);
-    return { images, videos };
+    return ad && typeof ad === 'object' ? ad as NhatotAd : null;
   } catch (e) {
     console.warn(`[nhatot] ad-listing API failed for ${adId}:`, e);
-    return empty;
+    return null;
   }
+}
+
+export function mediaFromAd(ad: NhatotAd): { images: string[]; videos: PropertyVideo[] } {
+  // `images` is the gallery in listing order; `image` is the cover, which is
+  // usually already in it. Appended rather than assumed, then deduped.
+  const images = [...new Set(
+    (Array.isArray(ad.images) ? ad.images : [])
+      .concat(typeof ad.image === 'string' ? [ad.image] : [])
+      .filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http')),
+  )].filter(u => !isVideoOrAnimatedUrl(u) && !isMapOrDiagramUrl(u));
+
+  const videos: PropertyVideo[] = (Array.isArray(ad.videos) ? ad.videos : [])
+    // deno-lint-ignore no-explicit-any
+    .filter((v: any) => v && typeof v.url === 'string')
+    // deno-lint-ignore no-explicit-any
+    .map((v: any) => ({
+      url: v.url,
+      thumbnail: typeof v.thumbnail === 'string' ? v.thumbnail : null,
+      source: 'nhatot',
+    }));
+
+  return { images, videos };
+}
+
+export async function fetchNhatotMedia(
+  url: string,
+): Promise<{ images: string[]; videos: PropertyVideo[] }> {
+  const ad = await fetchNhatotAd(url);
+  if (!ad) return { images: [], videos: [] };
+  const media = mediaFromAd(ad);
+  console.log(
+    `[nhatot] ad ${extractNhatotAdId(url)}: ${media.images.length} gallery image(s), ` +
+    `${media.videos.length} video(s) from the public API`,
+  );
+  return media;
+}
+
+// A listing built from the ad payload rather than from page text.
+//
+// nhatot renders client-side, so the detail scrape returns a shell: markdown
+// too short to extract from, one cover image, and nothing else. The pipeline
+// then fell through to search-page extraction, which sees only the card - one
+// `preset:listing` cover per listing - and every candidate was rejected as
+// "too_few_images:1". 894 of them, while the crawl reported success.
+//
+// The public ad endpoint already carries everything the LLM was being asked to
+// guess, and carries it typed: price as an integer, rooms and size as numbers,
+// the ward and district split out, coordinates, and the seller's account id.
+// So nhatot skips extraction entirely - no Firecrawl fetch, no model call, and
+// no hallucinated bedroom counts.
+export interface NhatotListing {
+  title: string;
+  location: string;
+  price: number;
+  priceDisplay: string;
+  size: string;
+  rooms: string;
+  images: string[];
+  videos: PropertyVideo[];
+  description: string;
+  amenities: string[];
+  sourceProviderName?: string;
+  sourceAgentId?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+function roomsLabel(rooms: unknown): string {
+  const n = typeof rooms === 'number' ? rooms : parseInt(String(rooms ?? ''), 10);
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n === 0) return 'Studio';
+  return n === 1 ? '1 Bedroom' : `${n} Bedrooms`;
+}
+
+export function buildNhatotListing(ad: NhatotAd, url: string): NhatotListing | null {
+  const { images, videos } = mediaFromAd(ad);
+
+  // Price is dong per month, already numeric. A listing with no price cannot be
+  // shortlisted and cannot be sanity-checked against a broker's quote later, so
+  // it is not worth storing.
+  const price = typeof ad.price === 'number' && ad.price > 0 ? ad.price : 0;
+  if (!price) {
+    console.log(`[nhatot] ${url}: no usable price on the ad payload`);
+    return null;
+  }
+
+  // "Trương Quốc Dung, Phường 9, Quận Phú Nhuận, Tp Hồ Chí Minh" - assembled
+  // from the parts chotot already keeps separate, so the district survives
+  // rather than being parsed back out of prose later.
+  const location = [ad.street_name, ad.ward_name, ad.area_name, ad.region_name]
+    .filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0)
+    .join(', ');
+
+  const size = typeof ad.size === 'number' && ad.size > 0 ? `${ad.size} m²` : 'N/A';
+
+  return {
+    title: typeof ad.subject === 'string' && ad.subject.trim() ? ad.subject.trim() : 'Rental Property',
+    location: location || 'Ho Chi Minh City',
+    price,
+    priceDisplay: typeof ad.price_string === 'string' && ad.price_string
+      ? ad.price_string
+      : `${price.toLocaleString()} VND`,
+    size,
+    rooms: roomsLabel(ad.rooms),
+    images,
+    videos,
+    description: typeof ad.body === 'string' ? ad.body.trim() : '',
+    amenities: [],
+    sourceProviderName: typeof ad.account_name === 'string' ? ad.account_name : undefined,
+    // The durable per-broker join key. `phone` on this payload is masked
+    // ("098890****") and is deliberately not read - a masked number stored as a
+    // real one would look resolved and be undialable.
+    sourceAgentId: ad.account_oid ? String(ad.account_oid) : (ad.account_id ? String(ad.account_id) : undefined),
+    latitude: typeof ad.latitude === 'number' ? ad.latitude : undefined,
+    longitude: typeof ad.longitude === 'number' ? ad.longitude : undefined,
+  };
 }

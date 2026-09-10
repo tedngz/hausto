@@ -11,7 +11,7 @@ import {
   MIN_DISPLAY_IMAGES, STORE_TARGET,
 } from '../_shared/vibe-policy.ts';
 import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
-import { fetchNhatotMedia, type PropertyVideo } from '../_shared/nhatot.ts';
+import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo } from '../_shared/nhatot.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -786,6 +786,15 @@ async function savePropertiesToDB(
         vibe: property.vibe || null,
         vibe_analysis: sanitizeVibeAnalysis(property.vibe_analysis || {}),
         is_active: true,
+        // Only sources that hand us coordinates set these. Spread conditionally
+        // so a source that does not know them cannot null out a geocode that a
+        // later pass filled in.
+        ...(typeof (property as { latitude?: number }).latitude === 'number'
+          ? { latitude: (property as { latitude?: number }).latitude }
+          : {}),
+        ...(typeof (property as { longitude?: number }).longitude === 'number'
+          ? { longitude: (property as { longitude?: number }).longitude }
+          : {}),
       };
 
       if (existing) {
@@ -2151,8 +2160,33 @@ Deno.serve(async (req) => {
         
         const batchPromises = batch.map(async (listing, batchIdx) => {
           const globalIdx = i + batchIdx;
+
+          // nhatot is built from the ad payload, not scraped. See the comment on
+          // buildNhatotListing: the rendered page has nothing on it to extract.
+          if (marketplace === 'nhatot') {
+            const ad = await fetchNhatotAd(listing.url);
+            if (!ad) {
+              console.log(`[Phase 2] nhatot ad payload unavailable: ${listing.url}`);
+              return null;
+            }
+            const built = buildNhatotListing(ad, listing.url);
+            if (!built) return null;
+            const images = built.images.map(toFullSizeImageUrl).filter(isValidPropertyImageUrl).slice(0, 12);
+            console.log(`[Phase 2] nhatot ${globalIdx + 1}/${newLinks.length}: ${images.length} image(s), ${built.rooms || 'rooms unknown'}, ${built.priceDisplay}`);
+            return {
+              id: `external-${marketplace}-${Date.now()}-${globalIdx}`,
+              ...built,
+              images,
+              highlights: [],
+              source: marketplace as 'batdongsan' | 'nhatot' | 'airbnb' | 'housingsgn',
+              sourceUrl: listing.url,
+              vibe: undefined,
+              vibe_analysis: undefined,
+            } as ExternalProperty;
+          }
+
           console.log(`[Phase 2] Scraping detail page ${globalIdx + 1}/${newLinks.length}: ${listing.url}`);
-          
+
           const detail = await scrapeDetailPage(listing.url, marketplace);
           if (!detail) {
             console.log(`[Phase 2] Failed to scrape detail page: ${listing.url}`);
@@ -2222,7 +2256,14 @@ Deno.serve(async (req) => {
     
     // ── Fallback: extract from search page if detail scraping yielded few results (skipped in raw mode — costs OpenAI) ──
     // ONLY run for older non-SPA sites. Housingsgn search pages cause massive AI hallucinations, so we skip it.
-    if (!rawMode && properties.length < 2 && marketplace !== 'housingsgn') {
+    //
+    // nhatot is skipped for a sharper reason: a search card carries exactly one
+    // `preset:listing` cover image, so every listing this produced died at the
+    // display floor as "too_few_images:1" - 894 times, while the run reported
+    // success. Its listings now come from the ad payload in Phase 2, and a
+    // nhatot page that gets here has genuinely nothing to offer.
+    const searchPageFallbackSources = ['housingsgn', 'nhatot'];
+    if (!rawMode && properties.length < 2 && !searchPageFallbackSources.includes(marketplace)) {
       console.log(`[Fallback] Only ${properties.length} from detail pages, falling back to search page extraction`);
       
       const searchImages = extractImagesFromHtml(allHtml);
