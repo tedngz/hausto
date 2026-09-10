@@ -14,6 +14,12 @@ interface DeepVibeAnalysisProps {
   /** Drops the card chrome so the block can sit inside another surface (the
    *  vibe-match popover) without reading as a card in a card. */
   bare?: boolean;
+  /** Keep the offer stacked - heading, then a full-width button - instead of
+   *  letting it become a row at the sm: breakpoint. For surfaces that are
+   *  narrow while the viewport is wide, the chat rail above all: sm: measures
+   *  the viewport, so a row there pushes the button out of the rail. `bare`
+   *  implies it; pass it on its own to keep the card chrome and still stack. */
+  stacked?: boolean;
   /** The listing's name, shown under the heading. For surfaces where the read
    *  is not adjacent to its listing - Hausto Agent, where a search returned
    *  several places - so it is never ambiguous which one was read. */
@@ -64,6 +70,7 @@ export const DeepVibeAnalysis = ({
   propertyType = 'internal',
   onRequestPass,
   bare = false,
+  stacked = false,
   title,
   ctaOnly = false,
   onScan,
@@ -184,12 +191,14 @@ export const DeepVibeAnalysis = ({
   // here, so the block stays off rather than offering a dead button.
   if (locked && !onRequestPass) return null;
 
+  // Inside something narrow - a popover on a card, the chat rail - sm: is the
+  // viewport's width, not the container's, so the row layout would push the
+  // button out of the panel. Stack there.
+  const isStacked = bare || stacked;
+
   const teaser = (
-    // Bare means the block is inside something narrow - a popover on a card -
-    // where sm: is the viewport's width, not the container's, and the row
-    // layout would push the button out of the panel. Stack there.
-    <div className={bare ? 'flex flex-col gap-3' : 'flex flex-col sm:flex-row sm:items-center gap-3'}>
-      <div className="flex-1">
+    <div className={isStacked ? 'flex flex-col gap-3' : 'flex flex-col sm:flex-row sm:items-center gap-3'}>
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 font-medium text-sm">
           <Sparkles className="h-4 w-4 shrink-0 text-primary" />
           Deep Scan
@@ -200,13 +209,13 @@ export const DeepVibeAnalysis = ({
         {title && (
           <p className="text-xs font-medium text-foreground/80 mt-1 truncate">{title}</p>
         )}
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1 break-words">
           {ctaOnly && analysis
             ? 'Already read for you - open it in the chat, beside the listing it read.'
             : 'The layout and light, who it suits, the honest downsides, and how the area fits you.'}
         </p>
       </div>
-      <Button onClick={onPress} disabled={isGenerating} className={bare ? 'w-full' : 'shrink-0'}>
+      <Button onClick={onPress} disabled={isGenerating} className={isStacked ? 'w-full' : 'shrink-0'}>
         {isGenerating ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />

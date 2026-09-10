@@ -1185,6 +1185,9 @@ export const HomeAI = ({
                 }
                 title={scanRequest?.title ?? analysisProperty!.title}
                 autoGenerate={!!scanRequest}
+                // The rail is narrow while the viewport is wide, so the offer
+                // stacks here rather than becoming a row that overflows it.
+                stacked
                 onRequestPass={() => setIsSubscriptionModalOpen(true)}
               />
             </div>
