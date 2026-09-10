@@ -66,7 +66,8 @@ and subtracts duplicate excess. Do not use it as a supply metric.
 
 These reshape S1 far more than the source list does.
 
-**A. Two of three crawlers have silently stopped producing.**
+**A. Two of three sources stopped producing rows - but not because the crawler
+stopped running.**
 
 | Source | Last row crawled | Rows in last 14 days |
 |---|---|---|
@@ -74,12 +75,24 @@ These reshape S1 far more than the source list does.
 | housingsgn | 2026-08-31 | 2 |
 | nhatot | **2026-08-06** | **0** |
 
-The cron is firing - in fact **twice**: `auto-crawl-v2` and `auto-crawl-v3` are
-both active on `*/30 * * * *`, both POSTing `scheduled-crawl`, one with a
-hardcoded bearer and one with `x-cron-secret`. All three marketplaces are enabled
-in the function. So the scheduler runs 48 times a day and nhatot has produced
-nothing for 35 days. Adding new sources on top of this does not raise supply; it
-adds three more crawlers to the same silence.
+The obvious reading is that the crawler stalled. It did not. `crawler_rejections`
+shows nhatot being crawled daily right through 2026-09-09 and **rejecting every
+candidate** - 894 of them as `too_few_images:1`. The rejected rows carry one
+`preset:listing` cover image apiece, while the ad API holds 9 to 13 gallery
+photos for the very same ids. nhatot renders client-side, so the detail scrape
+returned a shell, Phase 2 produced nothing, and the search-page fallback took
+over - and a search card carries only the cover. The fallback excluded
+`housingsgn` and not `nhatot`.
+
+So "no new rows" and "the crawler stopped" are different diagnoses, and only one
+of them was true. Check `crawler_rejections` (`reason`, `sample_images`,
+`rejected_at`) before believing a source has gone quiet.
+
+The cron is also firing **twice**: `auto-crawl-v2` and `auto-crawl-v3` are both
+active on `*/30 * * * *`, both POSTing `scheduled-crawl`. v2 sends the anon key,
+which matches none of the four auth branches in that function, so it has been
+401ing 48 times a day since `20260818140000` closed the endpoint to it. A lot of
+green-looking cron history that never did anything.
 
 **B. nhatot ads come back from the dead, and nothing looks.** 383 of 425 nhatot
 rows carry `last_verification_reason = 'gateway_not_found'`. Probed against
@@ -137,15 +150,22 @@ what they specified is either built or a repair rather than a build.
 
 Retention before acquisition. In order:
 
-1. **Fix the crawlers that stopped.** Instrument `scheduled-crawl` to record per
-   source, per run: rows attempted, rows written, rows rejected and why. Then
-   find out why nhatot has written nothing since 2026-08-06 and housingsgn almost
-   nothing since 08-31. This is a one-line answer hiding behind no telemetry.
+1. **Fix the rejection path that was eating nhatot.** Done in #72: nhatot
+   listings are now built from the chotot ad payload rather than scraped, and
+   nhatot is excluded from the search-page fallback that could only ever supply
+   the cover image. Still outstanding, and the reason this took a database dig
+   rather than a glance at a dashboard: **instrument `scheduled-crawl` to record
+   per source, per run - rows attempted, written, and rejected with why.** A run
+   that rejects 100% of candidates currently reports success.
 2. **Delete one of the two crawl crons.** `auto-crawl-v2` and `auto-crawl-v3` run
    the same function every 30 minutes with different auth. Keep v3, drop v2.
-3. **Recover the 50 switched-off rows.** Establish why `is_active` is false on
-   rows that verified alive and were never deactivated, fix the gate, and
-   backfill. Expected: 115 → ~165 active for a day's work and no new crawling.
+3. **Recover the switched-off rows.** Cause found and fixed in #72:
+   backfill-image-highlights hides a listing on a failed highlight pass and
+   enqueues the retry fire-and-forget, swallowing the insert error, so a failed
+   enqueue left the row hidden with nothing scheduled. 45 housingsgn rows sat
+   that way for two months with their analysis already complete. **41** of the
+   50 clear the five-image display floor and are revived by migration; the other
+   nine genuinely have too few images and stay hidden.
 4. **Add a resurrection sweep, and stop treating dead as final.** Chotot ads
    expire and are reposted under the same list id - about 11% of our dead nhatot
    rows are live at any given moment (finding B). `verify-external-listings`
@@ -167,7 +187,7 @@ Retention before acquisition. In order:
    not a project.
 
 **Done when:** per-source crawl telemetry exists and all three sources have
-written rows in the last 24 hours; the 50 recovered rows are live; the
+written rows in the last 24 hours; the 41 recovered rows are live; the
 resurrection sweep runs on a schedule and has reactivated its first batch; a
 single verification reason cannot silently deactivate more than 20% of a run;
 ≥800 active HCMC listings, with ≥2,000 as the standing target once the leak is
