@@ -1,9 +1,155 @@
-# Working in this repo
+# Hausto
+
+Two halves. The first is the live platform - crawling, style analysis, image
+storage, search, the Pass. The second is the viewing-coordination MVP being
+built on top of it, which is what `docs/SPEC.md` and `docs/PLAN-v3.md` describe.
+
+Read `docs/SPEC.md` before touching the viewing domain model. Read
+`docs/PLAN-v3.md` for the current milestone and its acceptance criteria. The
+second half of this file, from "Shipping changes to production" down, is about
+the live platform and applies to everything.
+
+Supabase project ref: `gbgrwjdmytaksrztcyzs`.
+
+## The viewing-coordination MVP
+
+A renter shortlists 3-5 crawled rental listings in Ho Chi Minh City and requests
+viewings. A human operator working Zalo confirms availability with each realtor.
+The system assembles a viewing itinerary and delivers it to the renter over
+WhatsApp. Renter confirms with one tap.
+
+The renter never talks to a realtor. The realtor never sees the renter's contact
+details. Everything crosses through us.
+
+### Build on what exists, do not rebuild
+
+The platform already runs on Supabase with a Lovable-built React SPA at
+hausto.com. Crawling, style analysis, image storage, dedup, verification and the
+public search API are live. Do not stand up a new Next.js app, a new database, or
+a new ORM. Everything below is additive.
+
+- Postgres: the existing Supabase database. New tables only; do not restructure
+  `external_properties` beyond the additive columns in SPEC §0.
+- Backend: Supabase Edge Functions (Deno/TS). The WhatsApp webhook, send service
+  and ops mutations all live here.
+- Scheduling: `pg_cron` + a `jobs` table. No Inngest, Trigger.dev, BullMQ, Redis.
+  Volume is ~25 requests/day.
+- Renter UI: the existing Lovable SPA. Add shortlist and request-intake screens
+  there.
+- Ops console: a separate small Vite + React app behind Supabase Auth with an
+  `ops` role and RLS. Keep it out of the renter SPA - different auth surface,
+  different deploy cadence, and it should stay ugly and fast.
+- `public-property-search` is a stable contract. It serves AI crawlers
+  (llms.txt/AEO) and will serve the WhatsApp agent. Extend it additively; never
+  break its response shape.
+
+### Non-negotiable invariants
+
+**1. All state transitions go through the event log.**
+`events` is append-only. Every status field on `viewing_requests` and
+`request_items` is derived by a reducer over events, never written directly by
+UI code. If you find yourself writing `UPDATE request_items SET status = ...`
+outside the reducer, stop.
+
+**2. Operators never free-text an outcome.**
+The ops console exposes a fixed set of seven outcome actions (SPEC §4). Each
+writes a typed event. Free text goes in an optional `note` that is never parsed
+and never affects state. This constraint is the whole point - it is how we
+generate the training data to automate the realtor side later.
+
+**3. Every outbound message is persisted before it is sent.**
+Write to `messages` with `status='QUEUED'`, then send, then update. Never send
+first. Idempotency key on every send.
+
+**4. Never expose a renter's phone number or name to the ops console realtor
+view, and never put a realtor's phone number in renter-facing output.**
+Enforce at the query layer, not the template layer.
+
+**5. Partial success is the happy path.**
+Any code that assumes all requested listings will be confirmed is wrong. Three of
+five is the normal outcome. Design every function signature and every UI state
+around it.
+
+**6. No `booking` vocabulary in renter-facing copy until state is CONFIRMED.**
+Use "request". We cannot honour a booking at intake time.
+
+### The WhatsApp adapter
+
+Meta Business verification, phone number provisioning and template approval are
+human-blocked tasks that will not be done when you start. Do not wait on them.
+
+Build `lib/whatsapp/adapter.ts` exporting a `WhatsAppAdapter` interface with two
+implementations:
+
+- `MockAdapter` - writes to `messages`, renders in `/dev/phone`, a fake WhatsApp
+  thread UI. Inbound simulated by a text box on that page. The default in dev and
+  in all tests.
+- `CloudApiAdapter` - Meta Graph API. Enabled by `WHATSAPP_MODE=cloud`.
+
+Every milestone through S6 must be fully demoable on `MockAdapter`. If a
+milestone's acceptance criteria cannot be met without real Meta credentials, the
+milestone is wrongly scoped - say so rather than stubbing around it.
+
+### Message-window rules the code must respect
+
+The Cloud API 24-hour customer service window is a real constraint, not a detail.
+
+- `renters.service_window_expires_at` is updated on every inbound message.
+- `sendFreeForm()` throws if the window is closed. It does not silently fall
+  back.
+- Re-opening a closed window requires `sendTemplate()`, which only accepts
+  template names from the approved registry in `lib/whatsapp/templates.ts`.
+- From 2026-10-01 Meta bills service and utility messages sent inside the window.
+  Consolidate: one message carrying a full itinerary, not a sequence of turns.
+  Any code path that sends 3+ messages in a row to the same renter is a bug.
+
+### Out of scope for the MVP
+
+Do not build these even if they seem natural:
+
+- Route/traffic optimization. Ops orders the itinerary by hand; they know the
+  city.
+- Calendar sync (ICS, Google Calendar).
+- Any Zalo integration, Zalo OA, or ZNS. The realtor side is a human this
+  quarter.
+- Realtor-facing accounts, login, or portal.
+- Renter authentication beyond a signed session cookie keyed to phone number.
+- i18n framework. Renter UI is English only. Vietnamese strings are data, not UI.
+- Hanoi and Da Nang. HCMC only until the flow works.
+- Geocoding. Zero active listings have coordinates and the viewing flow does not
+  need them.
+
+**Payments are not on this list.** They are live and shipping - see the Payments
+section below. The rule is: build no new payment surface for the viewing flow,
+and leave the Pass alone.
+
+### Conventions
+
+- Money in VND, stored as integer dong. Never floats. Display `15.000.000 ₫`.
+  Note `external_properties.price` is `numeric` and holds USD for housingsgn
+  rows; the canonical column is `price_vnd` (SPEC §0).
+- All timestamps stored UTC, displayed `Asia/Ho_Chi_Minh`.
+- Phone numbers stored E.164 (`+84...`). Normalize at every boundary; the crawler
+  will hand you `0901234567`, `84901234567`, and `+84 90 123 45 67` for the same
+  human.
+- Enum values SCREAMING_SNAKE in the DB, mirrored as TS union types generated
+  from a single source in `lib/domain/enums.ts`.
+- Use `-` rather than an em dash in anything a user reads.
+
+### Definition of done for any MVP task
+
+1. Types check, lint passes. Edge functions are Deno and are not covered by
+   `tsconfig.app.json`, so `tsc --noEmit` says nothing about them.
+2. Reducer tests cover every new event type, including out-of-order arrival.
+3. The path is demoable end to end on `MockAdapter` with seeded data.
+4. `docs/SPEC.md` updated if the domain model changed.
+
+---
+
+# Shipping changes to production
 
 Notes on how changes reach production. Everything here is something that looked
 fine locally and went wrong on the way out.
-
-Supabase project ref: `gbgrwjdmytaksrztcyzs`.
 
 ## Database migrations: two paths that fight each other
 
