@@ -204,10 +204,28 @@ interface CrawlConfig {
   configStorageError?: string;
 }
 
+// Sizing, because these two numbers are not independent and the arithmetic is
+// not obvious from either one:
+//
+// A run crawls exactly ONE location+marketplace combo, and there are 20
+// locations x 3 marketplaces = 60 of them. pg_cron fires every 30 minutes, so
+// 48 runs a day means any given combo comes back around only every ~30 hours.
+// The rotation, not `frequencyMinutes`, is what paces a source.
+//
+// So frequencyMinutes only decides whether a due combo gets SKIPPED. Above ~30h
+// it starts skipping runs outright (it was 2880, i.e. 48h); below ~30h it
+// changes nothing, because the rotation is already slower than that. 1440 sits
+// under the rotation period without pretending to be a real cadence, and taking
+// it to the 30-minute floor would buy nothing.
+//
+// `maxListingsPerRun` is the actual throttle: the daily ceiling is roughly
+// 48 x maxListingsPerRun. It was 1 in production, which is ~48 candidates a day
+// across all three sources before rejections - and the observed rate was ~2.
+// That, not a broken crawler, is why the index sat at 111 listings.
 const DEFAULT_CONFIG: CrawlConfig = {
   paused: false,
-  frequencyMinutes: 2880,
-  maxListingsPerRun: 5,
+  frequencyMinutes: 1440,
+  maxListingsPerRun: 10,
   minPriceVnd: 5_000_000,
   enabledMarketplaces: ['batdongsan', 'nhatot', 'housingsgn'],
 };
