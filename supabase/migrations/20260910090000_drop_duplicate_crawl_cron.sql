@@ -5,9 +5,12 @@
 --
 -- 20260818140000_scheduled_crawl_cron_auth.sql closed the endpoint to the anon
 -- key, because it is published in the client bundle and could not tell pg_cron
--- apart from a stranger with curl. v3 was added then; v2 was never removed. It
--- has been posting the anon key into a 401 forty-eight times a day ever since,
--- which is a lot of green-looking cron history that never did anything.
+-- apart from a stranger with curl. v3 was added then; v2 was never removed.
+--
+-- v2 does not even get as far as being rejected: it fails inside the database
+-- with "permission denied for function http_post", because supabase_read_only_user
+-- cannot call it. 96 consecutive failures over the last two days, no request ever
+-- leaving the server. It is log noise, not a security or cost problem.
 --
 -- THIS MIGRATION CANNOT REMOVE IT, and the attempt is left here deliberately so
 -- nobody spends the afternoon rediscovering why:
