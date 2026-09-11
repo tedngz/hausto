@@ -13,11 +13,18 @@ export const MAX_SHORTLIST = 5;
 
 const STORAGE_KEY = 'hausto.shortlist.v1';
 
+/**
+ * Deliberately thin: an id, and just enough to render a row without a fetch.
+ *
+ * Notably no price. The price a card shows is `external_properties.price`,
+ * which carries two currencies and only its magnitude says which (SPEC §0) -
+ * caching that here and quoting it back on the request page would be showing
+ * the renter the very figure the canonical column exists to replace. The
+ * request page reads `price_vnd` per listing instead.
+ */
 export interface ShortlistEntry {
   listingId: string;
   title: string;
-  priceVnd: number | null;
-  districtCode: string | null;
   imageUrl: string | null;
   addedAt: string;
 }

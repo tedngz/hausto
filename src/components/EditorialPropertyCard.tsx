@@ -19,6 +19,7 @@ import { openDeepScan } from '@/lib/deepScanEvents';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
+import { ShortlistButton } from '@/components/ShortlistButton';
 
 // The property card used everywhere a listing appears in a list: browse, swipe,
 // matches, Hausto Agent, complex pages. Same anatomy as the listing page's card
@@ -69,6 +70,12 @@ interface EditorialPropertyCardProps {
    *  two id spaces can collide, so a wrong value would show one listing's scan
    *  on another - surfaces carrying crawled listings must pass 'external'. */
   propertyType?: PropertyType;
+  /** Whether this card offers the viewing shortlist. Defaults to true for
+   *  crawled listings, which are the only ones the viewing flow can request
+   *  against - an internal listing has its own booking path. Surfaces that
+   *  render a listing for inspection rather than for a renter to act on (a
+   *  realtor's preview of their own crawl, an upload preview) pass false. */
+  shortlistable?: boolean;
   /** Caption shown when the current image has no per-image highlight */
   quoteFallback?: string;
   onCardClick?: () => void;
@@ -128,6 +135,7 @@ export const EditorialPropertyCard = ({
   vibeDetailsText,
   scoreContext = 'preferences',
   propertyType = 'internal',
+  shortlistable,
   quoteFallback,
   onCardClick,
   onClose,
@@ -146,6 +154,10 @@ export const EditorialPropertyCard = ({
   footer,
   className = '',
 }: EditorialPropertyCardProps) => {
+  // Crawled listings only, unless a surface opts out. The viewing flow requests
+  // against `external_properties`; offering this on an internal listing would
+  // build a shortlist the intake function rejects.
+  const showShortlist = shortlistable ?? propertyType === 'external';
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(Math.min(initialImageIndex, images.length - 1));
   const [fits, setFits] = useState<Record<number, 'cover' | 'contain'>>({});
@@ -697,8 +709,17 @@ export const EditorialPropertyCard = ({
         )}
 
         {/* CTAs */}
-        {(onContact || onSchedule) && (
+        {(onContact || onSchedule || showShortlist) && (
           <div className="flex items-center gap-2 pt-0.5">
+            {showShortlist && (
+              <ShortlistButton
+                listingId={apartment.id}
+                title={apartment.title}
+                imageUrl={apartment.images?.[0] ?? null}
+                size={compact ? 'sm' : 'default'}
+                className="flex-1 rounded-full"
+              />
+            )}
             {onContact && (
               <Button
                 size={compact ? 'sm' : 'default'}

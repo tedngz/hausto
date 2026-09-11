@@ -8,7 +8,7 @@
 // Note the vocabulary: "request", never "booking", until state is CONFIRMED
 // (CLAUDE.md invariant 6). At this point nothing has been agreed with anybody.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +23,22 @@ import {
   type AvailabilityWindow,
   type DayPart,
 } from '../../supabase/functions/_shared/viewing/intake.ts';
+
+/**
+ * What the shortlist row shows, read back from the listing rather than cached
+ * when it was added.
+ *
+ * The price in particular: `external_properties.price` carries two currencies
+ * and only its magnitude says which (SPEC §0), so the canonical `price_vnd` is
+ * the only figure worth quoting a renter. Reading it here also surfaces a
+ * listing that died since it was shortlisted *before* they fill in the form,
+ * rather than as a rejection after they submit it.
+ */
+interface Hydrated {
+  priceVnd: number | null;
+  districtCode: string | null;
+  gone: boolean;
+}
 
 interface Submitted {
   ref: string;
@@ -47,6 +63,30 @@ export default function ViewingRequest() {
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
 
+  const [details, setDetails] = useState<Record<string, Hydrated>>({});
+
+  const ids = shortlist.entries.map(e => e.listingId).join(',');
+  useEffect(() => {
+    if (!ids) { setDetails({}); return; }
+    let cancelled = false;
+    void (async () => {
+      const pairs = await Promise.all(ids.split(',').map(async id => {
+        const { data, error: err } = await supabase.functions.invoke('get-public-property', { body: { id } });
+        const property = (data as { property?: Record<string, unknown> })?.property;
+        // A listing the public endpoint will not return is one that has gone
+        // inactive. Saying so here is the whole point of re-reading.
+        if (err || !property) return [id, { priceVnd: null, districtCode: null, gone: true }] as const;
+        return [id, {
+          priceVnd: typeof property.price_vnd === 'number' ? property.price_vnd : null,
+          districtCode: typeof property.district_code === 'string' ? property.district_code : null,
+          gone: false,
+        }] as const;
+      }));
+      if (!cancelled) setDetails(Object.fromEntries(pairs));
+    })();
+    return () => { cancelled = true; };
+  }, [ids]);
+
   // Seven days of chips. The function accepts fourteen; offering all of them
   // makes the grid the page rather than a field on it.
   const days = useMemo(() => {
@@ -62,6 +102,11 @@ export default function ViewingRequest() {
       return [...prev, { date, part }];
     });
   };
+
+  // A listing we already know is dead would come back as a rejection anyway.
+  // Blocking here turns that into a fix the renter can make before filling in
+  // the rest of the form.
+  const hasGone = shortlist.entries.some(e => details[e.listingId]?.gone);
 
   const submit = async () => {
     setError(null);
@@ -120,14 +165,19 @@ export default function ViewingRequest() {
           </p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {shortlist.entries.map(e => (
+            {shortlist.entries.map(e => {
+              const d = details[e.listingId];
+              return (
               <li key={e.listingId} className="flex items-center gap-3 rounded border border-neutral-200 p-2">
                 {e.imageUrl && <img src={e.imageUrl} alt="" className="h-12 w-16 rounded object-cover" />}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm">{e.title}</div>
-                  <div className="text-xs text-neutral-500">
-                    {e.priceVnd != null ? formatVnd(e.priceVnd) : 'Price unconfirmed'}
-                    {e.districtCode ? ` - ${e.districtCode}` : ''}
+                  <div className={`text-xs ${d?.gone ? 'text-amber-700' : 'text-neutral-500'}`}>
+                    {d === undefined
+                      ? 'Checking...'
+                      : d.gone
+                        ? 'No longer listed - remove it to continue'
+                        : `${d.priceVnd != null ? formatVnd(d.priceVnd) : 'Price unconfirmed'}${d.districtCode ? ` - ${d.districtCode}` : ''}`}
                   </div>
                 </div>
                 <button
@@ -137,7 +187,8 @@ export default function ViewingRequest() {
                   Remove
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
         {shortlist.entries.length > 0 && !shortlist.canSubmit && (
@@ -208,7 +259,7 @@ export default function ViewingRequest() {
 
       <button
         className="mt-6 w-full rounded bg-emerald-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
-        disabled={busy || !shortlist.canSubmit || picked.length === 0 || !phone.trim()}
+        disabled={busy || hasGone || !shortlist.canSubmit || picked.length === 0 || !phone.trim()}
         onClick={() => void submit()}
       >
         {busy ? 'Sending...' : 'Request these viewings'}
