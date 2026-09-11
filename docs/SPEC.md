@@ -178,7 +178,27 @@ sort_order           smallint                       -- ops-ordered itinerary pos
 ```
 
 `price_vnd_at_request` is what makes "the broker quoted a different price" a
-detectable event rather than an argument.
+detectable event rather than an argument. It is read from the listing row at
+intake, never taken from the request body - the renter's client says *which*
+listings, never what they cost.
+
+**The intake contract** (implemented in `_shared/viewing/intake.ts`, which is
+the single source for all of it):
+
+- `ref` is `HV-` plus four characters from `34679ACDEFGHJKLMNPQRTWXY`. The
+  alphabet drops everything that survives being read aloud badly - I/1, O/0,
+  S/5, Z/2, U/V, B/8 - because an operator types these back from a phone call.
+- `availability` is `[{date, part}]`, `date` a local calendar date in
+  Asia/Ho_Chi_Minh and `part` one of `MORNING` / `AFTERNOON` / `EVENING`. Chips,
+  not a datetime picker: what time on Tuesday is the broker's to answer, and
+  naming one at intake is promising a slot we cannot honour (§6). At most six,
+  at most 14 days ahead.
+- A shortlisted listing must clear the §0 gate - active, `price_vnd`,
+  `bedrooms`, `area_sqm` and `district_code` all present, `price_confidence`
+  not `LOW`. Screening happens at submit rather than at shortlist time, because
+  verification runs every 20 minutes and can deactivate a row in between. A
+  listing that falls through is reported to the renter by name; the request
+  proceeds on the rest as long as three survive.
 
 ### `events`
 
@@ -348,6 +368,22 @@ The Cloud API 24-hour customer service window is a real constraint:
 Adapter: `lib/whatsapp/adapter.ts` exports a `WhatsAppAdapter` interface with two
 implementations - `MockAdapter` (the default in dev and in all tests, rendering
 in `/dev/phone`) and `CloudApiAdapter` (`WHATSAPP_MODE=cloud`).
+
+**Nothing is sent at intake, and that is not an omission.** There is no service
+window until the renter messages us first, and no approved template to open one
+with. So the confirmation page hands them a `wa.me` link whose prefilled text
+carries their ref; sending it is what opens the window and makes everything
+afterwards sendable. The webhook routes that first message by the ref it
+carries, falling back to the renter's newest request for a bare reply - and to
+nothing at all for a ref that does not resolve, since attaching a message to the
+wrong thread is worse than attaching it to none.
+
+`/dev/phone` is backed by the `dev-phone` function, which takes the same inbound
+path Meta's delivery does (`_shared/viewing/routing.ts`, shared by both) and
+refuses to run when `WHATSAPP_MODE=cloud` - an unauthenticated endpoint that
+fabricates inbound messages is a forgery tool the moment the number is real. It
+renders the window state and the consecutive-outbound count alongside the
+thread, because those are what decide whether the next send is legal.
 
 ---
 

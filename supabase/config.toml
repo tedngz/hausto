@@ -117,3 +117,15 @@ verify_jwt = true
 # Meta calls this and cannot present a Supabase JWT. The X-Hub-Signature-256
 # HMAC over the raw body is what authenticates the caller instead.
 verify_jwt = false
+
+[functions.viewing-request-create]
+# The renter surface has no Supabase session - renter auth is a phone-keyed
+# cookie, and there is no cookie before the first request. Rate-limited by IP
+# instead, and it reads every price from the database rather than the body.
+verify_jwt = false
+
+[functions.dev-phone]
+# /dev/phone, the mock WhatsApp thread. Refuses outright when WHATSAPP_MODE is
+# cloud - simulating inbound messages against a real number would forge service
+# windows and renter replies.
+verify_jwt = false
