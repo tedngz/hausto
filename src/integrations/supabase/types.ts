@@ -507,17 +507,75 @@ export type Database = {
         }
         Relationships: []
       }
+      events: {
+        Row: {
+          actor: string
+          id: number
+          item_id: string | null
+          occurred_at: string
+          payload: Json
+          request_id: string
+          type: string
+        }
+        Insert: {
+          actor: string
+          id?: number
+          item_id?: string | null
+          occurred_at?: string
+          payload?: Json
+          request_id: string
+          type: string
+        }
+        Update: {
+          actor?: string
+          id?: number
+          item_id?: string | null
+          occurred_at?: string
+          payload?: Json
+          request_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "ops_request_items_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "request_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "viewing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       external_properties: {
         Row: {
           amenities: string[] | null
+          area_sqm: number | null
+          bedrooms: number | null
+          bedrooms_is_min: boolean | null
           canonical_group_id: string | null
           city: string | null
           contact_name: string | null
           contact_phone: string | null
+          contact_phone_e164: string | null
           crawled_at: string | null
           created_at: string | null
           deactivated_at: string | null
+          delisted_at: string | null
           description: string | null
+          district_code: string | null
           expires_at: string | null
           external_id: string
           highlights: string[] | null
@@ -536,12 +594,17 @@ export type Database = {
           longitude: number | null
           phone_extraction_attempts: number
           price: number | null
+          price_confidence: string | null
+          price_confirmed_at: string | null
           price_display: string | null
+          price_vnd: number | null
           raw_data: Json | null
           raw_only: boolean
+          realtor_id: string | null
           rooms: string | null
           size: string | null
           source: string
+          source_agent_id: string | null
           source_url: string
           title: string
           updated_at: string | null
@@ -549,17 +612,24 @@ export type Database = {
           vibe: string | null
           vibe_analysis: Json | null
           vibe_status: string
+          videos: Json
         }
         Insert: {
           amenities?: string[] | null
+          area_sqm?: number | null
+          bedrooms?: number | null
+          bedrooms_is_min?: boolean | null
           canonical_group_id?: string | null
           city?: string | null
           contact_name?: string | null
           contact_phone?: string | null
+          contact_phone_e164?: string | null
           crawled_at?: string | null
           created_at?: string | null
           deactivated_at?: string | null
+          delisted_at?: string | null
           description?: string | null
+          district_code?: string | null
           expires_at?: string | null
           external_id: string
           highlights?: string[] | null
@@ -578,12 +648,17 @@ export type Database = {
           longitude?: number | null
           phone_extraction_attempts?: number
           price?: number | null
+          price_confidence?: string | null
+          price_confirmed_at?: string | null
           price_display?: string | null
+          price_vnd?: number | null
           raw_data?: Json | null
           raw_only?: boolean
+          realtor_id?: string | null
           rooms?: string | null
           size?: string | null
           source: string
+          source_agent_id?: string | null
           source_url: string
           title: string
           updated_at?: string | null
@@ -591,17 +666,24 @@ export type Database = {
           vibe?: string | null
           vibe_analysis?: Json | null
           vibe_status?: string
+          videos?: Json
         }
         Update: {
           amenities?: string[] | null
+          area_sqm?: number | null
+          bedrooms?: number | null
+          bedrooms_is_min?: boolean | null
           canonical_group_id?: string | null
           city?: string | null
           contact_name?: string | null
           contact_phone?: string | null
+          contact_phone_e164?: string | null
           crawled_at?: string | null
           created_at?: string | null
           deactivated_at?: string | null
+          delisted_at?: string | null
           description?: string | null
+          district_code?: string | null
           expires_at?: string | null
           external_id?: string
           highlights?: string[] | null
@@ -620,12 +702,17 @@ export type Database = {
           longitude?: number | null
           phone_extraction_attempts?: number
           price?: number | null
+          price_confidence?: string | null
+          price_confirmed_at?: string | null
           price_display?: string | null
+          price_vnd?: number | null
           raw_data?: Json | null
           raw_only?: boolean
+          realtor_id?: string | null
           rooms?: string | null
           size?: string | null
           source?: string
+          source_agent_id?: string | null
           source_url?: string
           title?: string
           updated_at?: string | null
@@ -633,8 +720,17 @@ export type Database = {
           vibe?: string | null
           vibe_analysis?: Json | null
           vibe_status?: string
+          videos?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "external_properties_realtor_id_fkey"
+            columns: ["realtor_id"]
+            isOneToOne: false
+            referencedRelation: "realtors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       external_property_snapshots: {
         Row: {
@@ -737,6 +833,42 @@ export type Database = {
         }
         Relationships: []
       }
+      jobs: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          last_error: string | null
+          locked_at: string | null
+          payload: Json
+          run_after: string
+        }
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          last_error?: string | null
+          locked_at?: string | null
+          payload?: Json
+          run_after: string
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          last_error?: string | null
+          locked_at?: string | null
+          payload?: Json
+          run_after?: string
+        }
+        Relationships: []
+      }
       listing_deep_analyses: {
         Row: {
           analysis: Json
@@ -814,6 +946,62 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      messages: {
+        Row: {
+          body: string | null
+          channel: string
+          created_at: string
+          direction: string
+          error: string | null
+          id: string
+          idempotency_key: string
+          provider_id: string | null
+          request_id: string | null
+          sent_at: string | null
+          status: string
+          template_name: string | null
+          to_phone: string
+        }
+        Insert: {
+          body?: string | null
+          channel?: string
+          created_at?: string
+          direction: string
+          error?: string | null
+          id?: string
+          idempotency_key: string
+          provider_id?: string | null
+          request_id?: string | null
+          sent_at?: string | null
+          status: string
+          template_name?: string | null
+          to_phone: string
+        }
+        Update: {
+          body?: string | null
+          channel?: string
+          created_at?: string
+          direction?: string
+          error?: string | null
+          id?: string
+          idempotency_key?: string
+          provider_id?: string | null
+          request_id?: string | null
+          sent_at?: string | null
+          status?: string
+          template_name?: string | null
+          to_phone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "viewing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       openai_usage_log: {
         Row: {
@@ -1103,6 +1291,177 @@ export type Database = {
         }
         Relationships: []
       }
+      realtor_contact_imports: {
+        Row: {
+          display_name: string | null
+          imported_at: string
+          masked_prefix: string
+          phone_e164: string
+          sheet_row: string | null
+        }
+        Insert: {
+          display_name?: string | null
+          imported_at?: string
+          masked_prefix: string
+          phone_e164: string
+          sheet_row?: string | null
+        }
+        Update: {
+          display_name?: string | null
+          imported_at?: string
+          masked_prefix?: string
+          phone_e164?: string
+          sheet_row?: string | null
+        }
+        Relationships: []
+      }
+      realtor_identities: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          realtor_id: string
+          source: string
+          source_agent_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          realtor_id: string
+          source: string
+          source_agent_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          realtor_id?: string
+          source?: string
+          source_agent_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "realtor_identities_realtor_id_fkey"
+            columns: ["realtor_id"]
+            isOneToOne: false
+            referencedRelation: "realtors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      realtors: {
+        Row: {
+          agency: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          language: string
+          notes: string | null
+          phone_e164: string
+          updated_at: string
+        }
+        Insert: {
+          agency?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          language?: string
+          notes?: string | null
+          phone_e164: string
+          updated_at?: string
+        }
+        Update: {
+          agency?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          language?: string
+          notes?: string | null
+          phone_e164?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      renters: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          opted_out_at: string | null
+          phone_e164: string
+          service_window_expires_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          opted_out_at?: string | null
+          phone_e164: string
+          service_window_expires_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          opted_out_at?: string | null
+          phone_e164?: string
+          service_window_expires_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      request_items: {
+        Row: {
+          created_at: string
+          id: string
+          listing_id: string
+          price_vnd_at_request: number
+          realtor_id: string | null
+          request_id: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          listing_id: string
+          price_vnd_at_request: number
+          realtor_id?: string | null
+          request_id: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          listing_id?: string
+          price_vnd_at_request?: number
+          realtor_id?: string | null
+          request_id?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_items_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "external_properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_items_realtor_id_fkey"
+            columns: ["realtor_id"]
+            isOneToOne: false
+            referencedRelation: "realtors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_items_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "viewing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       security_audit_log: {
         Row: {
           action: string
@@ -1244,6 +1603,38 @@ export type Database = {
         }
         Relationships: []
       }
+      viewing_requests: {
+        Row: {
+          availability: Json
+          created_at: string
+          id: string
+          ref: string
+          renter_id: string
+        }
+        Insert: {
+          availability?: Json
+          created_at?: string
+          id?: string
+          ref: string
+          renter_id: string
+        }
+        Update: {
+          availability?: Json
+          created_at?: string
+          id?: string
+          ref?: string
+          renter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "viewing_requests_renter_id_fkey"
+            columns: ["renter_id"]
+            isOneToOne: false
+            referencedRelation: "renters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       viewing_trials: {
         Row: {
           renter_id: string
@@ -1264,14 +1655,58 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      ops_request_items_view: {
+        Row: {
+          area_sqm: number | null
+          bedrooms: number | null
+          created_at: string | null
+          district_code: string | null
+          id: string | null
+          listing_id: string | null
+          listing_title: string | null
+          listing_url: string | null
+          price_vnd_at_request: number | null
+          realtor_id: string | null
+          realtor_name: string | null
+          realtor_phone: string | null
+          request_id: string | null
+          request_ref: string | null
+          sort_order: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_items_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "external_properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_items_realtor_id_fkey"
+            columns: ["realtor_id"]
+            isOneToOne: false
+            referencedRelation: "realtors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_items_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "viewing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      activate_user_subscription: {
-        Args: { user_email: string }
-        Returns: undefined
-      }
       active_pass_expires_at: { Args: { _user_id: string }; Returns: string }
+      apply_realtor_contacts: {
+        Args: never
+        Returns: {
+          listings_linked: number
+          realtors_upserted: number
+        }[]
+      }
       base_viewing_allowance_remaining: {
         Args: { _user_id: string }
         Returns: number
@@ -1279,6 +1714,10 @@ export type Database = {
       can_create_fast_track_request:
         | { Args: { _user_id: string }; Returns: boolean }
         | { Args: { _needed: number; _user_id: string }; Returns: boolean }
+      canonical_price_vnd: {
+        Args: { _price: number; _price_display: string; _source: string }
+        Returns: number
+      }
       cleanup_expired_external_properties: { Args: never; Returns: undefined }
       deactivate_expired_properties: { Args: never; Returns: undefined }
       detect_city: { Args: { location_text: string }; Returns: string }
@@ -1422,14 +1861,6 @@ export type Database = {
           phone: string
         }[]
       }
-      get_user_subscription_status: {
-        Args: never
-        Returns: {
-          subscribed: boolean
-          subscription_end: string
-          subscription_tier: string
-        }[]
-      }
       has_active_pass: { Args: { _user_id: string }; Returns: boolean }
       has_complimentary_pass: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
@@ -1444,11 +1875,16 @@ export type Database = {
         Returns: boolean
       }
       normalize_location: { Args: { location_text: string }; Returns: string }
+      normalize_vn_phone: { Args: { raw: string }; Returns: string }
       openai_spend_today: { Args: never; Returns: number }
+      parse_area_sqm: { Args: { _size: string }; Returns: number }
+      parse_bedrooms: { Args: { _rooms: string }; Returns: number }
+      parse_bedrooms_is_min: { Args: { _rooms: string }; Returns: boolean }
       pass_viewing_credits_remaining: {
         Args: { _user_id: string }
         Returns: number
       }
+      price_confidence_for: { Args: { _price_vnd: number }; Returns: string }
       prune_orphan_listing_group_refs: { Args: never; Returns: number }
       set_fast_track_archived: {
         Args: { _archived: boolean; _request_id: string }
@@ -1457,12 +1893,19 @@ export type Database = {
           id: string
         }[]
       }
+      trim_old_logs: {
+        Args: { _older_than?: string }
+        Returns: {
+          rows_deleted: number
+          source: string
+        }[]
+      }
       validate_email: { Args: { email_input: string }; Returns: boolean }
       validate_phone: { Args: { phone_input: string }; Returns: boolean }
       verify_cron_secret: { Args: { _token: string }; Returns: boolean }
-      viewing_pack_credits_remaining: {
-        Args: { _user_id: string }
-        Returns: number
+      vn_district_code: {
+        Args: { _city: string; _location: string }
+        Returns: string
       }
     }
     Enums: {
@@ -1489,12 +1932,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1518,11 +1961,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1543,11 +1986,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1568,11 +2011,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1585,11 +2028,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

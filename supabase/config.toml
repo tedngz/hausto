@@ -117,3 +117,14 @@ verify_jwt = true
 # Meta calls this and cannot present a Supabase JWT. The X-Hub-Signature-256
 # HMAC over the raw body is what authenticates the caller instead.
 verify_jwt = false
+
+[functions.viewing-request]
+# Renter-facing intake: the SPA calls it with the anon key, so it validates
+# everything and trusts nothing from the client.
+verify_jwt = false
+
+[functions.dev-phone]
+# Backs /dev/phone. Checks the caller's admin role itself - it reads renter
+# numbers and message bodies, which is real personal data whatever the page is
+# called.
+verify_jwt = true

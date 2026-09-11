@@ -12,6 +12,8 @@ import Browse from "./pages/Browse";
 import Hub from "./pages/Hub";
 import Auth from "./pages/Auth";
 import PropertyDetail from "./pages/PropertyDetail";
+import ViewingRequest from "./pages/ViewingRequest";
+import DevPhone from "./pages/DevPhone";
 import NotFound from "./pages/NotFound";
 import AdminTools from "./pages/AdminTools";
 import AdminComplexes from "./pages/AdminComplexes";
@@ -64,6 +66,9 @@ const App = () => (
             <Route path="/pass-success" element={<PassSuccess />} />
             <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/request" element={<ViewingRequest />} />
+            {/* Dev-only surface, admin-gated in the edge function it calls. */}
+            <Route path="/dev/phone" element={<DevPhone />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           {/* Carries a card's "ask about this" to the hub's chat, which is
