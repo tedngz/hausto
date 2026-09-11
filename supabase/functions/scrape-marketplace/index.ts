@@ -2412,7 +2412,10 @@ Deno.serve(async (req) => {
           const extractPhoneUrl = `${SUPABASE_URL}/functions/v1/extract-phone`;
           // Build listings array from the properties that were just saved (new ones without phone)
           const listingsToExtract = filteredProperties
-            .filter(p => !p.sourceProviderPhone && p.sourceUrl)
+            // A masked value is not a phone. Testing truthiness here excluded
+            // exactly the listings that needed a reveal - 404 of them, carrying
+            // things like "0775 924 ***" - from ever being offered one.
+            .filter(p => !normalizeVnPhone(p.sourceProviderPhone) && p.sourceUrl)
             .slice(0, 5) // Limit to 5 per crawl to manage Browserless credits
             .map(p => ({
               source_url: normalizeSourceUrl(p.sourceUrl),
@@ -2427,7 +2430,9 @@ Deno.serve(async (req) => {
               .from('external_properties')
               .select('id, source_url, source')
               .in('source_url', sourceUrls)
-              .is('contact_phone', null);
+              // Same correction as the filter above: null OR masked both mean "no
+              // usable number". Matching on null alone skipped every masked row.
+              .or('contact_phone.is.null,contact_phone.like.%*%');
 
             if (savedProps && savedProps.length > 0) {
               console.log(`[scrape-marketplace] Triggering phone extraction for ${savedProps.length} new listings`);
