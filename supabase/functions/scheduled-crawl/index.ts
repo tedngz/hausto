@@ -31,16 +31,21 @@ const DAILY_COUNT_KEY = 'crawl:daily_count';
 // listing. The vision pass is not worth rationing: 1447 calls over 14 days came
 // to $2.12 on gpt-4o-mini.
 //
-// nhatot's headroom is deliberately well below what its Firecrawl cost alone
-// would allow. Its listings churn far faster than the others - 6.8% of HCMC
-// rows ever crawled are still active, against ~50% for batdongsan - so a large
-// nhatot index decays rather than accumulates. Raising this only pays off to
-// the extent the freshness work (the resurrection sweep, and `delisted_at`)
-// keeps up. Start here, watch the survival rate, and move it then.
+// nhatot is held at the same 20 as the others for now, even though its
+// Firecrawl cost would allow far more. Only 6.8% of HCMC nhatot rows ever
+// crawled are still active, against ~50% for batdongsan: chotot ads run out and
+// sellers repost, so a bigger nhatot index decays rather than accumulates.
+// Crawling harder into that would buy churn.
+//
+// Raise it once `delisted_at` lands (PLAN-v3 S1 item 5) and the survival rate
+// has been measured with the discovery fix in place - the resurrection sweep is
+// already running. This is the one line to change; the per-source machinery
+// below is what makes raising it safe, since nhatot's budget is no longer
+// shared with the sources that actually spend Firecrawl per listing.
 const MAX_DAILY_LISTINGS: Record<string, number> = {
   batdongsan: 20,
   housingsgn: 20,
-  nhatot: 100,
+  nhatot: 20,
 };
 const DEFAULT_MAX_DAILY_LISTINGS = 20;
 
