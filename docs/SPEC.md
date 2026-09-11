@@ -2,7 +2,7 @@
 
 Status: draft, authoritative. Written 2026-09-10 alongside `docs/PLAN-v3.md`.
 
-A renter shortlists 3-5 crawled HCMC rentals and requests viewings. A human
+A renter shortlists 3-5 crawled rentals and requests viewings. A human
 operator working Zalo confirms availability with each realtor. The system
 assembles an itinerary and delivers it over WhatsApp. The renter confirms with
 one tap.
@@ -27,7 +27,7 @@ Do not restructure it. Add only:
 | `bedrooms` | `smallint` | `rooms` is free text: `'2 Bedrooms'`, `'Studio'`, `'4+ Bedrooms'`. Zero of 115 active rows parse as a bare integer. `Studio` maps to `0`. |
 | `bedrooms_is_min` | `boolean` | True for `'4+ Bedrooms'`, so a `= 4` filter does not silently claim precision. |
 | `area_sqm` | `numeric` | `size` is free text; 17 of 115 active rows are numeric. |
-| `district_code` | `text` | `location_normalized` is diacritic-stripped prose (`'ng bn vn n phng 1 qun 4 h ch minh'`), not a code. Use `D1`..`D12`, `BINH_THANH`, `THU_DUC`, `PHU_NHUAN`, `TAN_BINH`, `GO_VAP`, `BINH_TAN`, `NHA_BE`. |
+| `district_code` | `text` | `location_normalized` is diacritic-stripped prose (`'ng bn vn n phng 1 qun 4 h ch minh'`), not a code. Scoped by `city`, because all three cities are in scope and district names collide across them - HCMC `D1`..`D12`, `BINH_THANH`, `THU_DUC`, `PHU_NHUAN`, `TAN_BINH`, `GO_VAP`, `BINH_TAN`, `NHA_BE`; Hanoi `BA_DINH`, `CAU_GIAY`, `DONG_DA`, `HAI_BA_TRUNG`, `HOAN_KIEM`, `TAY_HO`, `NAM_TU_LIEM`; Da Nang `HAI_CHAU`, `NGU_HANH_SON`, `SON_TRA`. Unique on `(city, district_code)`, never on `district_code` alone. |
 | `source_agent_id` | `text` | The broker's profile id on the source site. The durable join key for realtor identity - see §1. |
 | `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification **confirms** the unit is gone - the listing's own source saying so, twice - or when it goes 21 days without a price confirmation. A URL that merely failed to resolve sets `deactivated_at` only; on nhatot that is routinely wrong, since expired ads come back under the same id when the seller reposts. |
 | `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
