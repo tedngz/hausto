@@ -19,7 +19,39 @@ const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/scheduled-crawl`;
 
 const CONFIG_KEY = 'crawl:config';
 const DAILY_COUNT_KEY = 'crawl:daily_count';
-const MAX_DAILY_LISTINGS = 20;
+
+// The daily cap is a Firecrawl guard, so it belongs per source: what it is
+// really rationing is one detail-page fetch per listing, and not every source
+// spends one.
+//
+//   batdongsan, housingsgn   1 Firecrawl fetch per listing (scrapeDetailPage)
+//   nhatot                   0 - the chotot ad payload replaces the fetch
+//
+// Both still cost one search-page fetch per RUN, and one vision pass per
+// listing. The vision pass is not worth rationing: 1447 calls over 14 days came
+// to $2.12 on gpt-4o-mini.
+//
+// nhatot is held at the same 20 as the others for now, even though its
+// Firecrawl cost would allow far more. Only 6.8% of HCMC nhatot rows ever
+// crawled are still active, against ~50% for batdongsan: chotot ads run out and
+// sellers repost, so a bigger nhatot index decays rather than accumulates.
+// Crawling harder into that would buy churn.
+//
+// Raise it once `delisted_at` lands (PLAN-v3 S1 item 5) and the survival rate
+// has been measured with the discovery fix in place - the resurrection sweep is
+// already running. This is the one line to change; the per-source machinery
+// below is what makes raising it safe, since nhatot's budget is no longer
+// shared with the sources that actually spend Firecrawl per listing.
+const MAX_DAILY_LISTINGS: Record<string, number> = {
+  batdongsan: 20,
+  housingsgn: 20,
+  nhatot: 20,
+};
+const DEFAULT_MAX_DAILY_LISTINGS = 20;
+
+function dailyCapFor(source: string): number {
+  return MAX_DAILY_LISTINGS[source] ?? DEFAULT_MAX_DAILY_LISTINGS;
+}
 
 // ===== QStash signature verification =====
 async function verifyQStashSignature(signature: string, body: string): Promise<boolean> {
@@ -1068,7 +1100,34 @@ Deno.serve(async (req) => {
     // Check all location+marketplace combos in parallel batches
     const enabledMps = (config.enabledMarketplaces ?? DEFAULT_CONFIG.enabledMarketplaces)
       .filter((m) => (MARKETPLACES as readonly string[]).includes(m));
-    const rotationMps = enabledMps.length > 0 ? enabledMps : [...MARKETPLACES];
+    const candidateMps = enabledMps.length > 0 ? enabledMps : [...MARKETPLACES];
+
+    // Drop sources that have already spent their daily budget BEFORE choosing a
+    // target. The rotation picks the oldest-crawled combo, and a target is only
+    // marked crawled once it actually runs - so a capped source stays the oldest
+    // combo forever and every remaining run of the day exits on its budget check
+    // having crawled nothing. With one shared counter that merely ended the
+    // day's crawling; with per-source counts it would let a cheap source's cap
+    // block an expensive one that still had budget, which is backwards.
+    const today = new Date().toISOString().slice(0, 10);
+    const spend = await Promise.all(candidateMps.map(async (mp) => ({
+      mp,
+      used: ((await redisGet(`${DAILY_COUNT_KEY}:${today}:${mp}`)) || 0) as number,
+    })));
+    const rotationMps = spend.filter(({ mp, used }) => used < dailyCapFor(mp)).map(({ mp }) => mp);
+    if (rotationMps.length === 0) {
+      const detail = spend.map(({ mp, used }) => `${mp} ${used}/${dailyCapFor(mp)}`).join(', ');
+      console.log(`[scheduled-crawl] Every source has spent its daily budget (${detail}). Skipping.`);
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Daily limit reached for all enabled sources',
+        spend,
+        config,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const checks: Promise<{ loc: typeof CRAWL_LOCATIONS[0]; mp: string; lastCrawl: number | null }>[] = [];
     for (const loc of CRAWL_LOCATIONS) {
       for (const mp of rotationMps) {
@@ -1117,14 +1176,17 @@ Deno.serve(async (req) => {
 
     console.log(`[scheduled-crawl] Target: ${bestTarget.location} on ${bestTarget.marketplace} (last crawl: ${bestTarget.lastCrawl ? new Date(bestTarget.lastCrawl).toISOString() : 'never'})`);
 
-    // Check daily listing limit before proceeding
-    const todayKey = `${DAILY_COUNT_KEY}:${new Date().toISOString().slice(0, 10)}`;
+    // Check daily listing limit before proceeding. Counted per source, so a
+    // cheap source running hot cannot consume the budget a costly one needs -
+    // which is what a single shared counter did.
+    const dailyCap = dailyCapFor(bestTarget.marketplace);
+    const todayKey = `${DAILY_COUNT_KEY}:${new Date().toISOString().slice(0, 10)}:${bestTarget.marketplace}`;
     const dailyCount = (await redisGet(todayKey)) || 0;
-    if (dailyCount >= MAX_DAILY_LISTINGS) {
-      console.log(`[scheduled-crawl] Daily limit reached: ${dailyCount}/${MAX_DAILY_LISTINGS} listings today. Skipping.`);
+    if (dailyCount >= dailyCap) {
+      console.log(`[scheduled-crawl] Daily limit reached for ${bestTarget.marketplace}: ${dailyCount}/${dailyCap} listings today. Skipping.`);
       return new Response(JSON.stringify({
         success: true,
-        message: `Daily limit reached (${dailyCount}/${MAX_DAILY_LISTINGS})`,
+        message: `Daily limit reached for ${bestTarget.marketplace} (${dailyCount}/${dailyCap})`,
         config,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1132,9 +1194,9 @@ Deno.serve(async (req) => {
     }
 
     // Cap maxListingsPerRun to remaining daily budget
-    const remainingBudget = MAX_DAILY_LISTINGS - dailyCount;
+    const remainingBudget = dailyCap - dailyCount;
     const effectiveMax = Math.min(config.maxListingsPerRun, remainingBudget);
-    console.log(`[scheduled-crawl] Daily budget: ${dailyCount}/${MAX_DAILY_LISTINGS} used, effective max this run: ${effectiveMax}`);
+    console.log(`[scheduled-crawl] Daily budget for ${bestTarget.marketplace}: ${dailyCount}/${dailyCap} used, effective max this run: ${effectiveMax}`);
 
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
@@ -1197,7 +1259,7 @@ Deno.serve(async (req) => {
       midnight.setUTCHours(0, 0, 0, 0);
       const ttlSeconds = Math.max(60, Math.floor((midnight.getTime() - now.getTime()) / 1000));
       await redisSet(todayKey, updatedDailyCount, ttlSeconds);
-      console.log(`[scheduled-crawl] Daily count updated: ${updatedDailyCount}/${MAX_DAILY_LISTINGS}`);
+      console.log(`[scheduled-crawl] Daily count updated for ${bestTarget.marketplace}: ${updatedDailyCount}/${dailyCap}`);
     }
 
     // Step 3: Always chain vibe backfill via QStash after each crawl

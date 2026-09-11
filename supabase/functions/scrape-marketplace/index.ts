@@ -1291,7 +1291,16 @@ async function extractListingUrls(
   // Filter links to property detail pages based on marketplace URL patterns (RENT ONLY)
   const listingPatterns: Record<string, RegExp> = {
     batdongsan: /batdongsan\.com\.vn\/cho-thue-(can-ho|chung-cu|can-ho-chung-cu)[^?#]*-pr\d+/i,
-    nhatot: /nhatot\.com\/[^?#]*\/(thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
+    // The rent slug is the FIRST path segment on nhatot:
+    //   /thue-can-ho-chung-cu-quan-1-tp-ho-chi-minh/122149828.htm
+    // This used to require a segment before it (`[^?#]*\/(thue|cho-thue)`), so
+    // it matched nothing real. Phase 1 found 0 listing URLs on every nhatot run
+    // from 2026-02-28 onward, and the AI fallback's suggestions - correct URLs,
+    // several of them listings we already hold - were all rejected for failing
+    // the same test. What kept nhatot alive at all was the search-page
+    // extraction fallback, which is also where the one-image listings came
+    // from. The leading segment is now optional.
+    nhatot: /nhatot\.com\/(?:[^?#]*\/)?(?:thue|cho-thue)[^?#]*\/\d{6,}\.htm/i,
     airbnb: /airbnb\.com\/rooms\/\d+/i,
     // Single properties only: /properties/<slug> carrying a property code.
     // Project and district archives (/apartment-for-rent-in-one-verandah-thu-duc)
