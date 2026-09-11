@@ -11,15 +11,41 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const EXCLUDE_NUMBERS = ['19001881', '1900', '19006263'];
 
+// A Vietnamese mobile in local form: 10 digits, 0 then 3/5/7/8/9.
+//
+// The old acceptance test was `^0\d{9,10}$`, which takes 11-digit numbers and
+// the 01x prefixes retired in 2018 - and, combined with the `'0' + digits`
+// fallback below, turned any 9-to-10-digit field in a JSON payload into a phone
+// number. `ad_id` on a chotot ad is 9 digits, so every nhatot listing would have
+// been stamped with '0' + ad_id. See extractNhatotPhoneFromAd.
+function isPlausibleVnMobile(local: string): boolean {
+  return /^0(3|5|7|8|9)\d{8}$/.test(local);
+}
+
 function cleanPhoneNumber(raw: string): string | null {
   if (!raw) return null;
   if (raw.includes('*')) return null;
   let cleaned = raw.replace(/[^\d+]/g, '');
   if (cleaned.startsWith('+84')) cleaned = '0' + cleaned.slice(3);
   if (cleaned.startsWith('84') && cleaned.length > 10) cleaned = '0' + cleaned.slice(2);
-  if (/^0\d{9,10}$/.test(cleaned)) return cleaned;
-  if (/^\d{9,10}$/.test(cleaned)) return '0' + cleaned;
-  return null;
+  // A bare 9-digit national number ("901234567") is a real form on some pages,
+  // so it still gets its leading zero - but only the validator decides whether
+  // the result is a phone.
+  if (/^\d{9}$/.test(cleaned)) cleaned = '0' + cleaned;
+  return isPlausibleVnMobile(cleaned) ? cleaned : null;
+}
+
+// Chotot masks the number but leaves its opening digits visible: "036666****".
+// Those digits are real, which makes them a free validator - a candidate that
+// does not start with them is not this seller's number, whatever else it looks
+// like. Returns null when there is no usable mask, in which case nothing can be
+// confirmed and nothing should be stored.
+function maskPrefixOf(masked: unknown): string | null {
+  if (typeof masked !== 'string') return null;
+  const digits = masked.replace(/[^\d]/g, '');
+  // Needs enough prefix to mean something. Six digits pins the carrier block
+  // and most of the subscriber number.
+  return digits.length >= 5 ? digits : null;
 }
 
 function detectMarketplace(url: string): string | null {
@@ -234,9 +260,9 @@ async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string
       const mobileData = await mobileResp.json();
       const ad = mobileData?.ad;
       if (ad) {
-        const found = deepFindPhoneInObject(ad);
+        const found = extractNhatotPhoneFromAd(ad);
         if (found) {
-          console.log(`[extract-phone] Nhatot mobile API found phone: ${found}`);
+          console.log(`[extract-phone] Nhatot mobile API found phone matching its own mask: ${found}`);
           return { phone: found, method: 'nhatot_mobile_api' };
         }
       }
@@ -308,6 +334,49 @@ async function tryNhatotDirectFetch(listingUrl: string): Promise<{ phone: string
 }
 
 // Deep search an object for phone number values
+// Pull a phone out of a chotot ad payload, and only accept it if it agrees with
+// the mask the payload itself publishes.
+//
+// This replaces a blind deep scan for anything phone-shaped. Verified against
+// live ads, that scan returned:
+//
+//   ad 122149828   mask 036666****   scan said 0164218476   (= '0' + ad_id)
+//   ad 134590988   mask 098890****   scan said 0178660662
+//   ad 130451019   mask 094286****   scan said 0173821946
+//
+// None match their own mask, and all begin 01x, a prefix Vietnam retired in
+// 2018. It was reading `ad_id`. Nothing had noticed because the extractor has
+// never completed a run - had it run, every nhatot listing would carry a
+// confidently wrong number, and ops would have rung it.
+function extractNhatotPhoneFromAd(ad: Record<string, unknown>): string | null {
+  const prefix = maskPrefixOf(ad?.phone);
+  const candidates: string[] = [];
+  const walk = (v: unknown, depth = 0) => {
+    if (!v || depth > 12 || candidates.length > 50) return;
+    if (typeof v === 'string' || typeof v === 'number') {
+      const c = cleanPhoneNumber(String(v));
+      if (c) candidates.push(c);
+      return;
+    }
+    if (Array.isArray(v)) { for (const i of v) walk(i, depth + 1); return; }
+    if (typeof v === 'object') { for (const k of Object.keys(v as object)) walk((v as Record<string, unknown>)[k], depth + 1); }
+  };
+  walk(ad);
+
+  if (!prefix) {
+    // No mask to check against. An unvalidated guess is worse than no number:
+    // a blank field gets resolved on demand, a wrong one gets dialled.
+    console.log('[extract-phone] nhatot ad carries no usable phone mask - not guessing');
+    return null;
+  }
+  const match = candidates.find(c => c.startsWith(prefix));
+  if (!match) {
+    console.log(`[extract-phone] nhatot: ${candidates.length} candidate(s), none matching mask ${prefix}****`);
+    return null;
+  }
+  return match;
+}
+
 function deepFindPhoneInObject(obj: unknown, depth = 0): string | null {
   if (!obj || depth > 12) return null;
   if (typeof obj === 'string') {
@@ -478,7 +547,25 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (authHeader?.startsWith('Bearer ')) {
+
+    // pg_cron authenticates with the dedicated cron secret, the same way
+    // scheduled-crawl does. The vault holds no service-role key, and the anon
+    // key is published in the client bundle so it proves nothing.
+    const cronSecret = req.headers.get('x-cron-secret') || '';
+    let authorizedByCron = false;
+    if (cronSecret) {
+      const svc = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data, error } = await svc.rpc('verify_cron_secret', { _token: cronSecret });
+      if (error) console.error('[extract-phone] cron secret check failed:', error.message);
+      authorizedByCron = data === true;
+      if (!authorizedByCron) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    if (!authorizedByCron && authHeader?.startsWith('Bearer ')) {
       const token = authHeader.replace('Bearer ', '');
       const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
       const isAnonKey = token === anonKey;
@@ -514,6 +601,37 @@ serve(async (req) => {
           phone_extraction_attempts: 0,
           updated_at: new Date().toISOString(),
         }).eq('id', id);
+
+        // A revealed number is the expensive half of realtor identity, so it
+        // gets attached rather than left in a text column for someone to
+        // rediscover. normalize_vn_phone is the same function the ingest path
+        // and the S2 backfill use, so `realtors.phone_e164` cannot drift
+        // between the three ways a number can arrive.
+        const { data: e164 } = await supabase.rpc('normalize_vn_phone', { raw: phone });
+        if (e164) {
+          const { data: existing } = await supabase
+            .from('realtors').select('id').eq('phone_e164', e164).maybeSingle();
+          let realtorId = existing?.id as string | undefined;
+          if (!realtorId) {
+            const { data: created } = await supabase
+              .from('realtors').insert({ phone_e164: e164 }).select('id').maybeSingle();
+            realtorId = created?.id as string | undefined;
+          }
+          if (realtorId) {
+            await supabase.from('external_properties')
+              .update({ realtor_id: realtorId }).eq('id', id);
+            // Tie it to the source's own id for this seller where we have one,
+            // so the next listing from them resolves without another reveal.
+            const { data: row } = await supabase.from('external_properties')
+              .select('source, source_agent_id').eq('id', id).maybeSingle();
+            if (row?.source_agent_id) {
+              await supabase.from('realtor_identities').upsert(
+                { realtor_id: realtorId, source: row.source, source_agent_id: row.source_agent_id },
+                { onConflict: 'source,source_agent_id' },
+              ).then(() => {}, (e: Error) => console.warn('[extract-phone] identity upsert failed:', e.message));
+            }
+          }
+        }
       } else {
         const { data: cur } = await supabase
           .from('external_properties')
@@ -571,9 +689,13 @@ serve(async (req) => {
     // Mode 3: Auto-fill (skip listings that have already failed 3+ times)
     if (body.autoFill) {
       const limit = Math.min(body.limit || 5, 10);
+      // "Missing a phone" means missing a DIALABLE one. Selecting on
+      // `contact_phone IS NULL` skipped the 404 rows holding a masked value -
+      // which is every row that actually needed this function.
       const { data: missingPhone } = await supabase
         .from('external_properties').select('id, source_url, source, phone_extraction_attempts')
-        .is('contact_phone', null).eq('is_active', true)
+        .or('contact_phone.is.null,contact_phone.like.%*%')
+        .eq('is_active', true)
         .lt('phone_extraction_attempts', 3)
         .order('created_at', { ascending: false }).limit(limit);
 
