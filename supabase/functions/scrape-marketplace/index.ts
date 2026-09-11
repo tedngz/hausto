@@ -652,6 +652,72 @@ function extractHousingsgnGalleryImages(html: string, url: string): string[] {
 }
 
 
+// E.164 or nothing. Mirrors public.normalize_vn_phone.
+//
+// Returning null for a masked number is the whole point. 404 of the 495
+// contact_phone values in the index are things like "0775 924 ***", and storing
+// those as if they were numbers is what made realtor coverage look like 87% when
+// the real figure was ten distinct people.
+export function normalizeVnPhone(raw?: string | null): string | null {
+  const d = String(raw ?? '').replace(/[^0-9+]/g, '');
+  if (/^\+84[0-9]{9}$/.test(d)) return d;
+  if (/^84[0-9]{9}$/.test(d)) return `+${d}`;
+  if (/^0[0-9]{9}$/.test(d)) return `+84${d.slice(1)}`;
+  return null;
+}
+
+// Resolution order at ingest, per SPEC §1: agent identity, then phone, then NULL
+// and leave it for on-demand resolution when a renter actually shortlists it.
+//
+// Unresolved listings stay searchable on purpose. A contact is only needed once
+// someone wants to view the place, and chasing full coverage up front spends
+// Browserless reveals on listings nobody asks about.
+// deno-lint-ignore no-explicit-any
+async function resolveRealtorId(
+  supabase: any,
+  source: string,
+  sourceAgentId?: string | null,
+  rawPhone?: string | null,
+): Promise<string | null> {
+  if (sourceAgentId) {
+    const { data } = await supabase
+      .from('realtor_identities')
+      .select('realtor_id')
+      .eq('source', source)
+      .eq('source_agent_id', sourceAgentId)
+      .maybeSingle();
+    if (data?.realtor_id) return data.realtor_id as string;
+  }
+
+  const phone = normalizeVnPhone(rawPhone);
+  if (!phone) return null;
+
+  // A real number is worth a row whether or not we have seen it before.
+  const { data: existing } = await supabase
+    .from('realtors').select('id').eq('phone_e164', phone).maybeSingle();
+  let realtorId = existing?.id as string | undefined;
+  if (!realtorId) {
+    const { data: created, error } = await supabase
+      .from('realtors').insert({ phone_e164: phone }).select('id').maybeSingle();
+    if (error) {
+      console.warn(`[realtor] Could not create realtor for ${phone}:`, error.message);
+      return null;
+    }
+    realtorId = created?.id as string | undefined;
+  }
+  if (!realtorId) return null;
+
+  // Having resolved a phone, tie it to the agent id so the next ad from this
+  // broker needs no reveal at all. This is the step that compounds.
+  if (sourceAgentId) {
+    await supabase
+      .from('realtor_identities')
+      .upsert({ realtor_id: realtorId, source, source_agent_id: sourceAgentId }, { onConflict: 'source,source_agent_id' })
+      .then(() => {}, (e: Error) => console.warn('[realtor] identity upsert failed:', e.message));
+  }
+  return realtorId;
+}
+
 async function savePropertiesToDB(
   properties: ExternalProperty[],
   marketplace: string,
@@ -767,6 +833,13 @@ async function savePropertiesToDB(
       const existing = existingByUrl || existingById;
       const now = new Date().toISOString();
 
+      const resolvedRealtorId = await resolveRealtorId(
+        supabase,
+        marketplace,
+        (property as { sourceAgentId?: string }).sourceAgentId,
+        property.sourceProviderPhone,
+      );
+
       const propertyData = {
         title: property.title || 'Rental Property',
         location: property.location || fallbackLocation,
@@ -783,6 +856,15 @@ async function savePropertiesToDB(
         videos: property.videos || [],
         contact_name: property.sourceProviderName || null,
         contact_phone: property.sourceProviderPhone || null,
+        // The source's own id for the seller. Free on nhatot (`account_oid`),
+        // and the durable half of realtor identity: the phone behind it usually
+        // has to be bought with a Browserless reveal, but this arrives with the
+        // ad and never changes, so one resolution attaches every future listing
+        // from that broker.
+        ...((property as { sourceAgentId?: string }).sourceAgentId
+          ? { source_agent_id: (property as { sourceAgentId?: string }).sourceAgentId }
+          : {}),
+        ...(resolvedRealtorId ? { realtor_id: resolvedRealtorId } : {}),
         vibe: property.vibe || null,
         vibe_analysis: sanitizeVibeAnalysis(property.vibe_analysis || {}),
         is_active: true,
