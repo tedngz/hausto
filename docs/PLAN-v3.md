@@ -32,12 +32,30 @@ at least April - 337 HCMC rows, plus 68 Hanoi and 15 Da Nang. v2's top S1 item,
 "add Chotot (largest volume)", is already built. `scheduled-crawl/index.ts:327`
 enables all three marketplaces.
 
-**2. Realtor phones are already resolved, not waiting for a regex.**
-`contact_phone` is populated on 487 of 696 rows and on **100 of 115 active
-(87%)**. There is an `extract-phone` edge function and a
-`phone_extraction_attempts` column. v2's S2 acceptance criterion - "≥60% of
-active HCMC listings have a resolved realtor" - was already exceeded when it was
-written.
+**2. Realtor phones are NOT resolved. This finding was wrong.**
+
+It originally read "already resolved, 87% of active listings", from the fact
+that `contact_phone` is populated on 487 of 696 rows. Populated is not
+resolved. Of 495 rows carrying the field, **404 hold a masked value** -
+`0775 924 ***`, `098890 ***`, `***`. Counting those as contacts is what
+produced the 87%.
+
+What is actually dialable:
+
+| Source | Active | Dialable | Distinct real numbers |
+|---|---|---|---|
+| batdongsan | 88 | **0** | 0 |
+| housingsgn | 33 | 30 | **1** (the agency switchboard) |
+| nhatot | 24 | 1 | 1 |
+
+Ten distinct numbers across the whole 696-row index; two across active
+listings. `phone_extraction_attempts` is 0 on every row, so `extract-phone`
+has never run to completion, and it is on no cron.
+
+Masking is per source and deliberate: batdongsan hides the number behind
+"Bấm để hiện số", nhatot masks it in the ad payload. Only housingsgn publishes
+one, being a single agency. So acquisition is the work, and it is a day or two
+per source, not a regex pass.
 
 **3. `vibe` is not null on every row.** 287 of 696 rows carry it (28 of 115
 active). More to the point, `vibe` is not just a response field: the style filter
@@ -206,14 +224,18 @@ only thing counted.
 > built until the crawler work lands. 800 is enough to exercise the flow with
 > real inventory, so treat 800 as the gate and 2,000 as the goal.
 
-### S2 - Realtor identity (0.5 day)
+### S2 - Realtor identity (0.5 day scaffolding + acquisition per source)
 
-Most of this is done. What remains is normalization, not extraction.
+Re-scoped after finding 2 turned out to be wrong. This was costed as
+"normalization, not extraction" on the belief that the phones were already in
+hand. They are not, so it splits in two: the scaffolding below is half a day
+and real, and acquisition behind it is the actual milestone.
 
 1. Create `realtors` and `realtor_identities` per SPEC §1.
-2. Backfill `realtors` from the 487 rows that already carry `contact_phone`,
-   normalizing to E.164 and collapsing the duplicates - one broker appears across
-   many listings.
+2. Backfill `realtors` from the rows carrying a **dialable** `contact_phone`,
+   normalizing to E.164 and collapsing duplicates. That is 82 rows and 10
+   brokers, not 487 - `public.normalize_vn_phone` returns NULL for a masked
+   value rather than storing a number nobody can ring.
 3. Add `source_agent_id` to `external_properties` and populate it from the
    batdongsan seller box during the S1 crawler work, while that code is open.
 4. Wire ingest resolution order: agent identity → phone match → NULL and enqueue.
@@ -226,9 +248,16 @@ retiring. It is not a milestone.
 a contact only when a renter shortlists them, and ops resolves those on demand at
 request time. Every on-demand resolution enriches the table permanently.
 
-**Done when:** `realtors` and `realtor_identities` exist and are backfilled;
-ingest auto-attaches on `source_agent_id`; `/ops/resolve` lets an operator
-resolve an unknown in under 60 seconds.
+**Scaffolding done when:** `realtors` and `realtor_identities` exist and are
+backfilled; ingest resolves agent identity → phone → NULL; `source_agent_id`
+is persisted for every source that exposes one.
+
+**Acquisition done when:** `extract-phone` runs on a schedule and ≥60% of
+active listings resolve to a dialable number. Nothing about that is achievable
+by normalization - it needs the batdongsan reveal path working, which is what
+`extract-phone`'s Browserless branch was built for and has never done.
+
+`/ops/resolve` moves to S5, where the console it lives in gets built.
 
 ### S3 - Data normalization (1.5 days)
 
