@@ -183,17 +183,23 @@ Retention before acquisition. In order:
    price-confirming re-verification. Keep `deactivated_at` for URL-level death.
 6. **Then, and only then, add sources.** 3-5 expat-facing broker sites in the
    housingsgn mould, then the two or three HCMC expat rental Facebook groups that
-   matter. Chotot is already in - make it produce again rather than re-adding it.
-7. **Drop Hanoi and Da Nang** from crawl and search. HCMC only until the flow
-   works. Six active rows and 120 inactive ones are affected; this is a filter,
-   not a project.
+   matter - HCMC first because that is where the demand is, not because the other
+   cities are out of scope. Chotot is already in - make it produce again rather than re-adding it.
+7. ~~Drop Hanoi and Da Nang.~~ **Reversed on 2026-09-11: all three cities stay.**
+   The rotation already covers 10 HCMC districts, 7 Hanoi and 3 Da Nang, so
+   keeping them is the option that costs nothing - the work was only ever in
+   removing them. The one real consequence is that `district_code` (SPEC §0) has
+   to cover Hanoi and Da Nang districts, not just the HCMC set, and S3 should
+   carry that.
 
 **Done when:** per-source crawl telemetry exists and all three sources have
 written rows in the last 24 hours; the 41 recovered rows are live; the
 resurrection sweep runs on a schedule and has reactivated its first batch; a
 single verification reason cannot silently deactivate more than 20% of a run;
-≥800 active HCMC listings, with ≥2,000 as the standing target once the leak is
-closed and new sources land.
+≥800 active listings, with ≥2,000 as the standing target once the leak is closed
+and new sources land. Counted across all three cities, since they are all in
+scope again - HCMC remains where supply matters most, but it is no longer the
+only thing counted.
 
 > v2 targeted 2,000 active as a gate on everything downstream. That target is
 > right and unchanged, but gating S3-S6 on it means the ops console does not get
@@ -236,8 +242,9 @@ The live shape of the problem, on 115 active rows:
   `'4+ Bedrooms'` (6), `'4 Bedrooms'` (1), null (1).
 - `size` parses as a number on **17** of them.
 - `location_normalized` is populated on all 115 but is diacritic-stripped prose,
-  not a district code. Three active rows normalize to `'h ni'` - Hanoi rows that
-  S1 removes.
+  not a district code. Three active rows normalize to `'h ni'` - Hanoi rows,
+  which now stay, so the mapping has to cover all three cities rather than
+  assuming HCMC.
 - Price: fix the housingsgn USD conversion first, as a source-level rule, before
   building the title/description cross-check. Then flag `price_confidence = LOW`
   where extracted and described prices disagree by more than 15%, and exclude
@@ -362,7 +369,6 @@ from those threads is what the drafts and the parser get trained against.
 Already out: route optimization, calendar sync, realtor accounts, i18n framework.
 
 Newly out for this phase:
-- Hanoi and Da Nang. HCMC only.
 - Renter accounts beyond a phone-keyed session.
 - Any Zalo integration.
 - Geocoding the index. Zero active rows have coordinates and the viewing flow

@@ -115,7 +115,6 @@ Do not build these even if they seem natural:
 - Realtor-facing accounts, login, or portal.
 - Renter authentication beyond a signed session cookie keyed to phone number.
 - i18n framework. Renter UI is English only. Vietnamese strings are data, not UI.
-- Hanoi and Da Nang. HCMC only until the flow works.
 - Geocoding. Zero active listings have coordinates and the viewing flow does not
   need them.
 
