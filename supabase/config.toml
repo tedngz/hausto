@@ -107,3 +107,13 @@ verify_jwt = false
 [functions.concierge-email-reply]
 verify_jwt = true
 
+
+[functions.whatsapp-send]
+# Service role or cron secret only. A renter who could name a phone and a body
+# could send from our number.
+verify_jwt = true
+
+[functions.whatsapp-webhook]
+# Meta calls this and cannot present a Supabase JWT. The X-Hub-Signature-256
+# HMAC over the raw body is what authenticates the caller instead.
+verify_jwt = false
