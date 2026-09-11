@@ -54,6 +54,32 @@ function detectMarketplace(url: string): string | null {
   return null;
 }
 
+// `blocked` means the site refused us - 403/429/5xx, a BQL error, a timeout.
+// It is deliberately separate from "we loaded the page and there was no phone
+// on it", because only the second is evidence about the listing.
+interface PhoneResult {
+  phone: string | null;
+  method: string;
+  blocked?: boolean;
+  debug?: Record<string, unknown>;
+}
+
+// batdongsan starts returning 403 on listing pages when hit repeatedly, while
+// still passing the domain-level check - observed going from 200 to 403 inside
+// eight minutes of testing. It gets a longer gap than the others, and any run
+// that sees a block stops touching that source rather than marching through the
+// rest of the batch collecting 403s.
+const SOURCE_GAP_MS: Record<string, number> = {
+  batdongsan: 8000,
+  nhatot: 4000,
+  housingsgn: 2000,
+};
+const DEFAULT_GAP_MS = 2000;
+
+function gapForSource(source: string): number {
+  return SOURCE_GAP_MS[source] ?? DEFAULT_GAP_MS;
+}
+
 function getCookieString(marketplace: string): string {
   if (marketplace === 'batdongsan') return Deno.env.get('BATDONGSAN_COOKIES') || '';
   if (marketplace === 'nhatot') return Deno.env.get('NHATOT_COOKIES') || '';
@@ -433,7 +459,7 @@ function deepFindPhoneInObject(obj: unknown, depth = 0): string | null {
   return null;
 }
 
-async function extractPhoneForListing(listingUrl: string, marketplace: string): Promise<{ phone: string | null; method: string }> {
+async function extractPhoneForListing(listingUrl: string, marketplace: string): Promise<PhoneResult> {
   // For Nhatot: try direct HTTP fetch first (no browser needed, faster & free)
   if (marketplace === 'nhatot') {
     const directResult = await tryNhatotDirectFetch(listingUrl);
@@ -542,11 +568,22 @@ async function extractPhoneForListing(listingUrl: string, marketplace: string): 
     console.log(`[extract-phone] Raw evaluate value: ${typeof rawValue === 'string' ? rawValue.substring(0, 500) : rawValue}`);
     
     const phoneResult = parsePhoneResult(rawValue);
+
+    // Being refused is not the same as finding nothing. A 403, a 429, a 5xx or a
+    // BQL error means the site would not show us the page - which says nothing
+    // about whether the seller published a number. Counting those as failed
+    // attempts retires listings for our own infrastructure problems: two
+    // batdongsan rows hit the cap in a single afternoon of testing that way.
+    const pageStatus = (result.data?.gotoListing?.status ?? result.data?.reloadAfterVerify?.status ?? result.data?.goto?.status) as number | undefined;
+    const blocked = (typeof pageStatus === 'number' && (pageStatus === 403 || pageStatus === 429 || pageStatus >= 500)) || !!result.errors;
+    if (blocked) console.log(`[extract-phone] Blocked (status ${pageStatus ?? 'n/a'}) - not counting this as an attempt`);
+
     console.log(`[extract-phone] Result: ${JSON.stringify(phoneResult).substring(0, 500)}`);
-    return phoneResult;
+    return { ...phoneResult, blocked };
   } catch (error) {
+    // A throw here is a timeout or a transport failure - ours, not theirs.
     console.error(`[extract-phone] Error:`, error);
-    return { phone: null, method: 'error' };
+    return { phone: null, method: 'error', blocked: true };
   }
 }
 
@@ -604,8 +641,16 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Helper: persist successful phone or increment attempts on failure
-    const recordResult = async (id: string | undefined, phone: string | null) => {
+    const recordResult = async (id: string | undefined, phone: string | null, blocked = false) => {
       if (!id) return;
+      // Refused, not absent. Leave the attempt counter alone so the listing
+      // stays eligible - burning its retries for a 403 retires it over our
+      // problem rather than anything about the listing.
+      if (!phone && blocked) {
+        await supabase.from('external_properties')
+          .update({ updated_at: new Date().toISOString() }).eq('id', id);
+        return;
+      }
       if (phone) {
         await supabase.from('external_properties').update({
           contact_phone: phone,
@@ -679,17 +724,29 @@ serve(async (req) => {
       const results: Array<{ sourceUrl: string; phone: string | null; method: string; propertyId?: string }> = [];
       let extracted = 0;
 
+      // One block from a source means it is refusing us right now. Carrying on
+      // through the rest of the batch just collects 403s and, before the fix
+      // above, retired listings for it. Skip that source for the remainder of
+      // the run; the next run is an hour away, which is the backoff.
+      const blockedSources = new Set<string>();
+
       for (const listing of batch) {
         const url = listing.sourceUrl || listing.source_url;
         const id = listing.propertyId || listing.id;
         const mp = listing.marketplace || listing.source || detectMarketplace(url);
         if (!url || !mp) { results.push({ sourceUrl: url, phone: null, method: 'invalid_input' }); continue; }
+        if (blockedSources.has(mp)) { results.push({ sourceUrl: url, phone: null, method: `skipped_${mp}_blocked`, propertyId: id }); continue; }
 
-        const { phone, method } = await extractPhoneForListing(url, mp);
+        const { phone, method, blocked } = await extractPhoneForListing(url, mp);
         results.push({ sourceUrl: url, phone, method, propertyId: id });
-        await recordResult(id, phone);
+        await recordResult(id, phone, blocked);
         if (phone && id) extracted++;
-        if (batch.indexOf(listing) < batch.length - 1) await new Promise(r => setTimeout(r, 2000));
+        if (blocked) {
+          blockedSources.add(mp);
+          console.log(`[extract-phone] ${mp} is refusing requests - skipping its remaining listings this run`);
+          continue;
+        }
+        if (batch.indexOf(listing) < batch.length - 1) await new Promise(r => setTimeout(r, gapForSource(mp)));
       }
 
       return new Response(JSON.stringify({ success: true, total: batch.length, extracted, results }), {
@@ -719,14 +776,26 @@ serve(async (req) => {
       const results: Array<{ id: string; phone: string | null; method: string }> = [];
       let extracted = 0;
 
+      // One block from a source means it is refusing us right now. Carrying on
+      // through the rest of the batch just collects 403s and, before the fix
+      // above, retired listings for it. Skip that source for the remainder of
+      // the run; the next run is an hour away, which is the backoff.
+      const blockedSources = new Set<string>();
+
       for (const prop of missingPhone) {
         const mp = prop.source || detectMarketplace(prop.source_url);
         if (!mp) { results.push({ id: prop.id, phone: null, method: 'unsupported' }); continue; }
-        const { phone, method } = await extractPhoneForListing(prop.source_url, mp);
+        if (blockedSources.has(mp)) { results.push({ id: prop.id, phone: null, method: `skipped_${mp}_blocked` }); continue; }
+        const { phone, method, blocked } = await extractPhoneForListing(prop.source_url, mp);
         results.push({ id: prop.id, phone, method });
-        await recordResult(prop.id, phone);
+        await recordResult(prop.id, phone, blocked);
         if (phone) extracted++;
-        if (missingPhone.indexOf(prop) < missingPhone.length - 1) await new Promise(r => setTimeout(r, 2000));
+        if (blocked) {
+          blockedSources.add(mp);
+          console.log(`[extract-phone] ${mp} is refusing requests - skipping its remaining listings this run`);
+          continue;
+        }
+        if (missingPhone.indexOf(prop) < missingPhone.length - 1) await new Promise(r => setTimeout(r, gapForSource(mp)));
       }
 
       return new Response(JSON.stringify({ success: true, total: missingPhone.length, extracted, results }), {
