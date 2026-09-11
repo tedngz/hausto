@@ -757,12 +757,14 @@ serve(async (req) => {
     // Mode 3: Auto-fill (skip listings that have already failed 3+ times)
     if (body.autoFill) {
       const limit = Math.min(body.limit || 5, 10);
-      // "Missing a phone" means missing a DIALABLE one. Selecting on
-      // `contact_phone IS NULL` skipped the 404 rows holding a masked value -
-      // which is every row that actually needed this function.
+      // "Missing a phone" means missing a DIALABLE one, and contact_phone has
+      // three ways of not being one: NULL, masked ('0775 924 ***'), and prose
+      // ('Not provided', 'N/A', '25 listings'). contact_phone_e164 is generated
+      // from normalize_vn_phone, so a single IS NULL covers all three and any
+      // fourth shape the crawlers invent.
       const { data: missingPhone } = await supabase
         .from('external_properties').select('id, source_url, source, phone_extraction_attempts')
-        .or('contact_phone.is.null,contact_phone.like.%*%')
+        .is('contact_phone_e164', null)
         .eq('is_active', true)
         .lt('phone_extraction_attempts', 3)
         .order('created_at', { ascending: false }).limit(limit);
