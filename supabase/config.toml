@@ -129,3 +129,10 @@ verify_jwt = false
 # cloud - simulating inbound messages against a real number would forge service
 # windows and renter replies.
 verify_jwt = false
+
+[functions.ops-record-outcome]
+# An operator's JWT, never the service role: every event it writes carries
+# OPS:<uuid>, and the ops role is checked against user_roles before anything is
+# written. The console has SELECT and nothing else, so this is the only way a
+# state change reaches the log.
+verify_jwt = true
