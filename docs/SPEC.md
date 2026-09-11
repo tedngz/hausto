@@ -27,7 +27,7 @@ Do not restructure it. Add only:
 | `bedrooms` | `smallint` | `rooms` is free text: `'2 Bedrooms'`, `'Studio'`, `'4+ Bedrooms'`. Zero of 115 active rows parse as a bare integer. `Studio` maps to `0`. |
 | `bedrooms_is_min` | `boolean` | True for `'4+ Bedrooms'`, so a `= 4` filter does not silently claim precision. |
 | `area_sqm` | `numeric` | `size` is free text; 17 of 115 active rows are numeric. |
-| `district_code` | `text` | `location_normalized` is diacritic-stripped prose (`'ng bn vn n phng 1 qun 4 h ch minh'`), not a code. Scoped by `city`, because all three cities are in scope and district names collide across them - HCMC `D1`..`D12`, `BINH_THANH`, `THU_DUC`, `PHU_NHUAN`, `TAN_BINH`, `GO_VAP`, `BINH_TAN`, `NHA_BE`; Hanoi `BA_DINH`, `CAU_GIAY`, `DONG_DA`, `HAI_BA_TRUNG`, `HOAN_KIEM`, `TAY_HO`, `NAM_TU_LIEM`; Da Nang `HAI_CHAU`, `NGU_HANH_SON`, `SON_TRA`. Unique on `(city, district_code)`, never on `district_code` alone. |
+| `district_code` | `text` | Parsed from raw `location` by `public.vn_district_code(city, location)`, which is the authority - the codes are not enumerated here because they drift. Scoped by `city`: district names collide across cities, so this is unique on `(city, district_code)`, never on `district_code` alone. **Not** parsed from `location_normalized`, which deletes accented characters rather than folding them (`Bình Thạnh` → `bnh thnh`) and cannot be matched against. |
 | `source_agent_id` | `text` | The broker's profile id on the source site. The durable join key for realtor identity - see §1. Free on nhatot (`account_oid`), and the half of identity that does not have to be bought: the phone usually needs a reveal, this arrives with the ad. |
 | `realtor_id` | `uuid` | Resolved broker, nullable. Set at ingest in the order agent identity → phone → NULL. A NULL here is normal and not a defect: a listing needs a contact only once a renter shortlists it. |
 | `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification **confirms** the unit is gone - the listing's own source saying so, twice - or when it goes 21 days without a price confirmation. A URL that merely failed to resolve sets `deactivated_at` only; on nhatot that is routinely wrong, since expired ads come back under the same id when the seller reposts. |
@@ -35,6 +35,60 @@ Do not restructure it. Add only:
 
 `price_vnd`, `bedrooms`, `area_sqm` and `district_code` are NOT NULL for any row
 eligible for shortlisting. Enforce with a partial index, not application code.
+
+**`price` carries two currencies and only its magnitude says which.** housingsgn
+quotes USD, and the display is not a reliable tell - a live row reads
+`price = 12500000, price_display = '$500/month'`, already converted with the
+display never updated. Converting on a `# SPEC - viewing coordination domain model
+
+Status: draft, authoritative. Written 2026-09-10 alongside `docs/PLAN-v3.md`.
+
+A renter shortlists 3-5 crawled rentals and requests viewings. A human
+operator working Zalo confirms availability with each realtor. The system
+assembles an itinerary and delivers it over WhatsApp. The renter confirms with
+one tap.
+
+The renter never talks to a realtor. The realtor never sees the renter's contact
+details. Everything crosses through us.
+
+Nothing in this document exists yet. Everything in §0 is additive to the live
+schema; §1 onward is new.
+
+---
+
+## §0 Additive columns on existing tables
+
+The live listing table is `public.external_properties` (696 rows, 115 active).
+Do not restructure it. Add only:
+
+| Column | Type | Why |
+|---|---|---|
+| `price_vnd` | `integer` | Canonical. `price` is `numeric` and holds USD for housingsgn rows (a live row reads `price = 730`, `price_display = '$730 / month'`). Convert on write; never read `price` for money decisions. |
+| `price_confidence` | `text` | `HIGH` / `LOW`. `LOW` when the extracted price disagrees with a price mentioned in title or description by >15%. `LOW` rows stay searchable but cannot be shortlisted. |
+| `bedrooms` | `smallint` | `rooms` is free text: `'2 Bedrooms'`, `'Studio'`, `'4+ Bedrooms'`. Zero of 115 active rows parse as a bare integer. `Studio` maps to `0`. |
+| `bedrooms_is_min` | `boolean` | True for `'4+ Bedrooms'`, so a `= 4` filter does not silently claim precision. |
+| `area_sqm` | `numeric` | `size` is free text; 17 of 115 active rows are numeric. |
+| `district_code` | `text` | Parsed from raw `location` by `public.vn_district_code(city, location)`, which is the authority - the codes are not enumerated here because they drift. Scoped by `city`: district names collide across cities, so this is unique on `(city, district_code)`, never on `district_code` alone. **Not** parsed from `location_normalized`, which deletes accented characters rather than folding them (`Bình Thạnh` → `bnh thnh`) and cannot be matched against. |
+| `source_agent_id` | `text` | The broker's profile id on the source site. The durable join key for realtor identity - see §1. Free on nhatot (`account_oid`), and the half of identity that does not have to be bought: the phone usually needs a reveal, this arrives with the ad. |
+| `realtor_id` | `uuid` | Resolved broker, nullable. Set at ingest in the order agent identity → phone → NULL. A NULL here is normal and not a defect: a listing needs a contact only once a renter shortlists it. |
+| `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification **confirms** the unit is gone - the listing's own source saying so, twice - or when it goes 21 days without a price confirmation. A URL that merely failed to resolve sets `deactivated_at` only; on nhatot that is routinely wrong, since expired ads come back under the same id when the seller reposts. |
+| `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
+
+`price_vnd`, `bedrooms`, `area_sqm` and `district_code` are NOT NULL for any row
+eligible for shortlisting. Enforce with a partial index, not application code.
+
+ in the display turns that into 312
+billion dong. The threshold sits in the gap between the currencies, not at the
+edge of one: below 100,000 is USD, at or above it is dong. A rent of
+`2800000` ('2,8 triệu/tháng') is real and cheap, and any threshold near 3
+million misreads it.
+
+**Coverage is partial and that is expected.** On the 145 active rows: bedrooms
+144, price 145, district 129, area 124 - **107 shortlistable on all four**. The
+losses are listings whose source never published an area, and addresses that
+degrade to a bare 'Hồ Chí Minh'. A row missing any of the four is searchable
+but not shortlistable, which is the point of the partial index rather than a
+defect to chase to zero.
 
 **A moved price re-prices the listing; it does not delist it.** The plan's
 original wording treated a changed price as evidence the unit was gone. It is the
