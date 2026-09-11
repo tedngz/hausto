@@ -60,8 +60,19 @@ function getCookieString(marketplace: string): string {
   return '';
 }
 
+// NOTE THE String.raw. This script is a string that gets evaluated in a remote
+// browser, and a plain template literal eats the backslashes in its regexes
+// before it is ever sent: `\d` is not a recognised escape, so it becomes `d`.
+//
+// What Browserless actually received was
+//   /(?:+84|84|0)[3-9]d[s.-]?d{3}[s.-]?d{4}/g
+// which is not merely wrong but invalid - `(?:+` is "nothing to repeat" - so
+// the script threw on its first use and every extraction returned
+// `{"phone":null,"method":"no_result"}`, for every source, on every run.
+//
+// There are no ${} interpolations here, so String.raw changes nothing else.
 function buildExtractJS(): string {
-  return `(async () => {
+  return String.raw`(async () => {
     const revealTexts = ['Hiện số', 'Xem SĐT', 'Xem số', 'Bấm để hiện', 'Hiện số điện thoại', 'Show phone'];
     const clickSelectors = [
       '.re__btn-short-info-phone',
