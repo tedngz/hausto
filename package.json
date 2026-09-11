@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:ops": "vite --config vite.ops.config.ts",
     "build": "vite build",
+    "build:ops": "vite build --config vite.ops.config.ts",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

@@ -41,3 +41,6 @@ supabase/.temp
 # functions' remote imports.
 bun.lock
 bun.lockb
+
+# The ops console build output. Deployed separately from the renter SPA.
+dist-ops
