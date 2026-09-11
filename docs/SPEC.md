@@ -29,10 +29,18 @@ Do not restructure it. Add only:
 | `area_sqm` | `numeric` | `size` is free text; 17 of 115 active rows are numeric. |
 | `district_code` | `text` | `location_normalized` is diacritic-stripped prose (`'ng bn vn n phng 1 qun 4 h ch minh'`), not a code. Use `D1`..`D12`, `BINH_THANH`, `THU_DUC`, `PHU_NHUAN`, `TAN_BINH`, `GO_VAP`, `BINH_TAN`, `NHA_BE`. |
 | `source_agent_id` | `text` | The broker's profile id on the source site. The durable join key for realtor identity - see §1. |
-| `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification confirms the unit is gone or the price moved, not when a URL fails to resolve. |
+| `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification **confirms** the unit is gone - the listing's own source saying so, twice - or when it goes 21 days without a price confirmation. A URL that merely failed to resolve sets `deactivated_at` only; on nhatot that is routinely wrong, since expired ads come back under the same id when the seller reposts. |
+| `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
 
 `price_vnd`, `bedrooms`, `area_sqm` and `district_code` are NOT NULL for any row
 eligible for shortlisting. Enforce with a partial index, not application code.
+
+**A moved price re-prices the listing; it does not delist it.** The plan's
+original wording treated a changed price as evidence the unit was gone. It is the
+opposite: the seller re-priced and the unit is still on offer, so verification
+updates `price`/`price_display` and stamps `price_confirmed_at`. What must never
+happen is ops quoting a figure the broker has already changed - the mismatch
+`price_vnd_at_request` (§1) exists to catch, and should not have to.
 
 Also drop from the `public-property-search` response: `vibe`. It is non-null on
 28 of 115 active rows and carries no signal `style_tags` does not. **The style

@@ -22,7 +22,25 @@ const SUSPECT_REVERIFY_HOURS = 6;    // already failed once: confirm or clear it
 const RESURRECTION_BATCH = 20;       // dead nhatot rows re-probed per run - see resurrectNhatotAds
 const MAX_UNVERIFIED_AGE_DAYS = 45;  // unconfirmed past the lease window + grace: archive
 
-type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string };
+// `livePrice` is set only by verifiers that can read the listing's own price
+// back. It is what separates "the URL still resolves" from "this unit is still
+// on offer at this price", which is the only version ops can act on.
+type DeadResult = { status: 'alive' | 'dead' | 'error'; reason?: string; livePrice?: number };
+
+// Sources whose price can be re-read during verification, and which are
+// therefore subject to the freshness decay below. nhatot's ad payload carries
+// the price; batdongsan and housingsgn would need their detail pages parsed,
+// which costs a Firecrawl fetch per listing and is not built. They keep
+// price_confirmed_at NULL and are deliberately exempt - decaying listings whose
+// price we have no way to check would delete supply to no purpose.
+const PRICE_CONFIRMING_SOURCES = new Set(['nhatot']);
+
+// How far a price may move before it is a different offer rather than rounding.
+const PRICE_DRIFT_TOLERANCE = 0.02;
+
+// Without a price confirmation in this long, a listing stops being something
+// ops can be asked to act on.
+const PRICE_CONFIRMATION_TTL_DAYS = 21;
 
 const NHATOT_DEAD_KEYWORDS = [
   'tin đăng đã bị gỡ',
@@ -199,7 +217,10 @@ async function verifyViaChototApi(url: string): Promise<DeadResult> {
     if (res.status === 404) return { status: 'dead', reason: 'gateway_not_found' };
     if (!res.ok) return { status: 'error', reason: `gateway_${res.status}` };
     const data = await res.json().catch(() => null);
-    if (data?.ad && typeof data.ad === 'object') return { status: 'alive' };
+    if (data?.ad && typeof data.ad === 'object') {
+      const price = typeof data.ad.price === 'number' && data.ad.price > 0 ? data.ad.price : undefined;
+      return { status: 'alive', livePrice: price };
+    }
     const msg = String(data?.message || '').toLowerCase();
     if (msg.includes('not found')) return { status: 'dead', reason: 'gateway_not_found' };
     return { status: 'error', reason: 'gateway_unrecognized' };
@@ -246,14 +267,20 @@ async function resurrectNhatotAds(supabase: any, summary: { resurrected: number 
     await supabase.from('external_properties').update({
       is_active: true,
       deactivated_at: null,
+      // A repost clears the delisting it earned: the listing's own source is
+      // serving it again, which is the same class of evidence that set it.
+      delisted_at: null,
       last_verified_at: now,
       last_verification_status: 'alive',
       last_verification_reason: null,
       verification_failures: 0,
       // The repost is a new ad in every respect but its id - price and gallery
       // are refreshed from it rather than trusting what we stored months ago.
+      // Taking the price straight off the payload IS a price confirmation, and
+      // the freshest one available, so the decay clock restarts here.
       price: listing.price,
       price_display: listing.priceDisplay,
+      price_confirmed_at: now,
       images: listing.images,
       videos: listing.videos,
       updated_at: now,
@@ -265,6 +292,48 @@ async function resurrectNhatotAds(supabase: any, summary: { resurrected: number 
 
   if (summary.resurrected > 0) {
     console.log(`[verify-external-listings] Resurrection sweep: ${summary.resurrected}/${buried.length} back from the dead`);
+  }
+}
+
+// Decay: a listing nobody has confirmed the price of in three weeks is not
+// something ops can be asked to act on, however reliably its URL keeps
+// resolving. This is the half `last_verified_at` never covered.
+//
+// Restricted to sources whose price can actually be read back. Applying it to
+// batdongsan or housingsgn today would sweep out listings for failing a check
+// that was never run against them - deleting supply to no purpose, which is the
+// opposite of what this milestone is for. They become eligible by teaching their
+// verifiers to return `livePrice`, not by changing this function.
+// deno-lint-ignore no-explicit-any
+async function decayUnconfirmedListings(supabase: any, summary: { decayed: number }): Promise<void> {
+  const cutoff = new Date(Date.now() - PRICE_CONFIRMATION_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+
+  const { data: stale, error } = await supabase
+    .from('external_properties')
+    .update({
+      is_active: false,
+      delisted_at: now,
+      last_verification_status: 'stale',
+      last_verification_reason: `price_unconfirmed_${PRICE_CONFIRMATION_TTL_DAYS}d`,
+      updated_at: now,
+    })
+    .eq('is_active', true)
+    .in('source', [...PRICE_CONFIRMING_SOURCES])
+    // A row that has never been verified falls back to `crawled_at`, because
+    // crawling it IS when its price was last read off the source. Without that,
+    // a listing crawled an hour ago has a NULL confirmation and would be swept
+    // on the very next run - decaying the freshest supply in the index.
+    .or(`price_confirmed_at.lt.${cutoff},and(price_confirmed_at.is.null,crawled_at.lt.${cutoff})`)
+    .select('id');
+
+  if (error) {
+    console.warn('[verify-external-listings] Decay sweep failed:', error.message);
+    return;
+  }
+  summary.decayed = stale?.length ?? 0;
+  if (summary.decayed > 0) {
+    console.log(`[verify-external-listings] Decayed ${summary.decayed} listing(s) unconfirmed for ${PRICE_CONFIRMATION_TTL_DAYS}+ days`);
   }
 }
 
@@ -300,7 +369,7 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } }
   );
 
-  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, stale_archived: 0, errors: 0, resurrected: 0, deactivated_ids: [] as string[] };
+  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, stale_archived: 0, errors: 0, resurrected: 0, reprice: 0, delisted: 0, decayed: 0, deactivated_ids: [] as string[] };
 
   try {
     const nowMs = Date.now();
@@ -334,13 +403,17 @@ Deno.serve(async (req) => {
     // the verification pass by definition never selects.
     await resurrectNhatotAds(supabase, summary);
 
+    // After resurrection, so an ad that came back today is not swept for a
+    // confirmation it just received.
+    await decayUnconfirmedListings(supabase, summary);
+
     // Pull only listings due for a check, oldest-verified first (never-verified first).
     // Due = never verified, OR one dead result already on record (confirm or clear
     // it within hours rather than leaving a probably-gone listing up for days),
     // OR recent listing past its 2-day cadence, OR old listing past its 5-day one.
     const { data: listings, error } = await supabase
       .from('external_properties')
-      .select('id, source, source_url, external_id, verification_failures')
+      .select('id, source, source_url, external_id, verification_failures, price, price_display')
       .eq('is_active', true)
       .or(
         `last_verified_at.is.null,` +
@@ -367,12 +440,34 @@ Deno.serve(async (req) => {
 
       if (result.status === 'alive') {
         summary.alive++;
-        await supabase.from('external_properties').update({
+        const update: Record<string, unknown> = {
           last_verified_at: now,
           last_verification_status: 'alive',
           last_verification_reason: null,
           verification_failures: 0,
-        }).eq('id', item.id);
+        };
+
+        if (typeof result.livePrice === 'number') {
+          // Reading the price back is the point of the exercise, so record when
+          // it happened whether or not the number moved.
+          update.price_confirmed_at = now;
+
+          const stored = Number(item.price) || 0;
+          const drift = stored > 0 ? Math.abs(result.livePrice - stored) / stored : 1;
+          if (drift > PRICE_DRIFT_TOLERANCE) {
+            // A moved price does NOT delist the unit. The seller re-priced; the
+            // unit is still on offer and we want it, at the new number. What
+            // would be wrong is leaving ops to quote a figure the broker has
+            // already changed - that is the mismatch `price_vnd_at_request` in
+            // SPEC exists to catch, and it should not have to.
+            update.price = result.livePrice;
+            update.price_display = `${result.livePrice.toLocaleString()} VND`;
+            summary.reprice++;
+            console.log(`[verify-external-listings] Reprice ${item.id}: ${stored.toLocaleString()} -> ${result.livePrice.toLocaleString()} VND`);
+          }
+        }
+
+        await supabase.from('external_properties').update(update).eq('id', item.id);
       } else if (result.status === 'dead') {
         const newCount = (item.verification_failures || 0) + 1;
         summary.dead_increment++;
@@ -387,6 +482,16 @@ Deno.serve(async (req) => {
           update.deactivated_at = now;
           summary.deactivated++;
           summary.deactivated_ids.push(item.id);
+          // `delisted_at` is the stronger claim and only some evidence earns it.
+          // The chotot ad API answering "no ad found" twice is the listing's own
+          // source saying it is gone. A page that failed to load, redirected, or
+          // matched a keyword is not - that is what `deactivated_at` records,
+          // and on nhatot it is routinely wrong, since expired ads come back
+          // under the same id when the seller reposts.
+          if (PRICE_CONFIRMING_SOURCES.has(item.source) && result.reason === 'gateway_not_found') {
+            update.delisted_at = now;
+            summary.delisted++;
+          }
         }
         await supabase.from('external_properties').update(update).eq('id', item.id);
         console.log(`[verify-external-listings] Dead (${newCount}/${FAILURE_THRESHOLD}) - ${item.id} - ${result.reason}`);
@@ -408,7 +513,7 @@ Deno.serve(async (req) => {
     }
 
     // Invalidate discovery cache if we deactivated anything
-    if (summary.deactivated > 0 || summary.stale_archived > 0 || summary.resurrected > 0) {
+    if (summary.deactivated > 0 || summary.stale_archived > 0 || summary.resurrected > 0 || summary.decayed > 0) {
       try {
         await supabase.functions.invoke('property-discovery-cache', { body: { action: 'invalidate' } });
       } catch (e) {
