@@ -33,6 +33,12 @@ jobs:
       - name: Type-check
         run: npx tsc -p tsconfig.app.json --noEmit
 
+      # The domain reducer is the one piece where a silent regression is
+      # expensive: every request and item status is derived from it, and a bad
+      # replay is not visible until an operator is looking at a wrong state.
+      - name: Unit tests
+        run: npm test
+
       - name: Build
         run: npx vite build
 
