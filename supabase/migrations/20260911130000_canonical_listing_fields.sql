@@ -28,27 +28,37 @@ ALTER TABLE public.external_properties
 -- 'Studio' is 0, not unknown - a studio genuinely has no separate bedroom, and
 -- mapping it to NULL would drop 82 rows out of every bedroom filter.
 -- 'Penthouse' and 'Shared Room' say nothing about a count and stay NULL.
+-- Two scalar functions rather than one RETURNS TABLE. An UPDATE cannot reference
+-- its own target table from a LATERAL call in its FROM clause - PostgreSQL
+-- rejects it with "invalid reference to FROM-clause entry" (42P10) - so the
+-- backfill at the bottom could not call a composite-returning version at all.
 CREATE OR REPLACE FUNCTION public.parse_bedrooms(_rooms text)
-RETURNS TABLE (bedrooms smallint, is_min boolean)
+RETURNS smallint
 LANGUAGE sql IMMUTABLE
 SET search_path TO 'public'
 AS $$
-  SELECT
-    CASE
-      WHEN _rooms IS NULL THEN NULL
-      WHEN lower(_rooms) LIKE '%studio%' THEN 0::smallint
-      WHEN _rooms ~ '^\s*(\d{1,2})\s*\+?\s*[Bb]edroom' THEN
-        least((regexp_match(_rooms, '^\s*(\d{1,2})'))[1]::int, 32767)::smallint
-      ELSE NULL
-    END,
-    CASE
-      WHEN _rooms IS NULL THEN NULL
-      -- '4+ Bedrooms' means at least four. Storing it as plain 4 would let a
-      -- '= 4' filter claim a precision the source never offered.
-      WHEN _rooms ~ '^\s*\d{1,2}\s*\+' THEN true
-      WHEN lower(_rooms) LIKE '%studio%' OR _rooms ~ '^\s*\d{1,2}\s*[Bb]edroom' THEN false
-      ELSE NULL
-    END;
+  SELECT CASE
+    WHEN _rooms IS NULL THEN NULL
+    WHEN lower(_rooms) LIKE '%studio%' THEN 0::smallint
+    WHEN _rooms ~ '^\s*(\d{1,2})\s*\+?\s*[Bb]edroom' THEN
+      least((regexp_match(_rooms, '^\s*(\d{1,2})'))[1]::int, 32767)::smallint
+    ELSE NULL
+  END;
+$$;
+
+-- '4+ Bedrooms' means at least four. Storing it as plain 4 would let a '= 4'
+-- filter claim a precision the source never offered.
+CREATE OR REPLACE FUNCTION public.parse_bedrooms_is_min(_rooms text)
+RETURNS boolean
+LANGUAGE sql IMMUTABLE
+SET search_path TO 'public'
+AS $$
+  SELECT CASE
+    WHEN _rooms IS NULL THEN NULL
+    WHEN _rooms ~ '^\s*\d{1,2}\s*\+' THEN true
+    WHEN lower(_rooms) LIKE '%studio%' OR _rooms ~ '^\s*\d{1,2}\s*[Bb]edroom' THEN false
+    ELSE NULL
+  END;
 $$;
 
 -- ── area ────────────────────────────────────────────────────────────────────
@@ -203,12 +213,9 @@ RETURNS trigger
 LANGUAGE plpgsql
 SET search_path TO 'public'
 AS $$
-DECLARE
-  b record;
 BEGIN
-  SELECT * INTO b FROM public.parse_bedrooms(NEW.rooms);
-  NEW.bedrooms        := b.bedrooms;
-  NEW.bedrooms_is_min := b.is_min;
+  NEW.bedrooms        := public.parse_bedrooms(NEW.rooms);
+  NEW.bedrooms_is_min := public.parse_bedrooms_is_min(NEW.rooms);
   NEW.area_sqm        := public.parse_area_sqm(NEW.size);
   NEW.district_code   := public.vn_district_code(NEW.city, NEW.location);
   NEW.price_vnd        := public.canonical_price_vnd(NEW.source, NEW.price, NEW.price_display);
@@ -226,13 +233,12 @@ CREATE TRIGGER external_properties_canonical_sync
 -- Backfill. The trigger only fires on the listed columns, so existing rows need
 -- an explicit pass.
 UPDATE public.external_properties p
-SET bedrooms        = b.bedrooms,
-    bedrooms_is_min = b.is_min,
+SET bedrooms        = public.parse_bedrooms(p.rooms),
+    bedrooms_is_min = public.parse_bedrooms_is_min(p.rooms),
     area_sqm        = public.parse_area_sqm(p.size),
     district_code   = public.vn_district_code(p.city, p.location),
     price_vnd        = public.canonical_price_vnd(p.source, p.price, p.price_display),
     price_confidence = public.price_confidence_for(public.canonical_price_vnd(p.source, p.price, p.price_display))
-FROM LATERAL public.parse_bedrooms(p.rooms) b
 WHERE true;
 
 -- Shortlist eligibility, per SPEC §0: enforced by the database, not by whoever
