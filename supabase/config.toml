@@ -136,3 +136,13 @@ verify_jwt = false
 # written. The console has SELECT and nothing else, so this is the only way a
 # state change reaches the log.
 verify_jwt = true
+
+[functions.viewing-deliver]
+# An operator's JWT, the cron secret, or the service role. Delivery costs money
+# and spends the renter's attention - it is not an open endpoint.
+verify_jwt = false
+
+[functions.viewing-jobs-drain]
+# pg_cron calls this with the cron secret, which it checks itself. verify_jwt
+# would reject the request before the code could.
+verify_jwt = false

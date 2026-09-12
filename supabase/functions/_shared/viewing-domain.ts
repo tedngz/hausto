@@ -16,6 +16,11 @@ export const EVENT_TYPES = [
   'ITEM_NUDGED',
   'ITINERARY_ASSEMBLED',
   'ITINERARY_DELIVERED',
+  // Something the renter heard that was not the itinerary. It moves the
+  // silence clock (S6's 24h promise) and nothing else - typing a holding
+  // update as ITINERARY_DELIVERED would make the queue think the request was
+  // finished.
+  'HOLDING_UPDATE_SENT',
   'RENTER_REPLIED',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
@@ -224,6 +229,12 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
       case 'RENTER_REPLIED':
         // Intent classification drives later events; the reply alone moves
         // nothing, which is why there is no state change here.
+        break;
+
+      case 'HOLDING_UPDATE_SENT':
+        // Read by the silence watch, deliberately invisible to state: telling
+        // a renter we are still working is not progress, and a request that
+        // could be kept alive by saying so would never look stuck.
         break;
 
       case 'REQUEST_CONFIRMED':

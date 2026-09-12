@@ -15,6 +15,8 @@ import { reduceRequest, summarise, type DomainEvent, type RequestView } from '..
 import { formatVnd, hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { OutcomeForm } from './OutcomeForm';
 import { draftForRealtor } from './draft';
+import { Deliver } from './Deliver';
+import type { StopListing } from '../../supabase/functions/_shared/viewing/itinerary';
 
 interface Item {
   id: string;
@@ -94,6 +96,24 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           onChanged={load}
         />
       ))}
+
+      {/* Only once every broker has answered. Ordering an itinerary while
+          replies are outstanding invites sending a partial one early, and the
+          renter can only be told the plan once. */}
+      {s.unresolved === 0 && items.length > 0 && (
+        <Deliver
+          requestId={requestId}
+          ref={request.ref}
+          view={view}
+          listings={items.map<StopListing>(i => ({
+            itemId: i.id,
+            listingTitle: i.listing_title ?? 'A place',
+            districtCode: i.district_code,
+            priceVndAtRequest: i.price_vnd_at_request,
+          }))}
+          onDelivered={load}
+        />
+      )}
 
       <button onClick={onBack}>&larr; Back to queue</button>
     </>
