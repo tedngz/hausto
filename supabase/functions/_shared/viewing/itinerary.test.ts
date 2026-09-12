@@ -75,15 +75,20 @@ describe('assembling', () => {
     expect(a.stops.map(s => s.itemId)).toEqual(['i1', 'i2']);
   });
 
-  it('quotes the price the broker actually gave, not the advertised one', () => {
-    // A PRICE_CHANGED item has no slot so it is not a stop - but a CONFIRMED
-    // item can still carry a corrected price, and quoting the old one is the
-    // mistake `price_vnd_at_request` exists to make visible.
+  it('quotes the price the renter was shown, which is the only price a stop can have', () => {
+    // A re-priced unit cannot reach an itinerary at all: PRICE_CHANGED is
+    // terminal and slotless (SPEC §4), so there is no path from "the broker
+    // moved the price" to a stop. The itinerary therefore never has to choose
+    // between two prices - and must not imply it could.
     const { view, listings } = build(1, {
-      1: { outcome: 'CONFIRMED', slots: [slot('2026-09-15T02:00:00Z')], actual_price_vnd: 17_500_000 },
+      1: { outcome: 'CONFIRMED', slots: [slot('2026-09-15T02:00:00Z')] },
     });
-    const a = assembleItinerary(view, listings, ['i1']);
-    expect(a.stops[0].priceVnd).toBe(17_500_000);
+    expect(assembleItinerary(view, listings, ['i1']).stops[0].priceVnd).toBe(15_000_000);
+
+    const repriced = build(1, { 1: { outcome: 'PRICE_CHANGED', slots: [], actual_price_vnd: 17_500_000 } });
+    const a = assembleItinerary(repriced.view, repriced.listings, ['i1']);
+    expect(a.stops).toHaveLength(0);
+    expect(a.dropped[0].state).toBe('PRICE_CHANGED');
   });
 
   it('drops a confirmed item whose slot is missing instead of inventing a time', () => {

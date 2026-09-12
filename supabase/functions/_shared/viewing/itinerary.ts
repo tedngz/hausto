@@ -109,10 +109,20 @@ export function assembleItinerary(
       itemId,
       listingTitle: listing.listingTitle,
       districtCode: listing.districtCode,
-      // The price the broker actually quoted wins over the advertised one. This
-      // is the whole reason `price_vnd_at_request` is stored: never quote a
-      // figure the broker has already changed.
-      priceVnd: item.actualPriceVnd ?? listing.priceVndAtRequest,
+      // Always the price the renter was shown, and safely so: an outcome
+      // carrying a corrected price is PRICE_CHANGED, which is terminal and
+      // slotless (SPEC §4), so a re-priced unit can never reach an itinerary
+      // in the first place. Reading `actualPriceVnd` here would be
+      // unreachable code implying a guarantee the outcome contract does not
+      // make.
+      //
+      // The gap this leaves is real and deliberate: "free on Tuesday, but
+      // 19.5m not 15m" has no way to become a viewing. Under §4 it is a dead
+      // end the renter is told about, and re-offering at the new price is a
+      // new request. Widening CONFIRMED to carry a price would fix that and
+      // would also weaken the seven-outcome discipline the corpus depends on,
+      // so it is a product call rather than a tidy-up.
+      priceVnd: listing.priceVndAtRequest,
       startsAt: slot.starts_at,
       durationMinutes: slot.duration_minutes,
     });
