@@ -16,6 +16,7 @@ import { formatVnd, hcmc } from '../../supabase/functions/_shared/viewing/triage
 import { OutcomeForm } from './OutcomeForm';
 import { draftForRealtor } from './draft';
 import { Deliver } from './Deliver';
+import { Tasks } from './Tasks';
 import type { StopListing } from '../../supabase/functions/_shared/viewing/itinerary';
 
 interface Item {
@@ -86,6 +87,11 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         Requested {hcmc(request.created_at)}. Renter is free:{' '}
         {(request.availability ?? []).map(w => `${w.date} ${w.part.toLowerCase()}`).join(', ') || 'not stated'}
       </p>
+
+      <Tasks
+        requestId={requestId}
+        titleFor={id => items.find(i => i.id === id)?.listing_title ?? id}
+      />
 
       {items.map(item => (
         <ItemCard

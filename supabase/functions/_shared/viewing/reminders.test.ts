@@ -3,6 +3,7 @@ import {
   dueActions,
   lastHeardFromUs,
   renderHoldingUpdate,
+  renderViewingReminder,
   HOUR_MS,
   MAX_SILENCE_MS,
   SILENCE_ACTION_MS,
@@ -230,5 +231,33 @@ describe('the holding update', () => {
   it('does not claim progress it has not made', () => {
     const text = renderHoldingUpdate({ ref: 'HV-4KX7', view: reduceRequest('r', logOf(...submitted(4))) });
     expect(text).toContain('waiting on 4 agents');
+  });
+});
+
+describe('the viewing reminder', () => {
+  const opts = {
+    ref: 'HV-4KX7',
+    listingTitle: 'Sunny 2BR in Thao Dien',
+    startsAt: '2026-09-15T03:00:00Z',
+    districtCode: 'HCM-D2',
+  };
+
+  it('names the one viewing, in local time', () => {
+    // One viewing per message, not the whole plan again: this is a nudge about
+    // tomorrow, and 03:00Z is 10:00 in Ho Chi Minh City.
+    const text = renderViewingReminder(opts);
+    expect(text).toContain('Sunny 2BR in Thao Dien');
+    expect(text).toContain('10:00');
+    expect(text).not.toContain('03:00');
+  });
+
+  it('routes a change back through us, never to the broker', () => {
+    const text = renderViewingReminder(opts);
+    expect(text).toContain('Reply here');
+    expect(text).not.toMatch(/\+?84\d{7,}/);
+  });
+
+  it('stays one short message, because each one is billed', () => {
+    expect(renderViewingReminder(opts).split('\n')).toHaveLength(3);
   });
 });

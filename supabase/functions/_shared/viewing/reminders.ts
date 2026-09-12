@@ -12,6 +12,7 @@
 import type { RequestView } from '../viewing-domain.ts';
 import { summarise } from '../viewing-domain.ts';
 import type { DomainEvent } from '../viewing-domain.ts';
+import { hcmcLong } from './format.ts';
 
 export const HOUR_MS = 60 * 60 * 1000;
 
@@ -160,6 +161,28 @@ export function renderHoldingUpdate(opts: { ref: string; view: RequestView }): s
       ? `Still working on your viewings - we have heard back about ${heard} of ${s.total} so far.`
       : `Still working on your viewings - we are waiting on ${s.total} ${s.total === 1 ? 'agent' : 'agents'}.`,
     'We will send the full plan as soon as we have it, and by tomorrow at the latest.',
+    `Ref ${opts.ref}`,
+  ].join('\n');
+}
+
+/**
+ * The day-before reminder for one confirmed viewing.
+ *
+ * One viewing per message, unlike the itinerary, because this is a nudge about
+ * a thing happening tomorrow and a renter re-reading their whole plan the
+ * night before is not what it is for. It carries no realtor contact: if plans
+ * change the renter tells us, not the broker (§6).
+ */
+export function renderViewingReminder(opts: {
+  ref: string;
+  listingTitle: string;
+  startsAt: string;
+  districtCode: string | null;
+}): string {
+  return [
+    `Reminder: you are viewing ${opts.listingTitle} at ${hcmcLong(opts.startsAt)}` +
+      (opts.districtCode ? ` (${opts.districtCode}).` : '.'),
+    'Reply here if you need to move it and we will sort it out.',
     `Ref ${opts.ref}`,
   ].join('\n');
 }

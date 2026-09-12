@@ -97,6 +97,15 @@ Deno.serve(async (req) => {
       payload: { attempt: (count ?? 0) + 1 },
       actor,
     });
+    // The scheduler enqueues NUDGE_REALTOR as a to-do because the realtor
+    // channel is a person on Zalo, not an API. An operator actually doing it
+    // is what completes the job - nothing else ever will, and a to-do that
+    // never clears is one the console stops being trusted to show.
+    await db.from('jobs')
+      .update({ completed_at: new Date().toISOString() })
+      .eq('kind', 'NUDGE_REALTOR')
+      .is('completed_at', null)
+      .eq('payload->>item_id', item.id);
     return json({ success: true, recorded: 'ITEM_NUDGED', attempt: (count ?? 0) + 1 });
   }
 
