@@ -110,10 +110,7 @@ export function addDays(isoDate: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** The local calendar date in Asia/Ho_Chi_Minh for an instant. UTC+7, no DST. */
-export function hcmcDate(now: Date): string {
-  return new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
+export { hcmcDate } from './format.ts';
 
 // ── Shortlist ───────────────────────────────────────────────────────────────
 
@@ -264,7 +261,4 @@ export function refFromMessage(body: string): string | null {
   return m ? m[0] : null;
 }
 
-/** `15.000.000 ₫` (SPEC §7). Dong is an integer; never format a float. */
-export function formatVnd(dong: number): string {
-  return `${Math.round(dong).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
-}
+export { formatVnd } from './format.ts';

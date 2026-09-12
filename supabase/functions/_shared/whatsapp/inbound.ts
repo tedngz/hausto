@@ -102,8 +102,21 @@ export function verifySubscription(
   return { ok: false };
 }
 
-/** Opt-out keywords. Matched on the whole trimmed message, never a substring. */
-const OPT_OUT = ['stop', 'unsubscribe', 'huy', 'hủy', 'dung', 'dừng'];
+/**
+ * Opt-out keywords. Matched on the whole trimmed message, never a substring.
+ *
+ * **Diacritics are load-bearing here and must not be folded away.** `dừng` is
+ * "stop"; `đúng` is "that's right". Strip the marks and both become `dung`,
+ * at which point honouring an opt-out and opting out a renter who just agreed
+ * are the same code path. This is why `classifyIntent` calls this function on
+ * the raw text before it folds anything.
+ */
+const OPT_OUT = [
+  'stop', 'unsubscribe',
+  'huy', 'hủy', 'huỷ',
+  'dung', 'dừng', 'dung lai', 'dừng lại',
+  'khong nhan tin nua', 'không nhận tin nữa',
+];
 
 export function isOptOut(text: string): boolean {
   const t = text.trim().toLowerCase();

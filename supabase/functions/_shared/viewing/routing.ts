@@ -8,8 +8,9 @@
 
 import { recordInbound, type MessageStore, type StoredMessage } from '../whatsapp/send.ts';
 import { upsertRenterByPhone } from '../whatsapp/store.ts';
-import { isOptOut } from '../whatsapp/inbound.ts';
 import { refFromMessage } from './intake.ts';
+import { classifyIntent } from './intent.ts';
+import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -49,6 +50,47 @@ export interface InboundOutcome {
   requestId?: string;
   message: StoredMessage;
   optedOut: boolean;
+  intent: string;
+  /** True when this reply closed the request. */
+  confirmed: boolean;
+}
+
+/**
+ * Write REQUEST_CONFIRMED, but only for a request that has actually been sent
+ * an itinerary.
+ *
+ * A "yes" arriving before delivery is a renter agreeing to nothing in
+ * particular - most often it is the wa.me handshake message itself, which is
+ * the first thing they ever send us. Confirming on that would close a request
+ * before a single broker had been rung.
+ */
+// deno-lint-ignore no-explicit-any
+async function confirmIfDelivered(db: any, requestId: string, timestamp: string): Promise<boolean> {
+  const { data: events } = await db
+    .from('events')
+    .select('id, request_id, item_id, type, payload, actor, occurred_at')
+    .eq('request_id', requestId)
+    .order('occurred_at', { ascending: true });
+
+  const view = reduceRequest(requestId, (events ?? []) as DomainEvent[]);
+  if (view.state !== 'DELIVERED') return false;
+
+  const confirmedItemIds = Object.values(view.items)
+    .filter(i => i.state === 'CONFIRMED')
+    .map(i => i.itemId);
+
+  // Partial success is the happy path (invariant 5): a renter confirming three
+  // of five is confirming the request, not three fifths of one.
+  if (confirmedItemIds.length === 0 && summarise(view).total > 0) return false;
+
+  await db.from('events').insert({
+    request_id: requestId,
+    type: 'REQUEST_CONFIRMED',
+    payload: { confirmed_item_ids: confirmedItemIds },
+    actor: 'RENTER',
+    occurred_at: new Date(timestamp).toISOString(),
+  });
+  return true;
 }
 
 /**
@@ -74,24 +116,34 @@ export async function handleInbound(
     now: new Date(m.timestamp),
   });
 
-  // The reply is state, so it goes in the log. `intent` is UNCLASSIFIED here on
-  // purpose: classifying it is S6, and a placeholder the reducer ignores is
-  // honest where guessing this early would not be.
+  // The reply is state, so it goes in the log - with what it meant, over the
+  // closed set in intent.ts.
+  const { intent } = classifyIntent(m.text);
+
   if (requestId) {
     await db.from('events').insert({
       request_id: requestId,
       type: 'RENTER_REPLIED',
-      payload: { intent: 'UNCLASSIFIED', message_id: message.id },
+      payload: { intent, message_id: message.id },
       actor: 'RENTER',
       occurred_at: new Date(m.timestamp).toISOString(),
     });
   }
 
+  // A confirmation is the one reply the system finishes on its own. Everything
+  // else routes to an operator (see `needsOperator`), because a wrong
+  // automated reply inside a billed window costs more than a person reading
+  // one line.
+  let confirmed = false;
+  if (intent === 'CONFIRM' && requestId) {
+    confirmed = await confirmIfDelivered(db, requestId, m.timestamp);
+  }
+
   let optedOut = false;
-  if (isOptOut(m.text)) {
+  if (intent === 'OPT_OUT') {
     await db.from('renters').update({ opted_out_at: new Date().toISOString() }).eq('id', renter.id);
     optedOut = true;
   }
 
-  return { renterId: renter.id, requestId, message, optedOut };
+  return { renterId: renter.id, requestId, message, optedOut, intent, confirmed };
 }

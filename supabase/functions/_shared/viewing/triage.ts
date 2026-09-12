@@ -98,22 +98,7 @@ export function triage(view: RequestView, ageSeconds: number, heardFromUsAt: num
   };
 }
 
-/** `15.000.000 ₫` (SPEC §7). */
-export function formatVnd(dong: number): string {
-  return `${Math.round(dong).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
-}
-
-/** Stored UTC, displayed Asia/Ho_Chi_Minh (SPEC §7). Always both. */
-export function hcmc(iso: string): string {
-  return new Date(iso).toLocaleString('en-GB', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  });
-}
-
-export function humanAge(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  if (h < 1) return `${Math.floor(seconds / 60)}m`;
-  if (h < 48) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
+// Display helpers live in format.ts. Re-exported here because the console
+// imports them alongside triage, and a second import line is not worth the
+// churn of changing every call site.
+export { formatVnd, hcmc, humanAge } from './format.ts';

@@ -1,0 +1,116 @@
+import { describe, it, expect } from 'vitest';
+import { classifyIntent, needsOperator, fold, INTENTS } from './intent.ts';
+
+const intentOf = (s: string) => classifyIntent(s).intent;
+
+describe('folding', () => {
+  it('folds Vietnamese to base letters rather than deleting them', () => {
+    // SPEC §0 records what deleting them costs: `Bình Thạnh` became `bnh thnh`
+    // and could not be matched against anything.
+    expect(fold('Đồng ý')).toBe('dong y');
+    expect(fold('Được không?')).toBe('duoc khong?');
+    expect(fold('  HỦY  ')).toBe('huy');
+  });
+});
+
+describe('confirmation', () => {
+  it('reads the ways a renter says yes', () => {
+    for (const s of ['yes', 'Y', 'ok', 'OK', 'Oke', 'confirmed', 'đồng ý', 'Được', 'vâng', 'chốt']) {
+      expect(intentOf(s), s).toBe('CONFIRM');
+    }
+  });
+
+  it('reads a yes with something after it', () => {
+    expect(intentOf('yes please, see you then')).toBe('CONFIRM');
+    expect(intentOf('Được ạ, em sẽ đến')).toBe('CONFIRM');
+  });
+
+  it('treats "yes, what time?" as a confirmation, not a question', () => {
+    // Routing this as a question would leave the viewings unheld while someone
+    // answers a detail the itinerary already covered.
+    expect(intentOf('yes, what time again?')).toBe('CONFIRM');
+  });
+});
+
+describe('decline', () => {
+  it('reads the ways a renter says no', () => {
+    for (const s of ['no', 'No', 'nope', 'cancel', 'Không', 'ko', 'thôi']) {
+      expect(intentOf(s), s).toBe('DECLINE');
+    }
+  });
+
+  it('reads a renter who has already found somewhere', () => {
+    expect(intentOf('thanks but I found a place')).toBe('DECLINE');
+    expect(intentOf('em thuê rồi ạ')).toBe('DECLINE');
+  });
+});
+
+describe('reschedule', () => {
+  it('beats a bare yes in the same message', () => {
+    // "ok but can we move it" is not a confirmation, and treating it as one
+    // sends the renter to a viewing they said they could not make.
+    expect(intentOf('ok but can we move it to Saturday')).toBe('RESCHEDULE');
+    expect(intentOf('Được nhưng đổi giờ khác được không')).toBe('RESCHEDULE');
+  });
+
+  it('reads the common phrasings', () => {
+    for (const s of ['can we reschedule', 'another time please', 'a bit later?', 'đổi lịch nhé']) {
+      expect(intentOf(s), s).toBe('RESCHEDULE');
+    }
+  });
+});
+
+describe('opt-out', () => {
+  it('wins over everything, because it is an instruction not a preference', () => {
+    expect(intentOf('STOP')).toBe('OPT_OUT');
+    expect(intentOf('huỷ')).toBe('OPT_OUT');
+    expect(intentOf('Dừng')).toBe('OPT_OUT');
+    expect(intentOf('không nhận tin nữa')).toBe('OPT_OUT');
+  });
+
+  it('tells "dừng" from "đúng", which folding cannot', () => {
+    // Both fold to "dung". `dừng` is stop, `đúng` is "that's right" - so
+    // opt-out is matched on the RAW text, before any folding happens. Getting
+    // this wrong means either ignoring a legal instruction or opting out a
+    // renter who just agreed.
+    expect(intentOf('dừng')).toBe('OPT_OUT');
+    expect(intentOf('đúng')).not.toBe('OPT_OUT');
+    expect(intentOf('đúng rồi ạ')).not.toBe('OPT_OUT');
+  });
+
+  it('does not fire on a message that merely contains the word', () => {
+    expect(intentOf('stop by at 3?')).not.toBe('OPT_OUT');
+  });
+});
+
+describe('questions and the unknown', () => {
+  it('reads an interrogative', () => {
+    for (const s of ['how far is it from the centre', 'bao nhiêu tiền cọc?', 'can I bring my dog?']) {
+      expect(intentOf(s), s).toBe('QUESTION');
+    }
+  });
+
+  it('falls through to UNKNOWN rather than guessing', () => {
+    // The escape hatch is the point. A wrong automated reply inside a billed
+    // window costs more than an operator reading one line.
+    expect(intentOf('👍')).toBe('UNKNOWN');
+    expect(intentOf('the third one')).toBe('UNKNOWN');
+    expect(intentOf('')).toBe('UNKNOWN');
+  });
+});
+
+describe('routing', () => {
+  it('finishes on its own only for a confirmation or an opt-out', () => {
+    expect(needsOperator('CONFIRM')).toBe(false);
+    expect(needsOperator('OPT_OUT')).toBe(false);
+    for (const i of ['DECLINE', 'RESCHEDULE', 'QUESTION', 'UNKNOWN'] as const) {
+      expect(needsOperator(i), i).toBe(true);
+    }
+  });
+
+  it('classifies every message into the closed set', () => {
+    for (const s of ['yes', 'no', 'reschedule', 'STOP', 'why?', 'asdfgh']) {
+      expect(INTENTS).toContain(intentOf(s));
+    }
+  });
+});

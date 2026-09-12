@@ -39,11 +39,14 @@ class FakeStore implements MessageStore {
 function fakeDb(seed: {
   requests?: { id: string; ref: string; renter_id: string; created_at: string }[];
   renters?: { id: string; phone_e164: string; opted_out_at?: string | null }[];
+  events?: Record<string, unknown>[];
 } = {}) {
   const state = {
     requests: seed.requests ?? [],
     renters: seed.renters ?? [{ id: 'r1', phone_e164: PHONE, opted_out_at: null }],
-    events: [] as Record<string, unknown>[],
+    // Seeded events are the log as it stood before this message; anything
+    // handleInbound writes is appended to the same list.
+    events: [...(seed.events ?? [])] as Record<string, unknown>[],
     renterUpdates: [] as Record<string, unknown>[],
   };
 
@@ -51,10 +54,15 @@ function fakeDb(seed: {
     let rows: Record<string, unknown>[] =
       table === 'viewing_requests' ? [...state.requests]
       : table === 'renters' ? [...state.renters]
+      : table === 'events' ? [...state.events]
       : [];
 
     const api: Record<string, unknown> = {
       select: () => api,
+      // `await db.from('events').select(...).eq(...).order(...)` resolves the
+      // builder itself, so it has to be thenable as well as chainable.
+      then: (resolve: (r: { data: unknown; error: null }) => unknown) =>
+        resolve({ data: rows, error: null }),
       eq: (col: string, val: unknown) => { rows = rows.filter(r => r[col] === val); return api; },
       // Sorted here rather than at read time, because postgrest applies the
       // order before the limit - and the newest-request read is only correct
@@ -140,16 +148,49 @@ describe('handleInbound', () => {
     expect(store.messages[0].direction).toBe('IN');
   });
 
-  it('logs RENTER_REPLIED with an unclassified intent - classifying it is S6', async () => {
+  it('logs RENTER_REPLIED with what the reply meant', async () => {
     const db = fakeDb({ requests: REQUESTS });
     await handleInbound(db, store, message('yes'));
-    expect(db.state.events).toHaveLength(1);
     expect(db.state.events[0]).toMatchObject({
       request_id: 'req-new',
       type: 'RENTER_REPLIED',
       actor: 'RENTER',
-      payload: { intent: 'UNCLASSIFIED' },
+      payload: { intent: 'CONFIRM' },
     });
+  });
+
+  it('does not confirm a request that has had no itinerary sent to it', async () => {
+    // The very first message a renter ever sends is the wa.me handshake, and
+    // it often reads as agreement. Confirming on it would close a request
+    // before a single broker had been rung.
+    const db = fakeDb({ requests: REQUESTS });
+    const out = await handleInbound(db, store, message('yes'));
+    expect(out.confirmed).toBe(false);
+    expect(db.state.events.filter(e => e.type === 'REQUEST_CONFIRMED')).toHaveLength(0);
+  });
+
+  it('confirms a delivered request, carrying the items that were confirmed', async () => {
+    const delivered = [
+      { id: 1, request_id: 'req-new', item_id: null, type: 'REQUEST_SUBMITTED', payload: {}, actor: 'RENTER', occurred_at: '2026-09-11T00:00:00Z' },
+      { id: 2, request_id: 'req-new', item_id: 'i1', type: 'ITEM_ADDED', payload: { listing_id: 'l1' }, actor: 'RENTER', occurred_at: '2026-09-11T00:00:01Z' },
+      { id: 3, request_id: 'req-new', item_id: 'i2', type: 'ITEM_ADDED', payload: { listing_id: 'l2' }, actor: 'RENTER', occurred_at: '2026-09-11T00:00:02Z' },
+      { id: 4, request_id: 'req-new', item_id: 'i1', type: 'OUTCOME_RECORDED', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-09-15T03:00:00Z', duration_minutes: 30 }] }, actor: 'OPS:u1', occurred_at: '2026-09-11T02:00:00Z' },
+      { id: 5, request_id: 'req-new', item_id: 'i2', type: 'OUTCOME_RECORDED', payload: { outcome: 'ALREADY_RENTED', slots: [] }, actor: 'OPS:u1', occurred_at: '2026-09-11T02:01:00Z' },
+      { id: 6, request_id: 'req-new', item_id: null, type: 'ITINERARY_DELIVERED', payload: { message_id: 'm1' }, actor: 'SYSTEM', occurred_at: '2026-09-11T03:00:00Z' },
+    ];
+    const db = fakeDb({ requests: REQUESTS, events: delivered });
+    const out = await handleInbound(db, store, message('yes please'));
+    expect(out.confirmed).toBe(true);
+    const confirmedEvent = db.state.events.find(e => e.type === 'REQUEST_CONFIRMED');
+    // One of two confirmed is a confirmed request, not half of one.
+    expect(confirmedEvent).toMatchObject({ payload: { confirmed_item_ids: ['i1'] }, actor: 'RENTER' });
+  });
+
+  it('does not confirm on a reschedule that also says ok', async () => {
+    const db = fakeDb({ requests: REQUESTS });
+    const out = await handleInbound(db, store, message('ok but can we move it to Saturday'));
+    expect(out.intent).toBe('RESCHEDULE');
+    expect(out.confirmed).toBe(false);
   });
 
   it('writes no event when the message belongs to no request', async () => {
@@ -165,6 +206,7 @@ describe('handleInbound', () => {
   it('honours an opt-out, and still stores the message that carried it', async () => {
     const db = fakeDb({ requests: REQUESTS });
     const out = await handleInbound(db, store, message('STOP'));
+    expect(out.intent).toBe('OPT_OUT');
     expect(out.optedOut).toBe(true);
     expect(db.state.renterUpdates[0]).toHaveProperty('opted_out_at');
     expect(store.messages).toHaveLength(1);
