@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { assessVerification } from '../_shared/crawl-telemetry.ts';
 import { fetchNhatotAd, buildNhatotListing } from '../_shared/nhatot.ts';
 
 const corsHeaders = {
@@ -369,7 +370,9 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } }
   );
 
-  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, stale_archived: 0, errors: 0, resurrected: 0, reprice: 0, delisted: 0, decayed: 0, deactivated_ids: [] as string[] };
+  // `deactivation_reasons` is the tally behind the 20% ceiling below: which
+  // reason took each listing off the index, not just how many went.
+  const summary = { checked: 0, alive: 0, dead_increment: 0, deactivated: 0, stale_archived: 0, errors: 0, resurrected: 0, reprice: 0, delisted: 0, decayed: 0, deactivated_ids: [] as string[], deactivation_reasons: {} as Record<string, number> };
 
   try {
     const nowMs = Date.now();
@@ -482,6 +485,8 @@ Deno.serve(async (req) => {
           update.deactivated_at = now;
           summary.deactivated++;
           summary.deactivated_ids.push(item.id);
+          const why = result.reason ?? 'unknown';
+          summary.deactivation_reasons[why] = (summary.deactivation_reasons[why] ?? 0) + 1;
           // `delisted_at` is the stronger claim and only some evidence earns it.
           // The chotot ad API answering "no ad found" twice is the listing's own
           // source saying it is gone. A page that failed to load, redirected, or
@@ -512,6 +517,20 @@ Deno.serve(async (req) => {
       await Promise.all(chunk.map(processOne));
     }
 
+    // PLAN-v3 S1: a single verification reason must not silently deactivate
+    // more than 20% of a run. This is the check that would have caught the
+    // nhatot collapse in August, and it is also what would catch the gateway
+    // genuinely starting to refuse us - the two look identical from inside a
+    // single listing, and only the share tells them apart.
+    //
+    // It warns rather than halting. Stopping the pass would leave the index
+    // half-verified on a threshold that might be a real cull, and a loud log
+    // with the reason named is what a person can actually act on.
+    const health = assessVerification({ checked: summary.checked, reasons: summary.deactivation_reasons });
+    if (!health.healthy) {
+      console.error(`[verify-external-listings] DEACTIVATION SKEW: ${health.message}`);
+    }
+
     // Invalidate discovery cache if we deactivated anything
     if (summary.deactivated > 0 || summary.stale_archived > 0 || summary.resurrected > 0 || summary.decayed > 0) {
       try {
@@ -521,7 +540,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ message: 'Verification complete', summary }), {
+    return new Response(JSON.stringify({ message: 'Verification complete', summary, health }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
