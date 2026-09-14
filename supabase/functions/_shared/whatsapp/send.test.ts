@@ -304,3 +304,81 @@ describe('adapter selection', () => {
     expect(() => adapterFromEnv({ WHATSAPP_MODE: 'cloud' })).toThrow(/missing/);
   });
 });
+
+describe('the live template gate', () => {
+  /** A store that also knows what Meta last said about a template. */
+  function storeWithStatus(status: string | null) {
+    const base = new FakeStore();
+    return Object.assign(base, {
+      getTemplateStatus: () => Promise.resolve(status ? { status } : null),
+    });
+  }
+
+  it('refuses a code-approved template that Meta has since paused', async () => {
+    // The failure a code flag can never catch: approval is not permanent. Meta
+    // pauses templates whose quality drops, and the flag stays true through it.
+    TEMPLATES.REQUEST_RECEIVED.approved = true;
+    try {
+      const store = storeWithStatus('PAUSED');
+      await expect(
+        sendTemplate(store, new MockAdapter(), {
+          renterId: 'r1', purpose: 'p', templateName: 'request_received',
+          params: ['a', 'b', 'c'],
+        }),
+      ).rejects.toBeInstanceOf(UnapprovedTemplateError);
+      // And nothing was written: the refusal happens before the row.
+      expect(store.messages).toHaveLength(0);
+    } finally {
+      TEMPLATES.REQUEST_RECEIVED.approved = false;
+    }
+  });
+
+  it('sends when the code flag and Meta agree', async () => {
+    TEMPLATES.REQUEST_RECEIVED.approved = true;
+    try {
+      const res = await sendTemplate(storeWithStatus('APPROVED'), new MockAdapter(), {
+        renterId: 'r1', purpose: 'p', templateName: 'request_received', params: ['a', 'b', 'c'],
+      });
+      expect(res.message.status).toBe('SENT');
+    } finally {
+      TEMPLATES.REQUEST_RECEIVED.approved = false;
+    }
+  });
+
+  it('falls back to the code flag when the template has never been synced', async () => {
+    // A missing row means "not synced", not "disapproved". Refusing on absence
+    // would let a cold database block every template send - a worse failure
+    // than the one being prevented.
+    TEMPLATES.REQUEST_RECEIVED.approved = true;
+    try {
+      const res = await sendTemplate(storeWithStatus(null), new MockAdapter(), {
+        renterId: 'r1', purpose: 'p', templateName: 'request_received', params: ['a', 'b', 'c'],
+      });
+      expect(res.message.status).toBe('SENT');
+    } finally {
+      TEMPLATES.REQUEST_RECEIVED.approved = false;
+    }
+  });
+
+  it('still refuses when Meta approves but the code flag does not', async () => {
+    // The deploy gate survives the sync: Meta approving a template does not
+    // make it sendable on its own.
+    await expect(
+      sendTemplate(storeWithStatus('APPROVED'), new MockAdapter(), {
+        renterId: 'r1', purpose: 'p', templateName: 'itinerary_ready', params: ['a', 'b', 'c'],
+      }),
+    ).rejects.toBeInstanceOf(UnapprovedTemplateError);
+  });
+
+  it('works with a store that does not implement the lookup at all', async () => {
+    TEMPLATES.REQUEST_RECEIVED.approved = true;
+    try {
+      const res = await sendTemplate(new FakeStore(), new MockAdapter(), {
+        renterId: 'r1', purpose: 'p', templateName: 'request_received', params: ['a', 'b', 'c'],
+      });
+      expect(res.message.status).toBe('SENT');
+    } finally {
+      TEMPLATES.REQUEST_RECEIVED.approved = false;
+    }
+  });
+});

@@ -60,6 +60,14 @@ export interface MessageStore {
   countConsecutiveOutbound(renterId: string): Promise<number>;
   getRenter(renterId: string): Promise<StoredRenter | null>;
   touchServiceWindow(renterId: string, expiresAt: string): Promise<void>;
+  /**
+   * Meta's last-known status for a template, or null if never synced.
+   *
+   * Optional so an in-memory store can omit it. A store that does not
+   * implement it falls back to the code flag alone, which is the behaviour
+   * before this existed - tests and the mock path are unaffected.
+   */
+  getTemplateStatus?(name: string): Promise<{ status: string } | null>;
 }
 
 export interface StoredRenter {
@@ -197,8 +205,27 @@ export async function sendTemplate(
     attempt?: number;
   },
 ): Promise<SendResult> {
+  // Two gates, and they guard different failures.
+  //
+  // The code flag is a deploy gate: a template nobody reviewed must not become
+  // sendable because an API said so. Meta's status is the live permission, and
+  // it is the one that can be withdrawn after the fact - a template REJECTED on
+  // resubmission or PAUSED for quality stays `true` in the code forever, and
+  // without this check the first sign would be a graph_400 on the itinerary a
+  // renter was waiting for.
   if (!isApprovedTemplate(opts.templateName)) {
     throw new UnapprovedTemplateError(opts.templateName);
+  }
+  if (store.getTemplateStatus) {
+    const live = await store.getTemplateStatus(opts.templateName);
+    // A missing row means never synced, not disapproved. Refusing on absence
+    // would make a cold database block every template send, which is a worse
+    // failure than the one being prevented.
+    if (live && live.status !== 'APPROVED') {
+      throw new UnapprovedTemplateError(
+        `${opts.templateName} (Meta reports ${live.status} as of the last sync)`,
+      );
+    }
   }
   const spec = templateByName(opts.templateName)!;
   const params = opts.params ?? [];
