@@ -21,6 +21,9 @@ export const EVENT_TYPES = [
   // update as ITINERARY_DELIVERED would make the queue think the request was
   // finished.
   'HOLDING_UPDATE_SENT',
+  // Listings we put in front of the renter, in the order shown. What a reply
+  // of "2" resolves against - see selection.ts.
+  'SUGGESTIONS_OFFERED',
   'RENTER_REPLIED',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
@@ -229,6 +232,11 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
       case 'RENTER_REPLIED':
         // Intent classification drives later events; the reply alone moves
         // nothing, which is why there is no state change here.
+        break;
+
+      case 'SUGGESTIONS_OFFERED':
+        // Read by the selection path, invisible to state: offering
+        // alternatives is not progress on the request that failed.
         break;
 
       case 'HOLDING_UPDATE_SENT':

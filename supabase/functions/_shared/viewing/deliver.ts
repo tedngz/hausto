@@ -74,6 +74,11 @@ export async function deliver(
   let stops = 0;
   let warnings: Warning[] = [];
   let orderedItemIds: string[] | null = null;
+  let substitutes: { title: string; priceVnd: number; districtCode: string | null; listingId?: string }[] = [];
+  // Recorded as SUGGESTIONS_OFFERED so a reply of "2" has something to resolve
+  // against. Without it the message says "reply with a number" and the number
+  // means nothing - which is what it did before this.
+  let offeredListingIds: string[] = [];
 
   if (opts.purpose === 'ITINERARY') {
     const assembled = assembleItinerary(view, listings, opts.order ?? view.itineraryOrder);
@@ -87,8 +92,10 @@ export async function deliver(
       // Until now nothing produced any - the ops console passed an empty array
       // - so the message promised a follow-up nobody was going to make. Now it
       // finds its own when the caller has not supplied better.
-      const substitutes = opts.substitutes ?? await findSubstitutes(db, opts.requestId);
-      text = renderNoSupply({ ref: request.ref, requestedCount: listings.length, substitutes });
+      const found = opts.substitutes ?? await findSubstitutes(db, opts.requestId);
+      substitutes = found;
+      offeredListingIds = found.map(s => s.listingId).filter((id): id is string => !!id);
+      text = renderNoSupply({ ref: request.ref, requestedCount: listings.length, substitutes: found });
     } else {
       text = renderItinerary({ ref: request.ref, stops: assembled.stops, requestedCount: listings.length });
     }
@@ -217,7 +224,10 @@ async function findSubstitutes(db: Supa, requestId: string) {
     if (profile.districts.length > 0) query = query.in('district_code', profile.districts);
 
     const { data: candidates } = await query;
-    return toRenderable(rankSubstitutes(profile, (candidates ?? []) as ShortlistCandidate[]));
+    // Keeps listingId alongside the renderable fields: the renderer ignores
+    // it, and SUGGESTIONS_OFFERED needs it.
+    const ranked = rankSubstitutes(profile, (candidates ?? []) as ShortlistCandidate[]);
+    return ranked.map((r, i) => ({ ...toRenderable([r])[0], listingId: r.listingId, position: i + 1 }));
   } catch (e) {
     console.error('[deliver] substitute search failed, sending without:', (e as Error).message);
     return [];

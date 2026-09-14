@@ -93,8 +93,12 @@ describe('questions and the unknown', () => {
   it('falls through to UNKNOWN rather than guessing', () => {
     // The escape hatch is the point. A wrong automated reply inside a billed
     // window costs more than an operator reading one line.
+    //
+    // ("the third one" used to be asserted here. It now classifies as
+    // SELECTION, which is the whole point of adding that intent - the old
+    // assertion documented the absence of a feature, not a rule.)
     expect(intentOf('👍')).toBe('UNKNOWN');
-    expect(intentOf('the third one')).toBe('UNKNOWN');
+    expect(intentOf('sounds about right i suppose')).toBe('UNKNOWN');
     expect(intentOf('')).toBe('UNKNOWN');
   });
 });
@@ -112,5 +116,29 @@ describe('routing', () => {
     for (const s of ['yes', 'no', 'reschedule', 'STOP', 'why?', 'asdfgh']) {
       expect(INTENTS).toContain(intentOf(s));
     }
+  });
+});
+
+describe('picking from a list', () => {
+  it('reads a numbered reply as a selection', () => {
+    for (const s of ['2', '1 and 3', 'the second one', 'number 2 please']) {
+      expect(intentOf(s), s).toBe('SELECTION');
+    }
+  });
+
+  it('does not turn a time into a listing number', () => {
+    // "can we move it to 3pm" is a reschedule. Reading the 3 as a pick would
+    // arrange a viewing instead of moving one.
+    expect(intentOf('can we move it to 3pm')).toBe('RESCHEDULE');
+    expect(intentOf('another time please')).toBe('RESCHEDULE');
+  });
+
+  it('leaves a yes a confirmation, not a pick', () => {
+    expect(intentOf('yes')).toBe('CONFIRM');
+    expect(intentOf('ok')).toBe('CONFIRM');
+  });
+
+  it('sends a question about a listing to a person', () => {
+    expect(intentOf('is 2 still available and what floor')).toBe('QUESTION');
   });
 });

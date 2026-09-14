@@ -15,12 +15,17 @@
 // either and often both in one message.
 
 import { isOptOut } from '../whatsapp/inbound.ts';
+import { looksLikeSelection } from './selection.ts';
 
 export const INTENTS = [
   'CONFIRM',
   'DECLINE',
   'RESCHEDULE',
   'QUESTION',
+  // Picking from a list we sent - "2", "1 and 3", "the second one". Both
+  // renderNoSupply and renderSearchResults end with "reply with a number", so
+  // this is an affordance we promised before we read it.
+  'SELECTION',
   'OPT_OUT',
   'UNKNOWN',
 ] as const;
@@ -98,6 +103,14 @@ export function classifyIntent(raw: string): Classification {
   for (const [intent, phrases] of CONTAINS) {
     const hit = phrases.find(p => text.includes(p));
     if (hit) return { intent, reason: `phrase:${hit}` };
+  }
+
+  // After the phrase rules, so "can we move it to 3pm" stays a reschedule
+  // rather than becoming a pick of listing three. `looksLikeSelection` is
+  // deliberately strict about what counts: a false positive arranges viewings
+  // nobody asked for, a false negative goes to an operator who reads one line.
+  if (looksLikeSelection(raw)) {
+    return { intent: 'SELECTION', reason: 'numbered pick' };
   }
 
   // A leading yes or no with more after it. "yes please, 3pm works" is a
