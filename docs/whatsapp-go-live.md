@@ -14,7 +14,7 @@ anything - the switch is the last step, not the first.
 
 ---
 
-## 1. The six secrets
+## 1. The secrets
 
 Set these at
 `https://supabase.com/dashboard/project/gbgrwjdmytaksrztcyzs/settings/functions`.
@@ -32,6 +32,7 @@ the failure surfaces much later as a generic error from whatever consumes it.
 | `WHATSAPP_APP_SECRET` | `whatsapp-webhook` | Every inbound is rejected 403. The webhook cannot tell an unsigned caller from Meta. |
 | `WHATSAPP_VERIFY_TOKEN` | `whatsapp-webhook` | Meta's subscription handshake fails; you never get inbound at all. |
 | `WHATSAPP_BUSINESS_PHONE` | `viewing-request-create` | **Silent breakage - see the trap below.** |
+| `WHATSAPP_WABA_ID` | `whatsapp-template-sync` | The hourly reconciliation no-ops. Nothing breaks, but a withdrawn approval stops being noticed. |
 
 ### The trap: `WHATSAPP_BUSINESS_PHONE`
 
@@ -145,11 +146,42 @@ still `false` **before** writing a `messages` row. So the flag is not
 bookkeeping: until you flip it, that template cannot be sent, and flipping it
 early means a row that says SENT for a message Meta rejected.
 
-This is one place the code is deliberately doing less than it could. Nothing
-reconciles these flags against Meta's actual approval state, so a template
-rejected later, or paused for quality, stays `true` here. If you want that
-checked rather than remembered, say so and I will build it - the Graph API
-exposes template status and it is a short function.
+### The flag is not the only gate any more
+
+`whatsapp-template-sync` runs hourly, asks Meta for the real status of every
+template, caches it in `whatsapp_template_status`, and compares it with the
+registry. `sendTemplate` now consults both.
+
+The two gates guard different failures, and neither replaces the other:
+
+- **The code flag is a deploy gate.** Meta approving a template does not make
+  it sendable - somebody still flips the flag and deploys. A template nobody
+  reviewed must not go live because an API said so.
+- **Meta's status is the live permission**, and it is the one that can be
+  withdrawn after the fact. A template REJECTED on resubmission or PAUSED for
+  quality would otherwise stay `true` in the code forever, and the first sign
+  would be a `graph_400` on an itinerary a renter was waiting for.
+
+A template with no cached row falls back to the flag alone. A missing row means
+"never synced", not "disapproved" - refusing on absence would let a cold
+database block every template send, which is a worse failure than the one being
+prevented.
+
+What the sync logs, and how loudly:
+
+| Situation | Logged as |
+|---|---|
+| Flag is `true`, Meta says anything but APPROVED | **error** - this is the one that can actually send and fail |
+| Flag is `true`, Meta has never heard of the template | **error** - same reason |
+| Flag is `true`, Meta rates quality RED | **error** - RED precedes a pause |
+| Meta says APPROVED, flag still `false` | info - the deploy gate working as designed |
+| In the registry, not submitted | info - a to-do, not an incident |
+| Meta has a template the registry does not | info |
+
+It needs one secret beyond the six above: **`WHATSAPP_WABA_ID`**, the WhatsApp
+Business Account id (not the phone number id). Until that and the access token
+are set it no-ops and returns 200, so the hourly cron stays quiet rather than
+filling the logs with errors about a thing nobody has been able to do yet.
 
 ---
 
@@ -223,7 +255,9 @@ volume low, or after it with the consolidation behaviour already proven.
 
 ## What is still deliberately unbuilt
 
-- **Nothing reconciles template flags against Meta.** See §4.
+- **Nothing sends a template automatically when Meta approves one.** The sync
+  reports it; flipping the flag and deploying stays a human act. That is the
+  deploy gate, not an omission.
 - **Nothing sends `request_received` at intake.** Intake writes no message at
   all: there is no window until the renter messages first, and the deep link is
   the handshake. Once `request_received` is approved, sending it at intake

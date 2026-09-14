@@ -89,6 +89,23 @@ export class SupabaseMessageStore implements MessageStore {
       .update({ service_window_expires_at: expiresAt, updated_at: new Date().toISOString() })
       .eq('id', renterId);
   }
+
+  /**
+   * Meta's last-known status, or null when the template has never been synced.
+   *
+   * Null on a query error too, deliberately: this check exists to catch an
+   * approval Meta withdrew, and a database hiccup must not become a reason no
+   * template can be sent at all.
+   */
+  async getTemplateStatus(name: string): Promise<{ status: string } | null> {
+    const { data, error } = await this.db
+      .from('whatsapp_template_status').select('status').eq('name', name).maybeSingle();
+    if (error) {
+      console.warn('[whatsapp] template status lookup failed, falling back to the code flag:', error);
+      return null;
+    }
+    return data ? { status: String(data.status) } : null;
+  }
 }
 
 /** Find a renter by phone, or create one. Used by the inbound path. */
