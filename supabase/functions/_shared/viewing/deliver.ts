@@ -16,6 +16,8 @@ import { sendFreeForm, ServiceWindowClosedError, ConsecutiveMessageError } from 
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { assembleItinerary, renderItinerary, renderNoSupply, type StopListing, type Warning } from './itinerary.ts';
 import { renderHoldingUpdate, renderViewingReminder } from './reminders.ts';
+import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
+import type { ShortlistCandidate } from './intake.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -27,6 +29,10 @@ export interface DeliverOptions {
   purpose: DeliveryPurpose;
   /** Ops-chosen itinerary order. Ignored for anything but ITINERARY. */
   order?: string[];
+  /**
+   * Explicit substitutes, if the caller has some. Left unset, a zero-confirmed
+   * request picks its own - see findSubstitutes below.
+   */
   substitutes?: { title: string; priceVnd: number; districtCode: string | null }[];
   /** Required for VIEWING_REMINDER: which viewing is being reminded about. */
   itemId?: string;
@@ -74,11 +80,18 @@ export async function deliver(
     stops = assembled.stops.length;
     warnings = assembled.warnings;
     orderedItemIds = assembled.stops.map(s => s.itemId);
-    text = stops === 0
+    if (stops === 0) {
       // Zero confirmed. FAILED_NO_SUPPLY ships with substitutes or it is a
       // dead end, and a dead end is not something we make a renter read.
-      ? renderNoSupply({ ref: request.ref, requestedCount: listings.length, substitutes: opts.substitutes ?? [] })
-      : renderItinerary({ ref: request.ref, stops: assembled.stops, requestedCount: listings.length });
+      //
+      // Until now nothing produced any - the ops console passed an empty array
+      // - so the message promised a follow-up nobody was going to make. Now it
+      // finds its own when the caller has not supplied better.
+      const substitutes = opts.substitutes ?? await findSubstitutes(db, opts.requestId);
+      text = renderNoSupply({ ref: request.ref, requestedCount: listings.length, substitutes });
+    } else {
+      text = renderItinerary({ ref: request.ref, stops: assembled.stops, requestedCount: listings.length });
+    }
   } else if (opts.purpose === 'VIEWING_REMINDER') {
     const item = opts.itemId ? view.items[opts.itemId] : undefined;
     const slot = item?.slots?.[0] as { starts_at?: string } | undefined;
@@ -171,4 +184,42 @@ export async function deliver(
   if (evErr) console.error('[deliver] event insert failed after a successful send:', evErr);
 
   return { ok: true, messageId, deduplicated, stops, warnings, preview: text };
+}
+
+/**
+ * Close matches for a request whose whole shortlist fell through.
+ *
+ * Reads the renter's own shortlist to infer what they wanted, then ranks live
+ * listings against it. Deterministic - see substitutes.ts for why this is not
+ * an LLM call.
+ *
+ * Returns [] on any failure rather than throwing: a substitute search that
+ * breaks must not stop the renter being told their request failed, which is
+ * the more important half of the message.
+ */
+async function findSubstitutes(db: Supa, requestId: string) {
+  const columns =
+    'id, is_active, price_vnd, price_confidence, bedrooms, area_sqm, district_code, realtor_id, title';
+  try {
+    const { data: items } = await db
+      .from('request_items').select('listing_id').eq('request_id', requestId);
+    const listingIds = (items ?? []).map((i: { listing_id: string }) => i.listing_id);
+    if (listingIds.length === 0) return [];
+
+    const { data: shortlisted } = await db
+      .from('external_properties').select(columns).in('id', listingIds);
+    const profile = profileOf((shortlisted ?? []) as ShortlistCandidate[]);
+
+    // Candidates from the districts they chose. Scoped rather than scanning the
+    // whole index: a substitute in another city is not a substitute, and the
+    // ranker would score it last anyway.
+    let query = db.from('external_properties').select(columns).eq('is_active', true).limit(200);
+    if (profile.districts.length > 0) query = query.in('district_code', profile.districts);
+
+    const { data: candidates } = await query;
+    return toRenderable(rankSubstitutes(profile, (candidates ?? []) as ShortlistCandidate[]));
+  } catch (e) {
+    console.error('[deliver] substitute search failed, sending without:', (e as Error).message);
+    return [];
+  }
 }

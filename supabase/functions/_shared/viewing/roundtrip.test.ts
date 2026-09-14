@@ -45,8 +45,21 @@ async function seed() {
     db.tables.external_properties.push({
       id: `listing-${i + 1}`, title, district_code: districts[i],
       price_vnd: 15_000_000 + i * 1_000_000, is_active: true,
+      bedrooms: 2, area_sqm: 70, price_confidence: 'HIGH',
     });
   });
+
+  // Live listings the renter did NOT shortlist, for the substitute search to
+  // find. Two are plausible neighbours; one is priced far out of their band and
+  // must not be offered.
+  db.tables.external_properties.push(
+    { id: 'alt-1', title: 'Bright 2BR, Thao Dien', district_code: 'HCM-D2',
+      price_vnd: 16_000_000, is_active: true, bedrooms: 2, area_sqm: 68, price_confidence: 'HIGH' },
+    { id: 'alt-2', title: 'Corner 2BR near Ben Thanh', district_code: 'HCM-D1',
+      price_vnd: 14_500_000, is_active: true, bedrooms: 2, area_sqm: 65, price_confidence: 'HIGH' },
+    { id: 'alt-rich', title: 'Penthouse, Thao Dien', district_code: 'HCM-D2',
+      price_vnd: 60_000_000, is_active: true, bedrooms: 4, area_sqm: 200, price_confidence: 'HIGH' },
+  );
 
   db.tables.renters.push({ id: 'renter-1', phone_e164: PHONE, service_window_expires_at: null, opted_out_at: null });
 
@@ -206,6 +219,41 @@ describe('the round trip, end to end on MockAdapter', () => {
     const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
     expect(text).toContain('Flat A');
     expect(text).toContain('Reply with a number');
+  });
+
+  it('finds its own substitutes when nothing is confirmed and none were supplied', async () => {
+    // The hole this closes: renderNoSupply has always taken substitutes and
+    // nothing ever produced any, so the message promised a follow-up nobody was
+    // going to make.
+    for (const id of itemIds) record(id, { outcome: 'ALREADY_RENTED' });
+    await inbound('hi');
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    expect(result.ok).toBe(true);
+
+    const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
+    expect(text).toContain('Bright 2BR, Thao Dien');
+    expect(text).toContain('Corner 2BR near Ben Thanh');
+    // Out of the price band - offering it would waste the renter's time twice.
+    expect(text).not.toContain('Penthouse');
+    // And never one they already shortlisted and were just told is gone.
+    expect(text).not.toContain('Sunny 2BR in Thao Dien');
+    expect(text).toContain('Reply with a number');
+  });
+
+  it('still sends the failure when the substitute search finds nothing', async () => {
+    // An empty result is honest, and the renter being told their request failed
+    // matters more than the suggestions.
+    db.tables.external_properties = db.tables.external_properties.filter(p => !String(p.id).startsWith('alt-'));
+    for (const id of itemIds) record(id, { outcome: 'ALREADY_RENTED' });
+    await inbound('hi');
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    expect(result.ok).toBe(true);
+    const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
+    expect(text).toContain('come back to you today');
   });
 
   it('refuses to send with the window shut, rather than logging a send nobody got', async () => {
