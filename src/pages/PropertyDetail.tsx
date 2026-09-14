@@ -389,6 +389,10 @@ const PropertyDetail = () => {
               vibeMatch={vibeMatch}
               onBookViewing={user ? handleBookViewing : undefined}
               isBooking={isBooking}
+              // Crawled listings only. The viewing flow requests against
+              // `external_properties`; an internal listing books through the
+              // Fast-Track path above instead.
+              shortlistable={source === 'external'}
             />
 
           </div>

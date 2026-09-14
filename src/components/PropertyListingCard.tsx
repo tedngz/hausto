@@ -18,6 +18,7 @@ import { requestPass } from '@/lib/passEvents';
 import { openDeepScan } from '@/lib/deepScanEvents';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
+import { ShortlistButton } from '@/components/ShortlistButton';
 
 // Full listing card for the individual property page: a 16:9 gallery on top and
 // a details panel below (badges, title/price, vibe tags, description, amenities).
@@ -45,6 +46,10 @@ interface PropertyListingCardProps {
   onBookViewing?: () => void;
   /** Disables the CTA while the booking flow is being opened */
   isBooking?: boolean;
+  /** Offers the viewing shortlist. Crawled listings only - the viewing flow
+   *  requests against `external_properties`, and an internal listing has its
+   *  own booking path. */
+  shortlistable?: boolean;
 }
 
 export const PropertyListingCard = ({
@@ -54,6 +59,7 @@ export const PropertyListingCard = ({
   vibeMatch,
   onBookViewing,
   isBooking = false,
+  shortlistable = false,
 }: PropertyListingCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(0);
@@ -398,6 +404,16 @@ export const PropertyListingCard = ({
               ))}
             </div>
           </div>
+        )}
+
+        {shortlistable && (
+          <ShortlistButton
+            listingId={apartment.id}
+            title={apartment.title}
+            imageUrl={apartment.images?.[0] ?? null}
+            size="default"
+            className="w-full rounded-full mt-1"
+          />
         )}
 
         {onBookViewing && (

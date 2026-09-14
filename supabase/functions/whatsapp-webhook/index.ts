@@ -2,23 +2,24 @@
 // supabase/config.toml sets verify_jwt = false and the signature is what
 // authenticates the caller instead.
 //
-// Two jobs, and it does them in this order deliberately:
-//   1. re-open the renter's service window - every inbound does this
-//   2. persist the message
+// Verify the signature, parse the batch, and hand each message to
+// `handleInbound` - which re-opens the service window, stores the row, logs the
+// reply and honours an opt-out, in that order. The order matters: the window is
+// the fact with a deadline attached. A message we failed to store can be
+// recovered from Meta; a window we failed to extend silently blocks every reply
+// for 24 hours.
 //
-// The window first, because that is the fact with a deadline attached. A
-// message we failed to store can be recovered from Meta; a window we failed to
-// extend silently blocks every reply for 24 hours.
+// `handleInbound` is shared with `dev-phone` so the mock inbound path and the
+// real one cannot drift apart.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { SupabaseMessageStore, upsertRenterByPhone } from '../_shared/whatsapp/store.ts';
-import { recordInbound } from '../_shared/whatsapp/send.ts';
+import { SupabaseMessageStore } from '../_shared/whatsapp/store.ts';
 import {
   verifyMetaSignature,
   parseInboundMessages,
   verifySubscription,
-  isOptOut,
 } from '../_shared/whatsapp/inbound.ts';
+import { handleInbound } from '../_shared/viewing/routing.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -69,22 +70,10 @@ Deno.serve(async (req) => {
 
   for (const m of messages) {
     try {
-      const renter = await upsertRenterByPhone(db, m.from);
-
-      // Window first. See the note at the top of this file.
-      await recordInbound(store, {
-        renterId: renter.id,
-        body: m.text,
-        providerMessageId: m.providerMessageId,
-        now: new Date(m.timestamp),
-      });
-
-      if (isOptOut(m.text)) {
-        await db.from('renters')
-          .update({ opted_out_at: new Date().toISOString() })
-          .eq('id', renter.id);
-        console.log(`[whatsapp-webhook] ${renter.id} opted out`);
-      }
+      // Window, row, event, opt-out - all of it in one place, shared with the
+      // mock inbound path so the two cannot drift.
+      const { renterId, optedOut } = await handleInbound(db, store, m);
+      if (optedOut) console.log(`[whatsapp-webhook] ${renterId} opted out`);
     } catch (e) {
       // One bad message must not cost us the rest of the batch, and must not
       // make Meta retry the whole delivery - the others are already stored.

@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ANALYZE_COUNT } from '../_shared/vibe-policy.ts';
+import { assessRun } from '../_shared/crawl-telemetry.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1201,6 +1202,28 @@ Deno.serve(async (req) => {
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);
 
+    // Per-source, per-run telemetry (PLAN-v3 S1.1). Opened before the scrape so
+    // a run that times out or dies still leaves a row - the runs that vanish
+    // are exactly the ones worth seeing.
+    const runStartedAt = new Date().toISOString();
+    let crawlRunId: string | null = null;
+    try {
+      const { data: runRow } = await supabase
+        .from('crawl_runs')
+        .insert({
+          source: bestTarget.marketplace,
+          location: bestTarget.location,
+          started_at: runStartedAt,
+        })
+        .select('id')
+        .single();
+      crawlRunId = runRow?.id ?? null;
+    } catch (e) {
+      // Telemetry must never cost a crawl. A run we cannot measure is still a
+      // run worth doing.
+      console.warn('[scheduled-crawl] crawl_runs insert failed:', e);
+    }
+
     // Step 2: Call scrape-marketplace with directSave mode
     // scrape-marketplace saves properties directly to DB, so even if this call times out,
     // properties already saved are not lost.
@@ -1359,6 +1382,76 @@ Deno.serve(async (req) => {
 
     const duration = Date.now() - startTime;
 
+    // ── Close the telemetry row, and judge the run ────────────────────────
+    //
+    // The reason breakdown comes from `crawler_rejections`, which already
+    // records one row per rejected candidate with its reason. Reading it back
+    // by (source, rejected_at >= runStartedAt) rather than threading a counter
+    // through scrape-marketplace keeps a 2,400-line function untouched. The
+    // cost is that a second concurrent run of the SAME source in the same
+    // window would have its rejections counted here too - the cron picks one
+    // target per run so that is rare, and it can only inflate a share that is
+    // already being flagged, never hide one.
+    let reasons: Record<string, number> = {};
+    try {
+      const { data: rejections } = await supabase
+        .from('crawler_rejections')
+        .select('reason')
+        .eq('source', bestTarget.marketplace)
+        .gte('rejected_at', runStartedAt)
+        .limit(1000);
+      for (const r of (rejections ?? []) as { reason: string }[]) {
+        const key = r.reason ?? 'unknown';
+        reasons[key] = (reasons[key] ?? 0) + 1;
+      }
+    } catch (e) {
+      console.warn('[scheduled-crawl] rejection readback failed:', e);
+      reasons = {};
+    }
+
+    // `attempted` is derived rather than reported, so the parts always sum to
+    // the whole: every candidate handed to the saver either landed, updated,
+    // deduped or was filtered.
+    const attempted = newListings + updatedListings + duplicatesSkipped + filtered;
+    const assessment = assessRun({
+      attempted,
+      written: newListings,
+      updated: updatedListings,
+      duplicates: duplicatesSkipped,
+      rejected: filtered,
+      reasons,
+    });
+
+    if (crawlRunId) {
+      try {
+        await supabase.from('crawl_runs').update({
+          finished_at: new Date().toISOString(),
+          attempted,
+          written: newListings,
+          updated: updatedListings,
+          duplicates: duplicatesSkipped,
+          rejected: filtered,
+          reasons,
+          healthy: assessment.healthy,
+          verdict: assessment.verdict,
+          error: scrapeResult?.success ? null : 'scrape did not report success',
+        }).eq('id', crawlRunId);
+      } catch (e) {
+        console.warn('[scheduled-crawl] crawl_runs update failed:', e);
+      }
+    }
+
+    // The line that was missing for 35 days. An unhealthy run is logged at
+    // error level even though the HTTP response is a 200, because the response
+    // is read by a cron that cannot act on it and the log is read by a person
+    // who can.
+    if (!assessment.healthy) {
+      console.error(
+        `[scheduled-crawl] UNHEALTHY ${bestTarget.marketplace}/${bestTarget.location}: ` +
+        `${assessment.verdict} - ${assessment.message}`,
+      );
+    }
+
     const summary = {
       duration: `${duration}ms`,
       target: bestTarget,
@@ -1366,9 +1459,15 @@ Deno.serve(async (req) => {
       updatedListings,
       duplicatesSkipped,
       filtered,
+      attempted,
       vibeAnalyzed,
       directSaveMode: true,
       scrapeCompleted: !!scrapeResult?.success,
+      // Surfaced in the response as well as the log so a caller testing a
+      // source by hand sees the verdict without opening the dashboard.
+      healthy: assessment.healthy,
+      verdict: assessment.verdict,
+      verdictMessage: assessment.message,
     };
 
     console.log('[scheduled-crawl] Completed:', JSON.stringify(summary));

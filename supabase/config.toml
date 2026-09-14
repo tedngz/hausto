@@ -117,3 +117,37 @@ verify_jwt = true
 # Meta calls this and cannot present a Supabase JWT. The X-Hub-Signature-256
 # HMAC over the raw body is what authenticates the caller instead.
 verify_jwt = false
+
+[functions.viewing-request-create]
+# The renter surface has no Supabase session - renter auth is a phone-keyed
+# cookie, and there is no cookie before the first request. Rate-limited by IP
+# instead, and it reads every price from the database rather than the body.
+verify_jwt = false
+
+[functions.dev-phone]
+# /dev/phone, the mock WhatsApp thread. Refuses outright when WHATSAPP_MODE is
+# cloud - simulating inbound messages against a real number would forge service
+# windows and renter replies.
+verify_jwt = false
+
+[functions.ops-record-outcome]
+# An operator's JWT, never the service role: every event it writes carries
+# OPS:<uuid>, and the ops role is checked against user_roles before anything is
+# written. The console has SELECT and nothing else, so this is the only way a
+# state change reaches the log.
+verify_jwt = true
+
+[functions.viewing-deliver]
+# An operator's JWT, the cron secret, or the service role. Delivery costs money
+# and spends the renter's attention - it is not an open endpoint.
+verify_jwt = false
+
+[functions.viewing-jobs-drain]
+# pg_cron calls this with the cron secret, which it checks itself. verify_jwt
+# would reject the request before the code could.
+verify_jwt = false
+
+[functions.viewing-jobs-run]
+# pg_cron calls this with the cron secret, which it checks itself. verify_jwt
+# would reject the request before the code could.
+verify_jwt = false
