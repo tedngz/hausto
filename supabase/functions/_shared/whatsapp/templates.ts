@@ -41,6 +41,18 @@ export const TEMPLATES = {
     purpose: 'Day-before reminder, typically outside the window.',
     approved: false,
   },
+  WEEKLY_DIGEST: {
+    name: 'weekly_digest',
+    params: ['renter_name', 'new_count', 'area_summary'],
+    purpose:
+      'The weekly new-listing digest. Unlike the other four this one is not a reply - it arrives ' +
+      'unbidden, which is why it needs its own opt-in (renters.digest_opt_in_at) and why it is ' +
+      'almost certainly MARKETING rather than UTILITY when submitted. Submitting it as Utility to ' +
+      'dodge the consent bar gets a WABA restricted rather than a template rejected. It carries a ' +
+      'summary, not a list: template parameters are positional and cannot hold a variable-length ' +
+      'set of listings. The renter replies, which opens the window, and the detail goes free-form.',
+    approved: false,
+  },
   NO_SUPPLY_SUBSTITUTES: {
     name: 'no_supply_substitutes',
     params: ['renter_name', 'request_ref'],
