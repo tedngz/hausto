@@ -33,6 +33,42 @@ the failure surfaces much later as a generic error from whatever consumes it.
 | `WHATSAPP_VERIFY_TOKEN` | `whatsapp-webhook` | Meta's subscription handshake fails; you never get inbound at all. |
 | `WHATSAPP_BUSINESS_PHONE` | `viewing-request-create` | **Silent breakage - see the trap below.** |
 | `WHATSAPP_WABA_ID` | `whatsapp-template-sync` | The hourly reconciliation no-ops. Nothing breaks, but a withdrawn approval stops being noticed. |
+| `VIEWING_AGENT_ENABLED` | `whatsapp-webhook`, `dev-phone` | The agent stays silent. Everything routes to an operator, which is the safe default and where this should start. |
+
+### The agent switch
+
+`VIEWING_AGENT_ENABLED` is the one flag that turns automated replies on. It is
+off unless the value is exactly `true` - a typo, an empty string, or the
+variable not existing all mean off, which is the direction a flag controlling
+outbound messages should fail in.
+
+With it on, exactly two things happen automatically, and only in reply to a
+message the renter sent:
+
+| Renter says | Agent does |
+|---|---|
+| "2" / "1 and 3" / "the second one", against a list we sent | Creates a **new** request for those listings and confirms it |
+| A pick it cannot honour (list expired, number not on it) | Says why, in one message |
+| "anything in district 2 under 15tr" | Searches and replies with three listings |
+| Anything else | **Nothing.** An operator handles it |
+
+That last row is most of the traffic, and deliberately. `QUESTION` is the
+tempting thing to automate and the wrong one: "what floor is it on" is a
+question, and answering it with three unrelated flats is worse than not
+answering. The search intent is narrow on purpose - it needs the renter to
+describe a want, not merely to ask something.
+
+**One reply per inbound message, always.** `decideAction` returns a single
+action or none; it cannot return a list. The 3-in-a-row guard in `send.ts` is
+the backstop, not the mechanism.
+
+An opt-out outranks everything, including a selection in the same message -
+replying at all is the wrong answer to "stop messaging me".
+
+`/dev/phone` reads the same flag and takes the same path, so the mock is a
+rehearsal rather than an approximation. The one thing it will not do is
+dispatch a search, because that spends OpenAI budget and a mock phone should
+not quietly do that; it reports the decision instead.
 
 ### The trap: `WHATSAPP_BUSINESS_PHONE`
 
@@ -110,7 +146,7 @@ fails, the token does not match - nothing else in that path can fail.
 
 ---
 
-## 4. The four templates
+## 4. The templates
 
 Submit these **with these exact names and this exact parameter order**. The
 registry in `_shared/whatsapp/templates.ts` checks the name before a row is
@@ -123,6 +159,29 @@ renamed or reordered template is a refusal, not a silent mis-send.
 | `itinerary_ready` | `renter_name`, `confirmed_count`, `first_viewing_time` | Utility | The consolidated itinerary. One message carrying every confirmed viewing. |
 | `viewing_reminder` | `renter_name`, `viewing_time`, `listing_address` | Utility | Day-before reminder, typically outside the window. |
 | `no_supply_substitutes` | `renter_name`, `request_ref` | Utility | Nothing could be confirmed. Never sent alone - it carries substitutes. |
+| `weekly_digest` | `renter_name`, `new_count`, `area_summary` | **Marketing** | The weekly new-listing digest. See the warning below. |
+
+### `weekly_digest` is not like the other four
+
+The first four all answer something the renter did - they requested, we reply.
+The digest arrives unbidden on a Tuesday morning, and that difference matters
+in three ways:
+
+- **Submit it as Marketing, not Utility.** It is recurring promotional contact
+  whatever the wording. Submitting it as Utility to dodge the consent bar gets
+  a WABA restricted, which is a much worse day than a template rejection.
+- **It has its own opt-in.** `renters.digest_opt_in_at`, default NULL. A
+  viewing request is not consent for a weekly mailshot, and treating it as one
+  is how a number's quality rating falls - and the damage lands on the
+  itinerary somebody is waiting for, not on the digest.
+- **Nothing in the codebase sets that flag.** There is no opt-in checkbox yet.
+  Until a renter can deliberately say yes somewhere, the digest sweep will
+  correctly find nobody eligible.
+
+The scheduled sweep is a **dry run**: it counts who would be messaged and sends
+nothing. Turning it into a real send is a deliberate edit to
+`20260915050000_digest_cron.sql`, which is about the right amount of friction
+for recurring outbound.
 
 Submit them as **Utility**, not Marketing. Marketing templates are billed
 differently and are the category that gets numbers limited when recipients

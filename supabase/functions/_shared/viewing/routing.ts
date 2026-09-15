@@ -10,6 +10,7 @@ import { recordInbound, type MessageStore, type StoredMessage } from '../whatsap
 import { upsertRenterByPhone } from '../whatsapp/store.ts';
 import { refFromMessage } from './intake.ts';
 import { classifyIntent } from './intent.ts';
+import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './selection.ts';
 import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -53,6 +54,53 @@ export interface InboundOutcome {
   intent: string;
   /** True when this reply closed the request. */
   confirmed: boolean;
+  /** Set when the reply picked from a list we sent. */
+  selection?: SelectionOutcome;
+}
+
+export interface SelectionOutcome {
+  positions: number[];
+  listingIds?: string[];
+  problem?: 'NO_OFFER' | 'EXPIRED' | 'OUT_OF_RANGE';
+}
+
+/**
+ * The most recent list we put in front of this renter, and what they picked
+ * from it.
+ *
+ * Reads the newest SUGGESTIONS_OFFERED on the request. Older offers are
+ * deliberately ignored rather than searched: a renter replying "2" means the
+ * list in front of them, not one from last week, and resolveSelection's TTL
+ * catches the case where even the newest is stale.
+ */
+// deno-lint-ignore no-explicit-any
+async function resolveOffer(db: any, requestId: string, text: string, now: Date): Promise<SelectionOutcome> {
+  const { data } = await db
+    .from('events')
+    .select('payload, occurred_at')
+    .eq('request_id', requestId)
+    .eq('type', 'SUGGESTIONS_OFFERED')
+    .order('occurred_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const listingIds: string[] = Array.isArray(data?.payload?.listing_ids) ? data.payload.listing_ids : [];
+  const offer: Offer | null = data ? { listingIds, offeredAt: String(data.occurred_at) } : null;
+
+  // Parsed against how many were actually offered, so "4" against three
+  // suggestions is out of range rather than a silent miss.
+  //
+  // With no offer at all the cap falls back to the default rather than zero:
+  // narrowing to nothing would discard the digits and report "not a
+  // selection", when what actually happened is a selection with nothing to
+  // resolve against - and those need different replies.
+  const positions = parseSelection(text, listingIds.length || MAX_SELECTED);
+  if (positions.length === 0) return { positions: [] };
+
+  const resolved = resolveSelection(positions, offer, now);
+  return resolved.ok
+    ? { positions, listingIds: resolved.listingIds }
+    : { positions, problem: resolved.reason };
 }
 
 /**
@@ -139,11 +187,19 @@ export async function handleInbound(
     confirmed = await confirmIfDelivered(db, requestId, m.timestamp);
   }
 
+  // A selection resolves against the last list we showed them. Recorded here
+  // rather than acted on: creating the new request is the caller's job
+  // (viewing-agent-select), because it writes rows and queues operator work.
+  let selection: SelectionOutcome | undefined;
+  if (intent === 'SELECTION' && requestId) {
+    selection = await resolveOffer(db, requestId, m.text, new Date(m.timestamp));
+  }
+
   let optedOut = false;
   if (intent === 'OPT_OUT') {
     await db.from('renters').update({ opted_out_at: new Date().toISOString() }).eq('id', renter.id);
     optedOut = true;
   }
 
-  return { renterId: renter.id, requestId, message, optedOut, intent, confirmed };
+  return { renterId: renter.id, requestId, message, optedOut, intent, confirmed, selection };
 }

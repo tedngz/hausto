@@ -47,6 +47,10 @@ export function Deliver({
   const assembled = assembleItinerary(view, listings, effective);
   const titleOf = (itemId: string) => listings.find(l => l.itemId === itemId)?.listingTitle ?? itemId;
 
+  // The no-supply preview cannot show the real substitutes: they are chosen
+  // server-side at send time, against the index as it stands then rather than
+  // as it stood when this screen loaded. Saying so beats showing an empty list
+  // an operator would read as "there are none".
   const preview = assembled.stops.length === 0
     ? renderNoSupply({ ref, requestedCount: listings.length, substitutes: [] })
     : renderItinerary({ ref, stops: assembled.stops, requestedCount: listings.length });
@@ -88,8 +92,10 @@ export function Deliver({
 
       {assembled.stops.length === 0 && (
         <p className="small" style={{ marginBottom: 4 }}>
-          Nothing confirmed. Sending this tells the renter so - it should carry
-          substitutes, which is a thing to add before pressing send.
+          Nothing confirmed. Sending this tells the renter so, and carries up to
+          three close matches chosen at send time - same districts, same bedroom
+          count, within their price band. The preview below shows the wording,
+          not the actual picks.
         </p>
       )}
 

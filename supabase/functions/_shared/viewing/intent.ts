@@ -15,12 +15,20 @@
 // either and often both in one message.
 
 import { isOptOut } from '../whatsapp/inbound.ts';
+import { looksLikeSelection } from './selection.ts';
 
 export const INTENTS = [
   'CONFIRM',
   'DECLINE',
   'RESCHEDULE',
   'QUESTION',
+  // Picking from a list we sent - "2", "1 and 3", "the second one". Both
+  // renderNoSupply and renderSearchResults end with "reply with a number", so
+  // this is an affordance we promised before we read it.
+  'SELECTION',
+  // Describing what they are looking for, not asking about something we
+  // already sent. Deliberately narrow - see SEARCH_SIGNALS.
+  'SEARCH',
   'OPT_OUT',
   'UNKNOWN',
 ] as const;
@@ -61,9 +69,32 @@ const CONTAINS: [Intent, string[]][] = [
   ['CONFIRM', ['see you then', 'i will be there', 'see you there', 'minh se den', 'em se den']],
 ];
 
+/**
+ * Phrases that mean "find me something", as opposed to "tell me about the
+ * thing you already sent".
+ *
+ * This has to be narrow. QUESTION is the tempting trigger and it is the wrong
+ * one: "what floor is it on" is a question, and answering it with three
+ * unrelated flats is worse than not answering. So a search needs the renter to
+ * actually describe a want - a verb of seeking, or a budget, or a district
+ * paired with one.
+ */
+const SEEKING = [
+  'looking for', 'do you have', 'any ', 'anything', 'show me', 'find me',
+  'what else', 'other options', 'alternatives',
+  'tim ', 'can thue', 'muon thue', 'co can nao', 'con can nao', 'goi y',
+];
+
+/** A budget, in any of the ways a renter writes one. */
+const BUDGET = /\b\d{1,3}\s*(tr|trieu|m|million|k)\b|\b\d{7,9}\b|\bunder\s*\d|\bduoi\s*\d/;
+
 const QUESTION_WORDS = [
-  'what', 'when', 'where', 'which', 'how', 'why', 'can i', 'can you', 'is it', 'are they', 'do you',
-  'bao nhieu', 'khi nao', 'o dau', 'the nao', 'co the', 'duoc khong', 'bao gio', 'may gio',
+  'what', 'when', 'where', 'which', 'how', 'why', 'can i', 'can you', 'do you',
+  // Existential and "does it" forms. Added because "is there parking" carries
+  // no question mark and matched nothing, so it landed in UNKNOWN - the same
+  // routing, but a worse label in the corpus these events exist to produce.
+  'is it', 'is there', 'are there', 'are they', 'does it', 'do they', 'has it',
+  'bao nhieu', 'khi nao', 'o dau', 'the nao', 'co the', 'duoc khong', 'bao gio', 'may gio', 'co ... khong',
 ];
 
 export interface Classification {
@@ -100,12 +131,33 @@ export function classifyIntent(raw: string): Classification {
     if (hit) return { intent, reason: `phrase:${hit}` };
   }
 
+  // After the phrase rules, so "can we move it to 3pm" stays a reschedule
+  // rather than becoming a pick of listing three. `looksLikeSelection` is
+  // deliberately strict about what counts: a false positive arranges viewings
+  // nobody asked for, a false negative goes to an operator who reads one line.
+  if (looksLikeSelection(raw)) {
+    return { intent: 'SELECTION', reason: 'numbered pick' };
+  }
+
   // A leading yes or no with more after it. "yes please, 3pm works" is a
   // confirmation; "no, the second one is too far" is not.
   const leading = text.match(/^(yes|yeah|yep|ok|oke|okay|dong y|duoc|vang|chot)\b/);
   if (leading) return { intent: 'CONFIRM', reason: `leading:${leading[1]}` };
   const leadingNo = text.match(/^(no|nope|khong|ko)\b/);
   if (leadingNo) return { intent: 'DECLINE', reason: `leading:${leadingNo[1]}` };
+
+  // Before QUESTION, because most searches are phrased as questions ("do you
+  // have anything in district 2 under 15tr?") and routing those to an operator
+  // wastes the one thing the agent is actually good at.
+  const seeking = SEEKING.find(p => text.includes(p));
+  const hasBudget = BUDGET.test(text);
+  if (seeking || hasBudget) {
+    // A budget alone is enough only when the message is short - "we agreed 15tr
+    // last week, has that changed" is not a search.
+    if (seeking || text.length <= 60) {
+      return { intent: 'SEARCH', reason: seeking ? `seeking:${seeking.trim()}` : 'budget mentioned' };
+    }
+  }
 
   if (text.includes('?') || QUESTION_WORDS.some(q => text.includes(q))) {
     return { intent: 'QUESTION', reason: 'interrogative' };

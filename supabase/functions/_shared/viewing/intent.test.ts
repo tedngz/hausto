@@ -93,8 +93,12 @@ describe('questions and the unknown', () => {
   it('falls through to UNKNOWN rather than guessing', () => {
     // The escape hatch is the point. A wrong automated reply inside a billed
     // window costs more than an operator reading one line.
+    //
+    // ("the third one" used to be asserted here. It now classifies as
+    // SELECTION, which is the whole point of adding that intent - the old
+    // assertion documented the absence of a feature, not a rule.)
     expect(intentOf('👍')).toBe('UNKNOWN');
-    expect(intentOf('the third one')).toBe('UNKNOWN');
+    expect(intentOf('sounds about right i suppose')).toBe('UNKNOWN');
     expect(intentOf('')).toBe('UNKNOWN');
   });
 });
@@ -112,5 +116,66 @@ describe('routing', () => {
     for (const s of ['yes', 'no', 'reschedule', 'STOP', 'why?', 'asdfgh']) {
       expect(INTENTS).toContain(intentOf(s));
     }
+  });
+});
+
+describe('picking from a list', () => {
+  it('reads a numbered reply as a selection', () => {
+    for (const s of ['2', '1 and 3', 'the second one', 'number 2 please']) {
+      expect(intentOf(s), s).toBe('SELECTION');
+    }
+  });
+
+  it('does not turn a time into a listing number', () => {
+    // "can we move it to 3pm" is a reschedule. Reading the 3 as a pick would
+    // arrange a viewing instead of moving one.
+    expect(intentOf('can we move it to 3pm')).toBe('RESCHEDULE');
+    expect(intentOf('another time please')).toBe('RESCHEDULE');
+  });
+
+  it('leaves a yes a confirmation, not a pick', () => {
+    expect(intentOf('yes')).toBe('CONFIRM');
+    expect(intentOf('ok')).toBe('CONFIRM');
+  });
+
+  it('sends a question about a listing to a person', () => {
+    expect(intentOf('is 2 still available and what floor')).toBe('QUESTION');
+  });
+});
+
+describe('searching, which must not swallow every question', () => {
+  it('reads a described want as a search', () => {
+    for (const s of [
+      'do you have anything in district 2 under 15tr',
+      'looking for a 2 bedroom in thao dien',
+      'show me something cheaper',
+      'tìm căn 2 phòng ngủ',
+      'what else do you have',
+    ]) {
+      expect(intentOf(s), s).toBe('SEARCH');
+    }
+  });
+
+  it('does NOT turn a question about a listing into a search', () => {
+    // The whole reason this intent is narrow. Answering "what floor is it on"
+    // with three unrelated flats is worse than not answering.
+    expect(intentOf('what floor is it on')).toBe('QUESTION');
+    expect(intentOf('is there parking')).toBe('QUESTION');
+    expect(intentOf('can I bring my dog?')).toBe('QUESTION');
+  });
+
+  it('does not read a budget mentioned in passing as a search', () => {
+    // A long message about a price we already agreed is not a request to go
+    // looking.
+    const passing = 'we agreed 15tr last week for the thao dien place, has that changed at all since then';
+    expect(passing.length).toBeGreaterThan(60);
+    expect(intentOf(passing)).not.toBe('SEARCH');
+  });
+
+  it('still lets the earlier intents win', () => {
+    expect(intentOf('yes')).toBe('CONFIRM');
+    expect(intentOf('2')).toBe('SELECTION');
+    expect(intentOf('can we move it to another time')).toBe('RESCHEDULE');
+    expect(intentOf('STOP')).toBe('OPT_OUT');
   });
 });

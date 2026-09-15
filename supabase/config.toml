@@ -156,3 +156,15 @@ verify_jwt = false
 # pg_cron calls this with the cron secret, which it checks itself. verify_jwt
 # would reject the request before the code could.
 verify_jwt = false
+
+[functions.viewing-agent-search]
+# Service role, cron secret, or an ops user - checked in the function. Never the
+# renter's own client: it spends OpenAI budget per call and sends from our
+# number.
+verify_jwt = false
+
+[functions.viewing-digest-send]
+# pg_cron calls this with the cron secret, which it checks itself. Defaults to a
+# dry run - a sweep that messages every opted-in renter should not be triggerable
+# by curling a URL without meaning to.
+verify_jwt = false

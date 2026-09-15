@@ -224,3 +224,61 @@ describe('handleInbound', () => {
     expect(store.messages).toHaveLength(1);
   });
 });
+
+describe('picking from a list we sent', () => {
+  let store: FakeStore;
+  beforeEach(() => { store = new FakeStore(); });
+
+  const offered = (hoursAgo: number, ids: string[]) => ([{
+    id: 1, request_id: 'req-new', item_id: null, type: 'SUGGESTIONS_OFFERED',
+    payload: { listing_ids: ids, source: 'SUBSTITUTES' },
+    actor: 'SYSTEM',
+    occurred_at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
+  }]);
+
+  const reply = (text: string) =>
+    // deno-lint-ignore no-explicit-any
+    handleInbound(fakeDb({ requests: REQUESTS, events: offered(1, ['l1', 'l2', 'l3']) }) as any, store, {
+      from: PHONE, text, providerMessageId: `wamid.${Math.random()}`, timestamp: new Date().toISOString(),
+    });
+
+  it('resolves a number against the last list shown', async () => {
+    const out = await reply('2');
+    expect(out.intent).toBe('SELECTION');
+    expect(out.selection?.listingIds).toEqual(['l2']);
+  });
+
+  it('resolves several', async () => {
+    expect((await reply('1 and 3')).selection?.listingIds).toEqual(['l1', 'l3']);
+  });
+
+  it('reports a number that is not on the list, rather than picking a subset', async () => {
+    const out = await reply('1 and 4');
+    // Parsed against three offers, "4" invalidates the whole reply.
+    expect(out.selection?.positions).toEqual([]);
+    expect(out.selection?.listingIds).toBeUndefined();
+  });
+
+  it('expires an old list instead of arranging a viewing on something gone', async () => {
+    const db = fakeDb({ requests: REQUESTS, events: offered(100, ['l1', 'l2', 'l3']) });
+    // deno-lint-ignore no-explicit-any
+    const out = await handleInbound(db as any, store, {
+      from: PHONE, text: '2', providerMessageId: 'wamid.old', timestamp: new Date().toISOString(),
+    });
+    expect(out.selection?.problem).toBe('EXPIRED');
+    expect(out.selection?.listingIds).toBeUndefined();
+  });
+
+  it('says so when no list was ever shown', async () => {
+    const db = fakeDb({ requests: REQUESTS });
+    // deno-lint-ignore no-explicit-any
+    const out = await handleInbound(db as any, store, {
+      from: PHONE, text: '2', providerMessageId: 'wamid.none', timestamp: new Date().toISOString(),
+    });
+    expect(out.selection?.problem).toBe('NO_OFFER');
+  });
+
+  it('does not resolve anything for a reply that is not a selection', async () => {
+    expect((await reply('yes')).selection).toBeUndefined();
+  });
+});

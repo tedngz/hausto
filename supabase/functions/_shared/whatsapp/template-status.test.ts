@@ -7,7 +7,7 @@ import {
   SENDABLE_STATUS,
   type MetaTemplate,
 } from './template-status.ts';
-import type { TemplateSpec } from './templates.ts';
+import { TEMPLATES, type TemplateSpec } from './templates.ts';
 
 const spec = (name: string, approved: boolean): TemplateSpec => ({
   name, params: ['a'], purpose: 'test', approved,
@@ -134,11 +134,15 @@ describe('the cache rows and the summary', () => {
 });
 
 describe('against the real registry', () => {
-  it('reports all four as unsubmitted today, and none as urgent', () => {
+  it('reports every registry template as unsubmitted today, and none as urgent', () => {
     // Every template ships approved: false, and nothing has been submitted, so
     // a sync run right now should be entirely quiet.
+    //
+    // Counted from the registry rather than hardcoded: this caught the digest
+    // template being added, which is the right kind of catch but not one worth
+    // re-editing the test for every time.
     const d = reconcile([]);
-    expect(d).toHaveLength(4);
+    expect(d).toHaveLength(Object.keys(TEMPLATES).length);
     expect(d.every(x => x.kind === 'NOT_SUBMITTED')).toBe(true);
     expect(summarise(d).urgent).toBe(0);
   });

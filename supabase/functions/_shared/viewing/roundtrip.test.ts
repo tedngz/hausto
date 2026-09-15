@@ -18,6 +18,8 @@ import { intakeEvents, buildDeepLink, generateRef } from './intake.ts';
 import { validateOutcome, outcomePayload, opsActor } from './outcomes.ts';
 import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
 import { dueActions, SILENCE_ACTION_MS } from './reminders.ts';
+import { decideAction } from './agent.ts';
+import { performAction } from './agent-act.ts';
 
 const PHONE = '+84901234567';
 const BUSINESS = '+84900000000';
@@ -45,8 +47,21 @@ async function seed() {
     db.tables.external_properties.push({
       id: `listing-${i + 1}`, title, district_code: districts[i],
       price_vnd: 15_000_000 + i * 1_000_000, is_active: true,
+      bedrooms: 2, area_sqm: 70, price_confidence: 'HIGH',
     });
   });
+
+  // Live listings the renter did NOT shortlist, for the substitute search to
+  // find. Two are plausible neighbours; one is priced far out of their band and
+  // must not be offered.
+  db.tables.external_properties.push(
+    { id: 'alt-1', title: 'Bright 2BR, Thao Dien', district_code: 'HCM-D2',
+      price_vnd: 16_000_000, is_active: true, bedrooms: 2, area_sqm: 68, price_confidence: 'HIGH' },
+    { id: 'alt-2', title: 'Corner 2BR near Ben Thanh', district_code: 'HCM-D1',
+      price_vnd: 14_500_000, is_active: true, bedrooms: 2, area_sqm: 65, price_confidence: 'HIGH' },
+    { id: 'alt-rich', title: 'Penthouse, Thao Dien', district_code: 'HCM-D2',
+      price_vnd: 60_000_000, is_active: true, bedrooms: 4, area_sqm: 200, price_confidence: 'HIGH' },
+  );
 
   db.tables.renters.push({ id: 'renter-1', phone_e164: PHONE, service_window_expires_at: null, opted_out_at: null });
 
@@ -208,6 +223,41 @@ describe('the round trip, end to end on MockAdapter', () => {
     expect(text).toContain('Reply with a number');
   });
 
+  it('finds its own substitutes when nothing is confirmed and none were supplied', async () => {
+    // The hole this closes: renderNoSupply has always taken substitutes and
+    // nothing ever produced any, so the message promised a follow-up nobody was
+    // going to make.
+    for (const id of itemIds) record(id, { outcome: 'ALREADY_RENTED' });
+    await inbound('hi');
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    expect(result.ok).toBe(true);
+
+    const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
+    expect(text).toContain('Bright 2BR, Thao Dien');
+    expect(text).toContain('Corner 2BR near Ben Thanh');
+    // Out of the price band - offering it would waste the renter's time twice.
+    expect(text).not.toContain('Penthouse');
+    // And never one they already shortlisted and were just told is gone.
+    expect(text).not.toContain('Sunny 2BR in Thao Dien');
+    expect(text).toContain('Reply with a number');
+  });
+
+  it('still sends the failure when the substitute search finds nothing', async () => {
+    // An empty result is honest, and the renter being told their request failed
+    // matters more than the suggestions.
+    db.tables.external_properties = db.tables.external_properties.filter(p => !String(p.id).startsWith('alt-'));
+    for (const id of itemIds) record(id, { outcome: 'ALREADY_RENTED' });
+    await inbound('hi');
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    expect(result.ok).toBe(true);
+    const text = String(db.tables.messages.find(m => m.direction === 'OUT')!.body);
+    expect(text).toContain('come back to you today');
+  });
+
   it('refuses to send with the window shut, rather than logging a send nobody got', async () => {
     // No inbound at all, so the window never opened. This is the human-blocked
     // template dependency surfacing - the correct behaviour is refusal.
@@ -292,5 +342,100 @@ describe('the round trip, end to end on MockAdapter', () => {
     const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [itemIds[0]] });
     expect(result.ok).toBe(false);
     expect(db.tables.messages.filter(m => m.direction === 'OUT')).toHaveLength(0);
+  });
+});
+
+describe('the agent switch, end to end', () => {
+  beforeEach(seed);
+
+  /** Fail the shortlist, send the no-supply message, capture what was offered. */
+  async function offerSubstitutes() {
+    for (const id of itemIds) record(id, { outcome: 'ALREADY_RENTED' });
+    await inbound('hi');
+    // deno-lint-ignore no-explicit-any
+    await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    return db.tables.events.filter(e => e.type === 'SUGGESTIONS_OFFERED');
+  }
+
+  it('records what it offered, so a number can mean something', async () => {
+    const offers = await offerSubstitutes();
+    expect(offers).toHaveLength(1);
+    expect((offers[0].payload as { listing_ids: string[] }).listing_ids.length).toBeGreaterThan(0);
+  });
+
+  it('does nothing at all when the switch is off', async () => {
+    await offerSubstitutes();
+    const outboundBefore = db.tables.messages.filter(m => m.direction === 'OUT').length;
+    const out = await inbound('1');
+
+    const action = decideAction({
+      enabled: false, intent: out.intent, text: '1',
+      requestId: out.requestId, optedOut: out.optedOut, confirmed: out.confirmed, selection: out.selection,
+    });
+    expect(action.kind).toBe('NONE');
+    expect(action.kind === 'NONE' && action.reason).toBe('agent disabled');
+
+    // Nothing sent, and no new request - the inbound is still stored and the
+    // window still re-opened, which is the switch being off rather than the
+    // whole path being dead.
+    expect(db.tables.messages.filter(m => m.direction === 'OUT')).toHaveLength(outboundBefore);
+    expect(db.tables.messages.filter(m => m.direction === 'IN').length).toBeGreaterThan(0);
+    expect(db.tables.viewing_requests).toHaveLength(1);
+  });
+
+  it('turns a picked number into a new request when the switch is on', async () => {
+    await offerSubstitutes();
+    const out = await inbound('1');
+    expect(out.intent).toBe('SELECTION');
+    expect(out.selection?.listingIds?.length).toBe(1);
+
+    const action = decideAction({
+      enabled: true, intent: out.intent, text: '1',
+      requestId: out.requestId, optedOut: out.optedOut, confirmed: out.confirmed, selection: out.selection,
+    });
+    expect(action.kind).toBe('RE_REQUEST');
+
+    // deno-lint-ignore no-explicit-any
+    const result = await performAction(db as any, adapter, action, {
+      renterId: out.renterId, requestId: out.requestId, providerMessageId: 'wamid.pick',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.performed).toBe('RE_REQUEST');
+    // A NEW request, not items bolted onto the failed one.
+    expect(db.tables.viewing_requests).toHaveLength(2);
+    expect(result.ref).toMatch(/^HV-/);
+
+    const confirmation = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    expect(confirmation).toContain(result.ref!);
+    expect(confirmation.toLowerCase()).not.toContain('booked');
+  });
+
+  it('sends exactly one message for one inbound', async () => {
+    await offerSubstitutes();
+    const before = db.tables.messages.filter(m => m.direction === 'OUT').length;
+    const out = await inbound('1');
+    const action = decideAction({
+      enabled: true, intent: out.intent, text: '1',
+      requestId: out.requestId, optedOut: out.optedOut, confirmed: out.confirmed, selection: out.selection,
+    });
+    // deno-lint-ignore no-explicit-any
+    await performAction(db as any, adapter, action, {
+      renterId: out.renterId, requestId: out.requestId, providerMessageId: 'wamid.one',
+    });
+    const after = db.tables.messages.filter(m => m.direction === 'OUT').length;
+    expect(after - before).toBe(1);
+  });
+
+  it('will not act on a pick from someone who opted out', async () => {
+    await offerSubstitutes();
+    await inbound('dừng');
+    const out = await inbound('1');
+    const action = decideAction({
+      enabled: true, intent: out.intent, text: '1',
+      requestId: out.requestId, optedOut: true, confirmed: out.confirmed, selection: out.selection,
+    });
+    expect(action.kind).toBe('NONE');
+    expect(db.tables.viewing_requests).toHaveLength(1);
   });
 });
