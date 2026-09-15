@@ -20,11 +20,40 @@ import {
   verifySubscription,
 } from '../_shared/whatsapp/inbound.ts';
 import { handleInbound } from '../_shared/viewing/routing.ts';
+import { decideAction } from '../_shared/viewing/agent.ts';
+import { performAction } from '../_shared/viewing/agent-act.ts';
+import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const APP_SECRET = Deno.env.get('WHATSAPP_APP_SECRET') || '';
 const VERIFY_TOKEN = Deno.env.get('WHATSAPP_VERIFY_TOKEN') || '';
+
+// The single switch. Off unless the value is exactly 'true', so a typo, an
+// empty string, or the variable simply not existing all mean off - which is
+// the direction a flag controlling automated outbound should fail in.
+const AGENT_ENABLED = (Deno.env.get('VIEWING_AGENT_ENABLED') || '').trim() === 'true';
+
+/**
+ * Hand a search to viewing-agent-search.
+ *
+ * Fire and forget on failure: the renter's message is already stored and their
+ * window already re-opened, and losing Meta's whole delivery batch to a failed
+ * agent reply would be a far worse trade than a missed search.
+ */
+async function dispatchSearch(renterId: string, query: string, requestId?: string): Promise<void> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/viewing-agent-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
+      body: JSON.stringify({ renterId, query, requestId, send: true }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) console.warn(`[whatsapp-webhook] agent search returned ${res.status}`);
+  } catch (e) {
+    console.warn('[whatsapp-webhook] agent search dispatch failed:', (e as Error).message);
+  }
+}
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -72,8 +101,40 @@ Deno.serve(async (req) => {
     try {
       // Window, row, event, opt-out - all of it in one place, shared with the
       // mock inbound path so the two cannot drift.
-      const { renterId, optedOut } = await handleInbound(db, store, m);
-      if (optedOut) console.log(`[whatsapp-webhook] ${renterId} opted out`);
+      const outcome = await handleInbound(db, store, m);
+      if (outcome.optedOut) console.log(`[whatsapp-webhook] ${outcome.renterId} opted out`);
+
+      // Then, and only if the switch is on, at most one automated reply.
+      // `decideAction` is pure and returns a single action; everything it
+      // declines routes to an operator, which is the default for all but two
+      // intents.
+      const action = decideAction({
+        enabled: AGENT_ENABLED,
+        intent: outcome.intent,
+        text: m.text,
+        requestId: outcome.requestId,
+        optedOut: outcome.optedOut,
+        confirmed: outcome.confirmed,
+        selection: outcome.selection,
+      });
+
+      if (action.kind === 'NONE') {
+        if (AGENT_ENABLED) console.log(`[whatsapp-webhook] agent passed: ${action.reason}`);
+      } else if (action.kind === 'SEARCH') {
+        // Dispatched rather than performed here: viewing-agent-search owns the
+        // OpenAI call, the budget guard and the usage logging, and two places
+        // that can spend money is one too many.
+        await dispatchSearch(outcome.renterId, action.query, outcome.requestId);
+      } else {
+        const adapter = adapterFromEnv(Deno.env.toObject());
+        const result = await performAction(db, adapter, action, {
+          renterId: outcome.renterId,
+          requestId: outcome.requestId,
+          providerMessageId: m.providerMessageId,
+        });
+        if (result.error) console.warn(`[whatsapp-webhook] agent ${result.performed}: ${result.error}`);
+        else console.log(`[whatsapp-webhook] agent ${result.performed}${result.ref ? ` -> ${result.ref}` : ''}`);
+      }
     } catch (e) {
       // One bad message must not cost us the rest of the batch, and must not
       // make Meta retry the whole delivery - the others are already stored.

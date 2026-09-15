@@ -33,6 +33,42 @@ the failure surfaces much later as a generic error from whatever consumes it.
 | `WHATSAPP_VERIFY_TOKEN` | `whatsapp-webhook` | Meta's subscription handshake fails; you never get inbound at all. |
 | `WHATSAPP_BUSINESS_PHONE` | `viewing-request-create` | **Silent breakage - see the trap below.** |
 | `WHATSAPP_WABA_ID` | `whatsapp-template-sync` | The hourly reconciliation no-ops. Nothing breaks, but a withdrawn approval stops being noticed. |
+| `VIEWING_AGENT_ENABLED` | `whatsapp-webhook`, `dev-phone` | The agent stays silent. Everything routes to an operator, which is the safe default and where this should start. |
+
+### The agent switch
+
+`VIEWING_AGENT_ENABLED` is the one flag that turns automated replies on. It is
+off unless the value is exactly `true` - a typo, an empty string, or the
+variable not existing all mean off, which is the direction a flag controlling
+outbound messages should fail in.
+
+With it on, exactly two things happen automatically, and only in reply to a
+message the renter sent:
+
+| Renter says | Agent does |
+|---|---|
+| "2" / "1 and 3" / "the second one", against a list we sent | Creates a **new** request for those listings and confirms it |
+| A pick it cannot honour (list expired, number not on it) | Says why, in one message |
+| "anything in district 2 under 15tr" | Searches and replies with three listings |
+| Anything else | **Nothing.** An operator handles it |
+
+That last row is most of the traffic, and deliberately. `QUESTION` is the
+tempting thing to automate and the wrong one: "what floor is it on" is a
+question, and answering it with three unrelated flats is worse than not
+answering. The search intent is narrow on purpose - it needs the renter to
+describe a want, not merely to ask something.
+
+**One reply per inbound message, always.** `decideAction` returns a single
+action or none; it cannot return a list. The 3-in-a-row guard in `send.ts` is
+the backstop, not the mechanism.
+
+An opt-out outranks everything, including a selection in the same message -
+replying at all is the wrong answer to "stop messaging me".
+
+`/dev/phone` reads the same flag and takes the same path, so the mock is a
+rehearsal rather than an approximation. The one thing it will not do is
+dispatch a search, because that spends OpenAI budget and a mock phone should
+not quietly do that; it reports the decision instead.
 
 ### The trap: `WHATSAPP_BUSINESS_PHONE`
 

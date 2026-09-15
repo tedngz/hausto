@@ -88,7 +88,16 @@ export class FakeDb {
                 resolve({ data: null, error: { code: '23505' } }),
             };
           }
-          const withId = { id: r.id ?? this.nextId(table.slice(0, 2)), created_at: new Date().toISOString(), ...r };
+          const withId: FakeRow = {
+            id: r.id ?? this.nextId(table.slice(0, 2)),
+            created_at: new Date().toISOString(),
+            // `events.occurred_at` is NOT NULL DEFAULT now() in the schema.
+            // Without it here the column arrives undefined, every offer parses
+            // as an unreadable date, and the selection path looks broken when
+            // it is the fake that is wrong.
+            ...(table === 'events' ? { occurred_at: new Date().toISOString() } : {}),
+            ...r,
+          };
           (this.tables[table] ??= []).push(withId);
           inserted.push(withId);
         }

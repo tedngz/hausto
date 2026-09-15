@@ -142,3 +142,40 @@ describe('picking from a list', () => {
     expect(intentOf('is 2 still available and what floor')).toBe('QUESTION');
   });
 });
+
+describe('searching, which must not swallow every question', () => {
+  it('reads a described want as a search', () => {
+    for (const s of [
+      'do you have anything in district 2 under 15tr',
+      'looking for a 2 bedroom in thao dien',
+      'show me something cheaper',
+      'tìm căn 2 phòng ngủ',
+      'what else do you have',
+    ]) {
+      expect(intentOf(s), s).toBe('SEARCH');
+    }
+  });
+
+  it('does NOT turn a question about a listing into a search', () => {
+    // The whole reason this intent is narrow. Answering "what floor is it on"
+    // with three unrelated flats is worse than not answering.
+    expect(intentOf('what floor is it on')).toBe('QUESTION');
+    expect(intentOf('is there parking')).toBe('QUESTION');
+    expect(intentOf('can I bring my dog?')).toBe('QUESTION');
+  });
+
+  it('does not read a budget mentioned in passing as a search', () => {
+    // A long message about a price we already agreed is not a request to go
+    // looking.
+    const passing = 'we agreed 15tr last week for the thao dien place, has that changed at all since then';
+    expect(passing.length).toBeGreaterThan(60);
+    expect(intentOf(passing)).not.toBe('SEARCH');
+  });
+
+  it('still lets the earlier intents win', () => {
+    expect(intentOf('yes')).toBe('CONFIRM');
+    expect(intentOf('2')).toBe('SELECTION');
+    expect(intentOf('can we move it to another time')).toBe('RESCHEDULE');
+    expect(intentOf('STOP')).toBe('OPT_OUT');
+  });
+});

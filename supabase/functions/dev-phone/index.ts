@@ -17,6 +17,9 @@ import { SupabaseMessageStore } from '../_shared/whatsapp/store.ts';
 import { handleInbound } from '../_shared/viewing/routing.ts';
 import { toE164 } from '../_shared/whatsapp/inbound.ts';
 import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
+import { decideAction } from '../_shared/viewing/agent.ts';
+import { performAction } from '../_shared/viewing/agent-act.ts';
+import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +29,10 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const WHATSAPP_MODE = Deno.env.get('WHATSAPP_MODE') || 'mock';
+// The same switch the webhook reads. /dev/phone has to see the agent behave
+// exactly as it will in production, or it stops being a rehearsal - which was
+// the whole point of MockAdapter.
+const AGENT_ENABLED = (Deno.env.get('VIEWING_AGENT_ENABLED') || '').trim() === 'true';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -81,7 +88,31 @@ Deno.serve(async (req) => {
     timestamp: new Date().toISOString(),
   });
 
-  return json({ success: true, ...outcome, thread: await readThread(db, phone) });
+  // The same decision the webhook makes, so what you see here is what a real
+  // renter would get. SEARCH is the one exception: it is dispatched by the
+  // webhook to a function that spends OpenAI budget, and a mock phone should
+  // not quietly do that - it reports the decision instead.
+  const action = decideAction({
+    enabled: AGENT_ENABLED,
+    intent: outcome.intent,
+    text,
+    requestId: outcome.requestId,
+    optedOut: outcome.optedOut,
+    confirmed: outcome.confirmed,
+    selection: outcome.selection,
+  });
+
+  let agent: unknown = { decided: action.kind, reason: action.kind === 'NONE' ? action.reason : undefined };
+  if (action.kind === 'RE_REQUEST' || action.kind === 'SELECTION_PROBLEM') {
+    const adapter = adapterFromEnv(Deno.env.toObject());
+    agent = { decided: action.kind, ...(await performAction(db, adapter, action, {
+      renterId: outcome.renterId,
+      requestId: outcome.requestId,
+      providerMessageId: `mock-in-${crypto.randomUUID()}`,
+    })) };
+  }
+
+  return json({ success: true, ...outcome, agent, thread: await readThread(db, phone) });
 });
 
 /**

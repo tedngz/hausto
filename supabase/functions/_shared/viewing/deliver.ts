@@ -176,9 +176,6 @@ export async function deliver(
   }
   toWrite.push({
     request_id: opts.requestId,
-    // A holding update is something the renter heard - it moves the silence
-    // clock - but it is not the itinerary, and typing it as one would make the
-    // queue think the request was finished.
     // Both a holding update and a viewing reminder are things the renter
     // heard: they move the silence clock and nothing else. Only the itinerary
     // is ITINERARY_DELIVERED, because only that means the plan has gone out.
@@ -186,6 +183,18 @@ export async function deliver(
     payload: { message_id: messageId },
     actor,
   });
+
+  // What was put in front of the renter, in the order shown. Without this a
+  // reply of "2" resolves against nothing and the "reply with a number" line in
+  // the message is a promise we cannot keep.
+  if (offeredListingIds.length > 0) {
+    toWrite.push({
+      request_id: opts.requestId,
+      type: 'SUGGESTIONS_OFFERED',
+      payload: { listing_ids: offeredListingIds, source: 'SUBSTITUTES', message_id: messageId },
+      actor,
+    });
+  }
 
   const { error: evErr } = await db.from('events').insert(toWrite);
   if (evErr) console.error('[deliver] event insert failed after a successful send:', evErr);
