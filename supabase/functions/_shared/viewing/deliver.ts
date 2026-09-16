@@ -22,7 +22,11 @@ import type { ShortlistCandidate } from './intake.ts';
 // deno-lint-ignore no-explicit-any
 type Supa = any;
 
-export type DeliveryPurpose = 'ITINERARY' | 'HOLDING_UPDATE' | 'VIEWING_REMINDER';
+// The closed set, exported as a value so callers taking a purpose off the wire
+// can check it rather than cast. Note there is no NO_SUPPLY: that message is
+// ITINERARY with nothing confirmed, which is how deliver() reaches it.
+export const DELIVERY_PURPOSES = ['ITINERARY', 'HOLDING_UPDATE', 'VIEWING_REMINDER'] as const;
+export type DeliveryPurpose = typeof DELIVERY_PURPOSES[number];
 
 export interface DeliverOptions {
   requestId: string;
