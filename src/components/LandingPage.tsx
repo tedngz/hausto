@@ -197,6 +197,11 @@ export const LandingPage = () => {
           <p className="text-center text-muted-foreground mt-1">
             <a href="mailto:hello@hausto.com" className="hover:text-foreground transition-colors">hello@hausto.com</a>
           </p>
+          <p className="text-center text-muted-foreground mt-1">
+            <Link to="/privacy" className="hover:text-foreground transition-colors underline-offset-4 hover:underline">
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </footer>
     </div>;

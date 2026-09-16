@@ -5,6 +5,8 @@ import {
   refFromMessage,
   validateAvailability,
   validateShortlist,
+  DAY_PARTS,
+  MIN_LEAD_DAYS,
   screenCandidates,
   intakeEvents,
   buildDeepLink,
@@ -39,24 +41,26 @@ describe('refs', () => {
 
 describe('availability', () => {
   const today = '2026-09-11';
+  // today + MIN_LEAD_DAYS. The first date anyone can actually pick.
+  const earliest = '2026-09-13';
 
   it('accepts chips inside the window and sorts them', () => {
     const r = validateAvailability(
-      [{ date: '2026-09-13', part: 'MORNING' }, { date: '2026-09-12', part: 'EVENING' },
-       { date: '2026-09-12', part: 'MORNING' }],
+      [{ date: '2026-09-14', part: 'MORNING' }, { date: earliest, part: 'EVENING' },
+       { date: earliest, part: 'MORNING' }],
       today,
     );
     expect(r.ok).toBe(true);
     expect(r.value).toEqual([
-      { date: '2026-09-12', part: 'MORNING' },
-      { date: '2026-09-12', part: 'EVENING' },
-      { date: '2026-09-13', part: 'MORNING' },
+      { date: earliest, part: 'MORNING' },
+      { date: earliest, part: 'EVENING' },
+      { date: '2026-09-14', part: 'MORNING' },
     ]);
   });
 
   it('collapses a double tap rather than rejecting it', () => {
     const r = validateAvailability(
-      [{ date: '2026-09-12', part: 'MORNING' }, { date: '2026-09-12', part: 'MORNING' }],
+      [{ date: earliest, part: 'MORNING' }, { date: earliest, part: 'MORNING' }],
       today,
     );
     expect(r.ok).toBe(true);
@@ -68,11 +72,30 @@ describe('availability', () => {
     expect(validateAvailability([{ date: '2026-09-10', part: 'MORNING' }], today).ok).toBe(false);
     expect(validateAvailability([{ date: '2026-10-30', part: 'MORNING' }], today).ok).toBe(false);
     expect(validateAvailability([{ date: 'tuesday', part: 'MORNING' }], today).ok).toBe(false);
-    expect(validateAvailability([{ date: '2026-09-12', part: 'NIGHT' }], today).ok).toBe(false);
+    expect(validateAvailability([{ date: earliest, part: 'NIGHT' }], today).ok).toBe(false);
   });
 
-  it('accepts today itself', () => {
-    expect(validateAvailability([{ date: today, part: 'EVENING' }], today).ok).toBe(true);
+  it('refuses today and tomorrow, whatever the time of day', () => {
+    // The buffer. An operator has to reach every realtor on the shortlist, on
+    // Zalo, and wait for each to answer - so "this evening" is a request
+    // nobody can fill. This test previously asserted the opposite ("accepts
+    // today itself"), which documented the absence of the buffer rather than
+    // a rule worth keeping.
+    for (const part of DAY_PARTS) {
+      expect(validateAvailability([{ date: today, part }], today).ok).toBe(false);
+      expect(validateAvailability([{ date: addDays(today, 1), part }], today).ok).toBe(false);
+    }
+  });
+
+  it('accepts the first day past the buffer', () => {
+    expect(validateAvailability([{ date: earliest, part: 'EVENING' }], today).ok).toBe(true);
+    expect(addDays(today, MIN_LEAD_DAYS)).toBe(earliest);
+  });
+
+  it('says how long the wait is rather than just refusing', () => {
+    const r = validateAvailability([{ date: today, part: 'MORNING' }], today);
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain(earliest);
   });
 });
 

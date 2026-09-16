@@ -54,6 +54,21 @@ export interface AvailabilityWindow {
 /** How far ahead a renter may pick. Beyond this the listing data is stale. */
 export const MAX_DAYS_AHEAD = 14;
 
+/**
+ * The buffer. Today and tomorrow are never bookable.
+ *
+ * An operator has to reach every realtor on the shortlist, on Zalo, and wait
+ * for each to answer - and the realtor side is a human this quarter, not an
+ * API. A request filed at 6pm for tomorrow morning is one nobody can fill, so
+ * offering it sells a promise the system cannot keep and spends the renter's
+ * evening waiting for it.
+ *
+ * Enforced here rather than in the date picker so the page and the function
+ * cannot disagree: a client that offered tomorrow would have its request
+ * rejected on submit, which is a worse experience than never showing it.
+ */
+export const MIN_LEAD_DAYS = 2;
+
 export interface Validation<T> {
   ok: boolean;
   value?: T;
@@ -79,6 +94,7 @@ export function validateAvailability(
   const seen = new Set<string>();
   const out: AvailabilityWindow[] = [];
   const limit = addDays(today, MAX_DAYS_AHEAD);
+  const earliest = addDays(today, MIN_LEAD_DAYS);
 
   for (const w of raw) {
     const date = String((w as AvailabilityWindow)?.date ?? '');
@@ -90,6 +106,12 @@ export function validateAvailability(
       return { ok: false, error: `Not a time of day: ${part || '(missing)'}` };
     }
     if (date < today) return { ok: false, error: `${date} is in the past.` };
+    if (date < earliest) {
+      return {
+        ok: false,
+        error: `${date} is too soon - we need until ${earliest} to reach the agents.`,
+      };
+    }
     if (date > limit) return { ok: false, error: `${date} is more than ${MAX_DAYS_AHEAD} days ahead.` };
 
     const key = `${date}:${part}`;
