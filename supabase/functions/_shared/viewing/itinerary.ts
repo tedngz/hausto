@@ -224,8 +224,16 @@ export function renderItinerary(m: ItineraryMessage): string {
   if (n < m.requestedCount) {
     // One line, no apology and no detail. Which broker said what is not the
     // renter's business, and a paragraph about it reads as an excuse.
+    //
+    // It states that they are unconfirmed, not why. There are seven outcomes
+    // (SPEC §4) and this line covers all of them: ALREADY_RENTED is gone
+    // entirely, PRICE_CHANGED is available at a different price, NO_RESPONSE
+    // means nobody knows yet. The old copy asserted "no longer available at
+    // the price advertised" for every one of them, which was false for a
+    // rented unit and misleading for a re-priced one - we would be telling a
+    // renter something untrue about a specific flat, in writing.
     const missing = m.requestedCount - n;
-    lines.push(`The other ${missing === 1 ? 'one is' : `${missing} are`} no longer available at the price advertised.`);
+    lines.push(`We could not confirm the other ${missing === 1 ? 'one' : missing} for these times.`);
   }
   lines.push('Reply YES to lock these in, or tell us what to change.');
   lines.push(`Ref ${m.ref}`);
