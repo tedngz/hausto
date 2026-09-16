@@ -104,6 +104,39 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
  * - Complimentary (admin) cover: a rolling 30 days. It writes no passes row.
  * - Free tier: the one-off trial, tracked in viewing_trials.
  */
+/**
+ * Listings requested through the viewing flow since a given moment.
+ *
+ * `integrations/supabase/types.ts` is generated from the live database and
+ * predates this domain, so these tables are absent from its union and the
+ * typed client refuses the query. One narrow cast rather than `any` spread
+ * through the hook; regenerating the types needs database credentials this
+ * repo does not carry.
+ *
+ * Returns zero on any error. An unreadable count must not inflate the credits
+ * a renter is shown - it would promise a request the server then refuses.
+ */
+const countViewingItemsSince = async (since: Date): Promise<{ count: number }> => {
+  const db = supabase as unknown as {
+    from: (table: string) => {
+      select: (
+        columns: string,
+        opts: { count: 'exact'; head: true },
+      ) => {
+        gte: (column: string, value: string) => Promise<{ count: number | null; error: unknown }>;
+      };
+    };
+  };
+  // RLS scopes this to the signed-in renter's own rows, so there is no
+  // user filter to forget here.
+  const { count, error } = await db
+    .from('request_items')
+    .select('id, viewing_requests!inner(created_at)', { count: 'exact', head: true })
+    .gte('viewing_requests.created_at', since.toISOString());
+  if (error) return { count: 0 };
+  return { count: count ?? 0 };
+};
+
 export const useViewingQuota = () => {
   const { user } = useAuth();
   const { isAdmin, isLoading: rolesLoading } = useUserRoles();
@@ -138,7 +171,16 @@ export const useViewingQuota = () => {
           .eq('renter_id', user!.id)
           .neq('status', 'cancelled')
           .gte('created_at', since.toISOString());
-        return (data ?? []).reduce((n, r) => n + Math.max(1, r.property_ids?.length ?? 1), 0);
+        const fastTrack = (data ?? []).reduce(
+          (n, r) => n + Math.max(1, r.property_ids?.length ?? 1), 0);
+
+        // The viewing flow spends from the same allowance. Counting only
+        // Fast-Track here would show a renter credits the server has already
+        // spent, and the refusal would land at submit - after they filled in
+        // the form. Mirrors viewing_listings_booked_since in SQL, which is the
+        // side that actually decides.
+        const { count } = await countViewingItemsSince(since);
+        return fastTrack + count;
       };
 
       // What the plan itself covers, before any pack credit is touched.

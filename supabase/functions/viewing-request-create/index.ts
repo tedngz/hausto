@@ -1,10 +1,14 @@
 // Request intake. The renter surface's one write into the viewing domain.
 //
-// Public by necessity: a renter has no Supabase session (CLAUDE.md scopes renter
-// auth to a phone-keyed cookie, and there is no cookie before the first
-// request). So this is rate-limited by IP, it accepts only ids and chips, and it
-// reads every price from the database rather than from the caller - the body
-// says which listings, never what they cost.
+// Signed in, as of the Fast-Track retirement. It was public - a renter had no
+// Supabase session and there was no cookie before the first request - but a
+// request now spends viewing credits, and credits belong to an account. An
+// anonymous caller cannot be charged, and an endpoint that writes coordinator
+// work without charging anyone is one curl away from being expensive.
+//
+// Still rate-limited by IP on top of that, still accepts only ids and chips,
+// and still reads every price from the database rather than from the caller -
+// the body says which listings, never what they cost.
 //
 // It writes rows and it writes events, and the events are the state. There is no
 // status column to set here, which is invariant 1 holding by construction.
@@ -31,6 +35,9 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+// Used only to verify the caller's JWT. Never to write - every write below goes
+// through the service-role client.
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 // The number the renter messages to open the service window. Falls back to a
 // documented placeholder rather than throwing: provisioning is human-blocked,
 // and the whole flow has to stay demoable on mock without it (CLAUDE.md).
@@ -55,6 +62,21 @@ Deno.serve(async (req) => {
   const ip = clientIp(req);
   if (await isRateLimited(`viewing-intake:${ip}`, 10, 3600)) {
     return json({ error: 'rate_limited', message: 'Too many requests. Try again in an hour.' }, 429);
+  }
+
+  // ── Who is asking ─────────────────────────────────────────────────────────
+  // verify_jwt stays false in config.toml so this can answer with a reason the
+  // modal can show, rather than the platform's bare 401 before our code runs.
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!jwt) {
+    return json({ error: 'sign_in_required', message: 'Sign in to request viewings.' }, 401);
+  }
+  const { data: authData, error: authErr } = await createClient(SUPABASE_URL, ANON_KEY)
+    .auth.getUser(jwt);
+  const user = authData?.user;
+  if (authErr || !user) {
+    return json({ error: 'sign_in_required', message: 'Sign in to request viewings.' }, 401);
   }
 
   let body: Record<string, unknown>;
@@ -102,11 +124,37 @@ Deno.serve(async (req) => {
     }, 422);
   }
 
+  // ── Can they afford it? ───────────────────────────────────────────────────
+  // One credit per listing: four places in one request costs the same as four
+  // separate requests, because it is the same four hours of a coordinator's
+  // day. Asked before anything is written, so the common refusal costs no rows.
+  const { data: affordable, error: quotaErr } = await db.rpc('can_create_fast_track_request', {
+    _user_id: user.id,
+    _needed: eligible.length,
+  });
+  if (quotaErr) {
+    console.error('[viewing-request-create] quota check failed:', quotaErr);
+    return json({ error: 'quota_check_failed' }, 500);
+  }
+  if (!affordable) {
+    return json({
+      error: 'insufficient_credits',
+      message: `This request covers ${eligible.length} place${eligible.length === 1 ? '' : 's'} and needs ${eligible.length} viewing credit${eligible.length === 1 ? '' : 's'}.`,
+      needed: eligible.length,
+    }, 402);
+  }
+
   // ── The renter ────────────────────────────────────────────────────────────
+  // user_id links the phone-keyed renter row to the account being charged. It
+  // is how the hub answers "my requests" and how the ledger attributes items.
   const { data: renter, error: renterErr } = await db
     .from('renters')
     .upsert(
-      { phone_e164: phone, ...(displayName ? { display_name: displayName } : {}) },
+      {
+        phone_e164: phone,
+        user_id: user.id,
+        ...(displayName ? { display_name: displayName } : {}),
+      },
       { onConflict: 'phone_e164' },
     )
     .select('id, opted_out_at')
@@ -183,6 +231,33 @@ Deno.serve(async (req) => {
     console.error('[viewing-request-create] event insert failed:', eventsErr);
     await db.from('viewing_requests').delete().eq('id', request.id);
     return json({ error: 'events_failed' }, 500);
+  }
+
+  // ── The charge ────────────────────────────────────────────────────────────
+  // Last, and only once the request is whole. One credit per item.
+  //
+  // Charged after the write rather than before it because the windowed
+  // allowance is derived by counting request_items - it has to see them to
+  // answer. The affordability check above is what keeps the common refusal
+  // cheap; this is what makes it true.
+  //
+  // If it raises, the request is removed. A request nobody paid for is worse
+  // than no request: it queues real work for an operator against an account
+  // with nothing left to spend. Nothing has been sent at this point - intake
+  // writes no message - so there is no half-told renter to worry about.
+  const { error: chargeErr } = await db.rpc('consume_viewing_credits', {
+    _user_id: user.id,
+    _needed: items.length,
+    _request_id: request.id,
+  });
+  if (chargeErr) {
+    console.error('[viewing-request-create] charge failed:', chargeErr);
+    await db.from('viewing_requests').delete().eq('id', request.id);
+    return json({
+      error: 'insufficient_credits',
+      message: `This request covers ${items.length} place${items.length === 1 ? '' : 's'} and needs ${items.length} viewing credit${items.length === 1 ? '' : 's'}.`,
+      needed: items.length,
+    }, 402);
   }
 
   // No message is sent here, and that is deliberate. There is no service window
