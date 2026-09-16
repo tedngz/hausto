@@ -183,9 +183,53 @@ nothing. Turning it into a real send is a deliberate edit to
 `20260915050000_digest_cron.sql`, which is about the right amount of friction
 for recurring outbound.
 
-Submit them as **Utility**, not Marketing. Marketing templates are billed
+Submit the **first four** as Utility. Marketing templates are billed
 differently and are the category that gets numbers limited when recipients
-report them.
+report them - which is exactly why `weekly_digest` is the one that has to go in
+as Marketing anyway, per the warning above. Category is decided by what the
+message *is*, not by which bill you would rather receive.
+
+### The bodies as submitted
+
+The registry pins names and parameter order; the wording lives here. Each ends
+by inviting a reply, because a template is what you send when the window is
+**closed** - the renter's reply re-opens it, and the real detail (addresses,
+times, the full itinerary) then goes free-form with no cost and no length cap.
+No variable starts or ends a body and none sit adjacent, which Meta rejects on
+without naming the rule. And no `booking` vocabulary: CLAUDE.md forbids it in
+renter-facing copy until state is CONFIRMED.
+
+**`request_received`** - Utility. Samples: `Minh`, `HAUSTO-4K7P`, `4`
+
+> Hi {{1}}, we have your viewing request {{2}} for {{3}} places. We are checking
+> availability with each one now and will come back to you with times. No need
+> to do anything yet.
+
+**`itinerary_ready`** - Utility. Samples: `Minh`, `3`, `Saturday 10:00`
+
+> Hi {{1}}, good news - {{2}} of your viewings are confirmed. The first is
+> {{3}}. Reply here and we will send you the full schedule with addresses.
+
+**`viewing_reminder`** - Utility. Samples: `Minh`, `tomorrow at 14:00`,
+`Thao Dien, District 2`
+
+> Hi {{1}}, a reminder that your viewing is {{2}} at {{3}}. Reply here if
+> anything has changed and we will rearrange it.
+
+**`no_supply_substitutes`** - Utility. Samples: `Minh`, `HAUSTO-4K7P`
+
+> Hi {{1}}, an update on request {{2}} - none of the places you picked could be
+> confirmed for your times. We have found some close matches. Reply here and we
+> will send them over.
+
+**`weekly_digest`** - **Marketing**. Samples: `Minh`, `3`,
+`Thao Dien and District 1`
+
+> Hi {{1}}, there are {{2}} new places this week in {{3}}. Reply here if you
+> would like to see them.
+
+Meta requires a sample value for every variable before Submit will enable, and
+the greyed-out button does not say so. That is the step people miss.
 
 ### Once each is approved
 
