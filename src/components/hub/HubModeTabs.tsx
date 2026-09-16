@@ -1,6 +1,6 @@
-import { Building2, Heart, LayoutList, Map, Sparkles } from 'lucide-react';
+import { Building2, CalendarCheck, Heart, LayoutList, Map, Sparkles } from 'lucide-react';
 
-export type HubMode = 'browse' | 'ai' | 'matches' | 'complexes' | 'map';
+export type HubMode = 'browse' | 'ai' | 'matches' | 'complexes' | 'map' | 'viewings';
 
 interface HubModeTabsProps {
   mode: HubMode;
@@ -18,6 +18,9 @@ const TABS: { id: HubMode; label: string; icon: typeof Heart }[] = [
   { id: 'map', label: 'Map', icon: Map },
   { id: 'ai', label: 'AI results', icon: Sparkles },
   { id: 'matches', label: 'Matches', icon: Heart },
+  // Last, and the only tab about something already in motion rather than
+  // something still being chosen.
+  { id: 'viewings', label: 'Viewings', icon: CalendarCheck },
 ];
 
 /**
@@ -25,7 +28,7 @@ const TABS: { id: HubMode; label: string; icon: typeof Heart }[] = [
  * icon buttons so the two read as the same control family.
  */
 export const HubModeTabs = ({ mode, onChange, counts }: HubModeTabsProps) => (
-  // Five tabs do not fit a phone at equal widths, so the strip scrolls rather
+  // Six tabs do not fit a phone at equal widths, so the strip scrolls rather
   // than squeezing the labels out.
   <div
     role="tablist"

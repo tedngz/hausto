@@ -26,7 +26,6 @@ import Privacy from "./pages/Privacy";
 import { AssistantHandoff } from "@/components/AssistantHandoff";
 import { PassGate } from "@/components/PassGate";
 import { ShortlistProvider } from "@/hooks/useShortlist";
-import { ShortlistTray } from "@/components/ShortlistTray";
 
 // Listing data changes on a crawl cadence measured in hours, not seconds, so
 // the stock defaults (staleTime 0 + refetch on every window focus) meant a tab
@@ -84,9 +83,6 @@ const App = () => (
             {/* Answers "get the Pass" from surfaces that have no modal of their
                 own - a card's Deep Scan chip, wherever that card is rendered. */}
             <PassGate />
-            {/* The shortlist bar. Renders nothing until something is on it, so
-                it costs the other surfaces no space. */}
-            <ShortlistTray />
           </BrowserRouter>
         </ShortlistProvider>
       </AuthProvider>

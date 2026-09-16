@@ -18,6 +18,7 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HubNavigation } from '@/components/hub/HubNavigation';
 import { HubPreferenceBar } from '@/components/hub/HubPreferenceBar';
 import { HubModeTabs, type HubMode } from '@/components/hub/HubModeTabs';
+import { ViewingRequestsPane } from '@/components/hub/ViewingRequestsPane';
 import { HubNewListings } from '@/components/hub/HubNewListings';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -334,6 +335,8 @@ const Hub = () => {
               {mode === 'complexes' && (
                 <ComplexDirectory embedded onCompareOpenChange={setIsComparing} />
               )}
+
+              {mode === 'viewings' && <ViewingRequestsPane />}
 
               {mode === 'map' && (
                 <div className="pb-4">
