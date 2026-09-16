@@ -18,7 +18,7 @@ import { requestPass } from '@/lib/passEvents';
 import { openDeepScan } from '@/lib/deepScanEvents';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
-import { ShortlistButton } from '@/components/ShortlistButton';
+import { RequestViewingModal } from '@/components/RequestViewingModal';
 
 // Full listing card for the individual property page: a 16:9 gallery on top and
 // a details panel below (badges, title/price, vibe tags, description, amenities).
@@ -42,7 +42,8 @@ interface PropertyListingCardProps {
   preferences?: UserPreferences | null;
   /** Matched style/lifestyle/feature attributes shown in the vibe popover */
   vibeMatch?: VibeMatchAttributes;
-  /** Opens Fast-Track viewing coordination for this listing */
+  /** Retained so existing call sites keep compiling; the card now opens the
+   *  request modal itself rather than asking its parent to. Unused. */
   onBookViewing?: () => void;
   /** Disables the CTA while the booking flow is being opened */
   isBooking?: boolean;
@@ -63,6 +64,7 @@ export const PropertyListingCard = ({
 }: PropertyListingCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
   const [current, setCurrent] = useState(0);
+  const [requestOpen, setRequestOpen] = useState(false);
   // Controlled so pressing the Deep Scan CTA can close it: the scan is read
   // in the chat, and a popover left open sits over the card it is about.
   const [scanOpen, setScanOpen] = useState(false);
@@ -406,20 +408,30 @@ export const PropertyListingCard = ({
           </div>
         )}
 
+        {/* One button. "Shortlist" and "Book viewing" used to sit here
+            together, which asked the renter to care about a distinction that
+            was ours: one built a list, the other opened a scheduler, and both
+            ended in someone visiting a flat. */}
         {shortlistable && (
-          <ShortlistButton
-            listingId={apartment.id}
-            title={apartment.title}
-            imageUrl={apartment.images?.[0] ?? null}
-            size="default"
-            className="w-full rounded-full mt-1"
-          />
-        )}
-
-        {onBookViewing && (
-          <Button className="w-full rounded-full mt-1" size="lg" onClick={onBookViewing} disabled={isBooking}>
-            {isBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Book viewing'}
-          </Button>
+          <>
+            <Button
+              className="w-full rounded-full mt-1"
+              size="lg"
+              onClick={e => { e.preventDefault(); e.stopPropagation(); setRequestOpen(true); }}
+              disabled={isBooking}
+            >
+              {isBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Request viewing'}
+            </Button>
+            <RequestViewingModal
+              open={requestOpen}
+              onOpenChange={setRequestOpen}
+              seed={{
+                listingId: apartment.id,
+                title: apartment.title,
+                imageUrl: apartment.images?.[0] ?? null,
+              }}
+            />
+          </>
         )}
       </div>
 

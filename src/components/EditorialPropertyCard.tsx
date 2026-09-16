@@ -19,7 +19,7 @@ import { openDeepScan } from '@/lib/deepScanEvents';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
-import { ShortlistButton } from '@/components/ShortlistButton';
+import { RequestViewingModal } from '@/components/RequestViewingModal';
 
 // The property card used everywhere a listing appears in a list: browse, swipe,
 // matches, Hausto Agent, complex pages. Same anatomy as the listing page's card
@@ -165,6 +165,7 @@ export const EditorialPropertyCard = ({
   const [hover, setHover] = useState(false);
   const [noHover, setNoHover] = useState(false);
   const [descOpen, setDescOpen] = useState(defaultExpanded);
+  const [requestOpen, setRequestOpen] = useState(false);
   const [showAmenities, setShowAmenities] = useState(defaultExpanded);
   // Swipe bookkeeping: start point, and a flag so the tap that ends a swipe
   // doesn't also open the card.
@@ -711,14 +712,15 @@ export const EditorialPropertyCard = ({
         {/* CTAs */}
         {(onContact || onSchedule || showShortlist) && (
           <div className="flex items-center gap-2 pt-0.5">
+            {/* One button, not two. See RequestViewingModal for why. */}
             {showShortlist && (
-              <ShortlistButton
-                listingId={apartment.id}
-                title={apartment.title}
-                imageUrl={apartment.images?.[0] ?? null}
+              <Button
                 size={compact ? 'sm' : 'default'}
                 className="flex-1 rounded-full"
-              />
+                onClick={e => { e.stopPropagation(); setRequestOpen(true); }}
+              >
+                Request viewing
+              </Button>
             )}
             {onContact && (
               <Button
@@ -733,7 +735,11 @@ export const EditorialPropertyCard = ({
                 {contactLabel}
               </Button>
             )}
-            {onSchedule && (
+            {/* onSchedule opened the retired Fast-Track scheduler. A card that
+                offers both it and "Request viewing" is the confusion this
+                change removes, so it only renders where the request modal is
+                not on offer. */}
+            {onSchedule && !showShortlist && (
               <Button
                 size={compact ? 'sm' : 'default'}
                 className="flex-1 rounded-full"
@@ -752,6 +758,18 @@ export const EditorialPropertyCard = ({
           <div className="border-t border-border/60 pt-3" onClick={e => e.stopPropagation()}>
             {footer}
           </div>
+        )}
+
+        {showShortlist && (
+          <RequestViewingModal
+            open={requestOpen}
+            onOpenChange={setRequestOpen}
+            seed={{
+              listingId: apartment.id,
+              title: apartment.title,
+              imageUrl: apartment.images?.[0] ?? null,
+            }}
+          />
         )}
       </div>
 

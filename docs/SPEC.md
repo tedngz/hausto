@@ -2,7 +2,7 @@
 
 Status: draft, authoritative. Written 2026-09-10 alongside `docs/PLAN-v3.md`.
 
-A renter shortlists 3-5 crawled rentals and requests viewings. A human
+A renter shortlists 1-5 crawled rentals and requests viewings. A human
 operator working Zalo confirms availability with each realtor. The system
 assembles an itinerary and delivers it over WhatsApp. The renter confirms with
 one tap.
@@ -43,7 +43,7 @@ display never updated. Converting on a `# SPEC - viewing coordination domain mod
 
 Status: draft, authoritative. Written 2026-09-10 alongside `docs/PLAN-v3.md`.
 
-A renter shortlists 3-5 crawled rentals and requests viewings. A human
+A renter shortlists 1-5 crawled rentals and requests viewings. A human
 operator working Zalo confirms availability with each realtor. The system
 assembles an itinerary and delivers it over WhatsApp. The renter confirms with
 one tap.
@@ -166,7 +166,7 @@ created_at      timestamptz default now()
 
 ### `request_items`
 
-One per shortlisted unit. 3-5 per request. Status is **derived**.
+One per shortlisted unit. 1-5 per request. Status is **derived**.
 
 ```
 id                   uuid pk

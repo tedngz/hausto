@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { HCMC_APARTMENT_PROJECTS, groupProjectsByDistrict, type ApartmentProject } from "@/data/hcmcApartmentProjects";
 import { RealtorApplicationsPanel } from "@/components/admin/RealtorApplicationsPanel";
 import { FastTrackQueuePanel } from "@/components/admin/FastTrackQueuePanel";
+import { ViewingFlowQueuePanel } from "@/components/admin/ViewingFlowQueuePanel";
 import { ConciergeRequestsPanel } from "@/components/admin/ConciergeRequestsPanel";
 import { ImageConflictsPanel } from "@/components/admin/ImageConflictsPanel";
 import { OpenAIUsagePanel } from "@/components/admin/OpenAIUsagePanel";
@@ -987,6 +988,8 @@ const AdminTools = () => {
 
 
       <OpenAIUsagePanel />
+
+      <ViewingFlowQueuePanel />
 
       <FastTrackQueuePanel />
 

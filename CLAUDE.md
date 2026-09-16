@@ -13,7 +13,7 @@ Supabase project ref: `gbgrwjdmytaksrztcyzs`.
 
 ## The viewing-coordination MVP
 
-A renter shortlists 3-5 crawled rental listings in Ho Chi Minh City and requests
+A renter shortlists 1-5 crawled rental listings in Ho Chi Minh City and requests
 viewings. A human operator working Zalo confirms availability with each realtor.
 The system assembles a viewing itinerary and delivers it to the renter over
 WhatsApp. Renter confirms with one tap.
@@ -73,6 +73,26 @@ around it.
 **6. No `booking` vocabulary in renter-facing copy until state is CONFIRMED.**
 Use "request". We cannot honour a booking at intake time.
 
+**7. Today and tomorrow are never offerable.**
+`MIN_LEAD_DAYS` in `_shared/viewing/intake.ts`. An operator has to reach every
+agent by hand, on Zalo, and wait for each to answer. A request filed at 6pm for
+tomorrow morning is one nobody can fill. The rule lives beside `MAX_DAYS_AHEAD`
+in the shared module rather than in the date picker, so a client cannot offer
+a window the function will refuse.
+
+**8. One way to ask for a viewing.**
+Cards carry a single "Request viewing" button, which opens
+`RequestViewingModal`. "Shortlist" and "Book viewing" used to sit side by side
+and asked the renter to care about a distinction that was ours. Fast-Track is
+retired as a renter surface; its plumbing stays for history and entitlements.
+
+**9. New-flow requests are visible to operators, never to realtors.**
+`ViewingFlowQueuePanel` is admin scope only and read-only - status is derived
+and outcomes are the seven fixed actions in the ops console.
+`ViewingRequestsManager` resolves renter profiles for its realtor scope, so
+feeding it `viewing_requests` would put a renter's identity in front of an
+agent. That is invariant 4, and it is the whole product.
+
 ### The WhatsApp adapter
 
 Meta Business verification, phone number provisioning and template approval are
@@ -113,14 +133,22 @@ Do not build these even if they seem natural:
 - Any Zalo integration, Zalo OA, or ZNS. The realtor side is a human this
   quarter.
 - Realtor-facing accounts, login, or portal.
-- Renter authentication beyond a signed session cookie keyed to phone number.
+- Renter authentication beyond Supabase auth on the request surface. Intake
+  requires a signed-in user, because a request spends viewing credits and
+  credits belong to an account; the phone number stays the identity for
+  everything inbound, since a WhatsApp message arrives with nothing else to key
+  on. `renters.user_id` links the two and is nullable - a renter who arrived
+  over WhatsApp and never signed up is still a renter.
 - i18n framework. Renter UI is English only. Vietnamese strings are data, not UI.
 - Geocoding. Zero active listings have coordinates and the viewing flow does not
   need them.
 
 **Payments are not on this list.** They are live and shipping - see the Payments
 section below. The rule is: build no new payment surface for the viewing flow,
-and leave the Pass alone.
+and leave the Pass alone. The viewing flow spends the existing entitlement
+rather than inventing one: one credit per listing, so four places in a request
+cost the same as four separate requests, because it is the same four hours of a
+coordinator's day.
 
 ### Conventions
 
@@ -142,6 +170,10 @@ and leave the Pass alone.
 2. Reducer tests cover every new event type, including out-of-order arrival.
 3. The path is demoable end to end on `MockAdapter` with seeded data.
 4. `docs/SPEC.md` updated if the domain model changed.
+5. If it touched renter-facing copy, you have read it:
+   `REHEARSAL_PRINT=1 npx vitest run rehearsal` prints the whole conversation.
+   No assertion catches copy that is correct and reads badly, and `/dev/phone`
+   stops being available the moment `WHATSAPP_MODE=cloud`.
 
 ---
 
@@ -347,3 +379,26 @@ Entitlements must be counted once. A bought pass draws only on the `passes`
 ledger; the windowed allowance in `base_viewing_allowance_remaining` is for
 holders with no ledger row (complimentary cover, the free trial). Granting both
 sold three viewings and permitted six.
+
+**Two request tables are that same hazard in a different shape.** Fast-Track
+(`fast_track_requests`) is retired as a renter surface but its rows are real
+history, and the viewing flow writes `viewing_requests` + `request_items`.
+`viewing_listings_booked_since()` exists so a listing is counted once,
+whichever table it was requested through, and
+`base_viewing_allowance_remaining` calls it rather than counting either table
+itself. Counting only one would give a complimentary-cover account three
+coordinations from each.
+
+The two flows spend the same credits by different routes, and neither route may
+be duplicated:
+
+- Fast-Track charges in a trigger on insert, reading `NEW.property_ids`.
+- The viewing flow calls `consume_viewing_credits()` from
+  `viewing-request-create`, because its listings arrive as `request_items`
+  *after* the request row exists, so there is no row to hang a trigger on. It
+  charges last, after the log is written, and deletes the request if the charge
+  raises - a request nobody paid for queues real operator work against an
+  account with nothing left.
+- That function also stamps `viewing_trials`. Fast-Track does it with an
+  `AFTER INSERT` trigger the new flow has no insert to hang off, and without it
+  the free trial is infinite through the new modal.
