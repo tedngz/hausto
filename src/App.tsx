@@ -22,6 +22,7 @@ import RealtorApply from "./pages/RealtorApply";
 import OAuthConsent from "./pages/OAuthConsent";
 import DevPhone from "./pages/DevPhone";
 import ViewingRequest from "./pages/ViewingRequest";
+import Privacy from "./pages/Privacy";
 import { AssistantHandoff } from "@/components/AssistantHandoff";
 import { PassGate } from "@/components/PassGate";
 import { ShortlistProvider } from "@/hooks/useShortlist";
@@ -74,6 +75,7 @@ const App = () => (
               <Route path="/dev/phone" element={<DevPhone />} />
               <Route path="/viewings/request" element={<ViewingRequest />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             {/* Carries a card's "ask about this" to the hub's chat, which is
