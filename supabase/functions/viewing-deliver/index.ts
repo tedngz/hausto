@@ -6,7 +6,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
-import { deliver, type DeliveryPurpose } from '../_shared/viewing/deliver.ts';
+import { deliver, DELIVERY_PURPOSES, type DeliveryPurpose } from '../_shared/viewing/deliver.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,13 +52,22 @@ Deno.serve(async (req) => {
   const requestId = String(body.requestId ?? '');
   if (!requestId) return json({ error: 'requestId is required' }, 400);
 
+  // Checked, not cast. `as DeliveryPurpose` on an HTTP body is a lie the
+  // compiler believes: deliver() falls through to a holding update for
+  // anything it does not recognise, so a typo'd purpose used to send a renter
+  // a plausible, wrong message instead of failing. Found by rehearsing it.
+  const purpose = String(body.purpose ?? 'ITINERARY');
+  if (!DELIVERY_PURPOSES.includes(purpose as DeliveryPurpose)) {
+    return json({ error: `unknown purpose '${purpose}'`, allowed: DELIVERY_PURPOSES }, 400);
+  }
+
   let adapter;
   try { adapter = adapterFromEnv(Deno.env.toObject()); }
   catch (e) { return json({ error: (e as Error).message }, 500); }
 
   const result = await deliver(db, adapter, {
     requestId,
-    purpose: (String(body.purpose ?? 'ITINERARY') as DeliveryPurpose),
+    purpose: purpose as DeliveryPurpose,
     order: Array.isArray(body.order) ? body.order.map(String) : undefined,
     substitutes: Array.isArray(body.substitutes)
       ? body.substitutes as { title: string; priceVnd: number; districtCode: string | null }[]

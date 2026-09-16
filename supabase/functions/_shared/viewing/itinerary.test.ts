@@ -195,9 +195,24 @@ describe('the message', () => {
 
   it('mentions the shortfall in one line and does not apologise', () => {
     const text = renderItinerary({ ref: 'HV-4KX7', stops, requestedCount: 5 });
-    expect(text).toContain('The other 2 are no longer available at the price advertised.');
+    expect(text).toContain('We could not confirm the other 2 for these times.');
     expect(text.toLowerCase()).not.toContain('sorry');
     expect(text.toLowerCase()).not.toContain('unfortunately');
+  });
+
+  it('does not tell the renter WHY an item is missing', () => {
+    // The renderer is handed stops, never outcomes, so any reason it gave
+    // would be a guess across seven of them (SPEC §4). It used to guess
+    // "no longer available at the price advertised", which is false for an
+    // ALREADY_RENTED unit and misleading for a PRICE_CHANGED one.
+    const text = renderItinerary({ ref: 'HV-4KX7', stops, requestedCount: 5 });
+    expect(text).not.toMatch(/price advertised/i);
+    expect(text).not.toMatch(/\brented\b/i);
+  });
+
+  it('uses the singular when exactly one fell through', () => {
+    const text = renderItinerary({ ref: 'HV-4KX7', stops, requestedCount: 4 });
+    expect(text).toContain('We could not confirm the other one for these times.');
   });
 
   it('says nothing about a shortfall when there is none', () => {
