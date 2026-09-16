@@ -10,6 +10,13 @@ import { ArrowLeft } from 'lucide-react';
 // Vietnam's Decree 13/2023/ND-CP (PDPD) is the governing instrument. This page
 // is not legal advice and has not been reviewed by a lawyer; it describes the
 // system honestly, which is the part engineering can be responsible for.
+//
+// The controller is named as "Hausto", a trading name rather than a registered
+// entity, at the operator's direction. Worth knowing what that costs: a data
+// subject exercising a right under the PDPD, and a reviewer at Meta checking
+// who is accountable, both look for someone identifiable. A trading name with
+// a contact address is the weaker version of that, and it is what should be
+// revisited first if the business incorporates or a regulator asks.
 
 const UPDATED = '16 September 2026';
 const CONTACT = 'hello@hausto.com';
@@ -48,9 +55,9 @@ const Privacy = () => (
 
       <Section title="Who we are">
         <p>
-          Hausto is operated by <strong>Hoang Minh Nguyen</strong>, an individual trading
-          in Vietnam, who is the data controller for the personal data described here.
-          You can reach us at <a className="underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+          <strong>Hausto</strong> is the data controller for the personal data described
+          here, operating in Vietnam. You can reach us at{' '}
+          <a className="underline" href={`mailto:${CONTACT}`}>{CONTACT}</a>.
         </p>
         <p>
           Hausto helps renters in Ho Chi Minh City arrange property viewings. You shortlist
