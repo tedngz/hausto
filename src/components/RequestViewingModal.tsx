@@ -8,10 +8,10 @@
 //
 // Three rules it exists to hold:
 //
-// 1. **An itinerary is one day.** 3 to 5 places, enforced here and again in
-//    `validateShortlist` on the server. Clicking from a single card seeds that
-//    card and then asks for the rest, which is why the matches list is in here
-//    rather than on a page the renter would have to go find.
+// 1. **An itinerary is one day.** Up to 5 places, enforced here and again in
+//    `validateShortlist` on the server - more than that cannot be seen in a
+//    day. One is a perfectly good request; the matches list is here to make
+//    adding a second easy, not to make the first conditional on it.
 //
 // 2. **Today and tomorrow are never bookable** (MIN_LEAD_DAYS). An operator has
 //    to reach every agent by hand. The calendar disables them rather than
@@ -259,10 +259,18 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                   </li>
                 ))}
               </ul>
-              {!enough && (
+              {count === 0 && (
                 <p className="mt-2 text-sm text-amber-700">
-                  Add {MIN_SHORTLIST - count} more - we arrange viewings in one trip, so a
-                  request covers {MIN_SHORTLIST} to {MAX_SHORTLIST} places.
+                  Add at least one place to request a viewing.
+                </p>
+              )}
+              {count > 0 && count < MAX_SHORTLIST && (
+                // An invitation, not a requirement. Seeing several in one trip
+                // is genuinely better for the renter, and it is the operator's
+                // round either way - but a request for one is a real request.
+                <p className="mt-2 text-xs text-muted-foreground">
+                  We arrange viewings in one trip, so you can add up to{' '}
+                  {MAX_SHORTLIST - count} more for the same visit.
                 </p>
               )}
 

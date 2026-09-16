@@ -1,7 +1,7 @@
 // Request intake (PLAN-v3 S4). Shortlist → availability → phone → deep link.
 //
 // The page imports its rules straight from the edge function's shared module
-// rather than restating them, so "3 to 5" and "14 days ahead" cannot be true in
+// rather than restating them, so "up to 5" and "14 days ahead" cannot be true in
 // one place and nearly true in the other. The function re-validates everything
 // anyway - this is a better error message, not a check.
 //
@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { useShortlist, MIN_SHORTLIST } from '@/hooks/useShortlist';
+import { useShortlist } from '@/hooks/useShortlist';
 import {
   DAY_PARTS,
   MAX_DAYS_AHEAD,
@@ -161,7 +161,7 @@ export default function ViewingRequest() {
         {shortlist.entries.length === 0 ? (
           <p className="mt-3 text-sm text-neutral-600">
             Nothing shortlisted yet. <Link className="underline" to="/browse">Find some places</Link> and add
-            between {MIN_SHORTLIST} and 5.
+            up to 5.
           </p>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -191,10 +191,9 @@ export default function ViewingRequest() {
             })}
           </ul>
         )}
-        {shortlist.entries.length > 0 && !shortlist.canSubmit && (
-          <p className="mt-2 text-xs text-amber-700">
-            Add {MIN_SHORTLIST - shortlist.entries.length} more. Fewer than {MIN_SHORTLIST} rarely comes back with
-            enough free slots to make a trip worth it.
+        {shortlist.entries.length > 0 && shortlist.entries.length < 5 && (
+          <p className="mt-2 text-xs text-neutral-500">
+            You can add up to {5 - shortlist.entries.length} more for the same trip.
           </p>
         )}
       </section>

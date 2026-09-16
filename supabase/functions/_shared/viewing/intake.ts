@@ -10,9 +10,20 @@ import { toE164 } from '../whatsapp/inbound.ts';
 
 export { toE164 };
 
-/** A renter shortlists this many. Fewer is not worth an operator's round; more
- *  cannot be viewed in one day, which is what an itinerary is. */
-export const MIN_ITEMS = 3;
+/**
+ * A renter shortlists this many.
+ *
+ * The ceiling is the real constraint: more than five cannot be viewed in one
+ * day, and an itinerary is one day.
+ *
+ * The floor was three, on the reasoning that a single viewing is not worth an
+ * operator's round. That reasoning is about our cost, not the renter's need -
+ * and it met them as a refusal on the one action the whole product exists to
+ * offer, before they had any reason to trust us with three. Someone who wants
+ * one flat seen gets one flat seen; batching is an efficiency we can pursue by
+ * suggesting more, not by withholding the first.
+ */
+export const MIN_ITEMS = 1;
 export const MAX_ITEMS = 5;
 
 /**

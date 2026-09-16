@@ -1,4 +1,4 @@
-// The renter's shortlist: 3 to 5 listings they want to view.
+// The renter's shortlist: 1 to 5 listings they want to view.
 //
 // Kept in localStorage rather than in a table. A shortlist is a draft, and a
 // draft that costs a round trip to add to is a draft nobody builds; it becomes
@@ -8,7 +8,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-export const MIN_SHORTLIST = 3;
+// Mirrors MIN_ITEMS in the shared intake module, which is the gate that
+// actually decides. One is enough: see the note there for why it is not three.
+export const MIN_SHORTLIST = 1;
 export const MAX_SHORTLIST = 5;
 
 const STORAGE_KEY = 'hausto.shortlist.v1';
