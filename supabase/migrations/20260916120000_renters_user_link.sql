@@ -59,3 +59,32 @@ USING (EXISTS (
   JOIN public.renters r ON r.id = vr.renter_id
   WHERE vr.id = request_items.request_id AND r.user_id = auth.uid()
 ));
+
+-- ── Operators ───────────────────────────────────────────────────────────────
+--
+-- The admin ops queue reads these from the browser with an admin's JWT, so the
+-- renter-scoped policies above would show them nothing.
+--
+-- SELECT only here too, for the same reason: outcomes are the seven fixed
+-- actions in the ops console, which go through an edge function and write to
+-- the event log. An operator with UPDATE on viewing_requests could set a status
+-- directly, and invariant 1 says status is derived and never written.
+--
+-- This is also the privacy boundary. Admins are our operators and need the
+-- renter's name and number to do the job; the realtor dashboard reads
+-- fast_track_requests and never these tables (invariant 4).
+
+DROP POLICY IF EXISTS "Admins read renters" ON public.renters;
+CREATE POLICY "Admins read renters"
+ON public.renters FOR SELECT TO authenticated
+USING (public.has_role(auth.uid(), 'admin'));
+
+DROP POLICY IF EXISTS "Admins read viewing requests" ON public.viewing_requests;
+CREATE POLICY "Admins read viewing requests"
+ON public.viewing_requests FOR SELECT TO authenticated
+USING (public.has_role(auth.uid(), 'admin'));
+
+DROP POLICY IF EXISTS "Admins read request items" ON public.request_items;
+CREATE POLICY "Admins read request items"
+ON public.request_items FOR SELECT TO authenticated
+USING (public.has_role(auth.uid(), 'admin'));
