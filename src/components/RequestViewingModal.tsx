@@ -3,26 +3,32 @@
 // Built as a phone screen that happens to fit on a desktop, not the reverse:
 // a fixed header, one scrolling column of numbered steps, and a footer that
 // stays put so the action is never a scroll away. The three questions are
-// always in the same order - which places, when, where to reach you - so the
+// always in the same order - which place, when, where to reach you - so the
 // modal reads as a form rather than a dashboard.
 //
-// The places list is the renter's matches, with a checkbox each. One
-// exception, and it is a correctness one rather than a preference: a listing
-// seeded by the card that opened this modal is pinned at the top even when it
-// is not among their matches. It is in the request; a request must never
-// contain something the renter cannot see and uncheck.
+// **One place per request.** The domain still accepts up to five in one
+// request - `MAX_ITEMS` is unchanged, and the agent's re-request path makes
+// multi-item requests from a renter's WhatsApp reply - but the renter-facing
+// form asks for one. Choosing several places and several time windows in one
+// modal is two multi-selects stacked, and the second one is the one that
+// actually needs the room.
+//
+// So the list is a single choice over the renter's matches. One exception, and
+// it is correctness rather than preference: a listing seeded by the card that
+// opened this modal appears even when it is not among their matches. It is
+// what the renter asked to view, and a form must not quietly request something
+// it never showed them.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { ImageOff, Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
+import { Check, ImageOff, Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -30,7 +36,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useRenterIdentity } from '@/hooks/useRenterIdentity';
-import { useShortlist, MAX_SHORTLIST } from '@/hooks/useShortlist';
+import { useShortlist } from '@/hooks/useShortlist';
 import {
   DAY_PARTS,
   MAX_DAYS_AHEAD,
@@ -121,13 +127,17 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const [touched, setTouched] = useState({ name: false, phone: false });
 
+  // The card that opened this is the choice, replacing anything left over from
+  // a previous visit - the shortlist lives in localStorage, so without the
+  // clear a renter could open a listing page and find a different flat
+  // selected.
   useEffect(() => {
     if (!open || !seed) return;
-    if (shortlist.has(seed.listingId)) return;
-    const r = shortlist.toggle({
+    if (shortlist.has(seed.listingId) && shortlist.entries.length === 1) return;
+    shortlist.clear();
+    shortlist.toggle({
       listingId: seed.listingId, title: seed.title, imageUrl: seed.imageUrl ?? null,
     });
-    if (!r.ok) toast.error(r.error ?? 'That request is already full.');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seed?.listingId]);
 
@@ -202,15 +212,21 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const count = shortlist.entries.length;
   const credits = quota?.remaining ?? 0;
   const shortOnCredits = !!quota && credits < count;
-  const full = count >= MAX_SHORTLIST;
 
-  const toggleChoice = (c: Choice) => {
-    if (!c.selected && full) {
-      toast.error(`${MAX_SHORTLIST} places is as many as fit in one day.`);
-      return;
-    }
+  /**
+   * Pick one. The shortlist is cleared first, so choosing a second place
+   * replaces the first rather than adding to it - the functional updates chain,
+   * so `toggle` sees the emptied list.
+   *
+   * Tapping the chosen one again does nothing. Deselecting to nothing is a
+   * state with no way forward, and the renter's next move from there is to pick
+   * a different place anyway.
+   */
+  const chooseOnly = (c: Choice) => {
+    if (c.selected) return;
+    shortlist.clear();
     const r = shortlist.toggle({ listingId: c.id, title: c.title, imageUrl: c.imageUrl });
-    if (!r.ok) toast.error(r.error ?? 'That request is full.');
+    if (!r.ok) toast.error(r.error ?? 'Could not select that place.');
   };
 
   const toggleDay = (date: string) => {
@@ -293,7 +309,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
         ) : !user ? (
           <div className="space-y-4 p-6">
             <DialogHeader>
-              <DialogTitle>Sign in to request viewings</DialogTitle>
+              <DialogTitle>Sign in to request a viewing</DialogTitle>
               <DialogDescription>
                 Your requests and viewing requests balance live on your account.
               </DialogDescription>
@@ -303,9 +319,9 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
         ) : (
           <>
             <DialogHeader className="shrink-0 space-y-1 border-b p-4 text-left sm:p-6 sm:pb-4">
-              <DialogTitle>Request viewings</DialogTitle>
+              <DialogTitle>Request a viewing</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                We contact each agent for you and come back with the times that are
+                We contact the agent for you and come back with the times that are
                 free. They never get your number.
               </DialogDescription>
             </DialogHeader>
@@ -314,51 +330,53 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
               {/* ── 1. Places ────────────────────────────────────────── */}
               <Step
                 n={1}
-                title="Which places?"
-                hint={
-                  full
-                    ? `That is ${MAX_SHORTLIST} - as many as fit in one day.`
-                    : `Tick up to ${MAX_SHORTLIST}. One viewing request each.`
-                }
+                title="Which place?"
+                hint="One place per request, and one viewing request from your balance."
               >
                 {choices.length === 0 ? (
                   <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                     No matches yet. Match a few places and they will show up here.
                   </p>
                 ) : (
-                  <ul className="space-y-1.5">
-                    {choices.map(c => {
-                      const blocked = !c.selected && full;
-                      return (
-                        <li key={c.id}>
-                          <label
+                  <ul role="radiogroup" aria-label="Which place" className="space-y-1.5">
+                    {choices.map(c => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={c.selected}
+                          onClick={() => chooseOnly(c)}
+                          className={cn(
+                            'flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors',
+                            c.selected
+                              ? 'border-primary bg-primary/5'
+                              : 'hover:bg-muted/50',
+                          )}
+                        >
+                          <span
                             className={cn(
-                              'flex cursor-pointer items-center gap-3 rounded-md border p-2 transition-colors',
-                              c.selected ? 'border-primary/40 bg-primary/5' : 'hover:bg-muted/50',
-                              blocked && 'cursor-not-allowed opacity-50',
+                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+                              c.selected
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-muted-foreground/40',
                             )}
                           >
-                            <Checkbox
-                              checked={c.selected}
-                              disabled={blocked}
-                              onCheckedChange={() => toggleChoice(c)}
-                              aria-label={c.title}
-                            />
-                            {c.imageUrl
-                              ? <img src={c.imageUrl} alt="" className="h-11 w-14 shrink-0 rounded object-cover" />
-                              : <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
-                                  <ImageOff className="h-4 w-4 text-muted-foreground" />
-                                </span>}
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm">{c.title}</span>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {c.pinned ? 'The place you opened this from' : c.location ?? 'From your matches'}
-                              </span>
+                            {c.selected && <Check className="h-2.5 w-2.5" />}
+                          </span>
+                          {c.imageUrl
+                            ? <img src={c.imageUrl} alt="" className="h-11 w-14 shrink-0 rounded object-cover" />
+                            : <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
+                                <ImageOff className="h-4 w-4 text-muted-foreground" />
+                              </span>}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm">{c.title}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {c.pinned ? 'The place you opened this from' : c.location ?? 'From your matches'}
                             </span>
-                          </label>
-                        </li>
-                      );
-                    })}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
                   </ul>
                 )}
               </Step>
@@ -461,14 +479,13 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
             <div className="shrink-0 space-y-2 border-t bg-background p-4 sm:p-6 sm:pt-4">
               {shortOnCredits ? (
                 <p className="text-sm text-amber-700">
-                  This needs {count} viewing request{count === 1 ? '' : 's'} and you have{' '}
-                  {credits}. Untick a place, or top up.
+                  A request uses one viewing request and you have {credits}. Top up to
+                  carry on.
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  {count} place{count === 1 ? '' : 's'} · {picked.length} of {MAX_WINDOWS} time
-                  window{picked.length === 1 ? '' : 's'}
-                  {quota ? ` · uses ${count} of your ${credits} viewing requests` : ''}
+                  {picked.length} of {MAX_WINDOWS} time window{picked.length === 1 ? '' : 's'}
+                  {quota ? ` · uses 1 of your ${credits} viewing requests` : ''}
                 </p>
               )}
               {error && <p className="text-sm text-destructive">{error}</p>}
@@ -478,7 +495,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                   ? 'Pick a place'
                   : picked.length === 0
                     ? 'Pick a time'
-                    : `Request ${count} viewing${count === 1 ? '' : 's'}`}
+                    : 'Request viewing'}
               </Button>
               <p className="text-center text-[11px] text-muted-foreground">
                 Nothing is arranged yet. We confirm with each agent first.
