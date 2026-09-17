@@ -37,6 +37,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { useRenterIdentity } from '@/hooks/useRenterIdentity';
 import { useShortlist, MAX_SHORTLIST } from '@/hooks/useShortlist';
 import {
   DAY_PARTS,
@@ -100,9 +101,17 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const shortlist = useShortlist();
   const { quota } = useViewingQuota();
   const { renterMatches } = useMatches();
+  const { identity } = useRenterIdentity();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  // Whether the renter has touched each field. Prefill fills what they have not
+  // typed in; it never reaches back over an edit, because the identity query
+  // can resolve after they have started typing and would otherwise overwrite
+  // them mid-word.
+  const [touched, setTouched] = useState<{ name: boolean; phone: boolean }>({
+    name: false, phone: false,
+  });
   const [picked, setPicked] = useState<AvailabilityWindow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +130,16 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     // otherwise re-run this and fight the renter removing the seeded card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seed?.listingId]);
+
+  // Seed from what we already know. A returning renter should not retype their
+  // own number, and someone requesting for a partner should not have to fight
+  // a form that keeps knowing better - so this only ever fills a field the
+  // renter has left alone.
+  useEffect(() => {
+    if (!identity) return;
+    setName(prev => (touched.name || prev ? prev : identity.name));
+    setPhone(prev => (touched.phone || prev ? prev : identity.phone));
+  }, [identity, touched.name, touched.phone]);
 
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
@@ -443,15 +462,25 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
             </div>
 
             {/* ── Who ──────────────────────────────────────────────────── */}
+            {identity && (identity.name || identity.phone) && !touched.name && !touched.phone && (
+              <p className="text-xs text-muted-foreground">
+                Using the details on your account - edit either if you would rather we
+                used something else.
+              </p>
+            )}
             <section className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="rv-name">Your name</Label>
-                <Input id="rv-name" value={name} onChange={e => setName(e.target.value)} placeholder="Minh" />
+                <Input
+                  id="rv-name" value={name} placeholder="Minh"
+                  onChange={e => { setTouched(t => ({ ...t, name: true })); setName(e.target.value); }}
+                />
               </div>
               <div>
                 <Label htmlFor="rv-phone">WhatsApp number</Label>
                 <Input
-                  id="rv-phone" value={phone} onChange={e => setPhone(e.target.value)}
+                  id="rv-phone" value={phone}
+                  onChange={e => { setTouched(t => ({ ...t, phone: true })); setPhone(e.target.value); }}
                   placeholder="0901 234 567" inputMode="tel"
                 />
               </div>
