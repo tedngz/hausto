@@ -45,7 +45,7 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
   }
 
   const viewingsLine = quota
-    ? `${quota.remaining} viewing coordination left`
+    ? `${quota.remaining} viewing request${quota.remaining === 1 ? '' : 's'} left`
     : null;
 
   return (
@@ -81,8 +81,8 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
               {quota?.trialAvailable
                 ? 'Your first viewing is on us. The Pass adds 3 more, plus a Deep Scan on any listing before you spend a Saturday on it.'
                 : quota?.trialLocked
-                  ? 'Answer the preference quiz and match 3 listings to unlock your free viewing coordination.'
-                  : 'Free viewing coordination used. The Pass unlocks Deep Scan and 3 more viewings.'}
+                  ? 'Answer the preference quiz and match 3 listings to unlock your free viewing request.'
+                  : 'Free viewing request used. The Pass unlocks Deep Scan and 3 more viewings.'}
             </p>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />

@@ -97,7 +97,7 @@ export const UsageMeter = () => {
               <div className="flex items-center gap-2">
                 <CalendarCheck className="h-4 w-4 text-orange-500" />
                 <span className="font-medium">
-                  {quota.isTrial ? 'Free viewing coordination' : 'Viewing coordinations'}
+                  {quota.isTrial ? 'Free viewing request' : 'Viewing requests'}
                 </span>
                 {/* Locked reads as 1/1 spent otherwise - say why it's not on offer yet. */}
                 {quota.trialLocked && (

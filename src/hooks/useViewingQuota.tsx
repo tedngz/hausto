@@ -59,51 +59,20 @@ export const describeViewingBlock = (quota: ViewingQuota) => {
     return {
       title: 'Your free viewing is almost unlocked',
       description: !hasPreferences
-        ? 'Answer a few preference questions and match 3 listings, and we book your first viewing for you.'
-        : `Match ${matchesNeeded - matchCount} more listing${matchesNeeded - matchCount === 1 ? '' : 's'} and we book your first viewing for you.`,
+        ? 'Answer a few preference questions and match 3 listings, and we arrange your first viewing for you.'
+        : `Match ${matchesNeeded - matchCount} more listing${matchesNeeded - matchCount === 1 ? '' : 's'} and we arrange your first viewing for you.`,
       showPaywall: false,
     };
   }
   return {
     title: quota.trialUsed
-      ? "You've used your free viewing coordination"
-      : 'Viewing bookings used up for this cycle',
+      ? "You've used your free viewing request"
+      : 'Viewing requests used up for this cycle',
     description: 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.',
     showPaywall: true,
   };
 };
 
-/**
- * Who can book a coordinated viewing, and how many are left.
- *
- * - Free tier: one trial booking per account, ever. It's the only way to feel
- *   what coordination does before paying, so it doesn't reset. It has to be
- *   earned first - preference quiz answered and 3 listings matched - because a
- *   coordinator's hour is too expensive to hand every signup on arrival. The
- *   same gate is enforced in SQL by free_viewing_trial_unlocked().
- * - Hausto Pass: $25 buys 3 bookings for 30 days, and $10 tops that up by 2.
- *   Passes stack across repeat purchases.
- * - Admins: a complimentary pass allowance, 3 bookings per rolling 30 days.
- *   It stays metered because each booking is a real coordinator hour.
- *
- * The retired $20/10-viewing pack is gone entirely - viewing_addons was empty
- * and has been dropped, so passes is the only credit ledger left.
- *
- * Credits are only spent once the plan allowance above is exhausted - the same
- * order the DB trigger consumes them in.
- *
- * Each entitlement is counted once, and only once, which is the rule this got
- * wrong: a bought pass draws purely on the passes ledger, never on a windowed
- * allowance as well. Granting both handed out six coordinations for a
- * three-viewing product, because the two are independent mechanisms that each
- * believed they owned the same three.
- *
- * The windowed allowance therefore survives only where there is no ledger row
- * to spend from, mirroring base_viewing_allowance_remaining in SQL - the client
- * must not promise a booking the INSERT policy would refuse:
- * - Complimentary (admin) cover: a rolling 30 days. It writes no passes row.
- * - Free tier: the one-off trial, tracked in viewing_trials.
- */
 /**
  * Listings requested through the viewing flow since a given moment.
  *
@@ -137,6 +106,37 @@ const countViewingItemsSince = async (since: Date): Promise<{ count: number }> =
   return { count: count ?? 0 };
 };
 
+/**
+ * Who can book a coordinated viewing, and how many are left.
+ *
+ * - Free tier: one trial booking per account, ever. It's the only way to feel
+ *   what coordination does before paying, so it doesn't reset. It has to be
+ *   earned first - preference quiz answered and 3 listings matched - because a
+ *   coordinator's hour is too expensive to hand every signup on arrival. The
+ *   same gate is enforced in SQL by free_viewing_trial_unlocked().
+ * - Hausto Pass: $25 buys 3 bookings for 30 days, and $10 tops that up by 2.
+ *   Passes stack across repeat purchases.
+ * - Admins: a complimentary pass allowance, 3 bookings per rolling 30 days.
+ *   It stays metered because each booking is a real coordinator hour.
+ *
+ * The retired $20/10-viewing pack is gone entirely - viewing_addons was empty
+ * and has been dropped, so passes is the only credit ledger left.
+ *
+ * Credits are only spent once the plan allowance above is exhausted - the same
+ * order the DB trigger consumes them in.
+ *
+ * Each entitlement is counted once, and only once, which is the rule this got
+ * wrong: a bought pass draws purely on the passes ledger, never on a windowed
+ * allowance as well. Granting both handed out six coordinations for a
+ * three-viewing product, because the two are independent mechanisms that each
+ * believed they owned the same three.
+ *
+ * The windowed allowance therefore survives only where there is no ledger row
+ * to spend from, mirroring base_viewing_allowance_remaining in SQL - the client
+ * must not promise a booking the INSERT policy would refuse:
+ * - Complimentary (admin) cover: a rolling 30 days. It writes no passes row.
+ * - Free tier: the one-off trial, tracked in viewing_trials.
+ */
 export const useViewingQuota = () => {
   const { user } = useAuth();
   const { isAdmin, isLoading: rolesLoading } = useUserRoles();

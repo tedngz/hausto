@@ -33,7 +33,7 @@ export const SubscriptionModal = ({
   const [loading, setLoading] = useState(false);
   const [addonLoading, setAddonLoading] = useState(false);
   const reasonMessages = {
-    viewings: "You've used your free viewing coordination.",
+    viewings: "You've used your free viewing request.",
     ai: "You've used your 10 AI requests for today."
   };
   // Both are one-off Polar checkouts now - purchasePass/purchaseTopUp redirect to
@@ -70,15 +70,15 @@ export const SubscriptionModal = ({
     'Basic vibe analysis on every listing',
     '10 AI requests per day',
     quota?.trialUsed
-      ? '1 free viewing coordination (used)'
-      : '1 free viewing coordination - we book it for you',
+      ? '1 free viewing request (used)'
+      : '1 free viewing request - we arrange it for you',
   ];
   const premiumFeatures = [
     'Everything in Free',
     'Deep Scan on any listing - design, fit, honest downsides',
     'Neighbourhood and commute rated against your preferences',
     'Unlimited AI requests',
-    '3 viewing coordination',
+    '3 viewing requests',
   ];
   return <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -131,7 +131,7 @@ export const SubscriptionModal = ({
                 </span>
                 {pass?.active && <Badge variant="secondary">Current</Badge>}
               </CardTitle>
-              <CardDescription>Unlimited search, plus viewing coordination</CardDescription>
+              <CardDescription>Unlimited search, plus viewing requests</CardDescription>
               <div className="text-2xl sm:text-3xl font-bold">
                 ${PASS_PRICE_USD}<span className="text-sm font-normal">/{PASS_DAYS} days</span>
               </div>
@@ -162,7 +162,7 @@ export const SubscriptionModal = ({
                   <Badge variant="secondary">${TOPUP_PRICE_USD} one-off</Badge>
                 </div>
                 <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                  {TOPUP_VIEWINGS} more viewing coordination, running until your pass ends.
+                  {TOPUP_VIEWINGS} more viewing requests, running until your pass ends.
                   {!!quota?.packRemaining && ` ${quota.packRemaining} left on your account.`}
                 </p>
               </div>

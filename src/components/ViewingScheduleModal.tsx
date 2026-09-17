@@ -119,8 +119,8 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
       }
       if (prev.length >= maxSelectable) {
         toast({
-          title: "Viewing coordination limit",
-          description: `You have ${maxSelectable} viewing coordination left, so you can pick up to ${maxSelectable} propert${maxSelectable === 1 ? 'y' : 'ies'}. Buy a pass or top up for more.`,
+          title: "Viewing request limit",
+          description: `You have ${maxSelectable} viewing request${maxSelectable === 1 ? '' : 's'} left, so you can pick up to ${maxSelectable} propert${maxSelectable === 1 ? 'y' : 'ies'}. Buy a pass or top up for more.`,
           variant: "destructive"
         });
         return prev;
@@ -152,8 +152,8 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
         description: block && !block.showPaywall
           ? block.description
           : quota?.trialUsed
-            ? "You've used your free viewing coordination. Get the Hausto Pass to keep booking."
-            : `You've used all ${quota?.included ?? INCLUDED_VIEWINGS_PER_CYCLE} of your viewing coordination. Top up to keep booking.`,
+            ? "You've used your free viewing request. Get the Hausto Pass to keep going."
+            : `You've used all ${quota?.included ?? INCLUDED_VIEWINGS_PER_CYCLE} of your viewing requests. Top up to keep going.`,
         variant: block && !block.showPaywall ? "default" : "destructive"
       });
       return;
@@ -225,7 +225,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
             <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 flex items-center gap-2 text-sm text-emerald-800">
               <CalendarCheck className="h-4 w-4 shrink-0" />
               <span>
-                {quota.remaining} viewing coordination left, including {quota.packRemaining} from your viewing pack
+                {quota.remaining} viewing requests left, including {quota.packRemaining} from your viewing pack
                 {quota.packExpiresAt ? ` (until ${format(new Date(quota.packExpiresAt), 'MMM dd, yyyy')})` : ''}.
               </span>
             </div>
@@ -233,7 +233,7 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
             <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 flex items-center gap-2 text-sm text-emerald-800">
               <Gift className="h-4 w-4 shrink-0" />
               <span>
-                This one is on us - your free viewing coordination. No card, no charge.
+                This one is on us - your free viewing request. No card, no charge.
               </span>
             </div>
           ) : quota.remaining > 0 ? (
@@ -246,19 +246,19 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
                 {quota.trialLocked
                   ? describeViewingBlock(quota).description
                   : quota.trialUsed
-                    ? "You've used your free viewing coordination."
-                    : `You've used all ${quota.included} of your viewing coordination.`}
+                    ? "You've used your free viewing request."
+                    : `You've used all ${quota.included} of your viewing requests.`}
               </p>
               {/* Nothing to sell a renter whose free viewing is still waiting.
                   Otherwise: a pass holder tops up, everyone else buys the pass. */}
               {!quota.trialLocked && (
                 pass?.active ? (
                   <Button size="sm" onClick={purchaseTopUp}>
-                    Top up - {TOPUP_VIEWINGS} more coordination for ${TOPUP_PRICE_USD}
+                    Top up - {TOPUP_VIEWINGS} more viewing requests for ${TOPUP_PRICE_USD}
                   </Button>
                 ) : (
                   <Button size="sm" onClick={purchasePass}>
-                    Hausto Pass - {PASS_VIEWINGS} coordination, 30 days, ${PASS_PRICE_USD}
+                    Hausto Pass - {PASS_VIEWINGS} viewing requests, 30 days, ${PASS_PRICE_USD}
                   </Button>
                 )
               )}

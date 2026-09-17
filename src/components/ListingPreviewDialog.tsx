@@ -120,7 +120,7 @@ export const ListingPreviewDialog = ({
       <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-border/60 pt-2.5">
         <span className="text-xs text-muted-foreground">
           {quota?.hasPack
-            ? `${quota.remaining} viewing coordination left`
+            ? `${quota.remaining} viewing request${quota.remaining === 1 ? '' : 's'} left`
             : quota?.trialAvailable
               ? 'Your first viewing is on us'
               : quota?.trialLocked
@@ -184,7 +184,7 @@ export const ListingPreviewDialog = ({
               onLike={onLike}
               onClose={() => onOpenChange(false)}
               onSchedule={onSchedule}
-              scheduleLabel="Book viewing"
+              scheduleLabel="Request viewing"
               footer={bookingOffer}
             />
           )}
