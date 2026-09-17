@@ -1,31 +1,28 @@
 // One way to ask for a viewing (CLAUDE.md invariant 8).
 //
-// Two design calls worth knowing about, because both replaced something that
-// looked reasonable:
+// Built as a phone screen that happens to fit on a desktop, not the reverse:
+// a fixed header, one scrolling column of numbered steps, and a footer that
+// stays put so the action is never a scroll away. The three questions are
+// always in the same order - which places, when, where to reach you - so the
+// modal reads as a form rather than a dashboard.
 //
-// **One list, not two.** There used to be a "Places" list of what you had
-// picked and a separate "From your matches" list of what you could add. Same
-// job, twice, and the second one said "Nothing else matched yet" precisely
-// when the first was full - which reads as an error rather than as "you have
-// everything". Now there is a single list: everything you could request, with
-// the chosen ones marked.
-//
-// **A day strip, not a month grid.** The window is MIN_LEAD_DAYS to
-// MAX_DAYS_AHEAD - thirteen days. A month view spent two thirds of its cells
-// on disabled dates, offered navigation to months where nothing is selectable,
-// and highlighted today, which is never bookable, in a style that reads as
-// selected. The strip shows the days you can actually pick and nothing else.
+// The places list is the renter's matches, with a checkbox each. One
+// exception, and it is a correctness one rather than a preference: a listing
+// seeded by the card that opened this modal is pinned at the top even when it
+// is not among their matches. It is in the request; a request must never
+// contain something the renter cannot see and uncheck.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { Check, ImageOff, Loader2, Sun, Sunrise, Sunset, X } from 'lucide-react';
+import { ImageOff, Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -48,15 +45,10 @@ import {
 const MAX_WINDOWS = 6;
 
 const PART_LABEL: Record<DayPart, string> = {
-  MORNING: 'Morning',
-  AFTERNOON: 'Afternoon',
-  EVENING: 'Evening',
+  MORNING: 'Morning', AFTERNOON: 'Afternoon', EVENING: 'Evening',
 };
-
 const PART_ICON: Record<DayPart, typeof Sun> = {
-  MORNING: Sunrise,
-  AFTERNOON: Sun,
-  EVENING: Sunset,
+  MORNING: Sunrise, AFTERNOON: Sun, EVENING: Sunset,
 };
 
 export interface RequestSeed {
@@ -68,25 +60,21 @@ export interface RequestSeed {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The listing whose card was clicked, added to the request on open. */
   seed?: RequestSeed | null;
 }
 
-interface Submitted {
-  ref: string;
-  waLink: string;
-}
+interface Submitted { ref: string; waLink: string }
 
-/** A place the renter can put in the request. */
 interface Choice {
   id: string;
   title: string;
   location: string | null;
   imageUrl: string | null;
   selected: boolean;
+  /** True for a listing that came from the card, not from their matches. */
+  pinned: boolean;
 }
 
-/** "2026-09-19" -> { weekday: "Sat", day: "19", month: "Sept" } */
 function partsOf(iso: string) {
   const d = new Date(`${iso}T00:00:00`);
   return {
@@ -95,11 +83,28 @@ function partsOf(iso: string) {
     month: d.toLocaleDateString('en-GB', { month: 'short' }),
   };
 }
-
 const prettyDate = (iso: string) => {
   const p = partsOf(iso);
   return `${p.weekday} ${p.day} ${p.month}`;
 };
+
+/** A numbered step, so the modal reads in an order. */
+function Step({ n, title, hint, children }: {
+  n: number; title: string; hint?: string; children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+          {n}
+        </span>
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
+      {hint && <p className="pl-7 text-xs text-muted-foreground">{hint}</p>}
+      <div className="pl-7">{children}</div>
+    </section>
+  );
+}
 
 export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const { user } = useAuth();
@@ -116,8 +121,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const [touched, setTouched] = useState({ name: false, phone: false });
 
-  // Seeding on open rather than on mount: the modal is rendered by whichever
-  // card holds it, and a card nobody clicked must not add its listing.
   useEffect(() => {
     if (!open || !seed) return;
     if (shortlist.has(seed.listingId)) return;
@@ -128,8 +131,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seed?.listingId]);
 
-  // Prefill fills only a field the renter has left alone: the identity query
-  // can resolve after they start typing and must not overwrite them mid-word.
   useEffect(() => {
     if (!identity) return;
     setName(prev => (touched.name || prev ? prev : identity.name));
@@ -139,7 +140,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
 
-  /** Every day that can actually be requested. Thirteen of them. */
   const days = useMemo(() => {
     const out: string[] = [];
     for (let i = MIN_LEAD_DAYS; i <= MAX_DAYS_AHEAD; i++) out.push(addDays(today, i));
@@ -147,64 +147,57 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   }, [today]);
 
   const chosenDates = useMemo(
-    () => [...new Set(picked.map(w => w.date))].sort(),
-    [picked],
+    () => [...new Set(picked.map(w => w.date))].sort(), [picked],
   );
 
   /**
-   * One list: what is in the request, plus the matches that could be.
+   * The renter's matches, plus the seeded listing if it is not one of them.
    *
    * **External only.** The viewing flow requests against `external_properties`
-   * and `screenCandidates` rejects anything else on submit, so offering an
-   * internal match would mean the renter picks it, fills in the form, and is
-   * refused.
+   * and `screenCandidates` refuses anything else on submit, so offering an
+   * internal match would mean picking a place, filling in the form, and being
+   * told no.
    *
    * **No price.** `properties.price` is the raw column carrying USD for
-   * housingsgn rows (SPEC §0), so rendering it would tell a renter a $730 flat
-   * costs 730 ₫. The canonical `price_vnd` is a per-listing read and a dozen of
-   * those to decorate a picker is not worth it; the card they came from showed
-   * the price.
-   *
-   * Chosen places come first, and a seeded listing that is not among their
-   * matches still appears - it is in the request, so it has to be visible and
-   * removable.
+   * housingsgn rows (SPEC §0) - rendering it would tell a renter a $730 flat
+   * costs 730 ₫. The card they came from showed the price.
    */
   const choices = useMemo<Choice[]>(() => {
     type Match = {
       property_type?: string;
       properties?: { id?: string; title?: string; location?: string; images?: string[] | null } | null;
     };
-    const fromMatches = ((renterMatches ?? []) as Match[])
+    const matches = ((renterMatches ?? []) as Match[])
       .filter(m => m.property_type === 'external')
       .map(m => m.properties)
       .filter((p): p is NonNullable<Match['properties']> & { id: string; title: string } =>
         !!p?.id && !!p?.title);
 
-    const seen = new Set<string>();
-    const chosen: Choice[] = shortlist.entries.map(e => {
-      seen.add(e.listingId);
-      const m = fromMatches.find(p => p.id === e.listingId);
-      return {
+    const matched: Choice[] = matches.map(p => ({
+      id: p.id,
+      title: p.title,
+      location: p.location ?? null,
+      imageUrl: p.images?.[0] ?? null,
+      selected: shortlist.has(p.id),
+      pinned: false,
+    }));
+
+    // Anything in the request that is not a match. Normally just the listing
+    // whose card opened this. Shown, because a request must not contain
+    // something invisible.
+    const extras: Choice[] = shortlist.entries
+      .filter(e => !matches.some(p => p.id === e.listingId))
+      .map(e => ({
         id: e.listingId,
         title: e.title,
-        location: m?.location ?? null,
-        imageUrl: e.imageUrl ?? m?.images?.[0] ?? null,
+        location: null,
+        imageUrl: e.imageUrl ?? null,
         selected: true,
-      };
-    });
-
-    const rest: Choice[] = fromMatches
-      .filter(p => !seen.has(p.id))
-      .map(p => ({
-        id: p.id,
-        title: p.title,
-        location: p.location ?? null,
-        imageUrl: p.images?.[0] ?? null,
-        selected: false,
+        pinned: true,
       }));
 
-    return [...chosen, ...rest];
-  }, [renterMatches, shortlist.entries]);
+    return [...extras, ...matched];
+  }, [renterMatches, shortlist]);
 
   const count = shortlist.entries.length;
   const credits = quota?.remaining ?? 0;
@@ -227,8 +220,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
         toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
         return prev;
       }
-      // A date carrying no part means nothing to an operator, so choosing a day
-      // opts into the morning and lets the renter widen or move it.
       return [...prev, { date, part: 'MORNING' }];
     });
   };
@@ -236,12 +227,9 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const toggleWindow = (date: string, part: DayPart) => {
     setPicked(prev => {
       const exists = prev.some(w => w.date === date && w.part === part);
-      if (exists) {
-        const left = prev.filter(w => !(w.date === date && w.part === part));
-        // Removing the last part of a day removes the day: an operator cannot
-        // act on "Saturday, no times".
-        return left;
-      }
+      // Removing the last part of a day removes the day: an operator cannot act
+      // on "Saturday, no times".
+      if (exists) return prev.filter(w => !(w.date === date && w.part === part));
       if (prev.length >= MAX_WINDOWS) {
         toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
         return prev;
@@ -259,14 +247,12 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     setBusy(true);
     const { data, error: err } = await supabase.functions.invoke('viewing-request-create', {
       body: {
-        phone,
-        displayName: name,
+        phone, displayName: name,
         listingIds: shortlist.entries.map(e => e.listingId),
         availability: picked,
       },
     });
     setBusy(false);
-
     if (err) { setError('Something went wrong on our side. Try again in a moment.'); return; }
     const payload = data as Submitted & { error?: string; message?: string };
     if (payload?.error) { setError(payload.message ?? payload.error); return; }
@@ -283,9 +269,12 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={o => (o ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
+      {/* Full height on a phone with the footer pinned, a normal dialog above
+          that. The submit button being a scroll away was the worst of the old
+          layout on mobile. */}
+      <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
         {submitted ? (
-          <>
+          <div className="space-y-4 p-6">
             <DialogHeader>
               <DialogTitle>Request {submitted.ref} is in</DialogTitle>
               <DialogDescription>
@@ -300,9 +289,9 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
               <a href={submitted.waLink} target="_blank" rel="noreferrer">Open WhatsApp</a>
             </Button>
             <Button variant="ghost" className="w-full" onClick={close}>Done</Button>
-          </>
+          </div>
         ) : !user ? (
-          <>
+          <div className="space-y-4 p-6">
             <DialogHeader>
               <DialogTitle>Sign in to request viewings</DialogTitle>
               <DialogDescription>
@@ -310,142 +299,106 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
               </DialogDescription>
             </DialogHeader>
             <Button asChild className="w-full"><Link to="/auth">Sign in</Link></Button>
-          </>
+          </div>
         ) : (
           <>
-            <DialogHeader>
+            <DialogHeader className="shrink-0 space-y-1 border-b p-4 text-left sm:p-6 sm:pb-4">
               <DialogTitle>Request viewings</DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-xs sm:text-sm">
                 We contact each agent for you and come back with the times that are
-                free. You never deal with them, and they never get your number.
+                free. They never get your number.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-6 sm:grid-cols-2">
-              {/* ── Which places ───────────────────────────────────────── */}
-              <section className="min-w-0">
-                <div className="mb-2 flex items-baseline justify-between gap-2">
-                  <h3 className="text-sm font-medium">Which places?</h3>
-                  <span className="text-xs text-muted-foreground">
-                    {count} of {MAX_SHORTLIST} selected
-                  </span>
-                </div>
-
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+              {/* ── 1. Places ────────────────────────────────────────── */}
+              <Step
+                n={1}
+                title="Which places?"
+                hint={
+                  full
+                    ? `That is ${MAX_SHORTLIST} - as many as fit in one day.`
+                    : `Tick up to ${MAX_SHORTLIST}. One viewing request each.`
+                }
+              >
                 {choices.length === 0 ? (
-                  <p className="rounded border border-dashed p-4 text-sm text-muted-foreground">
-                    Nothing to request yet. Match a few places first and they will
-                    show up here.
+                  <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    No matches yet. Match a few places and they will show up here.
                   </p>
                 ) : (
-                  <ScrollArea className="h-[19rem] rounded-md border">
-                    <ul className="divide-y">
-                      {choices.map(c => (
+                  <ul className="space-y-1.5">
+                    {choices.map(c => {
+                      const blocked = !c.selected && full;
+                      return (
                         <li key={c.id}>
-                          <button
-                            type="button"
-                            onClick={() => toggleChoice(c)}
-                            aria-pressed={c.selected}
-                            disabled={!c.selected && full}
+                          <label
                             className={cn(
-                              'flex w-full items-center gap-3 p-2 text-left transition-colors',
-                              c.selected ? 'bg-primary/5' : 'hover:bg-muted/60',
-                              !c.selected && full && 'cursor-not-allowed opacity-50',
+                              'flex cursor-pointer items-center gap-3 rounded-md border p-2 transition-colors',
+                              c.selected ? 'border-primary/40 bg-primary/5' : 'hover:bg-muted/50',
+                              blocked && 'cursor-not-allowed opacity-50',
                             )}
                           >
+                            <Checkbox
+                              checked={c.selected}
+                              disabled={blocked}
+                              onCheckedChange={() => toggleChoice(c)}
+                              aria-label={c.title}
+                            />
                             {c.imageUrl
                               ? <img src={c.imageUrl} alt="" className="h-11 w-14 shrink-0 rounded object-cover" />
-                              : <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
+                              : <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
                                   <ImageOff className="h-4 w-4 text-muted-foreground" />
-                                </div>}
+                                </span>}
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm">{c.title}</span>
-                              {c.location && (
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {c.location}
-                                </span>
-                              )}
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {c.pinned ? 'The place you opened this from' : c.location ?? 'From your matches'}
+                              </span>
                             </span>
-                            <span
-                              className={cn(
-                                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border',
-                                c.selected
-                                  ? 'border-primary bg-primary text-primary-foreground'
-                                  : 'border-muted-foreground/40',
-                              )}
-                            >
-                              {c.selected && <Check className="h-3 w-3" />}
-                            </span>
-                          </button>
+                          </label>
                         </li>
-                      ))}
-                    </ul>
-                  </ScrollArea>
-                )}
-
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {full
-                    ? `That is ${MAX_SHORTLIST} - as many as fit in one day.`
-                    : count === 0
-                      ? 'Pick at least one.'
-                      : `You can add up to ${MAX_SHORTLIST - count} more for the same visit.`}
-                </p>
-              </section>
-
-              {/* ── When ───────────────────────────────────────────────── */}
-              <section className="min-w-0">
-                <h3 className="mb-1 text-sm font-medium">When are you free?</h3>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  We need two days to reach the agents, so the soonest is{' '}
-                  {prettyDate(earliest)}.
-                </p>
-
-                {/* Only the days that can be requested. A month grid spent two
-                    thirds of itself on dates nobody could choose. */}
-                <ScrollArea className="rounded-md border">
-                  <div className="grid grid-cols-4 gap-1.5 p-2 sm:grid-cols-5">
-                    {days.map(date => {
-                      const p = partsOf(date);
-                      const on = chosenDates.includes(date);
-                      return (
-                        <button
-                          key={date}
-                          type="button"
-                          onClick={() => toggleDay(date)}
-                          aria-pressed={on}
-                          className={cn(
-                            'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors',
-                            on
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'hover:bg-muted',
-                          )}
-                        >
-                          <span className="text-[10px] uppercase opacity-80">{p.weekday}</span>
-                          <span className="text-sm font-semibold leading-tight">{p.day}</span>
-                          <span className="text-[10px] opacity-80">{p.month}</span>
-                        </button>
                       );
                     })}
-                  </div>
-                </ScrollArea>
+                  </ul>
+                )}
+              </Step>
 
-                {chosenDates.length === 0 ? (
-                  <p className="mt-3 rounded border border-dashed p-3 text-sm text-muted-foreground">
-                    Pick a day above, then the times that suit.
-                  </p>
-                ) : (
+              <Separator />
+
+              {/* ── 2. When ──────────────────────────────────────────── */}
+              <Step
+                n={2}
+                title="When are you free?"
+                hint={`We need two days to reach the agents, so the soonest is ${prettyDate(earliest)}.`}
+              >
+                <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
+                  {days.map(date => {
+                    const p = partsOf(date);
+                    const on = chosenDates.includes(date);
+                    return (
+                      <button
+                        key={date}
+                        type="button"
+                        onClick={() => toggleDay(date)}
+                        aria-pressed={on}
+                        className={cn(
+                          'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors',
+                          on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
+                        )}
+                      >
+                        <span className="text-[10px] uppercase opacity-80">{p.weekday}</span>
+                        <span className="text-sm font-semibold leading-tight">{p.day}</span>
+                        <span className="text-[10px] opacity-80">{p.month}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {chosenDates.length > 0 && (
                   <ul className="mt-3 space-y-2">
                     {chosenDates.map(date => (
                       <li key={date} className="rounded-md border p-2">
-                        <div className="mb-1.5 flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium">{prettyDate(date)}</span>
-                          <Button
-                            type="button" size="icon" variant="ghost" className="h-7 w-7"
-                            aria-label={`Remove ${prettyDate(date)}`}
-                            onClick={() => setPicked(prev => prev.filter(w => w.date !== date))}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <div className="mb-1.5 text-sm font-medium">{prettyDate(date)}</div>
                         <div className="grid grid-cols-3 gap-1.5">
                           {DAY_PARTS.map(part => {
                             const on = picked.some(w => w.date === date && w.part === part);
@@ -458,9 +411,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                                 onClick={() => toggleWindow(date, part)}
                                 className={cn(
                                   'flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[11px] transition-colors',
-                                  on
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'hover:bg-muted',
+                                  on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
                                 )}
                               >
                                 <Icon className="h-3.5 w-3.5" />
@@ -473,58 +424,66 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                     ))}
                   </ul>
                 )}
+              </Step>
 
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {picked.length} of {MAX_WINDOWS} time windows
-                </p>
-              </section>
+              <Separator />
+
+              {/* ── 3. You ───────────────────────────────────────────── */}
+              <Step
+                n={3}
+                title="Where do we reach you?"
+                hint={
+                  identity && (identity.name || identity.phone) && !touched.name && !touched.phone
+                    ? 'Using the details on your account - edit either if you would rather we used something else.'
+                    : undefined
+                }
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="rv-name" className="text-xs">Your name</Label>
+                    <Input
+                      id="rv-name" value={name} placeholder="Minh"
+                      onChange={e => { setTouched(t => ({ ...t, name: true })); setName(e.target.value); }}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="rv-phone" className="text-xs">WhatsApp number</Label>
+                    <Input
+                      id="rv-phone" value={phone} placeholder="0901 234 567" inputMode="tel"
+                      onChange={e => { setTouched(t => ({ ...t, phone: true })); setPhone(e.target.value); }}
+                    />
+                  </div>
+                </div>
+              </Step>
             </div>
 
-            {/* ── Who ──────────────────────────────────────────────────── */}
-            {identity && (identity.name || identity.phone) && !touched.name && !touched.phone && (
-              <p className="text-xs text-muted-foreground">
-                Using the details on your account - edit either if you would rather we
-                used something else.
+            {/* ── Footer: always reachable ───────────────────────────── */}
+            <div className="shrink-0 space-y-2 border-t bg-background p-4 sm:p-6 sm:pt-4">
+              {shortOnCredits ? (
+                <p className="text-sm text-amber-700">
+                  This needs {count} viewing request{count === 1 ? '' : 's'} and you have{' '}
+                  {credits}. Untick a place, or top up.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {count} place{count === 1 ? '' : 's'} · {picked.length} of {MAX_WINDOWS} time
+                  window{picked.length === 1 ? '' : 's'}
+                  {quota ? ` · uses ${count} of your ${credits} viewing requests` : ''}
+                </p>
+              )}
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button className="w-full" disabled={!canSubmit} onClick={submit}>
+                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {count === 0
+                  ? 'Pick a place'
+                  : picked.length === 0
+                    ? 'Pick a time'
+                    : `Request ${count} viewing${count === 1 ? '' : 's'}`}
+              </Button>
+              <p className="text-center text-[11px] text-muted-foreground">
+                Nothing is arranged yet. We confirm with each agent first.
               </p>
-            )}
-            <section className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="rv-name">Your name</Label>
-                <Input
-                  id="rv-name" value={name} placeholder="Minh"
-                  onChange={e => { setTouched(t => ({ ...t, name: true })); setName(e.target.value); }}
-                />
-              </div>
-              <div>
-                <Label htmlFor="rv-phone">WhatsApp number</Label>
-                <Input
-                  id="rv-phone" value={phone}
-                  onChange={e => { setTouched(t => ({ ...t, phone: true })); setPhone(e.target.value); }}
-                  placeholder="0901 234 567" inputMode="tel"
-                />
-              </div>
-            </section>
-
-            {quota && !shortOnCredits && count > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Uses {count} of your {credits} viewing request{credits === 1 ? '' : 's'} - one per place.
-              </p>
-            )}
-            {shortOnCredits && (
-              <p className="text-sm text-amber-700">
-                This covers {count} place{count === 1 ? '' : 's'} and needs {count} viewing
-                request{count === 1 ? '' : 's'} - you have {credits}. Remove a place, or top up.
-              </p>
-            )}
-            {error && <p className="text-sm text-destructive">{error}</p>}
-
-            <Button className="w-full" disabled={!canSubmit} onClick={submit}>
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Request {count || ''} viewing{count === 1 ? '' : 's'}
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              Nothing is arranged yet. We confirm with each agent first.
-            </p>
+            </div>
           </>
         )}
       </DialogContent>

@@ -18,10 +18,9 @@ import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { shareProperty } from '@/utils/shareProperty';
-import { ArrowLeft, Loader2, LogIn, Share2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Share2 } from 'lucide-react';
 import { Apartment, UserPreferences } from '@/types';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
-import { Card, CardContent } from '@/components/ui/card';
 import { dbToPreferences, hasMeaningfulPreferences } from '@/lib/preferences';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -424,23 +423,11 @@ const PropertyDetail = () => {
             isRelist={isRelist}
           />
 
-          {!user && (
-            <Card className="mt-4 max-w-[760px] mx-auto">
-              <CardContent className="pt-6">
-                <div className="text-center">
-                  {/* The button says what it is for, so the line above it was
-                      saying the same thing twice. */}
-                  <Button
-                    onClick={() => navigate('/auth')}
-                    className="w-full"
-                  >
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Sign in to book viewing
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* No second CTA here. The card's "Request viewing" is the only one,
+              and the modal it opens asks a signed-out visitor to sign in - so a
+              separate "Sign in to book viewing" button was a second button for
+              the same job, one step earlier, in vocabulary invariant 6 forbids
+              before a request is CONFIRMED. */}
         </main>
         </div>
 
