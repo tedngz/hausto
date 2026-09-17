@@ -56,7 +56,7 @@ const PassSuccess = () => {
         setStatus('success');
         toast.success(
           data?.kind === 'topup'
-            ? 'Top-up added - 2 more viewing coordination! 🎉'
+            ? 'Top-up added - 2 more viewing requests! 🎉'
             : 'Your Hausto Pass is live - 30 days from now! 🎉',
         );
       } catch (err) {
@@ -86,8 +86,8 @@ const PassSuccess = () => {
             </h1>
             <p className="text-muted-foreground mb-6">
               {kind === 'topup'
-                ? '2 more viewing coordination are on your account. They run until your pass ends.'
-                : 'Deep vibe analysis, unlimited AI and 3 viewing coordination, for the next 30 days.'}
+                ? '2 more viewing requests are on your account. They run until your pass ends.'
+                : 'Deep vibe analysis, unlimited AI and 3 viewing requests, for the next 30 days.'}
             </p>
             <Button onClick={() => navigate('/hub')} size="lg">
               Back to your search

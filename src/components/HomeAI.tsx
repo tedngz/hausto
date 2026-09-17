@@ -1300,7 +1300,7 @@ export const HomeAI = ({
                   ? 'Your first viewing is on us'
                   : canFastTrack
                     ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
-                    : 'Hausto books the viewings for you'}
+                    : 'Hausto arranges the viewings for you'}
               </p>
               <p className="text-xs text-muted-foreground leading-tight mt-0.5">
                 {canFastTrack
