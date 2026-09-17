@@ -1,38 +1,33 @@
 // One way to ask for a viewing (CLAUDE.md invariant 8).
 //
-// Replaces two buttons that sat side by side on every card - "Shortlist" and
-// "Book viewing" - which asked the renter to care about a distinction that was
-// ours, not theirs: one built a list, the other opened a scheduler, and both
-// ended in somebody visiting a flat.
+// Two design calls worth knowing about, because both replaced something that
+// looked reasonable:
 //
-// Three rules it exists to hold:
+// **One list, not two.** There used to be a "Places" list of what you had
+// picked and a separate "From your matches" list of what you could add. Same
+// job, twice, and the second one said "Nothing else matched yet" precisely
+// when the first was full - which reads as an error rather than as "you have
+// everything". Now there is a single list: everything you could request, with
+// the chosen ones marked.
 //
-// 1. **An itinerary is one day.** Up to five places (MAX_ITEMS), enforced here
-//    and again in `validateShortlist` on the server. One is a perfectly good
-//    request; the matches picker is here to make adding a second easy, not to
-//    make the first conditional on it.
-//
-// 2. **Today and tomorrow are never bookable** (MIN_LEAD_DAYS, invariant 7).
-//    The calendar disables them rather than letting the server refuse after
-//    the form is filled in.
-//
-// 3. **One credit per property, not per request.** A fourth place costs the
-//    same as requesting it alone, because it is the same hour of somebody's
-//    time either way.
+// **A day strip, not a month grid.** The window is MIN_LEAD_DAYS to
+// MAX_DAYS_AHEAD - thirteen days. A month view spent two thirds of its cells
+// on disabled dates, offered navigation to months where nothing is selectable,
+// and highlighted today, which is never bookable, in a style that reads as
+// selected. The strip shows the days you can actually pick and nothing else.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { Check, ImageOff, Loader2, Plus, X } from 'lucide-react';
+import { Check, ImageOff, Loader2, Sun, Sunrise, Sunset, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
@@ -58,6 +53,12 @@ const PART_LABEL: Record<DayPart, string> = {
   EVENING: 'Evening',
 };
 
+const PART_ICON: Record<DayPart, typeof Sun> = {
+  MORNING: Sunrise,
+  AFTERNOON: Sun,
+  EVENING: Sunset,
+};
+
 export interface RequestSeed {
   listingId: string;
   title: string;
@@ -76,25 +77,29 @@ interface Submitted {
   waLink: string;
 }
 
-/** A match the renter can actually request. */
-interface Offerable {
+/** A place the renter can put in the request. */
+interface Choice {
   id: string;
   title: string;
   location: string | null;
   imageUrl: string | null;
+  selected: boolean;
 }
 
-/** Calendar days are local dates; never let a timezone decide the boundary. */
-function toIsoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** "2026-09-19" -> { weekday: "Sat", day: "19", month: "Sept" } */
+function partsOf(iso: string) {
+  const d = new Date(`${iso}T00:00:00`);
+  return {
+    weekday: d.toLocaleDateString('en-GB', { weekday: 'short' }),
+    day: d.toLocaleDateString('en-GB', { day: 'numeric' }),
+    month: d.toLocaleDateString('en-GB', { month: 'short' }),
+  };
 }
 
-/** "2026-09-19" -> "Sat 19 Sept", in the renter's city. */
-function prettyDate(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short',
-  });
-}
+const prettyDate = (iso: string) => {
+  const p = partsOf(iso);
+  return `${p.weekday} ${p.day} ${p.month}`;
+};
 
 export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const { user } = useAuth();
@@ -105,17 +110,11 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  // Whether the renter has touched each field. Prefill fills what they have not
-  // typed in; it never reaches back over an edit, because the identity query
-  // can resolve after they have started typing and would otherwise overwrite
-  // them mid-word.
-  const [touched, setTouched] = useState<{ name: boolean; phone: boolean }>({
-    name: false, phone: false,
-  });
   const [picked, setPicked] = useState<AvailabilityWindow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
+  const [touched, setTouched] = useState({ name: false, phone: false });
 
   // Seeding on open rather than on mount: the modal is rendered by whichever
   // card holds it, and a card nobody clicked must not add its listing.
@@ -126,15 +125,11 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
       listingId: seed.listingId, title: seed.title, imageUrl: seed.imageUrl ?? null,
     });
     if (!r.ok) toast.error(r.error ?? 'That request is already full.');
-    // Only when the dialog opens. shortlist changes on every add and would
-    // otherwise re-run this and fight the renter removing the seeded card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seed?.listingId]);
 
-  // Seed from what we already know. A returning renter should not retype their
-  // own number, and someone requesting for a partner should not have to fight
-  // a form that keeps knowing better - so this only ever fills a field the
-  // renter has left alone.
+  // Prefill fills only a field the renter has left alone: the identity query
+  // can resolve after they start typing and must not overwrite them mid-word.
   useEffect(() => {
     if (!identity) return;
     setName(prev => (touched.name || prev ? prev : identity.name));
@@ -143,87 +138,116 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
 
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
-  const latest = addDays(today, MAX_DAYS_AHEAD);
+
+  /** Every day that can actually be requested. Thirteen of them. */
+  const days = useMemo(() => {
+    const out: string[] = [];
+    for (let i = MIN_LEAD_DAYS; i <= MAX_DAYS_AHEAD; i++) out.push(addDays(today, i));
+    return out;
+  }, [today]);
 
   const chosenDates = useMemo(
     () => [...new Set(picked.map(w => w.date))].sort(),
     [picked],
   );
 
-  const selectedIds = useMemo(
-    () => new Set(shortlist.entries.map(e => e.listingId)),
-    [shortlist.entries],
-  );
-
   /**
-   * Matches the renter can actually request.
+   * One list: what is in the request, plus the matches that could be.
    *
-   * **External only.** The viewing flow requests against `external_properties`;
-   * an internal listing has its own path, and `screenCandidates` rejects one on
-   * submit. Offering it here would mean the renter picks a place, fills in the
-   * form, and is told no - which is a worse failure than never offering it.
+   * **External only.** The viewing flow requests against `external_properties`
+   * and `screenCandidates` rejects anything else on submit, so offering an
+   * internal match would mean the renter picks it, fills in the form, and is
+   * refused.
    *
-   * No price. `properties.price` is the raw column, which carries USD for
-   * housingsgn rows and only its magnitude says which (SPEC §0) - rendering it
-   * would tell a renter a $730 flat costs 730 ₫. The canonical `price_vnd` is
-   * a per-listing read, and twelve of those to decorate a picker is not worth
-   * it. The card they came from showed the price; this is a reminder of which
-   * place, not a listing page.
+   * **No price.** `properties.price` is the raw column carrying USD for
+   * housingsgn rows (SPEC §0), so rendering it would tell a renter a $730 flat
+   * costs 730 ₫. The canonical `price_vnd` is a per-listing read and a dozen of
+   * those to decorate a picker is not worth it; the card they came from showed
+   * the price.
+   *
+   * Chosen places come first, and a seeded listing that is not among their
+   * matches still appears - it is in the request, so it has to be visible and
+   * removable.
    */
-  const offerable = useMemo<Offerable[]>(() => {
+  const choices = useMemo<Choice[]>(() => {
     type Match = {
       property_type?: string;
       properties?: { id?: string; title?: string; location?: string; images?: string[] | null } | null;
     };
-    return ((renterMatches ?? []) as Match[])
+    const fromMatches = ((renterMatches ?? []) as Match[])
       .filter(m => m.property_type === 'external')
       .map(m => m.properties)
       .filter((p): p is NonNullable<Match['properties']> & { id: string; title: string } =>
-        !!p?.id && !!p?.title && !selectedIds.has(p.id))
+        !!p?.id && !!p?.title);
+
+    const seen = new Set<string>();
+    const chosen: Choice[] = shortlist.entries.map(e => {
+      seen.add(e.listingId);
+      const m = fromMatches.find(p => p.id === e.listingId);
+      return {
+        id: e.listingId,
+        title: e.title,
+        location: m?.location ?? null,
+        imageUrl: e.imageUrl ?? m?.images?.[0] ?? null,
+        selected: true,
+      };
+    });
+
+    const rest: Choice[] = fromMatches
+      .filter(p => !seen.has(p.id))
       .map(p => ({
         id: p.id,
         title: p.title,
         location: p.location ?? null,
         imageUrl: p.images?.[0] ?? null,
+        selected: false,
       }));
-  }, [renterMatches, selectedIds]);
+
+    return [...chosen, ...rest];
+  }, [renterMatches, shortlist.entries]);
 
   const count = shortlist.entries.length;
   const credits = quota?.remaining ?? 0;
   const shortOnCredits = !!quota && credits < count;
   const full = count >= MAX_SHORTLIST;
 
+  const toggleChoice = (c: Choice) => {
+    if (!c.selected && full) {
+      toast.error(`${MAX_SHORTLIST} places is as many as fit in one day.`);
+      return;
+    }
+    const r = shortlist.toggle({ listingId: c.id, title: c.title, imageUrl: c.imageUrl });
+    if (!r.ok) toast.error(r.error ?? 'That request is full.');
+  };
+
+  const toggleDay = (date: string) => {
+    setPicked(prev => {
+      if (prev.some(w => w.date === date)) return prev.filter(w => w.date !== date);
+      if (prev.length >= MAX_WINDOWS) {
+        toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
+        return prev;
+      }
+      // A date carrying no part means nothing to an operator, so choosing a day
+      // opts into the morning and lets the renter widen or move it.
+      return [...prev, { date, part: 'MORNING' }];
+    });
+  };
+
   const toggleWindow = (date: string, part: DayPart) => {
     setPicked(prev => {
       const exists = prev.some(w => w.date === date && w.part === part);
-      if (exists) return prev.filter(w => !(w.date === date && w.part === part));
+      if (exists) {
+        const left = prev.filter(w => !(w.date === date && w.part === part));
+        // Removing the last part of a day removes the day: an operator cannot
+        // act on "Saturday, no times".
+        return left;
+      }
       if (prev.length >= MAX_WINDOWS) {
         toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
         return prev;
       }
       return [...prev, { date, part }];
     });
-  };
-
-  const addDate = (d?: Date) => {
-    if (!d) return;
-    const iso = toIsoDate(d);
-    if (chosenDates.includes(iso)) {
-      setPicked(prev => prev.filter(w => w.date !== iso));
-      return;
-    }
-    if (picked.length >= MAX_WINDOWS) {
-      toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
-      return;
-    }
-    // A date with no part chosen means nothing to an operator, so picking a day
-    // opts into the morning and lets the renter widen or move it.
-    setPicked(prev => [...prev, { date: iso, part: 'MORNING' }]);
-  };
-
-  const addMatch = (p: Offerable) => {
-    const r = shortlist.toggle({ listingId: p.id, title: p.title, imageUrl: p.imageUrl });
-    if (!r.ok) toast.error(r.error ?? 'That request is full.');
   };
 
   const submit = async () => {
@@ -252,8 +276,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
 
   const close = () => {
     onOpenChange(false);
-    // Reset only after a completed request: a renter who closed by accident
-    // mid-form should find their dates still there.
     if (submitted) { setSubmitted(null); setPicked([]); }
   };
 
@@ -299,155 +321,151 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
               </DialogDescription>
             </DialogHeader>
 
-            {/* Two columns from sm up, stacked on a phone. The calendar is the
-                widest thing here and drove the layout: side by side it fits
-                without shrinking, stacked it gets the full width. */}
             <div className="grid gap-6 sm:grid-cols-2">
-              {/* ── Places ─────────────────────────────────────────────── */}
+              {/* ── Which places ───────────────────────────────────────── */}
               <section className="min-w-0">
                 <div className="mb-2 flex items-baseline justify-between gap-2">
-                  <h3 className="text-sm font-medium">Places</h3>
+                  <h3 className="text-sm font-medium">Which places?</h3>
                   <span className="text-xs text-muted-foreground">
-                    {count} of {MAX_SHORTLIST}
+                    {count} of {MAX_SHORTLIST} selected
                   </span>
                 </div>
 
-                {count === 0 ? (
-                  <p className="rounded border border-dashed p-3 text-sm text-muted-foreground">
-                    Pick at least one place below.
+                {choices.length === 0 ? (
+                  <p className="rounded border border-dashed p-4 text-sm text-muted-foreground">
+                    Nothing to request yet. Match a few places first and they will
+                    show up here.
                   </p>
                 ) : (
-                  <ul className="space-y-2">
-                    {shortlist.entries.map(e => (
-                      <li key={e.listingId} className="flex items-center gap-2 rounded border p-2">
-                        {e.imageUrl
-                          ? <img src={e.imageUrl} alt="" className="h-10 w-14 shrink-0 rounded object-cover" />
-                          : <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded bg-muted">
-                              <ImageOff className="h-4 w-4 text-muted-foreground" />
-                            </div>}
-                        <span className="min-w-0 flex-1 truncate text-sm">{e.title}</span>
-                        <Button
-                          type="button" size="icon" variant="ghost"
-                          aria-label={`Remove ${e.title}`}
-                          onClick={() => shortlist.remove(e.listingId)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {count > 0 && !full && (
-                  // An invitation, not a requirement. Seeing several in one trip
-                  // is better for the renter and it is the operator's round
-                  // either way - but a request for one is a real request.
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    You can add up to {MAX_SHORTLIST - count} more for the same visit.
-                  </p>
-                )}
-
-                {/* ── From your matches ───────────────────────────────── */}
-                <div className="mt-4">
-                  <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    From your matches
-                  </h4>
-                  {offerable.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {count > 0
-                        ? 'Nothing else matched yet.'
-                        : 'No matches yet - browse and match a few places first.'}
-                    </p>
-                  ) : (
-                    <ScrollArea className="h-48 rounded border">
-                      <ul className="divide-y">
-                        {offerable.map(p => (
-                          <li key={p.id} className="flex items-center gap-2 p-2">
-                            {p.imageUrl
-                              ? <img src={p.imageUrl} alt="" className="h-10 w-14 shrink-0 rounded object-cover" />
-                              : <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded bg-muted">
+                  <ScrollArea className="h-[19rem] rounded-md border">
+                    <ul className="divide-y">
+                      {choices.map(c => (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggleChoice(c)}
+                            aria-pressed={c.selected}
+                            disabled={!c.selected && full}
+                            className={cn(
+                              'flex w-full items-center gap-3 p-2 text-left transition-colors',
+                              c.selected ? 'bg-primary/5' : 'hover:bg-muted/60',
+                              !c.selected && full && 'cursor-not-allowed opacity-50',
+                            )}
+                          >
+                            {c.imageUrl
+                              ? <img src={c.imageUrl} alt="" className="h-11 w-14 shrink-0 rounded object-cover" />
+                              : <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
                                   <ImageOff className="h-4 w-4 text-muted-foreground" />
                                 </div>}
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm">{p.title}</div>
-                              {p.location && (
-                                <div className="truncate text-xs text-muted-foreground">{p.location}</div>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm">{c.title}</span>
+                              {c.location && (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {c.location}
+                                </span>
                               )}
-                            </div>
-                            <Button
-                              type="button" size="sm" variant="outline"
-                              disabled={full}
-                              onClick={() => addMatch(p)}
+                            </span>
+                            <span
+                              className={cn(
+                                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border',
+                                c.selected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-muted-foreground/40',
+                              )}
                             >
-                              <Plus className="mr-1 h-3 w-3" /> Add
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    </ScrollArea>
-                  )}
-                  {full && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      That is {MAX_SHORTLIST} - as many as fit in one day.
-                    </p>
-                  )}
-                </div>
+                              {c.selected && <Check className="h-3 w-3" />}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
+                )}
+
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {full
+                    ? `That is ${MAX_SHORTLIST} - as many as fit in one day.`
+                    : count === 0
+                      ? 'Pick at least one.'
+                      : `You can add up to ${MAX_SHORTLIST - count} more for the same visit.`}
+                </p>
               </section>
 
               {/* ── When ───────────────────────────────────────────────── */}
               <section className="min-w-0">
                 <h3 className="mb-1 text-sm font-medium">When are you free?</h3>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  Tap dates, then the times that suit. We need two days to reach the
-                  agents, so the soonest is {prettyDate(earliest)}.
+                  We need two days to reach the agents, so the soonest is{' '}
+                  {prettyDate(earliest)}.
                 </p>
 
-                {/* The calendar sizes to its column instead of a fixed width,
-                    which is what made it overflow on a phone. */}
-                <div className="flex justify-center">
-                  <Calendar
-                    mode="multiple"
-                    selected={chosenDates.map(d => new Date(`${d}T00:00:00`))}
-                    onDayClick={addDate}
-                    disabled={{
-                      before: new Date(`${earliest}T00:00:00`),
-                      after: new Date(`${latest}T00:00:00`),
-                    }}
-                    className="w-full max-w-[19rem] rounded-md border p-2"
-                  />
-                </div>
+                {/* Only the days that can be requested. A month grid spent two
+                    thirds of itself on dates nobody could choose. */}
+                <ScrollArea className="rounded-md border">
+                  <div className="grid grid-cols-4 gap-1.5 p-2 sm:grid-cols-5">
+                    {days.map(date => {
+                      const p = partsOf(date);
+                      const on = chosenDates.includes(date);
+                      return (
+                        <button
+                          key={date}
+                          type="button"
+                          onClick={() => toggleDay(date)}
+                          aria-pressed={on}
+                          className={cn(
+                            'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors',
+                            on
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'hover:bg-muted',
+                          )}
+                        >
+                          <span className="text-[10px] uppercase opacity-80">{p.weekday}</span>
+                          <span className="text-sm font-semibold leading-tight">{p.day}</span>
+                          <span className="text-[10px] opacity-80">{p.month}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
 
                 {chosenDates.length === 0 ? (
                   <p className="mt-3 rounded border border-dashed p-3 text-sm text-muted-foreground">
-                    No dates yet. Tap one above.
+                    Pick a day above, then the times that suit.
                   </p>
                 ) : (
                   <ul className="mt-3 space-y-2">
                     {chosenDates.map(date => (
-                      <li key={date} className="rounded border p-2">
-                        <div className="mb-2 flex items-center justify-between gap-2">
+                      <li key={date} className="rounded-md border p-2">
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
                           <span className="text-sm font-medium">{prettyDate(date)}</span>
                           <Button
-                            type="button" size="icon" variant="ghost"
+                            type="button" size="icon" variant="ghost" className="h-7 w-7"
                             aria-label={`Remove ${prettyDate(date)}`}
                             onClick={() => setPicked(prev => prev.filter(w => w.date !== date))}
                           >
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-3 gap-1.5">
                           {DAY_PARTS.map(part => {
                             const on = picked.some(w => w.date === date && w.part === part);
+                            const Icon = PART_ICON[part];
                             return (
-                              <Button
-                                key={part} type="button" size="sm"
-                                variant={on ? 'default' : 'outline'}
+                              <button
+                                key={part}
+                                type="button"
                                 aria-pressed={on}
                                 onClick={() => toggleWindow(date, part)}
+                                className={cn(
+                                  'flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[11px] transition-colors',
+                                  on
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'hover:bg-muted',
+                                )}
                               >
-                                {on && <Check className="mr-1 h-3 w-3" />}
+                                <Icon className="h-3.5 w-3.5" />
                                 {PART_LABEL[part]}
-                              </Button>
+                              </button>
                             );
                           })}
                         </div>
@@ -455,6 +473,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                     ))}
                   </ul>
                 )}
+
                 <p className="mt-2 text-xs text-muted-foreground">
                   {picked.length} of {MAX_WINDOWS} time windows
                 </p>
@@ -488,8 +507,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
 
             {quota && !shortOnCredits && count > 0 && (
               <p className="text-xs text-muted-foreground">
-                Uses {count} of your {credits} viewing request{credits === 1 ? '' : 's'}.
-                <Badge variant="secondary" className="ml-2">one per place</Badge>
+                Uses {count} of your {credits} viewing request{credits === 1 ? '' : 's'} - one per place.
               </p>
             )}
             {shortOnCredits && (
