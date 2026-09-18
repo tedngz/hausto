@@ -200,6 +200,7 @@ describe('no three in a row', () => {
 
   it('applies to templates too', async () => {
     // Otherwise the rule is trivially escapable by sending templates instead.
+    const wasApproved = TEMPLATES.REQUEST_RECEIVED.approved;
     TEMPLATES.REQUEST_RECEIVED.approved = true;
     try {
       await sendFreeForm(store, adapter, { renterId: 'r1', purpose: 'a', body: 'x', now: NOW });
@@ -213,7 +214,7 @@ describe('no three in a row', () => {
         }),
       ).rejects.toBeInstanceOf(ConsecutiveMessageError);
     } finally {
-      TEMPLATES.REQUEST_RECEIVED.approved = false;
+      TEMPLATES.REQUEST_RECEIVED.approved = wasApproved;
     }
   });
 });
@@ -226,21 +227,30 @@ describe('templates', () => {
     expect(store.messages).toHaveLength(0);
   });
 
-  it('refuses a registered template that Meta has not approved yet', async () => {
-    // Every template ships unapproved. Sending one would be rejected at Meta's
-    // end after we had already written a row claiming success.
-    expect(TEMPLATES.ITINERARY_READY.approved).toBe(false);
-    await expect(
-      sendTemplate(store, adapter, {
-        renterId: 'r1',
-        purpose: 'p',
-        templateName: 'itinerary_ready',
-        params: ['a', 'b', 'c'],
-      }),
-    ).rejects.toBeInstanceOf(UnapprovedTemplateError);
+  it('refuses a registered template the code flag has not approved', async () => {
+    // Sending one would be rejected at Meta's end after we had already written
+    // a row claiming success. This used to assert that ITINERARY_READY ships
+    // unapproved, which was true until Meta approved the five - it documented
+    // the state of the rollout rather than the rule. The rule is what the flag
+    // does, so the test now arranges the flag it needs.
+    const was = TEMPLATES.ITINERARY_READY.approved;
+    TEMPLATES.ITINERARY_READY.approved = false;
+    try {
+      await expect(
+        sendTemplate(store, adapter, {
+          renterId: 'r1',
+          purpose: 'p',
+          templateName: 'itinerary_ready',
+          params: ['a', 'b', 'c'],
+        }),
+      ).rejects.toBeInstanceOf(UnapprovedTemplateError);
+    } finally {
+      TEMPLATES.ITINERARY_READY.approved = was;
+    }
   });
 
   it('checks the parameter count', async () => {
+    const wasApproved = TEMPLATES.REQUEST_RECEIVED.approved;
     TEMPLATES.REQUEST_RECEIVED.approved = true;
     try {
       await expect(
@@ -252,12 +262,13 @@ describe('templates', () => {
         }),
       ).rejects.toThrow(/expects 3 params/);
     } finally {
-      TEMPLATES.REQUEST_RECEIVED.approved = false;
+      TEMPLATES.REQUEST_RECEIVED.approved = wasApproved;
     }
   });
 
   it('sends with the window shut, which is the point of a template', async () => {
     const closed = new FakeStore({ service_window_expires_at: null });
+    const wasApproved = TEMPLATES.REQUEST_RECEIVED.approved;
     TEMPLATES.REQUEST_RECEIVED.approved = true;
     try {
       const res = await sendTemplate(closed, adapter, {
@@ -269,7 +280,7 @@ describe('templates', () => {
       expect(res.message.status).toBe('SENT');
       expect(res.message.template_name).toBe('request_received');
     } finally {
-      TEMPLATES.REQUEST_RECEIVED.approved = false;
+      TEMPLATES.REQUEST_RECEIVED.approved = wasApproved;
     }
   });
 });
@@ -317,6 +328,7 @@ describe('the live template gate', () => {
   it('refuses a code-approved template that Meta has since paused', async () => {
     // The failure a code flag can never catch: approval is not permanent. Meta
     // pauses templates whose quality drops, and the flag stays true through it.
+    const wasApproved = TEMPLATES.REQUEST_RECEIVED.approved;
     TEMPLATES.REQUEST_RECEIVED.approved = true;
     try {
       const store = storeWithStatus('PAUSED');
@@ -329,11 +341,12 @@ describe('the live template gate', () => {
       // And nothing was written: the refusal happens before the row.
       expect(store.messages).toHaveLength(0);
     } finally {
-      TEMPLATES.REQUEST_RECEIVED.approved = false;
+      TEMPLATES.REQUEST_RECEIVED.approved = wasApproved;
     }
   });
 
   it('sends when the code flag and Meta agree', async () => {
+    const wasApproved = TEMPLATES.REQUEST_RECEIVED.approved;
     TEMPLATES.REQUEST_RECEIVED.approved = true;
     try {
       const res = await sendTemplate(storeWithStatus('APPROVED'), new MockAdapter(), {
@@ -341,7 +354,7 @@ describe('the live template gate', () => {
       });
       expect(res.message.status).toBe('SENT');
     } finally {
-      TEMPLATES.REQUEST_RECEIVED.approved = false;
+      TEMPLATES.REQUEST_RECEIVED.approved = wasApproved;
     }
   });
 
@@ -349,6 +362,7 @@ describe('the live template gate', () => {
     // A missing row means "not synced", not "disapproved". Refusing on absence
     // would let a cold database block every template send - a worse failure
     // than the one being prevented.
+    const wasApproved = TEMPLATES.REQUEST_RECEIVED.approved;
     TEMPLATES.REQUEST_RECEIVED.approved = true;
     try {
       const res = await sendTemplate(storeWithStatus(null), new MockAdapter(), {
@@ -356,21 +370,28 @@ describe('the live template gate', () => {
       });
       expect(res.message.status).toBe('SENT');
     } finally {
-      TEMPLATES.REQUEST_RECEIVED.approved = false;
+      TEMPLATES.REQUEST_RECEIVED.approved = wasApproved;
     }
   });
 
   it('still refuses when Meta approves but the code flag does not', async () => {
     // The deploy gate survives the sync: Meta approving a template does not
-    // make it sendable on its own.
-    await expect(
-      sendTemplate(storeWithStatus('APPROVED'), new MockAdapter(), {
-        renterId: 'r1', purpose: 'p', templateName: 'itinerary_ready', params: ['a', 'b', 'c'],
-      }),
-    ).rejects.toBeInstanceOf(UnapprovedTemplateError);
+    // make it sendable on its own. Somebody still flips the flag and deploys.
+    const was = TEMPLATES.ITINERARY_READY.approved;
+    TEMPLATES.ITINERARY_READY.approved = false;
+    try {
+      await expect(
+        sendTemplate(storeWithStatus('APPROVED'), new MockAdapter(), {
+          renterId: 'r1', purpose: 'p', templateName: 'itinerary_ready', params: ['a', 'b', 'c'],
+        }),
+      ).rejects.toBeInstanceOf(UnapprovedTemplateError);
+    } finally {
+      TEMPLATES.ITINERARY_READY.approved = was;
+    }
   });
 
   it('works with a store that does not implement the lookup at all', async () => {
+    const wasApproved = TEMPLATES.REQUEST_RECEIVED.approved;
     TEMPLATES.REQUEST_RECEIVED.approved = true;
     try {
       const res = await sendTemplate(new FakeStore(), new MockAdapter(), {
@@ -378,7 +399,7 @@ describe('the live template gate', () => {
       });
       expect(res.message.status).toBe('SENT');
     } finally {
-      TEMPLATES.REQUEST_RECEIVED.approved = false;
+      TEMPLATES.REQUEST_RECEIVED.approved = wasApproved;
     }
   });
 });

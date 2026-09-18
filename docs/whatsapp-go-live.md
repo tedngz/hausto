@@ -233,6 +233,10 @@ the greyed-out button does not say so. That is the step people miss.
 
 ### Once each is approved
 
+**Done, as of 18 September 2026: all five are approved at Meta and all five
+flags are `true`.** The rest of this section is the procedure, kept because a
+rejected resubmission or a paused template puts you back in it.
+
 Flip its flag in `_shared/whatsapp/templates.ts`:
 
 ```ts

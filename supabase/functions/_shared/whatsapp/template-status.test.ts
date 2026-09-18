@@ -134,16 +134,34 @@ describe('the cache rows and the summary', () => {
 });
 
 describe('against the real registry', () => {
-  it('reports every registry template as unsubmitted today, and none as urgent', () => {
-    // Every template ships approved: false, and nothing has been submitted, so
-    // a sync run right now should be entirely quiet.
-    //
-    // Counted from the registry rather than hardcoded: this caught the digest
-    // template being added, which is the right kind of catch but not one worth
-    // re-editing the test for every time.
-    const d = reconcile([]);
-    expect(d).toHaveLength(Object.keys(TEMPLATES).length);
-    expect(d.every(x => x.kind === 'NOT_SUBMITTED')).toBe(true);
+  // Counted from the registry rather than hardcoded: this caught the digest
+  // template being added, which is the right kind of catch but not one worth
+  // re-editing the test for every time.
+  const ALL = Object.keys(TEMPLATES).length;
+
+  it('is silent when Meta agrees every template is approved', () => {
+    // Where the registry now stands: all five approved at Meta and flagged
+    // sendable in code. reconcile reports drift, so agreement is an empty
+    // list - there is nothing to say.
+    const d = reconcile(
+      Object.values(TEMPLATES).map(t => meta(t.name, 'APPROVED', 'GREEN')),
+    );
+    expect(d).toHaveLength(0);
     expect(summarise(d).urgent).toBe(0);
+  });
+
+  it('shouts when the flags say sendable and Meta has never heard of them', () => {
+    // This used to assert the opposite - every template unsubmitted, nothing
+    // urgent - which held while they all shipped approved: false. It
+    // documented the state of the rollout, not a rule.
+    //
+    // The rule it was hiding is the one worth having: a template the code will
+    // send and Meta does not know about fails on the itinerary somebody is
+    // waiting for. With the flags true, an empty Meta response is an
+    // emergency on every one of them, and the sync says so.
+    const d = reconcile([]);
+    expect(d).toHaveLength(ALL);
+    expect(d.every(x => x.kind === 'CODE_AHEAD_OF_META')).toBe(true);
+    expect(summarise(d).urgent).toBe(ALL);
   });
 });
