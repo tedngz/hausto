@@ -25,7 +25,7 @@ export const TEMPLATES = {
     name: 'request_received',
     params: ['renter_name', 'request_ref', 'listing_count'],
     purpose: 'Acknowledges intake. First contact, so there is no open window yet.',
-    approved: false,
+    approved: true,
   },
   ITINERARY_READY: {
     name: 'itinerary_ready',
@@ -33,13 +33,13 @@ export const TEMPLATES = {
     purpose:
       'The consolidated itinerary. One message carrying every confirmed viewing - ' +
       'never one per listing, which is what the 3-in-a-row guard enforces.',
-    approved: false,
+    approved: true,
   },
   VIEWING_REMINDER: {
     name: 'viewing_reminder',
     params: ['renter_name', 'viewing_time', 'listing_address'],
     purpose: 'Day-before reminder, typically outside the window.',
-    approved: false,
+    approved: true,
   },
   WEEKLY_DIGEST: {
     name: 'weekly_digest',
@@ -51,7 +51,7 @@ export const TEMPLATES = {
       'dodge the consent bar gets a WABA restricted rather than a template rejected. It carries a ' +
       'summary, not a list: template parameters are positional and cannot hold a variable-length ' +
       'set of listings. The renter replies, which opens the window, and the detail goes free-form.',
-    approved: false,
+    approved: true,
   },
   NO_SUPPLY_SUBSTITUTES: {
     name: 'no_supply_substitutes',
@@ -59,7 +59,7 @@ export const TEMPLATES = {
     purpose:
       'Nothing on the shortlist could be confirmed. Never sent alone - it carries ' +
       'substitutes, because FAILED_NO_SUPPLY with no alternative is a dead end.',
-    approved: false,
+    approved: true,
   },
 } as const;
 
