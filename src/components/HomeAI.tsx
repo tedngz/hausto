@@ -1008,12 +1008,13 @@ export const HomeAI = ({
 
   return <div className={isRail ? 'w-full h-full flex flex-col min-h-0' : 'w-full max-w-4xl mx-auto mt-4 px-1'}>
       <div className={isRail
-        // Scrolls rather than spills: in the mobile dock (a third of the
-        // viewport) a signed-in renter with pinned listings adds a subject
-        // strip on top of the composer, and on a short phone that is taller
-        // than the sheet. Nothing to scroll while it fits.
-        ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto p-3'
-        : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10'}>
+        // The outer rail/dock container flexes full height but doesn't scroll.
+        // It holds the scrollable thread, and the fixed composer at the bottom.
+        ? 'flex-1 min-h-0 flex flex-col p-3'
+        : 'p-3 md:p-6 glass-card rounded-2xl animate-fade-in relative z-10 flex flex-col'}>
+        
+        {/* Scrollable Conversation Area */}
+        <div className={isRail ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-1' : 'flex flex-col gap-2'}>
       {/* Header — history / new-chat controls. Given a headerPortal they move up
           onto the pane's own "Hausto Agent" heading, which already has a half-empty
           row; without one they sit in normal flow so they reserve their own row
@@ -1277,17 +1278,22 @@ export const HomeAI = ({
                   </Button>
                 </div>
               ) : (
-                <div className="flex justify-start mt-2">
-                  <p className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-secondary/30 text-[11px] text-muted-foreground">
-                    <span>{ANON_SEARCH_LIMIT - anonSearchCount} free {ANON_SEARCH_LIMIT - anonSearchCount === 1 ? 'search' : 'searches'} left today &middot;</span>
-                    <button
-                      className="font-medium hover:text-foreground underline underline-offset-2"
-                      onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
-                    >
-                      Sign in for more
-                    </button>
-                    <span>, and to save what you find.</span>
-                  </p>
+                <div className="flex justify-start mt-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 px-4 py-3 rounded-2xl border border-primary/20 bg-primary/5 text-xs text-muted-foreground w-fit max-w-[85%] sm:max-w-[70%]">
+                    <span className="font-medium text-primary">
+                      {ANON_SEARCH_LIMIT - anonSearchCount} free {ANON_SEARCH_LIMIT - anonSearchCount === 1 ? 'search' : 'searches'} left today
+                    </span>
+                    <span className="hidden sm:inline text-primary/40">&bull;</span>
+                    <span>
+                      <button
+                        className="font-medium text-foreground hover:text-primary underline underline-offset-2 decoration-primary/30"
+                        onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
+                      >
+                        Sign in for more
+                      </button>
+                      , and to save what you find.
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -1348,7 +1354,10 @@ export const HomeAI = ({
           </div>
         </div>
       )}
+      </div>
 
+      {/* Fixed Input Area */}
+      <div className={isRail ? 'shrink-0 flex flex-col pt-2' : 'flex flex-col'}>
       {/* Subject strip: which listings this conversation is about. Sits directly
           above the composer so the scope is visible while typing.
 
@@ -1513,6 +1522,7 @@ export const HomeAI = ({
         )}
 
         </div>}
+      </div>
 
       {/* Listings for the hub's main pane. Rendered through a portal rather
           than lifted into the parent so the like, vibe-score and detail-modal
