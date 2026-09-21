@@ -12,6 +12,7 @@ import {
 } from '../_shared/vibe-policy.ts';
 import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo } from '../_shared/nhatot.ts';
+import { normalizeListingCopy } from '../_shared/listing-language.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -2263,7 +2264,28 @@ Deno.serve(async (req) => {
             const built = buildNhatotListing(ad, listing.url);
             if (!built) return null;
             const images = built.images.map(toFullSizeImageUrl).filter(isValidPropertyImageUrl).slice(0, 12);
-            console.log(`[Phase 2] nhatot ${globalIdx + 1}/${newLinks.length}: ${images.length} image(s), ${built.rooms || 'rooms unknown'}, ${built.priceDisplay}`);
+
+            // The feed hands back the seller's own Vietnamese headline and
+            // advert text. Every other marketplace gets an English rewrite out
+            // of Phase 3 extraction; this is nhatot's equivalent. On failure we
+            // keep the original rather than losing the listing.
+            const copy = await normalizeListingCopy({
+              title: built.title,
+              description: built.description,
+              amenities: built.amenities,
+              location: built.location,
+              rooms: built.rooms,
+              size: built.size,
+              fn: 'scrape-marketplace',
+              sourceUrl: listing.url,
+            });
+            if (copy) {
+              built.title = copy.title;
+              built.description = copy.description;
+              built.amenities = copy.amenities;
+            }
+
+            console.log(`[Phase 2] nhatot ${globalIdx + 1}/${newLinks.length}: ${images.length} image(s), ${built.rooms || 'rooms unknown'}, ${built.priceDisplay}${copy ? ', rewritten in English' : ''}`);
             return {
               id: `external-${marketplace}-${Date.now()}-${globalIdx}`,
               ...built,
