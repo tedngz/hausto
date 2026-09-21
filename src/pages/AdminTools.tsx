@@ -93,6 +93,7 @@ const AdminTools = () => {
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
   const [mirrorRunning, setMirrorRunning] = useState(false);
+  const [languageRunning, setLanguageRunning] = useState(false);
   const [mirrorResult, setMirrorResult] = useState<any>(null);
   const [mirrorStatus, setMirrorStatus] = useState<any>(null);
   const [mirrorStatusLoading, setMirrorStatusLoading] = useState(false);
