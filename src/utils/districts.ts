@@ -55,11 +55,3 @@ export const districtOf = (location: string): string => {
   return withoutCity[withoutCity.length - 1];
 };
 
-/**
- * Compact display form: "District 7" → "D.7", named districts unchanged.
- * Use in tight table columns where space is limited.
- */
-export const districtShort = (district: string): string => {
-  const m = district.match(/^District (\d+)$/i);
-  return m ? `D.${m[1]}` : district;
-};

@@ -26,7 +26,7 @@ import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { getVibeRatingLabel } from '@/utils/vibeRating';
-import { CITY_DISTRICTS, districtOf, districtShort, locationMatchesDistrict } from '@/utils/districts';
+import { CITY_DISTRICTS, districtOf, locationMatchesDistrict } from '@/utils/districts';
 import { ASSISTANT_COMPARE_EVENT, listSubjects, type AssistantCompareDetail } from '@/lib/assistantEvents';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANE_CENTRED, HUB_PANEL_POSITION } from '@/lib/hubLayout';
@@ -604,7 +604,7 @@ export const BrowseTable = ({
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {districtShort(districtOf(r.location))}
+                        {districtOf(r.location)}
                       </TableCell>
                       <TableCell className="text-sm whitespace-nowrap">{r.rooms || '-'}</TableCell>
                       <TableCell className="text-sm whitespace-nowrap">
@@ -788,7 +788,7 @@ export const BrowseTable = ({
                     </button>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <MapPin className="w-3 h-3 flex-shrink-0" />
-                      <span className="line-clamp-1">{districtShort(districtOf(r.location))}</span>
+                      <span className="line-clamp-1">{districtOf(r.location)}</span>
                     </p>
 
     {score && (
