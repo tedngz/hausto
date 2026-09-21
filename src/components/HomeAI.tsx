@@ -1260,23 +1260,37 @@ export const HomeAI = ({
                     <Heart className="w-3.5 h-3.5 shrink-0 text-primary fill-primary" aria-hidden="true" />
                     Like a listing to save it.
                   </p>
+                </div>}
 
-                  {/* Sign-up wall — only once the anonymous search cap is reached */}
-                  {anonLimitReached && (
-                    <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        Sign up to keep searching — your conversation is saved.
-                      </p>
-                      <Button onClick={() => navigate('/auth', {
+              {/* Sign-up wall or Search Limit Tracker */}
+              {anonLimitReached ? (
+                <div className="bg-secondary/20 p-4 rounded-lg animate-fade-in text-center space-y-2 mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Sign up to keep searching — your conversation is saved.
+                  </p>
+                  <Button onClick={() => navigate('/auth', {
                     state: {
                       returnTo: '/hub'
                     }
                   })} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2">
-                        Sign up to keep searching
-                      </Button>
-                    </div>
-                  )}
-                </div>}
+                    Sign up to keep searching
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex justify-start mt-2">
+                  <p className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-secondary/30 text-[11px] text-muted-foreground">
+                    <span>{ANON_SEARCH_LIMIT - anonSearchCount} free {ANON_SEARCH_LIMIT - anonSearchCount === 1 ? 'search' : 'searches'} left today &middot;</span>
+                    <button
+                      className="font-medium hover:text-foreground underline underline-offset-2"
+                      onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
+                    >
+                      Sign in for more
+                    </button>
+                    <span>, and to save what you find.</span>
+                  </p>
+                </div>
+              )}
+
 
               {/* Followup suggestions BELOW results */}
               {(searchResults.blocks || []).some((b: any) => b.type === 'followups') && (
@@ -1431,20 +1445,7 @@ export const HomeAI = ({
           split the slack between them - which is what left a signed-out
           visitor's pin marooned halfway up the pane. */}
       {(user || !anonLimitReached) && <div className={isRail ? `shrink-0 space-y-2 tall:space-y-4 xl:space-y-4${user || subjects.length > 0 ? '' : ' mt-auto'}` : 'space-y-4'}>
-          {/* Signed-out visitors get a few searches before the wall - say how
-              many are left rather than springing it on them. */}
-          {!user && (
-            <p className="text-[11px] text-muted-foreground">
-              {ANON_SEARCH_LIMIT - anonSearchCount} free {ANON_SEARCH_LIMIT - anonSearchCount === 1 ? 'search' : 'searches'} left today &middot;{' '}
-              <button
-                className="underline underline-offset-2 hover:text-foreground"
-                onClick={() => navigate('/auth', { state: { returnTo: '/hub' } })}
-              >
-                Sign in
-              </button>{' '}
-              for more, and to save what you find.
-            </p>
-          )}
+
           <div className="relative">
             <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className={`${isRail ? 'min-h-[68px] tall:min-h-[104px] xl:min-h-[104px]' : 'min-h-[140px] sm:min-h-[104px]'} pr-20 resize-none bg-transparent`} />
           <div className="absolute bottom-3 right-3 flex gap-2">
