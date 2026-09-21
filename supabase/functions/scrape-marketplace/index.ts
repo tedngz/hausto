@@ -13,6 +13,7 @@ import {
 import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo } from '../_shared/nhatot.ts';
 import { looksVietnamese, normalizeListingCopy } from '../_shared/listing-language.ts';
+import { normalizeLocationForEnglishDisplay } from '../_shared/location-language.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -2435,6 +2436,13 @@ Deno.serve(async (req) => {
         property.amenities = copy.amenities;
         console.log(`[listing-language] Rewrote Vietnamese ${marketplace} listing: ${property.sourceUrl}`);
       }));
+    }
+
+    // Store one renter-facing location representation for every source. City
+    // detection has already happened on the source value, so this cannot make
+    // a Vietnamese address harder to place or geocode upstream.
+    for (const property of filteredProperties) {
+      property.location = normalizeLocationForEnglishDisplay(property.location) || property.location;
     }
 
     // Global deduplication to prevent SPA/LLM duplicate clones
