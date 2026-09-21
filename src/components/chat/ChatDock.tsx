@@ -35,7 +35,7 @@ export const RAIL_MIN_VIEWPORT = 1280;
 // open but useless. The ceiling leaves enough of the pane behind it to see
 // what the conversation is about.
 const DOCK_MIN_PX = 240;
-const dockDefaultPx = () => Math.max(Math.round(window.innerHeight * 0.33), DOCK_MIN_PX);
+const dockDefaultPx = () => Math.max(Math.round(window.innerHeight * 0.5), DOCK_MIN_PX);
 const dockMaxPx = () => Math.round(window.innerHeight * 0.85);
 
 interface ChatDockProps {
@@ -136,7 +136,7 @@ export const ChatDock = ({
   // vanished behind the sheet the moment the renter opened it.
   useEffect(() => {
     const root = document.documentElement;
-    const openHeight = dockHeight === null ? 'max(33dvh, 15rem)' : `${dockHeight}px`;
+    const openHeight = dockHeight === null ? 'max(50dvh, 15rem)' : `${dockHeight}px`;
     root.style.setProperty(
       '--hub-dock',
       hasRail || hidden ? '0px' : isOpen ? openHeight : '4rem',
@@ -187,7 +187,7 @@ export const ChatDock = ({
         style={{
           height: isOpen
             ? dockHeight === null
-              ? 'max(33dvh, 15rem)'
+              ? 'max(50dvh, 15rem)'
               : `${dockHeight}px`
             : '4rem',
         }}

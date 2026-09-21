@@ -1495,15 +1495,15 @@ export const HomeAI = ({
                   size="sm"
                   title={isSearch ? 'Find listings' : 'Get advice'}
                   className={
-                    `text-xs h-auto py-2 px-3 rounded-xl inline-flex items-start gap-2 text-left shrink-0 whitespace-normal w-[220px] snap-start ${!isRail ? 'md:w-[calc(50%-0.25rem)] lg:w-auto lg:flex-1 md:items-center' : ''} ` +
+                    `text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 text-left shrink-0 whitespace-nowrap ` +
                     (isSearch
                       ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
                       : 'border-border text-foreground hover:bg-secondary')
                   }
                   onClick={() => handleSearch(text)}
                 >
-                  <Icon className={`h-3.5 w-3.5 shrink-0 ${!isRail ? 'mt-0.5 md:mt-0' : 'mt-0.5'}`} />
-                  <span className="leading-relaxed">{text}</span>
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{text}</span>
                 </Button>
               );
             })}
