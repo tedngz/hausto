@@ -657,22 +657,23 @@ export const BrowseTable = ({
       {/* Compare bar. Embedded on the hub, the chat dock owns the bottom of the
           screen below lg - so this sits above it rather than under it. */}
       {selected.length > 0 && (
-        <div className={`fixed left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full bg-foreground text-background px-5 py-2.5 shadow-lg ${
+        <div className={`fixed left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 sm:gap-3 rounded-full bg-foreground text-background px-3 sm:px-5 py-2 sm:py-2.5 shadow-lg w-auto max-w-[calc(100vw-1rem)] sm:max-w-none ${
           embedded
             // Centred on the browse pane, not the viewport: at xl the chat rail
             // owns the right-hand side, so a viewport-centred bar drifts under it.
             ? `bottom-20 xl:bottom-6 ${HUB_PANE_CENTRED}`
             : 'bottom-4'
         }`}>
-          <span className="text-sm">{selected.length} selected</span>
-          <Button size="sm" variant="secondary" className="rounded-full h-7" disabled={selected.length < 2} onClick={openCompare}>
+          <span className="text-xs sm:text-sm whitespace-nowrap shrink-0">{selected.length} <span className="hidden sm:inline">selected</span></span>
+          <Button size="sm" variant="secondary" className="rounded-full h-7 text-xs sm:text-sm px-2 sm:px-3 shrink-0" disabled={selected.length < 2} onClick={openCompare}>
             Compare
           </Button>
-          <Button size="sm" className="rounded-full h-7" onClick={() => openFastTrack(selected)}>
-            <CalendarCheck className="w-3.5 h-3.5 mr-1.5" />
-            Request viewings
+          <Button size="sm" className="rounded-full h-7 text-xs sm:text-sm px-2 sm:px-3 shrink-0" onClick={() => openFastTrack(selected)}>
+            <CalendarCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5 shrink-0" />
+            <span className="hidden sm:inline">Request viewings</span>
+            <span className="sm:hidden">Viewings</span>
           </Button>
-          <button className="text-xs opacity-70 hover:opacity-100" onClick={() => setSelected([])}>Clear</button>
+          <button className="text-xs opacity-70 hover:opacity-100 shrink-0" onClick={() => setSelected([])}>Clear</button>
         </div>
       )}
 
