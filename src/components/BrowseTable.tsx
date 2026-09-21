@@ -599,7 +599,7 @@ export const BrowseTable = ({
                             />
                           )}
                           <div className="min-w-0">
-                            <p className="font-medium text-sm line-clamp-1">{r.title}</p>
+                            <p className="font-medium text-sm line-clamp-2">{r.title}</p>
                           </div>
                         </div>
                       </TableCell>

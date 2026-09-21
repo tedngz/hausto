@@ -32,5 +32,8 @@ export const locationMatchesDistrict = (location: string, district: string): boo
 export const districtOf = (location: string): string => {
   const parts = (location || '').split(',').map((s) => s.trim()).filter(Boolean);
   if (parts.length <= 1) return location;
-  return parts.slice(0, -1).slice(-2).join(', ');
+  // Take the last segment before the city (which is always the final part).
+  // This gives us just the district name (e.g. "District 1", "Tan Binh").
+  const withoutCity = parts.slice(0, -1);
+  return withoutCity[withoutCity.length - 1] || location;
 };
