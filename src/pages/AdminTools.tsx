@@ -93,6 +93,7 @@ const AdminTools = () => {
   const [batchReanalyzeResults, setBatchReanalyzeResults] = useState<{ total: number; fixed: number; errors: number } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; currentTitle: string; fixed: number; errors: number } | null>(null);
   const [mirrorRunning, setMirrorRunning] = useState(false);
+  const [languageRunning, setLanguageRunning] = useState(false);
   const [mirrorResult, setMirrorResult] = useState<any>(null);
   const [mirrorStatus, setMirrorStatus] = useState<any>(null);
   const [mirrorStatusLoading, setMirrorStatusLoading] = useState(false);
@@ -1796,6 +1797,34 @@ const AdminTools = () => {
               className="w-full"
             >
               Repair Collisions
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  setLanguageRunning(true);
+                  const { data, error } = await supabase.functions.invoke('backfill-listing-language', { body: { batchSize: 20 } });
+                  if (error) throw error;
+                  setMirrorResult(data);
+                  toast.success(
+                    `Rewrote ${data?.rewritten ?? 0} listing(s) in English`,
+                    { description: `${data?.remaining ?? 0} still to go` },
+                  );
+                } catch (e: any) {
+                  toast.error('Translation backfill failed', { description: e?.message || String(e) });
+                } finally {
+                  setLanguageRunning(false);
+                }
+              }}
+              disabled={languageRunning}
+              size="lg"
+              className="w-full"
+            >
+              {languageRunning ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rewriting in English...</>
+              ) : (
+                'Translate Vietnamese Listings'
+              )}
             </Button>
           </div>
           {mirrorResult && (
