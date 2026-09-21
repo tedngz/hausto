@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { ASSISTANT_COMPARE_EVENT } from '@/lib/assistantEvents';
 
 /**
  * The Hausto Agent's shell: a rail on the side at desktop widths, a draggable
@@ -118,6 +119,16 @@ export const ChatDock = ({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [dockHeight]);
+
+  // Auto-expand the dock to half the screen when a compare is triggered on mobile.
+  useEffect(() => {
+    if (hasRail) return;
+    const onCompare = () => {
+      setDockHeight(Math.round(window.innerHeight * 0.5));
+    };
+    window.addEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
+    return () => window.removeEventListener(ASSISTANT_COMPARE_EVENT, onCompare);
+  }, [hasRail]);
 
   // How much of the bottom edge the chat is taking, published for the floating
   // panels (see lib/hubLayout). They are portaled to the body and cannot

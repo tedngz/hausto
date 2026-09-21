@@ -55,7 +55,7 @@ export const HUB_PANEL_POSITION = [
   '!top-auto !bottom-[calc(var(--hub-dock)+1rem)] !translate-y-0',
   '!max-h-[calc(100dvh-var(--hub-nav)-var(--hub-dock)-2rem)]',
   // xl and up: the dock is gone, the rail is not.
-  'xl:!top-1/2 xl:!bottom-auto xl:!-translate-y-1/2 xl:!max-h-[85dvh]',
+  'xl:!top-[calc(50%+var(--hub-nav)/2)] xl:!bottom-auto xl:!-translate-y-1/2 xl:!max-h-[calc(100dvh-var(--hub-nav)-2rem)]',
   'xl:left-[calc(50%-var(--hub-rail)/2)]',
   'xl:max-w-[calc(100vw-var(--hub-rail)-6rem)]',
 ].join(' ');

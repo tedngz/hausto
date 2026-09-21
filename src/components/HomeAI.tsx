@@ -1349,10 +1349,26 @@ export const HomeAI = ({
         // one group (it says what the conversation is about while you type),
         // and two auto margins would split the slack between them.
         <div className="mt-auto flex flex-wrap items-center gap-1.5">
+          {/* Mobile combined chip */}
+          {subjects.length > 1 && (
+            <span className="xl:hidden inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 py-1 pl-2.5 pr-1 text-xs text-primary">
+              <Home className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="font-medium px-1">{subjects.length} listings</span>
+              <button
+                aria-label="Clear all listings"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-primary/20"
+                onClick={() => setSubjects([])}
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          )}
+
+          {/* Individual chips - hidden on mobile if > 1 */}
           {subjects.map((s) => (
             <span
               key={s.propertyId}
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 py-1 pl-2.5 pr-1 text-xs text-primary"
+              className={`${subjects.length > 1 ? 'hidden xl:inline-flex' : 'inline-flex'} max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 py-1 pl-2.5 pr-1 text-xs text-primary`}
             >
               <Home className="h-3 w-3 shrink-0" aria-hidden="true" />
               <span className="truncate">{s.title || 'This listing'}</span>
@@ -1463,7 +1479,7 @@ export const HomeAI = ({
           // supposed to occupy - most of the mobile dock, and the top third of
           // the rail. Scrolling costs a gesture to reach the last chip and
           // gives the thread back the room.
-          <div className="flex gap-2 animate-fade-in overflow-x-auto pb-1">
+          <div className={`flex gap-2 animate-fade-in pb-1 ${!isRail ? 'overflow-x-auto md:overflow-visible md:flex-wrap md:justify-center' : 'overflow-x-auto snap-x'}`}>
             {([
               { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
               { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
@@ -1479,15 +1495,15 @@ export const HomeAI = ({
                   size="sm"
                   title={isSearch ? 'Find listings' : 'Get advice'}
                   className={
-                    'text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 text-left shrink-0 whitespace-nowrap ' +
+                    `text-xs h-auto py-2 px-3 rounded-xl inline-flex items-start gap-2 text-left shrink-0 whitespace-normal w-[220px] snap-start ${!isRail ? 'md:w-[calc(50%-0.25rem)] lg:w-auto lg:flex-1 md:items-center' : ''} ` +
                     (isSearch
                       ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
                       : 'border-border text-foreground hover:bg-secondary')
                   }
                   onClick={() => handleSearch(text)}
                 >
-                  <Icon className="h-3 w-3 shrink-0" />
-                  <span>{text}</span>
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${!isRail ? 'mt-0.5 md:mt-0' : 'mt-0.5'}`} />
+                  <span className="leading-relaxed">{text}</span>
                 </Button>
               );
             })}
