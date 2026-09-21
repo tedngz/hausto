@@ -30,10 +30,36 @@ export const locationMatchesDistrict = (location: string, district: string): boo
 
 /** The renter-facing district portion of a listing's location string. */
 export const districtOf = (location: string): string => {
-  const parts = (location || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (!location) return '';
+  const loc = stripDiacritics(location).toLowerCase();
+
+  // Match against the known district catalogue first — handles both English
+  // ("District 2") and Vietnamese ("Quan Tan Binh") spellings.
+  for (const districts of Object.values(CITY_DISTRICTS)) {
+    for (const d of districts) {
+      const dNorm = stripDiacritics(d).toLowerCase();
+      if (loc.includes(dNorm)) return d;
+      const numbered = d.match(/^District (\d+)$/);
+      if (numbered && new RegExp(`quan ${numbered[1]}(?!\\d)`).test(loc)) return d;
+    }
+  }
+
+  // Fallback: take the last non-ward, non-city comma segment.
+  const parts = location.split(',').map((s) => s.trim()).filter(Boolean);
   if (parts.length <= 1) return location;
-  // Take the last segment before the city (which is always the final part).
-  // This gives us just the district name (e.g. "District 1", "Tan Binh").
   const withoutCity = parts.slice(0, -1);
-  return withoutCity[withoutCity.length - 1] || location;
+  for (let i = withoutCity.length - 1; i >= 0; i--) {
+    const seg = stripDiacritics(withoutCity[i]).toLowerCase();
+    if (!/^(ward|phuong|phu[oơ]ng)\b/i.test(seg)) return withoutCity[i];
+  }
+  return withoutCity[withoutCity.length - 1];
+};
+
+/**
+ * Compact display form: "District 7" → "D.7", named districts unchanged.
+ * Use in tight table columns where space is limited.
+ */
+export const districtShort = (district: string): string => {
+  const m = district.match(/^District (\d+)$/i);
+  return m ? `D.${m[1]}` : district;
 };
