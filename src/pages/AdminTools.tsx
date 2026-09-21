@@ -1798,6 +1798,34 @@ const AdminTools = () => {
             >
               Repair Collisions
             </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  setLanguageRunning(true);
+                  const { data, error } = await supabase.functions.invoke('backfill-listing-language', { body: { batchSize: 20 } });
+                  if (error) throw error;
+                  setMirrorResult(data);
+                  toast.success(
+                    `Rewrote ${data?.rewritten ?? 0} listing(s) in English`,
+                    { description: `${data?.remaining ?? 0} still to go` },
+                  );
+                } catch (e: any) {
+                  toast.error('Translation backfill failed', { description: e?.message || String(e) });
+                } finally {
+                  setLanguageRunning(false);
+                }
+              }}
+              disabled={languageRunning}
+              size="lg"
+              className="w-full"
+            >
+              {languageRunning ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rewriting in English...</>
+              ) : (
+                'Translate Vietnamese Listings'
+              )}
+            </Button>
           </div>
           {mirrorResult && (
             <div className="p-4 bg-muted rounded-lg text-sm space-y-1">
