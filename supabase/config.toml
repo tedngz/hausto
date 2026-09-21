@@ -76,6 +76,9 @@ verify_jwt = false
 [functions.backfill-image-highlights]
 verify_jwt = false
 
+[functions.backfill-listing-language]
+verify_jwt = false
+
 [functions.verify-external-listings]
 verify_jwt = false
 
