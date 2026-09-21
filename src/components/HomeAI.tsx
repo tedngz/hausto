@@ -1452,16 +1452,16 @@ export const HomeAI = ({
           they are one group at the bottom of the rail, and two auto margins
           split the slack between them - which is what left a signed-out
           visitor's pin marooned halfway up the pane. */}
-      {(user || !anonLimitReached) && <div className={isRail ? `shrink-0 space-y-2 tall:space-y-4 xl:space-y-4${user || subjects.length > 0 ? '' : ' mt-auto'}` : 'space-y-4'}>
+      <div className={isRail ? `shrink-0 space-y-2 tall:space-y-4 xl:space-y-4${user || subjects.length > 0 ? '' : ' mt-auto'}` : 'space-y-4'}>
 
           <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={typedPlaceholder} disabled={isSendingMessage || isSearching} className={`${isRail ? 'min-h-[68px] tall:min-h-[104px] xl:min-h-[104px]' : 'min-h-[140px] sm:min-h-[104px]'} pr-20 resize-none bg-transparent`} />
+            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={!user && anonLimitReached ? 'Sign in to keep searching...' : typedPlaceholder} disabled={isSendingMessage || isSearching || (!user && anonLimitReached)} className={`${isRail ? 'min-h-[68px] tall:min-h-[104px] xl:min-h-[104px]' : 'min-h-[140px] sm:min-h-[104px]'} pr-20 resize-none bg-transparent`} />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3} size="sm" variant="outline" aria-label="Upload image" className="h-8 w-8 p-0">
+            <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3 || (!user && anonLimitReached)} size="sm" variant="outline" aria-label="Upload image" className="h-8 w-8 p-0">
               <Upload className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || !query.trim() && uploadedImages.length === 0} size="sm" aria-label="Send message" className="h-8 w-8 p-0">
+            <Button onClick={() => handleSearch()} disabled={isSendingMessage || isSearching || (!query.trim() && uploadedImages.length === 0) || (!user && anonLimitReached)} size="sm" aria-label="Send message" className="h-8 w-8 p-0">
               {isSendingMessage || isSearching ? <Send className="h-4 w-4" aria-hidden="true" /> : <PlaneTakeoff className="h-4 w-4" aria-hidden="true" />}
             </Button>
           </div>
@@ -1520,7 +1520,7 @@ export const HomeAI = ({
           </div>
         )}
 
-        </div>}
+        </div>
       </div>
 
       {/* Listings for the hub's main pane. Rendered through a portal rather
