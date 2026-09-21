@@ -19,12 +19,15 @@ export interface ListingCopy {
   amenities: string[];
 }
 
-// Vietnamese diacritics, or the handful of unaccented phrases sellers type.
-const VN_PATTERN =
-  /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]|\b(cho thue|can ho|phong ngu|noi that|lien he|dien tich)\b/i;
+// Detect Vietnamese *prose*, not Vietnamese place names. English listings
+// commonly mention places such as “Phú Nhuận” and “Thảo Cầm Viên”; matching
+// diacritics alone would send those clean rows through the writer again.
+// These are seller-ad terms, including the common unaccented spellings.
+const VN_COPY_PATTERN =
+  /(?:^|[^\p{L}])(?:cho\s*thu[êe]|c[aă]n\s*h[ộo]|ph[oò]ng\s*ng[uủ]|n[ộo]i\s*th[ấa]t|li[êe]n\s*h[ệe]|di[ệe]n\s*t[ií]ch|ph[oò]ng\s*kh[aá]ch|ph[oò]ng\s*b[ếe]p|nh[aà]\s*v[ệe]\s*sinh|ti[ệe]n\s*[ií]ch|v[ịi]\s*tr[ií]|g[ửu]i\s*xe|d[ựu]\s*[aá]n|gi[aá]\s*thu[êe]|tri[ệe]u\s*(?:\/?\s*)?th[aá]ng|y\s*h[iì]nh|[đd][ầa]y\s*[đd][ủu]|ch[ií]nh\s*ch[ủu])(?=$|[^\p{L}])/iu;
 
 export function looksVietnamese(text: string | null | undefined): boolean {
-  return !!text && VN_PATTERN.test(text);
+  return !!text && VN_COPY_PATTERN.test(text);
 }
 
 function clean(value: unknown): string {

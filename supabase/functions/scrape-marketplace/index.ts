@@ -12,7 +12,7 @@ import {
 } from '../_shared/vibe-policy.ts';
 import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo } from '../_shared/nhatot.ts';
-import { normalizeListingCopy } from '../_shared/listing-language.ts';
+import { looksVietnamese, normalizeListingCopy } from '../_shared/listing-language.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -2406,6 +2406,35 @@ Deno.serve(async (req) => {
         if (maxPrice && p.price > maxPrice) return false;
         return true;
       });
+    }
+
+    // Every crawl path, including raw harvests, search-page fallbacks and
+    // future sources, passes this final language gate before anything is
+    // saved. Most sources already produce English in Phase 3, so this is a
+    // no-op for them. Work in small parallel batches so a raw harvest with
+    // several Vietnamese adverts remains inside the edge-function timeout.
+    const vietnameseProperties = filteredProperties.filter(
+      (property) => looksVietnamese(property.title) || looksVietnamese(property.description),
+    );
+    for (let i = 0; i < vietnameseProperties.length; i += 3) {
+      await Promise.all(vietnameseProperties.slice(i, i + 3).map(async (property) => {
+        const copy = await normalizeListingCopy({
+          title: property.title ?? '',
+          description: property.description ?? '',
+          amenities: property.amenities ?? [],
+          location: property.location,
+          rooms: property.rooms,
+          size: property.size,
+          fn: 'scrape-marketplace',
+          sourceUrl: property.sourceUrl,
+        });
+        if (!copy) return;
+
+        property.title = copy.title;
+        property.description = copy.description;
+        property.amenities = copy.amenities;
+        console.log(`[listing-language] Rewrote Vietnamese ${marketplace} listing: ${property.sourceUrl}`);
+      }));
     }
 
     // Global deduplication to prevent SPA/LLM duplicate clones
