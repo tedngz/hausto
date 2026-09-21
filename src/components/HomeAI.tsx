@@ -1473,13 +1473,10 @@ export const HomeAI = ({
             Deep Scan counts as content: in the mobile dock the chips plus the
             composer fill the sheet, and the scan they were sent to read is left
             with no height to render into. */}
-        {!hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !scanRequest && !analysisProperty && !isSearching && !isSendingMessage && (
-          // One line that scrolls sideways, everywhere. Wrapped, these four
-          // chips stack into four rows and eat the space the conversation is
-          // supposed to occupy - most of the mobile dock, and the top third of
-          // the rail. Scrolling costs a gesture to reach the last chip and
-          // gives the thread back the room.
-          <div className={`flex gap-2 animate-fade-in pb-1 ${!isRail ? 'overflow-x-auto md:overflow-visible md:flex-wrap md:justify-center' : 'overflow-x-auto snap-x'}`}>
+        {!isRail && !hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !scanRequest && !analysisProperty && !isSearching && !isSendingMessage && (
+          // One line that scrolls sideways on mobile. Wrapped into two rows
+          // on desktop by capping max width.
+          <div className="flex gap-2 animate-fade-in pb-1 overflow-x-auto md:overflow-visible md:flex-wrap md:justify-center md:max-w-[600px] md:mx-auto">
             {([
               { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
               { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
