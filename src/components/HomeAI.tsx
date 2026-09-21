@@ -746,9 +746,8 @@ export const HomeAI = ({
       return;
     }
 
-    // For anonymous users, allow a few searches before the sign-up wall —
-    // follow-ups always work so the current conversation isn't cut off.
-    if (!user && !isFollowup && anonSearchCount >= ANON_SEARCH_LIMIT) {
+    // For anonymous users, allow a few searches before the sign-up wall.
+    if (!user && anonSearchCount >= ANON_SEARCH_LIMIT) {
       toast({
         title: "Sign up to keep searching",
         description: "You've used your free searches. Create an account to keep going — your conversation is saved.",
@@ -1053,7 +1052,7 @@ export const HomeAI = ({
           be the first thing in the thread - a renter can ask for one before
           they have said anything to the AI, and an empty conversation used to
           mean there was no thread for the scan to land in. */}
-      {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage || scanRequest || analysisProperty) && <div className={`space-y-4 overflow-y-auto ${isRail ? 'flex-1 min-h-0' : 'mb-4 max-h-[calc(100dvh-16rem)]'}`}>
+      {user && (messages.length > 0 || tempUserMessageForLoggedIn || isSendingMessage || scanRequest || analysisProperty) && <div className="space-y-4 mb-4">
           {messages.map((message, index) => {
           if (message.role === 'user') {
             return <div key={index} className="flex justify-end animate-slide-up">
@@ -1197,7 +1196,7 @@ export const HomeAI = ({
         </div>}
 
       {/* Temporary Chat Messages for Non-Logged In Users */}
-      {tempUserMessage && !user && <div className="space-y-4 mb-6 max-h-[calc(100dvh-16rem)] overflow-y-auto">
+      {tempUserMessage && !user && <div className="space-y-4 mb-6">
           {/* User Message */}
           <div className="flex justify-end animate-slide-up">
             <div className="max-w-[80%] p-4 rounded-2xl rounded-tr-sm bg-primary text-white shadow-md space-y-2">
@@ -1501,14 +1500,14 @@ export const HomeAI = ({
                 return (
                   <Button
                     key={`${text}-${i}`}
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     title={isSearch ? 'Find listings' : 'Get advice'}
                     className={
                       `text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 text-left shrink-0 whitespace-nowrap ` +
                       (isSearch
-                        ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
-                        : 'border-border text-foreground hover:bg-secondary')
+                        ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                        : 'bg-secondary/50 text-foreground hover:bg-secondary')
                     }
                     onClick={() => handleSearch(text)}
                   >
