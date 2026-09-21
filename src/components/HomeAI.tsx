@@ -1474,36 +1474,40 @@ export const HomeAI = ({
             composer fill the sheet, and the scan they were sent to read is left
             with no height to render into. */}
         {!isRail && !hasSearched && !searchResults && !tempUserMessage && !tempUserMessageForLoggedIn && (!user || messages.length === 0) && !scanRequest && !analysisProperty && !isSearching && !isSendingMessage && (
-          // One line that scrolls sideways on mobile. Wrapped into two rows
-          // on desktop by capping max width.
-          <div className="flex gap-2 animate-fade-in pb-1 overflow-x-auto md:overflow-visible md:flex-wrap md:justify-center md:max-w-[600px] md:mx-auto">
-            {([
-              { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
-              { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
-              { intent: 'ask', text: 'Which district suits young professionals?' },
-              { intent: 'ask', text: "What's it like living in Binh Thanh?" },
-            ] as const).map(({ intent, text }) => {
-              const isSearch = intent === 'search';
-              const Icon = isSearch ? Search : MessageCircle;
-              return (
-                <Button
-                  key={text}
-                  variant="outline"
-                  size="sm"
-                  title={isSearch ? 'Find listings' : 'Get advice'}
-                  className={
-                    `text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 text-left shrink-0 whitespace-nowrap ` +
-                    (isSearch
-                      ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
-                      : 'border-border text-foreground hover:bg-secondary')
-                  }
-                  onClick={() => handleSearch(text)}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span>{text}</span>
-                </Button>
-              );
-            })}
+          <div className="relative overflow-hidden w-full max-w-full pb-1 [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
+            <div className="flex w-max gap-3 animate-marquee-reverse hover:[animation-play-state:paused]">
+              {[
+                { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
+                { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
+                { intent: 'ask', text: 'Which district suits young professionals?' },
+                { intent: 'ask', text: "What's it like living in Binh Thanh?" },
+                { intent: 'search', text: '1BR in Thao Dien under 15M VND' },
+                { intent: 'search', text: 'Pet-friendly 2BR with a pool near District 1' },
+                { intent: 'ask', text: 'Which district suits young professionals?' },
+                { intent: 'ask', text: "What's it like living in Binh Thanh?" },
+              ].map(({ intent, text }, i) => {
+                const isSearch = intent === 'search';
+                const Icon = isSearch ? Search : MessageCircle;
+                return (
+                  <Button
+                    key={`${text}-${i}`}
+                    variant="outline"
+                    size="sm"
+                    title={isSearch ? 'Find listings' : 'Get advice'}
+                    className={
+                      `text-xs h-auto py-1.5 px-3 rounded-full inline-flex items-center gap-1.5 text-left shrink-0 whitespace-nowrap ` +
+                      (isSearch
+                        ? 'border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground'
+                        : 'border-border text-foreground hover:bg-secondary')
+                    }
+                    onClick={() => handleSearch(text)}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{text}</span>
+                  </Button>
+                );
+              })}
+            </div>
           </div>
         )}
 
