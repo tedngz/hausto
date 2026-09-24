@@ -168,3 +168,61 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           [ ${#failed[@]} -eq 0 ]
+
+      # CI deploys but never deletes. Removing a function's directory leaves the
+      # deployed copy live and callable, running code that no longer exists
+      # anywhere but git history. On 2026-09-25 five such functions were found
+      # and retired, the oldest removed from the repo in August 2025 - and one,
+      # ai-property-search, required no auth at all.
+      #
+      # This fails the run when something is deployed that the repo no longer
+      # has, so the next one is caught the day it happens rather than a year on.
+      # It runs even when the deploy step failed: an orphan is worth knowing
+      # about regardless of whether this particular deploy went through.
+      - name: Check for deployed functions with no source
+        if: always() && steps.guard.outputs.configured == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ steps.project.outputs.ref }}
+        run: |
+          set -euo pipefail
+
+          deployed=$(curl -sfS \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$PROJECT_REF/functions" \
+            | jq -r '.[].slug' | sort)
+
+          # Same rule as the deploy loop: directories starting with _ are
+          # library code bundled into their callers, never deployed on their own.
+          in_repo=$(for dir in supabase/functions/*/; do
+            fn=$(basename "$dir")
+            case "$fn" in _*) continue ;; esac
+            echo "$fn"
+          done | sort)
+
+          orphans=$(comm -23 <(echo "$deployed") <(echo "$in_repo"))
+
+          if [ -z "$orphans" ]; then
+            echo "Every deployed function has source in the repo."
+            exit 0
+          fi
+
+          {
+            echo "### Deployed functions with no source in the repo"
+            echo
+            echo "These are live and callable, but nothing in \`supabase/functions/\` describes them."
+            echo "If each was removed on purpose, retire it:"
+            echo
+            echo '```'
+            for fn in $orphans; do
+              echo "npx supabase functions delete $fn --project-ref $PROJECT_REF"
+            done
+            echo '```'
+            echo
+            echo "If one is still needed, restore its directory from git history instead."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for fn in $orphans; do
+            echo "::error title=Orphaned function::$fn is deployed but has no directory in supabase/functions/."
+          done
+          exit 1
