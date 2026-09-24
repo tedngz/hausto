@@ -119,13 +119,33 @@ jobs:
             # _shared and friends are library code, bundled into their callers.
             case "$fn" in _*) continue ;; esac
             flags=(--project-ref "$PROJECT_REF")
+            attempts=1
             if grep -qx "$fn" <<<"${API_BUNDLE_FUNCTIONS// /$'\n'}"; then
               flags+=(--use-api)
+              # Supabase's server-side bundler fails intermittently with a 500
+              # ("Function deploy failed due to an internal error"). On
+              # 2026-09-21 identical mcp source failed at 13:35, deployed at
+              # 15:14 and failed again at 15:29. One retry turns that into a
+              # rare event instead of a red run that sends someone hunting for a
+              # bug in our code. Only this path retries: a real bundling error
+              # anywhere else should still fail on the first attempt.
+              attempts=2
               echo "::group::$fn (server-side bundle)"
             else
               echo "::group::$fn"
             fi
-            if supabase functions deploy "$fn" "${flags[@]}"; then
+            ok=false
+            for ((try = 1; try <= attempts; try++)); do
+              if supabase functions deploy "$fn" "${flags[@]}"; then
+                ok=true
+                break
+              fi
+              if [ "$try" -lt "$attempts" ]; then
+                echo "::warning title=Retrying::$fn deploy attempt $try failed, retrying in 20s."
+                sleep 20
+              fi
+            done
+            if $ok; then
               deployed+=("$fn")
             else
               failed+=("$fn")
