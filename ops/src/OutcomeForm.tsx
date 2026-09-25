@@ -46,20 +46,31 @@ export function OutcomeForm({
   nudges,
   availability,
   onSubmit,
+  onSaveReply,
 }: {
   busy: boolean;
   nudges: number;
   availability: { date: string; part: string }[];
   onSubmit: (body: Record<string, unknown>) => Promise<boolean>;
+  /** Store the agent's reply on its own, when it settles nothing yet. */
+  onSaveReply: (body: Record<string, unknown>) => Promise<boolean>;
 }) {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [slots, setSlots] = useState<string[]>([]);
   const [price, setPrice] = useState('');
   const [note, setNote] = useState('');
+  // The agent's words, pasted from Zalo. Stored next to the outcome read from
+  // them - that pair is the corpus. Never parsed here, never changes state.
+  const [reply, setReply] = useState('');
+  const [replyKey, setReplyKey] = useState(() => crypto.randomUUID());
 
   const options = slotOptionsFor(availability);
 
-  const reset = () => { setOutcome(null); setSlots([]); setPrice(''); setNote(''); };
+  const reset = () => {
+    setOutcome(null); setSlots([]); setPrice(''); setNote(''); setReply(''); setReplyKey(crypto.randomUUID());
+  };
+
+  const replyFields = reply.trim() ? { realtorReply: reply, clientKey: replyKey } : {};
 
   const body = outcome
     ? {
@@ -77,6 +88,26 @@ export function OutcomeForm({
 
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+      <textarea
+        rows={2}
+        placeholder="Paste the agent's reply from Zalo (stored with the outcome)"
+        value={reply}
+        onChange={e => setReply(e.target.value)}
+        style={{ marginBottom: 6 }}
+      />
+      {reply.trim() && !outcome && (
+        <div className="row" style={{ marginBottom: 6 }}>
+          <button
+            disabled={busy}
+            onClick={async () => {
+              if (await onSaveReply({ channel: 'ZALO', message: reply, clientKey: replyKey })) reset();
+            }}
+          >
+            Save reply only
+          </button>
+          <span className="small muted">when it settles nothing yet - pick an outcome below if it does</span>
+        </div>
+      )}
       <div className="row wrap-row">
         {OUTCOMES.map(o => (
           <button
@@ -137,7 +168,7 @@ export function OutcomeForm({
             <button
               className="primary"
               disabled={busy || !check?.ok}
-              onClick={async () => { if (body && await onSubmit(body)) reset(); }}
+              onClick={async () => { if (body && await onSubmit({ ...body, ...replyFields })) reset(); }}
             >
               Record {LABEL[outcome].toLowerCase()}
             </button>

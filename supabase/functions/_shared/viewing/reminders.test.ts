@@ -8,6 +8,7 @@ import {
   MAX_SILENCE_MS,
   SILENCE_ACTION_MS,
   NUDGE_AFTER_MS,
+  realtorDecisionsOwed,
 } from './reminders.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 
@@ -259,5 +260,84 @@ describe('the viewing reminder', () => {
 
   it('stays one short message, because each one is billed', () => {
     expect(renderViewingReminder(opts).split('\n')).toHaveLength(3);
+  });
+});
+
+describe('an operator reply is the renter hearing from us', () => {
+  it('moves the silence clock like any other message', () => {
+    const events = logOf(...submitted(2), ev('REPLY_SENT', 7 * HOUR_MS, { message_id: 'o1' }));
+    expect(lastHeardFromUs(events, at(0))).toBe(T0 + 7 * HOUR_MS);
+  });
+
+  it('is not moved by an acknowledgement, which the renter never sees', () => {
+    const events = logOf(...submitted(2), ev('REPLIES_ACKNOWLEDGED', 7 * HOUR_MS));
+    expect(lastHeardFromUs(events, at(0))).toBe(T0);
+  });
+});
+
+describe('telling brokers what the renter decided', () => {
+  const slot = [{ starts_at: at(72 * HOUR_MS), duration_minutes: 30 }];
+  const confirmed = (itemId: string, t: number) =>
+    ev('OUTCOME_RECORDED', t, { outcome: 'CONFIRMED', slots: slot }, itemId);
+  const outcome = (o: string, itemId: string, t: number, slots: unknown[] = []) =>
+    ev('OUTCOME_RECORDED', t, { outcome: o, slots }, itemId);
+  const owed = (events: DomainEvent[]) => realtorDecisionsOwed(reduceRequest('r', events));
+
+  it('owes nothing while the renter has not decided', () => {
+    const events = logOf(...submitted(2), confirmed('i1', HOUR_MS), ev('ITINERARY_DELIVERED', 2 * HOUR_MS));
+    expect(owed(events)).toEqual([]);
+  });
+
+  it('confirms the kept viewings and releases every other broker holding time', () => {
+    // Four brokers, four fates. Only the two holding time for us are owed a
+    // message: one to confirm, one to release. The broker whose unit is let
+    // and the one we never reached are holding nothing.
+    const events = logOf(
+      ...submitted(4),
+      confirmed('i1', HOUR_MS),
+      outcome('ALTERNATIVE_OFFERED', 'i2', HOUR_MS, slot),
+      outcome('ALREADY_RENTED', 'i3', HOUR_MS),
+      ev('ITINERARY_DELIVERED', 2 * HOUR_MS),
+      ev('REQUEST_CONFIRMED', 3 * HOUR_MS, { confirmed_item_ids: ['i1'] }),
+    );
+    expect(owed(events)).toEqual([
+      { itemId: 'i1', decision: 'CONFIRM' },
+      { itemId: 'i2', decision: 'RELEASE' },
+    ]);
+  });
+
+  it('releases everyone still involved when the request is cancelled', () => {
+    const events = logOf(
+      ...submitted(3),
+      confirmed('i1', HOUR_MS),
+      ev('REALTOR_CONTACTED', HOUR_MS, { channel: 'ZALO' }, 'i2'),
+      ev('REQUEST_CANCELLED', 2 * HOUR_MS, { reason: 'renter found a place' }),
+    );
+    expect(owed(events)).toEqual([
+      { itemId: 'i1', decision: 'RELEASE' },
+      { itemId: 'i2', decision: 'RELEASE' },
+    ]);
+  });
+
+  it('stops owing a broker once they have been told', () => {
+    const events = logOf(
+      ...submitted(1),
+      confirmed('i1', HOUR_MS),
+      ev('ITINERARY_DELIVERED', 2 * HOUR_MS),
+      ev('REQUEST_CONFIRMED', 3 * HOUR_MS, { confirmed_item_ids: ['i1'] }),
+      ev('REALTOR_NOTIFIED', 4 * HOUR_MS, { decision: 'CONFIRM', message_id: 'rm1' }, 'i1'),
+    );
+    expect(owed(events)).toEqual([]);
+  });
+
+  it('turns what is owed into a to-do for the scheduler', () => {
+    const events = logOf(
+      ...submitted(1),
+      confirmed('i1', HOUR_MS),
+      ev('ITINERARY_DELIVERED', 2 * HOUR_MS),
+      ev('REQUEST_CONFIRMED', 3 * HOUR_MS, { confirmed_item_ids: ['i1'] }),
+    );
+    const due = dueActions({ view: reduceRequest('r', events), events, createdAt: at(0), now: T0 + 4 * HOUR_MS });
+    expect(due).toContainEqual(expect.objectContaining({ kind: 'CONFIRM_REALTOR', itemId: 'i1' }));
   });
 });

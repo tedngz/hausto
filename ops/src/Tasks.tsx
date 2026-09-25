@@ -21,6 +21,8 @@ const LABEL: Record<string, string> = {
   RESOLVE_REALTOR: 'Find a working number',
   HOLDING_UPDATE: 'Holding update to the renter',
   VIEWING_REMINDER: 'Viewing reminder',
+  CONFIRM_REALTOR: 'Confirm with the agent',
+  RELEASE_REALTOR: 'Release the agent',
 };
 
 /** Kinds the runner sends by itself - shown for visibility, not as work. */

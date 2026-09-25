@@ -141,6 +141,18 @@ async function confirmIfDelivered(db: any, requestId: string, timestamp: string)
   return true;
 }
 
+/** Has this request heard from the renter before? */
+// deno-lint-ignore no-explicit-any
+async function hasReplied(db: any, requestId: string): Promise<boolean> {
+  const { data } = await db
+    .from('events')
+    .select('id')
+    .eq('request_id', requestId)
+    .eq('type', 'RENTER_REPLIED')
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
 /**
  * Record one inbound message: window, row, event, opt-out. In that order.
  *
@@ -169,10 +181,14 @@ export async function handleInbound(
   const { intent } = classifyIntent(m.text);
 
   if (requestId) {
+    // The wa.me handshake - the first message, carrying the ref the deep link
+    // put there - opens the window and answers nothing. Flagged so thread.ts
+    // does not show every new request as a renter waiting on a reply.
+    const handshake = refFromMessage(m.text) != null && !(await hasReplied(db, requestId));
     await db.from('events').insert({
       request_id: requestId,
       type: 'RENTER_REPLIED',
-      payload: { intent, message_id: message.id },
+      payload: { intent, message_id: message.id, ...(handshake ? { handshake: true } : {}) },
       actor: 'RENTER',
       occurred_at: new Date(m.timestamp).toISOString(),
     });

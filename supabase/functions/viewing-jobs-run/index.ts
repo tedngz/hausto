@@ -4,8 +4,9 @@
 // a job that fails should be retried from its row rather than lost with the
 // pass that produced it.
 //
-// **It only runs the renter-facing sends.** NUDGE_REALTOR and RESOLVE_REALTOR
-// are enqueued by the drain and by ops actions, and they stay pending until a
+// **It only runs the renter-facing sends.** NUDGE_REALTOR, RESOLVE_REALTOR,
+// CONFIRM_REALTOR and RELEASE_REALTOR are enqueued by the drain and by ops
+// actions, and they stay pending until a
 // person does them - the realtor channel is Zalo and Zalo is a human this
 // quarter (CLAUDE.md). Writing ITEM_NUDGED here would be worse than useless:
 // it feeds the two-nudge floor on NO_RESPONSE (SPEC §4), so a job auto-nudging

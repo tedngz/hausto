@@ -237,6 +237,43 @@ created_at      timestamptz default now()
 sent_at         timestamptz
 ```
 
+### `realtor_messages`
+
+The broker transcript: every message to and from a realtor about an item.
+Written only through `_shared/realtor/send.ts`, which persists before a message
+counts as sent, keys every row for idempotency, and refuses any outbound body
+carrying a phone number or this request's renter's name (§6). Ops and admin
+read it; nothing in a browser writes it.
+
+```
+id              uuid pk
+request_id      uuid not null
+item_id         uuid
+realtor_id      uuid
+direction       text not null             -- OUT | IN
+medium          text not null             -- ZALO | PHONE | WHATSAPP | SMS
+purpose         text not null             -- REQUEST_VIEWING | NUDGE | CONFIRM | RELEASE | REPLY
+body            text not null
+status          text not null             -- QUEUED | SENT | FAILED | RECEIVED
+actor           text not null             -- OPS:<uuid> | AGENT:<version> | SYSTEM
+idempotency_key text unique not null
+provider_id     text
+error           text
+created_at      timestamptz default now()
+sent_at         timestamptz
+```
+
+This is the corpus §4 exists to produce. A broker's reply (`IN`) is stored
+verbatim and never parsed; the `OUTCOME_RECORDED` read from it points back at it
+by `reply_message_id`. That pair - their words, our typed reading of them - is
+what paste-parse and any later automation are trained and measured against.
+
+The transport is `_shared/realtor/channel.ts`, split from the rules the same
+way `WhatsAppAdapter` is. The only channel is `ManualChannel`: the operator sends
+on Zalo from their own phone and presses "Mark sent", so by the time it is
+called the message has already left. A bridge and Zalo OA are named in the
+interface and not built - both reopen the "no Zalo integration" scope line.
+
 ### `jobs`
 
 Timers and nudges, drained by `pg_cron`. No Inngest, Trigger.dev, BullMQ, Redis.
@@ -287,13 +324,16 @@ Event types:
 | `REQUEST_SUBMITTED` | request | `{availability}` |
 | `ITEM_ADDED` | item | `{listing_id, price_vnd_at_request}` |
 | `REALTOR_RESOLVED` | item | `{realtor_id, method}` - `method` ∈ `AGENT_ID`, `PHONE`, `MANUAL` |
-| `REALTOR_CONTACTED` | item | `{channel, draft_id}` |
-| `OUTCOME_RECORDED` | item | `{outcome, slots[], actual_price_vnd, note}` - see §4 |
-| `ITEM_NUDGED` | item | `{attempt}` |
+| `REALTOR_CONTACTED` | item | `{channel, draft_id}` - `draft_id` is the `realtor_messages` row sent, or null |
+| `OUTCOME_RECORDED` | item | `{outcome, slots[], actual_price_vnd, note, reply_message_id?}` - see §4 |
+| `ITEM_NUDGED` | item | `{attempt, message_id?}` |
+| `REALTOR_NOTIFIED` | item | `{decision, message_id}` - `decision` ∈ `CONFIRM`, `RELEASE`. Moves no state; sets `notified` on the item view |
 | `ITINERARY_ASSEMBLED` | request | `{ordered_item_ids[], warnings[]}` |
 | `ITINERARY_DELIVERED` | request | `{message_id}` |
 | `HOLDING_UPDATE_SENT` | request | `{message_id}` - something the renter heard that was not the itinerary |
-| `RENTER_REPLIED` | request | `{intent, message_id}` - `intent` ∈ `CONFIRM`, `DECLINE`, `RESCHEDULE`, `QUESTION`, `OPT_OUT`, `UNKNOWN` |
+| `RENTER_REPLIED` | request | `{intent, message_id, handshake?}` - `intent` ∈ `CONFIRM`, `DECLINE`, `RESCHEDULE`, `QUESTION`, `SELECTION`, `SEARCH`, `OPT_OUT`, `UNKNOWN`. `handshake: true` on the first ref-carrying message, which answers nothing |
+| `REPLY_SENT` | request | `{message_id}` - an operator's free-text WhatsApp reply. Moves the silence clock (§9) and clears waiting replies; no state |
+| `REPLIES_ACKNOWLEDGED` | request | `{message_ids[]}` - replies read and judged to need no answer. Clears waiting replies; no state, no clock |
 | `REQUEST_CONFIRMED` | request | `{confirmed_item_ids[]}` |
 | `REQUEST_CANCELLED` | request | `{reason, actor}` |
 | `REQUEST_FAILED` | request | `{reason, substitute_listing_ids[]}` |
@@ -362,6 +402,39 @@ operator confirms with one click and can override every field. The LLM never
 writes an event directly - interpretation is suggested, never applied. This is
 where throughput comes from: interpretation is the slow part, not typing.
 
+### The rest of the operator's actions
+
+Everything an operator can do is one call in `_shared/viewing/ops-actions.ts`,
+reached through `ops-record-outcome` (which only proves the `ops` role and stamps
+`OPS:<uuid>`). It lives in `_shared` so it is tested against the in-memory
+database, and because it is the AI operator's tool list: the agent calls the
+same actions under `AGENT:<version>`, never a second implementation.
+
+| Action | Level | Writes |
+|---|---|---|
+| `CONTACTED` | item | `realtor_messages` OUT row (the words actually sent), `REALTOR_CONTACTED` |
+| `NUDGE` | item | OUT row, `ITEM_NUDGED`; completes `NUDGE_REALTOR` jobs |
+| `REALTOR_REPLY` | item | IN row only - a reply that settles nothing yet |
+| `OUTCOME` | item | optional IN row, `OUTCOME_RECORDED` with `reply_message_id` |
+| `RECORD_CONTACT` | item | `realtors` (by E.164), `request_items.realtor_id`, `REALTOR_RESOLVED {method: MANUAL}`; enriches `external_properties.realtor_id` and `realtor_identities`; completes `RESOLVE_REALTOR` |
+| `NOTIFY_REALTOR` | item | OUT row, `REALTOR_NOTIFIED`; refused unless the log says that decision is owed |
+| `REPLY` | request | `messages` via `sendFreeForm` (window and 3-in-a-row rules apply), `REPLY_SENT` |
+| `ACK_REPLIES` | request | `REPLIES_ACKNOWLEDGED`; refused when nothing is waiting |
+
+**A broker is owed the renter's decision once the request closes**
+(`realtorDecisionsOwed` in `reminders.ts`): `CONFIRM` for an item the renter
+kept that reached `CONFIRMED`, `RELEASE` for any other item still holding time
+(`CONFIRMED`, `ALTERNATIVE_OFFERED`, `CONTACTED`). A broker who said no is
+holding nothing and is owed nothing. The drain turns each into a
+`CONFIRM_REALTOR` / `RELEASE_REALTOR` job, which stays open until an operator
+sends it.
+
+**Waiting replies** (`waitingReplies` in `thread.ts`) are the renter's replies
+whose intent needs an operator, since the last `REPLY_SENT` or
+`REPLIES_ACKNOWLEDGED`. `SUGGESTIONS_OFFERED` answers a waiting `SEARCH` or
+`SELECTION`, and nothing else. They rank a request to the top of the queue,
+closed or not.
+
 ---
 
 ## §5 Messaging contract
@@ -413,6 +486,17 @@ Enforce at the query layer, not the template layer. The ops realtor view reads
 from a view that does not select `renters.phone_e164` or `renters.display_name`
 at all, so a careless template change cannot leak one. Renter-facing itinerary
 rendering takes a DTO with no realtor contact field on it.
+
+The console reads the renter's WhatsApp thread through `ops_request_thread()`, a
+`SECURITY DEFINER` function that returns bodies, times, the window expiry and
+the consecutive-outbound count - never `to_phone`, never a name - and masks
+phone-shaped text inside bodies. The console still has no grant on `messages`
+or `renters`.
+
+Free text is where shape stops protecting anyone, so it is checked on the way
+out by the server (`_shared/viewing/privacy.ts`): a broker-bound message may not
+carry any phone number or this renter's name, and an operator's reply to a
+renter may not carry any phone number.
 
 **No `booking` vocabulary in renter-facing copy until state is `CONFIRMED`.** Use
 "request". We cannot honour a booking at intake time.
@@ -486,13 +570,14 @@ something.** Asserted as a property test over randomly generated event logs
 (`reminders.test.ts`), not only as examples.
 
 - The clock starts at intake - the confirmation page already made a promise -
-  and moves forward on `ITINERARY_DELIVERED` or `HOLDING_UPDATE_SENT`.
+  and moves forward on `ITINERARY_DELIVERED`, `HOLDING_UPDATE_SENT` or
+  `REPLY_SENT`.
 - The scheduler acts at **20 hours**, not 24. A job firing on the deadline has
   already lost: the send has to happen, be delivered and be read, and the first
   can fail and need a retry.
-- A closed request is owed nothing, except that a `CONFIRMED` one still gets
-  its day-before viewing reminders. Closed for coordination is not closed for
-  the renter.
+- A closed request owes the renter nothing, except that a `CONFIRMED` one still
+  gets its day-before viewing reminders. Closed for coordination is not closed
+  for the renter - or for the brokers, who are owed its decision (§4).
 - Brokers are nudged after 6 hours of silence, measured from the last contact
   **or nudge**, which is what feeds the two-nudge floor on `NO_RESPONSE` (§4).
 

@@ -28,7 +28,13 @@ Operators get SELECT and nothing else. Every state change goes through the
 Nothing here can read a renter's name or phone number: no RLS policy grants
 `renters` or `messages` to the `ops` role (invariant 4). Requests are worked by
 their `ref`. If a screen here ever appears to need a renter's number, the answer
-is that ops should be messaging them through the system, not ringing them.
+is that ops should be messaging them through the system, not ringing them - which
+is what the reply box on each request is for.
+
+The renter's thread comes from `ops_request_thread()`, a function that returns
+message bodies, times and the 24-hour window, and never the number or name. The
+broker conversation is `realtor_messages`, readable directly: it holds what we
+sent each broker and what they said back, and nothing about the renter.
 
 ## Status is derived, never stored
 

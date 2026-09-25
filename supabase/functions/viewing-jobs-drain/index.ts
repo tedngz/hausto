@@ -77,7 +77,8 @@ Deno.serve(async (req) => {
 
   // What is already queued, so a second pass does not double it.
   const { data: pending } = await db
-    .from('jobs').select('kind, payload').is('completed_at', null).in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_REMINDER']);
+    .from('jobs').select('kind, payload').is('completed_at', null)
+    .in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_REMINDER', 'CONFIRM_REALTOR', 'RELEASE_REALTOR']);
   const queued = new Set(
     (pending ?? []).map((j: { kind: string; payload: Record<string, unknown> }) =>
       `${j.kind}:${j.payload?.request_id ?? '-'}:${j.payload?.item_id ?? '-'}`),

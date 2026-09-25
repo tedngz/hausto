@@ -188,3 +188,67 @@ describe('partial success is the happy path', () => {
     expect(summarise(view).hasNothing).toBe(true);
   });
 });
+
+describe('stage-0 operator events move no state', () => {
+  // REPLY_SENT, REPLIES_ACKNOWLEDGED and REALTOR_NOTIFIED are conversation and
+  // bookkeeping. None of them is progress on the request, and a request whose
+  // state could be moved by talking would stop looking stuck when it was.
+  function base() {
+    seq = 0;
+    return [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+      ev('REALTOR_CONTACTED', { item: 'i1', payload: { channel: 'ZALO' } }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-09-15T03:00:00Z', duration_minutes: 30 }] } }),
+      ev('OUTCOME_RECORDED', { item: 'i2', payload: { outcome: 'ALTERNATIVE_OFFERED', slots: [{ starts_at: '2026-09-16T03:00:00Z', duration_minutes: 30 }] } }),
+      ev('ITINERARY_DELIVERED', { payload: { message_id: 'm1' } }),
+      ev('REQUEST_CONFIRMED', { payload: { confirmed_item_ids: ['i1'] } }),
+    ];
+  }
+
+  it('leaves request and item states exactly where they were', () => {
+    const before = reduceRequest(REQ, base());
+    const events = base();
+    events.push(
+      ev('RENTER_REPLIED', { payload: { intent: 'QUESTION', message_id: 'm2' } }),
+      ev('REPLY_SENT', { payload: { message_id: 'm3' } }),
+      ev('REPLIES_ACKNOWLEDGED', { payload: { message_ids: ['m2'] } }),
+      ev('REALTOR_NOTIFIED', { item: 'i1', payload: { decision: 'CONFIRM', message_id: 'rm1' } }),
+      ev('REALTOR_NOTIFIED', { item: 'i2', payload: { decision: 'RELEASE', message_id: 'rm2' } }),
+    );
+    const after = reduceRequest(REQ, events);
+    expect(after.state).toBe(before.state);
+    expect(after.items.i1.state).toBe('CONFIRMED');
+    expect(after.items.i2.state).toBe('ALTERNATIVE_OFFERED');
+    expect(after.items.i1.notified).toBe('CONFIRM');
+    expect(after.items.i2.notified).toBe('RELEASE');
+  });
+
+  it('ignores a REALTOR_NOTIFIED with a decision outside the closed set', () => {
+    const events = [...base(), ev('REALTOR_NOTIFIED', { item: 'i1', payload: { decision: 'MAYBE' } })];
+    expect(reduceRequest(REQ, events).items.i1.notified).toBeUndefined();
+  });
+
+  it('reaches the same state forwards, backwards and shuffled', () => {
+    // Timestamps carry the real order; arrival order is what is permuted. A
+    // notification landing before the confirmation it follows must not change
+    // what the log means.
+    seq = 0;
+    const events = [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-09-15T03:00:00Z', duration_minutes: 30 }] } }),
+      ev('REPLY_SENT', { payload: { message_id: 'm3' } }),
+      ev('REQUEST_CONFIRMED', { payload: { confirmed_item_ids: ['i1'] } }),
+      ev('REALTOR_NOTIFIED', { item: 'i1', payload: { decision: 'CONFIRM', message_id: 'rm1' } }),
+    ];
+    const expected = reduceRequest(REQ, events);
+    expect(expected.state).toBe('CONFIRMED');
+    for (const order of permutations(events)) {
+      const v = reduceRequest(REQ, order);
+      expect(v.state).toBe(expected.state);
+      expect(v.items.i1).toEqual(expected.items.i1);
+    }
+  });
+});
