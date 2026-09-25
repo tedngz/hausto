@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { reduceRequest, type DomainEvent } from '../../supabase/functions/_shared/viewing-domain';
 import { triage, humanAge, type Triage } from '../../supabase/functions/_shared/viewing/triage';
+import { waitingReplies } from '../../supabase/functions/_shared/viewing/thread';
 
 interface QueueRow {
   id: string;
@@ -64,7 +65,8 @@ export function Queue({ onOpen }: { onOpen: (requestId: string) => void }) {
         .filter(e => e.type === 'ITINERARY_DELIVERED')
         .map(e => Date.parse(e.occurred_at))
         .sort((a, b) => b - a)[0] ?? null;
-      return { ...r, t: triage(view, r.age_seconds, delivered, now), state: view.state };
+      const waiting = waitingReplies(byRequest.get(r.id) ?? []).length;
+      return { ...r, t: triage(view, r.age_seconds, delivered, now, waiting), state: view.state };
     });
 
     decorated.sort((a, b) => a.t.rank - b.t.rank || b.age_seconds - a.age_seconds);

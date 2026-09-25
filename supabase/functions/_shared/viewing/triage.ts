@@ -7,6 +7,7 @@
 // readers.
 
 import { summarise, type RequestView, type ItemView } from '../viewing-domain.ts';
+import { realtorDecisionsOwed } from './reminders.ts';
 
 export const HOUR_MS = 60 * 60 * 1000;
 
@@ -55,13 +56,44 @@ export interface Triage {
  * requests that are merely waiting for a reply, and a request in a terminal
  * state drops out of the working set entirely however old it is.
  */
-export function triage(view: RequestView, ageSeconds: number, heardFromUsAt: number | null, now: number): Triage {
+export function triage(
+  view: RequestView,
+  ageSeconds: number,
+  heardFromUsAt: number | null,
+  now: number,
+  /** Renter replies nobody has answered - see thread.ts. */
+  waitingReplies = 0,
+): Triage {
   const u = urgency(ageSeconds, heardFromUsAt, now);
   const urgencyRank = u === 'LATE' ? 0 : u === 'WARN' ? 1 : 2;
   const open = openItems(view);
   const s = summarise(view);
 
+  // A renter waiting on an answer outranks everything else at the same
+  // urgency, closed requests included: "what is the address?" after a
+  // confirmation is still a person talking to us, and every reply that is not
+  // a yes or a stop routes here and nowhere else.
+  if (waitingReplies > 0) {
+    return {
+      urgency: u,
+      rank: urgencyRank * 10,
+      waitingOn: `Renter replied - ${waitingReplies} waiting on us`,
+      actionable: true,
+    };
+  }
+
   if (view.state === 'CONFIRMED' || view.state === 'CANCELLED' || view.state === 'FAILED_NO_SUPPLY') {
+    // Closed for the renter, not yet for the brokers holding time for them.
+    // Hiding it now would hide the one job left on it.
+    const owed = realtorDecisionsOwed(view).length;
+    if (owed > 0) {
+      return {
+        urgency: 'OK',
+        rank: 30,
+        waitingOn: `${view.state} - tell ${owed} agent${owed === 1 ? '' : 's'}`,
+        actionable: true,
+      };
+    }
     return { urgency: 'OK', rank: 900, waitingOn: `Closed - ${view.state}`, actionable: false };
   }
 

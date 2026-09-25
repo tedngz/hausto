@@ -25,6 +25,17 @@ export const EVENT_TYPES = [
   // of "2" resolves against - see selection.ts.
   'SUGGESTIONS_OFFERED',
   'RENTER_REPLIED',
+  // An operator answered the renter in free text (a question, a new time).
+  // Moves the silence clock like a holding update and clears the replies
+  // waiting on a person - see thread.ts. No state change.
+  'REPLY_SENT',
+  // An operator read the renter's replies and decided none needs an answer
+  // ("thanks!"). Clears the wait without spending a billed send.
+  'REPLIES_ACKNOWLEDGED',
+  // The broker was told the renter's decision: CONFIRM (the viewing is on) or
+  // RELEASE (stop holding the slot). Owed once per item after the request
+  // closes - see reminders.ts. Moves no state; the item's outcome stands.
+  'REALTOR_NOTIFIED',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
   'REQUEST_FAILED',
@@ -57,6 +68,10 @@ export const ITEM_STATES = [
   'UNREACHABLE',
 ] as const;
 export type ItemState = typeof ITEM_STATES[number];
+
+/** What a broker is told once the renter has decided (REALTOR_NOTIFIED). */
+export const REALTOR_DECISIONS = ['CONFIRM', 'RELEASE'] as const;
+export type RealtorDecision = typeof REALTOR_DECISIONS[number];
 
 export const REQUEST_STATES = [
   'DRAFT',
@@ -113,6 +128,8 @@ export interface ItemView {
   actualPriceVnd?: number;
   nudges: number;
   realtorId?: string;
+  /** Set once the broker has been told the renter's decision. */
+  notified?: RealtorDecision;
 }
 
 export interface RequestView {
@@ -237,6 +254,24 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
       case 'SUGGESTIONS_OFFERED':
         // Read by the selection path, invisible to state: offering
         // alternatives is not progress on the request that failed.
+        break;
+
+      case 'REALTOR_NOTIFIED': {
+        // Bookkeeping about the broker, not progress on the item: a confirmed
+        // viewing is still CONFIRMED after we tell the broker so. Kept on the
+        // view because the scheduler needs to know it is no longer owed.
+        if (!e.item_id) break;
+        const decision = p.decision as RealtorDecision | undefined;
+        if (decision && (REALTOR_DECISIONS as readonly string[]).includes(decision)) {
+          item(e.item_id).notified = decision;
+        }
+        break;
+      }
+
+      case 'REPLY_SENT':
+      case 'REPLIES_ACKNOWLEDGED':
+        // Read by thread.ts and the silence clock. An operator answering a
+        // question is conversation, not coordination.
         break;
 
       case 'HOLDING_UPDATE_SENT':

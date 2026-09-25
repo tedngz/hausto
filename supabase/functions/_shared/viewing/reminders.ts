@@ -9,7 +9,7 @@
 // internally cannot be tested against the one case that matters - the moment
 // just after the deadline - without waiting for it.
 
-import type { RequestView } from '../viewing-domain.ts';
+import type { RequestView, RealtorDecision } from '../viewing-domain.ts';
 import { summarise } from '../viewing-domain.ts';
 import type { DomainEvent } from '../viewing-domain.ts';
 import { hcmcLong } from './format.ts';
@@ -35,7 +35,9 @@ export const VIEWING_REMINDER_LEAD_MS = 24 * HOUR_MS;
 export type ActionKind =
   | 'HOLDING_UPDATE'     // the renter has heard nothing and the clock is running out
   | 'NUDGE_REALTOR'      // a broker has been contacted and has not replied
-  | 'VIEWING_REMINDER';  // a confirmed viewing is tomorrow
+  | 'VIEWING_REMINDER'   // a confirmed viewing is tomorrow
+  | 'CONFIRM_REALTOR'    // the renter kept this viewing; the broker has not been told
+  | 'RELEASE_REALTOR';   // the broker is holding time nobody will use
 
 export interface DueAction {
   kind: ActionKind;
@@ -58,7 +60,10 @@ const CLOSED = new Set(['CONFIRMED', 'CANCELLED', 'FAILED_NO_SUPPLY']);
 export function lastHeardFromUs(events: DomainEvent[], createdAt: string): number {
   let last = Date.parse(createdAt);
   for (const e of events) {
-    if (e.type === 'ITINERARY_DELIVERED' || e.type === 'HOLDING_UPDATE_SENT') {
+    // REPLY_SENT counts: an operator answering their question is the renter
+    // hearing from us, and a holding update on top of it would be the second
+    // of two messages saying less than the first.
+    if (e.type === 'ITINERARY_DELIVERED' || e.type === 'HOLDING_UPDATE_SENT' || e.type === 'REPLY_SENT') {
       last = Math.max(last, Date.parse(e.occurred_at));
     }
   }
@@ -117,6 +122,15 @@ export function dueActions(input: ScheduleInput): DueAction[] {
     }
   }
 
+  for (const owed of realtorDecisionsOwed(view)) {
+    actions.push({
+      kind: owed.decision === 'CONFIRM' ? 'CONFIRM_REALTOR' : 'RELEASE_REALTOR',
+      requestId,
+      itemId: owed.itemId,
+      reason: `request ${view.state.toLowerCase()}`,
+    });
+  }
+
   if (view.state === 'CONFIRMED') {
     for (const slot of input.slots ?? []) {
       const startsAt = Date.parse(slot.startsAt);
@@ -134,6 +148,40 @@ export function dueActions(input: ScheduleInput): DueAction[] {
 
   return actions;
 }
+
+/**
+ * Brokers still waiting to hear what the renter decided.
+ *
+ * Nothing is owed while the request is open - the renter has not decided. Once
+ * it closes, every broker holding time for us is owed an answer: CONFIRM for a
+ * viewing the renter kept, RELEASE for one they did not, for a slot offered
+ * and never taken, and for a broker still working on a request that ended
+ * under them. A broker who said no (rented, unavailable, a new price) is
+ * holding nothing and is owed nothing, and neither is one we never reached.
+ *
+ * Without this the renter's "yes" stopped at us: the broker who offered
+ * Saturday at ten was never told to expect anyone, or to stop expecting them.
+ */
+export function realtorDecisionsOwed(view: RequestView): { itemId: string; decision: RealtorDecision }[] {
+  if (!CLOSED.has(view.state)) return [];
+  const kept = new Set(view.state === 'CONFIRMED' ? view.confirmedItemIds : []);
+  const owed: { itemId: string; decision: RealtorDecision }[] = [];
+  for (const item of Object.values(view.items)) {
+    if (item.notified) continue;
+    // Kept and actually holding a confirmed slot. A kept id on an item that
+    // never reached CONFIRMED has no time to name, and telling a broker to
+    // hold nothing in particular is a message they cannot act on.
+    if (kept.has(item.itemId) && item.state === 'CONFIRMED') {
+      owed.push({ itemId: item.itemId, decision: 'CONFIRM' });
+    } else if (HOLDING_TIME.has(item.state)) {
+      owed.push({ itemId: item.itemId, decision: 'RELEASE' });
+    }
+  }
+  return owed;
+}
+
+/** Item states in which a broker is holding a slot, or still looking for one. */
+const HOLDING_TIME = new Set(['CONFIRMED', 'ALTERNATIVE_OFFERED', 'CONTACTED']);
 
 function lastEventTime(events: DomainEvent[], itemId: string, types: string[]): number | null {
   let last: number | null = null;

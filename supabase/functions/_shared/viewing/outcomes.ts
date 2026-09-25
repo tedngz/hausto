@@ -155,11 +155,21 @@ export function opsActor(userId: string): string {
  * future listing from that broker, and the resolution ops does by hand next
  * week is the one they could have skipped.
  */
-export function jobsForOutcome(v: ValidatedOutcome, item: { itemId: string; listingId: string }) {
+export function jobsForOutcome(
+  v: ValidatedOutcome,
+  item: { itemId: string; listingId: string; requestId?: string },
+) {
   if (v.outcome !== 'UNREACHABLE') return [];
   return [{
     kind: 'RESOLVE_REALTOR',
     run_after: new Date().toISOString(),
-    payload: { listing_id: item.listingId, item_id: item.itemId, reason: 'UNREACHABLE' },
+    // request_id is what the console's Flagged panel filters on. Without it
+    // the to-do existed and was shown on no request.
+    payload: {
+      listing_id: item.listingId,
+      item_id: item.itemId,
+      request_id: item.requestId ?? null,
+      reason: 'UNREACHABLE',
+    },
   }];
 }

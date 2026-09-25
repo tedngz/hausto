@@ -106,3 +106,29 @@ describe('display conventions', () => {
     expect(humanAge(72 * 3600)).toBe('3d');
   });
 });
+
+describe('what cannot wait', () => {
+  it('puts a renter waiting on an answer at the top, closed request or not', () => {
+    // A reply that is not a yes or a stop routes to an operator and nowhere
+    // else. A question after confirmation is still a person waiting on us.
+    const confirmed = view(1, [outcome('CONFIRMED', 'i1'), ev('REQUEST_CONFIRMED', { confirmed_item_ids: ['i1'] })]);
+    const t = triage(confirmed, 3600, null, NOW, 1);
+    expect(t.actionable).toBe(true);
+    expect(t.waitingOn).toBe('Renter replied - 1 waiting on us');
+    expect(t.rank).toBeLessThanOrEqual(triage(view(3), 3600, null, NOW).rank);
+  });
+
+  it('keeps a closed request in the working set while brokers are owed its decision', () => {
+    const confirmed = view(1, [outcome('CONFIRMED', 'i1'), ev('REQUEST_CONFIRMED', { confirmed_item_ids: ['i1'] })]);
+    const owed = triage(confirmed, 3600, null, NOW);
+    expect(owed.actionable).toBe(true);
+    expect(owed.waitingOn).toBe('CONFIRMED - tell 1 agent');
+
+    const told = view(1, [
+      outcome('CONFIRMED', 'i1'),
+      ev('REQUEST_CONFIRMED', { confirmed_item_ids: ['i1'] }),
+      ev('REALTOR_NOTIFIED', { decision: 'CONFIRM' }, 'i1'),
+    ]);
+    expect(triage(told, 3600, null, NOW).actionable).toBe(false);
+  });
+});

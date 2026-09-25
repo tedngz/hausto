@@ -116,7 +116,14 @@ export class FakeDb {
         const target = api as unknown as { _filters: ((r: FakeRow) => boolean)[] };
         void target;
         const chain = {
-          eq: (col: string, val: unknown) => { rows = rows.filter(r => r[col] === val); return chain; },
+          // `payload->>item_id` as select's eq reads it: completing a job by
+          // what it is about is the one update that filters on JSON.
+          eq: (col: string, val: unknown) => {
+            rows = rows.filter(r => (col.includes('->>')
+              ? (r[col.split('->>')[0]] as FakeRow)?.[col.split('->>')[1].replace(/'/g, '')] === val
+              : r[col] === val));
+            return chain;
+          },
           is: (col: string, val: unknown) => { rows = rows.filter(r => (r[col] ?? null) === val); return chain; },
           then: (resolve: (x: { data: null; error: null }) => unknown) => {
             for (const r of rows) Object.assign(r, patch);
