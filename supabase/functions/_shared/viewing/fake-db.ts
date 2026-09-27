@@ -39,7 +39,11 @@ export class FakeDb {
         price_vnd_at_request: ri.price_vnd_at_request,
         sort_order: ri.sort_order ?? null,
         listing_title: listing.title ?? null,
+        listing_url: listing.source_url ?? null,
         district_code: listing.district_code ?? null,
+        // The broker's number, through realtors - the one contact the ops
+        // view does carry, because the operator rings them.
+        realtor_phone: (this.tables.realtors ?? []).find(r => r.id === ri.realtor_id)?.phone_e164 ?? null,
         // Note what is absent: every renters column. The real view omits them
         // so a careless change cannot leak one (invariant 4), and a fake that
         // exposed them would let a test pass on code that leaks.

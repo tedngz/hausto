@@ -11,13 +11,8 @@
 // renter's windows, spend one bounded model call under the daily cap.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import {
-  PARSE_MODEL,
-  PARSE_PROMPT,
-  MAX_REPLY_CHARS,
-  buildParseInput,
-  interpretParse,
-} from '../_shared/viewing/parse-reply.ts';
+import { PARSE_MODEL, MAX_REPLY_CHARS } from '../_shared/viewing/parse-reply.ts';
+import { callParseModel } from '../_shared/viewing/parse-call.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 const corsHeaders = {
@@ -81,34 +76,14 @@ Deno.serve(async (req) => {
     now: new Date(),
   };
 
-  let parsed: unknown;
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: PARSE_MODEL,
-        response_format: { type: 'json_object' },
-        temperature: 0,
-        max_tokens: 300,
-        messages: [
-          { role: 'system', content: PARSE_PROMPT },
-          { role: 'user', content: buildParseInput(ctx) },
-        ],
-      }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      console.error('[ops-parse-reply] openai error:', JSON.stringify(data).slice(0, 300));
-      return json({ error: 'llm_failed', status: res.status }, 502);
-    }
-    logOpenAIUsage({ fn: 'ops-parse-reply', model: PARSE_MODEL, usage: data?.usage, metadata: { itemId } });
-    parsed = JSON.parse(data?.choices?.[0]?.message?.content ?? '{}');
-  } catch (e) {
-    console.error('[ops-parse-reply] failed:', (e as Error).message);
-    return json({ error: 'llm_failed', message: (e as Error).message }, 502);
+  const result = await callParseModel(ctx, OPENAI_API_KEY);
+  if (!result.ok) {
+    console.error('[ops-parse-reply] failed:', result.error);
+    return json({ error: 'llm_failed', message: 'The reply could not be read - pick the outcome by hand.' }, 502);
   }
-
-  return json({ success: true, suggestion: interpretParse(parsed, ctx) });
+  logOpenAIUsage({
+    fn: 'ops-parse-reply', model: PARSE_MODEL,
+    usage: result.usage as { prompt_tokens?: number; completion_tokens?: number } | null, metadata: { itemId },
+  });
+  return json({ success: true, suggestion: result.suggestion });
 });

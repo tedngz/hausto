@@ -24,6 +24,7 @@ interface QueueRow {
 interface Decorated extends QueueRow {
   t: Triage;
   state: string;
+  proposals: number;
 }
 
 export function Queue({ onOpen }: { onOpen: (requestId: string) => void }) {
@@ -49,6 +50,15 @@ export function Queue({ onOpen }: { onOpen: (requestId: string) => void }) {
       .order('occurred_at', { ascending: true });
     if (eErr) { setError(eErr.message); return; }
 
+    // What the AI operator is waiting on a decision for. Shown, never used to
+    // rank: shadow mode must not change what the operator works next.
+    const { data: pending } = await supabase
+      .from('operator_proposals').select('request_id').eq('status', 'PENDING').in('request_id', ids);
+    const pendingByRequest = new Map<string, number>();
+    for (const p of (pending ?? []) as { request_id: string }[]) {
+      pendingByRequest.set(p.request_id, (pendingByRequest.get(p.request_id) ?? 0) + 1);
+    }
+
     const byRequest = new Map<string, DomainEvent[]>();
     for (const e of (events ?? []) as DomainEvent[]) {
       const list = byRequest.get(e.request_id) ?? [];
@@ -66,7 +76,12 @@ export function Queue({ onOpen }: { onOpen: (requestId: string) => void }) {
         .map(e => Date.parse(e.occurred_at))
         .sort((a, b) => b - a)[0] ?? null;
       const waiting = waitingReplies(byRequest.get(r.id) ?? []).length;
-      return { ...r, t: triage(view, r.age_seconds, delivered, now, waiting), state: view.state };
+      return {
+        ...r,
+        t: triage(view, r.age_seconds, delivered, now, waiting),
+        state: view.state,
+        proposals: pendingByRequest.get(r.id) ?? 0,
+      };
     });
 
     decorated.sort((a, b) => a.t.rank - b.t.rank || b.age_seconds - a.age_seconds);
@@ -106,7 +121,7 @@ export function Queue({ onOpen }: { onOpen: (requestId: string) => void }) {
         <table>
           <thead>
             <tr>
-              <th>Ref</th><th>Age</th><th>State</th><th>Waiting on</th><th>Units</th><th>Unresolved</th>
+              <th>Ref</th><th>Age</th><th>State</th><th>Waiting on</th><th>Units</th><th>Unresolved</th><th title="AI operator proposals waiting for a decision">AI</th>
             </tr>
           </thead>
           <tbody>
@@ -122,6 +137,11 @@ export function Queue({ onOpen }: { onOpen: (requestId: string) => void }) {
                 <td>
                   {r.unresolved_realtor_count > 0
                     ? <span className="tag warn">{r.unresolved_realtor_count} no contact</span>
+                    : <span className="muted small">-</span>}
+                </td>
+                <td>
+                  {r.proposals > 0
+                    ? <span className="tag good">{r.proposals}</span>
                     : <span className="muted small">-</span>}
                 </td>
               </tr>
