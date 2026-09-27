@@ -221,3 +221,29 @@ describe('answering the renter with a draft', () => {
     expect(p.action).toBe('ESCALATE');
   });
 });
+
+describe('when every window the renter gave has passed', () => {
+  // Windows: Tue 29 Sep morning (ends 12:00 HCMC = 05:00Z).
+  const after = Date.parse('2026-09-29T05:00:00Z');
+
+  it('proposes no first message and no chase - it asks a person to get new times', () => {
+    const pending = plan(submitted(2), { now: after + HOUR_MS });
+    expect(pending.map(p => [p.key, p.action])).toEqual([['STALE_WINDOWS:r', 'ESCALATE']]);
+
+    const contacted = [...submitted(1), ev('REALTOR_CONTACTED', 0, {}, 'i1')];
+    const ps = plan(contacted, { items: items(1), now: after + NUDGE_AFTER_MS * 3 });
+    expect(ps.map(p => p.action)).toEqual(['ESCALATE']);
+  });
+
+  it('still reads an agent reply that arrives late', () => {
+    const contacted = [...submitted(1), ev('REALTOR_CONTACTED', 0, {}, 'i1')];
+    const s = { outcome: 'UNAVAILABLE_DATE' as const, slots: [], actualPriceVnd: null, note: 'too late', confidence: 'HIGH' as const, problems: [], model: 'm' };
+    const ps = plan(contacted, { items: items(1), now: after + HOUR_MS, unreadReplies: [{ itemId: 'i1', messageId: 'rm1', suggestion: s }] });
+    expect(ps.map(p => p.key)).toEqual(['STALE_WINDOWS:r', 'OUTCOME:i1:rm1']);
+  });
+
+  it('is not triggered while a window is still ahead, or when none were given', () => {
+    expect(plan(submitted(1), { items: items(1), now: after - 60_000 }).map(p => p.action)).toEqual(['CONTACTED']);
+    expect(plan(submitted(1), { items: items(1), availability: [], now: after + HOUR_MS }).map(p => p.action)).toEqual(['CONTACTED']);
+  });
+});

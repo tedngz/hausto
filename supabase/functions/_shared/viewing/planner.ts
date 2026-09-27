@@ -27,6 +27,7 @@ import { assembleItinerary } from './itinerary.ts';
 import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft } from '../realtor/drafts.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
 import type { DraftResult } from './renter-reply.ts';
+import { DAY_PART_HOURS, type DayPart } from './intake.ts';
 
 /** Stamped on every proposal, so agreement can be compared across versions. */
 export const AGENT_VERSION = 'shadow-v1';
@@ -100,6 +101,20 @@ function lastTouch(events: DomainEvent[], itemId: string): number | null {
 }
 
 const hours = (ms: number) => Math.floor(ms / 3_600_000);
+
+/**
+ * Has every window the renter gave already ended, in Ho Chi Minh City time?
+ * No windows at all is not "passed" - the first message then asks the agent
+ * for any time that week.
+ */
+export function windowsAllPassed(availability: { date: string; part: string }[], now: number): boolean {
+  if (availability.length === 0) return false;
+  return availability.every(w => {
+    const to = DAY_PART_HOURS[w.part as DayPart]?.to ?? 23;
+    const end = Date.parse(`${w.date}T${String(to).padStart(2, '0')}:00:00+07:00`);
+    return Number.isFinite(end) && end <= now;
+  });
+}
 
 export function planRequest(p: PlanInput): Proposal[] {
   const out: Proposal[] = [];
@@ -175,6 +190,19 @@ export function planRequest(p: PlanInput): Proposal[] {
 
   if (closed) return out;
 
+  // Every time the renter offered is over. Asking an agent about a morning
+  // that has gone - or chasing them about it - is a message nobody can act
+  // on, and one that may now go out with no person reading it first. The
+  // renter needs asking for new times, and that is a person's job.
+  const stale = windowsAllPassed(p.availability, p.now);
+  if (stale && Object.values(view.items).some(i => i.state === 'PENDING' || i.state === 'CONTACTED')) {
+    propose({
+      itemId: null, key: `STALE_WINDOWS:${requestId}`, action: 'ESCALATE',
+      input: { requestId, reason: 'WINDOWS_PASSED' },
+      rationale: 'Every time the renter gave has passed. Ask them for new times before any agent is contacted or chased.',
+    });
+  }
+
   // ── Each broker ────────────────────────────────────────────────────────────
   for (const item of p.items) {
     const state = view.items[item.itemId];
@@ -207,6 +235,9 @@ export function planRequest(p: PlanInput): Proposal[] {
       }
       continue;
     }
+
+    // Replies are still read above; nothing new goes out on dead dates.
+    if (stale) continue;
 
     if (state.state === 'PENDING') {
       if (item.hasContact) {
