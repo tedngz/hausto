@@ -95,26 +95,33 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
-          # Off a terminal the CLI prints JSON rather than a bare URL, and says
-          # whether the deployment actually became ready.
-          out=$(npx --yes "$VERCEL_CLI" deploy dist-ops --prod --yes --token "$VERCEL_TOKEN")
-          state=$(jq -r '.deployment.readyState // empty' <<<"$out")
-          url=$(jq -r '.deployment.url // empty' <<<"$out")
-          if [ "$state" != "READY" ]; then
-            echo "::error title=Deploy not ready::Vercel reported '${state:-nothing}'."
-            echo "$out"
-            exit 1
-          fi
+          # The exit code is the contract. The CLI's output is not: here it is
+          # human-readable text, and run from an agent's shell it is JSON, so
+          # nothing below parses it beyond finding the URL for the summary.
+          npx --yes "$VERCEL_CLI" deploy dist-ops --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://hausto-[a-z0-9]+-ted-team\.vercel\.app' deploy.log | head -1 || true)
           {
             echo "### Ops console -> https://hausto-ops.vercel.app"
             echo
-            echo "From \`${GITHUB_SHA:0:7}\`. Deployment: $url"
+            echo "From \`${GITHUB_SHA:0:7}\`. Deployment: ${url:-see the step log}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The deploy reporting success is not the page serving. Read it back.
-      - name: Check the production URL serves the console
+      # A green deploy is not proof the alias moved. Production must serve the
+      # exact bundle this run built - its content hash is in dist-ops/index.html
+      # - so a deploy that landed somewhere else, or an alias still pointing at
+      # the previous build, fails here.
+      - name: Check production serves this build
         if: steps.guard.outputs.configured == 'true'
         run: |
           set -euo pipefail
-          sleep 5
-          curl -sfS https://hausto-ops.vercel.app | grep -q '<title>Hausto ops</title>'
+          bundle=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist-ops/index.html | head -1)
+          echo "Expecting $bundle"
+          for attempt in 1 2 3 4 5 6; do
+            if curl -sfS https://hausto-ops.vercel.app | grep -qF "$bundle"; then
+              echo "Production serves $bundle."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error title=Not live::https://hausto-ops.vercel.app is not serving $bundle a minute after the deploy."
+          exit 1
