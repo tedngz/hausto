@@ -287,3 +287,58 @@ describe('the handshake is not a reply', () => {
     expect(waitingReplies(db.tables.events as unknown as DomainEvent[])).toHaveLength(1);
   });
 });
+
+describe('cancelling a request (gap 9)', () => {
+  it('needs a reason from the closed set', async () => {
+    const r = await act({ action: 'CANCEL_REQUEST', requestId: 'req-1', reason: 'changed my mind lol' });
+    expect(r.status).toBe(400);
+    expect(eventsOf('REQUEST_CANCELLED')).toHaveLength(0);
+  });
+
+  it('writes REQUEST_CANCELLED, clears queued broker work, and owes every held broker a release', async () => {
+    await act({ action: 'CONTACTED', itemId: 'i1', message: 'Chào anh' });
+    await act({ action: 'OUTCOME', itemId: 'i2', outcome: 'ALTERNATIVE_OFFERED', slots: [SLOT] });
+    db.tables.jobs.push({ id: 'j1', kind: 'NUDGE_REALTOR', payload: { request_id: 'req-1', item_id: 'i1' }, completed_at: null });
+
+    const r = await act({ action: 'CANCEL_REQUEST', requestId: 'req-1', reason: 'RENTER_FOUND_PLACE', note: 'signed elsewhere' });
+    expect(r.status).toBe(200);
+    expect(eventsOf('REQUEST_CANCELLED')[0]).toMatchObject({
+      actor: ACTOR, payload: { reason: 'RENTER_FOUND_PLACE', note: 'signed elsewhere' },
+    });
+    expect(view().state).toBe('CANCELLED');
+    expect(db.tables.jobs[0].completed_at).not.toBeNull();
+
+    // Both brokers were holding time: one still looking, one with slots offered.
+    expect((await act({ action: 'NOTIFY_REALTOR', itemId: 'i1', decision: 'RELEASE', message: 'Không cần giữ ạ' })).status).toBe(200);
+    expect((await act({ action: 'NOTIFY_REALTOR', itemId: 'i2', decision: 'RELEASE', message: 'Không cần giữ ạ' })).status).toBe(200);
+  });
+
+  it('refuses to cancel twice', async () => {
+    await act({ action: 'CANCEL_REQUEST', requestId: 'req-1', reason: 'DUPLICATE' });
+    expect((await act({ action: 'CANCEL_REQUEST', requestId: 'req-1', reason: 'DUPLICATE' })).status).toBe(409);
+  });
+});
+
+describe('what paste-parse suggested travels with the outcome', () => {
+  it('is stored beside the operator\'s choice, reduced to what measures agreement', async () => {
+    await act({
+      action: 'OUTCOME', itemId: 'i1', outcome: 'ALTERNATIVE_OFFERED', slots: [SLOT],
+      realtorReply: 'Thứ 7 10h được em',
+      suggested: {
+        outcome: 'CONFIRMED', slots: [{ startsAt: SLOT.startsAt, durationMinutes: 30 }],
+        actualPriceVnd: null, confidence: 'HIGH', model: 'gpt-4o-mini', note: 'free text dropped', problems: ['x'],
+      },
+    });
+    const payload = eventsOf('OUTCOME_RECORDED')[0].payload as Record<string, unknown>;
+    expect(payload.outcome).toBe('ALTERNATIVE_OFFERED');
+    expect(payload.suggested).toEqual({
+      outcome: 'CONFIRMED', slot_starts: [SLOT.startsAt], actual_price_vnd: null, confidence: 'HIGH', model: 'gpt-4o-mini',
+    });
+  });
+
+  it('drops a suggested outcome outside the seven rather than storing it', async () => {
+    await act({ action: 'OUTCOME', itemId: 'i1', outcome: 'ALREADY_RENTED', suggested: { outcome: 'MAYBE' } });
+    const payload = eventsOf('OUTCOME_RECORDED')[0].payload as { suggested: { outcome: unknown } };
+    expect(payload.suggested.outcome).toBeNull();
+  });
+});

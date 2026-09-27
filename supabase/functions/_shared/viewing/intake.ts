@@ -56,6 +56,30 @@ export function isValidRef(ref: string): boolean {
 export const DAY_PARTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
 export type DayPart = typeof DAY_PARTS[number];
 
+/**
+ * What each part means on the clock, in Ho Chi Minh City time: `[from, to)` in
+ * whole hours, and the start time the console offers when an agent simply says
+ * "morning is fine". One definition, because "is 16:30 inside the renter's
+ * afternoon?" decides CONFIRMED against ALTERNATIVE_OFFERED, and the console
+ * and the reply parser must not answer it differently.
+ */
+export const DAY_PART_HOURS: Record<DayPart, { from: number; to: number; suggested: number }> = {
+  MORNING: { from: 8, to: 12, suggested: 9 },
+  AFTERNOON: { from: 12, to: 17, suggested: 14 },
+  EVENING: { from: 17, to: 21, suggested: 18 },
+};
+
+/** Does this UTC instant fall inside one of the renter's windows? */
+export function withinWindows(startsAt: string, windows: { date: string; part: string }[]): boolean {
+  const local = new Date(Date.parse(startsAt) + 7 * 60 * 60 * 1000);
+  const date = local.toISOString().slice(0, 10);
+  const hour = local.getUTCHours() + local.getUTCMinutes() / 60;
+  return windows.some(w => {
+    const h = DAY_PART_HOURS[w.part as DayPart];
+    return !!h && w.date === date && hour >= h.from && hour < h.to;
+  });
+}
+
 export interface AvailabilityWindow {
   /** Local calendar date in Asia/Ho_Chi_Minh, `YYYY-MM-DD`. */
   date: string;

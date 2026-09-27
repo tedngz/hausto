@@ -195,4 +195,43 @@ describe('dress rehearsal', () => {
     // The promise this message makes must be one something can keep.
     expect(body).not.toMatch(/\bbook(ed|ing)\b/i);
   });
+
+  it('plays the two alternative paths: offered times beside a plan, and instead of one', async () => {
+    log('\n\n  ── Agents offered other times ───────────────────────────────');
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    record(itemIds[0], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-19T02:00:00Z', durationMinutes: 30 }] });
+    record(itemIds[1], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-19T04:00:00Z', durationMinutes: 30 }] });
+    record(itemIds[2], { outcome: 'ALTERNATIVE_OFFERED', slots: [
+      { startsAt: '2026-09-20T03:00:00Z', durationMinutes: 30 },
+      { startsAt: '2026-09-21T08:30:00Z', durationMinutes: 30 },
+    ] });
+    record(itemIds[3], { outcome: 'ALREADY_RENTED' });
+    record(itemIds[4], { outcome: 'UNAVAILABLE_DATE' });
+
+    // deno-lint-ignore no-explicit-any
+    const withPlan = await deliver(db as any, adapter, {
+      requestId, purpose: 'ITINERARY', order: [itemIds[0], itemIds[1]], actor: opsActor('ops-user-1'),
+    });
+    expect(withPlan.ok).toBe(true);
+    const plan = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    say('us → RENTER  (plan, plus other times offered)', plan);
+    expect(plan).toContain('offered different times');
+    expect(plan).not.toMatch(/\bbook(ed|ing)\b/i);
+
+    // Nothing at their times: the offers are the message.
+    seed();
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    record(itemIds[0], { outcome: 'ALTERNATIVE_OFFERED', slots: [{ startsAt: '2026-09-20T03:00:00Z', durationMinutes: 30 }] });
+    record(itemIds[1], { outcome: 'ALTERNATIVE_OFFERED', slots: [{ startsAt: '2026-09-22T11:00:00Z', durationMinutes: 30 }] });
+    for (const id of itemIds.slice(2)) record(id, { outcome: 'ALREADY_RENTED' });
+    // deno-lint-ignore no-explicit-any
+    const offersOnly = await deliver(db as any, adapter, {
+      requestId, purpose: 'ITINERARY', order: [], actor: opsActor('ops-user-1'),
+    });
+    expect(offersOnly.ok).toBe(true);
+    const body = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    say('us → RENTER  (only other times offered)', body);
+    expect(body).toContain('offered other times');
+    expect(body).not.toMatch(/close matches/);
+  });
 });

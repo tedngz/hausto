@@ -167,15 +167,16 @@ export function realtorDecisionsOwed(view: RequestView): { itemId: string; decis
   const kept = new Set(view.state === 'CONFIRMED' ? view.confirmedItemIds : []);
   const owed: { itemId: string; decision: RealtorDecision }[] = [];
   for (const item of Object.values(view.items)) {
-    if (item.notified) continue;
     // Kept and actually holding a confirmed slot. A kept id on an item that
     // never reached CONFIRMED has no time to name, and telling a broker to
     // hold nothing in particular is a message they cannot act on.
-    if (kept.has(item.itemId) && item.state === 'CONFIRMED') {
-      owed.push({ itemId: item.itemId, decision: 'CONFIRM' });
-    } else if (HOLDING_TIME.has(item.state)) {
-      owed.push({ itemId: item.itemId, decision: 'RELEASE' });
-    }
+    const needed: RealtorDecision | null = kept.has(item.itemId) && item.state === 'CONFIRMED'
+      ? 'CONFIRM'
+      : HOLDING_TIME.has(item.state) ? 'RELEASE' : null;
+    // Owed until the broker's last word from us matches. A broker confirmed
+    // on Monday for a request cancelled on Tuesday is holding a slot for
+    // nobody, and is owed a release despite having been told once already.
+    if (needed && item.notified !== needed) owed.push({ itemId: item.itemId, decision: needed });
   }
   return owed;
 }

@@ -14,7 +14,14 @@ import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
 import { sendFreeForm, ServiceWindowClosedError, ConsecutiveMessageError } from '../whatsapp/send.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
-import { assembleItinerary, renderItinerary, renderNoSupply, type StopListing, type Warning } from './itinerary.ts';
+import {
+  assembleItinerary,
+  renderItinerary,
+  renderNoSupply,
+  renderAlternativesOnly,
+  type StopListing,
+  type Warning,
+} from './itinerary.ts';
 import { renderHoldingUpdate, renderViewingReminder } from './reminders.ts';
 import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
@@ -37,7 +44,7 @@ export interface DeliverOptions {
    * Explicit substitutes, if the caller has some. Left unset, a zero-confirmed
    * request picks its own - see findSubstitutes below.
    */
-  substitutes?: { title: string; priceVnd: number; districtCode: string | null }[];
+  substitutes?: { title: string; priceVnd: number; districtCode: string | null; listingId?: string }[];
   /** Required for VIEWING_REMINDER: which viewing is being reminded about. */
   itemId?: string;
   attempt?: number;
@@ -89,7 +96,15 @@ export async function deliver(
     stops = assembled.stops.length;
     warnings = assembled.warnings;
     orderedItemIds = assembled.stops.map(s => s.itemId);
-    if (stops === 0) {
+    if (stops === 0 && assembled.alternatives.length > 0) {
+      // Nothing at their times, but agents offered others. That is not "none
+      // are free" - these units are available and their agents are waiting on
+      // an answer - so it is not the no-supply message and carries no
+      // substitutes.
+      text = renderAlternativesOnly({
+        ref: request.ref, requestedCount: listings.length, alternatives: assembled.alternatives,
+      });
+    } else if (stops === 0) {
       // Zero confirmed. FAILED_NO_SUPPLY ships with substitutes or it is a
       // dead end, and a dead end is not something we make a renter read.
       //
@@ -101,7 +116,10 @@ export async function deliver(
       offeredListingIds = found.map(s => s.listingId).filter((id): id is string => !!id);
       text = renderNoSupply({ ref: request.ref, requestedCount: listings.length, substitutes: found });
     } else {
-      text = renderItinerary({ ref: request.ref, stops: assembled.stops, requestedCount: listings.length });
+      text = renderItinerary({
+        ref: request.ref, stops: assembled.stops, requestedCount: listings.length,
+        alternatives: assembled.alternatives,
+      });
     }
   } else if (opts.purpose === 'VIEWING_REMINDER') {
     const item = opts.itemId ? view.items[opts.itemId] : undefined;

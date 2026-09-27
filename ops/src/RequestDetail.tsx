@@ -18,9 +18,11 @@ import { supabase } from './supabase';
 import {
   reduceRequest,
   summarise,
+  CANCEL_REASONS,
   type DomainEvent,
   type RequestView,
   type RealtorDecision,
+  type CancelReason,
 } from '../../supabase/functions/_shared/viewing-domain';
 import { formatVnd, hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { waitingReplies } from '../../supabase/functions/_shared/viewing/thread';
@@ -36,6 +38,7 @@ import { Deliver } from './Deliver';
 import { Tasks } from './Tasks';
 import { RenterThread, type Thread } from './RenterThread';
 import type { StopListing } from '../../supabase/functions/_shared/viewing/itinerary';
+import type { ParseSuggestion } from '../../supabase/functions/_shared/viewing/parse-reply';
 
 interface Item {
   id: string;
@@ -130,6 +133,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           {s.unresolved > 0 ? `, ${s.unresolved} still open` : ''}
         </span>
         <div className="spacer" />
+        {view.state !== 'CANCELLED' && <CancelRequest requestId={requestId} onDone={load} />}
         <button onClick={() => void load()}>Refresh</button>
       </div>
 
@@ -298,6 +302,17 @@ function ItemCard({
           availability={availability}
           onSubmit={body => post({ action: 'OUTCOME', ...body })}
           onSaveReply={body => post({ action: 'REALTOR_REPLY', ...body })}
+          onSuggest={async reply => {
+            const { data, error: err } = await supabase.functions.invoke('ops-parse-reply', {
+              body: { itemId: item.id, reply },
+            });
+            const payload = data as { suggestion?: ParseSuggestion; message?: string; error?: string } | null;
+            if (err || !payload?.suggestion) {
+              if (payload?.message) setError(payload.message);
+              return null;
+            }
+            return payload.suggestion;
+          }}
         />
       )}
 
@@ -309,6 +324,19 @@ function ItemCard({
             ? ` - ${state.slots.map(s => hcmc((s as { starts_at: string }).starts_at)).join(', ')}`
             : ''}
         </p>
+      )}
+
+      {state?.state === 'ALTERNATIVE_OFFERED' && state.slots.length > 0 && (
+        <TakeOfferedTime
+          busy={busy}
+          slots={state.slots as { starts_at: string; duration_minutes: number }[]}
+          onTake={slot => post({
+            action: 'OUTCOME',
+            outcome: 'CONFIRMED',
+            slots: [{ startsAt: slot.starts_at, durationMinutes: slot.duration_minutes }],
+            note: 'Renter took an offered time',
+          })}
+        />
       )}
 
       {owed && (
@@ -415,6 +443,102 @@ function ContactForm({
         Save contact
       </button>
       {onCancel && <button disabled={busy} onClick={onCancel}>Cancel</button>}
+    </div>
+  );
+}
+
+/**
+ * The renter chose one of the times the agent offered instead. Recorded as the
+ * CONFIRMED outcome with that slot - one of the seven, like any other - so the
+ * item becomes a stop and, once the renter says yes, the agent is owed a
+ * confirmation for exactly that time.
+ */
+function TakeOfferedTime({
+  busy,
+  slots,
+  onTake,
+}: {
+  busy: boolean;
+  slots: { starts_at: string; duration_minutes: number }[];
+  onTake: (slot: { starts_at: string; duration_minutes: number }) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
+  if (!open) {
+    return (
+      <div className="row" style={{ marginTop: 8 }}>
+        <button disabled={busy} onClick={() => setOpen(true)}>Renter took an offered time</button>
+      </div>
+    );
+  }
+  const slot = slots.find(s => s.starts_at === picked) ?? null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="small muted">Which one did they take?</div>
+      {slots.map(s => (
+        <label key={s.starts_at} className="small" style={{ display: 'block' }}>
+          <input type="radio" name="offered" checked={picked === s.starts_at} onChange={() => setPicked(s.starts_at)} />{' '}
+          {hcmc(s.starts_at)}
+        </label>
+      ))}
+      <div className="row" style={{ marginTop: 6 }}>
+        <button className="primary" disabled={busy || !slot} onClick={() => slot && void onTake(slot)}>
+          Record as confirmed
+        </button>
+        <button disabled={busy} onClick={() => { setOpen(false); setPicked(null); }}>Cancel</button>
+      </div>
+      <p className="small muted" style={{ marginBottom: 0 }}>
+        Then tell the renter in the reply box - the itinerary has already gone out.
+      </p>
+    </div>
+  );
+}
+
+const CANCEL_LABEL: Record<CancelReason, string> = {
+  RENTER_DECLINED: 'Renter said no / pulled out',
+  RENTER_FOUND_PLACE: 'Renter found a place',
+  RENTER_UNRESPONSIVE: 'Renter never answered',
+  DUPLICATE: 'Duplicate request',
+  OTHER: 'Other',
+};
+
+/**
+ * Ending a request. A reason from a closed set, so "why do requests die" can
+ * be counted; anything more goes in the note. Every agent still holding time
+ * is then owed a release, which shows up on their cards.
+ */
+function CancelRequest({ requestId, onDone }: { requestId: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState<CancelReason | ''>('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) return <button onClick={() => setOpen(true)}>Cancel request</button>;
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    const { data, error: err } = await supabase.functions.invoke('ops-record-outcome', {
+      body: { action: 'CANCEL_REQUEST', requestId, reason, note },
+    });
+    setBusy(false);
+    const payload = data as { error?: string; message?: string } | null;
+    if (err || payload?.error) { setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed'); return; }
+    setOpen(false);
+    onDone();
+  };
+
+  return (
+    <div className="row wrap-row small">
+      <select value={reason} onChange={e => setReason(e.target.value as CancelReason)}>
+        <option value="">Why?</option>
+        {CANCEL_REASONS.map(r => <option key={r} value={r}>{CANCEL_LABEL[r]}</option>)}
+      </select>
+      <input placeholder="Note (optional)" value={note} onChange={e => setNote(e.target.value)} />
+      <button className="primary" disabled={busy || !reason} onClick={() => void submit()}>Cancel it</button>
+      <button disabled={busy} onClick={() => setOpen(false)}>Keep</button>
+      {error && <span className="error">{error}</span>}
     </div>
   );
 }

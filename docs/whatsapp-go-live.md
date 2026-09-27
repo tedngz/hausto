@@ -1,5 +1,28 @@
 # Taking WhatsApp live
 
+## Status, checked 2026-09-27
+
+**Live.** Read from production rather than remembered:
+
+- Every secret in the table below is set and non-empty, and `WHATSAPP_MODE` is
+  `cloud` (its digest matches `sha256("cloud")`), since 2026-09-18.
+  `WHATSAPP_BUSINESS_PHONE` is not the `+84000000000` placeholder.
+- All five registry templates are `APPROVED` in `whatsapp_template_status`
+  (plus Meta's sample `hello_world`), synced hourly.
+- Real traffic has flowed: outbound rows carry `wamid.` provider ids, and
+  inbound messages are arriving through the webhook.
+- `VIEWING_AGENT_ENABLED` is **not set**, so the agent is off and every reply
+  routes to an operator. That is the intended starting point, not a gap.
+
+Consequences worth knowing: `/dev/phone` now refuses to run, so renter-facing
+copy is read with `REHEARSAL_PRINT=1 npx vitest run rehearsal` (CLAUDE.md, DoD
+5), and any change to a renter message reaches real people on merge.
+
+The rest of this document is how it got here, kept for the next number or the
+next environment.
+
+---
+
 Everything in the code is done. `MockAdapter` and `CloudApiAdapter` implement the
 same interface, `WHATSAPP_MODE=cloud` picks the second one, and the sending
 rules (persist-then-send, idempotency, the 24-hour window, the 3-in-a-row guard)

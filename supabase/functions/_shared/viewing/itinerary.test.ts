@@ -4,6 +4,7 @@ import {
   warningsFor,
   renderItinerary,
   renderNoSupply,
+  renderAlternativesOnly,
   DISTRICT_HOP_MINUTES,
   type ItineraryStop,
   type StopListing,
@@ -282,5 +283,67 @@ describe('nothing confirmed', () => {
     // not something we make a renter read.
     const text = renderNoSupply({ ref: 'HV-4KX7', requestedCount: 4, substitutes: [] });
     expect(text).toContain('come back to you today');
+  });
+});
+
+describe('other times an agent offered (gap 7)', () => {
+  const offered = (...times: string[]) => ({ outcome: 'ALTERNATIVE_OFFERED', slots: times.map(t => slot(t)) });
+
+  it('collects them apart from the stops, earliest first', () => {
+    const { view, listings } = build(3, {
+      1: confirmed('2026-09-15T02:00:00Z'),
+      2: offered('2026-09-19T08:00:00Z', '2026-09-18T03:00:00Z'),
+      3: { outcome: 'ALREADY_RENTED', slots: [] },
+    });
+    const a = assembleItinerary(view, listings, ['i1']);
+    expect(a.stops.map(s => s.itemId)).toEqual(['i1']);
+    expect(a.alternatives).toEqual([expect.objectContaining({
+      itemId: 'i2', startsAt: ['2026-09-18T03:00:00Z', '2026-09-19T08:00:00Z'],
+    })]);
+    // Never a stop: the renter did not choose these times.
+    expect(a.warnings).toEqual([]);
+  });
+
+  it('puts them in the same one message, after the plan, in local time', () => {
+    const { view, listings } = build(3, {
+      1: confirmed('2026-09-15T02:00:00Z'),
+      2: offered('2026-09-18T03:00:00Z', '2026-09-19T08:00:00Z'),
+      3: { outcome: 'ALREADY_RENTED', slots: [] },
+    });
+    const a = assembleItinerary(view, listings, ['i1']);
+    const text = renderItinerary({ ref: 'HV-4KX9', stops: a.stops, requestedCount: 3, alternatives: a.alternatives });
+    expect(text).toContain('1 of the 3 places');
+    expect(text).toContain('The agent for one more offered different times:');
+    // 03:00Z is 10:00 in Ho Chi Minh City, 08:00Z is 15:00.
+    expect(text).toContain('Flat 2 - 15.000.000 ₫/month - HCM-D1: Fri 18 Sept, 10:00 or Sat 19 Sept, 15:00');
+    expect(text).toContain('We could not confirm the last one for these times.');
+    expect(text).toContain('If one of the other times suits you, tell us which.');
+    expect(text).not.toMatch(/book/i);
+  });
+
+  it('does not count an offered unit as a dead end', () => {
+    const { view, listings } = build(2, {
+      1: confirmed('2026-09-15T02:00:00Z'),
+      2: offered('2026-09-18T03:00:00Z'),
+    });
+    const a = assembleItinerary(view, listings, ['i1']);
+    const text = renderItinerary({ ref: 'HV-4KX9', stops: a.stops, requestedCount: 2, alternatives: a.alternatives });
+    expect(text).not.toContain('could not confirm');
+  });
+
+  it('when nothing is free at their times, lists the offers instead of saying none are free', () => {
+    const { view, listings } = build(3, {
+      1: offered('2026-09-18T03:00:00Z'),
+      2: offered('2026-09-19T08:00:00Z'),
+      3: { outcome: 'ALREADY_RENTED', slots: [] },
+    });
+    const a = assembleItinerary(view, listings, []);
+    expect(a.stops).toHaveLength(0);
+    const text = renderAlternativesOnly({ ref: 'HV-4KX9', requestedCount: 3, alternatives: a.alternatives });
+    expect(text).toContain('the agents for 2 of them offered other times');
+    expect(text).toContain('Tell us which of these suit you');
+    // No plan exists yet, so there is nothing to say YES to.
+    expect(text).not.toMatch(/reply yes/i);
+    expect(text).toContain('Ref HV-4KX9');
   });
 });

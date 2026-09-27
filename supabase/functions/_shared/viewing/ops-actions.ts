@@ -23,14 +23,17 @@
 // Request actions - the renter side:
 //   REPLY           a free-text answer on WhatsApp, inside the 24h window
 //   ACK_REPLIES     the renter's replies were read and need no answer
+//   CANCEL_REQUEST  the request is over; brokers holding time become owed a release
 
 import {
   reduceRequest,
   REALTOR_DECISIONS,
+  CANCEL_REASONS,
   type DomainEvent,
   type RealtorDecision,
+  type CancelReason,
 } from '../viewing-domain.ts';
-import { validateOutcome, outcomePayload, jobsForOutcome } from './outcomes.ts';
+import { validateOutcome, outcomePayload, jobsForOutcome, OUTCOMES } from './outcomes.ts';
 import { realtorDecisionsOwed } from './reminders.ts';
 import { waitingReplies, checkOperatorReply } from './thread.ts';
 import {
@@ -72,7 +75,7 @@ const refuse = (status: number, error: string, message?: string): OpsResult =>
   ({ status, body: { error, ...(message ? { message } : {}) } });
 
 export const ITEM_ACTIONS = ['CONTACTED', 'NUDGE', 'REALTOR_REPLY', 'OUTCOME', 'RECORD_CONTACT', 'NOTIFY_REALTOR'] as const;
-export const REQUEST_ACTIONS = ['REPLY', 'ACK_REPLIES'] as const;
+export const REQUEST_ACTIONS = ['REPLY', 'ACK_REPLIES', 'CANCEL_REQUEST'] as const;
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -137,6 +140,33 @@ async function insertEvent(db: Supa, row: Record<string, unknown>): Promise<OpsR
     return refuse(500, 'event_failed');
   }
   return null;
+}
+
+/**
+ * What paste-parse suggested, kept beside what the operator recorded.
+ *
+ * The pair is the agreement rate the AI operator plan gates on: how often the
+ * model's reading matched the operator's. Reduced to the fields that measure
+ * it and checked against the closed sets, because it arrives from the browser
+ * and lives in an append-only log. The reducer never reads it.
+ */
+function suggestedPayload(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const s = raw as Record<string, unknown>;
+  const outcome = (OUTCOMES as readonly string[]).includes(String(s.outcome)) ? String(s.outcome) : null;
+  const slots = Array.isArray(s.slots)
+    ? s.slots.slice(0, 6)
+      .map(x => String((x as { startsAt?: unknown })?.startsAt ?? ''))
+      .filter(t => Number.isFinite(Date.parse(t)))
+    : [];
+  const price = Number.isInteger(s.actualPriceVnd) ? s.actualPriceVnd : null;
+  return {
+    outcome,
+    slot_starts: slots,
+    actual_price_vnd: price,
+    confidence: s.confidence === 'HIGH' ? 'HIGH' : 'LOW',
+    model: typeof s.model === 'string' ? s.model.slice(0, 60) : null,
+  };
 }
 
 interface Item {
@@ -290,11 +320,16 @@ export async function performOpsAction(
         }
       }
 
+      const suggested = suggestedPayload(input.suggested);
       const failed = await insertEvent(db, {
         request_id: item.request_id,
         item_id: item.id,
         type: 'OUTCOME_RECORDED',
-        payload: { ...outcomePayload(validated.value), ...(replyId ? { reply_message_id: replyId } : {}) },
+        payload: {
+          ...outcomePayload(validated.value),
+          ...(replyId ? { reply_message_id: replyId } : {}),
+          ...(suggested ? { suggested } : {}),
+        },
         actor,
       });
       if (failed) return failed;
@@ -435,6 +470,40 @@ async function requestAction(
   if (!request) return refuse(404, 'Unknown request');
 
   const events = await loadEvents(db, requestId);
+
+  if (action === 'CANCEL_REQUEST') {
+    // Gap 9: a renter who pulled out stayed in the queue for ever. Cancelling
+    // is an event like everything else; the reducer lets it win over any
+    // other state, and every broker still holding time becomes owed a release
+    // (realtorDecisionsOwed), which is the half of cancelling that matters to
+    // them.
+    //
+    // It refunds nothing. Credits were spent at intake for an operator's time,
+    // and whether a cancellation returns them is a payments decision
+    // (CLAUDE.md: no new payment surface for the viewing flow).
+    const reason = str(input.reason).toUpperCase() as CancelReason;
+    if (!(CANCEL_REASONS as readonly string[]).includes(reason)) {
+      return refuse(400, 'invalid_reason', `reason must be one of ${CANCEL_REASONS.join(', ')}`);
+    }
+    if (reduceRequest(requestId, events).state === 'CANCELLED') {
+      return refuse(409, 'already_cancelled', 'This request is already cancelled.');
+    }
+    const note = str(input.note).slice(0, 2000);
+    const failed = await insertEvent(db, {
+      request_id: requestId,
+      type: 'REQUEST_CANCELLED',
+      payload: { reason, ...(note ? { note } : {}) },
+      actor,
+    });
+    if (failed) return failed;
+    // A confirmation still queued for a request that no longer exists would
+    // tell a broker to expect someone. The drain queues releases instead.
+    const { data: items } = await db.from('request_items').select('id').eq('request_id', requestId);
+    for (const it of (items ?? []) as { id: string }[]) {
+      await completeJobs(db, ['CONFIRM_REALTOR', 'NUDGE_REALTOR', 'RESOLVE_REALTOR'], it.id);
+    }
+    return done({ recorded: 'REQUEST_CANCELLED', reason });
+  }
 
   if (action === 'ACK_REPLIES') {
     const waiting = waitingReplies(events);

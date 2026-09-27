@@ -171,3 +171,9 @@ verify_jwt = false
 # dry run - a sweep that messages every opted-in renter should not be triggerable
 # by curling a URL without meaning to.
 verify_jwt = false
+
+[functions.ops-parse-reply]
+# An operator's JWT, checked against user_roles in the function. It spends
+# OpenAI budget per call and writes nothing - a suggestion for the console to
+# fill in, never an event.
+verify_jwt = true

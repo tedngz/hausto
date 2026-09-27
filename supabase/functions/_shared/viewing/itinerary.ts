@@ -62,8 +62,26 @@ function firstSlot(slots: unknown[]): Slot | null {
   return { starts_at: s.starts_at, duration_minutes: Number(s.duration_minutes) || 30 };
 }
 
+/**
+ * A unit whose agent could not do the renter's times but offered others.
+ *
+ * Until these were relayed, "Offered other times" was a dead end: the operator
+ * recorded the slots and the renter never heard them. They are not stops - the
+ * renter has not said yes to a time they did not choose - so they are listed
+ * apart, and a renter who takes one tells us which.
+ */
+export interface OfferedAlternative {
+  itemId: string;
+  listingTitle: string;
+  districtCode: string | null;
+  priceVnd: number;
+  /** UTC instants, in the order the agent offered them. */
+  startsAt: string[];
+}
+
 export interface Assembled {
   stops: ItineraryStop[];
+  alternatives: OfferedAlternative[];
   warnings: Warning[];
   /** Items that were requested but are not in the itinerary, and why. */
   dropped: { itemId: string; state: string }[];
@@ -83,6 +101,7 @@ export function assembleItinerary(
 ): Assembled {
   const byItem = new Map(listings.map(l => [l.itemId, l]));
   const stops: ItineraryStop[] = [];
+  const alternatives: OfferedAlternative[] = [];
   const dropped: { itemId: string; state: string }[] = [];
 
   // Ops order first, then any confirmed item ops did not place - appended
@@ -93,6 +112,24 @@ export function assembleItinerary(
   for (const itemId of ordered) {
     const item = view.items[itemId];
     if (!item) continue;
+    if (item.state === 'ALTERNATIVE_OFFERED') {
+      const listing = byItem.get(itemId);
+      const times = (item.slots as Slot[])
+        .filter(s => typeof s?.starts_at === 'string')
+        .map(s => s.starts_at)
+        .sort();
+      if (listing && times.length > 0) {
+        alternatives.push({
+          itemId,
+          listingTitle: listing.listingTitle,
+          districtCode: listing.districtCode,
+          priceVnd: listing.priceVndAtRequest,
+          startsAt: times,
+        });
+      }
+      dropped.push({ itemId, state: item.state });
+      continue;
+    }
     if (item.state !== 'CONFIRMED') {
       dropped.push({ itemId, state: item.state });
       continue;
@@ -128,7 +165,7 @@ export function assembleItinerary(
     });
   }
 
-  return { stops, warnings: warningsFor(stops), dropped };
+  return { stops, alternatives, warnings: warningsFor(stops), dropped };
 }
 
 /**
@@ -188,6 +225,19 @@ export interface ItineraryMessage {
   ref: string;
   stops: ItineraryStop[];
   requestedCount: number;
+  /** Other times agents offered. Listed apart from the plan, never in it. */
+  alternatives?: OfferedAlternative[];
+}
+
+/** `Sat 28 Sep 10:00 or Sun 29 Sep 15:00` - the day named each time, since these are choices, not a route. */
+function offeredTimes(startsAt: string[]): string {
+  const times = startsAt.map(t => hcmcLong(t));
+  return times.length <= 1 ? (times[0] ?? '') : `${times.slice(0, -1).join(', ')} or ${times[times.length - 1]}`;
+}
+
+function alternativeLines(alternatives: OfferedAlternative[]): string[] {
+  return alternatives.map(a =>
+    `- ${a.listingTitle} - ${formatVnd(a.priceVnd)}/month${a.districtCode ? ` - ${a.districtCode}` : ''}: ${offeredTimes(a.startsAt)}`);
 }
 
 /**
@@ -220,8 +270,22 @@ export function renderItinerary(m: ItineraryMessage): string {
     lines.push(`   ${formatVnd(stop.priceVnd)}/month${stop.districtCode ? ` - ${stop.districtCode}` : ''}`);
   });
 
+  const alternatives = m.alternatives ?? [];
+  if (alternatives.length > 0) {
+    // Apart from the plan, and not as stops: the renter picked windows, the
+    // agent answered with different ones, and saying yes to the plan is not
+    // saying yes to these.
+    lines.push('');
+    lines.push(alternatives.length === 1
+      ? 'The agent for one more offered different times:'
+      : `The agents for ${alternatives.length} more offered different times:`);
+    lines.push(...alternativeLines(alternatives));
+  }
+
   lines.push('');
-  if (n < m.requestedCount) {
+  // Unconfirmed and not offered anything else - the dead ends.
+  const missing = m.requestedCount - n - alternatives.length;
+  if (missing > 0) {
     // One line, no apology and no detail. Which broker said what is not the
     // renter's business, and a paragraph about it reads as an excuse.
     //
@@ -232,12 +296,43 @@ export function renderItinerary(m: ItineraryMessage): string {
     // the price advertised" for every one of them, which was false for a
     // rented unit and misleading for a re-priced one - we would be telling a
     // renter something untrue about a specific flat, in writing.
-    const missing = m.requestedCount - n;
-    lines.push(`We could not confirm the other ${missing === 1 ? 'one' : missing} for these times.`);
+    const other = alternatives.length > 0
+      ? (missing === 1 ? 'the last one' : `the last ${missing}`)
+      : `the other ${missing === 1 ? 'one' : missing}`;
+    lines.push(`We could not confirm ${other} for these times.`);
   }
-  lines.push('Reply YES to lock these in, or tell us what to change.');
+  lines.push(alternatives.length > 0
+    ? 'Reply YES to lock these in. If one of the other times suits you, tell us which.'
+    : 'Reply YES to lock these in, or tell us what to change.');
   lines.push(`Ref ${m.ref}`);
 
+  return lines.join('\n');
+}
+
+/**
+ * Nothing is free at the renter's times, but agents offered others.
+ *
+ * Not the no-supply message: these units are available, just not when the
+ * renter said. Sending "none are free" with substitutes would be telling them
+ * something untrue about places whose agents are waiting on an answer. There
+ * is no YES here, because there is no plan to agree to yet - they choose.
+ */
+export function renderAlternativesOnly(opts: {
+  ref: string;
+  requestedCount: number;
+  alternatives: OfferedAlternative[];
+}): string {
+  const k = opts.alternatives.length;
+  const lines = [
+    k === opts.requestedCount
+      ? `None of the ${opts.requestedCount} places you asked about are free at the times you gave, but ${k === 1 ? 'the agent offered' : 'every agent offered'} other times:`
+      : `None of the ${opts.requestedCount} places you asked about are free at the times you gave, but the agents for ${k === 1 ? 'one of them' : `${k} of them`} offered other times:`,
+    '',
+    ...alternativeLines(opts.alternatives),
+    '',
+    'Tell us which of these suit you and we will set them up.',
+    `Ref ${opts.ref}`,
+  ];
   return lines.join('\n');
 }
 
