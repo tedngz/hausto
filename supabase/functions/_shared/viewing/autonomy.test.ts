@@ -60,10 +60,12 @@ describe('what may run by itself', () => {
   const state = autonomyState({ env: 'REPLY', paused: false, stats: [stats(40, 40)], executed: {}, flagged: {} });
   const now = Date.parse('2026-09-27T03:00:00Z');
 
-  it('is only a confident reply - never a holding one, never broker work', () => {
+  it('is a confident reply, never a holding one - and never the itinerary, a cancellation or an escalation', () => {
     expect(autoEligible({ action: 'REPLY', confidence: 'HIGH' })).toBe(true);
     expect(autoEligible({ action: 'REPLY', confidence: 'LOW' })).toBe(false);
-    for (const action of ['CONTACTED', 'NUDGE', 'OUTCOME', 'NOTIFY_REALTOR', 'DELIVER', 'CANCEL_REQUEST', 'ESCALATE']) {
+    // An outcome with no reply behind it - NO_RESPONSE - stays a person's call.
+    expect(autoEligible({ action: 'OUTCOME', confidence: 'HIGH' })).toBe(false);
+    for (const action of ['DELIVER', 'CANCEL_REQUEST', 'ESCALATE']) {
       expect(autoEligible({ action, confidence: 'HIGH' })).toBe(false);
     }
   });
@@ -113,5 +115,44 @@ describe('stage 3: recording what an agent said', () => {
     const s = autonomyState({ env: 'REPLY,OUTCOME', paused: false, stats: [], executed: {}, flagged: {}, gateOverride: ['REPLY'] });
     expect(s.actions.REPLY.open).toBe(true);
     expect(s.actions.OUTCOME.open).toBe(false);
+  });
+});
+
+describe('stage 4: messages to agents', () => {
+  const record = (action: string): AgreementStats => ({ action, decided: 40, agreed: 40, corrected: 0, rejected: 0, edited: 0, rate: 1 });
+  const everything = 'REPLY,OUTCOME,CONTACTED,NUDGE,NOTIFY_REALTOR';
+
+  it('never sends alone while agent messages go by hand, whatever the record', () => {
+    const s = autonomyState({
+      env: everything, paused: false, stats: ['CONTACTED', 'NUDGE', 'NOTIFY_REALTOR'].map(record),
+      executed: {}, flagged: {}, realtorChannel: 'manual',
+    });
+    for (const a of ['CONTACTED', 'NUDGE', 'NOTIFY_REALTOR'] as const) {
+      expect(s.actions[a].open).toBe(false);
+      expect(s.actions[a].reason).toMatch(/REALTOR_CHANNEL is not bridge/);
+    }
+  });
+
+  it('opens each one through the bridge, on its own record', () => {
+    const s = autonomyState({
+      env: everything, paused: false, stats: [record('CONTACTED')], executed: {}, flagged: {}, realtorChannel: 'bridge',
+    });
+    expect(s.actions.CONTACTED.open).toBe(true);
+    expect(s.actions.NUDGE.open).toBe(false);          // no record of its own
+    expect(s.actions.NOTIFY_REALTOR.open).toBe(false);
+  });
+
+  it('is not opened by the renter-reply override', () => {
+    const s = autonomyState({
+      env: everything, paused: false, stats: [], executed: {}, flagged: {}, gateOverride: ['REPLY'], realtorChannel: 'bridge',
+    });
+    expect(s.actions.REPLY.open).toBe(true);
+    expect(s.actions.CONTACTED.open).toBe(false);
+  });
+
+  it('counts a confident agent message as eligible - the locks decide the rest', () => {
+    expect(autoEligible({ action: 'CONTACTED', confidence: 'HIGH', key: 'CONTACT:i1' })).toBe(true);
+    expect(autoEligible({ action: 'NUDGE', confidence: 'HIGH', key: 'NUDGE:i1:1' })).toBe(true);
+    expect(autoEligible({ action: 'NOTIFY_REALTOR', confidence: 'HIGH', key: 'NOTIFY:i1:CONFIRM' })).toBe(true);
   });
 });

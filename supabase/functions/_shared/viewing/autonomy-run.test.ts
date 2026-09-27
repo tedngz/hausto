@@ -203,3 +203,48 @@ describe('stage 3: an agent reply recorded without a person', () => {
     expect(p.status).toBe('EXECUTED');
   });
 });
+
+describe('stage 4: an agent asked without a person', () => {
+  it('queues the first message for the Zalo device, and "contacted" waits for the device', async () => {
+    const { BridgeChannel } = await import('../realtor/channel.ts');
+    deps.realtorChannel = new BridgeChannel();
+    db.tables.realtors = [{ id: 'realtor-1', phone_e164: '+84901234567' }];
+    db.tables.request_items[0].realtor_id = 'realtor-1';
+    db.tables.events.push({ id: 'e4', request_id: 'req-1', item_id: null, type: 'REPLIES_ACKNOWLEDGED', payload: {}, actor: 'OPS:op-1', occurred_at: at(-30_000).toISOString() });
+    for (let i = 0; i < GATE.minDecided; i++) {
+      db.tables.operator_proposals.push({ id: `c-${i}`, request_id: 'old', item_id: null, dedupe_key: `CONTACT:old-${i}`,
+        action: 'CONTACTED', input: {}, status: 'APPROVED', edited: false, decided_at: at(-86_400_000).toISOString() });
+    }
+    const contactPass = async (now: Date, channel: string) => {
+      // deno-lint-ignore no-explicit-any
+      const state = await loadAutonomyState(db as any, 'CONTACTED', now, { realtorChannel: channel });
+      // deno-lint-ignore no-explicit-any
+      return runPlanner(db as any, { now, parse: () => Promise.resolve(null), autonomy: { state, deps } });
+    };
+
+    await contactPass(at(0), 'bridge');
+    const p = db.tables.operator_proposals.find(x => x.dedupe_key === 'CONTACT:i1')!;
+    expect(p.execute_after).toBe(at(AUTO_HOLD_MS).toISOString());
+
+    await contactPass(at(AUTO_HOLD_MS + 1000), 'bridge');
+    expect(p.status).toBe('EXECUTED');
+    const queued = db.tables.realtor_messages.find(m => m.direction === 'OUT')!;
+    expect(queued).toMatchObject({ status: 'QUEUED', purpose: 'REQUEST_VIEWING', actor: 'AGENT:auto-v1' });
+    expect(queued.on_sent_event).toMatchObject({ type: 'REALTOR_CONTACTED', actor: 'AGENT:auto-v1' });
+    expect(db.tables.events.filter(e => e.type === 'REALTOR_CONTACTED')).toHaveLength(0);
+  });
+
+  it('proposes it for a person instead when agent messages go by hand', async () => {
+    db.tables.realtors = [{ id: 'realtor-1', phone_e164: '+84901234567' }];
+    db.tables.request_items[0].realtor_id = 'realtor-1';
+    for (let i = 0; i < GATE.minDecided; i++) {
+      db.tables.operator_proposals.push({ id: `c-${i}`, request_id: 'old', item_id: null, dedupe_key: `CONTACT:old-${i}`,
+        action: 'CONTACTED', input: {}, status: 'APPROVED', edited: false, decided_at: at(-86_400_000).toISOString() });
+    }
+    // deno-lint-ignore no-explicit-any
+    const state = await loadAutonomyState(db as any, 'CONTACTED', at(0), { realtorChannel: 'manual' });
+    // deno-lint-ignore no-explicit-any
+    await runPlanner(db as any, { now: at(0), parse: () => Promise.resolve(null), autonomy: { state, deps } });
+    expect(db.tables.operator_proposals.find(x => x.dedupe_key === 'CONTACT:i1')!.execute_after).toBeNull();
+  });
+});
