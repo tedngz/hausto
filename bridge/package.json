@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node --experimental-transform-types src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "login": "node --experimental-transform-types src/login.ts"
+    "login": "node --experimental-transform-types src/login.ts",
+    "smoke": "node --experimental-transform-types src/smoke.ts"
   },
   "dependencies": {
     "zca-js": "~2.2.0"

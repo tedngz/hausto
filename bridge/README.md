@@ -200,14 +200,22 @@ stays queued until the device sends it.
 
 ## First run
 
-`src/zca-js.d.ts` describes the parts of zca-js the bridge uses, written from
-the library's documentation - **nothing in the Hausto repo installs or runs
-zca-js**. On the device's first run, check it against the installed version
-(`node_modules/zca-js`): the login call, `findUser`, `sendMessage` and the
-message listener's shape. Anything that differs is fixed in
-`src/zalo-zca.ts`, which is the only file that touches the library.
+`src/zca-js.d.ts` describes the parts of zca-js the bridge uses. It was
+checked against the installed zca-js 2.2.0, and `src/zalo-zca.ts` typechecks
+against the library's own types - but the library is still unofficial and can
+change under a new version, so pin it (`~2.2.0`, with the lockfile) and check
+again before upgrading.
 
-Then send one message to a number you control that is set up as an agent on a
-test request, and confirm on the console that it shows as sent, that
-"contacted" appears on the item, and that a reply from that number arrives in
-the agent conversation.
+To check the Zalo side end to end - find a number, send it a message, hear its
+reply - without going through Hausto at all, stop the service and run the
+smoke test against a number you control:
+
+```bash
+systemctl stop hausto-zalo-bridge
+cd /opt/hausto-bridge/app && runuser -u hausto -- env ZALO_CREDENTIALS_FILE=/opt/hausto-bridge/state/credentials.json   node --experimental-transform-types src/smoke.ts +84XXXXXXXXX "Hausto bridge test - please reply \"ok\" to this message."
+systemctl start hausto-zalo-bridge
+```
+
+It logs in, finds the number, sends the message, and waits two minutes for a
+reply from it. Run on 2026-09-27 against the LANIT VPS: found, sent, and the
+reply received.
