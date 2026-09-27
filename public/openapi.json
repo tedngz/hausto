@@ -99,7 +99,7 @@
                           "price_usd": { "type": "number", "nullable": true },
                           "rooms": { "type": "string", "nullable": true },
                           "size": { "type": "string", "nullable": true },
-                          "vibe": { "type": "string", "nullable": true },
+                          "style_tags": { "type": "array", "items": { "type": "string" }, "description": "Styles from the AI photo analysis, e.g. Modern, Cozy. What the style filter matches against." },
                           "images": { "type": "array", "items": { "type": "string" } },
                           "highlights": { "type": "array", "items": { "type": "string" } },
                           "description": { "type": "string", "nullable": true },

@@ -150,10 +150,10 @@ export interface SearchResult {
   /**
    * The CANONICAL price, read from `external_properties.price_vnd`.
    *
-   * Deliberately not the `price_vnd` field in the search endpoint's response,
-   * which is `Number(p.price)` - the raw column that holds USD for housingsgn
-   * rows (SPEC §0). Quoting that to a renter prints "730 ₫" for a $730 flat.
-   * The caller enriches from the table before rendering; see
+   * The search endpoint emits the same column now, but it used to emit the
+   * raw `price`, which holds USD for housingsgn rows (SPEC §0) - quoting that
+   * to a renter printed "730 ₫" for a $730 flat. The caller still re-reads
+   * the table before rendering, and nulls the price when the row is gone; see
    * viewing-agent-search.
    */
   price_vnd?: number | null;

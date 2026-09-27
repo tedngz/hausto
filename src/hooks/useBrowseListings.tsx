@@ -15,7 +15,6 @@ export type BrowseRow = {
   price_usd: number | null;
   rooms: string | null;
   size: string | null;
-  vibe: string | null;
   images: string[];
   highlights?: string[];
   amenities?: string[];

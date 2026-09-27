@@ -135,10 +135,10 @@ describe('the reply', () => {
   });
 
   it('says price on request rather than quoting an uncorrected figure', () => {
-    // The search endpoint's own price_vnd is the raw `price` column, which
-    // holds USD for housingsgn rows. When the canonical read finds nothing the
-    // caller nulls it, and the renter must see no number rather than a wrong
-    // one - "730 ₫" for a $730 flat is worse than saying nothing.
+    // When the canonical read finds nothing the caller nulls the price, and
+    // the renter must see no number rather than a wrong one - "730 ₫" for a
+    // $730 flat, which is what the raw `price` column says, is worse than
+    // saying nothing.
     const text = renderSearchResults({
       results: [{ id: 'a1', title: 'A flat', price_vnd: null, price_display: null }],
       siteUrl: 'https://hausto.com',

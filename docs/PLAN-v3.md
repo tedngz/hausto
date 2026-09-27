@@ -173,10 +173,9 @@ Retention before acquisition. In order:
 1. **Fix the rejection path that was eating nhatot.** Done in #72: nhatot
    listings are now built from the chotot ad payload rather than scraped, and
    nhatot is excluded from the search-page fallback that could only ever supply
-   the cover image. Still outstanding, and the reason this took a database dig
-   rather than a glance at a dashboard: **instrument `scheduled-crawl` to record
-   per source, per run - rows attempted, written, and rejected with why.** A run
-   that rejects 100% of candidates currently reports success.
+   the cover image. Per-source, per-run telemetry - rows attempted, written,
+   and rejected with why - landed in #92 (`crawl_runs`), so a run that rejects
+   100% of candidates no longer reports success.
 2. **Delete one of the two crawl crons.** `auto-crawl-v2` and `auto-crawl-v3` run
    the same function every 30 minutes with different auth. Keep v3, drop v2.
 3. **Recover the switched-off rows.** Cause found and fixed in #72:
@@ -284,6 +283,11 @@ Drop `vibe` from the API response - **after** re-pointing the style filter at
 `style_tags`, `image_highlights`, `amenities`. Extend the response additively;
 never break its shape. It serves AI crawlers via llms.txt and will serve the
 WhatsApp agent.
+
+Status 2026-09-27: the style filter reads `vibe_analysis->>styles` and `vibe`
+is gone from the response; budgets and `price_vnd` in the response read the
+canonical column; `canonical-price.test.ts` evaluates the migrated SQL rule in
+CI. The title/description cross-check is still not built.
 
 **Done when:** every active listing has a canonical bedroom count, area, district
 and VND price; the `$730` row and its class are caught by an assertion in CI, not
