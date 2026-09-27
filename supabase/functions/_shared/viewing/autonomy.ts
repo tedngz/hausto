@@ -68,11 +68,30 @@ export function gateFor(stats: AgreementStats | undefined, executed: number, fla
   if (editedShare > GATE.maxEditedShare) {
     return { open: false, reason: `${Math.round(editedShare * 100)}% reworded before sending, above ${GATE.maxEditedShare * 100}%.` };
   }
+  const ceiling = flagCeiling(executed, flagged);
+  if (ceiling) return ceiling;
+  return { open: true, reason: `Agreement ${Math.round(rate * 100)}% over ${stats.decided} decisions.` };
+}
+
+/** The one check that applies with or without an override: too many of its own actions flagged. */
+function flagCeiling(executed: number, flagged: number): GateCheck | null {
   const acted = executed + flagged;
   if (acted >= GATE.minExecutedForFlagRate && flagged / acted > GATE.maxFlaggedShare) {
     return { open: false, reason: `${flagged} of ${acted} autonomous actions flagged as wrong - closed until reviewed.` };
   }
-  return { open: true, reason: `Agreement ${Math.round(rate * 100)}% over ${stats.decided} decisions.` };
+  return null;
+}
+
+/**
+ * The gate, skipped on purpose (`ai_operator_controls.gate_override`). The
+ * shadow record is not required - that is what an override is - but the flag
+ * ceiling still is, so an override that goes wrong closes itself.
+ */
+export function overriddenGate(stats: AgreementStats | undefined, executed: number, flagged: number): GateCheck {
+  return flagCeiling(executed, flagged) ?? {
+    open: true,
+    reason: `Gate skipped by override - ${stats?.decided ?? 0} shadow decisions so far, not the ${GATE.minDecided} it asks for.`,
+  };
 }
 
 export interface AutonomyState {
@@ -91,11 +110,15 @@ export function autonomyState(opts: {
   stats: AgreementStats[];
   executed: Record<string, number>;
   flagged: Record<string, number>;
+  /** Actions whose measured gate an owner chose to skip. */
+  gateOverride?: string[];
 }): AutonomyState {
   const listed = new Set((opts.env ?? '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
+  const overridden = new Set((opts.gateOverride ?? []).map(s => s.toUpperCase()));
   const actions = {} as AutonomyState['actions'];
   for (const action of AUTONOMOUS_ACTIONS) {
-    const gate = gateFor(opts.stats.find(s => s.action === action), opts.executed[action] ?? 0, opts.flagged[action] ?? 0);
+    const args = [opts.stats.find(s => s.action === action), opts.executed[action] ?? 0, opts.flagged[action] ?? 0] as const;
+    const gate = overridden.has(action) ? overriddenGate(...args) : gateFor(...args);
     const enabled = listed.has(action);
     actions[action] = {
       enabled,

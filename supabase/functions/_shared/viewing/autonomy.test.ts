@@ -81,3 +81,22 @@ describe('what may run by itself', () => {
     expect(mayExecute(paused, { action: 'REPLY', confidence: 'HIGH', execute_after: new Date(now - 1).toISOString() }, now)).toBe(false);
   });
 });
+
+describe('the gate override', () => {
+  it('opens without a shadow record, and says so', () => {
+    const s = autonomyState({ env: 'REPLY', paused: false, stats: [], executed: {}, flagged: {}, gateOverride: ['REPLY'] });
+    expect(s.actions.REPLY.open).toBe(true);
+    expect(s.actions.REPLY.reason).toBe('Gate skipped by override - 0 shadow decisions so far, not the 30 it asks for.');
+  });
+
+  it('skips only the gate - the env and the pause still hold', () => {
+    expect(autonomyState({ env: '', paused: false, stats: [], executed: {}, flagged: {}, gateOverride: ['REPLY'] }).actions.REPLY.open).toBe(false);
+    expect(autonomyState({ env: 'REPLY', paused: true, stats: [], executed: {}, flagged: {}, gateOverride: ['REPLY'] }).actions.REPLY.open).toBe(false);
+  });
+
+  it('still closes itself when too many of its own sends are flagged', () => {
+    const s = autonomyState({ env: 'REPLY', paused: false, stats: [], executed: { REPLY: 9 }, flagged: { REPLY: 1 }, gateOverride: ['REPLY'] });
+    expect(s.actions.REPLY.open).toBe(false);
+    expect(s.actions.REPLY.reason).toMatch(/flagged as wrong/);
+  });
+});

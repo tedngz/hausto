@@ -148,3 +148,22 @@ describe('with a lock shut', () => {
     expect(whatsapp.delivered).toHaveLength(0);
   });
 });
+
+describe('with the gate skipped by override', () => {
+  it('sends with no shadow record at all, once the hold is out', async () => {
+    db.tables.ai_operator_controls[0].gate_override = ['REPLY'];
+    await pass(at(0));
+    expect(reply().execute_after).toBe(at(AUTO_HOLD_MS).toISOString());
+    await pass(at(AUTO_HOLD_MS + 1000));
+    expect(whatsapp.delivered).toHaveLength(1);
+    expect(db.tables.ai_operator_controls[0].last_state.actions.REPLY.reason).toMatch(/Gate skipped by override/);
+  });
+
+  it('can be restored from the console, and only names known actions', async () => {
+    db.tables.ai_operator_controls[0].gate_override = ['REPLY'];
+    expect((await act({ action: 'SET_AUTONOMY', gateOverride: ['EVERYTHING'] })).status).toBe(400);
+    expect((await act({ action: 'SET_AUTONOMY', gateOverride: [] })).status).toBe(200);
+    await pass(at(0));
+    expect(reply().execute_after).toBeNull();
+  });
+});
