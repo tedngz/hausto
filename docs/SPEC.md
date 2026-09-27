@@ -664,3 +664,20 @@ none once the daily OpenAI cap is reached, escalating instead. The console
 shows pending proposals on each request, a count in the queue that never
 changes the ranking, and an "AI operator" screen with agreement per action and
 paste-parse accuracy against the PLAN-v3 bar (80% of 30+ real replies).
+
+**Drafted renter replies.** For a renter's waiting reply that is not a decline,
+the planner proposes `REPLY` with a drafted WhatsApp answer
+(`renter-reply.ts`, `reply-call.ts`), keyed on the newest waiting message and
+carrying `clientKey: reply-<message id>` so approval is idempotent. The model
+is shown listing facts (title, location, district, price, bedrooms, area,
+amenities, a phone-masked description), each unit's standing as a sentence
+built from its typed outcome, and the request's thread with phone numbers
+masked - never a renter's or agent's contact, and no listing contact column is
+selected. It is told to answer only from those facts, to say "we will check
+with the agent" otherwise (`needs_agent`, which makes the proposal LOW
+confidence and tells the operator they still have to ask), and never to agree
+a new time. Every draft passes `checkOperatorReply` - no phone numbers, no
+"booked" before `CONFIRMED` - or it becomes `ESCALATE` with the reason.
+Nothing is drafted when nothing could be sent: an opted-out renter, a closed
+24-hour window, or two messages already sent since they last wrote. At most 10
+drafts per pass, once per reply, under the daily OpenAI cap.

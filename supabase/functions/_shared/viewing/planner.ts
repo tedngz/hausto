@@ -26,12 +26,13 @@ import { NUDGES_BEFORE_NO_RESPONSE } from './outcomes.ts';
 import { assembleItinerary } from './itinerary.ts';
 import { draftForRealtor, nudgeDraft, confirmDraft, releaseDraft } from '../realtor/drafts.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
+import type { DraftResult } from './renter-reply.ts';
 
 /** Stamped on every proposal, so agreement can be compared across versions. */
 export const AGENT_VERSION = 'shadow-v1';
 
 export const PROPOSED_ACTIONS = [
-  'CONTACTED', 'NUDGE', 'OUTCOME', 'NOTIFY_REALTOR', 'DELIVER', 'CANCEL_REQUEST', 'ESCALATE',
+  'CONTACTED', 'NUDGE', 'OUTCOME', 'NOTIFY_REALTOR', 'DELIVER', 'CANCEL_REQUEST', 'REPLY', 'ESCALATE',
 ] as const;
 export type ProposedAction = typeof PROPOSED_ACTIONS[number];
 
@@ -60,7 +61,18 @@ export interface PlanInput {
   items: PlanItem[];
   availability: { date: string; part: string }[];
   unreadReplies: UnreadReply[];
+  /** A drafted answer to the renter's newest waiting reply, if one was attempted. */
+  renterDraft?: RenterDraft;
   now: number;
+}
+
+export interface RenterDraft {
+  /** The newest waiting reply the draft answers. A newer message makes it stale. */
+  messageId: string;
+  /** Null when the model could not be asked. */
+  draft: DraftResult | null;
+  /** Why nothing may be sent right now: the window is shut, they opted out, two already sent. */
+  blocked?: string;
 }
 
 export interface Proposal {
@@ -97,10 +109,10 @@ export function planRequest(p: PlanInput): Proposal[] {
     out.push({ requestId, confidence: 'HIGH', ...x });
 
   // ── The renter ─────────────────────────────────────────────────────────────
-  // Every reply that is not a yes or a stop routes to a person (intent.ts), and
-  // stage 1 keeps it that way, with one exception the plan names: a decline
-  // means the request is over. Everything else is escalated, keyed on the
-  // newest reply so a new message is a new proposal.
+  // Every reply that is not a yes or a stop routes to a person (intent.ts). A
+  // decline proposes ending the request; anything else proposes a drafted
+  // answer for the person to approve, or escalates when there is no safe
+  // draft. Keyed on the newest reply, so a new message is a new proposal.
   const waiting = waitingReplies(p.events);
   if (waiting.length > 0) {
     const newest = waiting[waiting.length - 1];
@@ -115,12 +127,30 @@ export function planRequest(p: PlanInput): Proposal[] {
         confidence: 'LOW',
       });
     } else {
-      propose({
-        itemId: null, key, action: 'ESCALATE',
-        input: { requestId, reason: 'RENTER_REPLY', intents: waiting.map(w => w.intent) },
-        rationale: `The renter wrote ${waiting.length === 1 ? 'a reply' : `${waiting.length} replies`} `
-          + `(${waiting.map(w => w.intent.toLowerCase()).join(', ')}) that ${waiting.length === 1 ? 'needs' : 'need'} a person.`,
-      });
+      // A drafted answer, when one was made for exactly this reply and the
+      // renter can legally be sent it. The draft was checked against the same
+      // rules as an operator's own reply before it got here (renter-reply.ts).
+      const d = p.renterDraft;
+      const clientKey = newest.messageId ? `reply-${newest.messageId}` : null;
+      if (d && clientKey && d.messageId === newest.messageId && !d.blocked && d.draft?.kind === 'DRAFT') {
+        propose({
+          itemId: null, key, action: 'REPLY',
+          input: { requestId, message: d.draft.message, clientKey },
+          rationale: d.draft.needsAgent
+            ? `Drafted a reply that promises to check with the agent - you still have to ask them. ${d.draft.note}`.trim()
+            : `Drafted an answer from the listing and request. ${d.draft.note}`.trim(),
+          confidence: d.draft.confidence,
+        });
+      } else {
+        const why = d?.blocked ?? (d?.draft?.kind === 'ESCALATE' ? d.draft.reason : null);
+        propose({
+          itemId: null, key, action: 'ESCALATE',
+          input: { requestId, reason: 'RENTER_REPLY', intents: waiting.map(w => w.intent) },
+          rationale: `The renter wrote ${waiting.length === 1 ? 'a reply' : `${waiting.length} replies`} `
+            + `(${waiting.map(w => w.intent.toLowerCase()).join(', ')}) that ${waiting.length === 1 ? 'needs' : 'need'} a person.`
+            + (why ? ` No draft: ${why}` : ''),
+        });
+      }
     }
   }
 

@@ -13,6 +13,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { runPlanner } from '../_shared/viewing/plan-run.ts';
 import { callParseModel } from '../_shared/viewing/parse-call.ts';
 import { PARSE_MODEL } from '../_shared/viewing/parse-reply.ts';
+import { callDraftModel } from '../_shared/viewing/reply-call.ts';
+import { REPLY_MODEL } from '../_shared/viewing/renter-reply.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 const corsHeaders = {
@@ -76,8 +78,22 @@ Deno.serve(async (req) => {
       });
       return r.suggestion;
     },
+    draft: async ctx => {
+      if (!canSpend) return null;
+      const r = await callDraftModel(ctx, OPENAI_API_KEY);
+      if (!r.ok) {
+        console.warn('[ai-operator-plan] renter draft failed:', r.error);
+        return null;
+      }
+      logOpenAIUsage({
+        fn: 'ai-operator-plan', model: REPLY_MODEL,
+        usage: r.usage as { prompt_tokens?: number; completion_tokens?: number } | null,
+        metadata: { kind: 'renter_draft' },
+      });
+      return r.draft;
+    },
   });
 
-  console.log(`[ai-operator-plan] scanned ${result.scanned}, proposed ${result.proposed}, superseded ${result.superseded}, parsed ${result.parsed}`);
+  console.log(`[ai-operator-plan] scanned ${result.scanned}, proposed ${result.proposed}, superseded ${result.superseded}, parsed ${result.parsed}, drafted ${result.drafted}`);
   return json({ success: true, ...result });
 });
