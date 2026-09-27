@@ -183,3 +183,8 @@ verify_jwt = true
 # operator's JWT to refresh one request. Both are checked in the function, so
 # verify_jwt would only reject the cron. It writes proposals, never events.
 verify_jwt = false
+
+[functions.zalo-bridge]
+# The always-on Zalo device (bridge/). It authenticates with ZALO_BRIDGE_TOKEN,
+# checked in the function; it cannot present a Supabase JWT.
+verify_jwt = false

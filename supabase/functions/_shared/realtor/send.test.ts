@@ -35,6 +35,11 @@ class MemoryStore implements RealtorMessageStore {
     this.rows.find(r => r.id === id)!.status = 'FAILED';
     return Promise.resolve();
   }
+  requeue(id: string, body: string) {
+    const row = this.rows.find(r => r.id === id)!;
+    Object.assign(row, { status: 'QUEUED', body });
+    return Promise.resolve(row);
+  }
 }
 
 let store: MemoryStore;
@@ -163,11 +168,12 @@ describe('the drafts', () => {
 });
 
 describe('choosing a channel', () => {
-  it('is manual by default and refuses anything not built', () => {
+  it('is manual by default, bridge when asked, and refuses anything else', () => {
     expect(realtorChannelFromEnv({}).mode).toBe('manual');
     expect(realtorChannelFromEnv({ REALTOR_CHANNEL: 'manual' }).mode).toBe('manual');
-    // A bridge that silently fell back to manual would record drafts as SENT
+    expect(realtorChannelFromEnv({ REALTOR_CHANNEL: 'bridge' }).mode).toBe('bridge');
+    // A typo that silently fell back to manual would record drafts as SENT
     // that never left.
-    expect(() => realtorChannelFromEnv({ REALTOR_CHANNEL: 'bridge' })).toThrow();
+    expect(() => realtorChannelFromEnv({ REALTOR_CHANNEL: 'bridgee' })).toThrow();
   });
 });

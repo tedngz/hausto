@@ -73,7 +73,9 @@ Deno.serve(async (req) => {
   // every action is closed and this runs as shadow mode exactly.
   const now = new Date();
   const env = Deno.env.toObject();
-  const state = await loadAutonomyState(db, env.AI_OPERATOR_AUTONOMY, now);
+  const state = await loadAutonomyState(db, env.AI_OPERATOR_AUTONOMY, now, {
+    realtorChannel: (env.REALTOR_CHANNEL || 'manual').trim() || 'manual',
+  });
   const anyOpen = Object.values(state.actions).some(a => a.open);
   let autonomy;
   if (anyOpen) {

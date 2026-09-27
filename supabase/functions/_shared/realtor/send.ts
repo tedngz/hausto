@@ -52,6 +52,8 @@ export interface RealtorMessageStore {
   insert(row: NewRealtorMessage & { status: StoredRealtorMessage['status'] }): Promise<StoredRealtorMessage>;
   markSent(id: string, providerId?: string): Promise<void>;
   markFailed(id: string, error: string): Promise<void>;
+  /** Put a FAILED row back in the outbox, with the wording being sent now. */
+  requeue(id: string, body: string): Promise<StoredRealtorMessage>;
 }
 
 export class RenterIdentityError extends Error {
@@ -134,20 +136,26 @@ export async function sendToRealtor(
   assertNoRenterIdentity(body, opts.renter);
 
   const existing = await store.findByIdempotencyKey(opts.idempotencyKey);
-  if (existing) return { message: existing, deduplicated: true };
+  if (existing && existing.status !== 'FAILED') return { message: existing, deduplicated: true };
 
-  const message = await store.insert({
-    request_id: opts.requestId,
-    item_id: opts.itemId,
-    realtor_id: opts.realtorId,
-    direction: 'OUT',
-    medium: opts.medium,
-    purpose: opts.purpose,
-    body,
-    actor: opts.actor,
-    idempotency_key: opts.idempotencyKey,
-    status: 'QUEUED',
-  });
+  // A failed send is retried on the same row - same key, the latest wording -
+  // rather than refused as a duplicate of the message that never arrived.
+  // Only the bridge fails like this (an agent not on Zalo, a device error);
+  // the manual channel never does.
+  const message = existing
+    ? await store.requeue(existing.id, body)
+    : await store.insert({
+      request_id: opts.requestId,
+      item_id: opts.itemId,
+      realtor_id: opts.realtorId,
+      direction: 'OUT',
+      medium: opts.medium,
+      purpose: opts.purpose,
+      body,
+      actor: opts.actor,
+      idempotency_key: opts.idempotencyKey,
+      status: 'QUEUED',
+    });
 
   const result = await channel.deliver({ messageId: message.id, medium: opts.medium, body });
   if (!result.ok) {

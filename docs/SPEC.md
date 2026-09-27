@@ -729,3 +729,40 @@ override that goes wrong still closes itself. The console shows "gate skipped"
 beside the action with a **Restore the gate** button (`SET_AUTONOMY` with
 `gateOverride`). First used for `REPLY` on 2026-09-27, by the owner's decision,
 with no shadow decisions yet recorded.
+
+### Stage 3: the Zalo bridge, and outcomes recorded alone
+
+**The bridge** (`bridge/`, owner's decision 2026-09-27) is a daemon on an
+always-on device logged in to the business's Zalo account through zca-js, an
+unofficial client - an accepted risk to the account. With the
+`REALTOR_CHANNEL` secret set to `bridge`, `BridgeChannel` leaves a message to an
+agent `QUEUED` instead of treating it as sent by hand, and the event it stands
+for (`REALTOR_CONTACTED`, `ITEM_NUDGED`, `REALTOR_NOTIFIED`) waits on the row in
+`realtor_messages.on_sent_event`. The device talks to `zalo-bridge`
+(`_shared/realtor/bridge.ts`), authenticated by `ZALO_BRIDGE_TOKEN`:
+
+- **pull** - a heartbeat, then up to 10 `QUEUED` messages claimed for a 10-minute
+  lease (`claimed_at`), with the agent's number, and the **watch list**: agent
+  numbers on requests from the last 21 days. Nothing while
+  `zalo_bridge_status.paused`.
+- **ack** - `SENT` writes the deferred event, once; a repeat ack writes nothing.
+  `FAILED` records why, and sending again from the console requeues the same
+  row with the new wording (`requeue`).
+- **inbound** - a message from a number in `realtors` is stored as an `IN`
+  reply (actor `BRIDGE`, key `bridge:<zalo msg id>`) against the item that agent
+  was last sent something about, and the planner is asked to read it at once.
+  Anyone else is dropped, unstored.
+
+The device only forwards senders on the watch list, journals every send before
+acking so a crash cannot resend, and holds a daily cap and a minimum gap
+between sends to bound the damage of a mistake - nothing in it disguises the
+automation. The console shows the device (online, sent today, queued, last
+error), a **Pause sending** switch (`SET_BRIDGE`), queued and failed messages
+on each item, and send buttons that say whether a person or the device sends.
+
+**Outcomes recorded alone.** `OUTCOME` joins `REPLY` in `AUTONOMOUS_ACTIONS`,
+behind the same three locks with its own gate and record. Only an outcome read
+from an agent's reply by paste-parse qualifies (key `OUTCOME:<item>:<reply>`,
+HIGH confidence, nothing flagged); `NO_RESPONSE` never does. It waits the same
+5-minute hold and runs as `AGENT:auto-v1`. The `REPLY` gate override does not
+open it.

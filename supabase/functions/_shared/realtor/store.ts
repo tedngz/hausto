@@ -34,6 +34,14 @@ export class SupabaseRealtorMessageStore implements RealtorMessageStore {
       .eq('id', id);
   }
 
+  async requeue(id: string, body: string): Promise<StoredRealtorMessage> {
+    await this.db.from('realtor_messages')
+      .update({ status: 'QUEUED', body, error: null, claimed_at: null })
+      .eq('id', id);
+    const { data } = await this.db.from('realtor_messages').select('*').eq('id', id).maybeSingle();
+    return data as StoredRealtorMessage;
+  }
+
   async markFailed(id: string, error: string): Promise<void> {
     await this.db.from('realtor_messages')
       .update({ status: 'FAILED', error: error.slice(0, 500) })

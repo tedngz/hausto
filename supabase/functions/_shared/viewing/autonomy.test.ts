@@ -100,3 +100,18 @@ describe('the gate override', () => {
     expect(s.actions.REPLY.reason).toMatch(/flagged as wrong/);
   });
 });
+
+describe('stage 3: recording what an agent said', () => {
+  it('qualifies only for an outcome read from an agent\'s reply - never "no response"', () => {
+    expect(autoEligible({ action: 'OUTCOME', confidence: 'HIGH', key: 'OUTCOME:i1:rm1' })).toBe(true);
+    expect(autoEligible({ action: 'OUTCOME', confidence: 'HIGH', dedupe_key: 'OUTCOME:i1:rm1' })).toBe(true);
+    expect(autoEligible({ action: 'OUTCOME', confidence: 'LOW', key: 'OUTCOME:i1:rm1' })).toBe(false);
+    expect(autoEligible({ action: 'OUTCOME', confidence: 'HIGH', key: 'NO_RESPONSE:i1' })).toBe(false);
+  });
+
+  it('has its own gate - the reply override does not open it', () => {
+    const s = autonomyState({ env: 'REPLY,OUTCOME', paused: false, stats: [], executed: {}, flagged: {}, gateOverride: ['REPLY'] });
+    expect(s.actions.REPLY.open).toBe(true);
+    expect(s.actions.OUTCOME.open).toBe(false);
+  });
+});

@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config';
 // inside an edge function bundle.
 export default defineConfig({
   test: {
-    include: ['supabase/functions/**/*.test.ts', 'src/**/*.test.ts'],
+    include: ['supabase/functions/**/*.test.ts', 'src/**/*.test.ts', 'bridge/src/**/*.test.ts'],
     environment: 'node',
   },
 });
