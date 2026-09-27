@@ -55,7 +55,7 @@ GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search
       "price_usd": 612,
       "rooms": "2",
       "size": "75 sqm",
-      "vibe": "modern",
+      "style_tags": ["Modern", "Minimalist"],
       "images": ["https://..."],
       "highlights": ["rooftop pool", "gym"],
       "source": "hausto",

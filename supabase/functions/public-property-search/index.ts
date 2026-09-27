@@ -72,7 +72,7 @@ serve(async (req) => {
     if (source !== 'external') {
       let internalQuery = supabase
         .from('properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, created_at, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
+        .select('id, title, location, price, size, rooms, images, highlights, amenities, description, created_at, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
         .eq('is_active', true)
         .gte('last_activated_at', tenDaysAgo)
         .order('created_at', { ascending: false });
@@ -113,7 +113,10 @@ serve(async (req) => {
         internalQuery = internalQuery.ilike('rooms', `%${rooms}%`);
       }
       if (style) {
-        internalQuery = internalQuery.ilike('vibe', `%${style}%`);
+        // The text of the styles array (`["Modern", "Cozy"]`), matched the way
+        // the old `vibe` filter was: case-insensitive substring. `vibe` was set
+        // on a quarter of rows; every analysed row carries styles.
+        internalQuery = internalQuery.ilike('vibe_analysis->>styles', `%${style}%`);
       }
 
       const { data: internalProps } = await internalQuery.range(0, 999);
@@ -129,7 +132,6 @@ serve(async (req) => {
             price_usd: Math.round(Number(p.price) / VND_TO_USD),
             rooms: p.rooms || null,
             size: p.size || null,
-            vibe: p.vibe || null,
             style_tags: Array.isArray(p.style_tags) ? p.style_tags : [],
             // Slim per-image highlight strings (indexed to images) so cards can
             // show the detailed AI highlight per photo, not just the vibe word.
@@ -151,7 +153,7 @@ serve(async (req) => {
     if (source !== 'internal') {
       let externalQuery = supabase
         .from('external_properties')
-        .select('id, title, location, price, size, vibe, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
+        .select('id, title, location, price_vnd, size, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
         .eq('is_active', true)
         // Raw-harvested rows bypassed the ingest quality gates - never browse them
         .eq('raw_only', false)
@@ -178,17 +180,20 @@ serve(async (req) => {
         externalQuery = externalQuery.ilike('location', `%${district}%`);
       }
 
+      // `price` holds USD for housingsgn rows, so budgets and the emitted price
+      // both read the canonical `price_vnd` (SPEC §0). A $730 flat filtered on
+      // `price` looked like 730 dong and fell out of every budget.
       if (minBudget !== null) {
-        externalQuery = externalQuery.gte('price', minBudget * VND_TO_USD);
+        externalQuery = externalQuery.gte('price_vnd', minBudget * VND_TO_USD);
       }
       if (maxBudget !== null) {
-        externalQuery = externalQuery.lte('price', maxBudget * VND_TO_USD);
+        externalQuery = externalQuery.lte('price_vnd', maxBudget * VND_TO_USD);
       }
       if (rooms) {
         externalQuery = externalQuery.ilike('rooms', `%${rooms}%`);
       }
       if (style) {
-        externalQuery = externalQuery.ilike('vibe', `%${style}%`);
+        externalQuery = externalQuery.ilike('vibe_analysis->>styles', `%${style}%`);
       }
 
       const { data: externalProps } = await externalQuery.range(0, 999);
@@ -217,11 +222,10 @@ serve(async (req) => {
             url: `${BASE_URL}/property/${p.id}`,
             source_url: p.source_url,
             location: p.location,
-            price_vnd: Number(p.price) || null,
-            price_usd: p.price ? Math.round(Number(p.price) / VND_TO_USD) : null,
+            price_vnd: p.price_vnd ?? null,
+            price_usd: p.price_vnd ? Math.round(p.price_vnd / VND_TO_USD) : null,
             rooms: p.rooms || null,
             size: p.size || null,
-            vibe: p.vibe || null,
             style_tags: Array.isArray(p.style_tags) ? p.style_tags : [],
             image_highlights: Array.isArray(p.image_analyses)
               ? p.image_analyses.map((a: any) => String(a?.image_highlight || a?.highlight || ''))

@@ -158,15 +158,13 @@ Deno.serve(async (req) => {
 
   // ── Correct the prices before quoting them ────────────────────────────────
   //
-  // The search endpoint returns `price_vnd: Number(p.price)` - the raw column,
-  // which holds USD for housingsgn rows (SPEC §0: a live row reads price = 730,
-  // price_display = '$730 / month'). Rendering that would tell a renter a
-  // $730 flat costs 730 dong.
-  //
-  // The endpoint is a stable contract shared with ChatGPT and Perplexity and is
-  // not ours to change here, so the canonical values are read from the table
-  // instead. This also supplies district_code, which the response does not
-  // carry at all.
+  // The search endpoint used to return `price_vnd: Number(p.price)` - the raw
+  // column, which holds USD for housingsgn rows (SPEC §0: a live row reads
+  // price = 730, price_display = '$730 / month'), so a renter would have been
+  // told a $730 flat costs 730 dong. It now emits the canonical column, but
+  // the read stays: it supplies district_code, which the response does not
+  // carry at all, and it drops the price of a listing that went inactive
+  // between the search and now.
   if (results.length > 0) {
     const ids = results.map(r => r.id);
     const { data: canonical } = await db

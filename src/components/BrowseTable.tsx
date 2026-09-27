@@ -211,12 +211,13 @@ export const BrowseTable = ({
         location: r.location,
         price: r.price_vnd || 0,
         size: r.size || '',
-        vibe: r.vibe || '',
+        // The search API no longer sends `vibe`; style_tags below carries it.
+        vibe: '',
         description: r.description || '',
         highlights: r.highlights || [],
         amenities: r.amenities || [],
         // Same shape the matches view consumes, so the Style group renders
-        // from the AI analysis tags (vibe string is the scoring fallback).
+        // from the AI analysis tags.
         vibe_analysis: (r.style_tags && r.style_tags.length > 0) ? { styles: r.style_tags } : undefined,
         realtor: { id: '', name: '', phone: '', email: '' },
       } as Apartment;
@@ -704,7 +705,7 @@ export const BrowseTable = ({
               price: preview.price_vnd || 0,
               size: preview.size,
               rooms: preview.rooms,
-              vibe: preview.vibe,
+              vibe: '',
               description: preview.description,
               highlights: preview.highlights,
               amenities: preview.amenities,
