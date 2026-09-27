@@ -1,0 +1,33 @@
+# systemd unit for the Zalo bridge. Installed by deploy.sh.
+[Unit]
+Description=Hausto Zalo bridge
+Documentation=file:///opt/hausto-bridge/app/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hausto
+Group=hausto
+WorkingDirectory=/opt/hausto-bridge/app
+EnvironmentFile=/opt/hausto-bridge/.env
+ExecStart=/usr/bin/node --experimental-transform-types src/main.ts
+# main.ts exits after ten failed passes so a broken Zalo session is replaced
+# by a fresh one; this is what brings it back.
+Restart=always
+RestartSec=30
+
+# It needs to read its code, write its state, and make outbound HTTPS calls.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/hausto-bridge/state
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

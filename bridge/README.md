@@ -57,9 +57,54 @@ Two things decide where:
   account. Use SSH keys only, no shared users, and a provider you would trust
   with that login.
 
-## Setup
+## Deploying to a VPS
 
-Node 22.7 or newer.
+Everything after "create the server" is scripted (`deploy/`).
+
+1. **Create the server** in the provider's console: Ubuntu 24.04, 1 vCPU,
+   1 GB RAM, a Vietnam or Singapore location.
+   - SSH key: paste the public key (`~/.ssh/hausto_bridge_ed25519.pub` on the
+     machine this repo was set up from).
+   - User data / cloud-init: paste `deploy/cloud-init.yaml`. It installs Node
+     22, creates the `hausto` service user and its directories, allows SSH in
+     and nothing else, and turns on automatic security updates. Give it a
+     couple of minutes after the server boots.
+2. **Deploy** from the repo:
+
+   ```bash
+   bash bridge/deploy/deploy.sh root@SERVER_IP -i ~/.ssh/hausto_bridge_ed25519
+   ```
+
+   The first run prints a **ZALO_BRIDGE_TOKEN** it generated on the server.
+   Set it as that edge-function secret in the Supabase dashboard. It is shown
+   once and stored only in `/opt/hausto-bridge/.env` on the server.
+3. **Put the Zalo login on the server** (see "The Zalo session" below), then
+   run the same deploy command again. It starts the service this time.
+4. **Watch it come up:**
+   `ssh -i ~/.ssh/hausto_bridge_ed25519 root@SERVER_IP 'journalctl -u hausto-zalo-bridge -f'`,
+   and check the console's AI operator screen shows the device online. Then
+   do the first-run check below, then switch Hausto over.
+
+Updates are the same deploy command: it replaces the code, keeps `.env`, the
+Zalo login and the journal, and restarts the service.
+
+On the server:
+
+| Path | |
+|---|---|
+| `/opt/hausto-bridge/app` | The code. Replaced on every deploy. |
+| `/opt/hausto-bridge/.env` | Token and settings. Created once, never overwritten. |
+| `/opt/hausto-bridge/state/credentials.json` | The Zalo login. Yours to put there. |
+| `/opt/hausto-bridge/state/journal.jsonl` | The send journal. Do not delete it. |
+
+The service runs as `hausto` with a read-only system, writing only to `state/`
+(`deploy/hausto-zalo-bridge.service`). If zca-js turns out to need to write
+elsewhere, the logs will say `EROFS`; add that path to `ReadWritePaths`.
+
+## Setup by hand
+
+The steps below are what the deploy scripts do, for a machine set up without
+them. Node 22.7 or newer.
 
 ```bash
 cd bridge
@@ -83,19 +128,34 @@ not be `e3b0c442...`, the digest of an empty string.
 
 ### 2. The Zalo session
 
-zca-js logs in with the session of a browser already signed in to
-`chat.zalo.me` as the business account. Follow zca-js's own login guide for the
-installed version to export the three values it needs - the **cookie**, the
-**imei**, and the **userAgent** - and save them as `credentials.json` next to
-this README:
+The bridge needs a Zalo session: a **cookie**, an **imei** and a
+**userAgent**, in `credentials.json`. The way to get one is to log in by QR
+code, the same way Zalo PC does - nothing is copied out of a browser.
 
-```json
-{ "cookie": [ ... ], "imei": "...", "userAgent": "..." }
+**On a VPS**, from the repo:
+
+```bash
+bash bridge/deploy/login.sh root@SERVER_IP -i ~/.ssh/hausto_bridge_ed25519
 ```
 
-`credentials.json` is a login to the business's Zalo account. It is in
-`.gitignore`; keep it on the device only, readable by the user the daemon runs
-as.
+A QR code opens on your screen. On the phone of the account the bridge should
+use, open Zalo, tap the **QR icon** (top right), scan it, and confirm the login
+on the phone. The terminal says which account scanned before you confirm, and
+fetches a fresh code if one expires. The session is written to
+`/opt/hausto-bridge/state/credentials.json` on the server, owner-only, and never
+printed. Then run `deploy.sh` again to start the bridge.
+
+**On a machine you are sitting at**, run `npm run login` in this directory
+and scan `qr.png` from the state directory (`ZALO_CREDENTIALS_FILE`'s folder).
+
+Two things to know:
+
+- Logging in takes the account's **web/PC slot**: Zalo PC or Zalo Web on a
+  computer is likely to be signed out. The phone app stays signed in.
+- `credentials.json` is a full login to that Zalo account. It is in
+  `.gitignore`; keep it on the machine the bridge runs on, readable only by
+  the user it runs as. To revoke it, sign the web session out from the Zalo
+  app on the phone (settings, device / login management).
 
 ### 3. Run it
 
@@ -140,14 +200,22 @@ stays queued until the device sends it.
 
 ## First run
 
-`src/zca-js.d.ts` describes the parts of zca-js the bridge uses, written from
-the library's documentation - **nothing in the Hausto repo installs or runs
-zca-js**. On the device's first run, check it against the installed version
-(`node_modules/zca-js`): the login call, `findUser`, `sendMessage` and the
-message listener's shape. Anything that differs is fixed in
-`src/zalo-zca.ts`, which is the only file that touches the library.
+`src/zca-js.d.ts` describes the parts of zca-js the bridge uses. It was
+checked against the installed zca-js 2.2.0, and `src/zalo-zca.ts` typechecks
+against the library's own types - but the library is still unofficial and can
+change under a new version, so pin it (`~2.2.0`, with the lockfile) and check
+again before upgrading.
 
-Then send one message to a number you control that is set up as an agent on a
-test request, and confirm on the console that it shows as sent, that
-"contacted" appears on the item, and that a reply from that number arrives in
-the agent conversation.
+To check the Zalo side end to end - find a number, send it a message, hear its
+reply - without going through Hausto at all, stop the service and run the
+smoke test against a number you control:
+
+```bash
+systemctl stop hausto-zalo-bridge
+cd /opt/hausto-bridge/app && runuser -u hausto -- env ZALO_CREDENTIALS_FILE=/opt/hausto-bridge/state/credentials.json   node --experimental-transform-types src/smoke.ts +84XXXXXXXXX "Hausto bridge test - please reply \"ok\" to this message."
+systemctl start hausto-zalo-bridge
+```
+
+It logs in, finds the number, sends the message, and waits two minutes for a
+reply from it. Run on 2026-09-27 against the LANIT VPS: found, sent, and the
+reply received.

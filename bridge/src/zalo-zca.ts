@@ -1,8 +1,8 @@
 // ZaloClient over zca-js, the unofficial Zalo library.
 //
-// Written against zca-js.d.ts, which records the API as documented; verify it
-// on the device's first run (README.md). The adapter is deliberately thin so
-// a change in the library is a change here and nowhere else.
+// Written against zca-js.d.ts, checked against zca-js 2.2.0. The adapter is
+// deliberately thin so a change in the library is a change here and nowhere
+// else.
 
 import { readFileSync } from 'node:fs';
 import { Zalo, ThreadType, type API, type Credentials, type Message } from 'zca-js';
@@ -26,7 +26,9 @@ export class ZcaClient implements ZaloClient {
       onMessage({ fromUid: String(m.data.uidFrom ?? m.threadId), text, msgId: String(m.data.msgId) });
     });
     this.api.listener.on('error', (...args: unknown[]) => console.error('[zalo] listener error', ...args));
-    this.api.listener.start();
+    // Reconnect by itself when Zalo drops the socket, rather than going deaf
+    // until the next restart.
+    this.api.listener.start({ retryOnClose: true });
   }
 
   private need(): API {
