@@ -20,6 +20,8 @@ export interface ProposalRow {
   rationale: string;
   confidence: 'HIGH' | 'LOW';
   created_at: string;
+  /** Stage 2: when the AI operator will run this itself, unless a person acts first. */
+  execute_after: string | null;
 }
 
 const LABEL: Record<string, string> = {
@@ -134,6 +136,15 @@ function ProposalCard({
         <div className="spacer" />
         <span className="muted">{hcmc(p.created_at)}</span>
       </div>
+      {p.execute_after && (
+        <div className="small age-warn" style={{ marginTop: 4 }}>
+          The AI operator will send this itself at {hcmc(p.execute_after)} unless you act.
+          Editing the text does not stop it - send it, hold it, or reject it.{' '}
+          <button className="link" disabled={busy} onClick={() => void decide({ action: 'HOLD_PROPOSAL', proposalId: p.id })}>
+            Hold - I will handle it
+          </button>
+        </div>
+      )}
       <div className="small" style={{ marginTop: 4 }}>{p.rationale}</div>
       {detail && <div className="small muted" style={{ marginTop: 2 }}>{detail}</div>}
 

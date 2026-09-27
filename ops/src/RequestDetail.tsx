@@ -103,7 +103,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         supabase.rpc('ops_request_thread', { _request_id: requestId }),
         supabase.from('realtor_messages').select('id, item_id, direction, purpose, body, status, created_at')
           .eq('request_id', requestId).order('created_at', { ascending: true }),
-        supabase.from('operator_proposals').select('id, item_id, action, input, rationale, confidence, created_at')
+        supabase.from('operator_proposals').select('id, item_id, action, input, rationale, confidence, created_at, execute_after')
           .eq('request_id', requestId).eq('status', 'PENDING').order('created_at', { ascending: true }),
       ]);
     if (eErr) { setError(eErr.message); return; }

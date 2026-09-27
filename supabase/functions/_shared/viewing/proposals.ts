@@ -10,7 +10,10 @@
 // Pure, so the scoring is tested - it is the number stage 2 is gated on, and a
 // scoring bug would open that gate by accident.
 
-export type ProposalStatus = 'PENDING' | 'APPROVED' | 'AGREED' | 'CORRECTED' | 'REJECTED' | 'SUPERSEDED';
+export type ProposalStatus =
+  | 'PENDING' | 'APPROVED' | 'AGREED' | 'CORRECTED' | 'REJECTED' | 'SUPERSEDED'
+  // Stage 2: run by the AI operator itself, and later marked wrong by a person.
+  | 'EXECUTED' | 'FLAGGED';
 
 export interface ProposalRow {
   id: string;
@@ -122,7 +125,10 @@ export interface AgreementStats {
 export function agreementStats(rows: AgreementRow[]): AgreementStats[] {
   const by = new Map<string, AgreementStats>();
   for (const r of rows) {
-    if (r.status === 'PENDING' || r.status === 'SUPERSEDED') continue;
+    // Not decisions by a person: nothing to agree or disagree with. An
+    // autonomous action is judged by flags instead (autonomy.ts), and counting
+    // it here would let the AI operator raise its own agreement rate.
+    if (r.status === 'PENDING' || r.status === 'SUPERSEDED' || r.status === 'EXECUTED' || r.status === 'FLAGGED') continue;
     const s = by.get(r.action) ?? { action: r.action, decided: 0, agreed: 0, corrected: 0, rejected: 0, edited: 0, rate: null };
     s.decided += 1;
     if (r.status === 'APPROVED' || r.status === 'AGREED') s.agreed += 1;

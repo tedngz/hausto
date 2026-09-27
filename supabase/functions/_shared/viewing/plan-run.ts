@@ -16,6 +16,17 @@ import { describeStatus, type DraftContext, type DraftResult, type ListingFacts,
 import { waitingReplies } from './thread.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
 import { isWindowOpen, MAX_CONSECUTIVE_OUTBOUND } from '../whatsapp/send.ts';
+import {
+  autoEligible,
+  autonomyState,
+  mayExecute,
+  AUTO_HOLD_MS,
+  AUTO_AGENT_VERSION,
+  AUTONOMOUS_ACTIONS,
+  type AutonomyState,
+} from './autonomy.ts';
+import { agreementStats, type AgreementRow, type AgreementStats } from './proposals.ts';
+import { performOpsAction, type OpsDeps } from './ops-actions.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -31,6 +42,8 @@ export interface RunResult {
   superseded: number;
   parsed: number;
   drafted: number;
+  /** Run by the AI operator itself (stage 2). */
+  executed: number;
 }
 
 export async function runPlanner(
@@ -42,9 +55,11 @@ export async function runPlanner(
     parse: (ctx: ParseContext) => Promise<ParseSuggestion | null>;
     /** Draft an answer to the renter. Omitted, renter replies are escalated as before. */
     draft?: (ctx: DraftContext) => Promise<DraftResult | null>;
+    /** Stage 2. Omitted, nothing runs by itself - shadow mode exactly. */
+    autonomy?: { state: AutonomyState; deps: OpsDeps };
   },
 ): Promise<RunResult> {
-  const result: RunResult = { scanned: 0, proposed: 0, superseded: 0, parsed: 0, drafted: 0 };
+  const result: RunResult = { scanned: 0, proposed: 0, superseded: 0, parsed: 0, drafted: 0, executed: 0 };
   const store = new SupabaseMessageStore(db);
 
   let query = db.from('viewing_requests').select('id, ref, renter_id, availability, created_at');
@@ -69,7 +84,8 @@ export async function runPlanner(
         .eq('request_id', req.id),
       db.from('realtor_messages').select('id, item_id, body, created_at')
         .eq('request_id', req.id).eq('direction', 'IN').order('created_at', { ascending: true }),
-      db.from('operator_proposals').select('id, dedupe_key, status').eq('request_id', req.id),
+      db.from('operator_proposals')
+        .select('id, dedupe_key, status, action, input, confidence, execute_after').eq('request_id', req.id),
     ]);
 
     const events = (evs ?? []) as DomainEvent[];
@@ -143,20 +159,68 @@ export async function runPlanner(
         confidence: p.confidence,
         agent_version: AGENT_VERSION,
         status: 'PENDING',
+        // Stage 2: one the AI operator may run itself, after a hold in which
+        // a person can still take it. Decided at creation, against the locks
+        // as they are now - a proposal made while the gate was shut stays a
+        // person's.
+        execute_after: opts.autonomy && autoEligible(p) && opts.autonomy.state.actions[p.action].open
+          ? new Date(opts.now.getTime() + AUTO_HOLD_MS).toISOString()
+          : null,
       })));
       if (error) console.error('[plan-run] insert failed:', error);
       else result.proposed += fresh.length;
     }
 
     const live = new Set(proposals.map(p => p.key));
-    for (const p of (existing ?? []) as { id: string; dedupe_key: string; status: string }[]) {
-      if (p.status !== 'PENDING' || live.has(p.dedupe_key)) continue;
-      await db.from('operator_proposals').update({ status: 'SUPERSEDED', decided_at: opts.now.toISOString() }).eq('id', p.id);
-      result.superseded += 1;
+    for (const p of (existing ?? []) as ExistingProposal[]) {
+      if (p.status !== 'PENDING') continue;
+      if (!live.has(p.dedupe_key)) {
+        await db.from('operator_proposals').update({ status: 'SUPERSEDED', decided_at: opts.now.toISOString() }).eq('id', p.id);
+        result.superseded += 1;
+        continue;
+      }
+      // Due, still wanted, and every lock still open - checked again now, not
+      // trusted from when the hold was set.
+      if (opts.autonomy && mayExecute(opts.autonomy.state, p, opts.now.getTime())) {
+        if (await executeAutonomously(db, opts.autonomy.deps, p, opts.now)) result.executed += 1;
+      }
     }
   }
 
   return result;
+}
+
+interface ExistingProposal {
+  id: string;
+  dedupe_key: string;
+  status: string;
+  action: string;
+  input: Record<string, unknown>;
+  confidence: string;
+  execute_after: string | null;
+}
+
+/**
+ * Run a proposal as the AI operator itself. Through the same performOpsAction
+ * as every person's action, so every rule - the 24-hour window, no third
+ * message in a row, persist before send - applies unchanged.
+ *
+ * A failure hands it to a person rather than retrying: the reasons it fails
+ * (the window shut, a message already sent) are ones a retry cannot fix.
+ */
+async function executeAutonomously(db: Supa, deps: OpsDeps, p: ExistingProposal, now: Date): Promise<boolean> {
+  const r = await performOpsAction(db, deps, `AGENT:${AUTO_AGENT_VERSION}`, { ...p.input, action: p.action, viaProposal: p.id });
+  if (r.status === 200) {
+    await db.from('operator_proposals').update({
+      status: 'EXECUTED', executed_at: now.toISOString(), executed_action: p.action, executed_input: p.input,
+    }).eq('id', p.id);
+    return true;
+  }
+  await db.from('operator_proposals').update({
+    execute_after: null,
+    decision_note: `Did not run itself: ${String(r.body.message ?? r.body.error ?? r.status)}. Handed to a person.`,
+  }).eq('id', p.id);
+  return false;
 }
 
 /**
@@ -220,4 +284,45 @@ async function draftContext(
     .map(m => ({ direction: m.direction === 'IN' ? 'IN' : 'OUT', body: String(m.body), at: String(m.created_at) }));
 
   return { ref: req.ref, state: view.state, listings, thread, now };
+}
+
+/** How many of the most recent human decisions the gate is measured over. */
+export const GATE_SAMPLE = 100;
+
+/**
+ * The three locks, read fresh on every pass (autonomy.ts), and written back to
+ * `ai_operator_controls.last_state` for the console to show.
+ *
+ * The shadow record is the most recent human decisions on each action however
+ * old, not a date window: once an action runs itself, people decide fewer of
+ * them, and a 30-day window would close a healthy gate for lack of decisions.
+ * What keeps it honest once acting is the flag rate, over the last 30 days.
+ */
+export async function loadAutonomyState(db: Supa, env: string | undefined, now: Date): Promise<AutonomyState> {
+  const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  const [{ data: controls }, ...perAction] = await Promise.all([
+    db.from('ai_operator_controls').select('paused').eq('id', 'singleton').maybeSingle(),
+    ...AUTONOMOUS_ACTIONS.map(action => Promise.all([
+      db.from('operator_proposals').select('action, status, edited')
+        .eq('action', action).in('status', ['APPROVED', 'AGREED', 'CORRECTED', 'REJECTED'])
+        .order('decided_at', { ascending: false }).limit(GATE_SAMPLE),
+      db.from('operator_proposals').select('status')
+        .eq('action', action).in('status', ['EXECUTED', 'FLAGGED']).gte('executed_at', since),
+    ])),
+  ]);
+
+  const stats: AgreementStats[] = [];
+  const executed: Record<string, number> = {};
+  const flagged: Record<string, number> = {};
+  AUTONOMOUS_ACTIONS.forEach((action, i) => {
+    const [{ data: decided }, { data: acted }] = perAction[i] as [{ data: unknown[] }, { data: { status: string }[] }];
+    stats.push(...agreementStats((decided ?? []) as AgreementRow[]));
+    executed[action] = (acted ?? []).filter(r => r.status === 'EXECUTED').length;
+    flagged[action] = (acted ?? []).filter(r => r.status === 'FLAGGED').length;
+  });
+
+  const state = autonomyState({ env, paused: controls?.paused === true, stats, executed, flagged });
+  await db.from('ai_operator_controls')
+    .update({ last_state: state, last_run_at: now.toISOString() }).eq('id', 'singleton');
+  return state;
 }

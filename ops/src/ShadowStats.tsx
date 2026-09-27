@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { agreementStats, type AgreementStats } from '../../supabase/functions/_shared/viewing/proposals';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
+import { Autonomy } from './Autonomy';
 
 /** PLAN-v3 S5: paste-parse must read at least this share of real replies right... */
 const PARSE_BAR = 0.8;
@@ -71,9 +72,10 @@ export function ShadowStats() {
   return (
     <>
       <div className="row" style={{ marginBottom: 8 }}>
-        <h2 style={{ fontSize: 15, margin: 0 }}>AI operator - shadow mode, last 30 days</h2>
+        <h2 style={{ fontSize: 15, margin: 0 }}>AI operator - last 30 days</h2>
       </div>
 
+      <Autonomy />
       <div className="card">
         <div className="row wrap-row">
           <strong>Agreement</strong>

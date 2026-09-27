@@ -230,6 +230,9 @@ export async function performOpsAction(
   if (action === 'APPROVE_PROPOSAL' || action === 'REJECT_PROPOSAL') {
     return decideProposal(db, deps, actor, action, input);
   }
+  if (action === 'HOLD_PROPOSAL' || action === 'FLAG_PROPOSAL' || action === 'SET_AUTONOMY') {
+    return superviseAutonomy(db, actor, action, input);
+  }
   const result = await dispatch(db, deps, actor, action, input);
   if (result.status === 200) {
     try {
@@ -320,6 +323,55 @@ async function decideProposal(
     ...decided,
   }).eq('id', id);
   return { ...result, body: { ...result.body, proposal: approval.status } };
+}
+
+/**
+ * A person supervising the AI operator's own actions (stage 2).
+ *
+ *   HOLD_PROPOSAL  take over one it was about to run: it stops being
+ *                  automatic and waits for a person like any other.
+ *   FLAG_PROPOSAL  mark one it already ran as wrong. A WhatsApp message cannot
+ *                  be unsent; the flag is what tells someone to follow up, and
+ *                  what closes the gate if it happens too often (autonomy.ts).
+ *   SET_AUTONOMY   pause or resume all of it - the switch any operator can
+ *                  reach without the dashboard.
+ */
+async function superviseAutonomy(
+  db: Supa,
+  actor: string,
+  action: string,
+  input: Record<string, unknown>,
+): Promise<OpsResult> {
+  const now = new Date().toISOString();
+
+  if (action === 'SET_AUTONOMY') {
+    if (typeof input.paused !== 'boolean') return refuse(400, 'paused must be true or false');
+    const { error } = await db.from('ai_operator_controls').update({
+      paused: input.paused, note: str(input.note).slice(0, 500) || null,
+      updated_by: operatorId(actor), updated_at: now,
+    }).eq('id', 'singleton');
+    if (error) return refuse(500, 'controls_failed');
+    return done({ recorded: input.paused ? 'AUTONOMY_PAUSED' : 'AUTONOMY_RESUMED' });
+  }
+
+  const id = str(input.proposalId);
+  if (!id) return refuse(400, 'proposalId is required');
+  const { data: p } = await db.from('operator_proposals').select('id, status, execute_after').eq('id', id).maybeSingle();
+  if (!p) return refuse(404, 'Unknown proposal');
+
+  if (action === 'HOLD_PROPOSAL') {
+    if (p.status !== 'PENDING') return refuse(409, 'already_decided', `This proposal is already ${String(p.status).toLowerCase()}.`);
+    await db.from('operator_proposals').update({ execute_after: null }).eq('id', id);
+    return done({ recorded: 'PROPOSAL_HELD' });
+  }
+
+  // FLAG_PROPOSAL
+  if (p.status !== 'EXECUTED') return refuse(409, 'not_executed', 'Only something the AI operator did itself can be flagged.');
+  await db.from('operator_proposals').update({
+    status: 'FLAGGED', decided_by: operatorId(actor), decided_at: now,
+    decision_note: str(input.note).slice(0, 2000) || null,
+  }).eq('id', id);
+  return done({ recorded: 'PROPOSAL_FLAGGED' });
 }
 
 async function dispatch(
