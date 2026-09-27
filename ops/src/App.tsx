@@ -1,19 +1,22 @@
-// The shell: sign in, prove the `ops` role, then show a queue or one request.
+// The shell: sign in, prove the `ops` role, then show the queue, one request,
+// or how the AI operator is scoring.
 //
-// Routing is a piece of state rather than a router. There are two screens, the
-// second is reached from the first, and adding react-router to express that
-// would be the first thing here that is not ugly and fast.
+// Routing is a piece of state rather than a router. There are three screens
+// and adding react-router to express that would be the first thing here that
+// is not ugly and fast.
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { SignIn } from './SignIn';
 import { Queue } from './Queue';
 import { RequestDetail } from './RequestDetail';
+import { ShadowStats } from './ShadowStats';
 
 export function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isOps, setIsOps] = useState<boolean | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [screen, setScreen] = useState<'queue' | 'shadow'>('queue');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user.id ?? null));
@@ -53,15 +56,18 @@ export function App() {
 
   return (
     <div className="wrap">
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row nav" style={{ marginBottom: 16 }}>
         <strong>Hausto ops</strong>
-        {requestId && <button onClick={() => setRequestId(null)}>&larr; Queue</button>}
+        <button className={!requestId && screen === 'queue' ? 'active' : ''}
+          onClick={() => { setRequestId(null); setScreen('queue'); }}>Queue</button>
+        <button className={!requestId && screen === 'shadow' ? 'active' : ''}
+          onClick={() => { setRequestId(null); setScreen('shadow'); }}>AI operator</button>
         <div className="spacer" />
         <button onClick={signOut}>Sign out</button>
       </div>
       {requestId
         ? <RequestDetail requestId={requestId} onBack={() => setRequestId(null)} />
-        : <Queue onOpen={setRequestId} />}
+        : screen === 'shadow' ? <ShadowStats /> : <Queue onOpen={setRequestId} />}
     </div>
   );
 }

@@ -619,3 +619,48 @@ The decision is pure (`_shared/viewing/reminders.ts`); `viewing-jobs-drain`
 only runs it on a `pg_cron` schedule and enqueues a `jobs` row per action.
 Keeping the two apart is what makes the promise testable without a database and
 a clock.
+
+---
+
+## §10 The AI operator (stage 1: shadow)
+
+**It proposes; a person decides.** The AI operator writes `operator_proposals`
+rows and nothing else - no events, no messages. A proposal reaches the log only
+when an operator approves it, and then it runs through `ops-record-outcome`
+under the operator's own `OPS:<uuid>`, exactly as if they had pressed the
+button themselves. Invariants 1-4 hold because nothing new writes.
+
+**The judgement is rules, the reading is a model.** `planner.ts` is a pure
+function from one request's log to the proposals that follow from it: first
+message to an uncontacted agent with a number; a chase after six silent hours,
+numbered; `NO_RESPONSE` after two chases and more silence; the itinerary once
+every agent has answered, ordered by the clock; `CONFIRM`/`RELEASE` to brokers
+owed the renter's decision; `CANCEL_REQUEST` on a renter's decline (low
+confidence - a keyword "no" can mean less). An agent reply stored after the
+item's last outcome is read by paste-parse (`parse-call.ts`, the same call as
+the console's button) and proposed as an outcome. Anything the rules cannot
+settle - a renter's question, no agent number, a reply that settles nothing,
+an itinerary with a clash - is `ESCALATE`, which is a proposal too, and can be
+wrong.
+
+| `operator_proposals` | |
+|---|---|
+| `dedupe_key` | One proposal per situation, ever (`CONTACT:<item>`, `NUDGE:<item>:<n>`, `OUTCOME:<item>:<reply>`, `NOTIFY:<item>:<decision>`, `DELIVER:<request>`, `RENTER:<message>`, `NO_CONTACT:<item>`). Unique per request, so a rejected proposal is not made again. |
+| `action`, `input` | An ops action and its input; approving runs exactly this, with the operator's rewording. |
+| `status` | `PENDING` → `APPROVED` / `REJECTED` (a button), `AGREED` / `CORRECTED` (the operator did it by hand, the same or differently), or `SUPERSEDED` (the request moved on). |
+| `executed_action`, `executed_input`, `edited` | What was actually done, when it differed or was reworded. |
+
+**Scoring** (`proposals.ts`, pure and tested, because stage 2 is gated on it):
+approved and agreed count as agreement; corrected and rejected do not; pending
+and superseded are not decisions. Rewording a draft or reordering stops on
+approval is still agreement (`edited`); changing what the action decides - the
+outcome, a slot, the price, the decision - is a correction whichever button was
+pressed. Every operator action passes through `performOpsAction`, which scores
+any pending proposal it answers, so work done by hand is counted, not lost.
+
+`ai-operator-plan` runs the planner every 10 minutes (`pg_cron`) and on demand
+from the console for one request; it reads at most 10 replies per pass and
+none once the daily OpenAI cap is reached, escalating instead. The console
+shows pending proposals on each request, a count in the queue that never
+changes the ranking, and an "AI operator" screen with agreement per action and
+paste-parse accuracy against the PLAN-v3 bar (80% of 30+ real replies).

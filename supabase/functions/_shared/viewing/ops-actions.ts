@@ -24,6 +24,11 @@
 //   REPLY           a free-text answer on WhatsApp, inside the 24h window
 //   ACK_REPLIES     the renter's replies were read and need no answer
 //   CANCEL_REQUEST  the request is over; brokers holding time become owed a release
+//   DELIVER         send the itinerary (the same deliver() the console's button uses)
+//
+// Proposal verdicts - the AI operator's shadow mode (planner.ts):
+//   APPROVE_PROPOSAL  run what it proposed, with any rewording, as this operator
+//   REJECT_PROPOSAL   decline it, with an optional note
 
 import {
   reduceRequest,
@@ -44,6 +49,8 @@ import {
 } from '../whatsapp/send.ts';
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { toE164 } from '../whatsapp/inbound.ts';
+import { deliver } from './deliver.ts';
+import { settlementFor, approvalOf, type ProposalRow, type DoneAction } from './proposals.ts';
 import { REALTOR_MEDIA, type RealtorChannel, type RealtorMedium } from '../realtor/channel.ts';
 import {
   sendToRealtor,
@@ -75,7 +82,7 @@ const refuse = (status: number, error: string, message?: string): OpsResult =>
   ({ status, body: { error, ...(message ? { message } : {}) } });
 
 export const ITEM_ACTIONS = ['CONTACTED', 'NUDGE', 'REALTOR_REPLY', 'OUTCOME', 'RECORD_CONTACT', 'NOTIFY_REALTOR'] as const;
-export const REQUEST_ACTIONS = ['REPLY', 'ACK_REPLIES', 'CANCEL_REQUEST'] as const;
+export const REQUEST_ACTIONS = ['REPLY', 'ACK_REPLIES', 'CANCEL_REQUEST', 'DELIVER'] as const;
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -204,6 +211,15 @@ async function toRealtor(
   }
 }
 
+/**
+ * Run one action, then score any AI operator proposal it answers.
+ *
+ * Scoring happens here, beside the action, because this is the one place
+ * every operator action passes through: an operator doing the work by hand is
+ * the commonest way a proposal is agreed with or corrected, and a proposal
+ * left PENDING after the work is done would be a decision the agreement rate
+ * never counts. It never affects the action's own result.
+ */
 export async function performOpsAction(
   db: Supa,
   deps: OpsDeps,
@@ -211,6 +227,108 @@ export async function performOpsAction(
   input: Record<string, unknown>,
 ): Promise<OpsResult> {
   const action = str(input.action) || 'OUTCOME';
+  if (action === 'APPROVE_PROPOSAL' || action === 'REJECT_PROPOSAL') {
+    return decideProposal(db, deps, actor, action, input);
+  }
+  const result = await dispatch(db, deps, actor, action, input);
+  if (result.status === 200) {
+    try {
+      await settleProposals(db, { action, itemId: str(input.itemId) || null, input }, actor, str(input.viaProposal) || null);
+    } catch (e) {
+      console.error('[ops-actions] proposal settlement failed:', (e as Error).message);
+    }
+  }
+  return result;
+}
+
+async function settleProposals(db: Supa, done: DoneAction, actor: string, exceptId: string | null): Promise<void> {
+  let query = db.from('operator_proposals')
+    .select('id, request_id, item_id, dedupe_key, action, input, status')
+    .eq('status', 'PENDING');
+  query = done.itemId ? query.eq('item_id', done.itemId) : query.eq('request_id', str(done.input.requestId));
+  const { data } = await query;
+  for (const p of (data ?? []) as ProposalRow[]) {
+    if (p.id === exceptId) continue;
+    const verdict = settlementFor(p, done);
+    if (!verdict) continue;
+    const { action: _a, viaProposal: _v, ...executed } = done.input;
+    await db.from('operator_proposals').update({
+      status: verdict,
+      executed_action: done.action,
+      executed_input: executed,
+      decided_by: operatorId(actor),
+      decided_at: new Date().toISOString(),
+    }).eq('id', p.id);
+  }
+}
+
+/** `OPS:<uuid>` to the uuid, or null for a non-person actor. */
+function operatorId(actor: string): string | null {
+  return actor.startsWith('OPS:') ? actor.slice(4) : null;
+}
+
+/**
+ * An operator's verdict on one proposal.
+ *
+ * Approving runs the proposed action - with any rewording the operator made -
+ * through the same path as every other action, under the operator's own actor.
+ * The AI operator never writes to the log in shadow mode; a person approving
+ * its proposal does. ESCALATE runs nothing: approving it agrees that it needed
+ * a person.
+ */
+async function decideProposal(
+  db: Supa,
+  deps: OpsDeps,
+  actor: string,
+  action: string,
+  input: Record<string, unknown>,
+): Promise<OpsResult> {
+  const id = str(input.proposalId);
+  if (!id) return refuse(400, 'proposalId is required');
+  const { data: p } = await db
+    .from('operator_proposals')
+    .select('id, request_id, item_id, dedupe_key, action, input, status')
+    .eq('id', id)
+    .maybeSingle();
+  if (!p) return refuse(404, 'Unknown proposal');
+  if (p.status !== 'PENDING') return refuse(409, 'already_decided', `This proposal is already ${String(p.status).toLowerCase()}.`);
+
+  const decided = { decided_by: operatorId(actor), decided_at: new Date().toISOString() };
+
+  if (action === 'REJECT_PROPOSAL') {
+    await db.from('operator_proposals').update({
+      status: 'REJECTED', ...decided, decision_note: str(input.note).slice(0, 2000) || null,
+    }).eq('id', id);
+    return done({ recorded: 'PROPOSAL_REJECTED' });
+  }
+
+  if (p.action === 'ESCALATE') {
+    await db.from('operator_proposals').update({ status: 'APPROVED', ...decided }).eq('id', id);
+    return done({ recorded: 'PROPOSAL_APPROVED' });
+  }
+
+  const overrides = (input.overrides && typeof input.overrides === 'object' ? input.overrides : {}) as Record<string, unknown>;
+  const approval = approvalOf(p.input as Record<string, unknown>, overrides);
+  const result = await performOpsAction(db, deps, actor, { ...approval.input, action: p.action, viaProposal: id });
+  if (result.status !== 200) return result;
+
+  await db.from('operator_proposals').update({
+    status: approval.status,
+    edited: approval.edited,
+    executed_action: p.action,
+    executed_input: approval.input,
+    ...decided,
+  }).eq('id', id);
+  return { ...result, body: { ...result.body, proposal: approval.status } };
+}
+
+async function dispatch(
+  db: Supa,
+  deps: OpsDeps,
+  actor: string,
+  action: string,
+  input: Record<string, unknown>,
+): Promise<OpsResult> {
   if ((REQUEST_ACTIONS as readonly string[]).includes(action)) return requestAction(db, deps, actor, action, input);
   if (!(ITEM_ACTIONS as readonly string[]).includes(action)) return refuse(400, `Unknown action: ${action}`);
 
@@ -470,6 +588,20 @@ async function requestAction(
   if (!request) return refuse(404, 'Unknown request');
 
   const events = await loadEvents(db, requestId);
+
+  if (action === 'DELIVER') {
+    // The itinerary, as a typed action like every other. The ops console has
+    // its own button on viewing-deliver; this is the same deliver() for the
+    // AI operator's proposals, so "send the plan" is one tool rather than an
+    // HTTP hop only a browser can make.
+    const order = Array.isArray(input.order) ? input.order.map(String) : undefined;
+    const r = await deliver(db, deps.whatsapp, { requestId, purpose: 'ITINERARY', order, actor });
+    if (!r.ok) {
+      const status = r.code === 'unknown_request' ? 404 : r.code === 'send_failed' ? 502 : 409;
+      return refuse(status, r.code, r.message);
+    }
+    return done({ recorded: 'ITINERARY_DELIVERED', messageId: r.messageId, stops: r.stops, deduplicated: r.deduplicated });
+  }
 
   if (action === 'CANCEL_REQUEST') {
     // Gap 9: a renter who pulled out stayed in the queue for ever. Cancelling

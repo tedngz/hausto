@@ -37,6 +37,7 @@ import { OutcomeForm } from './OutcomeForm';
 import { Deliver } from './Deliver';
 import { Tasks } from './Tasks';
 import { RenterThread, type Thread } from './RenterThread';
+import { Proposals, type ProposalRow } from './Proposals';
 import type { StopListing } from '../../supabase/functions/_shared/viewing/itinerary';
 import type { ParseSuggestion } from '../../supabase/functions/_shared/viewing/parse-reply';
 
@@ -89,10 +90,11 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
   const [view, setView] = useState<RequestView | null>(null);
   const [thread, setThread] = useState<Thread | null>(null);
   const [transcript, setTranscript] = useState<RealtorMessage[]>([]);
+  const [proposals, setProposals] = useState<ProposalRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [{ data: req }, { data: rows }, { data: evs, error: eErr }, { data: th, error: tErr }, { data: rm }] =
+    const [{ data: req }, { data: rows }, { data: evs, error: eErr }, { data: th, error: tErr }, { data: rm }, { data: pr }] =
       await Promise.all([
         supabase.from('ops_request_queue').select('id, ref, availability, created_at').eq('id', requestId).maybeSingle(),
         supabase.from('ops_request_items_view').select('*').eq('request_id', requestId).order('sort_order'),
@@ -101,6 +103,8 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         supabase.rpc('ops_request_thread', { _request_id: requestId }),
         supabase.from('realtor_messages').select('id, item_id, direction, purpose, body, status, created_at')
           .eq('request_id', requestId).order('created_at', { ascending: true }),
+        supabase.from('operator_proposals').select('id, item_id, action, input, rationale, confidence, created_at')
+          .eq('request_id', requestId).eq('status', 'PENDING').order('created_at', { ascending: true }),
       ]);
     if (eErr) { setError(eErr.message); return; }
     // The thread failing (an old database without the function, say) must not
@@ -112,6 +116,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
     setView(reduceRequest(requestId, (evs ?? []) as DomainEvent[]));
     setThread((th as Thread) ?? null);
     setTranscript((rm ?? []) as RealtorMessage[]);
+    setProposals((pr ?? []) as ProposalRow[]);
     setError(null);
   }, [requestId]);
 
@@ -141,6 +146,13 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         Requested {hcmc(request.created_at)}. Renter is free:{' '}
         {(request.availability ?? []).map(w => `${w.date} ${w.part.toLowerCase()}`).join(', ') || 'not stated'}
       </p>
+
+      <Proposals
+        requestId={requestId}
+        proposals={proposals}
+        titleFor={id => items.find(i => i.id === id)?.listing_title ?? id}
+        onChanged={load}
+      />
 
       <RenterThread
         requestId={requestId}

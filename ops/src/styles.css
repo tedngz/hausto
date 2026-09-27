@@ -70,3 +70,9 @@ button.link:hover:not(:disabled) { background: none; }
 .bubble.out { align-self: flex-end; background: #eef6f1; }
 .bubble.waiting { border-color: var(--bad); }
 .bubble .body { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* The AI operator's proposals. Set apart so nobody mistakes a suggestion for
+   something that has happened. */
+.card.shadow { border-style: dashed; background: #fcfcfa; }
+.proposal { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.nav button.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }

@@ -177,3 +177,9 @@ verify_jwt = false
 # OpenAI budget per call and writes nothing - a suggestion for the console to
 # fill in, never an event.
 verify_jwt = true
+
+[functions.ai-operator-plan]
+# pg_cron calls this with the cron secret; the ops console calls it with an
+# operator's JWT to refresh one request. Both are checked in the function, so
+# verify_jwt would only reject the cron. It writes proposals, never events.
+verify_jwt = false
