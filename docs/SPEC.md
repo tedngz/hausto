@@ -210,7 +210,7 @@ request_id   uuid not null
 item_id      uuid                         -- null for request-level events
 type         text not null                -- SCREAMING_SNAKE, see §3
 payload      jsonb not null default '{}'
-actor        text not null                -- OPS:<uuid> | RENTER | SYSTEM
+actor        text not null                -- OPS:<uuid> | RENTER | SYSTEM | AGENT:<version> (§10)
 occurred_at  timestamptz not null default now()
 ```
 
@@ -681,3 +681,43 @@ a new time. Every draft passes `checkOperatorReply` - no phone numbers, no
 Nothing is drafted when nothing could be sent: an opted-out renter, a closed
 24-hour window, or two messages already sent since they last wrote. At most 10
 drafts per pass, once per reply, under the daily OpenAI cap.
+
+### Stage 2: acting alone on renter replies
+
+The AI operator may send a renter reply itself - and only that. Broker work
+and every escalation stay with people until stage 3. Three locks
+(`_shared/viewing/autonomy.ts`), all of which must be open, re-checked on every
+pass and again at the moment of running:
+
+1. **`AI_OPERATOR_AUTONOMY`**, an edge-function secret listing the actions
+   allowed (`REPLY`). Unset - how it ships - means every lock is shut and the
+   planner runs as shadow mode exactly.
+2. **`ai_operator_controls.paused`**, which any operator sets from the console
+   (`SET_AUTONOMY`). The kill switch needing no dashboard.
+3. **The gate**, measured from people's own stage 1 decisions on that action:
+   at least 30 of the most recent 100 decided, at least 90% agreed, at most 20%
+   reworded on the way out. Once acting, more than 5% of its own actions
+   flagged (over 10+) closes it again. The shadow record is the most recent
+   decisions however old, not a date window, because people decide fewer once
+   an action runs itself.
+
+Only a `REPLY` at HIGH confidence qualifies - a draft answered wholly from the
+facts. A holding reply ("we will check with the agent") is LOW and always goes
+to a person, since it promises work only a person can start.
+
+A qualifying proposal made while its lock is open gets `execute_after = now +
+5 minutes`. The console shows it with the time it will send and a **Hold**
+button (`HOLD_PROPOSAL`, clears `execute_after`); approving, rejecting or doing
+the work by hand also stop it. On a later pass, if it is still wanted and every
+lock is still open, it runs through `performOpsAction` as `AGENT:auto-v1` - the
+24-hour window, the 3-in-a-row guard and persist-before-send all apply - and
+becomes `EXECUTED`. A refused run is handed to a person (`execute_after`
+cleared, the reason in `decision_note`), never retried.
+
+A sent message cannot be unsent. **Flag as wrong** (`FLAG_PROPOSAL`) on the AI
+operator screen marks an `EXECUTED` proposal `FLAGGED` with a note: it tells a
+person to follow up with the renter, and feeds the flag rate that can close the
+gate. `EXECUTED` and `FLAGGED` are not shadow decisions and never count towards
+agreement - otherwise the AI operator could raise its own rate. The planner
+writes what it concluded about each lock to `ai_operator_controls.last_state`
+for the console, which cannot read the secret.

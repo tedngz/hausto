@@ -1,16 +1,23 @@
-// The AI operator, stage 1: shadow mode. Proposes; never acts.
+// The AI operator. Stage 1 (shadow): proposes, and people decide. Stage 2:
+// may also run renter replies itself, when every lock in autonomy.ts is open.
 //
 // Runs on pg_cron every 10 minutes over open requests, and on demand from the
-// ops console for one request. It writes `operator_proposals` rows and nothing
-// else - no events, no messages. An operator approving a proposal is what
-// turns it into an action, through ops-record-outcome, under their own actor.
+// ops console for one request. With every lock shut - the state it ships in -
+// it writes `operator_proposals` rows and nothing else, and an operator
+// approving one is what turns it into an action, under their own actor. With a
+// lock open, a qualifying proposal that no one took during its hold runs as
+// AGENT:<version>, through the same performOpsAction a person's action does.
 //
-// The judgement is `_shared/viewing/planner.ts` (pure, tested); the loop is
-// `_shared/viewing/plan-run.ts`. This file is auth, the model call for agent
-// replies, and the spend guard.
+// The judgement is `_shared/viewing/planner.ts`, the locks `autonomy.ts`
+// (both pure, tested); the loop is `plan-run.ts`. This file is auth, the model
+// calls, the spend guard and the transports.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { runPlanner } from '../_shared/viewing/plan-run.ts';
+import { runPlanner, loadAutonomyState } from '../_shared/viewing/plan-run.ts';
+import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
+import { SupabaseMessageStore } from '../_shared/whatsapp/store.ts';
+import { realtorChannelFromEnv } from '../_shared/realtor/channel.ts';
+import { SupabaseRealtorMessageStore } from '../_shared/realtor/store.ts';
 import { callParseModel } from '../_shared/viewing/parse-call.ts';
 import { PARSE_MODEL } from '../_shared/viewing/parse-reply.ts';
 import { callDraftModel } from '../_shared/viewing/reply-call.ts';
@@ -62,9 +69,35 @@ Deno.serve(async (req) => {
   // escalation, which is what a person would have had to handle anyway.
   const canSpend = !!OPENAI_API_KEY && !(await isOpenAIBudgetExhausted());
 
+  // Stage 2's locks, read fresh every pass. With AI_OPERATOR_AUTONOMY unset
+  // every action is closed and this runs as shadow mode exactly.
+  const now = new Date();
+  const env = Deno.env.toObject();
+  const state = await loadAutonomyState(db, env.AI_OPERATOR_AUTONOMY, now);
+  const anyOpen = Object.values(state.actions).some(a => a.open);
+  let autonomy;
+  if (anyOpen) {
+    try {
+      autonomy = {
+        state,
+        deps: {
+          whatsapp: adapterFromEnv(env),
+          messages: new SupabaseMessageStore(db),
+          realtorChannel: realtorChannelFromEnv(env),
+          realtorMessages: new SupabaseRealtorMessageStore(db),
+        },
+      };
+    } catch (e) {
+      // A misconfigured transport is a reason not to act, never a reason to
+      // act on a fallback.
+      console.error('[ai-operator-plan] autonomy disabled this pass:', (e as Error).message);
+    }
+  }
+
   const result = await runPlanner(db, {
     requestIds,
-    now: new Date(),
+    now,
+    autonomy,
     parse: async ctx => {
       if (!canSpend) return null;
       const r = await callParseModel(ctx, OPENAI_API_KEY);
@@ -94,6 +127,6 @@ Deno.serve(async (req) => {
     },
   });
 
-  console.log(`[ai-operator-plan] scanned ${result.scanned}, proposed ${result.proposed}, superseded ${result.superseded}, parsed ${result.parsed}, drafted ${result.drafted}`);
+  console.log(`[ai-operator-plan] scanned ${result.scanned}, proposed ${result.proposed}, superseded ${result.superseded}, parsed ${result.parsed}, drafted ${result.drafted}, executed ${result.executed}`);
   return json({ success: true, ...result });
 });
