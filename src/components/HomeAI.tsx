@@ -1370,7 +1370,9 @@ export const HomeAI = ({
         // mt-auto here, not on the composer: this strip and the composer are
         // one group (it says what the conversation is about while you type),
         // and two auto margins would split the slack between them.
-        <div className="mt-auto flex flex-wrap items-center gap-1.5">
+        // mb-2 keeps the chips off the composer's border; the relative anchors
+        // the picker to the strip so it can span the composer's width.
+        <div className="relative mt-auto mb-2 flex flex-wrap items-center gap-1.5">
           {/* Mobile combined chip */}
           {subjects.length > 1 && (
             <span className="xl:hidden inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 py-1 pl-2.5 pr-1 text-xs text-primary">
@@ -1405,7 +1407,7 @@ export const HomeAI = ({
           ))}
 
           {subjectOptions.length > 0 && (
-            <div className="relative" ref={subjectPickerRef}>
+            <div ref={subjectPickerRef}>
               <button
                 className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground"
                 aria-expanded={isSubjectPickerOpen}
@@ -1416,9 +1418,11 @@ export const HomeAI = ({
               </button>
 
               {isSubjectPickerOpen && (
-                // Drops down, not up: opening upward covered the reply the
-                // renter was reading to decide which listing to ask about.
-                <div className="absolute top-full left-0 z-20 mt-2 max-h-64 w-72 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl">
+                // Opens upward, the full width of the composer. The strip sits
+                // at the bottom of the rail, so dropping down ran the list off
+                // the screen behind the composer with one row visible. Picking
+                // closes it, so the reply it covers is back a tap later.
+                <div className="absolute bottom-full left-0 right-0 z-20 mb-2 max-h-[min(20rem,50vh)] overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl">
                   {subjectOptions.map((o) => {
                     const picked = subjects.some((s) => s.propertyId === o.propertyId);
                     return (
