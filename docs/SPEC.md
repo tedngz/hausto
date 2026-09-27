@@ -721,3 +721,11 @@ gate. `EXECUTED` and `FLAGGED` are not shadow decisions and never count towards
 agreement - otherwise the AI operator could raise its own rate. The planner
 writes what it concluded about each lock to `ai_operator_controls.last_state`
 for the console, which cannot read the secret.
+
+**The gate override.** `ai_operator_controls.gate_override` lists actions whose
+measured gate an owner has chosen to skip. It skips the shadow record only: the
+env switch and the pause still apply, and so does the flag ceiling, so an
+override that goes wrong still closes itself. The console shows "gate skipped"
+beside the action with a **Restore the gate** button (`SET_AUTONOMY` with
+`gateOverride`). First used for `REPLY` on 2026-09-27, by the owner's decision,
+with no shadow decisions yet recorded.

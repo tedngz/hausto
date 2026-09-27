@@ -51,6 +51,7 @@ import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { toE164 } from '../whatsapp/inbound.ts';
 import { deliver } from './deliver.ts';
 import { settlementFor, approvalOf, type ProposalRow, type DoneAction } from './proposals.ts';
+import { AUTONOMOUS_ACTIONS } from './autonomy.ts';
 import { REALTOR_MEDIA, type RealtorChannel, type RealtorMedium } from '../realtor/channel.ts';
 import {
   sendToRealtor,
@@ -345,13 +346,24 @@ async function superviseAutonomy(
   const now = new Date().toISOString();
 
   if (action === 'SET_AUTONOMY') {
-    if (typeof input.paused !== 'boolean') return refuse(400, 'paused must be true or false');
+    // Either lock an operator holds: the pause, or the gate override (which
+    // actions skip the measured gate). Setting the override to [] restores it.
+    const patch: Record<string, unknown> = {};
+    if (typeof input.paused === 'boolean') patch.paused = input.paused;
+    if (Array.isArray(input.gateOverride)) {
+      const list = input.gateOverride.map(a => String(a).toUpperCase());
+      if (list.some(a => !(AUTONOMOUS_ACTIONS as readonly string[]).includes(a))) {
+        return refuse(400, 'invalid_override', `gateOverride may only name ${AUTONOMOUS_ACTIONS.join(', ')}`);
+      }
+      patch.gate_override = [...new Set(list)];
+    }
+    if (Object.keys(patch).length === 0) return refuse(400, 'Give paused (true/false) or gateOverride (a list).');
     const { error } = await db.from('ai_operator_controls').update({
-      paused: input.paused, note: str(input.note).slice(0, 500) || null,
+      ...patch, note: str(input.note).slice(0, 500) || null,
       updated_by: operatorId(actor), updated_at: now,
     }).eq('id', 'singleton');
     if (error) return refuse(500, 'controls_failed');
-    return done({ recorded: input.paused ? 'AUTONOMY_PAUSED' : 'AUTONOMY_RESUMED' });
+    return done({ recorded: 'AUTONOMY_SET', ...patch });
   }
 
   const id = str(input.proposalId);

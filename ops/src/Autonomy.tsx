@@ -18,6 +18,7 @@ import type { AutonomyState } from '../../supabase/functions/_shared/viewing/aut
 
 interface Controls {
   paused: boolean;
+  gate_override: string[];
   note: string | null;
   updated_at: string;
   last_state: AutonomyState | null;
@@ -44,7 +45,7 @@ export function Autonomy() {
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
     const [{ data: c }, { data: a }] = await Promise.all([
-      supabase.from('ai_operator_controls').select('paused, note, updated_at, last_state, last_run_at').eq('id', 'singleton').maybeSingle(),
+      supabase.from('ai_operator_controls').select('paused, gate_override, note, updated_at, last_state, last_run_at').eq('id', 'singleton').maybeSingle(),
       supabase.from('operator_proposals')
         .select('id, request_id, action, status, executed_input, executed_at, decision_note')
         .in('status', ['EXECUTED', 'FLAGGED']).gte('executed_at', since)
@@ -93,6 +94,14 @@ export function Autonomy() {
             <strong>{action}</strong>{' '}
             <span className={`tag ${s.open ? 'good' : ''}`}>{s.open ? 'acting alone' : 'waits for a person'}</span>{' '}
             <span className="muted">{s.reason}</span>
+            {controls.gate_override?.includes(action) && (
+              <>
+                {' '}<span className="tag warn">gate skipped</span>{' '}
+                <button className="link" disabled={busy} onClick={() => void post({
+                  action: 'SET_AUTONOMY', gateOverride: controls.gate_override.filter(a => a !== action),
+                })}>Restore the gate</button>
+              </>
+            )}
           </li>
         ))}
       </ul>

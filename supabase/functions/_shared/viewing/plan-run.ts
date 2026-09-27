@@ -301,7 +301,7 @@ export const GATE_SAMPLE = 100;
 export async function loadAutonomyState(db: Supa, env: string | undefined, now: Date): Promise<AutonomyState> {
   const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
   const [{ data: controls }, ...perAction] = await Promise.all([
-    db.from('ai_operator_controls').select('paused').eq('id', 'singleton').maybeSingle(),
+    db.from('ai_operator_controls').select('paused, gate_override').eq('id', 'singleton').maybeSingle(),
     ...AUTONOMOUS_ACTIONS.map(action => Promise.all([
       db.from('operator_proposals').select('action, status, edited')
         .eq('action', action).in('status', ['APPROVED', 'AGREED', 'CORRECTED', 'REJECTED'])
@@ -321,7 +321,10 @@ export async function loadAutonomyState(db: Supa, env: string | undefined, now: 
     flagged[action] = (acted ?? []).filter(r => r.status === 'FLAGGED').length;
   });
 
-  const state = autonomyState({ env, paused: controls?.paused === true, stats, executed, flagged });
+  const state = autonomyState({
+    env, paused: controls?.paused === true, stats, executed, flagged,
+    gateOverride: Array.isArray(controls?.gate_override) ? controls.gate_override : [],
+  });
   await db.from('ai_operator_controls')
     .update({ last_state: state, last_run_at: now.toISOString() }).eq('id', 'singleton');
   return state;
