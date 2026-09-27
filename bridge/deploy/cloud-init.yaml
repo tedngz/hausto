@@ -1,0 +1,50 @@
+#cloud-config
+# Provisioning for the Zalo bridge VPS (bridge/README.md, "Deploying to a VPS").
+#
+# Paste this as "user data" / "cloud-init" when creating an Ubuntu 24.04
+# server. It prepares the machine and nothing else: Node, a service user, the
+# directories, a firewall, automatic security updates. The bridge itself is
+# copied on afterwards by deploy.sh, because the repo is private and the
+# server holds no GitHub credentials.
+#
+# It does not add SSH keys - add yours in the provider's "SSH keys" field when
+# creating the server. Password logins are switched off below.
+
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - ufw
+  - unattended-upgrades
+
+ssh_pwauth: false
+
+write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+runcmd:
+  # Node 22 from NodeSource's signed apt repository. Ubuntu's own nodejs is
+  # too old for --experimental-transform-types.
+  - install -d -m 0755 /etc/apt/keyrings
+  - curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+  - echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+  - apt-get update
+  - apt-get install -y nodejs
+
+  # A user that owns nothing but the bridge. It never logs in.
+  - useradd --system --home /opt/hausto-bridge --shell /usr/sbin/nologin hausto
+  - install -d -o hausto -g hausto -m 0750 /opt/hausto-bridge
+  - install -d -o hausto -g hausto -m 0750 /opt/hausto-bridge/app
+  # The Zalo login and the send journal live here, readable by the bridge only.
+  - install -d -o hausto -g hausto -m 0700 /opt/hausto-bridge/state
+
+  # Nothing listens except SSH. The bridge only makes outbound calls.
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow OpenSSH
+  - ufw --force enable

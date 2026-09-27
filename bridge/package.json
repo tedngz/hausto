@@ -12,6 +12,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "zca-js": "^2.0.0"
+    "zca-js": "~2.2.0"
   }
 }

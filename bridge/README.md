@@ -57,9 +57,54 @@ Two things decide where:
   account. Use SSH keys only, no shared users, and a provider you would trust
   with that login.
 
-## Setup
+## Deploying to a VPS
 
-Node 22.7 or newer.
+Everything after "create the server" is scripted (`deploy/`).
+
+1. **Create the server** in the provider's console: Ubuntu 24.04, 1 vCPU,
+   1 GB RAM, a Vietnam or Singapore location.
+   - SSH key: paste the public key (`~/.ssh/hausto_bridge_ed25519.pub` on the
+     machine this repo was set up from).
+   - User data / cloud-init: paste `deploy/cloud-init.yaml`. It installs Node
+     22, creates the `hausto` service user and its directories, allows SSH in
+     and nothing else, and turns on automatic security updates. Give it a
+     couple of minutes after the server boots.
+2. **Deploy** from the repo:
+
+   ```bash
+   bash bridge/deploy/deploy.sh root@SERVER_IP -i ~/.ssh/hausto_bridge_ed25519
+   ```
+
+   The first run prints a **ZALO_BRIDGE_TOKEN** it generated on the server.
+   Set it as that edge-function secret in the Supabase dashboard. It is shown
+   once and stored only in `/opt/hausto-bridge/.env` on the server.
+3. **Put the Zalo login on the server** (see "The Zalo session" below), then
+   run the same deploy command again. It starts the service this time.
+4. **Watch it come up:**
+   `ssh -i ~/.ssh/hausto_bridge_ed25519 root@SERVER_IP 'journalctl -u hausto-zalo-bridge -f'`,
+   and check the console's AI operator screen shows the device online. Then
+   do the first-run check below, then switch Hausto over.
+
+Updates are the same deploy command: it replaces the code, keeps `.env`, the
+Zalo login and the journal, and restarts the service.
+
+On the server:
+
+| Path | |
+|---|---|
+| `/opt/hausto-bridge/app` | The code. Replaced on every deploy. |
+| `/opt/hausto-bridge/.env` | Token and settings. Created once, never overwritten. |
+| `/opt/hausto-bridge/state/credentials.json` | The Zalo login. Yours to put there. |
+| `/opt/hausto-bridge/state/journal.jsonl` | The send journal. Do not delete it. |
+
+The service runs as `hausto` with a read-only system, writing only to `state/`
+(`deploy/hausto-zalo-bridge.service`). If zca-js turns out to need to write
+elsewhere, the logs will say `EROFS`; add that path to `ReadWritePaths`.
+
+## Setup by hand
+
+The steps below are what the deploy scripts do, for a machine set up without
+them. Node 22.7 or newer.
 
 ```bash
 cd bridge
