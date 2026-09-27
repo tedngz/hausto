@@ -188,3 +188,8 @@ verify_jwt = false
 # The always-on Zalo device (bridge/). It authenticates with ZALO_BRIDGE_TOKEN,
 # checked in the function; it cannot present a Supabase JWT.
 verify_jwt = false
+
+[functions.price-crosscheck]
+# pg_cron calls this with the cron secret, which it checks itself. verify_jwt
+# would reject the request before the code could.
+verify_jwt = false

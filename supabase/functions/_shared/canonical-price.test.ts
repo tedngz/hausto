@@ -13,6 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
+import { describedPrice } from './price-mentions.ts';
 
 const MIGRATIONS = new URL('../../migrations/', import.meta.url);
 
@@ -40,7 +41,9 @@ function compile(name: string): (...args: unknown[]) => unknown {
 
   const expr = (sql: string): string => {
     const js = sql
+      .replace(/(\w+)\s+NOT\s+BETWEEN\s+(\S+)\s+AND\s+(\S+)/gi, '!($1 >= $2 && $1 <= $3)')
       .replace(/(\w+)\s+BETWEEN\s+(\S+)\s+AND\s+(\S+)/gi, '($1 >= $2 && $1 <= $3)')
+      .replace(/(\w+)\s+IS\s+NOT\s+NULL\b/gi, '($1 != null)')
       .replace(/(\w+)\s+IS\s+NULL\b/gi, '($1 == null)')
       .replace(/\bOR\b/g, '||')
       .replace(/\bAND\b/g, '&&')
@@ -70,11 +73,13 @@ function compile(name: string): (...args: unknown[]) => unknown {
 
 const canonicalPriceVnd = compile('canonical_price_vnd') as
   (source: string, price: number | null, display: string | null) => number | null;
-const priceConfidenceFor = compile('price_confidence_for') as (vnd: number | null) => string | null;
+const priceConfidenceFor = compile('price_confidence_for') as
+  (vnd: number | null, describedMin: number | null, describedMax: number | null) => string | null;
 
+/** What the trigger writes for a row whose text quotes no rent. */
 const canonical = (source: string, price: number | null, display: string | null) => {
   const vnd = canonicalPriceVnd(source, price, display);
-  return { vnd, confidence: priceConfidenceFor(vnd) };
+  return { vnd, confidence: priceConfidenceFor(vnd, null, null) };
 };
 
 describe('the $730 row', () => {
@@ -131,5 +136,59 @@ describe('the class', () => {
   it('stays inside a Postgres integer', () => {
     const { vnd } = canonical('batdongsan', 99_999_999_999, null);
     expect(vnd).toBe(2_147_483_647);
+  });
+});
+
+// The other half of `price_confidence`: the price against the rent the
+// listing's own title and description quote (price-crosscheck stores the
+// range; this is the rule the trigger applies to it).
+describe('the price against what the listing says', () => {
+  const confidence = (vnd: number, text: [string, string]) => {
+    const d = describedPrice(...text);
+    return priceConfidenceFor(vnd, d?.min_vnd ?? null, d?.max_vnd ?? null);
+  };
+
+  it('flags the duplex extraction read off a similar-listings panel', () => {
+    // Stored at 70M; the advert says 60 triệu.
+    expect(confidence(70_000_000, ['Cho thuê duplex 3PN view nội khu giá 60 triệu', ''])).toBe('LOW');
+  });
+
+  it('flags a price far below what the text says', () => {
+    expect(confidence(7_000_000, ['Bright 2BR in Thao Dien', 'Rent is 16 million VND per month.'])).toBe('LOW');
+  });
+
+  it('allows 15% either way', () => {
+    const text: [string, string] = ['2BR - 16M VND/month', ''];
+    expect(confidence(18_400_000, text)).toBe('HIGH'); // +15%
+    expect(confidence(13_600_000, text)).toBe('HIGH'); // -15%
+    expect(confidence(18_400_001, text)).toBe('LOW');
+    expect(confidence(13_599_999, text)).toBe('LOW');
+  });
+
+  it('agrees with a housingsgn dollar price, whichever way it was stored', () => {
+    // Stored raw in USD and converted by canonical_price_vnd...
+    const raw = canonicalPriceVnd('housingsgn', 730, '$730 / month');
+    expect(confidence(raw!, ['Rent: $730 / month', ''])).toBe('HIGH');
+    // ...or already converted, with the dollar display never updated.
+    expect(confidence(12_500_000, ['Studio near the river', 'Rent $500 per month.'])).toBe('HIGH');
+  });
+
+  it('accepts any price inside a range the advert quotes', () => {
+    expect(confidence(10_000_000, ['1PN 8tr, 2PN 12tr', ''])).toBe('HIGH');
+    expect(confidence(12_000_000, ['Giá 12 - 15 triệu tùy căn', ''])).toBe('HIGH');
+  });
+
+  it('does not read a deposit, a fee or a starting price as the rent', () => {
+    expect(confidence(16_000_000, ['Giá 16tr - Cọc 32tr', 'Phí quản lý 1 triệu.'])).toBe('HIGH');
+    expect(confidence(15_000_000, ['Căn hộ chỉ từ 6,5 triệu', ''])).toBe('HIGH');
+  });
+
+  it('leaves a listing whose text quotes nothing as the band alone judges it', () => {
+    expect(confidence(16_000_000, ['Spacious 82m2 apartment', 'Great view, 3 bedrooms.'])).toBe('HIGH');
+    expect(confidence(730, ['Spacious 82m2 apartment', ''])).toBe('LOW');
+  });
+
+  it('has no confidence without a price', () => {
+    expect(priceConfidenceFor(null, 16_000_000, 16_000_000)).toBe(null);
   });
 });

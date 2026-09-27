@@ -287,7 +287,9 @@ WhatsApp agent.
 Status 2026-09-27: the style filter reads `vibe_analysis->>styles` and `vibe`
 is gone from the response; budgets and `price_vnd` in the response read the
 canonical column; `canonical-price.test.ts` evaluates the migrated SQL rule in
-CI. The title/description cross-check is still not built.
+CI. The title/description cross-check is built: `price-crosscheck` stores the
+rent range the text quotes and `price_confidence_for` marks a price more than
+15% outside it LOW.
 
 **Done when:** every active listing has a canonical bedroom count, area, district
 and VND price; the `$730` row and its class are caught by an assertion in CI, not
