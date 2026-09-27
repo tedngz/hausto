@@ -128,19 +128,34 @@ not be `e3b0c442...`, the digest of an empty string.
 
 ### 2. The Zalo session
 
-zca-js logs in with the session of a browser already signed in to
-`chat.zalo.me` as the business account. Follow zca-js's own login guide for the
-installed version to export the three values it needs - the **cookie**, the
-**imei**, and the **userAgent** - and save them as `credentials.json` next to
-this README:
+The bridge needs a Zalo session: a **cookie**, an **imei** and a
+**userAgent**, in `credentials.json`. The way to get one is to log in by QR
+code, the same way Zalo PC does - nothing is copied out of a browser.
 
-```json
-{ "cookie": [ ... ], "imei": "...", "userAgent": "..." }
+**On a VPS**, from the repo:
+
+```bash
+bash bridge/deploy/login.sh root@SERVER_IP -i ~/.ssh/hausto_bridge_ed25519
 ```
 
-`credentials.json` is a login to the business's Zalo account. It is in
-`.gitignore`; keep it on the device only, readable by the user the daemon runs
-as.
+A QR code opens on your screen. On the phone of the account the bridge should
+use, open Zalo, tap the **QR icon** (top right), scan it, and confirm the login
+on the phone. The terminal says which account scanned before you confirm, and
+fetches a fresh code if one expires. The session is written to
+`/opt/hausto-bridge/state/credentials.json` on the server, owner-only, and never
+printed. Then run `deploy.sh` again to start the bridge.
+
+**On a machine you are sitting at**, run `npm run login` in this directory
+and scan `qr.png` from the state directory (`ZALO_CREDENTIALS_FILE`'s folder).
+
+Two things to know:
+
+- Logging in takes the account's **web/PC slot**: Zalo PC or Zalo Web on a
+  computer is likely to be signed out. The phone app stays signed in.
+- `credentials.json` is a full login to that Zalo account. It is in
+  `.gitignore`; keep it on the machine the bridge runs on, readable only by
+  the user it runs as. To revoke it, sign the web session out from the Zalo
+  app on the phone (settings, device / login management).
 
 ### 3. Run it
 

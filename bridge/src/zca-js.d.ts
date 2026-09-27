@@ -45,9 +45,29 @@ declare module 'zca-js' {
     findUser(phone: string): Promise<{ uid?: string } | null | undefined>;
   }
 
+  export enum LoginQRCallbackEventType {
+    QRCodeGenerated = 0,
+    QRCodeExpired = 1,
+    QRCodeScanned = 2,
+    QRCodeDeclined = 3,
+    GotLoginInfo = 4,
+  }
+
+  type QRActions = { retry: () => unknown; abort: () => unknown };
+  export type LoginQRCallbackEvent =
+    | { type: LoginQRCallbackEventType.QRCodeGenerated; data: { code: string; image: string };
+        actions: QRActions & { saveToFile: (qrPath?: string) => Promise<unknown> } }
+    | { type: LoginQRCallbackEventType.QRCodeExpired; data: null; actions: QRActions }
+    | { type: LoginQRCallbackEventType.QRCodeScanned; data: { avatar: string; display_name: string }; actions: QRActions }
+    | { type: LoginQRCallbackEventType.QRCodeDeclined; data: { code: string }; actions: QRActions }
+    | { type: LoginQRCallbackEventType.GotLoginInfo; data: { cookie: unknown[]; imei: string; userAgent: string }; actions: null };
+
   export class Zalo {
     constructor(options?: { selfListen?: boolean; checkUpdate?: boolean; logging?: boolean });
     login(credentials: Credentials): Promise<API>;
-    loginQR(options?: unknown, callback?: (event: unknown) => unknown): Promise<API>;
+    loginQR(
+      options?: { userAgent?: string; language?: string; qrPath?: string },
+      callback?: (event: LoginQRCallbackEvent) => unknown,
+    ): Promise<API>;
   }
 }
