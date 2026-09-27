@@ -11,6 +11,7 @@ import { supabase } from './supabase';
 import { agreementStats, type AgreementStats } from '../../supabase/functions/_shared/viewing/proposals';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { Autonomy } from './Autonomy';
+import { BridgeStatus } from './BridgeStatus';
 
 /** PLAN-v3 S5: paste-parse must read at least this share of real replies right... */
 const PARSE_BAR = 0.8;
@@ -76,6 +77,7 @@ export function ShadowStats() {
       </div>
 
       <Autonomy />
+      <BridgeStatus />
       <div className="card">
         <div className="row wrap-row">
           <strong>Agreement</strong>

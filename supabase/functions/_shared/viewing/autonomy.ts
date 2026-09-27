@@ -24,8 +24,12 @@ import type { AgreementStats } from './proposals.ts';
 /** Stamped on every event the AI operator writes itself, as AGENT:<version>. */
 export const AUTO_AGENT_VERSION = 'auto-v1';
 
-/** Actions the AI operator may take alone at stage 2. The broker side is stage 3. */
-export const AUTONOMOUS_ACTIONS = ['REPLY'] as const;
+/**
+ * Actions the AI operator may take alone. REPLY is stage 2 (answering a
+ * renter from facts). OUTCOME is stage 3 (recording what an agent's reply
+ * said) - each behind its own gate, measured on its own record.
+ */
+export const AUTONOMOUS_ACTIONS = ['REPLY', 'OUTCOME'] as const;
 export type AutonomousAction = typeof AUTONOMOUS_ACTIONS[number];
 
 /**
@@ -131,15 +135,25 @@ export function autonomyState(opts: {
   return { actions, paused: opts.paused };
 }
 
-/** Could this proposal ever run by itself? The class, before the locks. */
-export function autoEligible(p: { action: string; confidence: string }): p is { action: AutonomousAction; confidence: 'HIGH' } {
-  return (AUTONOMOUS_ACTIONS as readonly string[]).includes(p.action) && p.confidence === 'HIGH';
+/**
+ * Could this proposal ever run by itself? The class, before the locks.
+ *
+ * A REPLY at HIGH confidence: answered wholly from facts. An OUTCOME only when
+ * it is an agent's reply read by paste-parse (key `OUTCOME:<item>:<reply>`)
+ * at HIGH confidence with nothing flagged - never NO_RESPONSE, which closes an
+ * item on silence and stays a person's call.
+ */
+export function autoEligible(p: { action: string; confidence: string; key?: string; dedupe_key?: string }):
+  p is { action: AutonomousAction; confidence: 'HIGH'; key?: string; dedupe_key?: string } {
+  if (!(AUTONOMOUS_ACTIONS as readonly string[]).includes(p.action) || p.confidence !== 'HIGH') return false;
+  if (p.action === 'OUTCOME') return (p.key ?? p.dedupe_key ?? '').startsWith('OUTCOME:');
+  return true;
 }
 
 /** May it run now? Eligible, its lock open, and its hold elapsed. */
 export function mayExecute(
   state: AutonomyState,
-  p: { action: string; confidence: string; execute_after: string | null },
+  p: { action: string; confidence: string; execute_after: string | null; dedupe_key?: string },
   now: number,
 ): boolean {
   if (!autoEligible(p) || !p.execute_after) return false;

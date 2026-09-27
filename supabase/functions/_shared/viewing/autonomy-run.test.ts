@@ -167,3 +167,39 @@ describe('with the gate skipped by override', () => {
     expect(reply().execute_after).toBeNull();
   });
 });
+
+describe('stage 3: an agent reply recorded without a person', () => {
+  it('reads the reply, holds, then records the outcome as the AI operator', async () => {
+    db.tables.realtors = [{ id: 'realtor-1', phone_e164: '+84901234567' }];
+    db.tables.request_items[0].realtor_id = 'realtor-1';
+    // The renter's question is answered already, so only the broker side is in play.
+    db.tables.events.push({ id: 'e4', request_id: 'req-1', item_id: null, type: 'REPLIES_ACKNOWLEDGED', payload: {}, actor: 'OPS:op-1', occurred_at: at(-30_000).toISOString() });
+    await act({ action: 'CONTACTED', itemId: 'i1', message: 'Chào anh' });
+    await act({ action: 'REALTOR_REPLY', itemId: 'i1', message: 'Căn này cho thuê rồi em nhé' });
+    for (let i = 0; i < GATE.minDecided; i++) {
+      db.tables.operator_proposals.push({ id: `o-${i}`, request_id: 'old', item_id: null, dedupe_key: `OUTCOME:old:${i}`,
+        action: 'OUTCOME', input: {}, status: 'AGREED', edited: false, decided_at: at(-86_400_000).toISOString() });
+    }
+
+    const outcomePass = async (now: Date) => {
+      // deno-lint-ignore no-explicit-any
+      const state = await loadAutonomyState(db as any, 'OUTCOME', now);
+      // deno-lint-ignore no-explicit-any
+      return runPlanner(db as any, {
+        now,
+        parse: () => Promise.resolve({ outcome: 'ALREADY_RENTED', slots: [], actualPriceVnd: null,
+          note: 'The agent says it is rented.', confidence: 'HIGH', problems: [], model: 'gpt-4o-mini' }),
+        autonomy: { state, deps },
+      });
+    };
+
+    await outcomePass(at(0));
+    const p = db.tables.operator_proposals.find(x => String(x.dedupe_key).startsWith('OUTCOME:i1:'))!;
+    expect(p).toMatchObject({ action: 'OUTCOME', status: 'PENDING', execute_after: at(AUTO_HOLD_MS).toISOString() });
+
+    await outcomePass(at(AUTO_HOLD_MS + 1000));
+    const recorded = db.tables.events.find(e => e.type === 'OUTCOME_RECORDED')!;
+    expect(recorded).toMatchObject({ actor: 'AGENT:auto-v1', payload: { outcome: 'ALREADY_RENTED' } });
+    expect(p.status).toBe('EXECUTED');
+  });
+});

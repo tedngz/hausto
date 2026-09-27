@@ -72,6 +72,7 @@ export interface RealtorMessage {
   purpose: string;
   body: string;
   status: string;
+  error?: string | null;
   created_at: string;
 }
 
@@ -91,6 +92,9 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
   const [thread, setThread] = useState<Thread | null>(null);
   const [transcript, setTranscript] = useState<RealtorMessage[]>([]);
   const [proposals, setProposals] = useState<ProposalRow[]>([]);
+  // Which way messages to agents leave: by hand, or through the Zalo device.
+  // Read from what the planner last saw, since the console cannot read secrets.
+  const [bridge, setBridge] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -101,7 +105,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         supabase.from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
           .eq('request_id', requestId).order('occurred_at', { ascending: true }),
         supabase.rpc('ops_request_thread', { _request_id: requestId }),
-        supabase.from('realtor_messages').select('id, item_id, direction, purpose, body, status, created_at')
+        supabase.from('realtor_messages').select('id, item_id, direction, purpose, body, status, error, created_at')
           .eq('request_id', requestId).order('created_at', { ascending: true }),
         supabase.from('operator_proposals').select('id, item_id, action, input, rationale, confidence, created_at, execute_after')
           .eq('request_id', requestId).eq('status', 'PENDING').order('created_at', { ascending: true }),
@@ -117,6 +121,8 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
     setThread((th as Thread) ?? null);
     setTranscript((rm ?? []) as RealtorMessage[]);
     setProposals((pr ?? []) as ProposalRow[]);
+    const { data: controls } = await supabase.from('ai_operator_controls').select('last_state').eq('id', 'singleton').maybeSingle();
+    setBridge((controls?.last_state as { realtorChannel?: string } | null)?.realtorChannel === 'bridge');
     setError(null);
   }, [requestId]);
 
@@ -150,6 +156,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
       <Proposals
         requestId={requestId}
         proposals={proposals}
+        bridge={bridge}
         titleFor={id => items.find(i => i.id === id)?.listing_title ?? id}
         onChanged={load}
       />
@@ -175,6 +182,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
           availability={request.availability ?? []}
           transcript={transcript.filter(m => m.item_id === item.id)}
           owed={owed.get(item.id) ?? null}
+          bridge={bridge}
           onChanged={load}
         />
       ))}
@@ -208,6 +216,7 @@ function ItemCard({
   availability,
   transcript,
   owed,
+  bridge,
   onChanged,
 }: {
   item: Item;
@@ -215,9 +224,17 @@ function ItemCard({
   availability: { date: string; part: string }[];
   transcript: RealtorMessage[];
   owed: RealtorDecision | null;
+  bridge: boolean;
   onChanged: () => void;
 }) {
   const state = view.items[item.id];
+  // Through the bridge, a message is queued until the device sends it. The
+  // card says so instead of offering to send it again, and says why if it
+  // failed - sending again from the box below retries it.
+  const lastOut = [...transcript].reverse().find(m => m.direction === 'OUT');
+  const queued = lastOut?.status === 'QUEUED';
+  const failed = lastOut?.status === 'FAILED';
+  const sendLabel = bridge ? 'Send via the Zalo device' : 'Mark sent';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
@@ -282,7 +299,18 @@ function ItemCard({
         />
       )}
 
-      {!settled && state?.state !== 'CONTACTED' && (
+      {queued && (
+        <p className="small age-warn" style={{ marginBottom: 0 }}>
+          Queued - the Zalo device will send the {PURPOSE[lastOut!.purpose]?.toLowerCase() ?? 'message'} message shortly.
+        </p>
+      )}
+      {failed && (
+        <p className="small error" style={{ marginBottom: 0 }}>
+          The Zalo device could not send the last message{lastOut?.error ? `: ${lastOut.error}` : '.'} Sending it again below retries it.
+        </p>
+      )}
+
+      {!queued && !settled && state?.state !== 'CONTACTED' && (
         <SendBox
           key="ask"
           busy={busy}
@@ -292,17 +320,17 @@ function ItemCard({
             priceVnd: item.price_vnd_at_request,
             availability,
           })}
-          label="Mark sent"
+          label={sendLabel}
           onSend={message => post({ action: 'CONTACTED', channel: 'ZALO', message })}
         />
       )}
 
-      {!settled && state?.state === 'CONTACTED' && (
+      {!queued && !settled && state?.state === 'CONTACTED' && (
         <SendBox
           key={`nudge-${state.nudges}`}
           busy={busy}
           initial={nudgeDraft({ listingTitle: title })}
-          label="Mark nudge sent"
+          label={bridge ? 'Send the chase via the Zalo device' : 'Mark nudge sent'}
           onSend={message => post({ action: 'NUDGE', channel: 'ZALO', message })}
         />
       )}
@@ -363,15 +391,15 @@ function ItemCard({
                 : 'The renter is not coming. Tell the agent to stop holding the time.'}
             </span>
           </div>
-          <SendBox
+          {!queued && <SendBox
             key={`notify-${owed}`}
             busy={busy}
             initial={owed === 'CONFIRM'
               ? confirmDraft({ listingTitle: title, startsAt: firstSlot })
               : releaseDraft({ listingTitle: title })}
-            label="Mark sent"
+            label={sendLabel}
             onSend={message => post({ action: 'NOTIFY_REALTOR', decision: owed, channel: 'ZALO', message })}
-          />
+          />}
         </div>
       )}
 
@@ -381,7 +409,10 @@ function ItemCard({
           <div className="thread">
             {transcript.map(m => (
               <div key={m.id} className={`bubble ${m.direction === 'IN' ? 'in' : 'out'}`}>
-                <div className="small muted">{PURPOSE[m.purpose] ?? m.purpose} - {hcmc(m.created_at)}</div>
+                <div className="small muted">
+                  {PURPOSE[m.purpose] ?? m.purpose} - {hcmc(m.created_at)}
+                  {m.direction === 'OUT' && m.status !== 'SENT' ? ` - ${m.status.toLowerCase()}` : ''}
+                </div>
                 <div className="body">{m.body}</div>
               </div>
             ))}

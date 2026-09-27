@@ -184,6 +184,27 @@ interface Item {
   realtor_id: string | null;
 }
 
+interface SentRef { id: string; status: string }
+
+/**
+ * Write the event a message to a broker stands for. Now, when it has left
+ * (the manual channel: the operator already sent it). On the device's ack,
+ * when it is queued for the bridge - the event rides on the message row
+ * (`on_sent_event`) until zalo-bridge hears it was sent, so the log never says
+ * an agent was contacted by a message still sitting in an outbox.
+ */
+async function eventForSend(db: Supa, sent: SentRef | null, row: Record<string, unknown>): Promise<OpsResult | null> {
+  if (sent?.status === 'QUEUED') {
+    const { error } = await db.from('realtor_messages').update({ on_sent_event: row }).eq('id', sent.id);
+    if (error) {
+      console.error('[ops-actions] deferring the event failed:', error);
+      return refuse(500, 'event_failed');
+    }
+    return null;
+  }
+  return insertEvent(db, row);
+}
+
 /** Send to the broker, turning the send layer's refusals into answers. */
 async function toRealtor(
   db: Supa,
@@ -191,7 +212,7 @@ async function toRealtor(
   item: Item,
   actor: string,
   opts: { purpose: Exclude<RealtorPurpose, 'REPLY'>; medium: RealtorMedium; body: string; key: string },
-): Promise<{ id: string } | OpsResult> {
+): Promise<SentRef | OpsResult> {
   try {
     const sent = await sendToRealtor(deps.realtorMessages, deps.realtorChannel, {
       requestId: item.request_id,
@@ -205,7 +226,7 @@ async function toRealtor(
       renter: (await loadRenter(db, item.request_id)) ?? undefined,
     });
     if (sent.message.status === 'FAILED') return refuse(502, 'send_failed');
-    return { id: sent.message.id };
+    return { id: sent.message.id, status: sent.message.status };
   } catch (e) {
     if (e instanceof RenterIdentityError) return refuse(400, 'renter_identity', e.message);
     return refuse(400, 'invalid_message', (e as Error).message);
@@ -230,6 +251,15 @@ export async function performOpsAction(
   const action = str(input.action) || 'OUTCOME';
   if (action === 'APPROVE_PROPOSAL' || action === 'REJECT_PROPOSAL') {
     return decideProposal(db, deps, actor, action, input);
+  }
+  if (action === 'SET_BRIDGE') {
+    // Stops the Zalo device sending, from the console. It keeps reading
+    // replies - pausing the outbox is not a reason to lose what agents say.
+    if (typeof input.paused !== 'boolean') return refuse(400, 'paused must be true or false');
+    const { error } = await db.from('zalo_bridge_status')
+      .update({ paused: input.paused, updated_at: new Date().toISOString() }).eq('id', 'singleton');
+    if (error) return refuse(500, 'bridge_failed');
+    return done({ recorded: input.paused ? 'BRIDGE_PAUSED' : 'BRIDGE_RESUMED' });
   }
   if (action === 'HOLD_PROPOSAL' || action === 'FLAG_PROPOSAL' || action === 'SET_AUTONOMY') {
     return superviseAutonomy(db, actor, action, input);
@@ -414,37 +444,39 @@ async function dispatch(
       // The words are optional so a broker reached by phone can still be
       // marked, but the console always sends them - they are the transcript.
       const text = str(input.message);
-      let messageId: string | null = null;
+      let sent: SentRef | null = null;
       if (text) {
         const attempt = (await countItemEvents(db, item.id, 'REALTOR_CONTACTED')) + 1;
-        const sent = await toRealtor(db, deps, item, actor, {
+        const r = await toRealtor(db, deps, item, actor, {
           purpose: 'REQUEST_VIEWING', medium, body: text, key: `${item.id}:REQUEST_VIEWING:${attempt}`,
         });
-        if (!('id' in sent)) return sent;
-        messageId = sent.id;
+        if (!('id' in r)) return r;
+        sent = r;
       }
-      const failed = await insertEvent(db, {
+      const messageId = sent?.id ?? null;
+      const failed = await eventForSend(db, sent, {
         request_id: item.request_id,
         item_id: item.id,
         type: 'REALTOR_CONTACTED',
         payload: { channel: medium, draft_id: messageId },
         actor,
       });
-      return failed ?? done({ recorded: 'REALTOR_CONTACTED', messageId });
+      return failed ?? done({ recorded: 'REALTOR_CONTACTED', messageId, queued: sent?.status === 'QUEUED' });
     }
 
     case 'NUDGE': {
       const attempt = (await countItemEvents(db, item.id, 'ITEM_NUDGED')) + 1;
       const text = str(input.message);
-      let messageId: string | null = null;
+      let sent: SentRef | null = null;
       if (text) {
-        const sent = await toRealtor(db, deps, item, actor, {
+        const r = await toRealtor(db, deps, item, actor, {
           purpose: 'NUDGE', medium, body: text, key: `${item.id}:NUDGE:${attempt}`,
         });
-        if (!('id' in sent)) return sent;
-        messageId = sent.id;
+        if (!('id' in r)) return r;
+        sent = r;
       }
-      const failed = await insertEvent(db, {
+      const messageId = sent?.id ?? null;
+      const failed = await eventForSend(db, sent, {
         request_id: item.request_id,
         item_id: item.id,
         type: 'ITEM_NUDGED',
@@ -456,7 +488,7 @@ async function dispatch(
       // channel is a person on Zalo, not an API. An operator actually doing it
       // is what completes the job - nothing else ever will.
       await completeJobs(db, ['NUDGE_REALTOR'], item.id);
-      return done({ recorded: 'ITEM_NUDGED', attempt, messageId });
+      return done({ recorded: 'ITEM_NUDGED', attempt, messageId, queued: sent?.status === 'QUEUED' });
     }
 
     case 'REALTOR_REPLY': {
@@ -555,7 +587,7 @@ async function dispatch(
         purpose: decision, medium, body: text, key: `${item.id}:${decision}:1`,
       });
       if (!('id' in sent)) return sent;
-      const failed = await insertEvent(db, {
+      const failed = await eventForSend(db, sent, {
         request_id: item.request_id,
         item_id: item.id,
         type: 'REALTOR_NOTIFIED',
@@ -564,7 +596,7 @@ async function dispatch(
       });
       if (failed) return failed;
       await completeJobs(db, [decision === 'CONFIRM' ? 'CONFIRM_REALTOR' : 'RELEASE_REALTOR'], item.id);
-      return done({ recorded: 'REALTOR_NOTIFIED', decision, messageId: sent.id });
+      return done({ recorded: 'REALTOR_NOTIFIED', decision, messageId: sent.id, queued: sent.status === 'QUEUED' });
     }
   }
   return refuse(400, `Unknown action: ${action}`);

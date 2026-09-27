@@ -7,18 +7,13 @@
 // to the broker. Keeping the split means swapping how a message reaches Zalo
 // cannot quietly change what is allowed into it.
 //
-// Today there is one channel, and it is a person. The operator sends on Zalo
-// from their own phone and presses "Mark sent" in the console; by the time
-// `deliver` is called, the message has already left. Two more are planned and
-// deliberately not built here (AI operator plan, "Zalo: realtor side"):
+// Two channels. Manual is a person: the operator sends on Zalo from their own
+// phone and presses "Mark sent"; by the time `deliver` is called the message
+// has already left. Bridge is the always-on device the owner chose on
+// 2026-09-27 (AI operator plan, stage 3): approving in the console queues the
+// message, and the device sends it. REALTOR_CHANNEL picks one.
 //
-//   - a bridge (a browser extension on web.zalo.me, or a small app on an
-//     always-on device) that pre-fills the draft and captures the reply, with
-//     a person still pressing send;
-//   - Zalo OA / ZNS, once a Vietnam-registered entity exists.
-//
-// Both reopen scope CLAUDE.md currently closes ("any Zalo integration"), so
-// they wait for that decision rather than arriving behind an interface.
+// Zalo OA / ZNS stays unbuilt until a Vietnam-registered entity exists.
 
 /** The medium the broker was reached on - recorded on every message. */
 export const REALTOR_MEDIA = ['ZALO', 'PHONE', 'WHATSAPP', 'SMS'] as const;
@@ -66,10 +61,25 @@ export class ManualChannel implements RealtorChannel {
   }
 }
 
+/**
+ * The always-on device (bridge/, stage 3). Sends nothing from here: it leaves
+ * the row QUEUED, the device claims it through the zalo-bridge function,
+ * sends it from the business's Zalo account, and acks it. The event the send
+ * stands for is written on that ack, so "contacted" means the agent was sent
+ * something, not that a button was pressed.
+ */
+export class BridgeChannel implements RealtorChannel {
+  readonly mode = 'bridge' as const;
+  deliver(): Promise<RealtorDeliveryResult> {
+    return Promise.resolve({ ok: true, state: 'QUEUED' });
+  }
+}
+
 export function realtorChannelFromEnv(env: Record<string, string | undefined>): RealtorChannel {
   const mode = (env.REALTOR_CHANNEL ?? '').trim();
   if (mode === '' || mode === 'manual') return new ManualChannel();
-  // Refusing beats falling back. A misconfigured bridge silently treated as
+  if (mode === 'bridge') return new BridgeChannel();
+  // Refusing beats falling back. A misconfigured channel silently treated as
   // manual would record every draft as SENT when nothing left the building.
-  throw new Error(`REALTOR_CHANNEL=${mode} is not built. Only 'manual' exists - see _shared/realtor/channel.ts.`);
+  throw new Error(`REALTOR_CHANNEL=${mode} is not a channel. Use 'manual' or 'bridge' - see _shared/realtor/channel.ts.`);
 }

@@ -298,7 +298,13 @@ export const GATE_SAMPLE = 100;
  * them, and a 30-day window would close a healthy gate for lack of decisions.
  * What keeps it honest once acting is the flag rate, over the last 30 days.
  */
-export async function loadAutonomyState(db: Supa, env: string | undefined, now: Date): Promise<AutonomyState> {
+export async function loadAutonomyState(
+  db: Supa,
+  env: string | undefined,
+  now: Date,
+  /** Facts the console cannot read for itself, stored beside the state (e.g. which realtor channel is live). */
+  extra: Record<string, unknown> = {},
+): Promise<AutonomyState> {
   const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
   const [{ data: controls }, ...perAction] = await Promise.all([
     db.from('ai_operator_controls').select('paused, gate_override').eq('id', 'singleton').maybeSingle(),
@@ -326,6 +332,6 @@ export async function loadAutonomyState(db: Supa, env: string | undefined, now: 
     gateOverride: Array.isArray(controls?.gate_override) ? controls.gate_override : [],
   });
   await db.from('ai_operator_controls')
-    .update({ last_state: state, last_run_at: now.toISOString() }).eq('id', 'singleton');
+    .update({ last_state: { ...state, ...extra }, last_run_at: now.toISOString() }).eq('id', 'singleton');
   return state;
 }

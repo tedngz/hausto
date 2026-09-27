@@ -1,0 +1,6 @@
+node_modules/
+# The Zalo session. It is a login to the business's account - never commit it.
+credentials.json
+# The send journal. Local state; the device's own record of what it sent.
+journal.jsonl
+.env

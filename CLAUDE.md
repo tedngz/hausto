@@ -130,8 +130,13 @@ Do not build these even if they seem natural:
 - Route/traffic optimization. Ops orders the itinerary by hand; they know the
   city.
 - Calendar sync (ICS, Google Calendar).
-- Any Zalo integration, Zalo OA, or ZNS. The realtor side is a human this
-  quarter.
+- Zalo OA or ZNS - they need a Vietnam-registered entity. The one Zalo
+  integration that exists is the bridge (`bridge/`, stage 3 of the AI operator
+  plan): a daemon on an always-on device that sends approved messages from the
+  business's Zalo account and forwards agents' replies. The owner chose it on
+  2026-09-27, knowing it automates a personal account against Zalo's terms.
+  Build nothing that disguises that automation, and nothing that reads chats
+  beyond the agents Hausto is talking to.
 - Realtor-facing accounts, login, or portal.
 - Renter authentication beyond Supabase auth on the request surface. Intake
   requires a signed-in user, because a request spends viewing credits and

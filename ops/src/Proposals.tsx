@@ -5,8 +5,9 @@
 // does the work their own way on the cards below - which scores it as agreed or
 // corrected. Nothing here is automatic: the AI operator never writes to the log.
 //
-// A message to an agent still goes out by hand on Zalo. Approving one of those
-// means "I have sent this", so the button says so.
+// A message to an agent goes out by hand on Zalo, or through the Zalo device
+// when the bridge is live. Approving means "I have sent this" in the first
+// case and "send this" in the second, and the button says which.
 
 import { useState } from 'react';
 import { supabase } from './supabase';
@@ -41,11 +42,14 @@ const SENT_BY_HAND = new Set(['CONTACTED', 'NUDGE', 'NOTIFY_REALTOR']);
 export function Proposals({
   requestId,
   proposals,
+  bridge,
   titleFor,
   onChanged,
 }: {
   requestId: string;
   proposals: ProposalRow[];
+  /** Messages to agents go through the Zalo device, so approving sends them. */
+  bridge: boolean;
   titleFor: (itemId: string) => string;
   onChanged: () => void;
 }) {
@@ -71,7 +75,7 @@ export function Proposals({
       </div>
       {proposals.length === 0 && <p className="small muted" style={{ marginBottom: 0 }}>Nothing proposed for this request.</p>}
       {proposals.map(p => (
-        <ProposalCard key={p.id} p={p} titleFor={titleFor} onChanged={onChanged} />
+        <ProposalCard key={p.id} p={p} bridge={bridge} titleFor={titleFor} onChanged={onChanged} />
       ))}
       {error && <p className="error small">{error}</p>}
     </div>
@@ -94,10 +98,12 @@ function summary(p: ProposalRow, titleFor: (id: string) => string): string {
 
 function ProposalCard({
   p,
+  bridge,
   titleFor,
   onChanged,
 }: {
   p: ProposalRow;
+  bridge: boolean;
   titleFor: (itemId: string) => string;
   onChanged: () => void;
 }) {
@@ -163,7 +169,7 @@ function ProposalCard({
           )}
           <button className="primary" disabled={busy || (hasMessage && !message.trim())} onClick={() => void approve()}>
             {p.action === 'ESCALATE' ? 'Agree - I will handle it'
-              : SENT_BY_HAND.has(p.action) ? 'Sent it on Zalo - approve'
+              : SENT_BY_HAND.has(p.action) ? (bridge ? 'Approve - the Zalo device sends it' : 'Sent it on Zalo - approve')
               : p.action === 'REPLY' ? 'Send to the renter on WhatsApp'
               : 'Approve'}
           </button>
