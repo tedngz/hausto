@@ -69,6 +69,20 @@ export const ITEM_STATES = [
 ] as const;
 export type ItemState = typeof ITEM_STATES[number];
 
+/**
+ * Why a request was cancelled (REQUEST_CANCELLED). A closed set for the same
+ * reason outcomes are: "why do requests die" is a question the log should be
+ * able to answer by counting, and free text in `note` cannot be counted.
+ */
+export const CANCEL_REASONS = [
+  'RENTER_DECLINED',       // said no to the plan, or pulled out
+  'RENTER_FOUND_PLACE',    // no longer looking
+  'RENTER_UNRESPONSIVE',   // never answered the itinerary
+  'DUPLICATE',             // the same request filed twice
+  'OTHER',
+] as const;
+export type CancelReason = typeof CANCEL_REASONS[number];
+
 /** What a broker is told once the renter has decided (REALTOR_NOTIFIED). */
 export const REALTOR_DECISIONS = ['CONFIRM', 'RELEASE'] as const;
 export type RealtorDecision = typeof REALTOR_DECISIONS[number];

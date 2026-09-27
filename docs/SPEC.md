@@ -325,7 +325,7 @@ Event types:
 | `ITEM_ADDED` | item | `{listing_id, price_vnd_at_request}` |
 | `REALTOR_RESOLVED` | item | `{realtor_id, method}` - `method` ∈ `AGENT_ID`, `PHONE`, `MANUAL` |
 | `REALTOR_CONTACTED` | item | `{channel, draft_id}` - `draft_id` is the `realtor_messages` row sent, or null |
-| `OUTCOME_RECORDED` | item | `{outcome, slots[], actual_price_vnd, note, reply_message_id?}` - see §4 |
+| `OUTCOME_RECORDED` | item | `{outcome, slots[], actual_price_vnd, note, reply_message_id?, suggested?}` - see §4 |
 | `ITEM_NUDGED` | item | `{attempt, message_id?}` |
 | `REALTOR_NOTIFIED` | item | `{decision, message_id}` - `decision` ∈ `CONFIRM`, `RELEASE`. Moves no state; sets `notified` on the item view |
 | `ITINERARY_ASSEMBLED` | request | `{ordered_item_ids[], warnings[]}` |
@@ -335,7 +335,7 @@ Event types:
 | `REPLY_SENT` | request | `{message_id}` - an operator's free-text WhatsApp reply. Moves the silence clock (§9) and clears waiting replies; no state |
 | `REPLIES_ACKNOWLEDGED` | request | `{message_ids[]}` - replies read and judged to need no answer. Clears waiting replies; no state, no clock |
 | `REQUEST_CONFIRMED` | request | `{confirmed_item_ids[]}` |
-| `REQUEST_CANCELLED` | request | `{reason, actor}` |
+| `REQUEST_CANCELLED` | request | `{reason, note?}` - `reason` ∈ `CANCEL_REASONS` (`RENTER_DECLINED`, `RENTER_FOUND_PLACE`, `RENTER_UNRESPONSIVE`, `DUPLICATE`, `OTHER`); who cancelled is the event's `actor` |
 | `REQUEST_FAILED` | request | `{reason, substitute_listing_ids[]}` |
 
 Reducer rules:
@@ -402,6 +402,23 @@ operator confirms with one click and can override every field. The LLM never
 writes an event directly - interpretation is suggested, never applied. This is
 where throughput comes from: interpretation is the slow part, not typing.
 
+Built as `ops-parse-reply` over `_shared/viewing/parse-reply.ts`. The model
+reports only what the agent said (`AVAILABLE` with times, `NOT_AT_THOSE_TIMES`,
+`ALREADY_RENTED`, `WRONG_PERSON`, `UNCLEAR`, a quoted price); deterministic code
+maps that to an outcome, because two rules are ours: a time inside the renter's
+windows (`DAY_PART_HOURS` / `withinWindows` in `intake.ts`, morning 08-12,
+afternoon 12-17, evening 17-21) is `CONFIRMED` and outside them
+`ALTERNATIVE_OFFERED`; a quoted price more than 3% from `price_vnd_at_request`
+is `PRICE_CHANGED`, slotless, whatever times came with it. It never suggests
+`NO_RESPONSE`. What it suggested is stored on the `OUTCOME_RECORDED` the
+operator writes, as `suggested {outcome, slot_starts, actual_price_vnd,
+confidence, model}`, so agreement with the operator is measurable on live
+traffic. The reducer never reads it.
+
+Slots are not limited to the renter's windows: the operator can add any date
+and time the agent named, in Ho Chi Minh City time, with a length of 30-90
+minutes.
+
 ### The rest of the operator's actions
 
 Everything an operator can do is one call in `_shared/viewing/ops-actions.ts`,
@@ -420,12 +437,19 @@ same actions under `AGENT:<version>`, never a second implementation.
 | `NOTIFY_REALTOR` | item | OUT row, `REALTOR_NOTIFIED`; refused unless the log says that decision is owed |
 | `REPLY` | request | `messages` via `sendFreeForm` (window and 3-in-a-row rules apply), `REPLY_SENT` |
 | `ACK_REPLIES` | request | `REPLIES_ACKNOWLEDGED`; refused when nothing is waiting |
+| `CANCEL_REQUEST` | request | `REQUEST_CANCELLED {reason, note?}`; completes open `CONFIRM_REALTOR`, `NUDGE_REALTOR` and `RESOLVE_REALTOR` jobs. Refunds nothing - credits paid for an operator's time, and a refund is a payments decision |
+
+A new request emails everyone with the `ops` role (`_shared/viewing/ops-alert.ts`,
+from `viewing-request-create` after the charge, never blocking it): the ref, the
+place count, the windows and a console link, and nothing about the renter.
 
 **A broker is owed the renter's decision once the request closes**
 (`realtorDecisionsOwed` in `reminders.ts`): `CONFIRM` for an item the renter
 kept that reached `CONFIRMED`, `RELEASE` for any other item still holding time
 (`CONFIRMED`, `ALTERNATIVE_OFFERED`, `CONTACTED`). A broker who said no is
-holding nothing and is owed nothing. The drain turns each into a
+holding nothing and is owed nothing. It stays owed until the broker's most
+recent `REALTOR_NOTIFIED` matches, so a broker confirmed on Monday for a request
+cancelled on Tuesday is owed a release. The drain turns each into a
 `CONFIRM_REALTOR` / `RELEASE_REALTOR` job, which stays open until an operator
 sends it.
 
@@ -562,6 +586,16 @@ Nothing says "booked". At delivery the request is `DELIVERED`, not `CONFIRMED`
 
 `FAILED_NO_SUPPLY` ships with substitutes or, when there are none yet, with a
 promise to come back the same day. Never on its own.
+
+**Other times an agent offered are relayed, not dropped.** An
+`ALTERNATIVE_OFFERED` item with slots is listed after the plan, in the same
+message, under "offered different times", with each day named. It is never a
+stop: the renter has not chosen that time. When nothing is confirmed but offers
+exist, the message is the offers (`renderAlternativesOnly`), not the no-supply
+message - those units are available and their agents are waiting. A renter who
+takes one tells us; the operator records `CONFIRMED` with that slot ("Renter took
+an offered time" on the card), which makes it a stop, and once the renter says
+yes its agent is owed a `CONFIRM` like any other.
 
 ### The silence clock
 

@@ -27,6 +27,7 @@ import {
   MIN_ITEMS,
   type ShortlistCandidate,
 } from '../_shared/viewing/intake.ts';
+import { renderIntakeAlert, sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -260,9 +261,26 @@ Deno.serve(async (req) => {
     }, 402);
   }
 
-  // No message is sent here, and that is deliberate. There is no service window
-  // until the renter messages us first, and no approved template to open one
-  // with. The deep link is the handshake; the confirmation page shows it.
+  // Tell the operators, after the charge and without waiting on it: the renter
+  // gets their answer now, and an email that fails must not unmake a request
+  // they have paid for. waitUntil keeps the isolate alive for the send.
+  const alert = sendIntakeAlert(
+    db,
+    renderIntakeAlert({
+      ref: request.ref,
+      placeCount: items.length,
+      availability: availability.value ?? [],
+      createdAt: new Date(),
+    }),
+    Deno.env.get('RESEND_API_KEY'),
+  ).then(r => {
+    if (r.skipped) console.warn(`[viewing-request-create] ops alert skipped: ${r.skipped}`);
+  });
+  (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(alert);
+
+  // No message is sent to the renter here, and that is deliberate. There is no
+  // service window until the renter messages us first. The deep link is the
+  // handshake; the confirmation page shows it.
   return json({
     success: true,
     ref: request.ref,

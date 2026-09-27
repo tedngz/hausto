@@ -15,6 +15,7 @@ import {
   assembleItinerary,
   renderItinerary,
   renderNoSupply,
+  renderAlternativesOnly,
   type StopListing,
 } from '../../supabase/functions/_shared/viewing/itinerary';
 import type { RequestView } from '../../supabase/functions/_shared/viewing-domain';
@@ -51,9 +52,15 @@ export function Deliver({
   // server-side at send time, against the index as it stands then rather than
   // as it stood when this screen loaded. Saying so beats showing an empty list
   // an operator would read as "there are none".
-  const preview = assembled.stops.length === 0
-    ? renderNoSupply({ ref, requestedCount: listings.length, substitutes: [] })
-    : renderItinerary({ ref, stops: assembled.stops, requestedCount: listings.length });
+  // Same three branches as deliver.ts, so the preview is the message.
+  const noStops = assembled.stops.length === 0;
+  const preview = noStops && assembled.alternatives.length > 0
+    ? renderAlternativesOnly({ ref, requestedCount: listings.length, alternatives: assembled.alternatives })
+    : noStops
+      ? renderNoSupply({ ref, requestedCount: listings.length, substitutes: [] })
+      : renderItinerary({
+          ref, stops: assembled.stops, requestedCount: listings.length, alternatives: assembled.alternatives,
+        });
 
   const move = (i: number, delta: number) => {
     const next = [...effective];
@@ -90,7 +97,15 @@ export function Deliver({
         {alreadySent && <span className="tag good">already sent</span>}
       </div>
 
-      {assembled.stops.length === 0 && (
+      {noStops && assembled.alternatives.length > 0 && (
+        <p className="small" style={{ marginBottom: 4 }}>
+          Nothing confirmed at the renter's times, but {assembled.alternatives.length} agent
+          {assembled.alternatives.length === 1 ? '' : 's'} offered others. Sending this lists them and
+          asks the renter to choose. When they do, record it on the card with "Renter took an offered time".
+        </p>
+      )}
+
+      {noStops && assembled.alternatives.length === 0 && (
         <p className="small" style={{ marginBottom: 4 }}>
           Nothing confirmed. Sending this tells the renter so, and carries up to
           three close matches chosen at send time - same districts, same bedroom

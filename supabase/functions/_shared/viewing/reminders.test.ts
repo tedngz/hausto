@@ -341,3 +341,21 @@ describe('telling brokers what the renter decided', () => {
     expect(due).toContainEqual(expect.objectContaining({ kind: 'CONFIRM_REALTOR', itemId: 'i1' }));
   });
 });
+
+describe('a confirmed broker whose request is then cancelled', () => {
+  it('is owed a release, despite having been told once already', () => {
+    const slot = [{ starts_at: at(72 * HOUR_MS), duration_minutes: 30 }];
+    const events = logOf(
+      ...submitted(1),
+      ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'CONFIRMED', slots: slot }, 'i1'),
+      ev('ITINERARY_DELIVERED', 2 * HOUR_MS),
+      ev('REQUEST_CONFIRMED', 3 * HOUR_MS, { confirmed_item_ids: ['i1'] }),
+      ev('REALTOR_NOTIFIED', 4 * HOUR_MS, { decision: 'CONFIRM', message_id: 'rm1' }, 'i1'),
+      ev('REQUEST_CANCELLED', 5 * HOUR_MS, { reason: 'RENTER_FOUND_PLACE' }),
+    );
+    expect(realtorDecisionsOwed(reduceRequest('r', events))).toEqual([{ itemId: 'i1', decision: 'RELEASE' }]);
+
+    const released = [...events, ev('REALTOR_NOTIFIED', 6 * HOUR_MS, { decision: 'RELEASE', message_id: 'rm2' }, 'i1')];
+    expect(realtorDecisionsOwed(reduceRequest('r', released))).toEqual([]);
+  });
+});
