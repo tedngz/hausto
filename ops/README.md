@@ -7,6 +7,12 @@ cadence, and a different standard - this one is meant to stay ugly and fast.
 Run it with `npm run dev:ops`, build it with `npm run build:ops` (output:
 `dist-ops/`). It never ships inside the renter bundle.
 
+It is served at https://hausto-ops.vercel.app, Vercel project `hausto-ops` in
+the `ted-team` scope. `.github/workflows/deploy-ops.yml` type-checks, builds
+and uploads `dist-ops/` on every merge to main that touches `ops/` or
+`supabase/functions/_shared/` (the console imports the reducer from there). It
+needs a `VERCEL_TOKEN` repository secret and skips with a notice without one.
+
 ## Why it shares the root `package.json`
 
 CLAUDE.md asks for a separate Vite app, and the separation that matters is the

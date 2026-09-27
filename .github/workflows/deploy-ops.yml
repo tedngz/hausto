@@ -1,0 +1,120 @@
+# Ships the ops console to Vercel when it changes on main.
+#
+# The console (ops/, built to dist-ops/) is a separate app from the renter SPA
+# and lives in its own Vercel project, `hausto-ops`, at
+# https://hausto-ops.vercel.app. It was first deployed by hand on 2026-09-27;
+# this exists so a merged fix does not sit on main while operators work the
+# old screen, which is the same drift deploy-functions.yml was written to end.
+#
+# Triggered by supabase/functions/_shared/** as well as ops/**: the console
+# imports the reducer, triage, drafts and outcome rules from there, so a change
+# to one is a change to what an operator sees.
+#
+# The Vercel project is not git-connected. This uploads the prebuilt
+# dist-ops/ directly, so Vercel runs no build of its own and the bundle is the
+# one this job type-checked.
+#
+# SETUP - one secret:
+#   VERCEL_TOKEN  an access token from https://vercel.com/account/tokens,
+#                 scoped to the "Ted's projects" team (ted-team).
+# The org and project ids below are identifiers, not credentials. Without the
+# token the job explains what is missing and exits green rather than failing
+# every push to main.
+name: Deploy ops console
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/**'
+      - 'vite.ops.config.ts'
+      - 'supabase/functions/_shared/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-ops.yml'
+  workflow_dispatch:
+
+# One deploy at a time, and never cancel one midway. The newest push still
+# deploys after the one in flight, since each run builds its own commit.
+concurrency:
+  group: deploy-ops
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: team_HZh3HIgSYSmzL4D5Rso4VR8i
+  VERCEL_PROJECT_ID: prj_2cbm5nP1EdpnHebICiSKjqH9M53T
+  # Pinned so a CLI release cannot change what a deploy does between two
+  # identical commits.
+  VERCEL_CLI: vercel@60.1.3
+
+jobs:
+  deploy:
+    name: vercel deploy dist-ops
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check the token is configured
+        id: guard
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::VERCEL_TOKEN is not set. Add it under Settings → Secrets and variables → Actions to deploy the ops console on merge."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.configured == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.guard.outputs.configured == 'true'
+        run: npm ci
+
+      # CI type-checks tsconfig.app.json, which does not include ops/. A console
+      # that fails to type-check should not reach operators.
+      - name: Type-check
+        if: steps.guard.outputs.configured == 'true'
+        run: npx tsc -p ops/tsconfig.json --noEmit
+
+      - name: Build
+        if: steps.guard.outputs.configured == 'true'
+        run: npm run build:ops
+
+      - name: Deploy
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Off a terminal the CLI prints JSON rather than a bare URL, and says
+          # whether the deployment actually became ready.
+          out=$(npx --yes "$VERCEL_CLI" deploy dist-ops --prod --yes --token "$VERCEL_TOKEN")
+          state=$(jq -r '.deployment.readyState // empty' <<<"$out")
+          url=$(jq -r '.deployment.url // empty' <<<"$out")
+          if [ "$state" != "READY" ]; then
+            echo "::error title=Deploy not ready::Vercel reported '${state:-nothing}'."
+            echo "$out"
+            exit 1
+          fi
+          {
+            echo "### Ops console -> https://hausto-ops.vercel.app"
+            echo
+            echo "From \`${GITHUB_SHA:0:7}\`. Deployment: $url"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The deploy reporting success is not the page serving. Read it back.
+      - name: Check the production URL serves the console
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl -sfS https://hausto-ops.vercel.app | grep -q '<title>Hausto ops</title>'
