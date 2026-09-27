@@ -189,3 +189,35 @@ describe('a closed request', () => {
     expect(plan(events, { items: items(1) })).toEqual([]);
   });
 });
+
+describe('answering the renter with a draft', () => {
+  const question = () => [...submitted(1), ev('RENTER_REPLIED', HOUR_MS, { intent: 'QUESTION', message_id: 'm7' })];
+  const draft = { kind: 'DRAFT' as const, message: 'Yes, it is furnished.\nRef HV-4KX9', confidence: 'HIGH' as const, needsAgent: false, note: 'from listing' };
+
+  it('proposes the reply, keyed on the reply it answers, with an idempotency key of its own', () => {
+    const p = byKey(plan(question(), { items: items(1), renterDraft: { messageId: 'm7', draft } }))['RENTER:m7'];
+    expect(p).toMatchObject({
+      action: 'REPLY', confidence: 'HIGH',
+      input: { requestId: 'r', message: 'Yes, it is furnished.\nRef HV-4KX9', clientKey: 'reply-m7' },
+    });
+  });
+
+  it('flags a holding reply - the agent still has to be asked', () => {
+    const holding = { ...draft, needsAgent: true, confidence: 'LOW' as const };
+    const p = byKey(plan(question(), { items: items(1), renterDraft: { messageId: 'm7', draft: holding } }))['RENTER:m7'];
+    expect(p.confidence).toBe('LOW');
+    expect(p.rationale).toMatch(/still have to ask them/);
+  });
+
+  it('escalates with the reason when nothing can be sent', () => {
+    const p = byKey(plan(question(), { items: items(1), renterDraft: { messageId: 'm7', draft: null, blocked: 'the 24-hour window is closed.' } }))['RENTER:m7'];
+    expect(p.action).toBe('ESCALATE');
+    expect(p.rationale).toContain('No draft: the 24-hour window is closed.');
+  });
+
+  it('never proposes a draft written for an older message', () => {
+    const events = [...question(), ev('RENTER_REPLIED', 2 * HOUR_MS, { intent: 'RESCHEDULE', message_id: 'm8' })];
+    const p = byKey(plan(events, { items: items(1), renterDraft: { messageId: 'm7', draft } }))['RENTER:m8'];
+    expect(p.action).toBe('ESCALATE');
+  });
+});

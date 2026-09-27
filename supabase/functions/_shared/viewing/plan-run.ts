@@ -10,20 +10,27 @@
 // in-memory database in tests, with the model call passed in.
 
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
-import { planRequest, AGENT_VERSION, type PlanItem, type UnreadReply } from './planner.ts';
+import { planRequest, AGENT_VERSION, type PlanItem, type UnreadReply, type RenterDraft } from './planner.ts';
 import type { ParseContext, ParseSuggestion } from './parse-reply.ts';
+import { describeStatus, type DraftContext, type DraftResult, type ListingFacts, type ThreadLine } from './renter-reply.ts';
+import { waitingReplies } from './thread.ts';
+import { SupabaseMessageStore } from '../whatsapp/store.ts';
+import { isWindowOpen, MAX_CONSECUTIVE_OUTBOUND } from '../whatsapp/send.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
 
 /** Model reads per pass. A backlog is read over several passes, not in one expensive burst. */
 export const MAX_PARSES_PER_RUN = 10;
+/** Drafted renter replies per pass, for the same reason. */
+export const MAX_DRAFTS_PER_RUN = 10;
 
 export interface RunResult {
   scanned: number;
   proposed: number;
   superseded: number;
   parsed: number;
+  drafted: number;
 }
 
 export async function runPlanner(
@@ -33,11 +40,14 @@ export async function runPlanner(
     now: Date;
     /** Null when the model cannot be asked - the planner escalates instead. */
     parse: (ctx: ParseContext) => Promise<ParseSuggestion | null>;
+    /** Draft an answer to the renter. Omitted, renter replies are escalated as before. */
+    draft?: (ctx: DraftContext) => Promise<DraftResult | null>;
   },
 ): Promise<RunResult> {
-  const result: RunResult = { scanned: 0, proposed: 0, superseded: 0, parsed: 0 };
+  const result: RunResult = { scanned: 0, proposed: 0, superseded: 0, parsed: 0, drafted: 0 };
+  const store = new SupabaseMessageStore(db);
 
-  let query = db.from('viewing_requests').select('id, availability, created_at');
+  let query = db.from('viewing_requests').select('id, ref, renter_id, availability, created_at');
   if (opts.requestIds?.length) {
     query = query.in('id', opts.requestIds);
   } else {
@@ -47,7 +57,7 @@ export async function runPlanner(
   }
   const { data: requests } = await query.order('created_at', { ascending: true }).limit(500);
 
-  for (const req of (requests ?? []) as { id: string; availability: unknown }[]) {
+  for (const req of (requests ?? []) as { id: string; ref: string; renter_id: string; availability: unknown }[]) {
     result.scanned += 1;
     const availability = Array.isArray(req.availability) ? req.availability as { date: string; part: string }[] : [];
 
@@ -55,7 +65,7 @@ export async function runPlanner(
       db.from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
         .eq('request_id', req.id).order('occurred_at', { ascending: true }),
       db.from('ops_request_items_view')
-        .select('id, listing_title, listing_url, district_code, price_vnd_at_request, realtor_phone')
+        .select('id, listing_id, listing_title, listing_url, district_code, price_vnd_at_request, realtor_phone')
         .eq('request_id', req.id),
       db.from('realtor_messages').select('id, item_id, body, created_at')
         .eq('request_id', req.id).eq('direction', 'IN').order('created_at', { ascending: true }),
@@ -99,8 +109,26 @@ export async function runPlanner(
       unreadReplies.push({ itemId: r.item_id, messageId: r.id, suggestion });
     }
 
+    // A drafted answer to the renter's newest waiting reply - once per reply,
+    // and only when there is something legal to send it on.
+    let renterDraft: RenterDraft | undefined;
+    const waiting = waitingReplies(events);
+    const newest = waiting[waiting.length - 1];
+    if (
+      opts.draft && newest?.messageId && !waiting.some(w => w.intent === 'DECLINE')
+      && !keys.has(`RENTER:${newest.messageId}`) && result.drafted < MAX_DRAFTS_PER_RUN
+    ) {
+      const blocked = await whyCannotMessage(store, req.renter_id, opts.now);
+      let draft: DraftResult | null = null;
+      if (!blocked) {
+        result.drafted += 1;
+        draft = await opts.draft(await draftContext(db, req, view, (rows ?? []) as Record<string, unknown>[], opts.now));
+      }
+      renterDraft = { messageId: newest.messageId, draft, ...(blocked ? { blocked } : {}) };
+    }
+
     const proposals = planRequest({
-      requestId: req.id, view, events, items, availability, unreadReplies, now: opts.now.getTime(),
+      requestId: req.id, view, events, items, availability, unreadReplies, renterDraft, now: opts.now.getTime(),
     });
 
     const fresh = proposals.filter(p => !keys.has(p.key));
@@ -129,4 +157,67 @@ export async function runPlanner(
   }
 
   return result;
+}
+
+/**
+ * Why a free-form message cannot go to this renter right now, or null. The
+ * send layer enforces all three on approval anyway; checking first means no
+ * draft is paid for that could never be sent.
+ */
+async function whyCannotMessage(store: SupabaseMessageStore, renterId: string, now: Date): Promise<string | null> {
+  const renter = await store.getRenter(renterId);
+  if (!renter) return 'the renter record is missing.';
+  if (renter.opted_out_at) return 'the renter opted out.';
+  if (!isWindowOpen(renter, now)) return 'the 24-hour window is closed, so nothing free-form can be sent until they write again.';
+  if (await store.countConsecutiveOutbound(renterId) >= MAX_CONSECUTIVE_OUTBOUND) {
+    return 'two messages have already gone since they last wrote.';
+  }
+  return null;
+}
+
+/**
+ * What the draft is written from: listing facts, each unit's standing, and
+ * the renter's own thread. Selected column by column - no contact column of
+ * the listing is read, and no renter or agent contact is passed on, so the
+ * model has nothing of the kind to repeat (invariant 4).
+ */
+async function draftContext(
+  db: Supa,
+  req: { id: string; ref: string },
+  view: ReturnType<typeof reduceRequest>,
+  rows: Record<string, unknown>[],
+  now: Date,
+): Promise<DraftContext> {
+  const listingIds = rows.map(r => String(r.listing_id));
+  const [{ data: facts }, { data: msgs }] = await Promise.all([
+    db.from('external_properties')
+      .select('id, title, location, district_code, bedrooms, area_sqm, price_vnd, amenities, description')
+      .in('id', listingIds),
+    db.from('messages').select('direction, body, template_name, created_at')
+      .eq('request_id', req.id).order('created_at', { ascending: true }),
+  ]);
+  const byId = new Map(((facts ?? []) as Record<string, unknown>[]).map(f => [String(f.id), f]));
+
+  const listings: ListingFacts[] = rows.map(r => {
+    const f = byId.get(String(r.listing_id)) ?? {};
+    const item = view.items[String(r.id)];
+    return {
+      itemId: String(r.id),
+      title: String(f.title ?? r.listing_title ?? 'A place'),
+      districtCode: (f.district_code as string) ?? null,
+      location: (f.location as string) ?? null,
+      priceVnd: Number(r.price_vnd_at_request ?? f.price_vnd ?? 0),
+      bedrooms: f.bedrooms != null ? Number(f.bedrooms) : null,
+      areaSqm: f.area_sqm != null ? Number(f.area_sqm) : null,
+      amenities: Array.isArray(f.amenities) ? (f.amenities as unknown[]).map(String) : [],
+      description: (f.description as string) ?? null,
+      status: describeStatus(item?.state ?? 'PENDING', item?.slots ?? [], item?.actualPriceVnd),
+    };
+  });
+
+  const thread: ThreadLine[] = ((msgs ?? []) as Record<string, unknown>[])
+    .filter(m => typeof m.body === 'string' && m.body)
+    .map(m => ({ direction: m.direction === 'IN' ? 'IN' : 'OUT', body: String(m.body), at: String(m.created_at) }));
+
+  return { ref: req.ref, state: view.state, listings, thread, now };
 }

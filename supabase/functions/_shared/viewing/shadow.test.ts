@@ -165,3 +165,60 @@ describe('shadow mode', () => {
     expect((await act({ action: 'APPROVE_PROPOSAL', proposalId: id })).status).toBe(409);
   });
 });
+
+describe('drafted renter replies', () => {
+  let seen: string[] = [];
+  const draftPlan = () =>
+    // deno-lint-ignore no-explicit-any
+    runPlanner(db as any, {
+      now: new Date(),
+      parse: () => Promise.resolve(null),
+      draft: ctx => {
+        seen.push(JSON.stringify(ctx));
+        return Promise.resolve({ kind: 'DRAFT', message: 'It is fully furnished. Ref HV-4KX9', confidence: 'HIGH', needsAgent: false, note: '' });
+      },
+    });
+
+  beforeEach(() => {
+    seen = [];
+    db.tables.messages.push({ id: 'in-1', request_id: 'req-1', direction: 'IN', to_phone: '+84912345678',
+      body: 'Is the first one furnished? call me 0912345678', status: 'QUEUED', idempotency_key: 'inbound:w1', created_at: new Date().toISOString() });
+    db.tables.events.push({ id: 'e10', request_id: 'req-1', item_id: null, type: 'RENTER_REPLIED',
+      payload: { intent: 'QUESTION', message_id: 'in-1' }, actor: 'RENTER', occurred_at: new Date().toISOString() });
+  });
+
+  it('proposes a drafted reply, written from a context holding no phone number at all', async () => {
+    await draftPlan();
+    expect(byKey('RENTER:in-1')).toMatchObject({ action: 'REPLY', input: { clientKey: 'reply-in-1' } });
+    expect(seen).toHaveLength(1);
+    // The renter's number and the agent's number both exist in this database.
+    // Neither reaches the model: the listing's contact columns are never
+    // selected, and the renter's own digits arrive already in the thread -
+    // masked when the prompt is built (renter-reply.test.ts).
+    expect(seen[0]).not.toContain('+84901234567');
+    expect(seen[0]).not.toContain('+84912345678');
+  });
+
+  it('sends it on WhatsApp when approved, and the renter stops waiting', async () => {
+    await draftPlan();
+    const r = await act({ action: 'APPROVE_PROPOSAL', proposalId: byKey('RENTER:in-1').id });
+    expect(r.status).toBe(200);
+    expect(db.tables.messages.filter(m => m.direction === 'OUT').map(m => m.body)).toEqual(['It is fully furnished. Ref HV-4KX9']);
+    expect(db.tables.events.find(e => e.type === 'REPLY_SENT')!.actor).toBe(ACTOR);
+    expect(byKey('RENTER:in-1').status).toBe('APPROVED');
+  });
+
+  it('does not pay for a draft that could never be sent', async () => {
+    db.tables.renters[0].service_window_expires_at = new Date(Date.now() - 1000).toISOString();
+    await draftPlan();
+    expect(seen).toHaveLength(0);
+    expect(byKey('RENTER:in-1')).toMatchObject({ action: 'ESCALATE' });
+    expect(String(byKey('RENTER:in-1').rationale)).toContain('window is closed');
+  });
+
+  it('drafts once per reply', async () => {
+    await draftPlan();
+    await draftPlan();
+    expect(seen).toHaveLength(1);
+  });
+});

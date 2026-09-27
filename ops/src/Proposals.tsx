@@ -29,6 +29,7 @@ const LABEL: Record<string, string> = {
   NOTIFY_REALTOR: 'Tell the agent',
   DELIVER: 'Send the itinerary',
   CANCEL_REQUEST: 'Cancel the request',
+  REPLY: 'Reply to the renter',
   ESCALATE: 'Needs a person',
 };
 
@@ -152,6 +153,7 @@ function ProposalCard({
           <button className="primary" disabled={busy || (hasMessage && !message.trim())} onClick={() => void approve()}>
             {p.action === 'ESCALATE' ? 'Agree - I will handle it'
               : SENT_BY_HAND.has(p.action) ? 'Sent it on Zalo - approve'
+              : p.action === 'REPLY' ? 'Send to the renter on WhatsApp'
               : 'Approve'}
           </button>
           <button disabled={busy} onClick={() => setRejecting(true)}>Reject</button>
