@@ -25,11 +25,24 @@ import type { AgreementStats } from './proposals.ts';
 export const AUTO_AGENT_VERSION = 'auto-v1';
 
 /**
- * Actions the AI operator may take alone. REPLY is stage 2 (answering a
- * renter from facts). OUTCOME is stage 3 (recording what an agent's reply
- * said) - each behind its own gate, measured on its own record.
+ * Actions the AI operator may take alone, each behind its own gate measured on
+ * its own record:
+ *
+ *   REPLY           stage 2 - answering a renter from facts
+ *   OUTCOME         stage 3 - recording what an agent's reply said
+ *   CONTACTED,      stage 4 - messages to agents: the first ask, a chase, and
+ *   NUDGE,          the confirm or release once the renter has decided. Only
+ *   NOTIFY_REALTOR  through the Zalo bridge (see REALTOR_SENDS).
  */
-export const AUTONOMOUS_ACTIONS = ['REPLY', 'OUTCOME'] as const;
+export const AUTONOMOUS_ACTIONS = ['REPLY', 'OUTCOME', 'CONTACTED', 'NUDGE', 'NOTIFY_REALTOR'] as const;
+
+/**
+ * Messages to agents. They may only run alone while REALTOR_CHANNEL is the
+ * bridge: under the manual channel, recording "contacted" means a person
+ * already sent it by hand - an AI operator recording it would be claiming a
+ * message nobody sent.
+ */
+export const REALTOR_SENDS: ReadonlySet<string> = new Set(['CONTACTED', 'NUDGE', 'NOTIFY_REALTOR']);
 export type AutonomousAction = typeof AUTONOMOUS_ACTIONS[number];
 
 /**
@@ -116,6 +129,8 @@ export function autonomyState(opts: {
   flagged: Record<string, number>;
   /** Actions whose measured gate an owner chose to skip. */
   gateOverride?: string[];
+  /** REALTOR_CHANNEL as the functions see it. Agent messages need 'bridge'. */
+  realtorChannel?: string;
 }): AutonomyState {
   const listed = new Set((opts.env ?? '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
   const overridden = new Set((opts.gateOverride ?? []).map(s => s.toUpperCase()));
@@ -124,11 +139,13 @@ export function autonomyState(opts: {
     const args = [opts.stats.find(s => s.action === action), opts.executed[action] ?? 0, opts.flagged[action] ?? 0] as const;
     const gate = overridden.has(action) ? overriddenGate(...args) : gateFor(...args);
     const enabled = listed.has(action);
+    const noBridge = REALTOR_SENDS.has(action) && opts.realtorChannel !== 'bridge';
     actions[action] = {
       enabled,
-      open: enabled && !opts.paused && gate.open,
+      open: enabled && !opts.paused && !noBridge && gate.open,
       reason: !enabled ? `Off - AI_OPERATOR_AUTONOMY does not list ${action}.`
         : opts.paused ? 'Paused by an operator.'
+        : noBridge ? 'Agent messages go by hand (REALTOR_CHANNEL is not bridge), so the AI operator cannot send them itself.'
         : gate.reason,
     };
   }

@@ -766,3 +766,20 @@ from an agent's reply by paste-parse qualifies (key `OUTCOME:<item>:<reply>`,
 HIGH confidence, nothing flagged); `NO_RESPONSE` never does. It waits the same
 5-minute hold and runs as `AGENT:auto-v1`. The `REPLY` gate override does not
 open it.
+
+### Stage 4: messages to agents sent alone
+
+`CONTACTED`, `NUDGE` and `NOTIFY_REALTOR` join `AUTONOMOUS_ACTIONS`: the first
+ask, a chase, and the confirm or release once the renter has decided. The plan
+gates this stage on "OA/ZNS, or an explicit accepted-risk decision"; the owner
+made that decision for the bridge on 2026-09-27.
+
+They open **only while `REALTOR_CHANNEL` is `bridge`** (`REALTOR_SENDS` in
+`autonomy.ts`). Under the manual channel, recording "contacted" means a person
+already sent it by hand, so an AI operator recording it would be claiming a
+message nobody sent. Each has its own gate on its own stage 1 record; the
+`REPLY` override opens none of them. Run alone, the message is queued for the
+device like any approved one and the event waits for the device's ack, carrying
+`AGENT:auto-v1` - so the log says the AI operator contacted the agent only once
+the bridge has sent it. The daily cap, the device pause and the 5-minute hold
+all apply. `NO_RESPONSE`, the itinerary and cancelling stay with people.

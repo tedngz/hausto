@@ -330,6 +330,7 @@ export async function loadAutonomyState(
   const state = autonomyState({
     env, paused: controls?.paused === true, stats, executed, flagged,
     gateOverride: Array.isArray(controls?.gate_override) ? controls.gate_override : [],
+    realtorChannel: typeof extra.realtorChannel === 'string' ? extra.realtorChannel : 'manual',
   });
   await db.from('ai_operator_controls')
     .update({ last_state: { ...state, ...extra }, last_run_at: now.toISOString() }).eq('id', 'singleton');
