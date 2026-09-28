@@ -108,13 +108,46 @@ describe('complex watches (SPEC §11)', () => {
     }
   });
 
-  it('sends nothing to a no, and lets a real search be a search', () => {
+  it('sends nothing to a no', () => {
     expect(decideAction(input({ intent: 'DECLINE', alertMessageId: 'm9' })).kind).toBe('NONE');
-    expect(decideAction(input({ intent: 'SEARCH', text: 'anything in D2', alertMessageId: 'm9' })).kind).toBe('SEARCH');
+  });
+
+  it('sends the places to "show me", which the classifier reads as a search', () => {
+    // The regression: with the agent off, "show me" got silence.
+    for (const enabled of [true, false]) {
+      expect(decideAction(input({ enabled, intent: 'SEARCH', text: 'show me', alertMessageId: 'm9' })))
+        .toEqual({ kind: 'ALERT_DETAILS', alertMessageId: 'm9' });
+    }
   });
 
   it('never answers a STOP, whatever else is pending', () => {
     expect(decideAction(input({ intent: 'OPT_OUT', optedOut: true, watch: confirmed })).kind).toBe('NONE');
     expect(decideAction(input({ intent: 'OPT_OUT', optedOut: true, alertMessageId: 'm9' })).kind).toBe('NONE');
+  });
+});
+
+describe('availability requests (SPEC §11)', () => {
+  it('leaves a reply on a request to the concierge, agent on or off', () => {
+    for (const enabled of [true, false]) {
+      for (const intent of ['CONFIRM', 'SEARCH', 'SELECTION', 'QUESTION']) {
+        const a = decideAction(input({ enabled, intent, inquiryId: 'inq-1', selection: { listingIds: ['l1'] } }));
+        expect(a.kind, `${enabled} ${intent}`).toBe('NONE');
+      }
+    }
+  });
+
+  it('carries the request into the confirmation, so the words can change', () => {
+    const inquiry = {
+      id: 'inq-1', firstConfirm: true, fullName: 'Mai', complexName: 'Empire City', bedrooms: 2,
+      budgetMaxVnd: 25_000_000, moveInDate: '2026-11-15', leaseMonths: 12, hasPets: false,
+    };
+    const a = decideAction(input({
+      enabled: false,
+      watch: {
+        kind: 'CONFIRMED', watchId: 'w1', complexName: 'Empire City', bedrooms: 2,
+        budgetMaxVnd: 25_000_000, expiresAt: '2026-11-29T16:59:59Z', inquiry,
+      },
+    }));
+    expect(a.kind === 'WATCH_CONFIRMED' && a.inquiry?.id).toBe('inq-1');
   });
 });

@@ -18,7 +18,8 @@
 //      kind, and against this request's renter by name and number.
 
 import type { RealtorChannel, RealtorMedium } from './channel.ts';
-import { containsPhoneNumber } from '../viewing/privacy.ts';
+import { containsInternationalNumber, containsPhoneNumber } from '../viewing/privacy.ts';
+import { nationalNumber } from '../whatsapp/inbound.ts';
 
 export type RealtorPurpose =
   | 'REQUEST_VIEWING'   // first contact about a unit
@@ -82,13 +83,18 @@ export function assertNoRenterIdentity(
   body: string,
   renter?: { phone_e164?: string | null; display_name?: string | null },
 ): void {
-  if (containsPhoneNumber(body)) throw new RenterIdentityError('a phone number');
+  if (containsPhoneNumber(body) || containsInternationalNumber(body)) {
+    throw new RenterIdentityError('a phone number');
+  }
 
   const text = body.replace(/https?:\/\/\S+/g, ' ');
 
+  // The renter's own number however it was written - `0901 234 567`,
+  // `07700 900123`, `(415) 555-0100` - by its national digits. Stripping a
+  // literal +84 here once meant a foreign renter's number was never checked.
   const digits = text.replace(/\D/g, '');
-  const local = renter?.phone_e164?.replace(/^\+84/, '');
-  if (local && local.length >= 9 && digits.includes(local)) {
+  const national = renter?.phone_e164 ? nationalNumber(renter.phone_e164) : null;
+  if (national && national.length >= 7 && digits.includes(national)) {
     throw new RenterIdentityError("the renter's phone number");
   }
 

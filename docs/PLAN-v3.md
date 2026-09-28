@@ -410,9 +410,10 @@ served to ChatGPT and Perplexity via llms.txt - one endpoint, three consumers.
   and two lines each, deep link to the property page
 - One-tap re-request from a suggested listing
 - Weekly new-listing digest matched to saved criteria (template message)
-- Complex watches, added 2026-09-28 (SPEC §11): WhatsApp alerts for one
-  building, opted in by messaging a code, delivered by the digest's sweep. The
-  sweep's cron now sends rather than dry-runs.
+- Availability requests on WhatsApp, added 2026-09-28/29 (SPEC §11): the
+  complex page's concierge request ends on WhatsApp, where a person replies
+  within 24 hours, and sets a watch that alerts new listings at the building
+  through the digest's sweep. The sweep's cron now sends rather than dry-runs.
 
 **Out of scope:**
 - First-time discovery. The style layer is visual - image highlights, style tags,

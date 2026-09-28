@@ -115,7 +115,7 @@ resolution enriches the table permanently. Do not chase full coverage.
 
 ```
 id                        uuid pk
-phone_e164                text unique not null      -- CHECK '^\+84[0-9]{9}$'
+phone_e164                text unique not null      -- CHECK '^\+[1-9][0-9]{6,14}$', any country
 display_name              text
 user_id                   uuid references auth.users -- nullable, unique when set
 service_window_expires_at timestamptz    -- see §5
@@ -563,13 +563,21 @@ rendering takes a DTO with no realtor contact field on it.
 The console reads the renter's WhatsApp thread through `ops_request_thread()`, a
 `SECURITY DEFINER` function that returns bodies, times, the window expiry and
 the consecutive-outbound count - never `to_phone`, never a name - and masks
-phone-shaped text inside bodies. The console still has no grant on `messages`
-or `renters`.
+phone-shaped text inside bodies (`mask_phone_numbers()`: Vietnamese shapes, any
+number written with a country code, and this renter's own number however they
+wrote it). The console still has no grant on `messages` or `renters`.
 
 Free text is where shape stops protecting anyone, so it is checked on the way
-out by the server (`_shared/viewing/privacy.ts`): a broker-bound message may not
-carry any phone number or this renter's name, and an operator's reply to a
-renter may not carry any phone number.
+out by the server (`_shared/viewing/privacy.ts`, `assertNoRenterIdentity`): a
+broker-bound message may not carry any phone number - Vietnamese-shaped or
+written with a country code - nor this renter's number in their own national
+format, nor their name; an operator's reply to a renter may not carry a
+Vietnamese number, since agents are Vietnamese.
+
+Renters may be on any country's number (§1, `toRenterE164`, `waIdToE164`);
+agents are Vietnamese only (`toE164`). Every check above is written for a renter
+from anywhere - stripping `+84` to find "the local number" is the mistake that
+once meant a foreign renter's number was never checked.
 
 **No `booking` vocabulary in renter-facing copy until state is `CONFIRMED`.** Use
 "request". We cannot honour a booking at intake time.
@@ -580,9 +588,10 @@ renter may not carry any phone number.
 
 - Money in VND, stored as integer dong. Never floats. Display `15.000.000 ₫`.
 - All timestamps stored UTC, displayed `Asia/Ho_Chi_Minh`.
-- Phone numbers stored E.164 (`+84...`). Normalize at every boundary - the
-  crawler hands you `0901234567`, `84901234567` and `+84 90 123 45 67` for the
-  same human.
+- Phone numbers stored E.164. Normalize at every boundary - the crawler hands
+  you `0901234567`, `84901234567` and `+84 90 123 45 67` for the same human.
+  Agents are `+84` only (`toE164`); renters may be any country (`toRenterE164`
+  for what they type, `waIdToE164` for what Meta sends).
 - Use `-` rather than an em dash in anything a user reads.
 
 ## §8 Definition of done
@@ -870,20 +879,97 @@ times, and that is a person's job.
 Restoring any gate is one button on the AI operator screen, and **Pause** on
 the same screen stops everything the AI operator does alone.
 
-## §11 Complex watches
+## §11 Availability requests and complex watches
 
-"Tell me on WhatsApp when a place comes up at Empire City." A complex page's
-main call to action (`ComplexWatchModal`). The email concierge
-(`complex_inquiries`, `ConciergeCaptureModal`) stays as the fallback for
-renters without WhatsApp.
+"Check availability at Empire City." A complex page's one call to action is
+a request to the concierge: a person on our team asks the agents who hold
+units in the building and replies within 24 hours. The crawl only knows what
+was advertised, and for most buildings that is nothing in a given month -
+which is why a person, not an automated alert, is what the page offers.
 
-A watch is not a request. It spends no credit, queues no operator work and is
-not in the event log: it has no operator decisions, and its only transitions
-are the renter sending its code and the renter saying STOP.
+WhatsApp only. Email was the original channel and is retired for new
+requests: one channel keeps one thread, and the 24-hour window keeps the
+concierge quick. The email requests made before keep their threads, and are
+still answered by email (`channel = 'EMAIL'`). Any country's WhatsApp number
+works (§1, §6).
 
-### `complex_watches`
+A request is not a viewing request. It spends no credit and is not in the
+event log: it asks a person to look, and viewings of what they find are
+requested the one way there is (invariant 8), from the listing page.
+
+### The form (`ConciergeCaptureModal`)
+
+1. **What you need** - move-in date, lease (6, 12 or 24+ months), bedrooms
+   (1-4+), the most they would pay a month in million ₫ (with a rough US$
+   figure beside it, never stored), pets, optional notes, and their name.
+2. **Send it on WhatsApp.** `complex-inquiry-create` returns a wa.me link:
+   `Hi Hausto - please check availability at <complex> for me (HW-XXXX)`. The
+   form asks for no phone number: the message proves the number is theirs,
+   opts them in, and opens the 24-hour window the concierge's promise is
+   measured against.
+
+`complex-inquiry-create` (anonymous or signed in, rate-limited by IP)
+validates (`validateInquiryInput`), writes the request and a `PENDING` complex
+watch with the same criteria, whose code is the handshake. Browsers can no
+longer insert `complex_inquiries` directly.
+
+### `complex_inquiries` (additive columns)
 
 ```
+channel                text not null   -- WHATSAPP; EMAIL on requests made before
+budget_max_vnd         bigint          -- the form's ceiling
+watch_id               uuid references complex_watches -- the handshake
+renter_id              uuid references renters        -- set when the code arrives
+whatsapp_confirmed_at  timestamptz     -- the concierge's clock starts
+```
+
+`channel` has no default: a new request says what it is. `email` and the old
+`budget_usd_*` are nullable now; an EMAIL request must have an email.
+`INQUIRY_CHANNELS` in `viewing-domain.ts`.
+
+### The thread (`complex_inquiry_messages`)
+
+One conversation per request whatever carried each message, so Admin Tools
+shows it whole. Additive: `channel` (`WHATSAPP` | `EMAIL`),
+`whatsapp_message_id` (the `messages` row, unique), `from_email` nullable, and
+`source` may be `whatsapp` (composed on the renter's phone).
+
+### On WhatsApp
+
+1. **The code arrives.** `handleInbound` confirms the watch (below) and, when
+   it belongs to a request, the request: `renter_id`, `phone`,
+   `whatsapp_confirmed_at`. The code message opens the thread. One reply
+   (`renderInquiryConfirmed`) says back what we heard, that a person replies
+   here within 24 hours, and that new listings there will be alerted until
+   the watch ends. Then the webhook asks `notify-complex-inquiry` to mail the
+   concierge - at confirmation, not at the form, because until the code
+   arrives there is nobody to reply to.
+2. **The concierge replies.** From Admin Tools (`concierge-email-reply`,
+   which sends by the request's channel) or by hitting Reply in Gmail
+   (`concierge-email-inbound` relays it to WhatsApp). Free-form only, inside
+   the window. When it has closed nothing can reach the renter until they
+   write again: the dashboard says so and disables the reply, and a Gmail
+   reply comes back to the admin as "did not go out" with the reason. An
+   approved utility template for "we have an update" is what would close that
+   gap; none exists yet. The consecutive-outbound rule (§5) holds: two
+   messages without an answer and the next is refused - so the confirmation
+   plus one concierge message, until the renter writes back.
+3. **The renter answers.** When the last thing we sent them is on a
+   request's thread (`inquiryAwaitingReply`), their message is filed there,
+   never attached to a viewing request (so a "yes" cannot confirm an
+   itinerary), answered by nothing automated, and mailed to the concierge as
+   "💬 replied on WhatsApp".
+
+Admin Tools lists a WhatsApp request only once its code has arrived, with the
+hours left in the window.
+
+### Complex watches
+
+The alert half. Created by a WhatsApp request; there is no separate entry
+point.
+
+```
+complex_watches
 id              uuid pk
 complex_id      uuid not null references complexes
 code            text unique not null      -- HW-XXXX, the ref alphabet
@@ -896,13 +982,8 @@ status          text not null             -- PENDING | ACTIVE | CANCELLED
 confirmed_at    timestamptz
 expires_at      timestamptz not null
 created_at, updated_at
-```
 
-`WATCH_STATUSES` in `viewing-domain.ts`. Service role writes; admins read.
-
-### `alert_items`
-
-```
+alert_items
 id              uuid pk
 renter_id       uuid not null references renters
 listing_id      uuid not null references external_properties
@@ -914,52 +995,35 @@ created_at      timestamptz
 unique (renter_id, listing_id)
 ```
 
-Every listing put in front of a renter unasked, from a watch or the digest.
-The unique key is what stops a listing being news twice; `message_id` is how
-a reply to the template finds the places it was about.
+`WATCH_STATUSES`, `ALERT_SOURCES` in `viewing-domain.ts`. Service role
+writes; admins read `complex_watches`.
 
-### The flow
+- **Confirm.** The code works for `CONFIRM_TTL_DAYS` (7), only from the phone
+  that first sent it, and clears an earlier `opted_out_at` - sending it is the
+  renter opting back in. It links `renters.user_id` if that is empty.
+- **Sweep.** `viewing-digest-send`, Tuesday 09:00 ICT. For each active watch,
+  new listings at the complex (`complex_listing_ids`: name or alias in the
+  title or location, the complex page's rule) created after `confirmed_at`
+  that pass the intake gate (`screenCandidates`) and fit the bedrooms and
+  budget. Merged with the renter's digest picks, watches first, three at most,
+  nothing already in `alert_items`. One message per renter per ISO week
+  (`DIGEST:<week>`): the `weekly_digest` template with the complex name as
+  `{{3}}`, or free-form with the places in it if their window is open.
+- **Reply.** When the last thing we sent is an alert whose places have not
+  gone out, anything but a no or STOP gets them free-form, with a link each
+  (`ALERT_DETAILS`) - "show me" included, which the intent classifier reads
+  as a search.
+- **End.** STOP cancels every active watch. Otherwise `MOVE_IN_GRACE_DAYS`
+  (14) after the move-in date, never later than `MAX_WATCH_DAYS` (120).
 
-1. **Set up.** `complex-watch-create` (anonymous or signed in) validates
-   bedrooms, budget and move-in date, writes a `PENDING` watch and returns a
-   wa.me link: `Hi Hausto - alert me about new places at <complex> (HW-XXXX)`.
-   There is no phone number in the request - a caller cannot point alerts at
-   somebody else's phone.
-2. **Opt in.** The renter sends that message. `handleInbound` finds the code,
-   turns the watch `ACTIVE`, sets `renter_id`, links `renters.user_id` if it
-   is empty, and clears an earlier `opted_out_at` - sending the code is the
-   renter opting back in. The code works for `CONFIRM_TTL_DAYS` (7), and only
-   from the phone that first sent it. One free-form reply says what is being
-   watched and until when (`WATCH_CONFIRMED`), or why the code did not work
-   (`WATCH_PROBLEM`).
-3. **Sweep.** `viewing-digest-send`, Tuesday 09:00 ICT. For each active watch,
-   new listings at the complex (`complex_listing_ids`: name or alias in the
-   title or location, the complex page's rule) that were created after
-   `confirmed_at`, pass the intake gate (`screenCandidates`) and fit the
-   bedrooms and budget. Merged with the renter's digest picks, watches first,
-   three at most, nothing already in `alert_items`. One message per renter per
-   ISO week (`DIGEST:<week>`): the `weekly_digest` template with the complex
-   name as `{{3}}`, or free-form with the places in it if their window is
-   already open.
-4. **Reply.** When the last thing we sent a renter is an alert whose places
-   have not gone out, their next message - anything except a no, a new search
-   or STOP - gets the places free-form, with a link each (`ALERT_DETAILS`).
-   From the listing page it is the one way to ask (invariant 8). That reply is
-   never attached to a viewing request, so a "yes" to an alert cannot confirm
-   an itinerary.
-5. **End.** STOP cancels every active watch. Otherwise a watch ends
-   `MOVE_IN_GRACE_DAYS` (14) after the move-in date, or `DEFAULT_WATCH_DAYS`
-   (60) after it was set without one, never later than `MAX_WATCH_DAYS` (120).
+The confirmation, the alert places and the concierge's thread are sent with
+`VIEWING_AGENT_ENABLED` off: none is the agent's judgement. Replies on a
+request's thread are answered by a person, agent on or off.
 
-The watch replies in 2 and 4 are sent with `VIEWING_AGENT_ENABLED` off. They
-are not the agent's judgement: the site told the renter to send the code, and
-the template tells them to reply.
-
-The consecutive-outbound guard (§5) still applies: the confirmation and one
-unanswered alert are two in a row, so a second unanswered alert is refused.
-A renter who never writes back hears from us twice.
-
-Limits: `renters.phone_e164` is `+84` only, and so is `toE164`, so a watch
-works only for a Vietnamese WhatsApp number - a code from any other number
-never reaches `handleInbound`. And the approved `weekly_digest` wording reads
-"there are 1 new places" for a single match; a dedicated template is the fix.
+Limits: Meta bills by the recipient's country, so a template to a UK or US
+number costs more than one to a Vietnamese number. Meta's sender id can differ
+from how a Mexican or Brazilian renter types their number (an extra digit), so
+for them a typed number and their messages can land on two renter rows - the
+request flow never asks for a typed number, so it is unaffected. And the
+approved `weekly_digest` wording reads "there are 1 new places" for a single
+match; a dedicated template is the fix.

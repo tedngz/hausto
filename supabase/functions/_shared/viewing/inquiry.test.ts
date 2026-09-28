@@ -1,0 +1,104 @@
+import { describe, it, expect } from 'vitest';
+import {
+  buildInquiryLink,
+  describeInquiry,
+  renderInquiryConfirmed,
+  validateInquiryInput,
+  windowClosesAt,
+} from './inquiry.ts';
+import { watchCodeFromMessage } from './watch.ts';
+import { refFromMessage } from './intake.ts';
+
+const NOW = new Date('2026-09-29T03:00:00Z'); // 10:00 in HCMC
+
+const valid = {
+  complexId: '0b6f7a52-5a8e-4c7a-9f4e-2f7b1f0a9c11',
+  name: 'Mai Nguyen',
+  moveInDate: '2026-11-15',
+  leaseMonths: 12,
+  bedrooms: 2,
+  budgetMaxVnd: 25_000_000,
+  hasPets: true,
+  notes: '  High floor  ',
+};
+
+describe('what the form may send', () => {
+  it('accepts a request - no phone, no email, no channel to pick', () => {
+    const r = validateInquiryInput(valid, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.notes).toBe('High floor');
+      expect(r.value.hasPets).toBe(true);
+      expect(Object.keys(r.value)).not.toContain('email');
+    }
+  });
+
+  it('ignores an email or a channel a stale client still sends', () => {
+    // Email is retired. An old page posting one gets a WhatsApp request.
+    const r = validateInquiryInput({ ...valid, channel: 'EMAIL', email: 'mai@example.com' }, NOW);
+    expect(r.ok).toBe(true);
+    expect(r.ok && Object.keys(r.value)).not.toContain('email');
+  });
+
+  it('asks for the things a concierge cannot check without', () => {
+    expect(validateInquiryInput({ ...valid, name: '  ' }, NOW).ok).toBe(false);
+    expect(validateInquiryInput({ ...valid, moveInDate: undefined }, NOW).ok).toBe(false);
+    expect(validateInquiryInput({ ...valid, budgetMaxVnd: null }, NOW).ok).toBe(false);
+    expect(validateInquiryInput({ ...valid, leaseMonths: 9 }, NOW).ok).toBe(false);
+    expect(validateInquiryInput({ ...valid, bedrooms: 5 }, NOW).ok).toBe(false);
+  });
+
+  it('refuses a move-in date in the past or beyond six months', () => {
+    expect(validateInquiryInput({ ...valid, moveInDate: '2026-09-28' }, NOW).ok).toBe(false);
+    expect(validateInquiryInput({ ...valid, moveInDate: '2026-09-29' }, NOW).ok).toBe(true);
+    expect(validateInquiryInput({ ...valid, moveInDate: '2027-06-01' }, NOW).ok).toBe(false);
+  });
+
+  it('never takes a budget as a float, or a typo in millions', () => {
+    expect(validateInquiryInput({ ...valid, budgetMaxVnd: 25 }, NOW).ok).toBe(false);
+    expect(validateInquiryInput({ ...valid, budgetMaxVnd: 25_000_000.5 }, NOW).ok).toBe(false);
+  });
+
+  it('refuses something that is not a building id', () => {
+    expect(validateInquiryInput({ ...valid, complexId: "'; drop table" }, NOW).ok).toBe(false);
+  });
+});
+
+describe('the handshake', () => {
+  it('carries a code the webhook finds, and no viewing ref', () => {
+    const link = buildInquiryLink('+84901112222', 'HW-4KX9', 'Empire City');
+    const text = decodeURIComponent(link.split('?text=')[1]);
+    expect(text).toBe('Hi Hausto - please check availability at Empire City for me (HW-4KX9)');
+    expect(watchCodeFromMessage(text)).toBe('HW-4KX9');
+    expect(refFromMessage(text)).toBeNull();
+  });
+});
+
+describe('the words', () => {
+  const summary = {
+    fullName: 'Mai Nguyen', complexName: 'Empire City', bedrooms: 2, budgetMaxVnd: 25_000_000,
+    moveInDate: '2026-11-15', leaseMonths: 12, hasPets: true,
+  };
+
+  it('says back what we heard', () => {
+    expect(describeInquiry(summary))
+      .toBe('2 bedrooms, up to 25.000.000 ₫ a month, moving in from 15 Nov, 12-month lease, with a pet');
+    expect(describeInquiry({ ...summary, bedrooms: 4, hasPets: false })).toMatch(/^4\+ bedrooms, .*lease$/);
+  });
+
+  it('confirms who does what by when, and that alerts come too', () => {
+    const body = renderInquiryConfirmed({ ...summary, watchExpiresAt: '2026-11-29T16:59:59Z' });
+    expect(body).toContain('Thanks Mai');
+    expect(body).toContain('Empire City');
+    expect(body).toContain('within 24 hours');
+    expect(body).toContain('Until 29 Nov');
+    expect(body).toContain('STOP');
+    expect(body).not.toMatch(/book/i);
+    expect(body).not.toMatch(/[—–]/);
+  });
+
+  it('shuts the window 24 hours after their last message', () => {
+    expect(windowClosesAt('2026-09-29T03:00:00Z')?.toISOString()).toBe('2026-09-30T03:00:00.000Z');
+    expect(windowClosesAt(null)).toBeNull();
+  });
+});

@@ -250,10 +250,12 @@ export function renderWatchConfirmed(opts: {
 export type WatchProblem = 'UNKNOWN' | 'EXPIRED';
 
 export function renderWatchProblem(problem: WatchProblem): string {
-  const again = "Set the alert up again from the building's page on hausto.com and send the new message it gives you.";
+  // Codes come from availability requests and from alerts alike, so the words
+  // name neither.
+  const again = "Send your request again from the building's page on hausto.com, then the new message it gives you.";
   return problem === 'EXPIRED'
-    ? `That alert code has expired - codes last a week. ${again}`
-    : `We could not find that alert code. ${again}`;
+    ? `That code has expired - codes last a week. ${again}`
+    : `We could not find that code. ${again}`;
 }
 
 export function listingUrl(listingId: string): string {

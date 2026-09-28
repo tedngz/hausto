@@ -15,6 +15,8 @@ import { renderSelectionProblem, renderReRequested } from './selection.ts';
 import type { AgentAction } from './agent.ts';
 import { renderAlertDetails, renderWatchConfirmed, renderWatchProblem } from './watch.ts';
 import { alertItemsFor, markAlertDetailed } from './alerts.ts';
+import { renderInquiryConfirmed } from './inquiry.ts';
+import { recordInquiryMessage } from './concierge.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -69,8 +71,18 @@ export async function performAction(
         // Keyed on the watch, so a second send of the same code - a double tap,
         // a redelivery - is answered once.
         purpose: `WATCH_CONFIRMED:${action.watchId}`,
-        body: renderWatchConfirmed(action),
+        body: action.inquiry
+          ? renderInquiryConfirmed({ ...action.inquiry, watchExpiresAt: action.expiresAt })
+          : renderWatchConfirmed(action),
       });
+      // On a request, the confirmation opens the concierge's thread - and being
+      // on it is what routes the renter's next message there (concierge.ts).
+      if (action.inquiry && !result.deduplicated) {
+        await recordInquiryMessage(db, {
+          inquiryId: action.inquiry.id, direction: 'outbound', source: 'system',
+          whatsappMessageId: result.message.id, body: result.message.body ?? '', now: new Date(),
+        });
+      }
       return { performed: action.kind, messageId: result.message.id };
     }
 

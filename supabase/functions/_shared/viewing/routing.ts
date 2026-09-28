@@ -14,6 +14,9 @@ import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './se
 import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
 import { codeUsable, watchCodeFromMessage, type WatchProblem } from './watch.ts';
 import { pendingAlert } from './alerts.ts';
+import {
+  confirmInquiryForWatch, inquiryAwaitingReply, recordInquiryInbound, type ConfirmedInquiry,
+} from './concierge.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -62,6 +65,8 @@ export interface InboundOutcome {
   watch?: WatchOutcome;
   /** The alert this answers, when the last thing we sent was one (SPEC §11). */
   alertMessageId?: string;
+  /** The availability request this answers, when the last thing we sent was on its thread. */
+  inquiryId?: string;
 }
 
 export type WatchOutcome =
@@ -72,6 +77,8 @@ export type WatchOutcome =
     bedrooms: number | null;
     budgetMaxVnd: number | null;
     expiresAt: string;
+    /** Set when the code came from an availability request (SPEC §11). */
+    inquiry?: ConfirmedInquiry;
   }
   | { kind: 'PROBLEM'; problem: WatchProblem };
 
@@ -240,13 +247,18 @@ export async function handleInbound(
   const renter = await upsertRenterByPhone(db, m.from);
   const now = new Date(m.timestamp);
 
-  // A watch code, or a reply to an alert, is not about a viewing request -
-  // attaching it to their newest one would put "yes" on the wrong thread, and
-  // on a delivered itinerary it would confirm viewings they were not asked
-  // about. Both are checked before the request is resolved, for that reason.
+  // A watch code, a reply to an alert, or a reply on an availability
+  // request's thread is not about a viewing request - attaching it to their
+  // newest one would put "yes" on the wrong thread, and on a delivered
+  // itinerary it would confirm viewings they were not asked about. All three
+  // are checked before the request is resolved, for that reason. The last two
+  // cannot both match: each asks what the last message we sent was.
   const watchCode = watchCodeFromMessage(m.text);
   const alertMessageId = watchCode ? undefined : await pendingAlert(db, renter.phone_e164, now);
-  const requestId = watchCode || alertMessageId
+  const inquiryId = watchCode || alertMessageId
+    ? undefined
+    : await inquiryAwaitingReply(db, renter.phone_e164, now);
+  const requestId = watchCode || alertMessageId || inquiryId
     ? undefined
     : await resolveRequestId(db, renter.id, m.text);
 
@@ -294,6 +306,21 @@ export async function handleInbound(
   }
 
   const watch = watchCode ? await confirmWatch(db, watchCode, renter, now) : undefined;
+  if (watch?.kind === 'CONFIRMED') {
+    // A code from an availability request confirms the request too: the
+    // concierge's clock starts now, and this message opens its thread.
+    const inquiry = await confirmInquiryForWatch(db, {
+      watchId: watch.watchId, complexName: watch.complexName, renter,
+      inboundMessageId: message.id, body: m.text, now,
+    });
+    if (inquiry) watch.inquiry = inquiry;
+  }
+
+  // Filed on the request whatever it says - STOP included, since the
+  // concierge needs to see that too.
+  if (inquiryId) {
+    await recordInquiryInbound(db, { inquiryId, whatsappMessageId: message.id, body: m.text, now });
+  }
 
   let optedOut = false;
   if (intent === 'OPT_OUT') {
@@ -308,5 +335,6 @@ export async function handleInbound(
     renterId: renter.id, requestId, message, optedOut, intent, confirmed, selection,
     ...(watch ? { watch } : {}),
     ...(alertMessageId ? { alertMessageId } : {}),
+    ...(inquiryId ? { inquiryId } : {}),
   };
 }

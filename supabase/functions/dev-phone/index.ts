@@ -15,7 +15,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { SupabaseMessageStore } from '../_shared/whatsapp/store.ts';
 import { handleInbound } from '../_shared/viewing/routing.ts';
-import { toE164 } from '../_shared/whatsapp/inbound.ts';
+import { toRenterE164 } from '../_shared/whatsapp/inbound.ts';
 import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
 import { decideAction } from '../_shared/viewing/agent.ts';
 import { performAction } from '../_shared/viewing/agent-act.ts';
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
   const db = createClient(SUPABASE_URL, SERVICE_ROLE);
 
   if (req.method === 'GET') {
-    const phone = toE164(new URL(req.url).searchParams.get('phone') ?? '');
+    const phone = toRenterE164(new URL(req.url).searchParams.get('phone') ?? '');
     if (!phone) return json({ error: 'invalid_phone' }, 400);
     return json(await readThread(db, phone));
   }
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     return json({ error: 'Invalid JSON' }, 400);
   }
 
-  const phone = toE164(String(body.phone ?? ''));
+  const phone = toRenterE164(String(body.phone ?? ''));
   if (!phone) return json({ error: 'invalid_phone' }, 400);
   // No text is a read, not a mistake: it is how the page polls the thread.
   const text = String(body.text ?? '').trim();
@@ -102,6 +102,7 @@ Deno.serve(async (req) => {
     selection: outcome.selection,
     watch: outcome.watch,
     alertMessageId: outcome.alertMessageId,
+    inquiryId: outcome.inquiryId,
   });
 
   let agent: unknown = { decided: action.kind, reason: action.kind === 'NONE' ? action.reason : undefined };

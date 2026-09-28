@@ -42,7 +42,8 @@ import {
   MIN_LEAD_DAYS,
   addDays,
   hcmcDate,
-  toE164,
+  toRenterE164,
+  RENTER_PHONE_HINT,
   type AvailabilityWindow,
   type DayPart,
 } from '../../supabase/functions/_shared/viewing/intake.ts';
@@ -205,8 +206,8 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const submit = async () => {
     if (!seed) return;
     setError(null);
-    if (!join && !toE164(phone)) {
-      setError('Enter a Vietnamese mobile number, e.g. 0901 234 567.');
+    if (!join && !toRenterE164(phone)) {
+      setError(RENTER_PHONE_HINT);
       return;
     }
     setBusy(true);
@@ -448,6 +449,9 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                           id="rv-phone" value={phone} placeholder="0901 234 567" inputMode="tel"
                           onChange={e => { setTouched(t => ({ ...t, phone: true })); setPhone(e.target.value); }}
                         />
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Not a Vietnamese number? Start with the country code, like +44.
+                        </p>
                       </div>
                     </div>
                   </Step>

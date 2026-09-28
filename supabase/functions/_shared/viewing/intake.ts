@@ -6,9 +6,15 @@
 // keeps "3 to 5 listings" from being re-decided slightly differently in the SPA,
 // the function and the ops console.
 
-import { toE164 } from '../whatsapp/inbound.ts';
+import { toE164, toRenterE164 } from '../whatsapp/inbound.ts';
 
-export { toE164 };
+// toE164 for agents (Vietnamese only), toRenterE164 for what a renter types
+// (any country, with its code) - the SPA and the function read the same rule.
+export { toE164, toRenterE164 };
+
+/** What to tell a renter whose number `toRenterE164` refused. */
+export const RENTER_PHONE_HINT =
+  'Enter your WhatsApp number: a Vietnamese one like 0901 234 567, or any other with its country code, like +44 7700 900123.';
 
 /**
  * A renter shortlists this many.

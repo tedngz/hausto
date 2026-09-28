@@ -26,6 +26,10 @@ import {
   subjectToken,
   textToHtml,
 } from "../_shared/concierge-email.ts";
+import { adapterFromEnv } from "../_shared/whatsapp/adapter.ts";
+import { SupabaseMessageStore } from "../_shared/whatsapp/store.ts";
+import { ConsecutiveMessageError, ServiceWindowClosedError } from "../_shared/whatsapp/send.ts";
+import { sendConciergeWhatsApp } from "../_shared/viewing/concierge.ts";
 
 // Receives mail sent to hello@hausto.com and files it onto the matching
 // availability request, then pings ted.ngz@gmail.com so nothing sits unseen.
@@ -450,12 +454,12 @@ serve(async (req) => {
     // that no longer resolves (deleted request, mangled address) falls back to
     // the most recent request from that sender rather than dropping the mail.
     const tokenId = inquiryIdFromAddresses(mail.recipients) ?? inquiryIdFromText(mail.subject);
-    let inquiry: { id: string; full_name: string; email: string; status: string; complex_id: string; handled_at: string | null } | null = null;
+    let inquiry: { id: string; full_name: string; email: string | null; status: string; complex_id: string; handled_at: string | null; channel: string } | null = null;
 
     if (tokenId) {
       const { data } = await supabase
         .from("complex_inquiries")
-        .select("id, full_name, email, status, complex_id, handled_at")
+        .select("id, full_name, email, status, complex_id, handled_at, channel")
         .eq("id", tokenId)
         .maybeSingle();
       inquiry = data ?? null;
@@ -474,7 +478,7 @@ serve(async (req) => {
         if (data?.inquiry_id) {
           const { data: row } = await supabase
             .from("complex_inquiries")
-            .select("id, full_name, email, status, complex_id, handled_at")
+            .select("id, full_name, email, status, complex_id, handled_at, channel")
             .eq("id", data.inquiry_id)
             .maybeSingle();
           inquiry = row ?? null;
@@ -492,7 +496,7 @@ serve(async (req) => {
     if (!inquiry) {
       const { data } = await supabase
         .from("complex_inquiries")
-        .select("id, full_name, email, status, complex_id, handled_at")
+        .select("id, full_name, email, status, complex_id, handled_at, channel")
         .eq("email", mail.from)
         .order("created_at", { ascending: false })
         .limit(10);
@@ -571,6 +575,41 @@ serve(async (req) => {
     // The admin replied from Gmail. Relay their words to the renter as the
     // concierge so the renter never sees a personal address, and so the whole
     // conversation stays on one sender.
+    // A WhatsApp request (SPEC §11): the admin's Gmail reply goes to the
+    // renter's WhatsApp, not their inbox - they may have given no email at all.
+    // Keyed on the mail's message id, so a webhook redelivery sends it once.
+    if (fromHausto && inquiry.channel === "WHATSAPP") {
+      let relayed = true;
+      try {
+        const sent = await sendConciergeWhatsApp(
+          supabase, new SupabaseMessageStore(supabase), adapterFromEnv(Deno.env.toObject()),
+          { inquiryId: inquiry.id, body, key: mail.messageId ?? crypto.randomUUID() },
+        );
+        if (sent.status === "FAILED") throw new Error("WhatsApp refused the message");
+        // The row above is this message; mark it as the one that went out on
+        // WhatsApp, so the renter's reply to it routes back to this request.
+        if (mail.messageId) {
+          await supabase.from("complex_inquiry_messages")
+            .update({ channel: "WHATSAPP", whatsapp_message_id: sent.messageId })
+            .eq("provider_message_id", mail.messageId);
+        }
+      } catch (relayError: any) {
+        relayed = false;
+        const why = relayError instanceof ServiceWindowClosedError
+          ? "Their WhatsApp window has closed - WhatsApp only lets us message them again once they write to us."
+          : relayError instanceof ConsecutiveMessageError
+          ? "They have not replied to your last two WhatsApp messages. Wait for them before sending another."
+          : `Sending on WhatsApp failed: ${relayError.message}.`;
+        console.error("Failed to relay admin reply to WhatsApp:", relayError);
+        await alertAdmin(
+          `⚠️ Your reply to ${inquiry.full_name} did not go out`,
+          `${why} It is filed on the request in Admin Tools but the renter has not seen it.`,
+          body,
+        );
+      }
+      return json({ success: true, matched: true, inquiryId: inquiry.id, direction, relayed, channel: "WHATSAPP" });
+    }
+
     if (fromHausto) {
       // The message row is already stored, so a 500 here would be retried into
       // the duplicate guard and never relayed. Report the failure to the admin

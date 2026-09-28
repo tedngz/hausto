@@ -188,9 +188,11 @@ coordinator's day.
   Note `external_properties.price` is `numeric` and holds USD for housingsgn
   rows; the canonical column is `price_vnd` (SPEC §0).
 - All timestamps stored UTC, displayed `Asia/Ho_Chi_Minh`.
-- Phone numbers stored E.164 (`+84...`). Normalize at every boundary; the crawler
-  will hand you `0901234567`, `84901234567`, and `+84 90 123 45 67` for the same
-  human.
+- Phone numbers stored E.164. Normalize at every boundary; the crawler will hand
+  you `0901234567`, `84901234567`, and `+84 90 123 45 67` for the same human.
+  Agents are `+84` only (`toE164`); renters may be on any country's number
+  (`toRenterE164` for what they type, `waIdToE164` for what Meta sends), so a
+  privacy check never assumes `+84` - see SPEC §6.
 - Enum values SCREAMING_SNAKE in the DB, mirrored as TS union types derived
   from a single source: the `as const` arrays in
   `supabase/functions/_shared/viewing-domain.ts`, beside the reducer. There is

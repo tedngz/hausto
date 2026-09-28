@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { ArrowLeft, Building2, BellRing, Home, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ArrowLeft, Building2, CalendarCheck, Home, MapPin, PawPrint, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useComplexListings, CITY_LABEL, type Complex } from '@/hooks/useComplexes';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConciergeCaptureModal } from '@/components/ConciergeCaptureModal';
-import { ComplexWatchModal } from '@/components/ComplexWatchModal';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { ComplexMapCanvas } from '@/components/ComplexMapCanvas';
 import { useComplexes } from '@/hooks/useComplexes';
@@ -49,7 +48,6 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
   const navigate = useNavigate();
   const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
-  const [watchOpen, setWatchOpen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
 
@@ -340,10 +338,11 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
                 ) : (
                   <Card className="p-6 bg-muted/30 text-center">
                     <p className="text-sm text-muted-foreground mb-4">
-                      No live listings at {complex.name} right now. We can message you on WhatsApp when one comes up.
+                      No listings advertised at {complex.name} right now - which does not mean nothing is free.
+                      We can ask the agents who hold units here.
                     </p>
-                    <Button onClick={() => setWatchOpen(true)} size="sm">
-                      Get WhatsApp alerts
+                    <Button onClick={() => setModalOpen(true)} size="sm">
+                      Check availability
                     </Button>
                   </Card>
                 )}
@@ -355,18 +354,18 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
               <div className="hidden lg:block sticky top-6">
                 <Card className="p-6 border-primary/30 shadow-xl">
                   <div className="flex items-center gap-2 mb-3 text-primary">
-                    <BellRing className="h-5 w-5" aria-hidden="true" />
-                    <span className="text-xs uppercase tracking-wider font-medium">Alerts</span>
+                    <CalendarCheck className="h-5 w-5" aria-hidden="true" />
+                    <span className="text-xs uppercase tracking-wider font-medium">Concierge</span>
                   </div>
-                  <h3 className="font-serif text-2xl leading-tight mb-2">Hear first when a place comes up here</h3>
+                  <h3 className="font-serif text-2xl leading-tight mb-2">Check what is free for your move-in date</h3>
                   <p className="text-sm text-muted-foreground mb-5">
-                    Tell us your bedrooms and budget. We check new listings at {complex.name} every week and message you on WhatsApp when one fits.
+                    Tell us your dates and budget. A person on our team asks the agents who hold units at {complex.name} and replies on WhatsApp.
                   </p>
-                  <Button className="w-full" size="lg" onClick={() => setWatchOpen(true)}>
-                    Get WhatsApp alerts
+                  <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
+                    Request availability
                   </Button>
                   <p className="text-xs text-muted-foreground mt-3 text-center">
-                    Free · Weekly · Reply STOP to end
+                    No fee · Reply within 24h · On WhatsApp
                   </p>
                 </Card>
               </div>
@@ -376,18 +375,11 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
 
         {/* Mobile fixed CTA */}
         <div className={isPanel ? 'px-5 pb-2 pt-6' : 'lg:hidden fixed bottom-0 inset-x-0 bg-background/95 backdrop-blur-md border-t border-border p-4 z-50'}>
-          <Button className="w-full" size="lg" onClick={() => setWatchOpen(true)}>
-            Get WhatsApp alerts
+          <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
+            Check availability
           </Button>
         </div>
 
-        <ComplexWatchModal
-          open={watchOpen}
-          onOpenChange={setWatchOpen}
-          complexId={complex.id}
-          complexName={complex.name}
-          onEmailInstead={() => setModalOpen(true)}
-        />
         <ConciergeCaptureModal
           open={modalOpen}
           onOpenChange={setModalOpen}
