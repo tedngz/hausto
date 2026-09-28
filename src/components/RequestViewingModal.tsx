@@ -2,14 +2,14 @@
 //
 // Built as a phone screen that happens to fit on a desktop, not the reverse:
 // a fixed header, one scrolling column of numbered steps, and a footer that
-// stays put so the action is never a scroll away. The questions are always in
-// the same order - which place, when, where to reach you - so the modal reads
-// as a form rather than a dashboard.
+// stays put so the action is never a scroll away. Two questions, always in the
+// same order - when, and where to reach you - and nothing else: no counters,
+// no reassurance lines, nothing the renter has to read past to find the button.
 //
-// **The place is the one the renter opened this from.** It used to be a
-// single choice over their matches, which mostly offered a way to request a
-// flat they were not looking at. Someone who wants three seen taps "Request
-// viewing" on three cards.
+// **The place is the one the renter opened this from**, so the modal does not
+// show it back to them. It used to be a single choice over their matches,
+// which mostly offered a way to request a flat they were not looking at.
+// Someone who wants three seen taps "Request viewing" on three cards.
 //
 // **And those three become one plan.** While the renter has a request whose
 // agents are still being asked, a new place joins it (intake.ts
@@ -29,7 +29,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { ImageOff, Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
+import { Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -318,42 +318,20 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
             </DialogHeader>
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
-              {/* ── 1. The place ─────────────────────────────────────── */}
-              <Step n={1} title="The place">
-                {seed ? (
-                  <div className="flex items-center gap-3 rounded-md border p-2">
-                    {seed.imageUrl
-                      ? <img src={seed.imageUrl} alt="" className="h-11 w-14 shrink-0 rounded object-cover" />
-                      : <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
-                          <ImageOff className="h-4 w-4 text-muted-foreground" />
-                        </span>}
-                    <span className="min-w-0 flex-1 truncate text-sm">{seed.title}</span>
-                  </div>
-                ) : (
-                  <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                    Open a listing and tap Request viewing there.
-                  </p>
-                )}
-                {alreadyIn && openRequest && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    This place is already in your request {openRequest.ref}. We will be in
-                    touch on WhatsApp.
-                  </p>
-                )}
-              </Step>
-
-              <Separator />
-
-              {/* ── 2. When ──────────────────────────────────────────── */}
+              {/* ── 1. When ──────────────────────────────────────────── */}
+              {/* No "which place" step: the modal opens from the listing, so
+                  the renter is already looking at it. */}
               {openLoading ? (
-                <Step n={2} title="When are you free?">
+                <Step n={1} title="When are you free?">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </Step>
               ) : join ? (
                 <Step
-                  n={2}
+                  n={1}
                   title="When"
-                  hint={`Adding this to your request ${join.ref}, at the times you already gave. We fit it into the same plan and send one message with every time.`}
+                  hint={alreadyIn
+                    ? `This place is already in your request ${join.ref}. We will be in touch on WhatsApp.`
+                    : `Adding this to your request ${join.ref}, at the times you already gave. We fit it into the same plan and send one message with every time.`}
                 >
                   <ul className="space-y-1.5">
                     {joinDays.map(([date, parts]) => (
@@ -377,7 +355,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                 </Step>
               ) : (
                 <Step
-                  n={2}
+                  n={1}
                   title="When are you free?"
                   hint={`We need two days to reach the agents, so the soonest is ${prettyDate(earliest)}.`}
                 >
@@ -449,21 +427,13 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                 </Step>
               )}
 
-              {/* ── 3. You ───────────────────────────────────────────── */}
+              {/* ── 2. You ───────────────────────────────────────────── */}
               {/* Not asked when joining: the answer goes to the WhatsApp thread
                   the open request already has. */}
               {!join && !openLoading && (
                 <>
                   <Separator />
-                  <Step
-                    n={3}
-                    title="Where do we reach you?"
-                    hint={
-                      identity && (identity.name || identity.phone) && !touched.name && !touched.phone
-                        ? 'Using the details on your account - edit either if you would rather we used something else.'
-                        : undefined
-                    }
-                  >
+                  <Step n={2} title="Where do we reach you?">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <Label htmlFor="rv-name" className="text-xs">Your name</Label>
@@ -487,17 +457,11 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
 
             {/* ── Footer: always reachable ───────────────────────────── */}
             <div className="shrink-0 space-y-2 border-t bg-background p-4 sm:p-6 sm:pt-4">
-              {shortOnCredits ? (
+              {/* Only when it explains a disabled button. */}
+              {shortOnCredits && (
                 <p className="text-sm text-amber-700">
                   A request uses one viewing request and you have none left. Top up to
                   carry on.
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  {join
-                    ? `Joins ${join.ref}`
-                    : `${picked.length} of ${MAX_WINDOWS} time window${picked.length === 1 ? '' : 's'}`}
-                  {quota ? ` · uses 1 of your ${credits} viewing requests` : ''}
                 </p>
               )}
               {error && <p className="text-sm text-destructive">{error}</p>}
@@ -511,9 +475,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                       ? 'Pick a time'
                       : 'Request viewing'}
               </Button>
-              <p className="text-center text-[11px] text-muted-foreground">
-                Nothing is arranged yet. We confirm with each agent first.
-              </p>
             </div>
           </>
         )}
