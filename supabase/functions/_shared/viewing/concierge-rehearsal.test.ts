@@ -12,6 +12,7 @@ import { MockAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
 import { ServiceWindowClosedError } from '../whatsapp/send.ts';
 import { handleInbound } from './routing.ts';
+import { parseInboundMessages } from '../whatsapp/inbound.ts';
 import { decideAction } from './agent.ts';
 import { performAction } from './agent-act.ts';
 import { recordInquiryMessage, sendConciergeWhatsApp } from './concierge.ts';
@@ -62,11 +63,11 @@ function seed() {
   }];
 }
 
-async function inbound(text: string) {
+async function inbound(text: string, from = PHONE) {
   say('Renter', text);
   // deno-lint-ignore no-explicit-any
   const outcome = await handleInbound(db as any, store, {
-    from: PHONE, text, providerMessageId: `wamid.${Math.random()}`, timestamp: new Date().toISOString(),
+    from, text, providerMessageId: `wamid.${Math.random()}`, timestamp: new Date().toISOString(),
   });
   const action = decideAction({
     enabled: false, intent: outcome.intent, text, requestId: outcome.requestId,
@@ -192,6 +193,30 @@ describe('availability request rehearsal', () => {
     expect(yes.outcome.inquiryId).toBe('inq-1');
     expect(yes.outcome.requestId).toBeUndefined();
     expect(db.tables.events.filter(e => e.request_id === 'req-1')).toHaveLength(0);
+  });
+
+  it('works the same for a renter on a UK number', async () => {
+    // Through the webhook's own parser: Meta sends the sender without a plus.
+    const payload = {
+      entry: [{ changes: [{ value: { messages: [{
+        from: '447700900123', id: 'wamid.uk', timestamp: '1790650000',
+        text: { body: `Hi Hausto - please check availability at Empire City for me (${code})` },
+      }] } }] }],
+    };
+    const [m] = parseInboundMessages(payload);
+    expect(m.from).toBe('+447700900123');
+
+    const first = await inbound(m.text, m.from);
+    expect(first.action.kind).toBe('WATCH_CONFIRMED');
+    expect(inquiry().phone).toBe('+447700900123');
+
+    at('2026-09-29T05:00:00Z');
+    await concierge('Hi Mai - one 2BR is free from mid-November. Want to see it?');
+    expect(adapter.delivered.at(-1)?.toPhone).toBe('+447700900123');
+
+    at('2026-09-29T06:00:00Z');
+    const reply = await inbound('Yes please', '+447700900123');
+    expect(reply.outcome.inquiryId).toBe('inq-1');
   });
 
   it('files a redelivered code once, and confirms the request once', async () => {

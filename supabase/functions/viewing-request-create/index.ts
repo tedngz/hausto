@@ -24,7 +24,8 @@ import {
   itemEvents,
   buildDeepLink,
   hcmcDate,
-  toE164,
+  toRenterE164,
+  RENTER_PHONE_HINT,
   MIN_ITEMS,
   MAX_ITEMS,
   type ShortlistCandidate,
@@ -259,9 +260,9 @@ Deno.serve(async (req) => {
     );
   }
 
-  const phone = toE164(String(body.phone ?? ''));
+  const phone = toRenterE164(String(body.phone ?? ''));
   if (!phone) {
-    return json({ error: 'invalid_phone', message: 'Enter a Vietnamese mobile number, e.g. 0901 234 567.' }, 400);
+    return json({ error: 'invalid_phone', message: RENTER_PHONE_HINT }, 400);
   }
 
   const shortlist = validateShortlist(body.listingIds);

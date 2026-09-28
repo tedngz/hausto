@@ -359,13 +359,13 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
                   </div>
                   <h3 className="font-serif text-2xl leading-tight mb-2">Check what is free for your move-in date</h3>
                   <p className="text-sm text-muted-foreground mb-5">
-                    Tell us your dates and budget. A person on our team asks the agents who hold units at {complex.name} and replies on WhatsApp or email.
+                    Tell us your dates and budget. A person on our team asks the agents who hold units at {complex.name} and replies on WhatsApp.
                   </p>
                   <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
                     Request availability
                   </Button>
                   <p className="text-xs text-muted-foreground mt-3 text-center">
-                    No fee · Reply within 24h · WhatsApp or email
+                    No fee · Reply within 24h · On WhatsApp
                   </p>
                 </Card>
               </div>

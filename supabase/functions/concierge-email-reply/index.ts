@@ -16,11 +16,11 @@ import { ConsecutiveMessageError, ServiceWindowClosedError } from "../_shared/wh
 import { NoWhatsAppError, recordInquiryMessage, sendConciergeWhatsApp } from "../_shared/viewing/concierge.ts";
 
 // Sends an admin's reply to a complex availability request, by the request's
-// channel (SPEC §11). Email: from hello@hausto.com, threaded against the last
-// message, logged, and BCC'd to ted.ngz@gmail.com so the same conversation is
-// readable in Gmail. WhatsApp: from the Hausto number, inside the window the
-// renter's code opened, filed on the same thread. `via: 'email'` sends a
-// WhatsApp request's reply by email instead, for when the window has closed.
+// channel (SPEC §11). WhatsApp - every new request: from the Hausto number,
+// inside the window the renter's code opened, filed on the request's thread.
+// Email - the requests made before email was retired: from hello@hausto.com,
+// threaded against the last message, logged, and BCC'd to ted.ngz@gmail.com so
+// the same conversation is readable in Gmail.
 // Admin-only: the JWT is checked against has_role(uid, 'admin').
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -43,9 +43,7 @@ async function replyOnWhatsApp(supabase: any, inquiry: any, message: string, key
     if (e instanceof ServiceWindowClosedError) {
       return json({
         error: "window_closed",
-        message: inquiry.email
-          ? `Their WhatsApp window has closed. Send it by email to ${inquiry.email} instead.`
-          : "Their WhatsApp window has closed, and they gave no email. It reopens when they write to us.",
+        message: "Their WhatsApp window has closed. It reopens when they write to us.",
       }, 409);
     }
     if (e instanceof ConsecutiveMessageError) {
@@ -104,7 +102,7 @@ serve(async (req) => {
     const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
     if (!isAdmin) return json({ error: "Admins only" }, 403);
 
-    const { inquiryId, body, via, key } = await req.json();
+    const { inquiryId, body, key } = await req.json();
     const message = String(body ?? "").trim();
     if (!inquiryId || !message) return json({ error: "inquiryId and body are required" }, 400);
 
@@ -115,9 +113,8 @@ serve(async (req) => {
       .maybeSingle();
     if (!inquiry) return json({ error: "Inquiry not found" }, 404);
 
-    // A WhatsApp request is answered on WhatsApp unless the admin asks for
-    // email - which they do once the window has closed, if there is an address.
-    if (inquiry.channel === "WHATSAPP" && via !== "email") {
+    // A WhatsApp request is answered on WhatsApp, and only there.
+    if (inquiry.channel === "WHATSAPP") {
       return await replyOnWhatsApp(supabase, inquiry, message, String(key || crypto.randomUUID()));
     }
     if (!inquiry.email) return json({ error: "no_email", message: "This request has no email address." }, 400);

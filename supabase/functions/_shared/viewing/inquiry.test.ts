@@ -20,29 +20,24 @@ const valid = {
   budgetMaxVnd: 25_000_000,
   hasPets: true,
   notes: '  High floor  ',
-  channel: 'WHATSAPP',
 };
 
 describe('what the form may send', () => {
-  it('accepts a WhatsApp request with no email', () => {
+  it('accepts a request - no phone, no email, no channel to pick', () => {
     const r = validateInquiryInput(valid, NOW);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.value.email).toBeNull();
       expect(r.value.notes).toBe('High floor');
       expect(r.value.hasPets).toBe(true);
+      expect(Object.keys(r.value)).not.toContain('email');
     }
   });
 
-  it('needs an email to reply by email', () => {
-    expect(validateInquiryInput({ ...valid, channel: 'EMAIL' }, NOW).ok).toBe(false);
-    expect(validateInquiryInput({ ...valid, channel: 'EMAIL', email: 'mai@example.com' }, NOW).ok).toBe(true);
-    expect(validateInquiryInput({ ...valid, channel: 'EMAIL', email: 'not-an-email' }, NOW).ok).toBe(false);
-  });
-
-  it('keeps an email given alongside WhatsApp, as the fallback', () => {
-    const r = validateInquiryInput({ ...valid, email: 'mai@example.com' }, NOW);
-    expect(r.ok && r.value.email).toBe('mai@example.com');
+  it('ignores an email or a channel a stale client still sends', () => {
+    // Email is retired. An old page posting one gets a WhatsApp request.
+    const r = validateInquiryInput({ ...valid, channel: 'EMAIL', email: 'mai@example.com' }, NOW);
+    expect(r.ok).toBe(true);
+    expect(r.ok && Object.keys(r.value)).not.toContain('email');
   });
 
   it('asks for the things a concierge cannot check without', () => {
@@ -51,7 +46,6 @@ describe('what the form may send', () => {
     expect(validateInquiryInput({ ...valid, budgetMaxVnd: null }, NOW).ok).toBe(false);
     expect(validateInquiryInput({ ...valid, leaseMonths: 9 }, NOW).ok).toBe(false);
     expect(validateInquiryInput({ ...valid, bedrooms: 5 }, NOW).ok).toBe(false);
-    expect(validateInquiryInput({ ...valid, channel: 'SMS' }, NOW).ok).toBe(false);
   });
 
   it('refuses a move-in date in the past or beyond six months', () => {

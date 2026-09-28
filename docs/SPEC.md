@@ -115,7 +115,7 @@ resolution enriches the table permanently. Do not chase full coverage.
 
 ```
 id                        uuid pk
-phone_e164                text unique not null      -- CHECK '^\+84[0-9]{9}$'
+phone_e164                text unique not null      -- CHECK '^\+[1-9][0-9]{6,14}$', any country
 display_name              text
 user_id                   uuid references auth.users -- nullable, unique when set
 service_window_expires_at timestamptz    -- see §5
@@ -563,13 +563,21 @@ rendering takes a DTO with no realtor contact field on it.
 The console reads the renter's WhatsApp thread through `ops_request_thread()`, a
 `SECURITY DEFINER` function that returns bodies, times, the window expiry and
 the consecutive-outbound count - never `to_phone`, never a name - and masks
-phone-shaped text inside bodies. The console still has no grant on `messages`
-or `renters`.
+phone-shaped text inside bodies (`mask_phone_numbers()`: Vietnamese shapes, any
+number written with a country code, and this renter's own number however they
+wrote it). The console still has no grant on `messages` or `renters`.
 
 Free text is where shape stops protecting anyone, so it is checked on the way
-out by the server (`_shared/viewing/privacy.ts`): a broker-bound message may not
-carry any phone number or this renter's name, and an operator's reply to a
-renter may not carry any phone number.
+out by the server (`_shared/viewing/privacy.ts`, `assertNoRenterIdentity`): a
+broker-bound message may not carry any phone number - Vietnamese-shaped or
+written with a country code - nor this renter's number in their own national
+format, nor their name; an operator's reply to a renter may not carry a
+Vietnamese number, since agents are Vietnamese.
+
+Renters may be on any country's number (§1, `toRenterE164`, `waIdToE164`);
+agents are Vietnamese only (`toE164`). Every check above is written for a renter
+from anywhere - stripping `+84` to find "the local number" is the mistake that
+once meant a foreign renter's number was never checked.
 
 **No `booking` vocabulary in renter-facing copy until state is `CONFIRMED`.** Use
 "request". We cannot honour a booking at intake time.
@@ -580,9 +588,10 @@ renter may not carry any phone number.
 
 - Money in VND, stored as integer dong. Never floats. Display `15.000.000 ₫`.
 - All timestamps stored UTC, displayed `Asia/Ho_Chi_Minh`.
-- Phone numbers stored E.164 (`+84...`). Normalize at every boundary - the
-  crawler hands you `0901234567`, `84901234567` and `+84 90 123 45 67` for the
-  same human.
+- Phone numbers stored E.164. Normalize at every boundary - the crawler hands
+  you `0901234567`, `84901234567` and `+84 90 123 45 67` for the same human.
+  Agents are `+84` only (`toE164`); renters may be any country (`toRenterE164`
+  for what they type, `waIdToE164` for what Meta sends).
 - Use `-` rather than an em dash in anything a user reads.
 
 ## §8 Definition of done
@@ -878,8 +887,11 @@ units in the building and replies within 24 hours. The crawl only knows what
 was advertised, and for most buildings that is nothing in a given month -
 which is why a person, not an automated alert, is what the page offers.
 
-The renter picks where the reply goes. WhatsApp is the default and the fast
-path; email is the fallback, and is the flow as it was before WhatsApp.
+WhatsApp only. Email was the original channel and is retired for new
+requests: one channel keeps one thread, and the 24-hour window keeps the
+concierge quick. The email requests made before keep their threads, and are
+still answered by email (`channel = 'EMAIL'`). Any country's WhatsApp number
+works (§1, §6).
 
 A request is not a viewing request. It spends no credit and is not in the
 event log: it asks a person to look, and viewings of what they find are
@@ -887,36 +899,33 @@ requested the one way there is (invariant 8), from the listing page.
 
 ### The form (`ConciergeCaptureModal`)
 
-Two steps, then one more on WhatsApp:
-
 1. **What you need** - move-in date, lease (6, 12 or 24+ months), bedrooms
    (1-4+), the most they would pay a month in million ₫ (with a rough US$
-   figure beside it, never stored), pets, and optional notes.
-2. **Where we reply** - their name, and WhatsApp or email.
-3. **WhatsApp only: send us the message.** `complex-inquiry-create` returns a
-   wa.me link: `Hi Hausto - please check availability at <complex> for me
-   (HW-XXXX)`. The form asks for no phone number: the message proves the
-   number is theirs, opts them in, and opens the 24-hour window the
-   concierge's promise is measured against.
+   figure beside it, never stored), pets, optional notes, and their name.
+2. **Send it on WhatsApp.** `complex-inquiry-create` returns a wa.me link:
+   `Hi Hausto - please check availability at <complex> for me (HW-XXXX)`. The
+   form asks for no phone number: the message proves the number is theirs,
+   opts them in, and opens the 24-hour window the concierge's promise is
+   measured against.
 
 `complex-inquiry-create` (anonymous or signed in, rate-limited by IP)
-validates (`validateInquiryInput`), writes the request and, for WhatsApp, a
-`PENDING` complex watch with the same criteria whose code is the handshake.
-Browsers can no longer insert `complex_inquiries` directly. An email request
-is mailed to the concierge and the renter at once (`notify-complex-inquiry`).
+validates (`validateInquiryInput`), writes the request and a `PENDING` complex
+watch with the same criteria, whose code is the handshake. Browsers can no
+longer insert `complex_inquiries` directly.
 
 ### `complex_inquiries` (additive columns)
 
 ```
-channel                text not null default 'EMAIL'  -- WHATSAPP | EMAIL
-budget_max_vnd         bigint                         -- the form's ceiling
+channel                text not null   -- WHATSAPP; EMAIL on requests made before
+budget_max_vnd         bigint          -- the form's ceiling
 watch_id               uuid references complex_watches -- the handshake
 renter_id              uuid references renters        -- set when the code arrives
-whatsapp_confirmed_at  timestamptz                    -- the concierge's clock starts
+whatsapp_confirmed_at  timestamptz     -- the concierge's clock starts
 ```
 
-`email` and the old `budget_usd_*` are nullable now; an EMAIL request must
-have an email. `INQUIRY_CHANNELS` in `viewing-domain.ts`.
+`channel` has no default: a new request says what it is. `email` and the old
+`budget_usd_*` are nullable now; an EMAIL request must have an email.
+`INQUIRY_CHANNELS` in `viewing-domain.ts`.
 
 ### The thread (`complex_inquiry_messages`)
 
@@ -938,11 +947,13 @@ shows it whole. Additive: `channel` (`WHATSAPP` | `EMAIL`),
 2. **The concierge replies.** From Admin Tools (`concierge-email-reply`,
    which sends by the request's channel) or by hitting Reply in Gmail
    (`concierge-email-inbound` relays it to WhatsApp). Free-form only, inside
-   the window: when it has closed, the dashboard offers email if there is an
-   address, and a Gmail reply comes back to the admin as "did not go out"
-   with the reason. The consecutive-outbound rule (§5) holds: two messages
-   without an answer and the next is refused - so the confirmation plus one
-   concierge message, until the renter writes back.
+   the window. When it has closed nothing can reach the renter until they
+   write again: the dashboard says so and disables the reply, and a Gmail
+   reply comes back to the admin as "did not go out" with the reason. An
+   approved utility template for "we have an update" is what would close that
+   gap; none exists yet. The consecutive-outbound rule (§5) holds: two
+   messages without an answer and the next is refused - so the confirmation
+   plus one concierge message, until the renter writes back.
 3. **The renter answers.** When the last thing we sent them is on a
    request's thread (`inquiryAwaitingReply`), their message is filed there,
    never attached to a viewing request (so a "yes" cannot confirm an
@@ -1009,7 +1020,10 @@ The confirmation, the alert places and the concierge's thread are sent with
 `VIEWING_AGENT_ENABLED` off: none is the agent's judgement. Replies on a
 request's thread are answered by a person, agent on or off.
 
-Limits: `renters.phone_e164` and `toE164` are `+84` only, so the WhatsApp
-path works only for a Vietnamese number - a code from any other number never
-reaches `handleInbound`. And the approved `weekly_digest` wording reads
-"there are 1 new places" for a single match; a dedicated template is the fix.
+Limits: Meta bills by the recipient's country, so a template to a UK or US
+number costs more than one to a Vietnamese number. Meta's sender id can differ
+from how a Mexican or Brazilian renter types their number (an extra digit), so
+for them a typed number and their messages can land on two renter rows - the
+request flow never asks for a typed number, so it is unaffected. And the
+approved `weekly_digest` wording reads "there are 1 new places" for a single
+match; a dedicated template is the fix.

@@ -45,13 +45,87 @@ export interface InboundMessage {
   timestamp: string;
 }
 
-/** Normalize whatever Meta calls a phone number into E.164. */
+// ── Phone numbers ─────────────────────────────────────────────────────────
+//
+// Three functions, because there are three sources and they do not agree:
+//
+//   * `toE164` - a Vietnamese mobile in any shape the crawler or an operator
+//     hands us. Agents are Vietnamese; this stays strict for them (the Zalo
+//     bridge, a recorded agent contact, the crawler).
+//   * `toRenterE164` - what a renter types. A Vietnamese number in its local
+//     shapes, or any other country's written with its code. Renters are often
+//     expats on their home number, and dropping them was dropping customers.
+//   * `waIdToE164` - what Meta sends as `from`. Always full international
+//     digits, so it is trusted as international.
+//
+// A Vietnamese renter comes out identical from all three, which is what keeps
+// a typed number and an inbound message on one renter row.
+
+/** A Vietnamese mobile number in E.164, or null. Agents, the crawler. */
 export function toE164(raw: string): string | null {
   const d = String(raw ?? '').replace(/[^0-9+]/g, '');
   if (/^\+84[0-9]{9}$/.test(d)) return d;
   if (/^84[0-9]{9}$/.test(d)) return `+${d}`;
   if (/^0[0-9]{9}$/.test(d)) return `+84${d.slice(1)}`;
   return null;
+}
+
+/** E.164: a plus, a country code that does not start with 0, 7-15 digits in all. */
+const E164 = /^\+[1-9][0-9]{6,14}$/;
+
+/**
+ * A number a renter typed, in E.164, or null.
+ *
+ * Vietnamese numbers as `toE164` reads them. Anything else must carry its
+ * country code - `+44 7700 900123` or `0044 7700 900123` - because without
+ * one, `7700900123` could be any country's. A `+84` number `toE164` refused is
+ * a mistyped Vietnamese number, not a foreign one, so it stays refused.
+ */
+export function toRenterE164(raw: string): string | null {
+  const vn = toE164(raw);
+  if (vn) return vn;
+  // `+44 (0)7700 900123` is how the UK writes it: the (0) is dialled at home only.
+  let d = String(raw ?? '').replace(/\(0\)/g, '').replace(/[\s().\-/]/g, '');
+  if (d.startsWith('00')) d = `+${d.slice(2)}`;
+  if (!E164.test(d) || d.startsWith('+84')) return null;
+  return d;
+}
+
+/**
+ * Meta's `from` (the WhatsApp id) in E.164, or null.
+ *
+ * Meta sends full international digits without the plus. Vietnamese ids go
+ * through `toE164` first so a Vietnamese renter's row is the same one their
+ * typed number made.
+ */
+export function waIdToE164(raw: string): string | null {
+  const vn = toE164(raw);
+  if (vn) return vn;
+  const d = `+${String(raw ?? '').replace(/\D/g, '')}`;
+  return E164.test(d) ? d : null;
+}
+
+/**
+ * E.164 country codes are prefix-free: 1 and 7 are one digit, these are two,
+ * and every other code is three (ITU-T E.164 assignments).
+ */
+const TWO_DIGIT_COUNTRY_CODES = new Set([
+  '20', '27', '30', '31', '32', '33', '34', '36', '39', '40', '41', '43', '44', '45', '46', '47', '48', '49',
+  '51', '52', '53', '54', '55', '56', '57', '58', '60', '61', '62', '63', '64', '65', '66',
+  '81', '82', '84', '86', '90', '91', '92', '93', '94', '95', '98',
+]);
+
+/**
+ * The number without its country code - `+447700900123` → `7700900123`,
+ * `+84901234567` → `901234567`. What someone writes when they write the
+ * number the way people at home do, and so what a leak check has to look for.
+ * Mirrored by `public.renter_national_number()` for the ops thread mask.
+ */
+export function nationalNumber(e164: string): string | null {
+  if (!E164.test(String(e164 ?? ''))) return null;
+  const d = e164.slice(1);
+  const ccLength = d[0] === '1' || d[0] === '7' ? 1 : TWO_DIGIT_COUNTRY_CODES.has(d.slice(0, 2)) ? 2 : 3;
+  return d.slice(ccLength);
 }
 
 /**
@@ -71,7 +145,8 @@ export function parseInboundMessages(payload: any): InboundMessage[] {
         // Non-text messages (images, audio, location) are acknowledged rather
         // than parsed: the window still re-opens, but there is no body.
         const text = m?.text?.body ?? '';
-        const from = toE164(m?.from ?? '');
+        // Any country: a renter on their home number is still a renter.
+        const from = waIdToE164(m?.from ?? '');
         if (!from || !m?.id) continue;
         out.push({
           from,

@@ -134,6 +134,41 @@ describe('the renter never reaches a broker (invariant 4)', () => {
   });
 });
 
+describe('a renter on a foreign number never reaches a broker either', () => {
+  const uk = { phone_e164: '+447700900123', display_name: null };
+
+  it("refuses their number the way they would write it at home", () => {
+    // The check used to strip a literal +84, so for this renter it checked nothing.
+    expect(() => assertNoRenterIdentity('Khách gọi 07700 900123', uk)).toThrow(RenterIdentityError);
+    expect(() => assertNoRenterIdentity('Khách: 7700-900-123', uk)).toThrow(RenterIdentityError);
+    expect(() => assertNoRenterIdentity('Khách (415) 555-0100', { phone_e164: '+14155550100' })).toThrow(RenterIdentityError);
+  });
+
+  it('refuses any number written with a country code, anyone\'s', () => {
+    expect(() => assertNoRenterIdentity('Số khách +44 7700 900123')).toThrow(RenterIdentityError);
+    expect(() => assertNoRenterIdentity('Số khách 0044 7700 900123')).toThrow(RenterIdentityError);
+    expect(() => assertNoRenterIdentity('Gọi +1 415 555 0100')).toThrow(RenterIdentityError);
+  });
+
+  it('does not mistake a price for a dialling code', () => {
+    expect(() => assertNoRenterIdentity('Giá 12.005.500.000 đ, thuê 24.000.000 đ/tháng', uk)).not.toThrow();
+    expect(() => assertNoRenterIdentity('Xem lúc 10:00 ngày 15/11', uk)).not.toThrow();
+  });
+
+  it('holds for every draft we ship', () => {
+    const drafts = [
+      draftForRealtor({
+        listingTitle: 'Căn hộ 2PN Thảo Điền', listingUrl: 'https://batdongsan.com.vn/pr41234567',
+        priceVnd: 15_000_000, availability: [{ date: '2026-09-28', part: 'MORNING' }],
+      }),
+      nudgeDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
+      confirmDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền', startsAt: '2026-09-28T03:30:00.000Z' }),
+      releaseDraft({ listingTitle: 'Căn hộ 2PN Thảo Điền' }),
+    ];
+    for (const d of drafts) expect(() => assertNoRenterIdentity(d, uk)).not.toThrow();
+  });
+});
+
 describe('what the broker said back', () => {
   it('is stored verbatim as RECEIVED, and never checked for renter identity', async () => {
     // The broker's own number in their own reply is theirs to give.

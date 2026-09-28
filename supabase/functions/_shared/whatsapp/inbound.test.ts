@@ -4,6 +4,9 @@ import {
   parseInboundMessages,
   verifySubscription,
   toE164,
+  toRenterE164,
+  waIdToE164,
+  nationalNumber,
   isOptOut,
 } from './inbound.ts';
 
@@ -66,6 +69,14 @@ describe('payload parsing', () => {
     expect(got[0]).toMatchObject({ from: '+84901234567', providerMessageId: 'wamid.1', text: 'hello' });
   });
 
+  it('keeps a message from a renter on a foreign number', () => {
+    // These were dropped: an expat on their home WhatsApp heard nothing back.
+    const got = parseInboundMessages(payload([
+      { from: '447700900123', id: 'wamid.uk', text: { body: 'hi' }, timestamp: '1789000000' },
+    ]));
+    expect(got[0]).toMatchObject({ from: '+447700900123', providerMessageId: 'wamid.uk' });
+  });
+
   it('returns nothing for a status callback', () => {
     // Delivery receipts arrive on the same endpoint with no messages array.
     expect(parseInboundMessages({ entry: [{ changes: [{ value: { statuses: [{ status: 'read' }] } }] }] })).toEqual([]);
@@ -105,6 +116,66 @@ describe('phone normalisation', () => {
     expect(toE164('0775 924 ***')).toBeNull();
     expect(toE164('12345')).toBeNull();
     expect(toE164('')).toBeNull();
+  });
+  it('stays Vietnamese-only, because agents are', () => {
+    expect(toE164('+44 7700 900123')).toBeNull();
+  });
+});
+
+describe('renter numbers, any country', () => {
+  it('reads a Vietnamese number exactly as toE164 does', () => {
+    for (const raw of ['0901234567', '+84 90 123 45 67', '84901234567']) {
+      expect(toRenterE164(raw)).toBe('+84901234567');
+    }
+  });
+
+  it('reads any other country written with its code', () => {
+    expect(toRenterE164('+44 7700 900123')).toBe('+447700900123');
+    expect(toRenterE164('+44 (0)7700 900123')).toBe('+447700900123');
+    expect(toRenterE164('0044 7700 900123')).toBe('+447700900123');
+    expect(toRenterE164('+1 (415) 555-0100')).toBe('+14155550100');
+    expect(toRenterE164('+65 9123 4567')).toBe('+6591234567');
+  });
+
+  it('refuses a foreign number without its code, which could be any country', () => {
+    expect(toRenterE164('7700 900123')).toBeNull();
+    expect(toRenterE164('(415) 555-0100')).toBeNull();
+  });
+
+  it('refuses a mistyped Vietnamese number rather than reading it as foreign', () => {
+    expect(toRenterE164('+84 90 123 45')).toBeNull();
+    expect(toRenterE164('+84 90 123 45 678')).toBeNull();
+  });
+
+  it('refuses what is not a number', () => {
+    expect(toRenterE164('+0 123 456 789')).toBeNull();
+    expect(toRenterE164('+44 7700 9001 ext 2')).toBeNull();
+    expect(toRenterE164('')).toBeNull();
+  });
+
+  it("reads Meta's sender id for any country, and a Vietnamese one as before", () => {
+    expect(waIdToE164('84901234567')).toBe('+84901234567');
+    expect(waIdToE164('447700900123')).toBe('+447700900123');
+    expect(waIdToE164('14155550100')).toBe('+14155550100');
+    expect(waIdToE164('')).toBeNull();
+    expect(waIdToE164('123')).toBeNull();
+  });
+
+  it('keeps a typed number and the same person messaging us on one renter row', () => {
+    expect(toRenterE164('+44 7700 900123')).toBe(waIdToE164('447700900123'));
+    expect(toRenterE164('0901 234 567')).toBe(waIdToE164('84901234567'));
+  });
+
+  it('finds the national number behind any country code', () => {
+    expect(nationalNumber('+84901234567')).toBe('901234567');
+    expect(nationalNumber('+447700900123')).toBe('7700900123');
+    expect(nationalNumber('+14155550100')).toBe('4155550100');
+    expect(nationalNumber('+79161234567')).toBe('9161234567');
+    expect(nationalNumber('+6591234567')).toBe('91234567');
+    // Three-digit codes: Hong Kong, Ireland.
+    expect(nationalNumber('+85291234567')).toBe('91234567');
+    expect(nationalNumber('+353861234567')).toBe('861234567');
+    expect(nationalNumber('not a number')).toBeNull();
   });
 });
 

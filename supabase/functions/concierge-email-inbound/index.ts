@@ -596,9 +596,7 @@ serve(async (req) => {
       } catch (relayError: any) {
         relayed = false;
         const why = relayError instanceof ServiceWindowClosedError
-          ? `Their WhatsApp window has closed - WhatsApp only lets us message them again once they write to us.${
-            inquiry.email ? ` Reply to them by email at ${inquiry.email} from Admin Tools instead.` : " They gave no email."
-          }`
+          ? "Their WhatsApp window has closed - WhatsApp only lets us message them again once they write to us."
           : relayError instanceof ConsecutiveMessageError
           ? "They have not replied to your last two WhatsApp messages. Wait for them before sending another."
           : `Sending on WhatsApp failed: ${relayError.message}.`;

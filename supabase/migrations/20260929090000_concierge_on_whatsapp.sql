@@ -1,8 +1,9 @@
 -- Concierge availability requests answered on WhatsApp (SPEC §11).
--- Additive, and replay-safe (IF NOT EXISTS, guarded constraints).
+-- New requests are WhatsApp only; the email requests that exist keep their
+-- threads. Additive, and replay-safe (IF NOT EXISTS, guarded constraints).
 
 -- ── The request ─────────────────────────────────────────────────────────────
--- A WhatsApp request may have no email, and the form now asks for a monthly
+-- A WhatsApp request has no email, and the form now asks for a monthly
 -- ceiling in dong rather than a USD range. The old columns stay for the rows
 -- that have them.
 ALTER TABLE public.complex_inquiries ALTER COLUMN email DROP NOT NULL;
@@ -17,6 +18,10 @@ ALTER TABLE public.complex_inquiries
   ADD COLUMN IF NOT EXISTS renter_id uuid REFERENCES public.renters(id) ON DELETE SET NULL,
   -- When the code arrived. The concierge's 24 hours start here.
   ADD COLUMN IF NOT EXISTS whatsapp_confirmed_at timestamptz;
+
+-- The default only labels the rows that already exist, which were all email.
+-- A new request must say what it is.
+ALTER TABLE public.complex_inquiries ALTER COLUMN channel DROP DEFAULT;
 
 DO $$
 BEGIN

@@ -6,17 +6,20 @@
 // buildings that is nothing this month - which is why the request, not an
 // automated alert, is the main thing the complex page offers.
 //
-// The WhatsApp half borrows the complex watch's handshake. The renter sends
-// us a code, which proves the number is theirs and opens the 24-hour service
-// window - the window the concierge's "within 24 hours" is measured against.
-// The same code turns on a watch with the same criteria, so a building with
-// nothing free today still reaches them when something is listed.
+// WhatsApp only. Email was the original channel and is retired for new
+// requests: one channel keeps one thread, and the 24-hour window keeps the
+// concierge quick. Old email requests keep their threads (channel EMAIL).
+//
+// It borrows the complex watch's handshake. The renter sends us a code, which
+// proves the number is theirs and opens the 24-hour service window - the
+// window the concierge's "within 24 hours" is measured against. The same code
+// turns on a watch with the same criteria, so a building with nothing free
+// today still reaches them when something is listed.
 //
 // Pure. The I/O lives in concierge.ts, routing.ts and the edge functions.
 
 import { formatVnd, hcmcDate } from './format.ts';
 import { MAX_BEDROOMS, MAX_BUDGET_VND, MAX_MOVE_IN_DAYS, MIN_BUDGET_VND } from './watch.ts';
-import { INQUIRY_CHANNELS, type InquiryChannel } from '../viewing-domain.ts';
 
 export const LEASE_MONTHS = [6, 12, 24] as const;
 export const MAX_NOTES = 1000;
@@ -40,14 +43,9 @@ export interface InquiryInput {
   budgetMaxVnd: number;
   hasPets: boolean;
   notes: string | null;
-  channel: InquiryChannel;
-  /** Required for EMAIL; kept when given for WHATSAPP, as a fallback. */
-  email: string | null;
 }
 
 export type InquiryValidation = { ok: true; value: InquiryInput } | { ok: false; error: string };
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // deno-lint-ignore no-explicit-any
 export function validateInquiryInput(raw: any, now: Date): InquiryValidation {
@@ -79,21 +77,13 @@ export function validateInquiryInput(raw: any, now: Date): InquiryValidation {
     return { ok: false, error: `Budget must be between ${formatVnd(MIN_BUDGET_VND)} and ${formatVnd(MAX_BUDGET_VND)} a month.` };
   }
 
-  const channel = raw?.channel;
-  if (!(INQUIRY_CHANNELS as readonly string[]).includes(channel)) return { ok: false, error: 'Pick how we reply.' };
-
-  const emailRaw = String(raw?.email ?? '').trim();
-  const email = emailRaw ? emailRaw : null;
-  if (email && !EMAIL.test(email)) return { ok: false, error: 'That email address does not look right.' };
-  if (channel === 'EMAIL' && !email) return { ok: false, error: 'Enter the email we should reply to.' };
-
   const notes = String(raw?.notes ?? '').trim().slice(0, MAX_NOTES) || null;
 
   return {
     ok: true,
     value: {
       complexId, name, moveInDate: moveIn, leaseMonths: lease, bedrooms, budgetMaxVnd: budget,
-      hasPets: raw?.hasPets === true, notes, channel, email,
+      hasPets: raw?.hasPets === true, notes,
     },
   };
 }

@@ -96,12 +96,13 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
     refetchInterval: 30_000,
   });
 
-  // A WhatsApp request is answered on WhatsApp while its window is open; after
-  // that only by email, and only if we have one.
+  // A WhatsApp request is answered on WhatsApp, while its window is open -
+  // after that, not until the renter writes again. Email is only for the
+  // requests made before it was retired.
   const whatsapp = inquiry.channel === 'WHATSAPP';
   const closes = whatsapp ? windowClosesAt(inquiry) : null;
   const windowOpen = !!closes && closes.getTime() > Date.now();
-  const via: 'whatsapp' | 'email' | null = !whatsapp ? 'email' : windowOpen ? 'whatsapp' : inquiry.email ? 'email' : null;
+  const via: 'whatsapp' | 'email' | null = !whatsapp ? 'email' : windowOpen ? 'whatsapp' : null;
 
   const send = async () => {
     const body = draft.trim();
@@ -110,7 +111,7 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
     try {
       const { data, error } = await supabase.functions.invoke('concierge-email-reply', {
         // The key makes a double click one message on WhatsApp.
-        body: { inquiryId: inquiry.id, body, via, key: crypto.randomUUID() },
+        body: { inquiryId: inquiry.id, body, key: crypto.randomUUID() },
       });
       if (error) {
         // A closed window or two unanswered messages come back as 409 with a
@@ -182,7 +183,7 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
             ? `Reply to ${inquiry.full_name} on WhatsApp - sent from the Hausto number`
             : via === 'email'
               ? `Reply to ${inquiry.full_name} - sent from hello@hausto.com`
-              : 'Their WhatsApp window has closed and they gave no email'
+              : 'Their WhatsApp window has closed'
         }
         value={draft}
         disabled={!via}
@@ -192,11 +193,9 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
         <p className="text-xs text-muted-foreground">
           {via === 'whatsapp' && closes
             ? `WhatsApp window open until ${closes.toLocaleString()}. One message with everything reads best.`
-            : whatsapp && via === 'email'
-              ? 'WhatsApp window closed - this goes by email instead.'
-              : whatsapp
-                ? 'It reopens when they write to us on WhatsApp.'
-                : 'Copied to your Gmail. Their reply comes back here.'}
+            : whatsapp
+              ? 'It reopens when they write to us on WhatsApp.'
+              : 'An email request, from before email was retired. Copied to your Gmail.'}
         </p>
         <Button size="sm" disabled={sending || !draft.trim() || !via} onClick={send}>
           {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
@@ -296,7 +295,7 @@ export const ConciergeRequestsPanel = () => {
         body: { inquiryId: row.id },
       });
       if (error) throw error;
-      toast.success('Notification email re-sent');
+      toast.success('Notice re-sent');
       qc.invalidateQueries({ queryKey: ['complex-inquiries'] });
     } catch (e: any) {
       toast.error('Send failed', { description: e?.message ?? String(e) });
@@ -366,7 +365,7 @@ export const ConciergeRequestsPanel = () => {
                       <Badge variant="outline">{row.bedrooms_needed >= 4 ? '4+' : row.bedrooms_needed} BR</Badge>
                       <Badge variant="outline">{budgetLabel(row)}</Badge>
                       {row.has_pets && <Badge variant="outline">Pets</Badge>}
-                      {!row.notified_at && <Badge variant="destructive">Not emailed</Badge>}
+                      {row.channel === 'WHATSAPP' && !row.notified_at && <Badge variant="destructive">Notice not sent</Badge>}
                       {row.last_inbound_at &&
                         row.last_inbound_at > (row.channel === 'WHATSAPP' ? row.whatsapp_confirmed_at ?? '' : row.created_at ?? '') && (
                         <Badge>Renter replied</Badge>
@@ -432,9 +431,12 @@ export const ConciergeRequestsPanel = () => {
                       <MessageSquare className="h-4 w-4 mr-1" />
                       {openThreadId === row.id ? 'Hide conversation' : row.channel === 'WHATSAPP' ? 'Reply on WhatsApp' : 'Reply by email'}
                     </Button>
-                    <Button variant="ghost" size="sm" disabled={busyId === row.id} onClick={() => resendNotification(row)}>
-                      Re-send email
-                    </Button>
+                    {/* The notice mails once; this is for when that mail failed. */}
+                    {row.channel === 'WHATSAPP' && !row.notified_at && (
+                      <Button variant="ghost" size="sm" disabled={busyId === row.id} onClick={() => resendNotification(row)}>
+                        Re-send notice
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" disabled={busyId === row.id} onClick={() => saveNotes(row)}>
                       Save notes
                     </Button>

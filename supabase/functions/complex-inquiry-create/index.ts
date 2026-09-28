@@ -1,14 +1,13 @@
 // Create a concierge availability request (SPEC §11). The complex page's
 // "Request availability" form posts here.
 //
-// WHATSAPP (the default): writes the request and a PENDING watch with the same
-// criteria, and hands back a wa.me link carrying the watch's code. Nothing is
-// sent, and the concierge is not told, until the renter sends that code from
-// their own phone - so there is no phone number in this request at all, and a
-// caller cannot point our messages at somebody else.
+// Writes the request and a PENDING watch with the same criteria, and hands
+// back a wa.me link carrying the watch's code. Nothing is sent, and the
+// concierge is not told, until the renter sends that code from their own
+// phone - so there is no phone number in this request at all, and a caller
+// cannot point our messages at somebody else.
 //
-// EMAIL: writes the request and mails the concierge and the renter at once,
-// through notify-complex-inquiry - the flow as it was before WhatsApp.
+// WhatsApp only. Email requests are retired; the old ones keep their threads.
 //
 // Signed-in is optional, as it always was for this form. A request spends no
 // viewing credit: it asks a person to check a building, and viewings are
@@ -61,83 +60,54 @@ Deno.serve(async (req) => {
 
   const caller = await identifyCaller(req, createClient(SUPABASE_URL, ANON_KEY));
 
-  // A signed-in renter's account email is the fallback when a WhatsApp
-  // window closes before the concierge has an answer.
-  let email = v.email;
-  if (!email && caller.userId) {
-    const { data: profile } = await db.from('profiles').select('email').eq('id', caller.userId).maybeSingle();
-    email = profile?.email ?? null;
-  }
-
-  // ── The handshake, for WhatsApp ───────────────────────────────────────────
-  let watch: { id: string; code: string; expiresAt: string } | null = null;
-  if (v.channel === 'WHATSAPP') {
-    const expiresAt = watchExpiry(now, v.moveInDate).toISOString();
-    for (let attempt = 0; attempt < 5 && !watch; attempt++) {
-      const code = generateWatchCode();
-      const { data, error } = await db.from('complex_watches').insert({
-        complex_id: complex.id,
-        code,
-        user_id: caller.userId,
-        bedrooms: v.bedrooms,
-        budget_max_vnd: v.budgetMaxVnd,
-        move_in_by: v.moveInDate,
-        expires_at: expiresAt,
-      }).select('id').single();
-      if (!error && data) { watch = { id: data.id, code, expiresAt }; break; }
-      if (error?.code !== '23505') {
-        console.error('[complex-inquiry-create] watch insert failed:', error);
-        return json({ error: 'create_failed' }, 500);
-      }
+  // ── The handshake ─────────────────────────────────────────────────────────
+  const expiresAt = watchExpiry(now, v.moveInDate).toISOString();
+  let watch: { id: string; code: string } | null = null;
+  for (let attempt = 0; attempt < 5 && !watch; attempt++) {
+    const code = generateWatchCode();
+    const { data, error } = await db.from('complex_watches').insert({
+      complex_id: complex.id,
+      code,
+      user_id: caller.userId,
+      bedrooms: v.bedrooms,
+      budget_max_vnd: v.budgetMaxVnd,
+      move_in_by: v.moveInDate,
+      expires_at: expiresAt,
+    }).select('id').single();
+    if (!error && data) { watch = { id: data.id, code }; break; }
+    if (error?.code !== '23505') {
+      console.error('[complex-inquiry-create] watch insert failed:', error);
+      return json({ error: 'create_failed' }, 500);
     }
-    if (!watch) return json({ error: 'code_collision' }, 500);
   }
+  if (!watch) return json({ error: 'code_collision' }, 500);
 
   // ── The request ───────────────────────────────────────────────────────────
   const { data: inquiry, error: inqErr } = await db.from('complex_inquiries').insert({
     complex_id: complex.id,
     user_id: caller.userId,
     full_name: v.name,
-    email,
     target_move_in_date: v.moveInDate,
     lease_duration_months: v.leaseMonths,
     bedrooms_needed: v.bedrooms,
     budget_max_vnd: v.budgetMaxVnd,
     has_pets: v.hasPets,
     additional_notes: v.notes,
-    channel: v.channel,
-    watch_id: watch?.id ?? null,
+    channel: 'WHATSAPP',
+    watch_id: watch.id,
   }).select('id').single();
   if (inqErr || !inquiry) {
     console.error('[complex-inquiry-create] inquiry insert failed:', inqErr);
-    if (watch) await db.from('complex_watches').delete().eq('id', watch.id);
+    await db.from('complex_watches').delete().eq('id', watch.id);
     return json({ error: 'create_failed' }, 500);
-  }
-
-  if (v.channel === 'EMAIL') {
-    // Mail the concierge and the renter now. The request is saved either way,
-    // so a mail failure is logged, not returned as a failed submission.
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-complex-inquiry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
-        body: JSON.stringify({ inquiryId: inquiry.id }),
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!res.ok) console.warn(`[complex-inquiry-create] notify returned ${res.status}`);
-    } catch (e) {
-      console.warn('[complex-inquiry-create] notify failed:', (e as Error).message);
-    }
-    return json({ success: true, channel: 'EMAIL', inquiryId: inquiry.id, complexName: complex.name });
   }
 
   return json({
     success: true,
-    channel: 'WHATSAPP',
     inquiryId: inquiry.id,
     complexName: complex.name,
-    code: watch!.code,
-    waLink: buildInquiryLink(BUSINESS_PHONE, watch!.code, complex.name),
-    alertsUntil: watch!.expiresAt,
+    code: watch.code,
+    waLink: buildInquiryLink(BUSINESS_PHONE, watch.code, complex.name),
+    alertsUntil: expiresAt,
   });
 });

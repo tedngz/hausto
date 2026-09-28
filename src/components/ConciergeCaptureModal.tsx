@@ -1,9 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
-import { usePass } from '@/hooks/usePass';
-import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, ArrowLeft, ArrowRight, Loader2, Mail, MessageCircle } from 'lucide-react';
+import { Loader2, MessageCircle } from 'lucide-react';
 
 interface Props {
   open: boolean;
@@ -19,9 +15,6 @@ interface Props {
   complexId: string;
   complexName: string;
 }
-
-type Channel = 'WHATSAPP' | 'EMAIL';
-type Stage = 'needs' | 'reply' | 'whatsapp' | 'email-done';
 
 interface WhatsAppHandoff { code: string; waLink: string; alertsUntil: string }
 
@@ -36,46 +29,34 @@ const usd = (dong: number) => `US$${(Math.round(dong / 25_000 / 50) * 50).toLoca
 /** Today in Ho Chi Minh City, `YYYY-MM-DD`. */
 const hcmcToday = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /**
  * "Check availability at Empire City" (SPEC §11).
  *
  * A person on our team asks the agents who hold units in the building and
- * replies within 24 hours. Two steps - what you need, where we reply - and on
- * WhatsApp a last one: send us the message WhatsApp opens with. That message
- * is the opt-in and proves the number is theirs, so the form never asks for a
- * phone number, and the concierge's 24 hours start when it arrives.
+ * replies on WhatsApp within 24 hours. One form, then one message: the renter
+ * sends us the text WhatsApp opens with. That message is the opt-in and proves
+ * the number is theirs, so the form never asks for one - any country's works -
+ * and the concierge's 24 hours start when it arrives.
  */
 export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexName }: Props) {
   const { user } = useAuth();
-  const { pass } = usePass();
-  const { quota } = useViewingQuota();
-  const navigate = useNavigate();
-  const [showUpgrade, setShowUpgrade] = useState(false);
-  const [stage, setStage] = useState<Stage>('needs');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
   const [handoff, setHandoff] = useState<WhatsAppHandoff | null>(null);
 
-  // What they need
   const [moveIn, setMoveIn] = useState('');
   const [lease, setLease] = useState<number>(12);
   const [bedrooms, setBedrooms] = useState<number>(2);
   const [budgetMillions, setBudgetMillions] = useState('');
   const [hasPets, setHasPets] = useState(false);
   const [notes, setNotes] = useState('');
-  // Where we reply
   const [name, setName] = useState('');
-  const [channel, setChannel] = useState<Channel>('WHATSAPP');
-  const [email, setEmail] = useState('');
 
   const reset = () => {
-    setStage('needs'); setError(null); setHandoff(null); setSubmitting(false);
+    setError(null); setHandoff(null); setSubmitting(false);
     setMoveIn(''); setLease(12); setBedrooms(2); setBudgetMillions(''); setHasPets(false); setNotes('');
-    setName(''); setChannel('WHATSAPP'); setEmail('');
-    setPrefilled(false);
+    setName(''); setPrefilled(false);
   };
 
   // Logged-in renters shouldn't retype what Hausto already knows.
@@ -83,14 +64,9 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
     if (!open || !user || prefilled) return;
     let cancelled = false;
     (async () => {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('name, email')
-        .eq('id', user.id)
-        .maybeSingle();
+      const { data: profile } = await supabase.from('profiles').select('name').eq('id', user.id).maybeSingle();
       if (cancelled) return;
       setName(prev => prev || profile?.name || user.user_metadata?.name || '');
-      setEmail(prev => prev || profile?.email || user.email || '');
       setPrefilled(true);
     })();
     return () => { cancelled = true; };
@@ -98,13 +74,9 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
 
   const close = () => { onOpenChange(false); setTimeout(reset, 300); };
 
-  // Signed-out visitors get the trial pitch too - a new account starts with one.
-  const trialPitch = user ? !!quota?.trialAvailable : true;
-
   const budgetVnd = budgetMillions.trim() ? Math.round(Number(budgetMillions) * 1_000_000) : null;
   const budgetValid = budgetVnd !== null && Number.isFinite(budgetVnd) && budgetVnd >= 3_000_000 && budgetVnd <= 500_000_000;
-  const canContinue = !!moveIn && moveIn >= hcmcToday() && budgetValid;
-  const canSubmit = !!name.trim() && (channel === 'WHATSAPP' || EMAIL.test(email.trim()));
+  const canSubmit = !!moveIn && moveIn >= hcmcToday() && budgetValid && !!name.trim();
 
   const submit = async () => {
     setSubmitting(true);
@@ -119,8 +91,6 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         budgetMaxVnd: budgetVnd,
         hasPets,
         notes: notes.trim() || null,
-        channel,
-        email: email.trim() || null,
       },
     });
     setSubmitting(false);
@@ -135,12 +105,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
       setError(message);
       return;
     }
-    if (data.channel === 'WHATSAPP') {
-      setHandoff({ code: data.code, waLink: data.waLink, alertsUntil: data.alertsUntil });
-      setStage('whatsapp');
-    } else {
-      setStage('email-done');
-    }
+    setHandoff({ code: data.code, waLink: data.waLink, alertsUntil: data.alertsUntil });
   };
 
   const until = handoff
@@ -148,17 +113,19 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
     : '';
 
   return (
-    <>
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        {stage === 'whatsapp' && handoff ? (
+        {handoff ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">One last step</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">Send it on WhatsApp</DialogTitle>
               <DialogDescription>
-                Send us the message WhatsApp opens with. That is where we reply.
+                {complexName} · Step 2 of 2
               </DialogDescription>
             </DialogHeader>
+            <p className="text-sm">
+              Send us the message WhatsApp opens with. That is where we reply.
+            </p>
             <Button asChild className="w-full" size="lg">
               <a href={handoff.waLink} target="_blank" rel="noreferrer">
                 <MessageCircle className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -175,175 +142,95 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
             </p>
             <Button variant="ghost" className="w-full" onClick={close}>Done</Button>
           </div>
-        ) : stage === 'email-done' ? (
-          <div className="py-8 text-center space-y-4">
-            <CheckCircle2 className="h-14 w-14 mx-auto text-primary" aria-hidden="true" />
-            <DialogTitle className="text-2xl font-serif">Your request is in</DialogTitle>
-            <DialogDescription className="text-base">
-              A person on our team checks with the agents at <strong>{complexName}</strong> and emails you within 24 hours.
-            </DialogDescription>
-            {!pass?.active && (
-              <div className="rounded-lg border bg-secondary/40 p-4 text-left space-y-2">
-                <p className="text-sm font-medium">Want to see units in person?</p>
-                <p className="text-sm text-muted-foreground">
-                  {trialPitch
-                    ? 'Your first viewing is on us - Hausto arranges the visit for you.'
-                    : 'Hausto arranges the visits for you. The Pass includes 3 viewing requests.'}
-                </p>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={() => (trialPitch ? navigate('/browse') : setShowUpgrade(true))}
-                >
-                  {trialPitch ? 'Request my free viewing' : 'Get the Pass to request viewings'}
-                </Button>
-              </div>
-            )}
-            <Button variant={pass?.active ? 'default' : 'ghost'} onClick={close} className="mt-2">Close</Button>
-          </div>
         ) : (
           <>
             <DialogHeader>
               <DialogTitle className="font-serif text-2xl">Check availability</DialogTitle>
               <DialogDescription>
-                {complexName} · Step {stage === 'needs' ? 1 : 2} of 2
+                {complexName} · Step 1 of 2
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex gap-1.5 mb-1">
-              {[1, 2].map((s) => (
-                <div key={s} className={`h-1 flex-1 rounded-full ${s <= (stage === 'needs' ? 1 : 2) ? 'bg-primary' : 'bg-muted'}`} />
-              ))}
-            </div>
-
-            {stage === 'needs' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="movein">Move-in date</Label>
-                    <Input id="movein" type="date" min={hcmcToday()} value={moveIn} onChange={(e) => setMoveIn(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Lease</Label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {LEASES.map((m) => (
-                        <Button key={m} type="button" variant={lease === m ? 'default' : 'outline'} onClick={() => setLease(m)}>
-                          {m === 24 ? '24+' : m}m
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Bedrooms</Label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {BEDROOMS.map((b) => (
-                      <Button key={b} type="button" variant={bedrooms === b ? 'default' : 'outline'} onClick={() => setBedrooms(b)}>
-                        {b === 4 ? '4+' : b}
+                  <Label htmlFor="movein">Move-in date</Label>
+                  <Input id="movein" type="date" min={hcmcToday()} value={moveIn} onChange={(e) => setMoveIn(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Lease</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {LEASES.map((m) => (
+                      <Button key={m} type="button" variant={lease === m ? 'default' : 'outline'} onClick={() => setLease(m)}>
+                        {m === 24 ? '24+' : m}m
                       </Button>
                     ))}
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="budget">Most you would pay a month</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="budget"
-                      inputMode="decimal"
-                      placeholder="e.g. 25"
-                      value={budgetMillions}
-                      onChange={(e) => setBudgetMillions(e.target.value.replace(/[^0-9.]/g, ''))}
-                    />
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">million ₫</span>
-                  </div>
-                  {budgetVnd !== null && (
-                    <p className={`text-xs ${budgetValid ? 'text-muted-foreground' : 'text-destructive'}`}>
-                      {budgetValid
-                        ? `Up to ${vnd(budgetVnd)} a month (about ${usd(budgetVnd)})`
-                        : 'Enter an amount between 3 and 500 million.'}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <Label htmlFor="pets" className="cursor-pointer">Bringing a pet?</Label>
-                  <Switch id="pets" checked={hasPets} onCheckedChange={setHasPets} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Anything specific? (optional)</Label>
-                  <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="High floor, river view, furnished…" rows={2} />
-                </div>
-
-                <Button className="w-full" onClick={() => setStage('reply')} disabled={!canContinue}>
-                  Next <ArrowRight className="h-4 w-4 ml-1" aria-hidden="true" />
-                </Button>
               </div>
-            )}
 
-            {stage === 'reply' && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Your name</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+              <div className="space-y-2">
+                <Label>Bedrooms</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {BEDROOMS.map((b) => (
+                    <Button key={b} type="button" variant={bedrooms === b ? 'default' : 'outline'} onClick={() => setBedrooms(b)}>
+                      {b === 4 ? '4+' : b}
+                    </Button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label>Where should we reply?</Label>
-                  <div className="grid grid-cols-1 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setChannel('WHATSAPP')}
-                      className={`rounded-lg border p-3 text-left transition ${channel === 'WHATSAPP' ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'}`}
-                    >
-                      <span className="flex items-center gap-2 text-sm font-medium">
-                        <MessageCircle className="h-4 w-4" aria-hidden="true" /> WhatsApp
-                        <span className="text-xs font-normal text-primary">Fastest</span>
-                      </span>
-                      <span className="block text-xs text-muted-foreground mt-1">
-                        A person replies within 24 hours, and we tell you when new listings here fit.
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setChannel('EMAIL')}
-                      className={`rounded-lg border p-3 text-left transition ${channel === 'EMAIL' ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'}`}
-                    >
-                      <span className="flex items-center gap-2 text-sm font-medium">
-                        <Mail className="h-4 w-4" aria-hidden="true" /> Email
-                      </span>
-                      <span className="block text-xs text-muted-foreground mt-1">A person replies within 24 hours.</span>
-                    </button>
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="budget">Most you would pay a month</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="budget"
+                    inputMode="decimal"
+                    placeholder="e.g. 25"
+                    value={budgetMillions}
+                    onChange={(e) => setBudgetMillions(e.target.value.replace(/[^0-9.]/g, ''))}
+                  />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">million ₫</span>
                 </div>
-
-                {channel === 'EMAIL' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
-                  </div>
+                {budgetVnd !== null && (
+                  <p className={`text-xs ${budgetValid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                    {budgetValid
+                      ? `Up to ${vnd(budgetVnd)} a month (about ${usd(budgetVnd)})`
+                      : 'Enter an amount between 3 and 500 million.'}
+                  </p>
                 )}
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <Button variant="ghost" onClick={() => { setError(null); setStage('needs'); }}>
-                    <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" /> Back
-                  </Button>
-                  <Button onClick={submit} disabled={!canSubmit || submitting}>
-                    {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />}
-                    {channel === 'WHATSAPP' ? 'Continue on WhatsApp' : 'Send request'}
-                  </Button>
-                </div>
               </div>
-            )}
+
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <Label htmlFor="pets" className="cursor-pointer">Bringing a pet?</Label>
+                <Switch id="pets" checked={hasPets} onCheckedChange={setHasPets} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Anything specific? (optional)</Label>
+                <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="High floor, river view, furnished…" rows={2} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name">Your name</Label>
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+              </div>
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+
+              <Button className="w-full" size="lg" onClick={submit} disabled={!canSubmit || submitting}>
+                {submitting
+                  ? <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                  : <MessageCircle className="h-4 w-4 mr-2" aria-hidden="true" />}
+                Continue on WhatsApp
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                A person replies on WhatsApp within 24 hours. Any country's number works.
+              </p>
+            </div>
           </>
         )}
       </DialogContent>
     </Dialog>
-    <SubscriptionModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
-    </>
   );
 }
