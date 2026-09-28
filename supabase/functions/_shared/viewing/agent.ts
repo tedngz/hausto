@@ -22,6 +22,7 @@
 import type { Intent } from './intent.ts';
 import type { WatchOutcome } from './routing.ts';
 import type { WatchProblem } from './watch.ts';
+import type { ConfirmedInquiry } from './concierge.ts';
 
 export type AgentAction =
   /** Nothing to do - an operator handles it, or there is nothing to handle. */
@@ -40,6 +41,8 @@ export type AgentAction =
     bedrooms: number | null;
     budgetMaxVnd: number | null;
     expiresAt: string;
+    /** The availability request the code came from, if any - it changes the words. */
+    inquiry?: ConfirmedInquiry;
   }
   /** They sent a code that is unknown or expired. Say what to do instead. */
   | { kind: 'WATCH_PROBLEM'; problem: WatchProblem }
@@ -62,6 +65,8 @@ export interface AgentInput {
   watch?: WatchOutcome;
   /** The alert this answers, when the last thing we sent was one. */
   alertMessageId?: string;
+  /** The availability request this answers - a person replies to those. */
+  inquiryId?: string;
 }
 
 /**
@@ -88,13 +93,19 @@ export function decideAction(input: AgentInput): AgentAction {
         bedrooms: input.watch.bedrooms,
         budgetMaxVnd: input.watch.budgetMaxVnd,
         expiresAt: input.watch.expiresAt,
+        ...(input.watch.inquiry ? { inquiry: input.watch.inquiry } : {}),
       }
       : { kind: 'WATCH_PROBLEM', problem: input.watch.problem };
   }
-  // Any answer to an alert asks for its places, except a no and a new search.
-  // "No thanks" wants nothing sent; "anything in D2 under 15tr" is its own
-  // question, and the search (when the agent is on) is the better answer.
-  if (!stopping && input.alertMessageId && input.intent !== 'DECLINE' && input.intent !== 'SEARCH') {
+  // A message on an availability request's thread is for the concierge, who
+  // promised the renter a person. Nothing automated answers it, agent on or off.
+  if (input.inquiryId) return { kind: 'NONE', reason: 'availability request - the concierge replies' };
+  // Any answer to an alert asks for its places, except a no. That includes
+  // what the classifier calls a SEARCH: "show me" is the most natural answer to
+  // "reply here if you would like to see them", and it trips the seeking-verb
+  // rule. Answering what we last asked is right even for a real search - the
+  // places go first, and their next message is searched as usual.
+  if (!stopping && input.alertMessageId && input.intent !== 'DECLINE') {
     return { kind: 'ALERT_DETAILS', alertMessageId: input.alertMessageId };
   }
 

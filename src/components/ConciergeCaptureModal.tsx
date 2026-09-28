@@ -10,10 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Slider } from '@/components/ui/slider';
-import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
+import { CheckCircle2, ArrowLeft, ArrowRight, Loader2, Mail, MessageCircle } from 'lucide-react';
 
 interface Props {
   open: boolean;
@@ -22,52 +20,77 @@ interface Props {
   complexName: string;
 }
 
+type Channel = 'WHATSAPP' | 'EMAIL';
+type Stage = 'needs' | 'reply' | 'whatsapp' | 'email-done';
+
+interface WhatsAppHandoff { code: string; waLink: string; alertsUntil: string }
+
+const LEASES = [6, 12, 24] as const;
+const BEDROOMS = [1, 2, 3, 4] as const;
+
+const vnd = (dong: number) => `${dong.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
+// A rough guide for renters who think in dollars - the listings they have seen
+// elsewhere often are. Never stored.
+const usd = (dong: number) => `US$${(Math.round(dong / 25_000 / 50) * 50).toLocaleString('en-US')}`;
+
+/** Today in Ho Chi Minh City, `YYYY-MM-DD`. */
+const hcmcToday = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * "Check availability at Empire City" (SPEC §11).
+ *
+ * A person on our team asks the agents who hold units in the building and
+ * replies within 24 hours. Two steps - what you need, where we reply - and on
+ * WhatsApp a last one: send us the message WhatsApp opens with. That message
+ * is the opt-in and proves the number is theirs, so the form never asks for a
+ * phone number, and the concierge's 24 hours start when it arrives.
+ */
 export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexName }: Props) {
   const { user } = useAuth();
   const { pass } = usePass();
   const { quota } = useViewingQuota();
   const navigate = useNavigate();
   const [showUpgrade, setShowUpgrade] = useState(false);
-  const [step, setStep] = useState(1);
+  const [stage, setStage] = useState<Stage>('needs');
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+  const [handoff, setHandoff] = useState<WhatsAppHandoff | null>(null);
 
-  // Step 1
+  // What they need
   const [moveIn, setMoveIn] = useState('');
-  const [lease, setLease] = useState(12);
-  // Step 2
-  const [bedrooms, setBedrooms] = useState(2);
-  const [budget, setBudget] = useState<[number, number]>([1500, 3000]);
+  const [lease, setLease] = useState<number>(12);
+  const [bedrooms, setBedrooms] = useState<number>(2);
+  const [budgetMillions, setBudgetMillions] = useState('');
   const [hasPets, setHasPets] = useState(false);
-  // Step 3
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  // Where we reply
+  const [name, setName] = useState('');
+  const [channel, setChannel] = useState<Channel>('WHATSAPP');
+  const [email, setEmail] = useState('');
 
   const reset = () => {
-    setStep(1); setDone(false); setMoveIn(''); setLease(12);
-    setBedrooms(2); setBudget([1500, 3000]); setHasPets(false);
-    setName(''); setEmail(''); setPhone(''); setNotes('');
+    setStage('needs'); setError(null); setHandoff(null); setSubmitting(false);
+    setMoveIn(''); setLease(12); setBedrooms(2); setBudgetMillions(''); setHasPets(false); setNotes('');
+    setName(''); setChannel('WHATSAPP'); setEmail('');
     setPrefilled(false);
   };
 
-  // Logged-in renters shouldn't retype what Hausto already knows: prefill the
-  // contact step from their profile the first time the modal opens.
+  // Logged-in renters shouldn't retype what Hausto already knows.
   useEffect(() => {
     if (!open || !user || prefilled) return;
     let cancelled = false;
     (async () => {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('name, email, phone')
+        .select('name, email')
         .eq('id', user.id)
         .maybeSingle();
       if (cancelled) return;
       setName(prev => prev || profile?.name || user.user_metadata?.name || '');
       setEmail(prev => prev || profile?.email || user.email || '');
-      setPhone(prev => prev || profile?.phone || user.user_metadata?.phone || '');
       setPrefilled(true);
     })();
     return () => { cancelled = true; };
@@ -78,76 +101,101 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
   // Signed-out visitors get the trial pitch too - a new account starts with one.
   const trialPitch = user ? !!quota?.trialAvailable : true;
 
-  const canNext1 = moveIn && lease > 0;
-  const canNext2 = bedrooms > 0 && budget[0] >= 0 && budget[1] > budget[0];
-  const canSubmit = name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const budgetVnd = budgetMillions.trim() ? Math.round(Number(budgetMillions) * 1_000_000) : null;
+  const budgetValid = budgetVnd !== null && Number.isFinite(budgetVnd) && budgetVnd >= 3_000_000 && budgetVnd <= 500_000_000;
+  const canContinue = !!moveIn && moveIn >= hcmcToday() && budgetValid;
+  const canSubmit = !!name.trim() && (channel === 'WHATSAPP' || EMAIL.test(email.trim()));
 
   const submit = async () => {
     setSubmitting(true);
-    // Only admins can SELECT from complex_inquiries, so we can't read the id back
-    // after inserting - mint it here instead and hand it to the notifier.
-    const inquiryId = crypto.randomUUID();
-    const { error } = await supabase.from('complex_inquiries').insert({
-      id: inquiryId,
-      complex_id: complexId,
-      user_id: user?.id ?? null,
-      full_name: name.trim(),
-      email: email.trim(),
-      phone: phone.trim() || null,
-      target_move_in_date: moveIn,
-      lease_duration_months: lease,
-      budget_usd_min: budget[0],
-      budget_usd_max: budget[1],
-      bedrooms_needed: bedrooms,
-      has_pets: hasPets,
-      additional_notes: notes.trim() || null,
+    setError(null);
+    const { data, error: fnError } = await supabase.functions.invoke('complex-inquiry-create', {
+      body: {
+        complexId,
+        name: name.trim(),
+        moveInDate: moveIn,
+        leaseMonths: lease,
+        bedrooms,
+        budgetMaxVnd: budgetVnd,
+        hasPets,
+        notes: notes.trim() || null,
+        channel,
+        email: email.trim() || null,
+      },
     });
-    if (error) {
-      setSubmitting(false);
-      toast({ title: 'Could not submit', description: error.message, variant: 'destructive' });
+    setSubmitting(false);
+    if (fnError || !data?.success) {
+      let message = 'Could not send your request. Try again in a moment.';
+      // supabase-js hides a non-2xx body behind `context`; the function's own
+      // message says what to fix.
+      try {
+        const body = await (fnError as { context?: Response })?.context?.json();
+        if (body?.message) message = body.message;
+      } catch { /* keep the generic message */ }
+      setError(message);
       return;
     }
-
-    // Alert the concierge team + confirm to the renter. The request is already
-    // saved, so a mail failure must not look like a failed submission.
-    try {
-      const { error: notifyError } = await supabase.functions.invoke('notify-complex-inquiry', {
-        body: { inquiryId },
-      });
-      if (notifyError) throw notifyError;
-    } catch (e) {
-      console.error('[concierge] notification failed', e);
+    if (data.channel === 'WHATSAPP') {
+      setHandoff({ code: data.code, waLink: data.waLink, alertsUntil: data.alertsUntil });
+      setStage('whatsapp');
+    } else {
+      setStage('email-done');
     }
-
-    setSubmitting(false);
-    setDone(true);
   };
+
+  const until = handoff
+    ? new Date(handoff.alertsUntil).toLocaleDateString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: 'numeric', month: 'short' })
+    : '';
 
   return (
     <>
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())}>
-      <DialogContent className="max-w-lg">
-        {done ? (
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        {stage === 'whatsapp' && handoff ? (
+          <div className="space-y-4">
+            <DialogHeader>
+              <DialogTitle className="font-serif text-2xl">One last step</DialogTitle>
+              <DialogDescription>
+                Send us the message WhatsApp opens with. That is where we reply.
+              </DialogDescription>
+            </DialogHeader>
+            <Button asChild className="w-full" size="lg">
+              <a href={handoff.waLink} target="_blank" rel="noreferrer">
+                <MessageCircle className="h-4 w-4 mr-2" aria-hidden="true" />
+                Open WhatsApp
+              </a>
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              A person on our team checks with the agents who hold units at {complexName} and replies
+              there within 24 hours of your message. Until {until} we will also tell you when a new
+              listing there fits. Reply STOP any time.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Your code is <span className="font-mono font-medium text-foreground">{handoff.code}</span> - it works for a week.
+            </p>
+            <Button variant="ghost" className="w-full" onClick={close}>Done</Button>
+          </div>
+        ) : stage === 'email-done' ? (
           <div className="py-8 text-center space-y-4">
             <CheckCircle2 className="h-14 w-14 mx-auto text-primary" aria-hidden="true" />
-            <DialogTitle className="text-2xl font-serif">You're on the list</DialogTitle>
+            <DialogTitle className="text-2xl font-serif">Your request is in</DialogTitle>
             <DialogDescription className="text-base">
-              Our concierge will reach out within 24 hours with vetted availability at <strong>{complexName}</strong>.
+              A person on our team checks with the agents at <strong>{complexName}</strong> and emails you within 24 hours.
             </DialogDescription>
             {!pass?.active && (
               <div className="rounded-lg border bg-secondary/40 p-4 text-left space-y-2">
                 <p className="text-sm font-medium">Want to see units in person?</p>
                 <p className="text-sm text-muted-foreground">
                   {trialPitch
-                    ? "Your first viewing is on us - Hausto arranges the visit for you."
-                    : "Hausto arranges the visits for you. The Pass includes 3 viewing requests."}
+                    ? 'Your first viewing is on us - Hausto arranges the visit for you.'
+                    : 'Hausto arranges the visits for you. The Pass includes 3 viewing requests.'}
                 </p>
                 <Button
                   size="sm"
                   className="w-full"
                   onClick={() => (trialPitch ? navigate('/browse') : setShowUpgrade(true))}
                 >
-                  {trialPitch ? 'Book my free viewing' : 'Get the Pass to schedule viewings'}
+                  {trialPitch ? 'Request my free viewing' : 'Get the Pass to request viewings'}
                 </Button>
               </div>
             )}
@@ -156,118 +204,141 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Check active availability</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">Check availability</DialogTitle>
               <DialogDescription>
-                {complexName} · Step {step} of 3
+                {complexName} · Step {stage === 'needs' ? 1 : 2} of 2
               </DialogDescription>
             </DialogHeader>
 
-            {/* Progress */}
-            <div className="flex gap-1.5 mb-2">
-              {[1, 2, 3].map((s) => (
-                <div key={s} className={`h-1 flex-1 rounded-full ${s <= step ? 'bg-primary' : 'bg-muted'}`} />
+            <div className="flex gap-1.5 mb-1">
+              {[1, 2].map((s) => (
+                <div key={s} className={`h-1 flex-1 rounded-full ${s <= (stage === 'needs' ? 1 : 2) ? 'bg-primary' : 'bg-muted'}`} />
               ))}
             </div>
 
-            {step === 1 && (
+            {stage === 'needs' && (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="movein">Target move-in date</Label>
-                  <Input id="movein" type="date" value={moveIn} onChange={(e) => setMoveIn(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Lease duration</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[6, 12, 24].map((m) => (
-                      <Button key={m} variant={lease === m ? 'default' : 'outline'} onClick={() => setLease(m)}>
-                        {m} months{m === 24 ? '+' : ''}
-                      </Button>
-                    ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="movein">Move-in date</Label>
+                    <Input id="movein" type="date" min={hcmcToday()} value={moveIn} onChange={(e) => setMoveIn(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Lease</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {LEASES.map((m) => (
+                        <Button key={m} type="button" variant={lease === m ? 'default' : 'outline'} onClick={() => setLease(m)}>
+                          {m === 24 ? '24+' : m}m
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {step === 2 && (
-              <div className="space-y-5">
                 <div className="space-y-2">
-                  <Label>Bedrooms needed</Label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {[1, 2, 3, 4, 5].map((b) => (
-                      <Button key={b} variant={bedrooms === b ? 'default' : 'outline'} onClick={() => setBedrooms(b)}>
-                        {b === 5 ? '5+' : b}
+                  <Label>Bedrooms</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {BEDROOMS.map((b) => (
+                      <Button key={b} type="button" variant={bedrooms === b ? 'default' : 'outline'} onClick={() => setBedrooms(b)}>
+                        {b === 4 ? '4+' : b}
                       </Button>
                     ))}
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Monthly budget (USD)</Label>
-                    <span className="text-sm font-medium">${budget[0].toLocaleString()} – ${budget[1].toLocaleString()}</span>
+
+                <div className="space-y-2">
+                  <Label htmlFor="budget">Most you would pay a month</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="budget"
+                      inputMode="decimal"
+                      placeholder="e.g. 25"
+                      value={budgetMillions}
+                      onChange={(e) => setBudgetMillions(e.target.value.replace(/[^0-9.]/g, ''))}
+                    />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">million ₫</span>
                   </div>
-                  <Slider
-                    min={500} max={10000} step={100}
-                    value={budget}
-                    onValueChange={(v) => setBudget([v[0], v[1]] as [number, number])}
-                  />
+                  {budgetVnd !== null && (
+                    <p className={`text-xs ${budgetValid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                      {budgetValid
+                        ? `Up to ${vnd(budgetVnd)} a month (about ${usd(budgetVnd)})`
+                        : 'Enter an amount between 3 and 500 million.'}
+                    </p>
+                  )}
                 </div>
+
                 <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <Label htmlFor="pets" className="cursor-pointer">Traveling with pets?</Label>
-                    <p className="text-xs text-muted-foreground">We'll filter pet-friendly stock.</p>
-                  </div>
+                  <Label htmlFor="pets" className="cursor-pointer">Bringing a pet?</Label>
                   <Switch id="pets" checked={hasPets} onCheckedChange={setHasPets} />
                 </div>
-              </div>
-            )}
 
-            {step === 3 && (
-              <div className="space-y-4">
-                {user && prefilled && (name || email) && (
-                  <p className="text-xs text-muted-foreground rounded-md bg-secondary/40 px-3 py-2">
-                    We've filled this in from your Hausto profile — just confirm and adjust if needed.
-                  </p>
-                )}
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full name *</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+                  <Label htmlFor="notes">Anything specific? (optional)</Label>
+                  <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="High floor, river view, furnished…" rows={2} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
-                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone (optional)</Label>
-                  <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 0100" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Anything specific?</Label>
-                  <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="High floor, river view, furnished…" rows={3} />
-                </div>
-              </div>
-            )}
 
-            <div className="flex items-center justify-between pt-4">
-              {step > 1 ? (
-                <Button variant="ghost" onClick={() => setStep(step - 1)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" /> Back
-                </Button>
-              ) : <div />}
-              {step < 3 && (
-                <Button
-                  onClick={() => setStep(step + 1)}
-                  disabled={step === 1 ? !canNext1 : !canNext2}
-                >
+                <Button className="w-full" onClick={() => setStage('reply')} disabled={!canContinue}>
                   Next <ArrowRight className="h-4 w-4 ml-1" aria-hidden="true" />
                 </Button>
-              )}
-              {step === 3 && (
-                <Button onClick={submit} disabled={!canSubmit || submitting}>
-                  {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />}
-                  Request availability
-                </Button>
-              )}
-            </div>
+              </div>
+            )}
+
+            {stage === 'reply' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Your name</Label>
+                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Where should we reply?</Label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setChannel('WHATSAPP')}
+                      className={`rounded-lg border p-3 text-left transition ${channel === 'WHATSAPP' ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'}`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <MessageCircle className="h-4 w-4" aria-hidden="true" /> WhatsApp
+                        <span className="text-xs font-normal text-primary">Fastest</span>
+                      </span>
+                      <span className="block text-xs text-muted-foreground mt-1">
+                        A person replies within 24 hours, and we tell you when new listings here fit.
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChannel('EMAIL')}
+                      className={`rounded-lg border p-3 text-left transition ${channel === 'EMAIL' ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'}`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <Mail className="h-4 w-4" aria-hidden="true" /> Email
+                      </span>
+                      <span className="block text-xs text-muted-foreground mt-1">A person replies within 24 hours.</span>
+                    </button>
+                  </div>
+                </div>
+
+                {channel === 'EMAIL' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+                  </div>
+                )}
+
+                {error && <p className="text-sm text-destructive">{error}</p>}
+
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <Button variant="ghost" onClick={() => { setError(null); setStage('needs'); }}>
+                    <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" /> Back
+                  </Button>
+                  <Button onClick={submit} disabled={!canSubmit || submitting}>
+                    {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />}
+                    {channel === 'WHATSAPP' ? 'Continue on WhatsApp' : 'Send request'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </DialogContent>

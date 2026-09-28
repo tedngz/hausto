@@ -14,8 +14,9 @@ type Status = 'new' | 'contacted' | 'closed';
 interface MessageRow {
   id: string;
   direction: 'inbound' | 'outbound';
-  source: 'email' | 'dashboard' | 'system';
-  from_email: string;
+  source: 'email' | 'dashboard' | 'system' | 'whatsapp';
+  channel: 'EMAIL' | 'WHATSAPP';
+  from_email: string | null;
   subject: string | null;
   body: string;
   created_at: string;
@@ -26,12 +27,15 @@ interface InquiryRow {
   complex_id: string;
   user_id: string | null;
   full_name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   target_move_in_date: string;
   lease_duration_months: number;
-  budget_usd_min: number;
-  budget_usd_max: number;
+  budget_usd_min: number | null;
+  budget_usd_max: number | null;
+  budget_max_vnd: number | null;
+  channel: 'EMAIL' | 'WHATSAPP';
+  whatsapp_confirmed_at: string | null;
   bedrooms_needed: number;
   has_pets: boolean;
   additional_notes: string | null;
@@ -44,6 +48,25 @@ interface InquiryRow {
   created_at: string;
   complexes: { name: string; slug: string; district: string | null } | null;
 }
+
+const vnd = (dong: number) => `${Math.round(dong).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
+
+const budgetLabel = (row: InquiryRow) =>
+  row.budget_max_vnd != null
+    ? `up to ${vnd(row.budget_max_vnd)}/mo`
+    : row.budget_usd_min != null && row.budget_usd_max != null
+      ? `$${row.budget_usd_min.toLocaleString()} - $${row.budget_usd_max.toLocaleString()}/mo`
+      : 'no budget';
+
+/**
+ * When a WhatsApp request's free-form window shuts: 24 hours after the
+ * renter's last message. After that WhatsApp only takes approved templates, so
+ * a reply has to go by email - or wait for them to write again.
+ */
+const windowClosesAt = (row: InquiryRow): Date | null => {
+  const last = row.last_inbound_at ?? row.whatsapp_confirmed_at;
+  return last ? new Date(new Date(last).getTime() + 24 * 3600_000) : null;
+};
 
 const STATUS_LABELS: Record<Status, string> = {
   new: 'New',
@@ -64,7 +87,7 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('complex_inquiry_messages')
-        .select('id, direction, source, from_email, subject, body, created_at')
+        .select('id, direction, source, channel, from_email, subject, body, created_at')
         .eq('inquiry_id', inquiry.id)
         .order('created_at', { ascending: true });
       if (error) throw error;
@@ -73,18 +96,31 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
     refetchInterval: 30_000,
   });
 
+  // A WhatsApp request is answered on WhatsApp while its window is open; after
+  // that only by email, and only if we have one.
+  const whatsapp = inquiry.channel === 'WHATSAPP';
+  const closes = whatsapp ? windowClosesAt(inquiry) : null;
+  const windowOpen = !!closes && closes.getTime() > Date.now();
+  const via: 'whatsapp' | 'email' | null = !whatsapp ? 'email' : windowOpen ? 'whatsapp' : inquiry.email ? 'email' : null;
+
   const send = async () => {
     const body = draft.trim();
-    if (!body) return;
+    if (!body || !via) return;
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke('concierge-email-reply', {
-        body: { inquiryId: inquiry.id, body },
+        // The key makes a double click one message on WhatsApp.
+        body: { inquiryId: inquiry.id, body, via, key: crypto.randomUUID() },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        // A closed window or two unanswered messages come back as 409 with a
+        // sentence meant for the admin.
+        const detail = await (error as { context?: Response }).context?.json().catch(() => null);
+        throw new Error(detail?.message ?? error.message);
+      }
+      if (data?.error) throw new Error(data.message ?? data.error);
       setDraft('');
-      toast.success(`Sent to ${inquiry.email}`);
+      toast.success(via === 'whatsapp' ? `Sent to ${inquiry.full_name} on WhatsApp` : `Sent to ${inquiry.email}`);
       qc.invalidateQueries({ queryKey: ['complex-inquiry-messages', inquiry.id] });
       qc.invalidateQueries({ queryKey: ['complex-inquiries'] });
       qc.invalidateQueries({ queryKey: ['complex-inquiry-counts'] });
@@ -116,8 +152,11 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
             >
               <div className="flex flex-wrap items-center gap-2 mb-1">
                 <span className="text-xs font-medium">
-                  {m.direction === 'inbound' ? m.from_email : 'Hausto'}
+                  {m.direction === 'inbound' ? (m.from_email ?? inquiry.full_name) : 'Hausto'}
                 </span>
+                {m.channel === 'WHATSAPP' && (
+                  <Badge variant="outline" className="text-[10px] px-1 py-0">WhatsApp</Badge>
+                )}
                 <span className="text-xs text-muted-foreground">
                   {new Date(m.created_at).toLocaleString()}
                 </span>
@@ -138,17 +177,30 @@ const InquiryThread = ({ inquiry }: { inquiry: InquiryRow }) => {
 
       <Textarea
         rows={3}
-        placeholder={`Reply to ${inquiry.full_name} — sent from hello@hausto.com`}
+        placeholder={
+          via === 'whatsapp'
+            ? `Reply to ${inquiry.full_name} on WhatsApp - sent from the Hausto number`
+            : via === 'email'
+              ? `Reply to ${inquiry.full_name} - sent from hello@hausto.com`
+              : 'Their WhatsApp window has closed and they gave no email'
+        }
         value={draft}
+        disabled={!via}
         onChange={(e) => setDraft(e.target.value)}
       />
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          Copied to your Gmail. Their reply comes back here.
+          {via === 'whatsapp' && closes
+            ? `WhatsApp window open until ${closes.toLocaleString()}. One message with everything reads best.`
+            : whatsapp && via === 'email'
+              ? 'WhatsApp window closed - this goes by email instead.'
+              : whatsapp
+                ? 'It reopens when they write to us on WhatsApp.'
+                : 'Copied to your Gmail. Their reply comes back here.'}
         </p>
-        <Button size="sm" disabled={sending || !draft.trim()} onClick={send}>
+        <Button size="sm" disabled={sending || !draft.trim() || !via} onClick={send}>
           {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-          Send reply
+          {via === 'whatsapp' ? 'Send on WhatsApp' : 'Send reply'}
         </Button>
       </div>
     </div>
@@ -173,7 +225,10 @@ export const ConciergeRequestsPanel = () => {
           const { count } = await supabase
             .from('complex_inquiries')
             .select('id', { count: 'exact', head: true })
-            .eq('status', status);
+            .eq('status', status)
+            // A WhatsApp request whose code never arrived is an abandoned form:
+            // there is nobody to reply to, so it is not work.
+            .or('channel.eq.EMAIL,whatsapp_confirmed_at.not.is.null');
           return [status, count ?? 0] as const;
         }),
       );
@@ -189,6 +244,7 @@ export const ConciergeRequestsPanel = () => {
         .from('complex_inquiries')
         .select('*, complexes(name, slug, district)')
         .eq('status', tab)
+        .or('channel.eq.EMAIL,whatsapp_confirmed_at.not.is.null')
         .order('last_message_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(100);
@@ -306,24 +362,34 @@ export const ConciergeRequestsPanel = () => {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">{row.bedrooms_needed} BR</Badge>
-                      <Badge variant="outline">
-                        ${row.budget_usd_min.toLocaleString()}–${row.budget_usd_max.toLocaleString()}/mo
-                      </Badge>
+                      {row.channel === 'WHATSAPP' && <Badge variant="secondary">WhatsApp</Badge>}
+                      <Badge variant="outline">{row.bedrooms_needed >= 4 ? '4+' : row.bedrooms_needed} BR</Badge>
+                      <Badge variant="outline">{budgetLabel(row)}</Badge>
                       {row.has_pets && <Badge variant="outline">Pets</Badge>}
                       {!row.notified_at && <Badge variant="destructive">Not emailed</Badge>}
-                      {row.last_inbound_at && row.last_inbound_at > (row.created_at ?? '') && (
+                      {row.last_inbound_at &&
+                        row.last_inbound_at > (row.channel === 'WHATSAPP' ? row.whatsapp_confirmed_at ?? '' : row.created_at ?? '') && (
                         <Badge>Renter replied</Badge>
                       )}
+                      {row.channel === 'WHATSAPP' && (() => {
+                        const closes = windowClosesAt(row);
+                        if (!closes) return null;
+                        const hours = Math.floor((closes.getTime() - Date.now()) / 3600_000);
+                        return hours >= 0
+                          ? <Badge variant={hours < 4 ? 'destructive' : 'outline'}>Reply within {hours}h</Badge>
+                          : <Badge variant="outline">Window closed</Badge>;
+                      })()}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                     <div>
                       <p className="text-xs uppercase text-muted-foreground mb-1">Contact</p>
-                      <a href={`mailto:${row.email}`} className="text-primary inline-flex items-center gap-1 hover:underline break-all">
-                        <Mail className="h-3 w-3" /> {row.email}
-                      </a>
+                      {row.email && (
+                        <a href={`mailto:${row.email}`} className="text-primary inline-flex items-center gap-1 hover:underline break-all">
+                          <Mail className="h-3 w-3" /> {row.email}
+                        </a>
+                      )}
                       {row.phone && (
                         <a href={`tel:${row.phone}`} className="ml-3 text-primary inline-flex items-center gap-1 hover:underline">
                           <Phone className="h-3 w-3" /> {row.phone}
@@ -364,7 +430,7 @@ export const ConciergeRequestsPanel = () => {
                       onClick={() => setOpenThreadId(openThreadId === row.id ? null : row.id)}
                     >
                       <MessageSquare className="h-4 w-4 mr-1" />
-                      {openThreadId === row.id ? 'Hide conversation' : 'Reply by email'}
+                      {openThreadId === row.id ? 'Hide conversation' : row.channel === 'WHATSAPP' ? 'Reply on WhatsApp' : 'Reply by email'}
                     </Button>
                     <Button variant="ghost" size="sm" disabled={busyId === row.id} onClick={() => resendNotification(row)}>
                       Re-send email

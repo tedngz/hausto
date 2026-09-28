@@ -107,6 +107,13 @@ export type RequestState = typeof REQUEST_STATES[number];
 export const WATCH_STATUSES = ['PENDING', 'ACTIVE', 'CANCELLED'] as const;
 export type WatchStatus = typeof WATCH_STATUSES[number];
 
+/**
+ * Where a concierge availability request is answered
+ * (`complex_inquiries.channel`, SPEC §11).
+ */
+export const INQUIRY_CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
+export type InquiryChannel = typeof INQUIRY_CHANNELS[number];
+
 /** Why a listing was put in front of a renter unasked (`alert_items.source`). */
 export const ALERT_SOURCES = ['WATCH', 'DIGEST'] as const;
 export type AlertSource = typeof ALERT_SOURCES[number];

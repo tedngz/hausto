@@ -55,6 +55,27 @@ async function dispatchSearch(renterId: string, query: string, requestId?: strin
   }
 }
 
+/**
+ * Email the concierge about an availability request (notify-complex-inquiry).
+ *
+ * Fire and forget on failure, like the search: the message is stored and on
+ * the request's thread in Admin Tools either way, and a mail outage must not
+ * cost Meta's delivery batch.
+ */
+async function notifyConcierge(body: { inquiryId: string; event?: 'WHATSAPP_REPLY' }): Promise<void> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-complex-inquiry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) console.warn(`[whatsapp-webhook] concierge notice returned ${res.status}`);
+  } catch (e) {
+    console.warn('[whatsapp-webhook] concierge notice failed:', (e as Error).message);
+  }
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
 
@@ -118,6 +139,7 @@ Deno.serve(async (req) => {
         selection: outcome.selection,
         watch: outcome.watch,
         alertMessageId: outcome.alertMessageId,
+        inquiryId: outcome.inquiryId,
       });
 
       if (action.kind === 'NONE') {
@@ -136,6 +158,16 @@ Deno.serve(async (req) => {
         });
         if (result.error) console.warn(`[whatsapp-webhook] agent ${result.performed}: ${result.error}`);
         else console.log(`[whatsapp-webhook] agent ${result.performed}${result.ref ? ` -> ${result.ref}` : ''}`);
+      }
+
+      // The concierge hears about an availability request when it is
+      // confirmed - not at the form, since until the code arrives there is
+      // nobody to reply to - and about every WhatsApp reply on its thread.
+      // After the renter's own reply above, so a slow mail send never delays it.
+      if (outcome.watch?.kind === 'CONFIRMED' && outcome.watch.inquiry?.firstConfirm) {
+        await notifyConcierge({ inquiryId: outcome.watch.inquiry.id });
+      } else if (outcome.inquiryId) {
+        await notifyConcierge({ inquiryId: outcome.inquiryId, event: 'WHATSAPP_REPLY' });
       }
     } catch (e) {
       // One bad message must not cost us the rest of the batch, and must not
