@@ -86,8 +86,8 @@ export const ViewingRequestsPane = () => {
       <div className="py-10 text-center">
         <p className="text-sm text-muted-foreground">No viewing requests yet.</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Find places you like and hit <strong>Request viewing</strong> - we arrange
-          three to five in one trip.
+          Find places you like and hit <strong>Request viewing</strong> on each - we
+          fit them into one trip.
         </p>
       </div>
     );

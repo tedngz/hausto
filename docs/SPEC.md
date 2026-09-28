@@ -149,7 +149,8 @@ created_at      timestamptz default now()
 
 ### `request_items`
 
-One per shortlisted unit. 1-5 per request. Status is **derived**.
+One per requested unit. 1-5 per request, arriving together or one at a time
+as the renter joins places to it (below). Status is **derived**.
 
 ```
 id                   uuid pk
@@ -192,6 +193,34 @@ the single source for all of it):
   `viewing_listings_booked_since()` counts both request tables.
 - Once charged, everyone with the `ops` role is emailed the new request
   (`_shared/viewing/ops-alert.ts`, §4). Nothing is sent to the renter (§5).
+
+**One place at a time, one plan.** The renter modal asks for one listing, the
+one it was opened from. A renter who wants three seen requests from three
+cards, and the second and third **join the first request** rather than each
+opening their own - otherwise they would get three itineraries, three billed
+messages (§5) and no clash warning between viewings that were never in the
+same plan. `pickJoinable` in `intake.ts` decides which request is open to
+join:
+
+- its derived state is `SUBMITTED` or `CONTACTING` and nothing has been
+  delivered - once assembly starts, the renter has been told, or is about to be
+  told, the plan;
+- it has fewer than `MAX_ITEMS` places;
+- at least one of its windows is still at least `MIN_LEAD_DAYS` away, since the
+  new agent is asked about the request's windows, not new ones;
+- the most recent such request for the signed-in account (`renters.user_id`),
+  not counting opted-out numbers.
+
+A joining place takes the request's windows and WhatsApp thread, so the modal
+asks for neither. The renter can choose different times instead, which makes it
+a request of its own. `viewing-request-open` tells the modal which request it
+would join; `viewing-request-create` decides again at submit (with `joinRef`)
+and answers `409 join_closed` if that request has moved on, rather than
+quietly opening a different one. A join writes only `ITEM_ADDED` (and
+`REALTOR_RESOLVED` where known) through the same `itemEvents` builder a new
+request uses, so the planner, console and itinerary cannot tell the
+difference. It charges one credit per place and undoes by deleting the new
+items, whose events cascade with them. The ops alert says "1 more place added".
 
 ### `events`
 
@@ -314,6 +343,11 @@ ships with substitutes, never on its own.
 A request moves to `ASSEMBLING` when every item has left `PENDING`/`CONTACTED`,
 or when the assembly deadline fires - whichever comes first. Ops can force it.
 
+An `ITEM_ADDED` that arrives while a request is `ASSEMBLING` (a place joining
+it, §1, raced against an operator assembling) moves it back to `CONTACTING`:
+the order on file no longer covers every place. From `DELIVERED` on, it moves
+nothing - intake never joins those.
+
 ---
 
 ## §3 The event log and the reducer
@@ -328,7 +362,7 @@ Event types:
 | Type | Level | Payload |
 |---|---|---|
 | `REQUEST_SUBMITTED` | request | `{availability}` |
-| `ITEM_ADDED` | item | `{listing_id, price_vnd_at_request}` |
+| `ITEM_ADDED` | item | `{listing_id, price_vnd_at_request}` - at intake, or later when a place joins an open request (§1). Moves `ASSEMBLING` back to `CONTACTING` (§2) |
 | `REALTOR_RESOLVED` | item | `{realtor_id, method}` - `method` ∈ `AGENT_ID`, `PHONE`, `MANUAL` |
 | `REALTOR_CONTACTED` | item | `{channel, draft_id}` - `draft_id` is the `realtor_messages` row sent, or null |
 | `OUTCOME_RECORDED` | item | `{outcome, slots[], actual_price_vnd, note, reply_message_id?, suggested?}` - see §4 |

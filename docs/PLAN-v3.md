@@ -342,7 +342,10 @@ before `vibe` was removed.
 > into one "Request viewing" button opening `RequestViewingModal`; intake
 > takes 1-5 listings, requires a signed-in user, spends one viewing credit per
 > listing, and never offers today or tomorrow. The phone number stays the
-> identity for everything inbound. See CLAUDE.md invariants 7-8.
+> identity for everything inbound. See CLAUDE.md invariants 7-8. Since then the
+> modal asks for the one place it was opened from, and a place requested while
+> an earlier request is still being arranged joins it (`viewing-request-open`,
+> `joinRef` on `viewing-request-create`, SPEC §1).
 
 Shortlist 3-5 units in the existing SPA. Availability windows as chips. Phone
 entry. Confirmation page with the `wa.me` deep link carrying the request ref.

@@ -21,13 +21,16 @@ import {
   validateShortlist,
   screenCandidates,
   intakeEvents,
+  itemEvents,
   buildDeepLink,
   hcmcDate,
   toE164,
   MIN_ITEMS,
+  MAX_ITEMS,
   type ShortlistCandidate,
 } from '../_shared/viewing/intake.ts';
-import { renderIntakeAlert, sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
+import { renderIntakeAlert, sendIntakeAlert, type IntakeAlert } from '../_shared/viewing/ops-alert.ts';
+import { findJoinableRequest } from '../_shared/viewing/open-request.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,6 +58,164 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+
+// deno-lint-ignore no-explicit-any
+type Supa = any;
+
+const creditsMessage = (n: number) =>
+  `This request covers ${n} place${n === 1 ? '' : 's'} and needs ${n} viewing credit${n === 1 ? '' : 's'}.`;
+
+/**
+ * Tell the operators, after the charge and without waiting on it: the renter
+ * gets their answer now, and an email that fails must not unmake a request
+ * they have paid for. waitUntil keeps the isolate alive for the send.
+ */
+function alertOps(db: Supa, alert: IntakeAlert) {
+  const sent = sendIntakeAlert(db, alert, Deno.env.get('RESEND_API_KEY')).then(r => {
+    if (r.skipped) console.warn(`[viewing-request-create] ops alert skipped: ${r.skipped}`);
+  });
+  (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(sent);
+}
+
+/**
+ * Add places to the renter's open request rather than opening another
+ * (intake.ts `pickJoinable` says why).
+ *
+ * Decided here again rather than trusted from the modal: the request may have
+ * moved on to assembly since the modal asked `viewing-request-open`. If it has,
+ * the answer is a 409 the modal turns into "pick your times", not a quiet new
+ * request - the renter was shown "adding to HV-4KX2" and should not be handed
+ * a different ref without being asked for the times that go with it.
+ *
+ * Same write order as a new request, for the same reasons: rows, then the log,
+ * then the charge last; undo on failure. Undo here is deleting the new items,
+ * which takes their events with them (ON DELETE CASCADE) and leaves the rest of
+ * the request exactly as it was.
+ */
+async function joinOpenRequest(
+  db: Supa,
+  userId: string,
+  joinRef: string,
+  listingIds: string[],
+): Promise<Response> {
+  const open = await findJoinableRequest(db, userId, hcmcDate(new Date())).catch((e: unknown) => {
+    console.error('[viewing-request-create] open request lookup failed:', e);
+    return undefined;
+  });
+  if (open === undefined) return json({ error: 'lookup_failed' }, 500);
+  if (!open || open.ref !== joinRef) {
+    return json({
+      error: 'join_closed',
+      message: `We are already putting ${joinRef} together, so this place needs its own request. Pick your times below.`,
+    }, 409);
+  }
+
+  const fresh = listingIds.filter(id => !open.listingIds.includes(id));
+  if (fresh.length === 0) {
+    return json({
+      error: 'already_requested',
+      message: `This place is already in your request ${open.ref}.`,
+      ref: open.ref,
+    }, 409);
+  }
+  if (open.listingIds.length + fresh.length > MAX_ITEMS) {
+    return json({
+      error: 'request_full',
+      message: `${open.ref} already has ${open.listingIds.length} places, and one day of viewings holds ${MAX_ITEMS}.`,
+    }, 409);
+  }
+
+  const { data: found, error: findErr } = await db
+    .from('external_properties')
+    .select(CANDIDATE_COLUMNS)
+    .in('id', fresh);
+  if (findErr) {
+    console.error('[viewing-request-create] listing lookup failed:', findErr);
+    return json({ error: 'lookup_failed' }, 500);
+  }
+  const { eligible, rejected } = screenCandidates(fresh, (found ?? []) as ShortlistCandidate[]);
+  if (eligible.length === 0) {
+    return json({
+      error: 'shortlist_too_short',
+      message: rejected[0]?.reason ?? 'This place can no longer be requested.',
+      rejected,
+    }, 422);
+  }
+
+  const { data: affordable, error: quotaErr } = await db.rpc('can_create_fast_track_request', {
+    _user_id: userId,
+    _needed: eligible.length,
+  });
+  if (quotaErr) {
+    console.error('[viewing-request-create] quota check failed:', quotaErr);
+    return json({ error: 'quota_check_failed' }, 500);
+  }
+  if (!affordable) {
+    return json({ error: 'insufficient_credits', message: creditsMessage(eligible.length), needed: eligible.length }, 402);
+  }
+
+  const { data: items, error: itemsErr } = await db
+    .from('request_items')
+    .insert(eligible.map((c, i) => ({
+      request_id: open.requestId,
+      listing_id: c.id,
+      realtor_id: c.realtor_id,
+      price_vnd_at_request: c.price_vnd,
+      sort_order: open.listingIds.length + i,
+    })))
+    .select('id, listing_id, realtor_id, price_vnd_at_request');
+  if (itemsErr || !items) {
+    console.error('[viewing-request-create] join item insert failed:', itemsErr);
+    return json({ error: 'items_failed' }, 500);
+  }
+  const undo = () => db.from('request_items').delete().in('id', items.map((i: { id: string }) => i.id));
+
+  const { error: eventsErr } = await db.from('events').insert(itemEvents({
+    requestId: open.requestId,
+    items: items.map((i: { id: string; listing_id: string; price_vnd_at_request: number; realtor_id: string | null }) => ({
+      itemId: i.id,
+      listingId: i.listing_id,
+      priceVndAtRequest: i.price_vnd_at_request,
+      realtorId: i.realtor_id,
+    })),
+  }));
+  if (eventsErr) {
+    console.error('[viewing-request-create] join event insert failed:', eventsErr);
+    await undo();
+    return json({ error: 'events_failed' }, 500);
+  }
+
+  const { error: chargeErr } = await db.rpc('consume_viewing_credits', {
+    _user_id: userId,
+    _needed: items.length,
+    _request_id: open.requestId,
+  });
+  if (chargeErr) {
+    console.error('[viewing-request-create] join charge failed:', chargeErr);
+    await undo();
+    return json({ error: 'insufficient_credits', message: creditsMessage(items.length), needed: items.length }, 402);
+  }
+
+  const placeCount = open.listingIds.length + items.length;
+  alertOps(db, renderIntakeAlert({
+    ref: open.ref,
+    placeCount,
+    added: items.length,
+    availability: open.availability,
+    createdAt: new Date(),
+  }));
+
+  return json({
+    success: true,
+    joined: true,
+    ref: open.ref,
+    requestId: open.requestId,
+    waLink: buildDeepLink(BUSINESS_PHONE, open.ref),
+    placeCount,
+    accepted: items.map((i: { listing_id: string }) => i.listing_id),
+    rejected,
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -85,6 +246,17 @@ Deno.serve(async (req) => {
     body = await req.json();
   } catch {
     return json({ error: 'Invalid JSON' }, 400);
+  }
+
+  // ── Joining an open request ───────────────────────────────────────────────
+  // The modal sends `joinRef` when it showed the renter "adding to HV-4KX2".
+  // It asks for neither a number nor times then: both are the request's own.
+  if (typeof body.joinRef === 'string' && body.joinRef.trim()) {
+    const places = validateShortlist(body.listingIds);
+    if (!places.ok) return json({ error: 'invalid_shortlist', message: places.error }, 400);
+    return await joinOpenRequest(
+      createClient(SUPABASE_URL, SERVICE_ROLE), user.id, body.joinRef.trim(), places.value!,
+    );
   }
 
   const phone = toE164(String(body.phone ?? ''));
@@ -120,7 +292,10 @@ Deno.serve(async (req) => {
     // through, so they can swap them rather than guess.
     return json({
       error: 'shortlist_too_short',
-      message: `Only ${eligible.length} of your ${shortlist.value!.length} listings can still be requested. Pick at least ${MIN_ITEMS}.`,
+      // One place - the modal's only shape now - is better told why.
+      message: shortlist.value!.length === 1 && rejected[0]
+        ? rejected[0].reason
+        : `Only ${eligible.length} of your ${shortlist.value!.length} listings can still be requested. Pick at least ${MIN_ITEMS}.`,
       rejected,
     }, 422);
   }
@@ -140,7 +315,7 @@ Deno.serve(async (req) => {
   if (!affordable) {
     return json({
       error: 'insufficient_credits',
-      message: `This request covers ${eligible.length} place${eligible.length === 1 ? '' : 's'} and needs ${eligible.length} viewing credit${eligible.length === 1 ? '' : 's'}.`,
+      message: creditsMessage(eligible.length),
       needed: eligible.length,
     }, 402);
   }
@@ -256,27 +431,17 @@ Deno.serve(async (req) => {
     await db.from('viewing_requests').delete().eq('id', request.id);
     return json({
       error: 'insufficient_credits',
-      message: `This request covers ${items.length} place${items.length === 1 ? '' : 's'} and needs ${items.length} viewing credit${items.length === 1 ? '' : 's'}.`,
+      message: creditsMessage(items.length),
       needed: items.length,
     }, 402);
   }
 
-  // Tell the operators, after the charge and without waiting on it: the renter
-  // gets their answer now, and an email that fails must not unmake a request
-  // they have paid for. waitUntil keeps the isolate alive for the send.
-  const alert = sendIntakeAlert(
-    db,
-    renderIntakeAlert({
-      ref: request.ref,
-      placeCount: items.length,
-      availability: availability.value ?? [],
-      createdAt: new Date(),
-    }),
-    Deno.env.get('RESEND_API_KEY'),
-  ).then(r => {
-    if (r.skipped) console.warn(`[viewing-request-create] ops alert skipped: ${r.skipped}`);
-  });
-  (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(alert);
+  alertOps(db, renderIntakeAlert({
+    ref: request.ref,
+    placeCount: items.length,
+    availability: availability.value ?? [],
+    createdAt: new Date(),
+  }));
 
   // No message is sent to the renter here, and that is deliberate. There is no
   // service window until the renter messages us first. The deep link is the
