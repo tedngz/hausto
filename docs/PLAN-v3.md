@@ -11,6 +11,32 @@ intake, then the ops console - survives. The sequencing does not.
 
 ---
 
+## Where it stands, 2026-09-28
+
+Read from production and the repo, not remembered. The rest of this document is
+the plan as written on 2026-09-10, with status notes added per milestone.
+
+**The software milestones are built and live; supply and realtor contacts are
+not at their bars.** The code path S3-S6 describes runs in production, on the
+real WhatsApp number since 2026-09-18, and the AI operator (SPEC §10), which
+this plan did not foresee, now does much of the operator's work through a Zalo
+bridge. What is short is exactly what this plan said would be short: listings
+and dialable brokers.
+
+| Milestone | State | Against its "done when" |
+|---|---|---|
+| S1 supply | Retention built, depth not | 180 active (753 total) against an 800 gate. One new row across all three sources in the last 24 hours; housingsgn's newest is from 2026-09-12. The resurrection sweep, the 20% single-reason ceiling, `delisted_at` and `crawl_runs` telemetry are built. `auto-crawl-v2` is still scheduled; a Supabase support ticket to remove it was filed on 2026-09-28 (item 2). No new sources. |
+| S2 realtor identity | Scaffolding done, acquisition short | `realtors` has 34 rows; 84 of 180 active listings resolve to one, 83 have a dialable number (46%, bar 60%). `extract-phone` runs hourly. `source_agent_id` is captured on nhatot only (15 of 40 active), and `realtor_identities` has no rows, so resolution by agent id has never matched. |
+| S3 normalization | Done | Canonical columns populated; 157 of 180 active rows shortlistable. `vibe` is out of the response, the style filter reads `styles`, the `$730` rule is asserted in CI, and the title/description price cross-check runs every 30 minutes (#117, #118). |
+| S4 intake + handshake | Done, and changed | Intake is `RequestViewingModal`: one button per card, a signed-in user, one credit per listing, 1-5 listings, no today or tomorrow (CLAUDE.md invariants 7-8). The `wa.me` handshake is as planned. WhatsApp is on the Cloud API. |
+| S5 ops console | Done | At https://hausto-ops.vercel.app, deployed on merge. Paste-parse is built (`ops-parse-reply`, #108). Its ≥80%-on-30-replies bar is **unmeasured**: no broker reply has been recorded yet. |
+| S6 itinerary + delivery | Done | Itinerary with clash warnings, one-message delivery, rules-based intent, reminders and the silence-clock property test landed in #92; substitutes and the agent followed (#94), and all five templates are approved (#101). |
+
+Live traffic so far is one viewing request. The number to watch (below) has no
+denominator yet.
+
+---
+
 ## Audit, re-run against the database
 
 All figures from `public.external_properties` on 2026-09-10.
@@ -178,6 +204,16 @@ Retention before acquisition. In order:
    100% of candidates no longer reports success.
 2. **Delete one of the two crawl crons.** `auto-crawl-v2` and `auto-crawl-v3` run
    the same function every 30 minutes with different auth. Keep v3, drop v2.
+   Still open on 2026-09-28: `auto-crawl-v2` (jobid 7) is owned by
+   `supabase_read_only_user`, and nothing available to us can remove it -
+   `postgres` is not a superuser and cannot `SET ROLE` to that owner (CLAUDE.md,
+   "A migration cannot touch a cron job owned by another role"). A Supabase
+   support ticket asking them to run `SELECT cron.unschedule(7)` as
+   `supabase_admin` was filed on 2026-09-28. It is harmless meanwhile: every run
+   fails inside the database on `permission denied for function http_post`
+   (48 of 48 in the preceding 24 hours), so nothing reaches `scheduled-crawl`.
+   Done when `SELECT jobid, jobname FROM cron.job WHERE jobname LIKE
+   'auto-crawl%'` returns only jobid 13, `auto-crawl-v3`.
 3. **Recover the switched-off rows.** Cause found and fixed in #72:
    backfill-image-highlights hides a listing on a failed highlight pass and
    enqueues the retry fire-and-forget, swallowing the insert error, so a failed
@@ -195,9 +231,13 @@ Retention before acquisition. In order:
    Alarm when a single verification reason accounts for more than 20% of a run's
    outcomes - that is the check that would have caught this in August, and it is
    also what would catch a genuine block if the gateway does start refusing us.
+   Built: `verify-external-listings` re-probes 20 dead nhatot rows per run
+   (`resurrectNhatotAds`) and enforces the 20% ceiling.
 5. **Add `delisted_at`,** set only when a re-verification confirms the unit is
    gone or the price moved. Decay listings out of search after 21 days without a
    price-confirming re-verification. Keep `deactivated_at` for URL-level death.
+   Built, with one correction recorded in SPEC §0: a moved price re-prices the
+   listing and stamps `price_confirmed_at`; it does not delist it.
 6. **Then, and only then, add sources.** 3-5 expat-facing broker sites in the
    housingsgn mould, then the two or three HCMC expat rental Facebook groups that
    matter - HCMC first because that is where the demand is, not because the other
@@ -298,6 +338,12 @@ before `vibe` was removed.
 
 ### S4 - Request intake and the WhatsApp handshake (3 days)
 
+> Built, then changed (#96 and after): the shortlist and "Book viewing" merged
+> into one "Request viewing" button opening `RequestViewingModal`; intake
+> takes 1-5 listings, requires a signed-in user, spends one viewing credit per
+> listing, and never offers today or tomorrow. The phone number stays the
+> identity for everything inbound. See CLAUDE.md invariants 7-8.
+
 Shortlist 3-5 units in the existing SPA. Availability windows as chips. Phone
 entry. Confirmation page with the `wa.me` deep link carrying the request ref.
 
@@ -377,6 +423,15 @@ reply per inbound message.
 
 ## Realtor-side automation: what is and isn't reachable
 
+> **Superseded on 2026-09-27.** The owner chose a Zalo bridge - a daemon on an
+> always-on device driving the business's Zalo account through zca-js
+> (`bridge/`) - knowing it automates a personal account against Zalo's terms.
+> It skipped the Chrome-extension step below and went straight to sending
+> without a click, behind the AI operator's locks. What was built instead, and
+> the limits it runs under, is SPEC §10 and `bridge/README.md`. The table and
+> sequence below are the reasoning as it stood on 2026-09-10; the risk they
+> name is the one that was accepted.
+
 | Capability | Automatable now? | Notes |
 |---|---|---|
 | Vietnamese draft generation | Yes, today | Per-listing, cached at request time |
@@ -404,10 +459,16 @@ from those threads is what the drafts and the parser get trained against.
 Already out: route optimization, calendar sync, realtor accounts, i18n framework.
 
 Newly out for this phase:
-- Renter accounts beyond a phone-keyed session.
-- Any Zalo integration.
-- Geocoding the index. Zero active rows have coordinates and the viewing flow
-  does not need them. Do not let `batch-geocode-properties` become S1.
+- Renter accounts beyond a phone-keyed session. *Changed:* intake now requires
+  Supabase sign-in, because a request spends viewing credits and credits belong
+  to an account. `renters.user_id` links the two and is nullable; the phone is
+  still the identity for everything inbound.
+- Any Zalo integration. *Changed 2026-09-27:* the Zalo bridge is the one
+  exception (see above). Zalo OA/ZNS stays out - it needs a Vietnam-registered
+  entity.
+- Geocoding the index. Zero active rows had coordinates (17 of 180 do on
+  2026-09-28) and the viewing flow does not need them. Do not let
+  `batch-geocode-properties` become S1.
 - A `NEEDS_REVIEW` unit-clustering console. Extend `canonical_group_id` and
   `listing_groups` instead of building a review queue.
 - Metrics dashboard. Emit the events; read them with SQL for now.
@@ -434,6 +495,11 @@ the recovered index while new sources are still landing.
 Launch is gated on Meta Business verification and on having a Vietnamese-speaking
 operator who has already run 10 requests by hand. Start both today; neither is
 code.
+
+As of 2026-09-28 the first gate is passed - the number is live on the Cloud API
+with all five templates approved. The second is not: one viewing request has
+been filed, and the AI operator's stage 1 record, which was meant to be built
+from those hand-run requests, has no decisions in it.
 
 ## The number to watch
 

@@ -14,12 +14,18 @@ Supabase project ref: `gbgrwjdmytaksrztcyzs`.
 ## The viewing-coordination MVP
 
 A renter shortlists 1-5 crawled rental listings in Ho Chi Minh City and requests
-viewings. A human operator working Zalo confirms availability with each realtor.
-The system assembles a viewing itinerary and delivers it to the renter over
-WhatsApp. Renter confirms with one tap.
+viewings. An operator confirms availability with each realtor over Zalo - a
+person working the ops console, and increasingly the AI operator (SPEC §10),
+which proposes every step and may take some alone. The system assembles a
+viewing itinerary and delivers it to the renter over WhatsApp. Renter confirms
+with one tap.
 
 The renter never talks to a realtor. The realtor never sees the renter's contact
 details. Everything crosses through us.
+
+All of it is live: WhatsApp on the Cloud API since 2026-09-18, the ops console
+at hausto-ops.vercel.app, and the Zalo bridge since 2026-09-27. PLAN-v3 opens
+with where each milestone stands.
 
 ### Build on what exists, do not rebuild
 
@@ -40,8 +46,9 @@ a new ORM. Everything below is additive.
   `ops` role and RLS. Keep it out of the renter SPA - different auth surface,
   different deploy cadence, and it should stay ugly and fast.
 - `public-property-search` is a stable contract. It serves AI crawlers
-  (llms.txt/AEO) and will serve the WhatsApp agent. Extend it additively; never
-  break its response shape.
+  (llms.txt/AEO) and the WhatsApp agent's follow-up search
+  (`viewing-agent-search`). Extend it additively; never break its response
+  shape.
 
 ### Non-negotiable invariants
 
@@ -93,22 +100,36 @@ and outcomes are the seven fixed actions in the ops console.
 feeding it `viewing_requests` would put a renter's identity in front of an
 agent. That is invariant 4, and it is the whole product.
 
+**10. The AI operator has no write path of its own.**
+Everything it does is a call in `_shared/viewing/ops-actions.ts`
+(`performOpsAction`), the same code the console's buttons reach through
+`ops-record-outcome`, stamped `AGENT:<version>` instead of `OPS:<uuid>`. So
+invariants 1-4 bind it exactly as they bind a person. Anything it does alone
+passes three locks in `_shared/viewing/autonomy.ts` - the
+`AI_OPERATOR_AUTONOMY` secret, the console's pause, and a gate measured from
+people's decisions - and anything that messages an agent opens only while
+`REALTOR_CHANNEL=bridge`. Do not add a second implementation of an action for
+it, and do not add an action to `AUTONOMOUS_ACTIONS` without its own gate.
+
 ### The WhatsApp adapter
 
-Meta Business verification, phone number provisioning and template approval are
-human-blocked tasks that will not be done when you start. Do not wait on them.
-
-Build `lib/whatsapp/adapter.ts` exporting a `WhatsAppAdapter` interface with two
-implementations:
+`supabase/functions/_shared/whatsapp/adapter.ts` exports a `WhatsAppAdapter`
+interface with two implementations:
 
 - `MockAdapter` - writes to `messages`, renders in `/dev/phone`, a fake WhatsApp
   thread UI. Inbound simulated by a text box on that page. The default in dev and
   in all tests.
 - `CloudApiAdapter` - Meta Graph API. Enabled by `WHATSAPP_MODE=cloud`.
 
-Every milestone through S6 must be fully demoable on `MockAdapter`. If a
-milestone's acceptance criteria cannot be met without real Meta credentials, the
-milestone is wrongly scoped - say so rather than stubbing around it.
+Production runs `CloudApiAdapter`: Meta verification, the number and all five
+templates were done by 2026-09-18 (`docs/whatsapp-go-live.md`). That makes
+`/dev/phone` unavailable in production, and every change to renter-facing copy
+reaches real people on merge. The rules stay in `_shared/whatsapp/send.ts`, so
+they do not depend on the transport.
+
+New work must still be fully demoable on `MockAdapter`. If a change's
+acceptance criteria cannot be met without real Meta credentials, it is wrongly
+scoped - say so rather than stubbing around it.
 
 ### Message-window rules the code must respect
 
@@ -118,7 +139,8 @@ The Cloud API 24-hour customer service window is a real constraint, not a detail
 - `sendFreeForm()` throws if the window is closed. It does not silently fall
   back.
 - Re-opening a closed window requires `sendTemplate()`, which only accepts
-  template names from the approved registry in `lib/whatsapp/templates.ts`.
+  template names from the approved registry in `_shared/whatsapp/templates.ts`,
+  and only while Meta's live status (synced hourly) still says `APPROVED`.
 - From 2026-10-01 Meta bills service and utility messages sent inside the window.
   Consolidate: one message carrying a full itinerary, not a sequence of turns.
   Any code path that sends 3+ messages in a row to the same renter is a bug.
@@ -145,8 +167,9 @@ Do not build these even if they seem natural:
   on. `renters.user_id` links the two and is nullable - a renter who arrived
   over WhatsApp and never signed up is still a renter.
 - i18n framework. Renter UI is English only. Vietnamese strings are data, not UI.
-- Geocoding. Zero active listings have coordinates and the viewing flow does not
-  need them.
+- Geocoding. Few active listings have coordinates (17 of 180 on 2026-09-28) and
+  the viewing flow does not need them; district-clash warnings run off
+  `district_code`.
 
 **Payments are not on this list.** They are live and shipping - see the Payments
 section below. The rule is: build no new payment surface for the viewing flow,
@@ -164,8 +187,10 @@ coordinator's day.
 - Phone numbers stored E.164 (`+84...`). Normalize at every boundary; the crawler
   will hand you `0901234567`, `84901234567`, and `+84 90 123 45 67` for the same
   human.
-- Enum values SCREAMING_SNAKE in the DB, mirrored as TS union types generated
-  from a single source in `lib/domain/enums.ts`.
+- Enum values SCREAMING_SNAKE in the DB, mirrored as TS union types derived
+  from a single source: the `as const` arrays in
+  `supabase/functions/_shared/viewing-domain.ts`, beside the reducer. There is
+  no `lib/` directory.
 - Use `-` rather than an em dash in anything a user reads.
 
 ### Definition of done for any MVP task
@@ -256,12 +281,19 @@ ERROR: could not find valid entry for job 'auto-crawl-v2' (SQLSTATE XX000)
 ```
 
 Deleting the row directly is no better - `cron.job` is owned by `supabase_admin`
-and `postgres` has no `DELETE` on it. Check the owner before writing the
-migration, and if it is not `postgres`, unschedule from the dashboard instead:
+and `postgres` has no `DELETE` on it. Nor can you borrow the owner: `postgres`
+is not a superuser and cannot `SET ROLE` to another owner such as
+`supabase_read_only_user`, so the SQL Editor fails the same way. Check the
+owner before writing the migration:
 
 ```sh
 echo "SELECT jobid, jobname, username FROM cron.job ORDER BY jobname;" | bash scripts/supabase-sql.sh
 ```
+
+If it is not `postgres`, try the dashboard's Cron page, and if that refuses
+too, only Supabase support can remove it: ask them to run
+`SELECT cron.unschedule(<jobid>);` as `supabase_admin`. That is where
+`auto-crawl-v2` (jobid 7) stands - see PLAN-v3 S1 item 2.
 
 A failing statement aborts the whole push, so **the migrations queued behind it
 never run** - and they are not recorded, so the next push retries them. Wrap
@@ -283,6 +315,10 @@ Three things it does not do:
 - **It never deletes.** Removing a function's directory leaves the deployed
   copy live and callable. Retiring one needs
   `npx supabase functions delete <slug> --project-ref gbgrwjdmytaksrztcyzs`.
+  Since #104 the run fails, naming it, while any deployed function has no
+  directory in `supabase/functions/` - so the next deploy after a removal goes
+  red until the delete is done. A failed deploy is retried once per function
+  (#103).
 - **It does not add config.** A new function needs a `supabase/config.toml`
   entry. Anything a third party calls (a payment webhook, say) needs
   `verify_jwt = false`, or the request is rejected before it reaches the code.
@@ -292,6 +328,20 @@ Three things it does not do:
 Edge functions are Deno and are not covered by `tsconfig.app.json`, so
 `tsc --noEmit` says nothing about them. CI catches syntax errors only when the
 deploy bundles them, which is after merge.
+
+## The other two deploy targets
+
+- **The ops console** deploys to Vercel (`hausto-ops`, served at
+  https://hausto-ops.vercel.app) through `.github/workflows/deploy-ops.yml`, on
+  merge to `main` when `ops/` or `supabase/functions/_shared/` changes - the
+  console imports the reducer from there. It needs a `VERCEL_TOKEN` repository
+  secret and skips with a notice without one. See `ops/README.md`.
+- **The Zalo bridge** is not deployed by CI at all. It runs on a VPS and is
+  updated by hand with `bash bridge/deploy/deploy.sh`, which replaces the code
+  and keeps the Zalo login and the send journal. See `bridge/README.md`. The
+  edge-function half of it (`zalo-bridge`) deploys like any other function.
+
+The renter SPA publishes from Lovable, not from a workflow.
 
 ## Secrets: set them in the dashboard
 

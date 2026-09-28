@@ -1,17 +1,20 @@
 # SPEC - viewing coordination domain model
 
-Status: draft, authoritative. Written 2026-09-10 alongside `docs/PLAN-v3.md`.
+Status: authoritative, and built. Written 2026-09-10 alongside
+`docs/PLAN-v3.md`; last brought up to date with the code on 2026-09-28.
 
-A renter shortlists 1-5 crawled rentals and requests viewings. A human
-operator working Zalo confirms availability with each realtor. The system
-assembles an itinerary and delivers it over WhatsApp. The renter confirms with
-one tap.
+A renter shortlists 1-5 crawled rentals and requests viewings. An operator -
+a person, and since stage 2 of §10 an AI operator acting within locks -
+confirms availability with each realtor over Zalo. The system assembles an
+itinerary and delivers it over WhatsApp. The renter confirms with one tap.
 
 The renter never talks to a realtor. The realtor never sees the renter's contact
 details. Everything crosses through us.
 
-Nothing in this document exists yet. Everything in §0 is additive to the live
-schema; §1 onward is new.
+Everything here is live in production: WhatsApp has run on the Cloud API since
+2026-09-18 (`docs/whatsapp-go-live.md`), and the Zalo bridge of §10 on the
+business's account since 2026-09-27. Everything in §0 is additive to the live
+listing schema; §1 onward is new tables.
 
 ---
 
@@ -33,18 +36,24 @@ Do not restructure it. Add only:
 | `realtor_id` | `uuid` | Resolved broker, nullable. Set at ingest in the order agent identity → phone → NULL. A NULL here is normal and not a defect: a listing needs a contact only once a renter shortlists it. |
 | `delisted_at` | `timestamptz` | Distinct from `deactivated_at`. Set when a re-verification **confirms** the unit is gone - the listing's own source saying so, twice - or when it goes 21 days without a price confirmation. A URL that merely failed to resolve sets `deactivated_at` only; on nhatot that is routinely wrong, since expired ads come back under the same id when the seller reposts. |
 | `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
+| `contact_phone_e164` | `text` | Generated: `normalize_vn_phone(contact_phone)`, stored. NULL for a masked value (`0775 924 ***`) rather than a number nobody can ring, so it is what "has a dialable contact" means. `extract-phone` works through active rows where it is NULL. |
 
 `price_vnd`, `bedrooms`, `area_sqm` and `district_code` are NOT NULL for any row
 eligible for shortlisting. Enforce with a partial index, not application code.
 
- in the display turns that into 312
+**`price` carries two currencies and only its magnitude says which.** housingsgn
+quotes USD, and the display is not a reliable tell - a live row reads
+`price = 12500000, price_display = '$500/month'`, already converted with the
+display never updated. Converting on a `$` in the display turns that into 312
 billion dong. The threshold sits in the gap between the currencies, not at the
 edge of one: below 100,000 is USD, at or above it is dong. A rent of
 `2800000` ('2,8 triệu/tháng') is real and cheap, and any threshold near 3
 million misreads it.
 
-**Coverage is partial and that is expected.** On the 145 active rows: bedrooms
-144, price 145, district 129, area 124 - **107 shortlistable on all four**. The
+**Coverage is partial and that is expected.** On the 145 active rows when this
+was first measured: bedrooms 144, price 145, district 129, area 124 - **107
+shortlistable on all four**. On 2026-09-28 it was 157 of 180 active rows,
+counting the `price_confidence` bar as well. The
 losses are listings whose source never published an area, and addresses that
 degrade to a bare 'Hồ Chí Minh'. A row missing any of the four is searchable
 but not shortlistable, which is the point of the partial index rather than a
@@ -57,12 +66,13 @@ updates `price`/`price_display` and stamps `price_confirmed_at`. What must never
 happen is ops quoting a figure the broker has already changed - the mismatch
 `price_vnd_at_request` (§1) exists to catch, and should not have to.
 
-Also drop from the `public-property-search` response: `vibe`. It is non-null on
-28 of 115 active rows and carries no signal `style_tags` does not. **The style
-filter at `public-property-search/index.ts:116` and `:191` reads `vibe` via
-`ilike` - re-point both at `vibe_analysis->styles` before removing the field.**
-All 115 active rows have a populated `styles` array, so the filter survives the
-move. Keep `style_tags`, `image_highlights`, `amenities`.
+`vibe` is gone from the `public-property-search` response (#117). It was
+non-null on 28 of 115 active rows and carried no signal `style_tags` does not.
+The style filter used to read it via `ilike`; it now reads
+`vibe_analysis->>styles` (a case-insensitive substring match, as before), and
+budgets and the emitted `price_vnd` read the canonical column rather than
+`price`. `style_tags`, `image_highlights` and `amenities` stay. The response
+shape is otherwise unchanged - it is a stable contract.
 
 ---
 
@@ -105,12 +115,25 @@ resolution enriches the table permanently. Do not chase full coverage.
 
 ```
 id                        uuid pk
-phone_e164                text unique not null
+phone_e164                text unique not null      -- CHECK '^\+84[0-9]{9}$'
 display_name              text
+user_id                   uuid references auth.users -- nullable, unique when set
 service_window_expires_at timestamptz    -- see §5
 opted_out_at              timestamptz
+digest_opt_in_at          timestamptz    -- weekly digest consent, default NULL
 created_at                timestamptz default now()
+updated_at                timestamptz default now()
 ```
+
+The phone is the identity for everything inbound, because a WhatsApp message
+arrives with nothing else to key on. `user_id` links it to the Supabase account
+that filed a request (intake requires one, since a request spends that
+account's viewing credits); RLS lets a signed-in user read their own renter
+row, requests and items through it. It is nullable because a renter who
+arrived over WhatsApp and never signed up is still a renter.
+
+`digest_opt_in_at` is deliberately separate from `opted_out_at`: a viewing
+request is not consent to a weekly marketing message.
 
 ### `viewing_requests`
 
@@ -152,13 +175,23 @@ the single source for all of it):
   Asia/Ho_Chi_Minh and `part` one of `MORNING` / `AFTERNOON` / `EVENING`. Chips,
   not a datetime picker: what time on Tuesday is the broker's to answer, and
   naming one at intake is promising a slot we cannot honour (§6). At most six,
-  at most 14 days ahead.
+  at most `MAX_DAYS_AHEAD` (14) days ahead, and never today or tomorrow:
+  `MIN_LEAD_DAYS` is 2, because an operator has to reach every agent by hand
+  and wait for each to answer. Both rules live in `intake.ts` rather than the
+  date picker, so a client cannot offer a window the function will refuse.
 - A shortlisted listing must clear the §0 gate - active, `price_vnd`,
   `bedrooms`, `area_sqm` and `district_code` all present, `price_confidence`
   not `LOW`. Screening happens at submit rather than at shortlist time, because
   verification runs every 20 minutes and can deactivate a row in between. A
   listing that falls through is reported to the renter by name; the request
-  proceeds on the rest as long as three survive.
+  proceeds on the rest as long as `MIN_ITEMS` (1) survives.
+- Intake requires a signed-in user and charges one viewing credit per listing
+  through `consume_viewing_credits()`, called last, after the log is written;
+  if the charge raises, the request is deleted. See the Payments section of
+  `CLAUDE.md` for why it is a call and not a trigger, and why
+  `viewing_listings_booked_since()` counts both request tables.
+- Once charged, everyone with the `ops` role is emailed the new request
+  (`_shared/viewing/ops-alert.ts`, §4). Nothing is sent to the renter (§5).
 
 ### `events`
 
@@ -215,10 +248,12 @@ medium          text not null             -- ZALO | PHONE | WHATSAPP | SMS
 purpose         text not null             -- REQUEST_VIEWING | NUDGE | CONFIRM | RELEASE | REPLY
 body            text not null
 status          text not null             -- QUEUED | SENT | FAILED | RECEIVED
-actor           text not null             -- OPS:<uuid> | AGENT:<version> | SYSTEM
+actor           text not null             -- OPS:<uuid> | AGENT:<version> | SYSTEM | BRIDGE
 idempotency_key text unique not null
 provider_id     text
 error           text
+claimed_at      timestamptz               -- bridge lease, §10 stage 3
+on_sent_event   jsonb                     -- the event written when the bridge acks SENT
 created_at      timestamptz default now()
 sent_at         timestamptz
 ```
@@ -229,10 +264,16 @@ by `reply_message_id`. That pair - their words, our typed reading of them - is
 what paste-parse and any later automation are trained and measured against.
 
 The transport is `_shared/realtor/channel.ts`, split from the rules the same
-way `WhatsAppAdapter` is. The only channel is `ManualChannel`: the operator sends
-on Zalo from their own phone and presses "Mark sent", so by the time it is
-called the message has already left. A bridge and Zalo OA are named in the
-interface and not built - both reopen the "no Zalo integration" scope line.
+way `WhatsAppAdapter` is, and chosen by the `REALTOR_CHANNEL` secret:
+
+- `ManualChannel` (unset or `manual`): the operator sends on Zalo from their own
+  phone and presses "Mark sent", so by the time it is called the message has
+  already left.
+- `BridgeChannel` (`bridge`, production since 2026-09-27): the row is left
+  `QUEUED` for the Zalo bridge device to send, and the event it stands for waits
+  in `on_sent_event` until the device acks it. See §10 stage 3.
+
+Zalo OA/ZNS is not built: it needs a Vietnam-registered entity.
 
 ### `jobs`
 
@@ -247,7 +288,12 @@ payload      jsonb not null default '{}'
 attempts     smallint default 0
 locked_at    timestamptz
 completed_at timestamptz
+last_error   text
+created_at   timestamptz default now()
 ```
+
+`viewing-jobs-drain` decides what is owed and enqueues; `viewing-jobs-run`
+claims rows (`claim_jobs`) and runs them. Both are on `pg_cron`.
 
 ---
 
@@ -291,6 +337,7 @@ Event types:
 | `ITINERARY_ASSEMBLED` | request | `{ordered_item_ids[], warnings[]}` |
 | `ITINERARY_DELIVERED` | request | `{message_id}` |
 | `HOLDING_UPDATE_SENT` | request | `{message_id}` - something the renter heard that was not the itinerary |
+| `SUGGESTIONS_OFFERED` | request | `{listing_ids[], source, message_id}` - listings put in front of the renter, in the order shown (today `source: SUBSTITUTES`). What a reply of "2" resolves against (`selection.ts`); answers a waiting `SEARCH` or `SELECTION` (§4). No state |
 | `RENTER_REPLIED` | request | `{intent, message_id, handshake?}` - `intent` ∈ `CONFIRM`, `DECLINE`, `RESCHEDULE`, `QUESTION`, `SELECTION`, `SEARCH`, `OPT_OUT`, `UNKNOWN`. `handshake: true` on the first ref-carrying message, which answers nothing |
 | `REPLY_SENT` | request | `{message_id}` - an operator's free-text WhatsApp reply. Moves the silence clock (§9) and clears waiting replies; no state |
 | `REPLIES_ACKNOWLEDGED` | request | `{message_ids[]}` - replies read and judged to need no answer. Clears waiting replies; no state, no clock |
@@ -327,8 +374,12 @@ and opting out a renter who just agreed become the same code path, so the
 keyword list in `_shared/whatsapp/inbound.ts` is matched against the raw text
 and is the only copy of it.
 
-Enum values are SCREAMING_SNAKE in the DB, mirrored as TS union types generated
-from a single source in `lib/domain/enums.ts`.
+Enum values are SCREAMING_SNAKE in the DB, mirrored as TS union types derived
+from a single source: the `as const` arrays in
+`supabase/functions/_shared/viewing-domain.ts`, alongside the reducer. It lives
+under `_shared` rather than `src/` because the edge functions are the writers
+and cannot import across the SPA boundary at deploy time; the ops console
+imports it from there.
 
 ---
 
@@ -434,14 +485,18 @@ The Cloud API 24-hour customer service window is a real constraint:
 - `sendFreeForm()` **throws** if the window is closed. It does not silently fall
   back to a template.
 - Re-opening a closed window requires `sendTemplate()`, which accepts only names
-  from the approved registry in `lib/whatsapp/templates.ts`.
+  from the approved registry in `_shared/whatsapp/templates.ts` - and, since
+  `whatsapp-template-sync` caches Meta's live status hourly, only while Meta
+  still says `APPROVED`.
 - From 2026-10-01 Meta bills service and utility messages sent inside the window.
   Consolidate: one message carrying a full itinerary, not a sequence of turns.
   **Any code path that sends 3+ messages in a row to the same renter is a bug.**
 
-Adapter: `lib/whatsapp/adapter.ts` exports a `WhatsAppAdapter` interface with two
-implementations - `MockAdapter` (the default in dev and in all tests, rendering
-in `/dev/phone`) and `CloudApiAdapter` (`WHATSAPP_MODE=cloud`).
+Adapter: `_shared/whatsapp/adapter.ts` exports a `WhatsAppAdapter` interface
+with two implementations - `MockAdapter` (the default in dev and in all tests,
+rendering in `/dev/phone`) and `CloudApiAdapter` (`WHATSAPP_MODE=cloud`, which
+production has run on since 2026-09-18). The rules above live once, in
+`_shared/whatsapp/send.ts`, so swapping transports cannot change them.
 
 **Nothing is sent at intake, and that is not an omission.** There is no service
 window until the renter messages us first, and no approved template to open one
@@ -503,6 +558,11 @@ renter may not carry any phone number.
 2. Reducer tests cover every new event type, including out-of-order arrival.
 3. The path is demoable end to end on `MockAdapter` with seeded data.
 4. This document is updated if the domain model changed.
+5. If it touched renter-facing copy, you have read it:
+   `REHEARSAL_PRINT=1 npx vitest run rehearsal` prints the whole conversation.
+   `/dev/phone` refuses to run under `WHATSAPP_MODE=cloud`, which is how
+   production runs, and a change to a renter message reaches real people on
+   merge.
 
 ---
 
@@ -582,7 +642,14 @@ a clock.
 
 ---
 
-## §10 The AI operator (stage 1: shadow)
+## §10 The AI operator
+
+Built in stages, each shipped behind the one before: 0, the console actions it
+calls (§4); 1, shadow proposals; 2, renter replies sent alone; 3, the Zalo
+bridge and outcomes recorded alone; 4, messages to agents sent alone. Where it
+stands in production is at the end of this section.
+
+### Stage 1: shadow
 
 **It proposes; a person decides.** The AI operator writes `operator_proposals`
 rows and nothing else - no events, no messages. A proposal reaches the log only
@@ -607,8 +674,9 @@ wrong.
 |---|---|
 | `dedupe_key` | One proposal per situation, ever (`CONTACT:<item>`, `NUDGE:<item>:<n>`, `OUTCOME:<item>:<reply>`, `NOTIFY:<item>:<decision>`, `DELIVER:<request>`, `RENTER:<message>`, `NO_CONTACT:<item>`). Unique per request, so a rejected proposal is not made again. |
 | `action`, `input` | An ops action and its input; approving runs exactly this, with the operator's rewording. |
-| `status` | `PENDING` → `APPROVED` / `REJECTED` (a button), `AGREED` / `CORRECTED` (the operator did it by hand, the same or differently), or `SUPERSEDED` (the request moved on). |
+| `status` | `PENDING` → `APPROVED` / `REJECTED` (a button), `AGREED` / `CORRECTED` (the operator did it by hand, the same or differently), or `SUPERSEDED` (the request moved on). From stage 2, also `EXECUTED` (ran alone) and `FLAGGED` (ran alone, marked wrong). |
 | `executed_action`, `executed_input`, `edited` | What was actually done, when it differed or was reworded. |
+| `execute_after`, `executed_at` | Stage 2: when a qualifying proposal will run alone, and when it did. |
 
 **Scoring** (`proposals.ts`, pure and tested, because stage 2 is gated on it):
 approved and agreed count as agreement; corrected and rejected do not; pending
@@ -688,7 +756,8 @@ env switch and the pause still apply, and so does the flag ceiling, so an
 override that goes wrong still closes itself. The console shows "gate skipped"
 beside the action with a **Restore the gate** button (`SET_AUTONOMY` with
 `gateOverride`). First used for `REPLY` on 2026-09-27, by the owner's decision,
-with no shadow decisions yet recorded.
+with no shadow decisions yet recorded; see "Where it stands" below for what it
+covers now.
 
 ### Stage 3: the Zalo bridge, and outcomes recorded alone
 
@@ -743,3 +812,26 @@ device like any approved one and the event waits for the device's ack, carrying
 `AGENT:auto-v1` - so the log says the AI operator contacted the agent only once
 the bridge has sent it. The daily cap, the device pause and the 5-minute hold
 all apply. `NO_RESPONSE`, the itinerary and cancelling stay with people.
+
+**The planner does not message agents about windows that have passed.** Once
+every availability window on a request is over (`windowsAllPassed` in
+`planner.ts`, #116), it proposes no first ask and no chase; agents' replies are
+still read. While any item is still `PENDING` or `CONTACTED` it proposes one
+`ESCALATE` (`STALE_WINDOWS:<request>`) instead: the renter needs asking for new
+times, and that is a person's job.
+
+### Where it stands (read from production, 2026-09-28)
+
+- All five `AUTONOMOUS_ACTIONS` - `REPLY`, `OUTCOME`, `CONTACTED`, `NUDGE`,
+  `NOTIFY_REALTOR` - are enabled by `AI_OPERATOR_AUTONOMY`, and all five are in
+  `gate_override`. The console is not paused, so every lock reads open with the
+  reason "Gate skipped by override - 0 shadow decisions so far".
+- `REALTOR_CHANNEL` is `bridge`, and the bridge device checks in
+  (`zalo_bridge_status.last_seen_at` current, not paused).
+- There is no stage 1 record yet to measure against: no `OUTCOME_RECORDED`
+  events and no `realtor_messages` rows. The flag ceiling (5% of 10+ executed)
+  is therefore the only measured lock that can close, and only once there is
+  traffic.
+
+Restoring any gate is one button on the AI operator screen, and **Pause** on
+the same screen stops everything the AI operator does alone.
