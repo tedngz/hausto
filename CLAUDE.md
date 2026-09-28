@@ -281,12 +281,19 @@ ERROR: could not find valid entry for job 'auto-crawl-v2' (SQLSTATE XX000)
 ```
 
 Deleting the row directly is no better - `cron.job` is owned by `supabase_admin`
-and `postgres` has no `DELETE` on it. Check the owner before writing the
-migration, and if it is not `postgres`, unschedule from the dashboard instead:
+and `postgres` has no `DELETE` on it. Nor can you borrow the owner: `postgres`
+is not a superuser and cannot `SET ROLE` to another owner such as
+`supabase_read_only_user`, so the SQL Editor fails the same way. Check the
+owner before writing the migration:
 
 ```sh
 echo "SELECT jobid, jobname, username FROM cron.job ORDER BY jobname;" | bash scripts/supabase-sql.sh
 ```
+
+If it is not `postgres`, try the dashboard's Cron page, and if that refuses
+too, only Supabase support can remove it: ask them to run
+`SELECT cron.unschedule(<jobid>);` as `supabase_admin`. That is where
+`auto-crawl-v2` (jobid 7) stands - see PLAN-v3 S1 item 2.
 
 A failing statement aborts the whole push, so **the migrations queued behind it
 never run** - and they are not recorded, so the next push retries them. Wrap
