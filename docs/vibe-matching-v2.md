@@ -1,6 +1,10 @@
 # Vibe Matching v2 — Implementation Spec
 
-Status: **in progress**. Owner decisions are locked (see §10).
+Status: **stages 1-6 of §11 are built** (feature extraction, `analyze-vibe`
+aggregation, backfill, `must_haves` plumbing, the quiz step and edit surfaces,
+the `vibeScoring` rewrite with feature chips). **Stage 7 is not:** `chat-ai`
+does not yet seed quiz must-haves into its ranker. Checked against the code on
+2026-09-28. Owner decisions are locked (see §10).
 
 ## 0. Design principles
 - **Score only on data we actually have.** Every scored dimension must trace to a real field, not a hardcoded guess.

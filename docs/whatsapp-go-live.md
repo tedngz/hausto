@@ -137,7 +137,7 @@ Each step gates the next. Doing them out of order mostly means waiting twice.
 4. **A permanent access token.** Generate it from a System User with the WABA
    assigned, not the temporary 24-hour token from the app dashboard - a test
    token expiring overnight is a confusing outage the next morning.
-5. **Submit the four templates** (see below). Approval is typically hours but
+5. **Submit the five templates** (see below). Approval is typically hours but
    can be days, and a rejection means editing and resubmitting.
 6. **Point the webhook at the function and subscribe** (see below).
 
@@ -308,8 +308,8 @@ What the sync logs, and how loudly:
 | In the registry, not submitted | info - a to-do, not an incident |
 | Meta has a template the registry does not | info |
 
-It needs one secret beyond the six above: **`WHATSAPP_WABA_ID`**, the WhatsApp
-Business Account id (not the phone number id). Until that and the access token
+It needs **`WHATSAPP_WABA_ID`** from the table above, the WhatsApp Business
+Account id (not the phone number id). Until that and the access token
 are set it no-ops and returns 200, so the hourly cron stays quiet rather than
 filling the logs with errors about a thing nobody has been able to do yet.
 

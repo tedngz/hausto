@@ -29,7 +29,13 @@ split it properly - not before.
 ## What it may read
 
 Operators get SELECT and nothing else. Every state change goes through the
-`ops-record-outcome` edge function, which is where SPEC §4 is enforced.
+`ops-record-outcome` edge function, which is where SPEC §4 is enforced - and
+which calls the same `performOpsAction` the AI operator does, so there is one
+implementation of each action, whoever takes it. Beyond the viewing tables the
+role reads `operator_proposals`, `ai_operator_controls` and
+`zalo_bridge_status`; the `AI_OPERATOR_AUTONOMY` and `REALTOR_CHANNEL` secrets
+it cannot read, so the planner writes what it concluded about them to
+`ai_operator_controls.last_state` for the console to show.
 
 Nothing here can read a renter's name or phone number: no RLS policy grants
 `renters` or `messages` to the `ops` role (invariant 4). Requests are worked by
@@ -41,6 +47,26 @@ The renter's thread comes from `ops_request_thread()`, a function that returns
 message bodies, times and the 24-hour window, and never the number or name. The
 broker conversation is `realtor_messages`, readable directly: it holds what we
 sent each broker and what they said back, and nothing about the renter.
+
+## The screens
+
+Three, switched by state rather than a router:
+
+- **Queue** - open requests ranked by SLA, waiting renter replies first, with a
+  count of pending AI operator proposals that never changes the ranking.
+- **A request** - one card per listing: the agent's contact, the Vietnamese
+  draft, the broker transcript, the paste-parse box (`ops-parse-reply`, which
+  suggests an outcome and never records one), the seven outcomes, and any
+  message queued for or failed on the Zalo bridge. Above them, the renter's
+  thread and reply box, the itinerary builder, and the AI operator's proposals
+  for this request, each with approve, reject, and - for one that will run
+  alone - **Hold**.
+- **AI operator** - agreement per action, paste-parse accuracy against the
+  PLAN-v3 bar, the three locks per action (with **Pause** and **Restore the
+  gate**), anything it did alone with **Flag as wrong**, and the bridge device
+  (online, sent today, queued, last error, **Pause sending**).
+
+What those mean, and the rules behind them, is SPEC §4 and §10.
 
 ## Status is derived, never stored
 
