@@ -12,6 +12,8 @@ import { refFromMessage } from './intake.ts';
 import { classifyIntent } from './intent.ts';
 import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './selection.ts';
 import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
+import { codeUsable, watchCodeFromMessage, type WatchProblem } from './watch.ts';
+import { pendingAlert } from './alerts.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -56,7 +58,22 @@ export interface InboundOutcome {
   confirmed: boolean;
   /** Set when the reply picked from a list we sent. */
   selection?: SelectionOutcome;
+  /** Set when the message carried a complex-watch code (SPEC §11). */
+  watch?: WatchOutcome;
+  /** The alert this answers, when the last thing we sent was one (SPEC §11). */
+  alertMessageId?: string;
 }
+
+export type WatchOutcome =
+  | {
+    kind: 'CONFIRMED';
+    watchId: string;
+    complexName: string;
+    bedrooms: number | null;
+    budgetMaxVnd: number | null;
+    expiresAt: string;
+  }
+  | { kind: 'PROBLEM'; problem: WatchProblem };
 
 export interface SelectionOutcome {
   positions: number[];
@@ -154,6 +171,61 @@ async function hasReplied(db: any, requestId: string): Promise<boolean> {
 }
 
 /**
+ * Turn a pending watch on, because its code just arrived from this phone.
+ *
+ * Sending the code is the opt-in (SPEC §11), so it also lifts an earlier STOP:
+ * a renter who said STOP and then taps "alert me about Empire City" has
+ * changed their mind in the most explicit way available. And it links the
+ * phone to the account that created the watch, if the renter row has none -
+ * never over a link that already exists.
+ *
+ * Idempotent on redelivery: the same code from the same phone confirms again.
+ * The same code from a different phone is treated as unknown, not as a
+ * transfer - a code is not a credential to be passed around.
+ */
+async function confirmWatch(
+  db: Supa,
+  code: string,
+  renter: { id: string; opted_out_at: string | null },
+  now: Date,
+): Promise<WatchOutcome> {
+  const { data: w } = await db
+    .from('complex_watches')
+    .select('id, complex_id, status, renter_id, user_id, bedrooms, budget_max_vnd, expires_at, created_at')
+    .eq('code', code)
+    .maybeSingle();
+
+  if (!w || w.status === 'CANCELLED') return { kind: 'PROBLEM', problem: 'UNKNOWN' };
+  if (w.status === 'ACTIVE' && w.renter_id !== renter.id) return { kind: 'PROBLEM', problem: 'UNKNOWN' };
+  if (w.status === 'PENDING' && codeUsable(String(w.created_at), String(w.expires_at), now) === 'EXPIRED') {
+    return { kind: 'PROBLEM', problem: 'EXPIRED' };
+  }
+
+  if (w.status === 'PENDING') {
+    await db.from('complex_watches')
+      .update({ status: 'ACTIVE', renter_id: renter.id, confirmed_at: now.toISOString() })
+      .eq('id', w.id)
+      .eq('status', 'PENDING');
+    if (renter.opted_out_at) {
+      await db.from('renters').update({ opted_out_at: null }).eq('id', renter.id);
+    }
+    if (w.user_id) {
+      await db.from('renters').update({ user_id: w.user_id }).eq('id', renter.id).is('user_id', null);
+    }
+  }
+
+  const { data: complex } = await db.from('complexes').select('name').eq('id', w.complex_id).maybeSingle();
+  return {
+    kind: 'CONFIRMED',
+    watchId: String(w.id),
+    complexName: complex?.name ?? 'that building',
+    bedrooms: w.bedrooms ?? null,
+    budgetMaxVnd: w.budget_max_vnd ?? null,
+    expiresAt: String(w.expires_at),
+  };
+}
+
+/**
  * Record one inbound message: window, row, event, opt-out. In that order.
  *
  * The window first, because it is the fact with a deadline attached. A message
@@ -166,7 +238,17 @@ export async function handleInbound(
   m: { from: string; text: string; providerMessageId: string; timestamp: string },
 ): Promise<InboundOutcome> {
   const renter = await upsertRenterByPhone(db, m.from);
-  const requestId = await resolveRequestId(db, renter.id, m.text);
+  const now = new Date(m.timestamp);
+
+  // A watch code, or a reply to an alert, is not about a viewing request -
+  // attaching it to their newest one would put "yes" on the wrong thread, and
+  // on a delivered itinerary it would confirm viewings they were not asked
+  // about. Both are checked before the request is resolved, for that reason.
+  const watchCode = watchCodeFromMessage(m.text);
+  const alertMessageId = watchCode ? undefined : await pendingAlert(db, renter.phone_e164, now);
+  const requestId = watchCode || alertMessageId
+    ? undefined
+    : await resolveRequestId(db, renter.id, m.text);
 
   const message = await recordInbound(store, {
     renterId: renter.id,
@@ -211,11 +293,20 @@ export async function handleInbound(
     selection = await resolveOffer(db, requestId, m.text, new Date(m.timestamp));
   }
 
+  const watch = watchCode ? await confirmWatch(db, watchCode, renter, now) : undefined;
+
   let optedOut = false;
   if (intent === 'OPT_OUT') {
     await db.from('renters').update({ opted_out_at: new Date().toISOString() }).eq('id', renter.id);
+    // STOP ends the watches too, rather than leaving them to wake up if the
+    // renter ever opts back in for something else.
+    await db.from('complex_watches').update({ status: 'CANCELLED' }).eq('renter_id', renter.id).eq('status', 'ACTIVE');
     optedOut = true;
   }
 
-  return { renterId: renter.id, requestId, message, optedOut, intent, confirmed, selection };
+  return {
+    renterId: renter.id, requestId, message, optedOut, intent, confirmed, selection,
+    ...(watch ? { watch } : {}),
+    ...(alertMessageId ? { alertMessageId } : {}),
+  };
 }

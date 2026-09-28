@@ -99,6 +99,18 @@ export const REQUEST_STATES = [
 ] as const;
 export type RequestState = typeof REQUEST_STATES[number];
 
+/**
+ * A complex watch (`complex_watches.status`, SPEC §11). Not a request and not
+ * in the event log: nothing about it is an operator's decision, and its only
+ * transitions are the renter sending the code and the renter saying STOP.
+ */
+export const WATCH_STATUSES = ['PENDING', 'ACTIVE', 'CANCELLED'] as const;
+export type WatchStatus = typeof WATCH_STATUSES[number];
+
+/** Why a listing was put in front of a renter unasked (`alert_items.source`). */
+export const ALERT_SOURCES = ['WATCH', 'DIGEST'] as const;
+export type AlertSource = typeof ALERT_SOURCES[number];
+
 // An outcome names the state its item lands in. Kept as a map rather than a
 // switch so adding an outcome without deciding its state is a type error.
 const OUTCOME_TO_ITEM_STATE: Record<Outcome, ItemState> = {

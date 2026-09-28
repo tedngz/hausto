@@ -34,7 +34,7 @@ export const MAX_ITEMS = 5;
  * left is 26 symbols, and four of them is ~457k refs - ample at ~25/day, and
  * short enough that nobody abbreviates it.
  */
-const REF_ALPHABET = '34679ACDEFGHJKLMNPQRTWXY';
+export const REF_ALPHABET = '34679ACDEFGHJKLMNPQRTWXY';
 
 export function generateRef(random: () => number = Math.random): string {
   let body = '';

@@ -100,10 +100,12 @@ Deno.serve(async (req) => {
     optedOut: outcome.optedOut,
     confirmed: outcome.confirmed,
     selection: outcome.selection,
+    watch: outcome.watch,
+    alertMessageId: outcome.alertMessageId,
   });
 
   let agent: unknown = { decided: action.kind, reason: action.kind === 'NONE' ? action.reason : undefined };
-  if (action.kind === 'RE_REQUEST' || action.kind === 'SELECTION_PROBLEM') {
+  if (action.kind !== 'NONE' && action.kind !== 'SEARCH') {
     const adapter = adapterFromEnv(Deno.env.toObject());
     agent = { decided: action.kind, ...(await performAction(db, adapter, action, {
       renterId: outcome.renterId,
