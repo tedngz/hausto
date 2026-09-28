@@ -15,9 +15,13 @@
 //      reading a line. Those are not close, so everything uncertain routes to
 //      a person.
 //   3. **Off by default.** The caller passes `enabled`, read from
-//      VIEWING_AGENT_ENABLED. Nothing here turns itself on.
+//      VIEWING_AGENT_ENABLED. Nothing here turns itself on. The one carve-out
+//      is the complex-watch replies, which are not the agent's to switch off -
+//      see the top of `decideAction`.
 
 import type { Intent } from './intent.ts';
+import type { WatchOutcome } from './routing.ts';
+import type { WatchProblem } from './watch.ts';
 
 export type AgentAction =
   /** Nothing to do - an operator handles it, or there is nothing to handle. */
@@ -27,7 +31,20 @@ export type AgentAction =
   /** They picked, but it cannot be honoured. Say why - silence is worse. */
   | { kind: 'SELECTION_PROBLEM'; problem: 'NO_OFFER' | 'EXPIRED' | 'OUT_OF_RANGE' }
   /** They described what they are looking for. Search and answer. */
-  | { kind: 'SEARCH'; query: string };
+  | { kind: 'SEARCH'; query: string }
+  /** They sent a complex-watch code and it is now on. Say so (SPEC §11). */
+  | {
+    kind: 'WATCH_CONFIRMED';
+    watchId: string;
+    complexName: string;
+    bedrooms: number | null;
+    budgetMaxVnd: number | null;
+    expiresAt: string;
+  }
+  /** They sent a code that is unknown or expired. Say what to do instead. */
+  | { kind: 'WATCH_PROBLEM'; problem: WatchProblem }
+  /** They answered an alert. Send the places it was about. */
+  | { kind: 'ALERT_DETAILS'; alertMessageId: string };
 
 export interface AgentInput {
   enabled: boolean;
@@ -41,6 +58,10 @@ export interface AgentInput {
     listingIds?: string[];
     problem?: 'NO_OFFER' | 'EXPIRED' | 'OUT_OF_RANGE';
   };
+  /** The complex-watch code this message carried, resolved (routing.ts). */
+  watch?: WatchOutcome;
+  /** The alert this answers, when the last thing we sent was one. */
+  alertMessageId?: string;
 }
 
 /**
@@ -51,6 +72,32 @@ export interface AgentInput {
  * only one of them is a bug.
  */
 export function decideAction(input: AgentInput): AgentAction {
+  // Complex watches (SPEC §11) answer before the switch, and they are the only
+  // thing that does. Neither is the agent's judgement: the renter set the
+  // watch up on the site, which told them to send us this message, and an
+  // alert ends "reply here if you would like to see them". With the agent off
+  // both would get silence, on a thread where we promised a reply. Still one
+  // reply per inbound, and an opt-out still outranks them.
+  const stopping = input.optedOut || input.intent === 'OPT_OUT';
+  if (!stopping && input.watch) {
+    return input.watch.kind === 'CONFIRMED'
+      ? {
+        kind: 'WATCH_CONFIRMED',
+        watchId: input.watch.watchId,
+        complexName: input.watch.complexName,
+        bedrooms: input.watch.bedrooms,
+        budgetMaxVnd: input.watch.budgetMaxVnd,
+        expiresAt: input.watch.expiresAt,
+      }
+      : { kind: 'WATCH_PROBLEM', problem: input.watch.problem };
+  }
+  // Any answer to an alert asks for its places, except a no and a new search.
+  // "No thanks" wants nothing sent; "anything in D2 under 15tr" is its own
+  // question, and the search (when the agent is on) is the better answer.
+  if (!stopping && input.alertMessageId && input.intent !== 'DECLINE' && input.intent !== 'SEARCH') {
+    return { kind: 'ALERT_DETAILS', alertMessageId: input.alertMessageId };
+  }
+
   if (!input.enabled) return { kind: 'NONE', reason: 'agent disabled' };
 
   // An opt-out is the one instruction that outranks everything, including a

@@ -92,24 +92,30 @@ export function digestParams(opts: {
   renterName: string | null;
   matches: { districtCode: string | null }[];
 }): string[] {
-  const count = opts.matches.length;
-  const districts = [...new Set(opts.matches.map(m => m.districtCode).filter((d): d is string => !!d))];
-
-  const where = districts.length === 0
-    ? 'Ho Chi Minh City'
-    : districts.length === 1
-      ? districts[0]
-      : districts.length === 2
-        ? `${districts[0]} and ${districts[1]}`
-        : `${districts[0]}, ${districts[1]} and elsewhere`;
-
   return [
     // Meta rejects a template parameter that is empty, so a renter who never
     // gave a name gets a greeting that still reads as one.
     opts.renterName?.trim() || 'there',
-    String(count),
-    where,
+    String(opts.matches.length),
+    placeSummary(opts.matches.map(m => m.districtCode)),
   ];
+}
+
+/**
+ * `Thao Dien and District 1` - the "where" a template can carry.
+ *
+ * Shared with the complex-watch alert (watch.ts), which puts complex names in
+ * the same slot, so one message covering both reads as one sentence.
+ */
+export function placeSummary(labels: (string | null)[]): string {
+  const places = [...new Set(labels.filter((d): d is string => !!d))];
+  return places.length === 0
+    ? 'Ho Chi Minh City'
+    : places.length === 1
+      ? places[0]
+      : places.length === 2
+        ? `${places[0]} and ${places[1]}`
+        : `${places[0]}, ${places[1]} and elsewhere`;
 }
 
 /**

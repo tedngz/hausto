@@ -13,6 +13,8 @@ import { sendFreeForm, ServiceWindowClosedError, ConsecutiveMessageError } from 
 import { generateRef, intakeEvents, screenCandidates, type ShortlistCandidate } from './intake.ts';
 import { renderSelectionProblem, renderReRequested } from './selection.ts';
 import type { AgentAction } from './agent.ts';
+import { renderAlertDetails, renderWatchConfirmed, renderWatchProblem } from './watch.ts';
+import { alertItemsFor, markAlertDetailed } from './alerts.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -59,6 +61,39 @@ export async function performAction(
 
     if (action.kind === 'RE_REQUEST') {
       return await createReRequest(db, adapter, action.listingIds, ctx);
+    }
+
+    if (action.kind === 'WATCH_CONFIRMED') {
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        // Keyed on the watch, so a second send of the same code - a double tap,
+        // a redelivery - is answered once.
+        purpose: `WATCH_CONFIRMED:${action.watchId}`,
+        body: renderWatchConfirmed(action),
+      });
+      return { performed: action.kind, messageId: result.message.id };
+    }
+
+    if (action.kind === 'WATCH_PROBLEM') {
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        purpose: `WATCH_PROBLEM:${ctx.providerMessageId}`,
+        body: renderWatchProblem(action.problem),
+      });
+      return { performed: action.kind, messageId: result.message.id };
+    }
+
+    if (action.kind === 'ALERT_DETAILS') {
+      const items = await alertItemsFor(db, action.alertMessageId);
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        // Keyed on the alert: the places go once, however many times the
+        // renter answers it.
+        purpose: `ALERT_DETAILS:${action.alertMessageId}`,
+        body: renderAlertDetails(items),
+      });
+      await markAlertDetailed(db, action.alertMessageId, new Date());
+      return { performed: action.kind, messageId: result.message.id };
     }
 
     // SEARCH is performed by viewing-agent-search, which owns the OpenAI call,

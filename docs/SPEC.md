@@ -869,3 +869,97 @@ times, and that is a person's job.
 
 Restoring any gate is one button on the AI operator screen, and **Pause** on
 the same screen stops everything the AI operator does alone.
+
+## §11 Complex watches
+
+"Tell me on WhatsApp when a place comes up at Empire City." A complex page's
+main call to action (`ComplexWatchModal`). The email concierge
+(`complex_inquiries`, `ConciergeCaptureModal`) stays as the fallback for
+renters without WhatsApp.
+
+A watch is not a request. It spends no credit, queues no operator work and is
+not in the event log: it has no operator decisions, and its only transitions
+are the renter sending its code and the renter saying STOP.
+
+### `complex_watches`
+
+```
+id              uuid pk
+complex_id      uuid not null references complexes
+code            text unique not null      -- HW-XXXX, the ref alphabet
+user_id         uuid                      -- the account that set it up, if any
+renter_id       uuid references renters   -- set when the code arrives
+bedrooms        smallint                  -- 1-4, 4 means 4+; NULL any
+budget_max_vnd  bigint                    -- monthly ceiling; NULL any
+move_in_by      date
+status          text not null             -- PENDING | ACTIVE | CANCELLED
+confirmed_at    timestamptz
+expires_at      timestamptz not null
+created_at, updated_at
+```
+
+`WATCH_STATUSES` in `viewing-domain.ts`. Service role writes; admins read.
+
+### `alert_items`
+
+```
+id              uuid pk
+renter_id       uuid not null references renters
+listing_id      uuid not null references external_properties
+watch_id        uuid references complex_watches  -- NULL for a digest pick
+source          text not null             -- WATCH | DIGEST
+message_id      uuid not null references messages
+detail_sent_at  timestamptz               -- the places themselves went out
+created_at      timestamptz
+unique (renter_id, listing_id)
+```
+
+Every listing put in front of a renter unasked, from a watch or the digest.
+The unique key is what stops a listing being news twice; `message_id` is how
+a reply to the template finds the places it was about.
+
+### The flow
+
+1. **Set up.** `complex-watch-create` (anonymous or signed in) validates
+   bedrooms, budget and move-in date, writes a `PENDING` watch and returns a
+   wa.me link: `Hi Hausto - alert me about new places at <complex> (HW-XXXX)`.
+   There is no phone number in the request - a caller cannot point alerts at
+   somebody else's phone.
+2. **Opt in.** The renter sends that message. `handleInbound` finds the code,
+   turns the watch `ACTIVE`, sets `renter_id`, links `renters.user_id` if it
+   is empty, and clears an earlier `opted_out_at` - sending the code is the
+   renter opting back in. The code works for `CONFIRM_TTL_DAYS` (7), and only
+   from the phone that first sent it. One free-form reply says what is being
+   watched and until when (`WATCH_CONFIRMED`), or why the code did not work
+   (`WATCH_PROBLEM`).
+3. **Sweep.** `viewing-digest-send`, Tuesday 09:00 ICT. For each active watch,
+   new listings at the complex (`complex_listing_ids`: name or alias in the
+   title or location, the complex page's rule) that were created after
+   `confirmed_at`, pass the intake gate (`screenCandidates`) and fit the
+   bedrooms and budget. Merged with the renter's digest picks, watches first,
+   three at most, nothing already in `alert_items`. One message per renter per
+   ISO week (`DIGEST:<week>`): the `weekly_digest` template with the complex
+   name as `{{3}}`, or free-form with the places in it if their window is
+   already open.
+4. **Reply.** When the last thing we sent a renter is an alert whose places
+   have not gone out, their next message - anything except a no, a new search
+   or STOP - gets the places free-form, with a link each (`ALERT_DETAILS`).
+   From the listing page it is the one way to ask (invariant 8). That reply is
+   never attached to a viewing request, so a "yes" to an alert cannot confirm
+   an itinerary.
+5. **End.** STOP cancels every active watch. Otherwise a watch ends
+   `MOVE_IN_GRACE_DAYS` (14) after the move-in date, or `DEFAULT_WATCH_DAYS`
+   (60) after it was set without one, never later than `MAX_WATCH_DAYS` (120).
+
+The watch replies in 2 and 4 are sent with `VIEWING_AGENT_ENABLED` off. They
+are not the agent's judgement: the site told the renter to send the code, and
+the template tells them to reply.
+
+The consecutive-outbound guard (§5) still applies: the confirmation and one
+unanswered alert are two in a row, so a second unanswered alert is refused.
+A renter who never writes back hears from us twice.
+
+Limits: `renters.phone_e164` is `+84` only, and so is `toE164`, so a watch
+works only for a Vietnamese WhatsApp number - a code from any other number
+never reaches `handleInbound`. And the approved `weekly_digest` wording reads
+"there are 1 new places" for a single match; a dedicated template is the fix.

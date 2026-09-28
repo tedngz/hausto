@@ -83,3 +83,38 @@ describe('one reply per inbound', () => {
     expect(costsASend({ kind: 'SELECTION_PROBLEM', problem: 'EXPIRED' })).toBe(true);
   });
 });
+
+describe('complex watches (SPEC §11)', () => {
+  const confirmed = {
+    kind: 'CONFIRMED' as const, watchId: 'w1', complexName: 'Empire City',
+    bedrooms: 2, budgetMaxVnd: 30_000_000, expiresAt: '2026-11-27T03:00:00Z',
+  };
+
+  it('answers a watch code even with the agent off - the site told them to send it', () => {
+    const a = decideAction(input({ enabled: false, watch: confirmed }));
+    expect(a.kind).toBe('WATCH_CONFIRMED');
+    expect(a.kind === 'WATCH_CONFIRMED' && a.complexName).toBe('Empire City');
+  });
+
+  it('says what went wrong with a bad code', () => {
+    const a = decideAction(input({ enabled: false, watch: { kind: 'PROBLEM', problem: 'EXPIRED' } }));
+    expect(a).toEqual({ kind: 'WATCH_PROBLEM', problem: 'EXPIRED' });
+  });
+
+  it('sends the places when they answer an alert, with the agent off', () => {
+    for (const intent of ['CONFIRM', 'QUESTION', 'UNKNOWN', 'SELECTION']) {
+      const a = decideAction(input({ enabled: false, intent, alertMessageId: 'm9' }));
+      expect(a, intent).toEqual({ kind: 'ALERT_DETAILS', alertMessageId: 'm9' });
+    }
+  });
+
+  it('sends nothing to a no, and lets a real search be a search', () => {
+    expect(decideAction(input({ intent: 'DECLINE', alertMessageId: 'm9' })).kind).toBe('NONE');
+    expect(decideAction(input({ intent: 'SEARCH', text: 'anything in D2', alertMessageId: 'm9' })).kind).toBe('SEARCH');
+  });
+
+  it('never answers a STOP, whatever else is pending', () => {
+    expect(decideAction(input({ intent: 'OPT_OUT', optedOut: true, watch: confirmed })).kind).toBe('NONE');
+    expect(decideAction(input({ intent: 'OPT_OUT', optedOut: true, alertMessageId: 'm9' })).kind).toBe('NONE');
+  });
+});

@@ -178,6 +178,12 @@ verify_jwt = false
 # by curling a URL without meaning to.
 verify_jwt = false
 
+[functions.complex-watch-create]
+# The complex page's "Get WhatsApp alerts". Anonymous visitors may set one - it
+# spends nothing and sends nothing until the renter messages us its code - so
+# the caller's JWT is optional and read in the function. Rate-limited by IP.
+verify_jwt = false
+
 [functions.ops-parse-reply]
 # An operator's JWT, checked against user_roles in the function. It spends
 # OpenAI budget per call and writes nothing - a suggestion for the console to

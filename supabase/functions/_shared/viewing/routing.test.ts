@@ -81,8 +81,14 @@ function fakeDb(seed: {
         return { select: () => ({ single: () => Promise.resolve({ data: row, error: null }) }) };
       },
       update: (patch: Record<string, unknown>) => {
-        state.renterUpdates.push(patch);
-        return { eq: () => Promise.resolve({ data: null, error: null }) };
+        if (table === 'renters') state.renterUpdates.push(patch);
+        // Chainable, because an opt-out also cancels watches with two filters.
+        const chain: Record<string, unknown> = {
+          eq: () => chain,
+          is: () => chain,
+          then: (resolve: (r: { data: null; error: null }) => unknown) => resolve({ data: null, error: null }),
+        };
+        return chain;
       },
     };
     return api;

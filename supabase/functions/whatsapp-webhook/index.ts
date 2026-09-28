@@ -104,10 +104,10 @@ Deno.serve(async (req) => {
       const outcome = await handleInbound(db, store, m);
       if (outcome.optedOut) console.log(`[whatsapp-webhook] ${outcome.renterId} opted out`);
 
-      // Then, and only if the switch is on, at most one automated reply.
-      // `decideAction` is pure and returns a single action; everything it
-      // declines routes to an operator, which is the default for all but two
-      // intents.
+      // Then at most one automated reply - only if the switch is on, apart
+      // from the complex-watch replies (SPEC §11), which the renter asked for
+      // on the site. `decideAction` is pure and returns a single action;
+      // everything it declines routes to an operator.
       const action = decideAction({
         enabled: AGENT_ENABLED,
         intent: outcome.intent,
@@ -116,6 +116,8 @@ Deno.serve(async (req) => {
         optedOut: outcome.optedOut,
         confirmed: outcome.confirmed,
         selection: outcome.selection,
+        watch: outcome.watch,
+        alertMessageId: outcome.alertMessageId,
       });
 
       if (action.kind === 'NONE') {
