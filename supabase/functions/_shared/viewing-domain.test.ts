@@ -155,6 +155,62 @@ describe('request state', () => {
     expect(view.cancelledReason).toBe('renter withdrew');
   });
 
+  it('a place added while the itinerary is being assembled reopens the request', () => {
+    seq = 0;
+    const view = reduceRequest(REQ, [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: ['s1'] } }),
+      ev('ITINERARY_ASSEMBLED', { payload: { ordered_item_ids: ['i1'] } }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+    ]);
+    expect(view.state).toBe('CONTACTING');
+    expect(view.items.i2.state).toBe('PENDING');
+    expect(summarise(view).unresolved).toBe(1);
+  });
+
+  it('a place added to a request still being arranged moves nothing but the item count', () => {
+    seq = 0;
+    const base = [ev('REQUEST_SUBMITTED'), ev('ITEM_ADDED', { item: 'i1' })];
+    expect(reduceRequest(REQ, [...base, ev('ITEM_ADDED', { item: 'i2' })]).state).toBe('SUBMITTED');
+    seq = 0;
+    const contacting = [
+      ev('REQUEST_SUBMITTED'), ev('ITEM_ADDED', { item: 'i1' }), ev('REALTOR_CONTACTED', { item: 'i1' }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+    ];
+    expect(reduceRequest(REQ, contacting).state).toBe('CONTACTING');
+  });
+
+  it('a place added after delivery does not pull the delivered plan back', () => {
+    seq = 0;
+    const view = reduceRequest(REQ, [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED' } }),
+      ev('ITINERARY_DELIVERED', { payload: { message_id: 'm1' } }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+    ]);
+    expect(view.state).toBe('DELIVERED');
+  });
+
+  it('a late-joined place reduces the same forwards, backwards and shuffled', () => {
+    seq = 0;
+    const log = [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('REALTOR_CONTACTED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: ['s1'] } }),
+      ev('ITINERARY_ASSEMBLED', { payload: { ordered_item_ids: ['i1'] } }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+      ev('REALTOR_CONTACTED', { item: 'i2' }),
+    ];
+    const expected = JSON.stringify(reduceRequest(REQ, log));
+    expect(JSON.parse(expected).state).toBe('CONTACTING');
+    for (const order of permutations(log)) {
+      expect(JSON.stringify(reduceRequest(REQ, order))).toBe(expected);
+    }
+  });
+
   it('a confirmed request is not walked back by a late delivery event', () => {
     seq = 0;
     const view = reduceRequest(REQ, [

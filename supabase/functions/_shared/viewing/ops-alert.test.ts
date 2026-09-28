@@ -16,6 +16,20 @@ describe('the new-request alert (gap 10)', () => {
     expect(alert.text).toContain(CONSOLE_URL);
   });
 
+  it('says so when places join a request that was already open', () => {
+    const joined = renderIntakeAlert({
+      ref: 'HV-4KX9',
+      placeCount: 3,
+      added: 1,
+      availability: [{ date: '2026-09-29', part: 'MORNING' }],
+      createdAt: new Date('2026-09-26T16:05:00Z'),
+    });
+    expect(joined.subject).toBe('HV-4KX9 - 1 more place added, 3 places now');
+    expect(joined.text).toContain('Same times as before: 2026-09-29 morning.');
+    expect(joined.text).toContain('The itinerary waits until they answer.');
+    expect(joined.text).not.toMatch(/\+84|@/);
+  });
+
   it('carries nothing about the renter, because it is given nothing', () => {
     expect(alert.text).not.toMatch(/\+84|@/);
   });

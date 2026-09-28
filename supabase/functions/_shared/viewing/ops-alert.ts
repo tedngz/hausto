@@ -24,6 +24,8 @@ export interface IntakeAlert {
 export function renderIntakeAlert(opts: {
   ref: string;
   placeCount: number;
+  /** Set when places joined a request that was already open. */
+  added?: number;
   availability: { date: string; part: string }[];
   createdAt: Date;
 }): IntakeAlert {
@@ -31,6 +33,20 @@ export function renderIntakeAlert(opts: {
   const at = `${local.slice(11, 16)} on ${local.slice(0, 10)}`;
   const windows = opts.availability.map(w => `${w.date} ${w.part.toLowerCase()}`).join(', ') || 'not stated';
   const places = `${opts.placeCount} place${opts.placeCount === 1 ? '' : 's'}`;
+  if (opts.added) {
+    const more = `${opts.added} more place${opts.added === 1 ? '' : 's'}`;
+    return {
+      subject: `${opts.ref} - ${more} added, ${places} now`,
+      text: [
+        `The renter on ${opts.ref} asked for ${more} at ${at} (Ho Chi Minh City). It joins the same plan: ${places} now.`,
+        `Same times as before: ${windows}.`,
+        '',
+        'The new agent has not been contacted yet. The itinerary waits until they answer.',
+        '',
+        `Open the queue: ${CONSOLE_URL}`,
+      ].join('\n'),
+    };
+  }
   return {
     subject: `New viewing request ${opts.ref} - ${places}`,
     text: [

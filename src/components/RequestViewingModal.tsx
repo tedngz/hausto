@@ -2,25 +2,26 @@
 //
 // Built as a phone screen that happens to fit on a desktop, not the reverse:
 // a fixed header, one scrolling column of numbered steps, and a footer that
-// stays put so the action is never a scroll away. The three questions are
-// always in the same order - which place, when, where to reach you - so the
-// modal reads as a form rather than a dashboard.
+// stays put so the action is never a scroll away. The questions are always in
+// the same order - which place, when, where to reach you - so the modal reads
+// as a form rather than a dashboard.
 //
-// **One place per request.** The domain still accepts up to five in one
-// request - `MAX_ITEMS` is unchanged, and the agent's re-request path makes
-// multi-item requests from a renter's WhatsApp reply - but the renter-facing
-// form asks for one. Choosing several places and several time windows in one
-// modal is two multi-selects stacked, and the second one is the one that
-// actually needs the room.
+// **The place is the one the renter opened this from.** It used to be a
+// single choice over their matches, which mostly offered a way to request a
+// flat they were not looking at. Someone who wants three seen taps "Request
+// viewing" on three cards.
 //
-// So the list is a single choice over the renter's matches. One exception, and
-// it is correctness rather than preference: a listing seeded by the card that
-// opened this modal appears even when it is not among their matches. It is
-// what the renter asked to view, and a form must not quietly request something
-// it never showed them.
+// **And those three become one plan.** While the renter has a request whose
+// agents are still being asked, a new place joins it (intake.ts
+// `pickJoinable`): it takes that request's times, its WhatsApp thread, and a
+// seat in its one itinerary message. Three separate requests would be three
+// itineraries, three billed messages and no clash warning between viewings
+// that were never in the same plan. The renter can still choose different
+// times, which makes it a request of its own.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,15 +29,13 @@ import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { Check, ImageOff, Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
+import { ImageOff, Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useMatches } from '@/hooks/useMatches';
 import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useRenterIdentity } from '@/hooks/useRenterIdentity';
-import { useShortlist } from '@/hooks/useShortlist';
 import {
   DAY_PARTS,
   MAX_DAYS_AHEAD,
@@ -69,16 +68,13 @@ interface Props {
   seed?: RequestSeed | null;
 }
 
-interface Submitted { ref: string; waLink: string }
+interface Submitted { ref: string; waLink: string; joined?: boolean; placeCount?: number }
 
-interface Choice {
-  id: string;
-  title: string;
-  location: string | null;
-  imageUrl: string | null;
-  selected: boolean;
-  /** True for a listing that came from the card, not from their matches. */
-  pinned: boolean;
+/** What `viewing-request-open` says about the request a new place would join. */
+interface OpenRequest {
+  ref: string;
+  availability: AvailabilityWindow[];
+  listingIds: string[];
 }
 
 function partsOf(iso: string) {
@@ -114,9 +110,8 @@ function Step({ n, title, hint, children }: {
 
 export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const { user } = useAuth();
-  const shortlist = useShortlist();
+  const queryClient = useQueryClient();
   const { quota } = useViewingQuota();
-  const { renterMatches } = useMatches();
   const { identity } = useRenterIdentity();
 
   const [name, setName] = useState('');
@@ -126,26 +121,34 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const [touched, setTouched] = useState({ name: false, phone: false });
-
-  // The card that opened this is the choice, replacing anything left over from
-  // a previous visit - the shortlist lives in localStorage, so without the
-  // clear a renter could open a listing page and find a different flat
-  // selected.
-  useEffect(() => {
-    if (!open || !seed) return;
-    if (shortlist.has(seed.listingId) && shortlist.entries.length === 1) return;
-    shortlist.clear();
-    shortlist.toggle({
-      listingId: seed.listingId, title: seed.title, imageUrl: seed.imageUrl ?? null,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, seed?.listingId]);
+  /** The renter chose their own times over joining their open request. */
+  const [separate, setSeparate] = useState(false);
 
   useEffect(() => {
     if (!identity) return;
     setName(prev => (touched.name || prev ? prev : identity.name));
     setPhone(prev => (touched.phone || prev ? prev : identity.phone));
   }, [identity, touched.name, touched.phone]);
+
+  // Asked every time the modal opens, never cached across opens: the request
+  // it names may have moved on to its itinerary in the meantime. The server
+  // decides again at submit either way - this is what the renter is shown.
+  const { data: openRequest, isLoading: openLoading } = useQuery<OpenRequest | null>({
+    queryKey: ['viewing-open-request', user?.id],
+    enabled: open && !!user,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+    queryFn: async () => {
+      const { data, error: err } = await supabase.functions.invoke('viewing-request-open', { body: {} });
+      // A failed lookup falls back to asking for times, which is always safe.
+      if (err) return null;
+      return ((data as { open?: OpenRequest | null })?.open) ?? null;
+    },
+  });
+
+  const join = openRequest && !separate ? openRequest : null;
+  const alreadyIn = !!seed && !!openRequest?.listingIds.includes(seed.listingId);
 
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
@@ -160,74 +163,19 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     () => [...new Set(picked.map(w => w.date))].sort(), [picked],
   );
 
-  /**
-   * The renter's matches, plus the seeded listing if it is not one of them.
-   *
-   * **External only.** The viewing flow requests against `external_properties`
-   * and `screenCandidates` refuses anything else on submit, so offering an
-   * internal match would mean picking a place, filling in the form, and being
-   * told no.
-   *
-   * **No price.** `properties.price` is the raw column carrying USD for
-   * housingsgn rows (SPEC §0) - rendering it would tell a renter a $730 flat
-   * costs 730 ₫. The card they came from showed the price.
-   */
-  const choices = useMemo<Choice[]>(() => {
-    type Match = {
-      property_type?: string;
-      properties?: { id?: string; title?: string; location?: string; images?: string[] | null } | null;
-    };
-    const matches = ((renterMatches ?? []) as Match[])
-      .filter(m => m.property_type === 'external')
-      .map(m => m.properties)
-      .filter((p): p is NonNullable<Match['properties']> & { id: string; title: string } =>
-        !!p?.id && !!p?.title);
+  /** The joined request's times still ahead, grouped by day, for display. */
+  const joinDays = useMemo(() => {
+    if (!join) return [];
+    const byDate = new Map<string, DayPart[]>();
+    for (const w of join.availability) {
+      if (w.date < today) continue;
+      byDate.set(w.date, [...(byDate.get(w.date) ?? []), w.part]);
+    }
+    return [...byDate.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
+  }, [join, today]);
 
-    const matched: Choice[] = matches.map(p => ({
-      id: p.id,
-      title: p.title,
-      location: p.location ?? null,
-      imageUrl: p.images?.[0] ?? null,
-      selected: shortlist.has(p.id),
-      pinned: false,
-    }));
-
-    // Anything in the request that is not a match. Normally just the listing
-    // whose card opened this. Shown, because a request must not contain
-    // something invisible.
-    const extras: Choice[] = shortlist.entries
-      .filter(e => !matches.some(p => p.id === e.listingId))
-      .map(e => ({
-        id: e.listingId,
-        title: e.title,
-        location: null,
-        imageUrl: e.imageUrl ?? null,
-        selected: true,
-        pinned: true,
-      }));
-
-    return [...extras, ...matched];
-  }, [renterMatches, shortlist]);
-
-  const count = shortlist.entries.length;
   const credits = quota?.remaining ?? 0;
-  const shortOnCredits = !!quota && credits < count;
-
-  /**
-   * Pick one. The shortlist is cleared first, so choosing a second place
-   * replaces the first rather than adding to it - the functional updates chain,
-   * so `toggle` sees the emptied list.
-   *
-   * Tapping the chosen one again does nothing. Deselecting to nothing is a
-   * state with no way forward, and the renter's next move from there is to pick
-   * a different place anyway.
-   */
-  const chooseOnly = (c: Choice) => {
-    if (c.selected) return;
-    shortlist.clear();
-    const r = shortlist.toggle({ listingId: c.id, title: c.title, imageUrl: c.imageUrl });
-    if (!r.ok) toast.error(r.error ?? 'Could not select that place.');
-  };
+  const shortOnCredits = !!quota && credits < 1;
 
   const toggleDay = (date: string) => {
     setPicked(prev => {
@@ -255,33 +203,52 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   };
 
   const submit = async () => {
+    if (!seed) return;
     setError(null);
-    if (!toE164(phone)) {
+    if (!join && !toE164(phone)) {
       setError('Enter a Vietnamese mobile number, e.g. 0901 234 567.');
       return;
     }
     setBusy(true);
     const { data, error: err } = await supabase.functions.invoke('viewing-request-create', {
-      body: {
-        phone, displayName: name,
-        listingIds: shortlist.entries.map(e => e.listingId),
-        availability: picked,
-      },
+      body: join
+        ? { listingIds: [seed.listingId], joinRef: join.ref }
+        : { phone, displayName: name, listingIds: [seed.listingId], availability: picked },
     });
     setBusy(false);
-    if (err) { setError('Something went wrong on our side. Try again in a moment.'); return; }
-    const payload = data as Submitted & { error?: string; message?: string };
-    if (payload?.error) { setError(payload.message ?? payload.error); return; }
+
+    // A non-2xx arrives as `err` with the body still readable on its context.
+    // The join refusals are 409s the renter can act on, so they are read out
+    // rather than flattened into "something went wrong".
+    let payload = data as (Submitted & { error?: string; message?: string }) | null;
+    if (err) {
+      const ctx = (err as { context?: Response }).context;
+      payload = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
+      if (!payload?.error) { setError('Something went wrong on our side. Try again in a moment.'); return; }
+    }
+    if (payload?.error) {
+      setError(payload.message ?? payload.error);
+      // The request moved on to its itinerary between opening and submitting.
+      // Ask again; with nothing open, the modal becomes an ordinary request.
+      if (payload.error === 'join_closed') {
+        queryClient.invalidateQueries({ queryKey: ['viewing-open-request'] });
+      }
+      return;
+    }
     setSubmitted(payload);
-    shortlist.clear();
+    queryClient.invalidateQueries({ queryKey: ['viewing-quota'] });
+    queryClient.invalidateQueries({ queryKey: ['my-viewing-requests'] });
   };
 
   const close = () => {
     onOpenChange(false);
+    setError(null);
+    setSeparate(false);
     if (submitted) { setSubmitted(null); setPicked([]); }
   };
 
-  const canSubmit = !busy && count > 0 && picked.length > 0 && !shortOnCredits;
+  const canSubmit = !busy && !!seed && !alreadyIn && !shortOnCredits && !openLoading
+    && (join ? true : picked.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={o => (o ? onOpenChange(true) : close())}>
@@ -290,22 +257,46 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
           layout on mobile. */}
       <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
         {submitted ? (
-          <div className="space-y-4 p-6">
-            <DialogHeader>
-              <DialogTitle>Request {submitted.ref} is in</DialogTitle>
-              <DialogDescription>
-                One last step - open WhatsApp so we can reach you with the times.
-              </DialogDescription>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              We are contacting each agent now. You will hear from us on WhatsApp with
-              the times that are actually free, usually within a day.
-            </p>
-            <Button asChild className="w-full">
-              <a href={submitted.waLink} target="_blank" rel="noreferrer">Open WhatsApp</a>
-            </Button>
-            <Button variant="ghost" className="w-full" onClick={close}>Done</Button>
-          </div>
+          submitted.joined ? (
+            <div className="space-y-4 p-6">
+              <DialogHeader>
+                <DialogTitle>Added to request {submitted.ref}</DialogTitle>
+                <DialogDescription>
+                  One plan, one message: we fit this place in with the
+                  {submitted.placeCount && submitted.placeCount > 2 ? ' others' : ' other one'} and
+                  send you every time together on WhatsApp.
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                We are contacting this agent now, at the same times you gave before.
+              </p>
+              <Button className="w-full" onClick={close}>Done</Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Not messaged us about {submitted.ref} yet?{' '}
+                <a href={submitted.waLink} target="_blank" rel="noreferrer" className="underline">
+                  Open WhatsApp
+                </a>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4 p-6">
+              <DialogHeader>
+                <DialogTitle>Request {submitted.ref} is in</DialogTitle>
+                <DialogDescription>
+                  One last step - open WhatsApp so we can reach you with the times.
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                We are contacting the agent now. You will hear from us on WhatsApp with
+                the times that are actually free, usually within a day. Want to see more
+                places? Request them the same way and we fit them into this plan.
+              </p>
+              <Button asChild className="w-full">
+                <a href={submitted.waLink} target="_blank" rel="noreferrer">Open WhatsApp</a>
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={close}>Done</Button>
+            </div>
+          )
         ) : !user ? (
           <div className="space-y-4 p-6">
             <DialogHeader>
@@ -327,175 +318,198 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
             </DialogHeader>
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
-              {/* ── 1. Places ────────────────────────────────────────── */}
-              <Step
-                n={1}
-                title="Which place?"
-                hint="One place per request, and one viewing request from your balance."
-              >
-                {choices.length === 0 ? (
-                  <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                    No matches yet. Match a few places and they will show up here.
-                  </p>
+              {/* ── 1. The place ─────────────────────────────────────── */}
+              <Step n={1} title="The place">
+                {seed ? (
+                  <div className="flex items-center gap-3 rounded-md border p-2">
+                    {seed.imageUrl
+                      ? <img src={seed.imageUrl} alt="" className="h-11 w-14 shrink-0 rounded object-cover" />
+                      : <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
+                          <ImageOff className="h-4 w-4 text-muted-foreground" />
+                        </span>}
+                    <span className="min-w-0 flex-1 truncate text-sm">{seed.title}</span>
+                  </div>
                 ) : (
-                  <ul role="radiogroup" aria-label="Which place" className="space-y-1.5">
-                    {choices.map(c => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={c.selected}
-                          onClick={() => chooseOnly(c)}
-                          className={cn(
-                            'flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors',
-                            c.selected
-                              ? 'border-primary bg-primary/5'
-                              : 'hover:bg-muted/50',
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
-                              c.selected
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-muted-foreground/40',
-                            )}
-                          >
-                            {c.selected && <Check className="h-2.5 w-2.5" />}
-                          </span>
-                          {c.imageUrl
-                            ? <img src={c.imageUrl} alt="" className="h-11 w-14 shrink-0 rounded object-cover" />
-                            : <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-muted">
-                                <ImageOff className="h-4 w-4 text-muted-foreground" />
-                              </span>}
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm">{c.title}</span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {c.pinned ? 'The place you opened this from' : c.location ?? 'From your matches'}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    Open a listing and tap Request viewing there.
+                  </p>
+                )}
+                {alreadyIn && openRequest && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    This place is already in your request {openRequest.ref}. We will be in
+                    touch on WhatsApp.
+                  </p>
                 )}
               </Step>
 
               <Separator />
 
               {/* ── 2. When ──────────────────────────────────────────── */}
-              <Step
-                n={2}
-                title="When are you free?"
-                hint={`We need two days to reach the agents, so the soonest is ${prettyDate(earliest)}.`}
-              >
-                <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
-                  {days.map(date => {
-                    const p = partsOf(date);
-                    const on = chosenDates.includes(date);
-                    return (
-                      <button
-                        key={date}
-                        type="button"
-                        onClick={() => toggleDay(date)}
-                        aria-pressed={on}
-                        className={cn(
-                          'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors',
-                          on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
-                        )}
-                      >
-                        <span className="text-[10px] uppercase opacity-80">{p.weekday}</span>
-                        <span className="text-sm font-semibold leading-tight">{p.day}</span>
-                        <span className="text-[10px] opacity-80">{p.month}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {chosenDates.length > 0 && (
-                  <ul className="mt-3 space-y-2">
-                    {chosenDates.map(date => (
-                      <li key={date} className="rounded-md border p-2">
-                        <div className="mb-1.5 text-sm font-medium">{prettyDate(date)}</div>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {DAY_PARTS.map(part => {
-                            const on = picked.some(w => w.date === date && w.part === part);
-                            const Icon = PART_ICON[part];
-                            return (
-                              <button
-                                key={part}
-                                type="button"
-                                aria-pressed={on}
-                                onClick={() => toggleWindow(date, part)}
-                                className={cn(
-                                  'flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[11px] transition-colors',
-                                  on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
-                                )}
-                              >
-                                <Icon className="h-3.5 w-3.5" />
-                                {PART_LABEL[part]}
-                              </button>
-                            );
-                          })}
-                        </div>
+              {openLoading ? (
+                <Step n={2} title="When are you free?">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </Step>
+              ) : join ? (
+                <Step
+                  n={2}
+                  title="When"
+                  hint={`Adding this to your request ${join.ref}, at the times you already gave. We fit it into the same plan and send one message with every time.`}
+                >
+                  <ul className="space-y-1.5">
+                    {joinDays.map(([date, parts]) => (
+                      <li key={date} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                        <span className="font-medium">{prettyDate(date)}</span>
+                        <span className="text-muted-foreground">
+                          {parts.map(p => PART_LABEL[p]).join(', ')}
+                        </span>
                       </li>
                     ))}
                   </ul>
-                )}
-              </Step>
+                  {!alreadyIn && (
+                    <button
+                      type="button"
+                      onClick={() => { setSeparate(true); setError(null); }}
+                      className="mt-2 text-xs text-muted-foreground underline"
+                    >
+                      Different times? Make it a separate request
+                    </button>
+                  )}
+                </Step>
+              ) : (
+                <Step
+                  n={2}
+                  title="When are you free?"
+                  hint={`We need two days to reach the agents, so the soonest is ${prettyDate(earliest)}.`}
+                >
+                  {openRequest && (
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      This will be a separate request from {openRequest.ref}.{' '}
+                      <button
+                        type="button"
+                        onClick={() => { setSeparate(false); setError(null); }}
+                        className="underline"
+                      >
+                        Add it to {openRequest.ref} instead
+                      </button>
+                    </p>
+                  )}
+                  <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
+                    {days.map(date => {
+                      const p = partsOf(date);
+                      const on = chosenDates.includes(date);
+                      return (
+                        <button
+                          key={date}
+                          type="button"
+                          onClick={() => toggleDay(date)}
+                          aria-pressed={on}
+                          className={cn(
+                            'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors',
+                            on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
+                          )}
+                        >
+                          <span className="text-[10px] uppercase opacity-80">{p.weekday}</span>
+                          <span className="text-sm font-semibold leading-tight">{p.day}</span>
+                          <span className="text-[10px] opacity-80">{p.month}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-              <Separator />
+                  {chosenDates.length > 0 && (
+                    <ul className="mt-3 space-y-2">
+                      {chosenDates.map(date => (
+                        <li key={date} className="rounded-md border p-2">
+                          <div className="mb-1.5 text-sm font-medium">{prettyDate(date)}</div>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {DAY_PARTS.map(part => {
+                              const on = picked.some(w => w.date === date && w.part === part);
+                              const Icon = PART_ICON[part];
+                              return (
+                                <button
+                                  key={part}
+                                  type="button"
+                                  aria-pressed={on}
+                                  onClick={() => toggleWindow(date, part)}
+                                  className={cn(
+                                    'flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[11px] transition-colors',
+                                    on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
+                                  )}
+                                >
+                                  <Icon className="h-3.5 w-3.5" />
+                                  {PART_LABEL[part]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Step>
+              )}
 
               {/* ── 3. You ───────────────────────────────────────────── */}
-              <Step
-                n={3}
-                title="Where do we reach you?"
-                hint={
-                  identity && (identity.name || identity.phone) && !touched.name && !touched.phone
-                    ? 'Using the details on your account - edit either if you would rather we used something else.'
-                    : undefined
-                }
-              >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="rv-name" className="text-xs">Your name</Label>
-                    <Input
-                      id="rv-name" value={name} placeholder="Minh"
-                      onChange={e => { setTouched(t => ({ ...t, name: true })); setName(e.target.value); }}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="rv-phone" className="text-xs">WhatsApp number</Label>
-                    <Input
-                      id="rv-phone" value={phone} placeholder="0901 234 567" inputMode="tel"
-                      onChange={e => { setTouched(t => ({ ...t, phone: true })); setPhone(e.target.value); }}
-                    />
-                  </div>
-                </div>
-              </Step>
+              {/* Not asked when joining: the answer goes to the WhatsApp thread
+                  the open request already has. */}
+              {!join && !openLoading && (
+                <>
+                  <Separator />
+                  <Step
+                    n={3}
+                    title="Where do we reach you?"
+                    hint={
+                      identity && (identity.name || identity.phone) && !touched.name && !touched.phone
+                        ? 'Using the details on your account - edit either if you would rather we used something else.'
+                        : undefined
+                    }
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor="rv-name" className="text-xs">Your name</Label>
+                        <Input
+                          id="rv-name" value={name} placeholder="Minh"
+                          onChange={e => { setTouched(t => ({ ...t, name: true })); setName(e.target.value); }}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="rv-phone" className="text-xs">WhatsApp number</Label>
+                        <Input
+                          id="rv-phone" value={phone} placeholder="0901 234 567" inputMode="tel"
+                          onChange={e => { setTouched(t => ({ ...t, phone: true })); setPhone(e.target.value); }}
+                        />
+                      </div>
+                    </div>
+                  </Step>
+                </>
+              )}
             </div>
 
             {/* ── Footer: always reachable ───────────────────────────── */}
             <div className="shrink-0 space-y-2 border-t bg-background p-4 sm:p-6 sm:pt-4">
               {shortOnCredits ? (
                 <p className="text-sm text-amber-700">
-                  A request uses one viewing request and you have {credits}. Top up to
+                  A request uses one viewing request and you have none left. Top up to
                   carry on.
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  {picked.length} of {MAX_WINDOWS} time window{picked.length === 1 ? '' : 's'}
+                  {join
+                    ? `Joins ${join.ref}`
+                    : `${picked.length} of ${MAX_WINDOWS} time window${picked.length === 1 ? '' : 's'}`}
                   {quota ? ` · uses 1 of your ${credits} viewing requests` : ''}
                 </p>
               )}
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button className="w-full" disabled={!canSubmit} onClick={submit}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {count === 0
-                  ? 'Pick a place'
-                  : picked.length === 0
-                    ? 'Pick a time'
-                    : 'Request viewing'}
+                {alreadyIn
+                  ? 'Already requested'
+                  : join
+                    ? `Add to request ${join.ref}`
+                    : picked.length === 0
+                      ? 'Pick a time'
+                      : 'Request viewing'}
               </Button>
               <p className="text-center text-[11px] text-muted-foreground">
                 Nothing is arranged yet. We confirm with each agent first.

@@ -127,6 +127,12 @@ verify_jwt = false
 # instead, and it reads every price from the database rather than the body.
 verify_jwt = false
 
+[functions.viewing-request-open]
+# The modal's preview of the request a new place would join. Verifies the
+# caller's JWT itself so a signed-out caller gets a reason rather than the
+# platform's bare 401, same as viewing-request-create.
+verify_jwt = false
+
 [functions.dev-phone]
 # /dev/phone, the mock WhatsApp thread. Refuses outright when WHATSAPP_MODE is
 # cloud - simulating inbound messages against a real number would forge service

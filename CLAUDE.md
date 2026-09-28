@@ -92,6 +92,10 @@ Cards carry a single "Request viewing" button, which opens
 `RequestViewingModal`. "Shortlist" and "Book viewing" used to sit side by side
 and asked the renter to care about a distinction that was ours. Fast-Track is
 retired as a renter surface; its plumbing stays for history and entitlements.
+The modal requests the one place it was opened from; a second place asked for
+while the first request's agents are still being asked joins that request
+(`pickJoinable` in `intake.ts`, SPEC §1), so several requests make one plan
+and one itinerary message rather than one each.
 
 **9. New-flow requests are visible to operators, never to realtors.**
 `ViewingFlowQueuePanel` is admin scope only and read-only - status is derived

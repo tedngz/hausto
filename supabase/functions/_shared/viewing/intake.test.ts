@@ -9,11 +9,14 @@ import {
   MIN_LEAD_DAYS,
   screenCandidates,
   intakeEvents,
+  itemEvents,
+  pickJoinable,
   buildDeepLink,
   formatVnd,
   hcmcDate,
   addDays,
   toE164,
+  type JoinCandidate,
   type ShortlistCandidate,
 } from './intake.ts';
 
@@ -218,6 +221,68 @@ describe('the events an intake writes', () => {
   it('attributes the intake to the renter, not to us', () => {
     const events = intakeEvents({ ...base, items: [] });
     expect(events[0].actor).toBe('RENTER');
+  });
+
+  it('writes a place joining an open request exactly as one that came with it, minus the submission', () => {
+    const items = [{ itemId: 'i3', listingId: 'l3', priceVndAtRequest: 9_000_000, realtorId: 'r3' }];
+    const joined = itemEvents({ requestId: 'req-1', items });
+    const fresh = intakeEvents({ ...base, items }).slice(1);
+    expect(joined).toEqual(fresh);
+    expect(joined.map(e => e.type)).toEqual(['ITEM_ADDED', 'REALTOR_RESOLVED']);
+    expect(joined.some(e => e.type === 'REQUEST_SUBMITTED')).toBe(false);
+  });
+});
+
+describe('joining an open request', () => {
+  const today = '2026-09-28';
+  const soonest = addDays(today, MIN_LEAD_DAYS); // 2026-09-30
+  const candidate = (over: Partial<JoinCandidate> = {}): JoinCandidate => ({
+    requestId: 'req-1',
+    ref: 'HV-4KX9',
+    createdAt: '2026-09-27T10:00:00Z',
+    availability: [{ date: soonest, part: 'MORNING' }],
+    listingIds: ['l1'],
+    state: 'CONTACTING',
+    delivered: false,
+    ...over,
+  });
+
+  it('joins a request whose agents are still being asked', () => {
+    expect(pickJoinable([candidate({ state: 'SUBMITTED' })], today)?.ref).toBe('HV-4KX9');
+    expect(pickJoinable([candidate({ state: 'CONTACTING' })], today)?.ref).toBe('HV-4KX9');
+  });
+
+  it('opens a fresh request once the plan is being put together or has gone out', () => {
+    for (const state of ['ASSEMBLING', 'DELIVERED', 'CONFIRMED', 'FAILED_NO_SUPPLY', 'CANCELLED']) {
+      expect(pickJoinable([candidate({ state })], today)).toBeNull();
+    }
+    // Delivered is read off the message, not just the state name.
+    expect(pickJoinable([candidate({ delivered: true })], today)).toBeNull();
+  });
+
+  it('opens a fresh request when the open one has no room left', () => {
+    expect(pickJoinable([candidate({ listingIds: ['a', 'b', 'c', 'd'] })], today)).not.toBeNull();
+    expect(pickJoinable([candidate({ listingIds: ['a', 'b', 'c', 'd', 'e'] })], today)).toBeNull();
+  });
+
+  it('opens a fresh request when every window is too soon to ask a new agent about', () => {
+    const tomorrow = addDays(today, 1);
+    expect(pickJoinable([candidate({ availability: [{ date: tomorrow, part: 'EVENING' }] })], today)).toBeNull();
+    // One window still far enough out is enough.
+    expect(pickJoinable([candidate({
+      availability: [{ date: tomorrow, part: 'EVENING' }, { date: soonest, part: 'MORNING' }],
+    })], today)).not.toBeNull();
+  });
+
+  it('picks the most recent when more than one is open', () => {
+    const older = candidate({ ref: 'HV-AAAA', createdAt: '2026-09-25T10:00:00Z' });
+    const newer = candidate({ ref: 'HV-CCCC', createdAt: '2026-09-27T10:00:00Z' });
+    expect(pickJoinable([older, newer], today)?.ref).toBe('HV-CCCC');
+    expect(pickJoinable([newer, older], today)?.ref).toBe('HV-CCCC');
+  });
+
+  it('opens a fresh request when there is nothing to join', () => {
+    expect(pickJoinable([], today)).toBeNull();
   });
 });
 

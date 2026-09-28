@@ -247,7 +247,7 @@ export interface NewEvent {
 }
 
 /**
- * Every event an intake produces, in one list.
+ * Every event a new request's intake produces, in one list.
  *
  * The whole point of invariant 1 is that this is the only way a request comes
  * into existence: rows in `viewing_requests`/`request_items` are the skeleton,
@@ -260,7 +260,7 @@ export function intakeEvents(opts: {
   availability: AvailabilityWindow[];
   items: { itemId: string; listingId: string; priceVndAtRequest: number; realtorId: string | null }[];
 }): NewEvent[] {
-  const events: NewEvent[] = [
+  return [
     {
       request_id: opts.requestId,
       item_id: null,
@@ -268,8 +268,21 @@ export function intakeEvents(opts: {
       payload: { availability: opts.availability },
       actor: 'RENTER',
     },
+    ...itemEvents(opts),
   ];
+}
 
+/**
+ * The events for places joining a request, whether it is new or already open.
+ * One builder for both, so a place added later is indistinguishable in the
+ * log from one that came with the request - which is what lets the planner,
+ * the console and the itinerary treat it the same without knowing.
+ */
+export function itemEvents(opts: {
+  requestId: string;
+  items: { itemId: string; listingId: string; priceVndAtRequest: number; realtorId: string | null }[];
+}): NewEvent[] {
+  const events: NewEvent[] = [];
   for (const item of opts.items) {
     events.push({
       request_id: opts.requestId,
@@ -293,6 +306,56 @@ export function intakeEvents(opts: {
     }
   }
   return events;
+}
+
+// ── Joining an open request ─────────────────────────────────────────────────
+// The modal asks for one place, the one the renter is looking at. Someone who
+// wants three flats seen taps "Request viewing" on three cards - and if each
+// became its own request, they would get three itineraries, three WhatsApp
+// messages (each billed from 2026-10-01, and the third refused by the send
+// service), and no clash warning between viewings that were never in the same
+// plan. So a place asked for while the renter has a request still being
+// arranged joins that request instead.
+
+/** An open request as the join rule sees it, reduced from its log. */
+export interface JoinCandidate {
+  requestId: string;
+  ref: string;
+  createdAt: string;
+  availability: AvailabilityWindow[];
+  listingIds: string[];
+  /** Derived state (viewing-domain `RequestState`). */
+  state: string;
+  delivered: boolean;
+}
+
+/**
+ * The request a new place should join, or null for a fresh one.
+ *
+ * Only while agents are still being asked (`SUBMITTED`, `CONTACTING`). Once the
+ * itinerary is being assembled or has gone out, the renter has been told - or
+ * is about to be told - what the plan is, and quietly growing it would mean a
+ * second itinerary or a place that never makes it into one.
+ *
+ * Only while it has room (`MAX_ITEMS` - an itinerary is one day of viewings),
+ * and only while at least one of its windows is still offerable under
+ * `MIN_LEAD_DAYS`. The new agent is asked about the request's windows, not
+ * fresh ones, so a request whose times are all tomorrow or earlier has nothing
+ * left to offer the place joining it. That also keeps a join inside the
+ * 30-day entitlement window, which counts listings by the request's
+ * `created_at`: windows are at most `MAX_DAYS_AHEAD` out, so an offerable
+ * request is at most two weeks old.
+ *
+ * The most recent wins if there is more than one.
+ */
+export function pickJoinable(candidates: JoinCandidate[], today: string): JoinCandidate | null {
+  const earliest = addDays(today, MIN_LEAD_DAYS);
+  const open = candidates
+    .filter(c => (c.state === 'SUBMITTED' || c.state === 'CONTACTING') && !c.delivered)
+    .filter(c => c.listingIds.length < MAX_ITEMS)
+    .filter(c => c.availability.some(w => w.date >= earliest))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return open[0] ?? null;
 }
 
 // ── The handshake ───────────────────────────────────────────────────────────

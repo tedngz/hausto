@@ -212,7 +212,16 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         break;
 
       case 'ITEM_ADDED':
-        if (e.item_id) item(e.item_id);
+        if (!e.item_id) break;
+        item(e.item_id);
+        // A place can join a request after it opened (intake.ts pickJoinable).
+        // Intake refuses once assembly has begun, but an operator can assemble
+        // between that check and this write - and then the order on file does
+        // not include a place that still has an agent to ask. Back to
+        // CONTACTING, so the request reads as unfinished until it is
+        // re-assembled. Delivered and later are left alone: the renter has
+        // their plan, and intake never joins those.
+        if (view.state === 'ASSEMBLING') view.state = 'CONTACTING';
         break;
 
       case 'REALTOR_RESOLVED':

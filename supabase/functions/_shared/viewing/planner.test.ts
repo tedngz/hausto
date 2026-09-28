@@ -152,6 +152,37 @@ describe('the itinerary', () => {
   });
 });
 
+describe('a place that joins a request already under way', () => {
+  // The renter asked for one flat, then another from a different card. The
+  // second joins the first request (intake.ts pickJoinable) with its own
+  // ITEM_ADDED, hours later. It must be asked about exactly like the first,
+  // and the renter must still hear one plan carrying both.
+  const joinedLater = () => [
+    ...submitted(1),
+    ev('REALTOR_CONTACTED', 0, {}, 'i1'),
+    ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'CONFIRMED', slots: slot('2026-09-29T02:00:00Z') }, 'i1'),
+    ev('ITEM_ADDED', 2 * HOUR_MS, {}, 'i2'),
+  ];
+
+  it('proposes the first message to the new agent, at the same times', () => {
+    const ps = plan(joinedLater(), { now: T0 + 2 * HOUR_MS });
+    expect(ps.map(p => p.key)).toEqual(['CONTACT:i2']);
+    expect(String(ps[0].input.message)).toContain('Chào anh/chị');
+  });
+
+  it('holds the itinerary back until the new agent answers, then carries both', () => {
+    expect(byKey(plan(joinedLater(), { now: T0 + 2 * HOUR_MS }))['DELIVER:r']).toBeUndefined();
+
+    const answered = [
+      ...joinedLater(),
+      ev('REALTOR_CONTACTED', 2 * HOUR_MS, {}, 'i2'),
+      ev('OUTCOME_RECORDED', 3 * HOUR_MS, { outcome: 'CONFIRMED', slots: slot('2026-09-29T04:00:00Z') }, 'i2'),
+    ];
+    const p = byKey(plan(answered, { now: T0 + 3 * HOUR_MS }))['DELIVER:r'];
+    expect(p).toMatchObject({ action: 'DELIVER', input: { order: ['i1', 'i2'] } });
+  });
+});
+
 describe('the renter', () => {
   it('escalates a question, keyed on the newest reply', () => {
     const events = [...submitted(1), ev('RENTER_REPLIED', HOUR_MS, { intent: 'QUESTION', message_id: 'm7' })];
