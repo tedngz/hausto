@@ -319,6 +319,20 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
             Send on WhatsApp
           </button>
         </div>
+        {/* After the window: the request_update template carries no news, only
+            "reply here to see it" - their reply reopens the window. Refused
+            until Meta approves the template (docs/whatsapp-go-live.md). */}
+        {!windowOpen && v.state !== 'CLOSED' && !!d.confirmed_at && !d.opted_out && (
+          <div className="row" style={{ marginTop: 6 }}>
+            <span className="small muted">
+              Have news for them? Send "we have an update on your request - reply here to see it", and their reply reopens the window.
+            </span>
+            <div className="spacer" />
+            <button disabled={busy} onClick={() => void run({ action: 'INQUIRY_SEND_UPDATE', key: crypto.randomUUID() })}>
+              Send update template
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card">

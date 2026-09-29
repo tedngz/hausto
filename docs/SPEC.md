@@ -144,6 +144,7 @@ id              uuid pk
 ref             text unique not null      -- short human ref, e.g. HV-4KX2
 renter_id       uuid references renters(id)
 availability    jsonb not null            -- chosen windows, Asia/Ho_Chi_Minh
+inquiry_id      uuid references complex_inquiries  -- made from an offer link (§11)
 created_at      timestamptz default now()
 ```
 
@@ -1043,6 +1044,33 @@ by inviting a reply and books nothing. Sent through `sendConciergeWhatsApp`
 `UNITS_OFFERED {listing_ids, message_id}`, and written to `alert_items` so the
 weekly alert does not offer the same places again. The request becomes
 `OFFERED`, and stays so if more agents are asked afterwards.
+
+### The handoff, the deadline and after the window (PLAN-v3 S7.1c)
+
+**Handoff.** An offer link `hausto.com/property/<id>?inq=<inquiry>` is
+remembered by the property page for the session (it survives the sign-in
+detour) and sent by `RequestViewingModal` as `inquiryId`.
+`viewing-request-create` then calls `linkViewingToInquiry()`, on a new request
+and on a join alike: when the viewing request and the availability request
+belong to the same renter - never otherwise, so a forwarded link closes nobody
+else's - it sets `viewing_requests.inquiry_id` and writes `CLOSED
+{reason: VIEWING_REQUESTED, request_id}` if the request is still open.
+
+**Deadline.** When the code arrives, two `jobs` of kind `INQUIRY_DEADLINE` are
+enqueued, at 16 and 22 hours (`inquiry-deadline.ts`). `viewing-jobs-run` runs
+them: each emails the ops team (`sendIntakeAlert`, nothing about the renter)
+only if the request is still unanswered - no message of ours after the code
+other than the automatic confirmation, nothing offered, not closed - and is
+completed either way, never retried into a second email. That no confirmed
+request reaches 24 hours without an answer or a reminder is asserted as a
+property test.
+
+**After the window.** `INQUIRY_SEND_UPDATE` sends the `request_update` template
+("we have an update on your request for {{2}} - reply here to see it"), only
+while the window is shut, filed on the thread so the reply routes back. The
+template is in the registry `approved: false` and not yet submitted to Meta
+(`docs/whatsapp-go-live.md`), so until then the action is refused as
+`template_not_approved`.
 
 ### Building agents (PLAN-v3 S7.0)
 

@@ -17,6 +17,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
 import { deliver } from '../_shared/viewing/deliver.ts';
+import { INQUIRY_DEADLINE_JOB } from '../_shared/viewing/inquiry-deadline.ts';
+import { runInquiryDeadline } from '../_shared/viewing/concierge.ts';
+import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,7 +30,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 /** Kinds this runner owns. Everything else is somebody's to-do, not a task. */
-const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_REMINDER'];
+const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_REMINDER', INQUIRY_DEADLINE_JOB];
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -88,6 +91,23 @@ Deno.serve(async (req) => {
   let skipped = 0;
 
   for (const job of jobs) {
+    // An availability request's 16h/22h reminder (PLAN-v3 S7.1c): an email to
+    // the ops team, only if nobody has answered yet. Never retried into a
+    // second email - a reminder that failed is logged, not repeated.
+    if (job.kind === INQUIRY_DEADLINE_JOB) {
+      const inquiryId = (job.payload as { inquiry_id?: string })?.inquiry_id;
+      const outcome = inquiryId
+        ? await runInquiryDeadline(db, inquiryId, new Date(), a => sendIntakeAlert(db, a, Deno.env.get('RESEND_API_KEY')))
+            .catch((e: Error) => `error: ${e.message}`)
+        : 'MISSING';
+      await db.from('jobs').update({
+        completed_at: new Date().toISOString(),
+        last_error: outcome === 'SENT' ? null : outcome,
+      }).eq('id', job.id);
+      if (outcome === 'SENT') sent++; else skipped++;
+      continue;
+    }
+
     const requestId = job.payload?.request_id;
     if (!requestId) {
       await db.from('jobs').update({ completed_at: new Date().toISOString(), last_error: 'no request_id' }).eq('id', job.id);

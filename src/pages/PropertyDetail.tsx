@@ -26,6 +26,7 @@ import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
 import { DEEP_SCAN_EVENT } from '@/lib/deepScanEvents';
+import { rememberOfferInquiry } from '@/components/RequestViewingModal';
 
 const PropertyDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +39,12 @@ const PropertyDetail = () => {
   const [source, setSource] = useState<'internal' | 'external'>('internal');
   const [isRelist, setIsRelist] = useState(false);
   const [firstSeenAt, setFirstSeenAt] = useState<string | null>(null);
+
+  // Opened from an availability request's offer (`?inq=`): remembered so the
+  // viewing request made from here links back to it.
+  useEffect(() => {
+    if (id) rememberOfferInquiry(id, new URLSearchParams(window.location.search).get('inq'));
+  }, [id]);
   const [isBooking, setIsBooking] = useState(false);
   // Set once the listing has a conversation to hang the request off; opening
   // the schedule modal is what it gates.

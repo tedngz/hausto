@@ -10,7 +10,9 @@
 
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { sendFreeForm, type MessageStore } from '../whatsapp/send.ts';
-import { INQUIRY_REPLY_DAYS, type InquirySummary } from './inquiry.ts';
+import { INQUIRY_REPLY_DAYS, describeInquiry, type InquirySummary } from './inquiry.ts';
+import { deadlineAlertNeeded, deadlineJobs, renderDeadlineAlert } from './inquiry-deadline.ts';
+import { reduceInquiry, type InquiryEvent } from '../viewing-domain.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -66,6 +68,10 @@ export async function confirmInquiryForWatch(
       inquiry_id: inq.id, type: 'CONFIRMED', payload: { renter_id: opts.renter.id }, actor: 'RENTER', occurred_at: now,
     });
     if (error) console.error(`[concierge] CONFIRMED for ${inq.id} failed:`, error.message ?? error);
+    // The 16h and 22h reminders (inquiry-deadline.ts). Each decides at run
+    // time whether it is still needed.
+    const { error: jobErr } = await db.from('jobs').insert(deadlineJobs(String(inq.id), now));
+    if (jobErr) console.error(`[concierge] deadline jobs for ${inq.id} failed:`, jobErr.message ?? jobErr);
   }
 
   return {
@@ -190,4 +196,90 @@ export async function sendConciergeWhatsApp(
     body: opts.body,
   });
   return { messageId: result.message.id, status: result.message.status };
+}
+
+/**
+ * Run one INQUIRY_DEADLINE job (inquiry-deadline.ts): email the ops team if
+ * the request is still unanswered, otherwise nothing. `send` is the alert
+ * transport - sendIntakeAlert in production - injected so this is testable.
+ */
+export async function runInquiryDeadline(
+  db: Supa,
+  inquiryId: string,
+  now: Date,
+  send: (alert: { subject: string; text: string }) => Promise<unknown>,
+): Promise<'SENT' | 'NOT_NEEDED' | 'MISSING'> {
+  const { data: inq } = await db
+    .from('complex_inquiries')
+    .select('id, complex_id, bedrooms_needed, budget_max_vnd, target_move_in_date, lease_duration_months, has_pets')
+    .eq('id', inquiryId).maybeSingle();
+  if (!inq) return 'MISSING';
+
+  const { data: events } = await db
+    .from('inquiry_events').select('id, inquiry_id, type, payload, actor, occurred_at').eq('inquiry_id', inquiryId);
+  const view = reduceInquiry(inquiryId, (events ?? []) as InquiryEvent[]);
+
+  // A person's answer: any message of ours other than the automatic confirmation.
+  const { data: ours } = await db
+    .from('complex_inquiry_messages').select('source, created_at')
+    .eq('inquiry_id', inquiryId).eq('direction', 'outbound');
+  const answeredAt = ((ours ?? []) as { source: string; created_at: string }[])
+    .filter(m => m.source !== 'system')
+    .map(m => m.created_at)
+    .sort()
+    .at(-1) ?? null;
+
+  if (!deadlineAlertNeeded(view, answeredAt)) return 'NOT_NEEDED';
+
+  const { data: complex } = await db.from('complexes').select('name').eq('id', inq.complex_id).maybeSingle();
+  await send(renderDeadlineAlert({
+    complexName: complex?.name ?? 'a building',
+    summary: describeInquiry({
+      fullName: '', complexName: '', bedrooms: Number(inq.bedrooms_needed), budgetMaxVnd: inq.budget_max_vnd ?? null,
+      moveInDate: String(inq.target_move_in_date), leaseMonths: Number(inq.lease_duration_months), hasPets: inq.has_pets === true,
+    }),
+    confirmedAt: view.confirmedAt!,
+    now,
+    agentsAsked: Object.values(view.agents).filter(a => a.askedAt).length,
+  }));
+  return 'SENT';
+}
+
+/**
+ * A viewing request made from an offer link (`?inq=`, offer.ts) points back
+ * at the availability request, which closes itself as VIEWING_REQUESTED
+ * (PLAN-v3 S7.1c) - the conversion the offer existed for.
+ *
+ * Only when both belong to the same renter: an offer link forwarded to a
+ * friend must not close someone else's request. Best effort - the viewing
+ * request stands either way, so this never throws.
+ */
+export async function linkViewingToInquiry(
+  db: Supa,
+  opts: { inquiryId: string; requestId: string; now: Date },
+): Promise<'LINKED' | 'SKIPPED'> {
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(opts.inquiryId)) return 'SKIPPED';
+    const { data: req } = await db
+      .from('viewing_requests').select('id, renter_id, inquiry_id').eq('id', opts.requestId).maybeSingle();
+    const { data: inq } = await db
+      .from('complex_inquiries').select('id, renter_id').eq('id', opts.inquiryId).maybeSingle();
+    if (!req || !inq?.renter_id || inq.renter_id !== req.renter_id) return 'SKIPPED';
+
+    if (!req.inquiry_id) {
+      await db.from('viewing_requests').update({ inquiry_id: opts.inquiryId }).eq('id', opts.requestId);
+    }
+    const { data: events } = await db
+      .from('inquiry_events').select('id, inquiry_id, type, payload, actor, occurred_at').eq('inquiry_id', opts.inquiryId);
+    if (reduceInquiry(opts.inquiryId, (events ?? []) as InquiryEvent[]).state !== 'CLOSED') {
+      await db.from('inquiry_events').insert({
+        inquiry_id: opts.inquiryId, type: 'CLOSED', actor: 'RENTER', occurred_at: opts.now.toISOString(),
+        payload: { reason: 'VIEWING_REQUESTED', request_id: opts.requestId },
+      });
+    }
+    return 'LINKED';
+  } catch (e) {
+    console.error(`[concierge] linking ${opts.requestId} to ${opts.inquiryId} failed:`, (e as Error).message);
+    return 'SKIPPED';
+  }
 }
