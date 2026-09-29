@@ -114,6 +114,15 @@ export type WatchStatus = typeof WATCH_STATUSES[number];
 export const INQUIRY_CHANNELS = ['WHATSAPP', 'EMAIL'] as const;
 export type InquiryChannel = typeof INQUIRY_CHANNELS[number];
 
+/**
+ * How an agent came to be on a building's roster (`complex_agents.source`,
+ * PLAN-v3 S7.0). LISTING is derived from their listings there and never stored;
+ * the other two are what an operator adds - an agent met in the building's
+ * groups, or the management company's leasing desk.
+ */
+export const BUILDING_AGENT_SOURCES = ['LISTING', 'MANUAL', 'MANAGEMENT'] as const;
+export type BuildingAgentSource = typeof BUILDING_AGENT_SOURCES[number];
+
 /** Why a listing was put in front of a renter unasked (`alert_items.source`). */
 export const ALERT_SOURCES = ['WATCH', 'DIGEST'] as const;
 export type AlertSource = typeof ALERT_SOURCES[number];
