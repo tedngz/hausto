@@ -137,12 +137,29 @@ export class FakeDb {
         return chain;
       },
 
-      delete: () => ({
-        eq: (col: string, val: unknown) => {
-          this.tables[table] = (this.tables[table] ?? []).filter(r => r[col] !== val);
-          return Promise.resolve({ data: null, error: null });
-        },
-      }),
+      // Chainable filters, like update: a roster entry is removed by two keys.
+      delete: () => {
+        const filters: [string, unknown][] = [];
+        const chain = {
+          eq: (col: string, val: unknown) => { filters.push([col, val]); return chain; },
+          then: (resolve: (x: { data: null; error: null }) => unknown) => {
+            this.tables[table] = (this.tables[table] ?? []).filter(r => !filters.every(([c, v]) => r[c] === v));
+            return resolve({ data: null, error: null });
+          },
+        };
+        return chain;
+      },
+
+      // Insert, or merge into the row matching every `onConflict` column - the
+      // one thing the roster needs from postgrest's upsert.
+      upsert: (row: FakeRow, opts?: { onConflict?: string }) => {
+        const keys = (opts?.onConflict ?? 'id').split(',').map(k => k.trim());
+        const list = (this.tables[table] ??= []);
+        const hit = list.find(r => keys.every(k => r[k] === row[k]));
+        if (hit) Object.assign(hit, row);
+        else list.push({ created_at: new Date().toISOString(), ...row });
+        return Promise.resolve({ data: null, error: null });
+      },
     };
     return api;
   }

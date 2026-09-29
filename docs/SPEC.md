@@ -963,6 +963,35 @@ shows it whole. Additive: `channel` (`WHATSAPP` | `EMAIL`),
 Admin Tools lists a WhatsApp request only once its code has arrived, with the
 hours left in the window.
 
+### Building agents (PLAN-v3 S7.0)
+
+Who can be asked about a building. Two kinds, merged by
+`ops_building_roster()` (ops or admin only) and shown on the ops console's
+Buildings screen, buildings with requests first:
+
+- **Found from listings** (`LISTING`): anyone whose listings match the building
+  by name or alias, the `complex_listing_ids()` rule over all time. Not stored.
+  An agency's site (one number across 30+ listings citywide - Housing SGN has 73)
+  is flagged as a desk, not someone who holds units there.
+- **Added by an operator** (`MANUAL`, `MANAGEMENT`), stored in `complex_agents`:
+
+```
+complex_id  uuid references complexes    -- pk with realtor_id
+realtor_id  uuid references realtors
+source      text                         -- MANUAL | MANAGEMENT
+note        text                         -- which tower, how we met; never parsed
+added_by    text                         -- OPS:<uuid>
+created_at  timestamptz
+```
+
+Written by `ADD_BUILDING_AGENT` / `REMOVE_BUILDING_AGENT` through
+`performOpsAction` (invariant 10); the number goes through `toE164`, since
+agents are Vietnamese and the bridge dials it. A roster entry is a contact, not
+a request's state, so it writes no event and can be removed. Each agent carries
+how many listings they have there and citywide, when they last listed, and when
+they last replied to us - who to ask first. `BUILDING_AGENT_SOURCES` in
+`viewing-domain.ts`; the target is `ROSTER_TARGET` (3) per building.
+
 ### Complex watches
 
 The alert half. Created by a WhatsApp request; there is no separate entry

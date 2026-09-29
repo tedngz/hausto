@@ -49,6 +49,7 @@ import {
 } from '../whatsapp/send.ts';
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { toE164 } from '../whatsapp/inbound.ts';
+import { validateBuildingAgent } from './roster.ts';
 import { deliver } from './deliver.ts';
 import { settlementFor, approvalOf, type ProposalRow, type DoneAction } from './proposals.ts';
 import { AUTONOMOUS_ACTIONS } from './autonomy.ts';
@@ -264,6 +265,9 @@ export async function performOpsAction(
   if (action === 'HOLD_PROPOSAL' || action === 'FLAG_PROPOSAL' || action === 'SET_AUTONOMY') {
     return superviseAutonomy(db, actor, action, input);
   }
+  // A building's agents (PLAN-v3 S7.0) - about no request, so no proposals to settle.
+  if (action === 'ADD_BUILDING_AGENT') return addBuildingAgent(db, actor, input);
+  if (action === 'REMOVE_BUILDING_AGENT') return removeBuildingAgent(db, input);
   const result = await dispatch(db, deps, actor, action, input);
   if (result.status === 200) {
     try {
@@ -610,27 +614,85 @@ async function dispatch(
  * future listing from the same broker (SPEC §1) - the listing row and, where
  * the source gave us one, the broker's source identity.
  */
+/**
+ * The agent with this number, created if new. A name or agency fills a blank,
+ * never overwrites one - the first operator to learn it is as likely right as
+ * the second. Shared by RECORD_CONTACT and ADD_BUILDING_AGENT.
+ */
+async function upsertRealtor(
+  db: Supa,
+  phone: string,
+  name: string | null,
+  agency: string | null = null,
+): Promise<{ id: string } | null> {
+  let { data: realtor } = await db
+    .from('realtors').select('id, display_name, agency').eq('phone_e164', phone).maybeSingle();
+  if (!realtor) {
+    const { data, error } = await db
+      .from('realtors').insert({ phone_e164: phone, display_name: name, agency })
+      .select('id, display_name, agency').single();
+    if (error?.code === '23505') {
+      ({ data: realtor } = await db.from('realtors').select('id, display_name, agency').eq('phone_e164', phone).maybeSingle());
+    } else if (error) {
+      console.error('[ops-actions] realtor insert failed:', error);
+      return null;
+    } else {
+      realtor = data;
+    }
+  } else {
+    const patch: Record<string, unknown> = {};
+    if (!realtor.display_name && name) patch.display_name = name;
+    if (!realtor.agency && agency) patch.agency = agency;
+    if (Object.keys(patch).length) {
+      await db.from('realtors').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', realtor.id);
+    }
+  }
+  return realtor ? { id: String(realtor.id) } : null;
+}
+
+/**
+ * An agent for a building (PLAN-v3 S7.0). Not an event: a roster entry is a
+ * contact, not a state of any request, and removing one is allowed.
+ * Re-adding the same agent updates the source and note rather than failing.
+ */
+async function addBuildingAgent(db: Supa, actor: string, input: Record<string, unknown>): Promise<OpsResult> {
+  const v = validateBuildingAgent(input);
+  if (!v.ok) return refuse(400, v.error, v.message);
+  const { complexId, phone, name, agency, source, note } = v.value;
+
+  const { data: complex } = await db.from('complexes').select('id').eq('id', complexId).maybeSingle();
+  if (!complex) return refuse(404, 'invalid_complex', 'Unknown building.');
+
+  const realtor = await upsertRealtor(db, phone, name, agency);
+  if (!realtor) return refuse(500, 'realtor_failed');
+
+  const { error } = await db.from('complex_agents').upsert(
+    { complex_id: complexId, realtor_id: realtor.id, source, note, added_by: actor },
+    { onConflict: 'complex_id,realtor_id' },
+  );
+  if (error) {
+    console.error('[ops-actions] roster insert failed:', error);
+    return refuse(500, 'roster_failed');
+  }
+  return done({ recorded: 'BUILDING_AGENT_ADDED', realtorId: realtor.id });
+}
+
+/** Take an added agent off a building. Agents found from listings are not stored, so not removable. */
+async function removeBuildingAgent(db: Supa, input: Record<string, unknown>): Promise<OpsResult> {
+  const complexId = str(input.complexId);
+  const realtorId = str(input.realtorId);
+  if (!complexId || !realtorId) return refuse(400, 'complexId and realtorId are required');
+  const { error } = await db.from('complex_agents').delete().eq('complex_id', complexId).eq('realtor_id', realtorId);
+  if (error) return refuse(500, 'roster_failed');
+  return done({ recorded: 'BUILDING_AGENT_REMOVED' });
+}
+
 async function recordContact(db: Supa, item: Item, actor: string, input: Record<string, unknown>): Promise<OpsResult> {
   const phone = toE164(str(input.phone));
   if (!phone) return refuse(400, 'invalid_phone', `Not a Vietnamese mobile number: ${str(input.phone) || '(empty)'}`);
   const name = str(input.name).slice(0, 120) || null;
 
-  let { data: realtor } = await db
-    .from('realtors').select('id, display_name').eq('phone_e164', phone).maybeSingle();
-  if (!realtor) {
-    const { data, error } = await db
-      .from('realtors').insert({ phone_e164: phone, display_name: name }).select('id, display_name').single();
-    if (error?.code === '23505') {
-      ({ data: realtor } = await db.from('realtors').select('id, display_name').eq('phone_e164', phone).maybeSingle());
-    } else if (error) {
-      console.error('[ops-actions] realtor insert failed:', error);
-      return refuse(500, 'realtor_failed');
-    } else {
-      realtor = data;
-    }
-  } else if (!realtor.display_name && name) {
-    await db.from('realtors').update({ display_name: name, updated_at: new Date().toISOString() }).eq('id', realtor.id);
-  }
+  const realtor = await upsertRealtor(db, phone, name);
   if (!realtor) return refuse(500, 'realtor_failed');
 
   // A reference, not a status: which broker this item is worked through. The
