@@ -85,3 +85,65 @@ describe('reduceInquiry', () => {
     expect(inquiryDeadline(reduceInquiry('inq-1', []))).toBeNull();
   });
 });
+
+describe('reduceInquiry - units (S7.1b)', () => {
+  it('records captured units and marks their agent as having units', () => {
+    const v = reduceInquiry('inq-1', [
+      ev('CONFIRMED', T(1)), ev('UNIT_CAPTURED', T(2), { listing_id: 'u1', realtor_id: 'r1' }),
+      ev('UNIT_CAPTURED', T(3), { listing_id: 'u2', realtor_id: 'r1' }),
+    ]);
+    expect(v.state).toBe('SOURCING');
+    expect(v.capturedListingIds).toEqual(['u1', 'u2']);
+    expect(v.agents.r1.answer).toBe('HAS_UNITS');
+  });
+
+  it('keeps an answer recorded before the capture', () => {
+    const v = reduceInquiry('inq-1', [
+      ev('CONFIRMED', T(1)), ev('AGENT_ANSWERED', T(2), { realtor_id: 'r1', answer: 'NO_REPLY' }),
+      ev('UNIT_CAPTURED', T(3), { listing_id: 'u1', realtor_id: 'r1' }),
+    ]);
+    // "No reply" then a unit is odd, but the log says both; the explicit answer stands.
+    expect(v.agents.r1.answer).toBe('NO_REPLY');
+  });
+
+  it('is OFFERED once units went out, and stays so when more agents are asked', () => {
+    const v = reduceInquiry('inq-1', [
+      ev('CONFIRMED', T(1)), ev('UNIT_CAPTURED', T(2), { listing_id: 'u1' }),
+      ev('UNITS_OFFERED', T(3), { listing_ids: ['u1', 'l9'], message_id: 'm1' }),
+      ev('AGENT_ASKED', T(4), { realtor_id: 'r2' }),
+    ]);
+    expect(v).toMatchObject({ state: 'OFFERED', offeredListingIds: ['u1', 'l9'], offeredAt: T(3) });
+  });
+
+  it('keeps every unit ever offered, the last offer dated', () => {
+    const v = reduceInquiry('inq-1', [
+      ev('CONFIRMED', T(1)),
+      ev('UNITS_OFFERED', T(2), { listing_ids: ['a', 'b'] }),
+      ev('UNITS_OFFERED', T(5), { listing_ids: ['b', 'c'] }),
+    ]);
+    expect(v.offeredListingIds).toEqual(['a', 'b', 'c']);
+    expect(v.offeredAt).toBe(T(5));
+  });
+
+  it('ignores an offer with no units', () => {
+    expect(reduceInquiry('inq-1', [ev('CONFIRMED', T(1)), ev('UNITS_OFFERED', T(2), { listing_ids: [] })]).state).toBe('NEW');
+  });
+
+  it('reopens to OFFERED when something was offered before it closed', () => {
+    const v = reduceInquiry('inq-1', [
+      ev('CONFIRMED', T(1)), ev('UNITS_OFFERED', T(2), { listing_ids: ['a'] }),
+      ev('CLOSED', T(3), { reason: 'RENTER_WENT_QUIET' }), ev('REOPENED', T(4)),
+    ]);
+    expect(v.state).toBe('OFFERED');
+  });
+
+  it('reduces capture and offer arriving out of order the same as in order', () => {
+    const inOrder = [
+      ev('SUBMITTED', T(1)), ev('CONFIRMED', T(2)), ev('AGENT_ASKED', T(3), { realtor_id: 'r1' }),
+      ev('UNIT_CAPTURED', T(4), { listing_id: 'u1', realtor_id: 'r1' }),
+      ev('UNITS_OFFERED', T(5), { listing_ids: ['u1'] }),
+    ];
+    const shuffled = [inOrder[4], inOrder[1], inOrder[3], inOrder[0], inOrder[2]];
+    expect(reduceInquiry('inq-1', shuffled)).toEqual(reduceInquiry('inq-1', inOrder));
+  });
+});

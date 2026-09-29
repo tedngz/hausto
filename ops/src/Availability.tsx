@@ -16,6 +16,9 @@ import {
 } from '../../supabase/functions/_shared/viewing-domain';
 import { describeInquiry } from '../../supabase/functions/_shared/viewing/inquiry';
 import { formatVnd, humanAge } from '../../supabase/functions/_shared/viewing/format';
+import {
+  FURNISHING, MAX_OFFER_UNITS, MAX_PHOTOS, UNIT_FRESH_DAYS, renderOffer, unitStale, type OfferUnit,
+} from '../../supabase/functions/_shared/viewing/offer';
 
 interface Row {
   id: string;
@@ -49,6 +52,7 @@ interface Detail {
   consecutive_outbound: number;
   thread: { id: string; direction: 'inbound' | 'outbound'; source: string; body: string; created_at: string }[];
   events: InquiryEvent[];
+  units: CapturedUnit[];
   on_file: {
     id: string; title: string; price_vnd: number; bedrooms: number; area_sqm: number; source: string;
     source_url: string; listed_at: string; realtor_id: string | null; realtor_name: string | null; realtor_phone: string | null;
@@ -56,6 +60,11 @@ interface Detail {
 }
 
 interface RosterAgent { realtor_id: string; name: string | null; phone: string; sources: string[]; listings_total: number }
+
+interface CapturedUnit {
+  id: string; title: string; price_vnd: number; bedrooms: number; area_sqm: number; images: string[] | null;
+  is_active: boolean; last_verified_at: string | null; realtor_id: string | null; realtor_name: string | null;
+}
 
 const ANSWER_LABEL: Record<AgentAnswer, string> = { HAS_UNITS: 'has units', NO_UNITS: 'no units', NO_REPLY: 'no reply' };
 
@@ -286,6 +295,10 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
         )}
       </div>
 
+      <Units d={d} agents={[...agents, ...extra]} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId} />
+
+      <OfferComposer d={d} canReply={canReply} replyBlocked={replyBlocked} busy={busy} run={run} inquiryId={inquiryId} />
+
       <div className="card">
         <strong>WhatsApp</strong>
         <div className="thread" style={{ marginTop: 6 }}>
@@ -338,5 +351,197 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
         ))}
       </div>
     </>
+  );
+}
+
+type Run = (body: Record<string, unknown>, after?: () => void) => Promise<void>;
+
+/**
+ * Units an agent offered, entered as listings (S7.1b). Photos go straight to
+ * storage from here - under concierge/<request>/, the only path the upload
+ * policy allows - and the action takes their URLs.
+ */
+function Units({ d, agents, closed, busy, run, inquiryId }: {
+  d: Detail; agents: RosterAgent[]; closed: boolean; busy: boolean; run: Run; inquiryId: string;
+}) {
+  const [realtorId, setRealtorId] = useState('');
+  const [bedrooms, setBedrooms] = useState('2');
+  const [area, setArea] = useState('');
+  const [priceM, setPriceM] = useState('');
+  const [floor, setFloor] = useState('');
+  const [tower, setTower] = useState('');
+  const [furnishing, setFurnishing] = useState('');
+  const [pets, setPets] = useState('');
+  const [availableFrom, setAvailableFrom] = useState('');
+  const [note, setNote] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const upload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(true);
+    setUploadError(null);
+    const urls: string[] = [];
+    for (const file of Array.from(files).slice(0, MAX_PHOTOS - photos.length)) {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const path = `concierge/${inquiryId}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from('external-property-images').upload(path, file, { contentType: file.type });
+      if (error) { setUploadError(error.message); break; }
+      urls.push(supabase.storage.from('external-property-images').getPublicUrl(path).data.publicUrl);
+    }
+    setPhotos(p => [...p, ...urls]);
+    setUploading(false);
+  };
+
+  const reset = () => {
+    setArea(''); setPriceM(''); setFloor(''); setTower(''); setFurnishing(''); setPets('');
+    setAvailableFrom(''); setNote(''); setPhotos([]);
+  };
+
+  const capture = () => void run({
+    action: 'INQUIRY_CAPTURE_UNIT',
+    realtorId,
+    bedrooms: Number(bedrooms),
+    areaSqm: Number(area),
+    priceVnd: Math.round(Number(priceM) * 1_000_000),
+    floor, tower, furnishing: furnishing || null,
+    petsOk: pets === '' ? null : pets === 'yes',
+    availableFrom: availableFrom || null,
+    note, photos,
+  }, reset);
+
+  return (
+    <div className="card">
+      <strong>Units agents offered</strong>
+      <span className="small muted"> - each becomes a listing the renter can request. It comes down {UNIT_FRESH_DAYS} days after its agent last confirmed it.</span>
+      {d.units.length > 0 && (
+        <table style={{ marginTop: 6 }}>
+          <thead><tr><th>Unit</th><th>Price</th><th>Agent</th><th>Confirmed</th><th>Photos</th><th /></tr></thead>
+          <tbody>
+            {d.units.map(u => {
+              const stale = !u.is_active || unitStale(u.last_verified_at, new Date());
+              return (
+                <tr key={u.id}>
+                  <td className="small"><a href={`https://hausto.com/property/${u.id}`} target="_blank" rel="noreferrer">{u.title}</a></td>
+                  <td className="small">{formatVnd(u.price_vnd)}</td>
+                  <td className="small">{u.realtor_name ?? '-'}</td>
+                  <td className="small">{hcmc(u.last_verified_at)}{stale && <span className="tag bad"> stale</span>}</td>
+                  <td className="small">{u.images?.length ?? 0}</td>
+                  <td>
+                    {!closed && (
+                      <button className="link small" disabled={busy}
+                        onClick={() => void run({ action: 'INQUIRY_RECONFIRM_UNIT', listingId: u.id })}>still free</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {!closed && (
+        <div className="proposal">
+          <div className="row wrap-row">
+            <select value={realtorId} onChange={e => setRealtorId(e.target.value)}>
+              <option value="">Agent who offered it</option>
+              {agents.map(a => <option key={a.realtor_id} value={a.realtor_id}>{a.name ?? a.phone}</option>)}
+            </select>
+            <select value={bedrooms} onChange={e => setBedrooms(e.target.value)}>
+              {[1, 2, 3, 4].map(b => <option key={b} value={b}>{b === 4 ? '4+' : b} BR</option>)}
+            </select>
+            <input style={{ width: 90 }} placeholder="m²" inputMode="numeric" value={area} onChange={e => setArea(e.target.value.replace(/\D/g, ''))} />
+            <input style={{ width: 130 }} placeholder="Rent, million ₫" inputMode="decimal" value={priceM} onChange={e => setPriceM(e.target.value.replace(/[^0-9.]/g, ''))} />
+            <input style={{ width: 80 }} placeholder="Floor" value={floor} onChange={e => setFloor(e.target.value)} />
+            <input style={{ width: 120 }} placeholder="Tower" value={tower} onChange={e => setTower(e.target.value)} />
+          </div>
+          <div className="row wrap-row" style={{ marginTop: 6 }}>
+            <select value={furnishing} onChange={e => setFurnishing(e.target.value)}>
+              <option value="">Furnishing?</option>
+              {FURNISHING.map(f => <option key={f} value={f}>{f.toLowerCase()}</option>)}
+            </select>
+            <select value={pets} onChange={e => setPets(e.target.value)}>
+              <option value="">Pets?</option>
+              <option value="yes">pets OK</option>
+              <option value="no">no pets</option>
+            </select>
+            <label className="small muted">Available from <input type="date" value={availableFrom} onChange={e => setAvailableFrom(e.target.value)} /></label>
+            <label className="small muted">
+              Photos {photos.length > 0 && `(${photos.length})`}
+              <input type="file" accept="image/*" multiple disabled={uploading || photos.length >= MAX_PHOTOS}
+                onChange={e => { void upload(e.target.files); e.target.value = ''; }} />
+            </label>
+            {uploading && <span className="small muted">uploading...</span>}
+          </div>
+          <div className="row" style={{ marginTop: 6 }}>
+            <input style={{ flex: 1 }} placeholder="Note for us - what the agent said (never shown to the renter)" value={note} onChange={e => setNote(e.target.value)} />
+            <button disabled={busy || uploading || !realtorId || !area || !priceM} onClick={capture}>Add unit</button>
+          </div>
+          {uploadError && <p className="error small">{uploadError}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The one message (SPEC §11). The preview is the same renderOffer the server
+ * sends, with the renter's first name left out - the console never has it.
+ */
+function OfferComposer({ d, canReply, replyBlocked, busy, run, inquiryId }: {
+  d: Detail; canReply: boolean; replyBlocked: string | null; busy: boolean; run: Run; inquiryId: string;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const [line, setLine] = useState('');
+  const now = new Date();
+
+  const candidates: (OfferUnit & { kind: string })[] = [
+    ...d.units.filter(u => u.is_active && !unitStale(u.last_verified_at, now)).map(u => ({
+      id: u.id, title: u.title, priceVnd: u.price_vnd, bedrooms: u.bedrooms, areaSqm: u.area_sqm,
+      confirmedAt: u.last_verified_at, kind: 'confirmed',
+    })),
+    ...d.on_file.map(l => ({
+      id: l.id, title: l.title, priceVnd: l.price_vnd, bedrooms: l.bedrooms, areaSqm: l.area_sqm,
+      confirmedAt: null, kind: 'advertised',
+    })),
+  ];
+  const chosen = candidates.filter(c => picked.includes(c.id));
+  const toggle = (id: string) =>
+    setPicked(p => p.includes(id) ? p.filter(x => x !== id) : p.length >= MAX_OFFER_UNITS ? p : [...p, id]);
+
+  if (candidates.length === 0) return null;
+  return (
+    <div className="card">
+      <strong>Offer units</strong>
+      <span className="small muted"> - one message with up to {MAX_OFFER_UNITS}; it uses one of the two messages they can get without replying.</span>
+      <div style={{ marginTop: 6 }}>
+        {candidates.map(c => (
+          <label key={c.id} className="row small" style={{ marginBottom: 2 }}>
+            <input type="checkbox" checked={picked.includes(c.id)} onChange={() => toggle(c.id)} />
+            <span>{c.title} · {formatVnd(c.priceVnd)}</span>
+            <span className={`tag ${c.kind === 'confirmed' ? 'good' : ''}`}>{c.kind}</span>
+          </label>
+        ))}
+      </div>
+      <input style={{ width: '100%', marginTop: 6 }} placeholder="Your own line, optional - e.g. which you would see first"
+        value={line} onChange={e => setLine(e.target.value)} />
+      {chosen.length > 0 && (
+        <div className="bubble" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>
+          {renderOffer({ firstName: '[first name]', complexName: d.complex.name, inquiryId, units: chosen, message: line, now })}
+        </div>
+      )}
+      <div className="row" style={{ marginTop: 6 }}>
+        <span className="small muted">{replyBlocked ?? ''}</span>
+        <div className="spacer" />
+        <button disabled={busy || !canReply || chosen.length === 0}
+          onClick={() => void run(
+            { action: 'INQUIRY_OFFER_UNITS', listingIds: chosen.map(c => c.id), message: line, key: crypto.randomUUID() },
+            () => { setPicked([]); setLine(''); },
+          )}>
+          Send offer on WhatsApp
+        </button>
+      </div>
+    </div>
   );
 }

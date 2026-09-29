@@ -133,6 +133,104 @@ describe('once confirmed', () => {
   });
 });
 
+
+describe('capturing units and offering them (S7.1b)', () => {
+  const AGENT = '99999999-2222-4333-8444-555555555555';
+  const unit = { realtorId: AGENT, bedrooms: 2, areaSqm: 80, priceVnd: 24_000_000, floor: '18' };
+
+  beforeEach(async () => {
+    db.tables.realtors.push({ id: AGENT, phone_e164: '+84907654321', display_name: 'Linh' });
+    db.tables.complexes[0] = { id: 'cx-1', name: 'Empire City', district: 'Thu Duc', city: 'ho_chi_minh' };
+    db.tables.external_properties = [];
+    db.tables.alert_items = [];
+    // sync_canonical_listing_fields(), for the rows this writes.
+    db.onInsert.external_properties = row => ({
+      ...row,
+      bedrooms: parseInt(String(row.rooms), 10),
+      area_sqm: parseInt(String(row.size), 10),
+      price_vnd: Number(row.price),
+      price_confidence: 'HIGH',
+      district_code: 'THU_DUC',
+    });
+    await renterSends(`Hi Hausto - please check availability at Empire City for me (${code})`);
+  });
+
+  const capture = async (over: Record<string, unknown> = {}) => {
+    const r = await act({ action: 'INQUIRY_CAPTURE_UNIT', inquiryId: INQ, ...unit, ...over });
+    return { r, id: r.body.listingId as string };
+  };
+
+  it('enters an agent\'s unit as a listing Request viewing will accept, and logs it', async () => {
+    const { r, id } = await capture();
+    expect(r.status).toBe(200);
+    expect(db.tables.external_properties.find(l => l.id === id)).toMatchObject({
+      source: 'concierge', is_active: true, realtor_id: AGENT, bedrooms: 2, price_vnd: 24_000_000,
+    });
+    expect(view().capturedListingIds).toEqual([id]);
+    expect(view().agents[AGENT].answer).toBe('HAS_UNITS');
+  });
+
+  it('removes a unit intake would refuse, and says why', async () => {
+    db.onInsert.external_properties = row => ({ ...row, bedrooms: 2, area_sqm: 80, price_vnd: 24_000_000, district_code: null });
+    const { r } = await capture();
+    expect(r.status).toBe(422);
+    expect(db.tables.external_properties).toHaveLength(0);
+    expect(view().capturedListingIds).toEqual([]);
+  });
+
+  it('refuses a building outside Ho Chi Minh City', async () => {
+    db.tables.complexes[0].city = 'hanoi';
+    expect((await capture()).r.status).toBe(409);
+  });
+
+  it('offers units in one message: sent, on the thread, logged, and kept out of the weekly alert', async () => {
+    const a = await capture();
+    const b = await capture({ floor: '9', priceVnd: 22_500_000 });
+    at('2026-09-29T05:00:00Z');
+    const r = await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [a.id, b.id], key: 'offer-1' });
+    expect(r.status).toBe(200);
+
+    const sent = whatsapp.delivered.at(-1)!;
+    expect(sent.toPhone).toBe(PHONE);
+    expect(sent.body).toContain('Hi Mai, here is what we found at Empire City:');
+    expect(sent.body).toContain(`?inq=${INQ}`);
+    expect(db.tables.complex_inquiry_messages.at(-1)).toMatchObject({ direction: 'outbound', body: sent.body });
+    expect(view()).toMatchObject({ state: 'OFFERED', offeredListingIds: [a.id, b.id] });
+    expect(db.tables.alert_items.map(x => x.listing_id)).toEqual([a.id, b.id]);
+
+    // Their answer comes back to the request.
+    at('2026-09-29T06:00:00Z');
+    expect((await renterSends('The first one please')).inquiryId).toBe(INQ);
+  });
+
+  it('refuses a listing from another building, and a unit gone stale', async () => {
+    db.tables.external_properties.push({
+      id: 'elsewhere', source: 'batdongsan', external_id: 'x', is_active: true, price_vnd: 20_000_000,
+      price_confidence: 'HIGH', bedrooms: 2, area_sqm: 70, district_code: 'D1', title: 'Somewhere else',
+    });
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: ['elsewhere'] })).body.error)
+      .toBe('not_this_building');
+
+    const { id } = await capture();
+    at('2026-10-20T00:00:00Z');
+    const r = await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [id] });
+    expect(r.body.error).toBe('stale_unit');
+
+    // Reconfirmed with the agent, it can go. (The window has long shut, so
+    // that is the refusal now - which is the point of the template in S7.1c.)
+    expect((await act({ action: 'INQUIRY_RECONFIRM_UNIT', inquiryId: INQ, listingId: id })).status).toBe(200);
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [id] })).body.error).toBe('window_closed');
+  });
+
+  it('refuses more than five, none, and an operator line with a phone number', async () => {
+    const { id } = await capture();
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [] })).status).toBe(400);
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: ['1', '2', '3', '4', '5', '6'] })).status).toBe(400);
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [id], message: 'Call Linh on 0907 654 321' })).status).toBe(400);
+    expect(view().state).toBe('SOURCING');
+  });
+});
+
 it('leaves email requests to Admin Tools', async () => {
   db.tables.complex_inquiries[0].channel = 'EMAIL';
   const r = await act({ action: 'INQUIRY_CLOSE', inquiryId: INQ, reason: 'OTHER' });

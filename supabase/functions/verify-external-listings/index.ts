@@ -393,6 +393,9 @@ Deno.serve(async (req) => {
         last_verification_reason: `age_cap_${MAX_UNVERIFIED_AGE_DAYS}d`,
       })
       .eq('is_active', true)
+      // Units an agent confirmed for a request (source 'concierge') have no page to
+      // check and their own 14-day expiry - see offer.ts.
+      .neq('source', 'concierge')
       .lt('crawled_at', ageCapCutoff)
       .or(`last_verified_at.is.null,last_verified_at.lt.${ageCapCutoff}`)
       .select('id');
@@ -418,6 +421,7 @@ Deno.serve(async (req) => {
       .from('external_properties')
       .select('id, source, source_url, external_id, verification_failures, price, price_display')
       .eq('is_active', true)
+      .neq('source', 'concierge')
       .or(
         `last_verified_at.is.null,` +
         `and(verification_failures.gte.1,last_verified_at.lte.${suspectReverifyCutoff}),` +
