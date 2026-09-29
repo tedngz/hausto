@@ -382,3 +382,144 @@ export function summarise(view: RequestView): {
     hasNothing: items.length > 0 && confirmed === 0 && unresolved === 0,
   };
 }
+
+// ── Availability requests (SPEC §11, PLAN-v3 S7.1) ──────────────────────────
+//
+// A request for a building is a sourcing job, and its state is derived here
+// from `inquiry_events` the way a viewing request's is from `events`
+// (invariant 1). The operator's steps are typed (invariant 2): who was asked,
+// what they answered, why it closed. Free text goes in a `note` that nothing
+// reads for state. Messages are the thread (`complex_inquiry_messages`), not
+// events: what was said is not a state.
+
+export const INQUIRY_EVENT_TYPES = [
+  'SUBMITTED',      // the form (complex-inquiry-create)
+  'CONFIRMED',      // the WhatsApp code arrived - the 24 hours start
+  'AGENT_ASKED',    // an operator asked an agent about the building
+  'AGENT_ANSWERED', // what that agent said, as one of AGENT_ANSWERS
+  'CLOSED',         // with one of INQUIRY_CLOSE_REASONS
+  'REOPENED',
+] as const;
+export type InquiryEventType = typeof INQUIRY_EVENT_TYPES[number];
+
+export const INQUIRY_STATES = [
+  'AWAITING_CODE', // the form was sent, the WhatsApp message was not
+  'NEW',           // confirmed; nobody asked yet
+  'SOURCING',      // agents being asked
+  'CLOSED',
+] as const;
+export type InquiryState = typeof INQUIRY_STATES[number];
+
+export const AGENT_ANSWERS = ['HAS_UNITS', 'NO_UNITS', 'NO_REPLY'] as const;
+export type AgentAnswer = typeof AGENT_ANSWERS[number];
+
+export const INQUIRY_CLOSE_REASONS = [
+  'VIEWING_REQUESTED',  // the renter asked to see something we found
+  'NOTHING_FOUND',
+  'RENTER_WENT_QUIET',
+  'RENTED_ELSEWHERE',
+  'LEASE_SIGNED',       // the outcome agent-side referral fees would track
+  'DUPLICATE',
+  'OTHER',
+] as const;
+export type InquiryCloseReason = typeof INQUIRY_CLOSE_REASONS[number];
+
+/** Media an agent can be asked on - REALTOR_MEDIA's by-hand subset. */
+export const INQUIRY_ASK_MEDIA = ['ZALO', 'PHONE'] as const;
+export type InquiryAskMedium = typeof INQUIRY_ASK_MEDIA[number];
+
+export interface InquiryEvent {
+  id: number;
+  inquiry_id: string;
+  type: string;
+  payload?: Record<string, unknown> | null;
+  actor: string;
+  occurred_at: string;
+}
+
+export interface InquiryAgentView {
+  realtorId: string;
+  askedAt: string | null;
+  medium: string | null;
+  answer: AgentAnswer | null;
+  answeredAt: string | null;
+}
+
+export interface InquiryView {
+  inquiryId: string;
+  state: InquiryState;
+  confirmedAt: string | null;
+  agents: Record<string, InquiryAgentView>;
+  closedReason: InquiryCloseReason | null;
+  closedAt: string | null;
+}
+
+/** The promise the page and the confirmation make. */
+export const INQUIRY_REPLY_WITHIN_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * `(events) => state` for an availability request. Pure; ordered like
+ * `sortEvents` - by `occurred_at`, then id - so events arriving out of order
+ * reduce the same as in order.
+ */
+export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): InquiryView {
+  const view: InquiryView = {
+    inquiryId, state: 'AWAITING_CODE', confirmedAt: null, agents: {}, closedReason: null, closedAt: null,
+  };
+  const agent = (id: string): InquiryAgentView =>
+    (view.agents[id] ??= { realtorId: id, askedAt: null, medium: null, answer: null, answeredAt: null });
+
+  const sorted = [...events].sort((a, b) =>
+    a.occurred_at !== b.occurred_at ? (a.occurred_at < b.occurred_at ? -1 : 1) : a.id - b.id);
+
+  for (const e of sorted) {
+    const p = (e.payload ?? {}) as Record<string, unknown>;
+    const realtorId = typeof p.realtor_id === 'string' ? p.realtor_id : null;
+    const working = () => { if (view.state !== 'CLOSED') view.state = 'SOURCING'; };
+
+    switch (e.type as InquiryEventType) {
+      case 'SUBMITTED':
+        break;
+      case 'CONFIRMED':
+        view.confirmedAt ??= e.occurred_at;
+        if (view.state === 'AWAITING_CODE') view.state = 'NEW';
+        break;
+      case 'AGENT_ASKED':
+        if (!realtorId) break;
+        // The first ask counts: asking again is a nudge, not a new request.
+        agent(realtorId).askedAt ??= e.occurred_at;
+        agent(realtorId).medium ??= typeof p.medium === 'string' ? p.medium : null;
+        working();
+        break;
+      case 'AGENT_ANSWERED': {
+        if (!realtorId) break;
+        const answer = p.answer as AgentAnswer;
+        if (!(AGENT_ANSWERS as readonly string[]).includes(answer)) break;
+        // The latest answer stands - "no units" then "one just came free".
+        agent(realtorId).answer = answer;
+        agent(realtorId).answeredAt = e.occurred_at;
+        working();
+        break;
+      }
+      case 'CLOSED': {
+        const reason = p.reason as InquiryCloseReason;
+        view.state = 'CLOSED';
+        view.closedReason = (INQUIRY_CLOSE_REASONS as readonly string[]).includes(reason) ? reason : 'OTHER';
+        view.closedAt = e.occurred_at;
+        break;
+      }
+      case 'REOPENED':
+        if (view.state !== 'CLOSED') break;
+        view.closedReason = null;
+        view.closedAt = null;
+        view.state = Object.keys(view.agents).length > 0 ? 'SOURCING' : view.confirmedAt ? 'NEW' : 'AWAITING_CODE';
+        break;
+    }
+  }
+  return view;
+}
+
+/** When the renter was promised a reply by: 24 hours from the code. */
+export function inquiryDeadline(view: InquiryView): string | null {
+  return view.confirmedAt ? new Date(Date.parse(view.confirmedAt) + INQUIRY_REPLY_WITHIN_MS).toISOString() : null;
+}

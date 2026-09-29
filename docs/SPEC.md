@@ -963,6 +963,44 @@ shows it whole. Additive: `channel` (`WHATSAPP` | `EMAIL`),
 Admin Tools lists a WhatsApp request only once its code has arrived, with the
 hours left in the window.
 
+### Worked in the ops console (PLAN-v3 S7.1a)
+
+WhatsApp requests are worked on the ops console's Availability screen; Admin
+Tools keeps the old email requests only. The console reads through
+`ops_inquiries()` and `ops_inquiry_detail()` (ops or admin), which never return
+the renter's name, phone, email or account (invariant 4) and mask numbers in
+the thread and notes with `mask_phone_numbers()`.
+
+**State is derived** from `inquiry_events`, append-only like `events` (UPDATE,
+DELETE and TRUNCATE revoked, service role included), by `reduceInquiry()` in
+`viewing-domain.ts`:
+
+```
+id           bigint identity
+inquiry_id   uuid references complex_inquiries
+type         SUBMITTED | CONFIRMED | AGENT_ASKED | AGENT_ANSWERED | CLOSED | REOPENED
+payload      jsonb      -- realtor_id, medium, answer, reason, note
+actor        text       -- RENTER, USER:<uuid>, OPS:<uuid>, AGENT:<version>
+occurred_at  timestamptz
+```
+
+`AWAITING_CODE` (form sent, no WhatsApp message) → `NEW` (code arrived; the 24
+hours start) → `SOURCING` (an agent asked) → `CLOSED` (one of
+`INQUIRY_CLOSE_REASONS`), reopenable. An agent's first ask stands; their latest
+answer (`HAS_UNITS | NO_UNITS | NO_REPLY`) stands. SUBMITTED is written by
+`complex-inquiry-create`, CONFIRMED when the code arrives; the rest are
+operator steps through `performOpsAction` (invariant 10): `INQUIRY_ASK_AGENT`,
+`INQUIRY_AGENT_ANSWERED`, `INQUIRY_CLOSE`, `INQUIRY_REOPEN`, and
+`INQUIRY_REPLY`, which sends on WhatsApp through `sendConciergeWhatsApp` after
+`checkOperatorReply` (no phone numbers, no booking). Nothing works a request
+before its code arrives. Messages stay in the thread, not the log: what was said
+is not a state.
+
+The brief: the criteria, the deadline (code + 24h), the window and
+consecutive-outbound count, the thread, the building's roster, and the listings
+on file that fit - requestable, within budget and bedrooms - with their agents,
+marked as advertised rather than available.
+
 ### Building agents (PLAN-v3 S7.0)
 
 Who can be asked about a building. Two kinds, merged by

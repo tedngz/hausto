@@ -1,7 +1,7 @@
 // The shell: sign in, prove the `ops` role, then show the queue, one request,
 // or how the AI operator is scoring.
 //
-// Routing is a piece of state rather than a router. There are four screens
+// Routing is a piece of state rather than a router. There are five screens
 // and adding react-router to express that would be the first thing here that
 // is not ugly and fast.
 
@@ -12,12 +12,13 @@ import { Queue } from './Queue';
 import { RequestDetail } from './RequestDetail';
 import { ShadowStats } from './ShadowStats';
 import { Buildings } from './Buildings';
+import { Availability } from './Availability';
 
 export function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isOps, setIsOps] = useState<boolean | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
-  const [screen, setScreen] = useState<'queue' | 'shadow' | 'buildings'>('queue');
+  const [screen, setScreen] = useState<'queue' | 'availability' | 'shadow' | 'buildings'>('queue');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user.id ?? null));
@@ -61,6 +62,8 @@ export function App() {
         <strong>Hausto ops</strong>
         <button className={!requestId && screen === 'queue' ? 'active' : ''}
           onClick={() => { setRequestId(null); setScreen('queue'); }}>Queue</button>
+        <button className={!requestId && screen === 'availability' ? 'active' : ''}
+          onClick={() => { setRequestId(null); setScreen('availability'); }}>Availability</button>
         <button className={!requestId && screen === 'shadow' ? 'active' : ''}
           onClick={() => { setRequestId(null); setScreen('shadow'); }}>AI operator</button>
         <button className={!requestId && screen === 'buildings' ? 'active' : ''}
@@ -70,7 +73,7 @@ export function App() {
       </div>
       {requestId
         ? <RequestDetail requestId={requestId} onBack={() => setRequestId(null)} />
-        : screen === 'shadow' ? <ShadowStats /> : screen === 'buildings' ? <Buildings /> : <Queue onOpen={setRequestId} />}
+        : screen === 'shadow' ? <ShadowStats /> : screen === 'buildings' ? <Buildings /> : screen === 'availability' ? <Availability /> : <Queue onOpen={setRequestId} />}
     </div>
   );
 }

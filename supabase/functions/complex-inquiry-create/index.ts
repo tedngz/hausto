@@ -102,6 +102,15 @@ Deno.serve(async (req) => {
     return json({ error: 'create_failed' }, 500);
   }
 
+  // The request's log starts here (PLAN-v3 S7.1). The row is the request
+  // either way; a missing SUBMITTED costs nothing a reducer reads.
+  const { error: evErr } = await db.from('inquiry_events').insert({
+    inquiry_id: inquiry.id, type: 'SUBMITTED', actor: caller.userId ? `USER:${caller.userId}` : 'RENTER',
+    payload: { bedrooms: v.bedrooms, budget_max_vnd: v.budgetMaxVnd, move_in: v.moveInDate },
+    occurred_at: now.toISOString(),
+  });
+  if (evErr) console.error('[complex-inquiry-create] SUBMITTED failed:', evErr);
+
   return json({
     success: true,
     inquiryId: inquiry.id,
