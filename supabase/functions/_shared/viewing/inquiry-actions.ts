@@ -12,8 +12,12 @@ import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import {
   ConsecutiveMessageError,
   ServiceWindowClosedError,
+  UnapprovedTemplateError,
+  isWindowOpen,
+  sendTemplate,
   type MessageStore,
 } from '../whatsapp/send.ts';
+import { TEMPLATES } from '../whatsapp/templates.ts';
 import {
   AGENT_ANSWERS,
   INQUIRY_ASK_MEDIA,
@@ -46,6 +50,7 @@ export const INQUIRY_ACTIONS = [
   'INQUIRY_CAPTURE_UNIT',
   'INQUIRY_RECONFIRM_UNIT',
   'INQUIRY_OFFER_UNITS',
+  'INQUIRY_SEND_UPDATE',
   'INQUIRY_REPLY',
   'INQUIRY_CLOSE',
   'INQUIRY_REOPEN',
@@ -169,6 +174,7 @@ export async function performInquiryAction(
   if (action === 'INQUIRY_CAPTURE_UNIT') return captureUnit(db, actor, row, input);
   if (action === 'INQUIRY_RECONFIRM_UNIT') return reconfirmUnit(db, row, input);
   if (action === 'INQUIRY_OFFER_UNITS') return offerUnits(db, deps, actor, row, input);
+  if (action === 'INQUIRY_SEND_UPDATE') return sendUpdate(db, deps, row, input);
 
   if (action === 'INQUIRY_CLOSE') {
     const reason = str(input.reason).toUpperCase();
@@ -370,4 +376,63 @@ async function offerUnits(
 
   const failed = await append(db, row.id, 'UNITS_OFFERED', { listing_ids: ids, message_id: sent.messageId }, actor);
   return failed ?? done({ recorded: 'UNITS_OFFERED', messageId: sent.messageId });
+}
+
+// ── After the window (S7.1c) ────────────────────────────────────────────────
+
+/** The `request_update` template's body, as Meta will render it - for the thread. */
+export function renderRequestUpdate(firstName: string | null, complexName: string): string {
+  return `Hi ${firstName?.trim() || 'there'}, we have an update on your request for ${complexName}. Reply here to see it.`;
+}
+
+/**
+ * The window shut before the news was ready: send `request_update`, which
+ * carries no news, so their reply reopens the window for the offer. Only
+ * when the window is shut - inside it a normal reply costs nothing extra -
+ * and refused as not-yet-approved until Meta approves the template.
+ */
+async function sendUpdate(
+  db: Supa,
+  deps: { whatsapp: WhatsAppAdapter; messages: MessageStore; newKey?: () => string },
+  row: InquiryRow,
+  input: Record<string, unknown>,
+): Promise<InquiryResult> {
+  if (!row.renter_id) return refuse(409, 'awaiting_code', 'The renter has not sent the WhatsApp message yet.');
+  const renter = await deps.messages.getRenter(row.renter_id);
+  if (renter && isWindowOpen(renter, new Date())) {
+    return refuse(409, 'window_open', 'Their window is open - send a normal reply instead.');
+  }
+
+  const { data: complex } = await db.from('complexes').select('name').eq('id', row.complex_id).maybeSingle();
+  const firstName = (row.full_name ?? '').trim().split(/\s+/)[0] || null;
+  const complexName = complex?.name ?? 'the building';
+
+  let sent: { message: { id: string; status: string } };
+  try {
+    sent = await sendTemplate(deps.messages, deps.whatsapp, {
+      renterId: row.renter_id,
+      purpose: `REQUEST_UPDATE:${row.id}:${str(input.key) || deps.newKey?.() || crypto.randomUUID()}`,
+      templateName: TEMPLATES.REQUEST_UPDATE.name,
+      params: [firstName || 'there', complexName],
+    });
+  } catch (e) {
+    if (e instanceof UnapprovedTemplateError) {
+      return refuse(409, 'template_not_approved',
+        'The request_update template is not approved by Meta yet - see docs/whatsapp-go-live.md.');
+    }
+    if (e instanceof ConsecutiveMessageError) {
+      return refuse(409, 'too_many_consecutive', 'They have not replied to our last two messages. Wait for them.');
+    }
+    throw e;
+  }
+  if (sent.message.status === 'FAILED') return refuse(502, 'send_failed', 'WhatsApp refused the message.');
+
+  const now = new Date();
+  // On the thread, so their reply to it routes back to this request.
+  await recordInquiryMessage(db, {
+    inquiryId: row.id, direction: 'outbound', source: 'dashboard', whatsappMessageId: sent.message.id,
+    body: renderRequestUpdate(firstName, complexName), now,
+  });
+  await db.from('complex_inquiries').update({ last_message_at: now.toISOString() }).eq('id', row.id);
+  return done({ recorded: 'UPDATE_SENT', messageId: sent.message.id });
 }

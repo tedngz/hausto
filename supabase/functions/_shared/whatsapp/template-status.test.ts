@@ -138,15 +138,17 @@ describe('against the real registry', () => {
   // template being added, which is the right kind of catch but not one worth
   // re-editing the test for every time.
   const ALL = Object.keys(TEMPLATES).length;
+  // Flagged sendable, and written but not yet submitted (request_update, for
+  // one) - counted from the registry, since the split moves as templates ship.
+  const SENDABLE = Object.values(TEMPLATES).filter(t => t.approved);
+  const UNSUBMITTED = Object.values(TEMPLATES).filter(t => !t.approved);
 
-  it('is silent when Meta agrees every template is approved', () => {
-    // Where the registry now stands: all five approved at Meta and flagged
-    // sendable in code. reconcile reports drift, so agreement is an empty
-    // list - there is nothing to say.
-    const d = reconcile(
-      Object.values(TEMPLATES).map(t => meta(t.name, 'APPROVED', 'GREEN')),
-    );
-    expect(d).toHaveLength(0);
+  it('is quiet when Meta has approved every template the code will send', () => {
+    // reconcile reports drift, so agreement on the sendable ones is silence.
+    // A template still waiting to be submitted is a to-do, never urgent.
+    const d = reconcile(SENDABLE.map(t => meta(t.name, 'APPROVED', 'GREEN')));
+    expect(d).toHaveLength(UNSUBMITTED.length);
+    expect(d.every(x => x.kind === 'NOT_SUBMITTED')).toBe(true);
     expect(summarise(d).urgent).toBe(0);
   });
 
@@ -161,7 +163,7 @@ describe('against the real registry', () => {
     // emergency on every one of them, and the sync says so.
     const d = reconcile([]);
     expect(d).toHaveLength(ALL);
-    expect(d.every(x => x.kind === 'CODE_AHEAD_OF_META')).toBe(true);
-    expect(summarise(d).urgent).toBe(ALL);
+    expect(d.filter(x => x.kind === 'CODE_AHEAD_OF_META')).toHaveLength(SENDABLE.length);
+    expect(summarise(d).urgent).toBe(SENDABLE.length);
   });
 });

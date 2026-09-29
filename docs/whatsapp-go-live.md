@@ -183,6 +183,7 @@ renamed or reordered template is a refusal, not a silent mis-send.
 | `viewing_reminder` | `renter_name`, `viewing_time`, `listing_address` | Utility | Day-before reminder, typically outside the window. |
 | `no_supply_substitutes` | `renter_name`, `request_ref` | Utility | Nothing could be confirmed. Never sent alone - it carries substitutes. |
 | `weekly_digest` | `renter_name`, `new_count`, `area_summary` | **Marketing** | The weekly new-listing digest. See the warning below. |
+| `request_update` | `renter_name`, `complex_name` | Utility | **Not yet submitted.** An availability request has news after the 24-hour window shut (SPEC §11). Carries no news itself: the renter replies and the offer goes free-form. |
 
 ### `weekly_digest` is not like the other four
 
@@ -250,6 +251,12 @@ renter-facing copy until state is CONFIRMED.
 
 > Hi {{1}}, there are {{2}} new places this week in {{3}}. Reply here if you
 > would like to see them.
+
+**`request_update`** - Utility. Samples: `Minh`, `Empire City`. Added
+2026-09-30 for availability requests; submit it, then flip `approved` in
+`_shared/whatsapp/templates.ts` once Meta approves.
+
+> Hi {{1}}, we have an update on your request for {{2}}. Reply here to see it.
 
 Meta requires a sample value for every variable before Submit will enable, and
 the greyed-out button does not say so. That is the step people miss.

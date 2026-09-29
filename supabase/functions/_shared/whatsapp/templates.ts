@@ -61,6 +61,15 @@ export const TEMPLATES = {
       'substitutes, because FAILED_NO_SUPPLY with no alternative is a dead end.',
     approved: true,
   },
+  REQUEST_UPDATE: {
+    name: 'request_update',
+    params: ['renter_name', 'complex_name'],
+    purpose:
+      'An availability request (SPEC §11) has news but the 24-hour window shut before the concierge ' +
+      'could send it. Carries no news itself - the renter replies, the window opens, and the offer ' +
+      'goes free-form. Utility: it answers a request the renter made. Not yet submitted to Meta.',
+    approved: false,
+  },
 } as const;
 
 export type TemplateKey = keyof typeof TEMPLATES;

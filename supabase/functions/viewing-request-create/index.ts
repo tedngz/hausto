@@ -32,6 +32,7 @@ import {
 } from '../_shared/viewing/intake.ts';
 import { renderIntakeAlert, sendIntakeAlert, type IntakeAlert } from '../_shared/viewing/ops-alert.ts';
 import { findJoinableRequest } from '../_shared/viewing/open-request.ts';
+import { linkViewingToInquiry } from '../_shared/viewing/concierge.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -98,6 +99,7 @@ async function joinOpenRequest(
   userId: string,
   joinRef: string,
   listingIds: string[],
+  inquiryId: string | null = null,
 ): Promise<Response> {
   const open = await findJoinableRequest(db, userId, hcmcDate(new Date())).catch((e: unknown) => {
     console.error('[viewing-request-create] open request lookup failed:', e);
@@ -198,6 +200,7 @@ async function joinOpenRequest(
   }
 
   const placeCount = open.listingIds.length + items.length;
+  if (inquiryId) await linkViewingToInquiry(db, { inquiryId, requestId: open.requestId, now: new Date() });
   alertOps(db, renderIntakeAlert({
     ref: open.ref,
     placeCount,
@@ -257,6 +260,7 @@ Deno.serve(async (req) => {
     if (!places.ok) return json({ error: 'invalid_shortlist', message: places.error }, 400);
     return await joinOpenRequest(
       createClient(SUPABASE_URL, SERVICE_ROLE), user.id, body.joinRef.trim(), places.value!,
+      typeof body.inquiryId === 'string' ? body.inquiryId : null,
     );
   }
 
@@ -443,6 +447,11 @@ Deno.serve(async (req) => {
     availability: availability.value ?? [],
     createdAt: new Date(),
   }));
+
+  // Made from an availability request's offer link (PLAN-v3 S7.1c).
+  if (typeof body.inquiryId === 'string') {
+    await linkViewingToInquiry(db, { inquiryId: body.inquiryId, requestId: request.id, now: new Date() });
+  }
 
   // No message is sent to the renter here, and that is deliberate. There is no
   // service window until the renter messages us first. The deep link is the

@@ -9,6 +9,7 @@ import { ManualChannel } from '../realtor/channel.ts';
 import { SupabaseRealtorMessageStore } from '../realtor/store.ts';
 import { performOpsAction, type OpsDeps } from './ops-actions.ts';
 import { handleInbound } from './routing.ts';
+import { linkViewingToInquiry, runInquiryDeadline } from './concierge.ts';
 import { generateWatchCode, watchExpiry } from './watch.ts';
 import { reduceInquiry, type InquiryEvent } from '../viewing-domain.ts';
 
@@ -228,6 +229,75 @@ describe('capturing units and offering them (S7.1b)', () => {
     expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: ['1', '2', '3', '4', '5', '6'] })).status).toBe(400);
     expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [id], message: 'Call Linh on 0907 654 321' })).status).toBe(400);
     expect(view().state).toBe('SOURCING');
+  });
+});
+
+
+describe('the handoff, the deadlines and the update template (S7.1c)', () => {
+  beforeEach(async () => {
+    db.tables.jobs = [];
+    await renterSends(`Hi Hausto - please check availability at Empire City for me (${code})`);
+  });
+
+  it('enqueues the 16h and 22h reminders when the code arrives', () => {
+    const jobs = db.tables.jobs.filter(j => j.kind === 'INQUIRY_DEADLINE');
+    expect(jobs.map(j => j.run_after)).toEqual(['2026-09-29T19:00:00.000Z', '2026-09-30T01:00:00.000Z']);
+    expect(jobs.every(j => (j.payload as { inquiry_id: string }).inquiry_id === INQ)).toBe(true);
+  });
+
+  it('emails the reminder when nobody has answered, and not once someone has', async () => {
+    const sent: { subject: string; text: string }[] = [];
+    // deno-lint-ignore no-explicit-any
+    const run = () => runInquiryDeadline(db as any, INQ, new Date('2026-09-29T19:00:00Z'), async a => { sent.push(a); });
+    expect(await run()).toBe('SENT');
+    expect(sent[0].subject).toBe('Empire City - availability reply due in 8h');
+
+    at('2026-09-29T20:00:00Z');
+    await act({ action: 'INQUIRY_REPLY', inquiryId: INQ, body: 'Still asking two agents - can you do mid-November or later?' });
+    expect(await run()).toBe('NOT_NEEDED');
+    expect(sent).toHaveLength(1);
+  });
+
+  it('does not count the automatic confirmation as an answer', async () => {
+    // The code's reply goes out as source 'system' (agent-act.ts files it so);
+    // the request is still unanswered by a person.
+    db.tables.complex_inquiry_messages.push({
+      inquiry_id: INQ, direction: 'outbound', source: 'system', body: 'Thanks Mai - your request...',
+      created_at: '2026-09-29T03:00:05.000Z',
+    });
+    // deno-lint-ignore no-explicit-any
+    expect(await runInquiryDeadline(db as any, INQ, new Date(), async () => {})).toBe('SENT');
+  });
+
+  it('links a viewing request made from the offer, and closes the request as VIEWING_REQUESTED', async () => {
+    const renterId = db.tables.complex_inquiries[0].renter_id;
+    db.tables.viewing_requests.push({ id: 'req-9', ref: 'HV-4KX9', renter_id: renterId, inquiry_id: null });
+    // deno-lint-ignore no-explicit-any
+    expect(await linkViewingToInquiry(db as any, { inquiryId: INQ, requestId: 'req-9', now: new Date() })).toBe('LINKED');
+    expect(db.tables.viewing_requests[0].inquiry_id).toBe(INQ);
+    expect(view()).toMatchObject({ state: 'CLOSED', closedReason: 'VIEWING_REQUESTED' });
+
+    // A second viewing request from the same offer links too, and closes nothing twice.
+    db.tables.viewing_requests.push({ id: 'req-10', ref: 'HV-4KXA', renter_id: renterId, inquiry_id: null });
+    // deno-lint-ignore no-explicit-any
+    await linkViewingToInquiry(db as any, { inquiryId: INQ, requestId: 'req-10', now: new Date() });
+    expect(db.tables.inquiry_events.filter(e => e.type === 'CLOSED')).toHaveLength(1);
+  });
+
+  it('will not let a forwarded offer link close someone else\'s request', async () => {
+    db.tables.viewing_requests.push({ id: 'req-x', ref: 'HV-XXXX', renter_id: 'someone-else', inquiry_id: null });
+    // deno-lint-ignore no-explicit-any
+    expect(await linkViewingToInquiry(db as any, { inquiryId: INQ, requestId: 'req-x', now: new Date() })).toBe('SKIPPED');
+    expect(db.tables.viewing_requests[0].inquiry_id).toBeNull();
+    expect(view().state).not.toBe('CLOSED');
+  });
+
+  it('refuses the update template while the window is open, and until Meta approves it', async () => {
+    expect((await act({ action: 'INQUIRY_SEND_UPDATE', inquiryId: INQ })).body.error).toBe('window_open');
+    at('2026-09-30T05:00:00Z');
+    const r = await act({ action: 'INQUIRY_SEND_UPDATE', inquiryId: INQ });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe('template_not_approved');
   });
 });
 

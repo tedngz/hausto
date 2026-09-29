@@ -71,6 +71,20 @@ interface Props {
 
 interface Submitted { ref: string; waLink: string; joined?: boolean; placeCount?: number }
 
+// An offer link from an availability request (`/property/<id>?inq=<request>`,
+// SPEC §11) - remembered per listing for the session, so it survives the
+// sign-in detour, and sent with the viewing request so the two are linked.
+const INQ_KEY = 'hausto.offer-inquiry';
+
+export function rememberOfferInquiry(listingId: string, inquiryId: string | null): void {
+  if (!inquiryId || !/^[0-9a-f-]{36}$/i.test(inquiryId)) return;
+  try { sessionStorage.setItem(`${INQ_KEY}:${listingId}`, inquiryId); } catch { /* private mode */ }
+}
+
+function offerInquiryFor(listingId: string): string | null {
+  try { return sessionStorage.getItem(`${INQ_KEY}:${listingId}`); } catch { return null; }
+}
+
 /** What `viewing-request-open` says about the request a new place would join. */
 interface OpenRequest {
   ref: string;
@@ -212,9 +226,12 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     }
     setBusy(true);
     const { data, error: err } = await supabase.functions.invoke('viewing-request-create', {
-      body: join
-        ? { listingIds: [seed.listingId], joinRef: join.ref }
-        : { phone, displayName: name, listingIds: [seed.listingId], availability: picked },
+      body: {
+        ...(join
+          ? { listingIds: [seed.listingId], joinRef: join.ref }
+          : { phone, displayName: name, listingIds: [seed.listingId], availability: picked }),
+        inquiryId: offerInquiryFor(seed.listingId),
+      },
     });
     setBusy(false);
 
