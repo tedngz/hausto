@@ -16,6 +16,7 @@ import { parseInboundMessages } from '../whatsapp/inbound.ts';
 import { decideAction } from './agent.ts';
 import { performAction } from './agent-act.ts';
 import { recordInquiryMessage, sendConciergeWhatsApp } from './concierge.ts';
+import { performOpsAction } from './ops-actions.ts';
 import { sendAlert } from './alerts.ts';
 import { buildInquiryLink } from './inquiry.ts';
 import { generateWatchCode, watchExpiry } from './watch.ts';
@@ -217,6 +218,49 @@ describe('availability request rehearsal', () => {
     at('2026-09-29T06:00:00Z');
     const reply = await inbound('Yes please', '+447700900123');
     expect(reply.outcome.inquiryId).toBe('inq-1');
+  });
+
+  it('plays the offer: two units an agent confirmed, and one advertised, in one message', async () => {
+    if (PRINT) console.log('\n\n══ REHEARSAL - the offer (S7.1b) ══');
+    const AGENT = '99999999-2222-4333-8444-555555555555';
+    db.tables.complexes = [{ id: 'cx-1', name: 'Empire City', district: 'Thu Duc', city: 'ho_chi_minh' }];
+    db.tables.realtors = [{ id: AGENT, phone_e164: '+84907654321', display_name: 'Linh' }];
+    db.onInsert.external_properties = row => ({
+      ...row, bedrooms: parseInt(String(row.rooms), 10), area_sqm: parseInt(String(row.size), 10),
+      price_vnd: Number(row.price), price_confidence: 'HIGH', district_code: 'THU_DUC',
+    });
+    // The console's actions need a uuid-shaped request id.
+    const inqId = '11111111-2222-4333-8444-555555555555';
+    db.tables.complex_inquiries[0].id = inqId;
+
+    await inbound(`Hi Hausto - please check availability at Empire City for me (${code})`);
+    const deps = {
+      whatsapp: adapter, messages: store,
+      realtorChannel: { mode: 'manual' as const, deliver: () => Promise.resolve({ ok: true as const, state: 'SENT' as const }) },
+      realtorMessages: null as never,
+    };
+    // deno-lint-ignore no-explicit-any
+    const act = (input: Record<string, unknown>) => performOpsAction(db as any, deps as never, 'OPS:op-1', { inquiryId: inqId, ...input });
+
+    at('2026-09-29T08:00:00Z');
+    const a = await act({ action: 'INQUIRY_CAPTURE_UNIT', realtorId: AGENT, bedrooms: 2, areaSqm: 82, priceVnd: 24_000_000, floor: '18', tower: 'Tower Linden', furnishing: 'FULL', petsOk: true, availableFrom: '2026-11-10' });
+    const b = await act({ action: 'INQUIRY_CAPTURE_UNIT', realtorId: AGENT, bedrooms: 2, areaSqm: 76, priceVnd: 22_500_000, floor: '9', tower: 'Tower Cove', furnishing: 'PARTIAL' });
+    expect(a.status).toBe(200);
+    db.tables.external_properties.push({
+      id: 'l-adv', source: 'batdongsan', external_id: 'bds-1', is_active: true, price_vnd: 23_000_000,
+      price_confidence: 'HIGH', bedrooms: 2, area_sqm: 78, district_code: 'THU_DUC', title: 'Sunny 2BR in Empire City Tilia',
+    });
+    // On file at the building: what complex_listing_ids() would return.
+    db.rpc = ((name: string) => Promise.resolve({ data: name === 'complex_listing_ids' ? ['l-adv'] : null, error: null })) as never;
+
+    at('2026-09-29T09:30:00Z');
+    const r = await act({
+      action: 'INQUIRY_OFFER_UNITS', listingIds: [a.body.listingId, b.body.listingId, 'l-adv'],
+      message: 'The Linden one is the brightest - I would see that first.', key: 'offer-1',
+    });
+    expect(r.status).toBe(200);
+    say('Hausto  [the offer, from the ops console]', String(adapter.delivered.at(-1)?.body));
+    expect(adapter.delivered.at(-1)?.body).not.toMatch(/\+84|0907/);
   });
 
   it('files a redelivered code once, and confirms the request once', async () => {

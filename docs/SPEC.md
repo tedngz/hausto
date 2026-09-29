@@ -978,14 +978,15 @@ DELETE and TRUNCATE revoked, service role included), by `reduceInquiry()` in
 ```
 id           bigint identity
 inquiry_id   uuid references complex_inquiries
-type         SUBMITTED | CONFIRMED | AGENT_ASKED | AGENT_ANSWERED | CLOSED | REOPENED
+type         SUBMITTED | CONFIRMED | AGENT_ASKED | AGENT_ANSWERED | UNIT_CAPTURED | UNITS_OFFERED | CLOSED | REOPENED
 payload      jsonb      -- realtor_id, medium, answer, reason, note
 actor        text       -- RENTER, USER:<uuid>, OPS:<uuid>, AGENT:<version>
 occurred_at  timestamptz
 ```
 
 `AWAITING_CODE` (form sent, no WhatsApp message) → `NEW` (code arrived; the 24
-hours start) → `SOURCING` (an agent asked) → `CLOSED` (one of
+hours start) → `SOURCING` (an agent asked, or a unit captured) → `OFFERED` (units
+sent to the renter; S7.1b below) → `CLOSED` (one of
 `INQUIRY_CLOSE_REASONS`), reopenable. An agent's first ask stands; their latest
 answer (`HAS_UNITS | NO_UNITS | NO_REPLY`) stands. SUBMITTED is written by
 `complex-inquiry-create`, CONFIRMED when the code arrives; the rest are
@@ -1000,6 +1001,48 @@ The brief: the criteria, the deadline (code + 24h), the window and
 consecutive-outbound count, the thread, the building's roster, and the listings
 on file that fit - requestable, within budget and bedrooms - with their agents,
 marked as advertised rather than available.
+
+### Units and the offer (PLAN-v3 S7.1b)
+
+**Capturing a unit** (`INQUIRY_CAPTURE_UNIT`) turns an agent's offer into an
+ordinary `external_properties` row, so Request viewing, the viewing flow and
+the alerts treat it like any listing:
+
+- `source = 'concierge'`, `external_id = concierge:<inquiry>:<id>`,
+  `source_url` its own hausto.com page, `realtor_id` the agent.
+- Written raw (`rooms '2 Bedrooms'`, `size '80 m²'`, `location
+  '<complex>, <district>'`, `price`) so `sync_canonical_listing_fields()`
+  derives `bedrooms`, `area_sqm`, `district_code`, `price_vnd` and
+  `price_confidence` - one parser for crawled and captured rows alike. (The
+  `complexes.district_code` column uses another format and is not read.)
+- Then held to `screenCandidates`; a unit intake would refuse is deleted and the
+  reason returned. Ho Chi Minh City only.
+- No `contact_name` or `contact_phone`: `get-public-property` serves these rows
+  to renters (invariant 4).
+- Photos are uploaded by the console to `external-property-images` under
+  `concierge/<inquiry>/`, the one path a storage policy opens to ops and admin;
+  the action refuses any other URL.
+- Writes `UNIT_CAPTURED {listing_id, realtor_id}`; its agent counts as having
+  units.
+
+**Freshness.** An agent's "it is free" is good for `UNIT_FRESH_DAYS` (14) from
+`last_verified_at`. `INQUIRY_RECONFIRM_UNIT` renews it (a listing fact, no
+event); the `concierge-units-expire` cron (02:30 ICT) deactivates the rest.
+`verify-external-listings` skips `source = 'concierge'` - there is no page to
+check.
+
+**The offer** (`INQUIRY_OFFER_UNITS`): 1-5 units, each requestable now, each
+either captured for this request (and fresh) or advertised at its building
+(`complex_listing_ids()`). One message, rendered server-side by
+`renderOffer()` - the console previews the same function without the renter's
+name: a greeting with their first name, the operator's optional line (checked
+like any reply), each unit with its facts, whether an agent confirmed it or it
+is only advertised, and a link `hausto.com/property/<id>?inq=<inquiry>`; it ends
+by inviting a reply and books nothing. Sent through `sendConciergeWhatsApp`
+(window and two-in-a-row rules hold), filed on the thread, logged as
+`UNITS_OFFERED {listing_ids, message_id}`, and written to `alert_items` so the
+weekly alert does not offer the same places again. The request becomes
+`OFFERED`, and stays so if more agents are asked afterwards.
 
 ### Building agents (PLAN-v3 S7.0)
 

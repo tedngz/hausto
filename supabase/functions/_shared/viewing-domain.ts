@@ -397,6 +397,8 @@ export const INQUIRY_EVENT_TYPES = [
   'CONFIRMED',      // the WhatsApp code arrived - the 24 hours start
   'AGENT_ASKED',    // an operator asked an agent about the building
   'AGENT_ANSWERED', // what that agent said, as one of AGENT_ANSWERS
+  'UNIT_CAPTURED',  // an agent's offered unit, entered as a listing (S7.1b)
+  'UNITS_OFFERED',  // the one message to the renter with the units in it
   'CLOSED',         // with one of INQUIRY_CLOSE_REASONS
   'REOPENED',
 ] as const;
@@ -406,6 +408,7 @@ export const INQUIRY_STATES = [
   'AWAITING_CODE', // the form was sent, the WhatsApp message was not
   'NEW',           // confirmed; nobody asked yet
   'SOURCING',      // agents being asked
+  'OFFERED',       // units sent to the renter
   'CLOSED',
 ] as const;
 export type InquiryState = typeof INQUIRY_STATES[number];
@@ -450,6 +453,11 @@ export interface InquiryView {
   state: InquiryState;
   confirmedAt: string | null;
   agents: Record<string, InquiryAgentView>;
+  /** Listings entered from agents' offers, in capture order. */
+  capturedListingIds: string[];
+  /** Every listing put in front of the renter, and when the last offer went. */
+  offeredListingIds: string[];
+  offeredAt: string | null;
   closedReason: InquiryCloseReason | null;
   closedAt: string | null;
 }
@@ -464,7 +472,8 @@ export const INQUIRY_REPLY_WITHIN_MS = 24 * 60 * 60 * 1000;
  */
 export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): InquiryView {
   const view: InquiryView = {
-    inquiryId, state: 'AWAITING_CODE', confirmedAt: null, agents: {}, closedReason: null, closedAt: null,
+    inquiryId, state: 'AWAITING_CODE', confirmedAt: null, agents: {}, capturedListingIds: [], offeredListingIds: [],
+    offeredAt: null, closedReason: null, closedAt: null,
   };
   const agent = (id: string): InquiryAgentView =>
     (view.agents[id] ??= { realtorId: id, askedAt: null, medium: null, answer: null, answeredAt: null });
@@ -475,7 +484,9 @@ export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): Inquir
   for (const e of sorted) {
     const p = (e.payload ?? {}) as Record<string, unknown>;
     const realtorId = typeof p.realtor_id === 'string' ? p.realtor_id : null;
-    const working = () => { if (view.state !== 'CLOSED') view.state = 'SOURCING'; };
+    // Work moves a request forward, never back: asking another agent after
+    // an offer went out does not un-offer it.
+    const working = () => { if (view.state === 'AWAITING_CODE' || view.state === 'NEW') view.state = 'SOURCING'; };
 
     switch (e.type as InquiryEventType) {
       case 'SUBMITTED':
@@ -501,6 +512,26 @@ export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): Inquir
         working();
         break;
       }
+      case 'UNIT_CAPTURED': {
+        const listingId = typeof p.listing_id === 'string' ? p.listing_id : null;
+        if (!listingId) break;
+        if (!view.capturedListingIds.includes(listingId)) view.capturedListingIds.push(listingId);
+        if (realtorId) {
+          // An agent whose unit was captured has units, whatever was recorded.
+          agent(realtorId).answer ??= 'HAS_UNITS';
+          agent(realtorId).answeredAt ??= e.occurred_at;
+        }
+        working();
+        break;
+      }
+      case 'UNITS_OFFERED': {
+        const ids = Array.isArray(p.listing_ids) ? p.listing_ids.filter((x): x is string => typeof x === 'string') : [];
+        if (ids.length === 0) break;
+        for (const id of ids) if (!view.offeredListingIds.includes(id)) view.offeredListingIds.push(id);
+        view.offeredAt = e.occurred_at;
+        if (view.state !== 'CLOSED') view.state = 'OFFERED';
+        break;
+      }
       case 'CLOSED': {
         const reason = p.reason as InquiryCloseReason;
         view.state = 'CLOSED';
@@ -512,7 +543,9 @@ export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): Inquir
         if (view.state !== 'CLOSED') break;
         view.closedReason = null;
         view.closedAt = null;
-        view.state = Object.keys(view.agents).length > 0 ? 'SOURCING' : view.confirmedAt ? 'NEW' : 'AWAITING_CODE';
+        view.state = view.offeredAt ? 'OFFERED'
+          : Object.keys(view.agents).length > 0 || view.capturedListingIds.length > 0 ? 'SOURCING'
+          : view.confirmedAt ? 'NEW' : 'AWAITING_CODE';
         break;
     }
   }

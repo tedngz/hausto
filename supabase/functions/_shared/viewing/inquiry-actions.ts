@@ -25,6 +25,17 @@ import {
 } from '../viewing-domain.ts';
 import { checkOperatorReply } from './thread.ts';
 import { NoWhatsAppError, recordInquiryMessage, sendConciergeWhatsApp } from './concierge.ts';
+import { screenCandidates, type ShortlistCandidate } from './intake.ts';
+import {
+  CONCIERGE_SOURCE,
+  MAX_OFFER_UNITS,
+  UNIT_FRESH_DAYS,
+  renderOffer,
+  unitPhotoPath,
+  unitRow,
+  unitStale,
+  validateUnit,
+} from './offer.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -32,6 +43,9 @@ type Supa = any;
 export const INQUIRY_ACTIONS = [
   'INQUIRY_ASK_AGENT',
   'INQUIRY_AGENT_ANSWERED',
+  'INQUIRY_CAPTURE_UNIT',
+  'INQUIRY_RECONFIRM_UNIT',
+  'INQUIRY_OFFER_UNITS',
   'INQUIRY_REPLY',
   'INQUIRY_CLOSE',
   'INQUIRY_REOPEN',
@@ -54,14 +68,26 @@ const refuse = (status: number, error: string, message?: string): InquiryResult 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 const MAX_NOTE = 500;
 
+interface InquiryRow {
+  id: string;
+  channel: string;
+  whatsapp_confirmed_at: string | null;
+  complex_id: string;
+  full_name: string | null;
+  renter_id: string | null;
+  watch_id: string | null;
+}
+
 /** The request and its derived state, or a refusal. */
 async function load(db: Supa, inquiryId: string): Promise<
-  { ok: true; view: InquiryView; row: { id: string; channel: string; whatsapp_confirmed_at: string | null } } |
+  { ok: true; view: InquiryView; row: InquiryRow } |
   { ok: false; result: InquiryResult }
 > {
   if (!/^[0-9a-f-]{36}$/i.test(inquiryId)) return { ok: false, result: refuse(400, 'inquiryId is required') };
   const { data: row } = await db
-    .from('complex_inquiries').select('id, channel, whatsapp_confirmed_at').eq('id', inquiryId).maybeSingle();
+    .from('complex_inquiries')
+    .select('id, channel, whatsapp_confirmed_at, complex_id, full_name, renter_id, watch_id')
+    .eq('id', inquiryId).maybeSingle();
   if (!row) return { ok: false, result: refuse(404, 'not_found', 'No such request.') };
   if (row.channel !== 'WHATSAPP') {
     return { ok: false, result: refuse(409, 'email_request', 'An email request - it is answered in Admin Tools.') };
@@ -140,6 +166,10 @@ export async function performInquiryAction(
       ?? done({ recorded: 'AGENT_ANSWERED' });
   }
 
+  if (action === 'INQUIRY_CAPTURE_UNIT') return captureUnit(db, actor, row, input);
+  if (action === 'INQUIRY_RECONFIRM_UNIT') return reconfirmUnit(db, row, input);
+  if (action === 'INQUIRY_OFFER_UNITS') return offerUnits(db, deps, actor, row, input);
+
   if (action === 'INQUIRY_CLOSE') {
     const reason = str(input.reason).toUpperCase();
     if (!(INQUIRY_CLOSE_REASONS as readonly string[]).includes(reason)) {
@@ -174,4 +204,170 @@ export async function performInquiryAction(
   });
   await db.from('complex_inquiries').update({ last_message_at: new Date().toISOString() }).eq('id', inquiryId);
   return done({ recorded: 'REPLIED', messageId: sent.messageId });
+}
+
+// ── Units (S7.1b) ───────────────────────────────────────────────────────────
+
+const LISTING_COLUMNS =
+  'id, is_active, price_vnd, price_confidence, bedrooms, area_sqm, district_code, realtor_id, title, source, external_id, last_verified_at';
+
+type UnitListing = ShortlistCandidate & { source: string; external_id: string; last_verified_at: string | null };
+
+/** Is this listing one of this request's captured units? */
+const capturedFor = (listing: { source?: unknown; external_id?: unknown }, inquiryId: string) =>
+  listing.source === CONCIERGE_SOURCE && String(listing.external_id ?? '').startsWith(`concierge:${inquiryId}:`);
+
+/**
+ * An agent's offered unit, entered as a listing. Written raw and parsed by the
+ * canonical trigger like any crawled row, then held to the same gate intake
+ * uses - a unit Request viewing would refuse is not worth offering, so it is
+ * removed and the reason returned.
+ */
+async function captureUnit(db: Supa, actor: string, row: InquiryRow, input: Record<string, unknown>): Promise<InquiryResult> {
+  const v = validateUnit(input, unitPhotoPath(row.id));
+  if (!v.ok) return refuse(400, 'invalid_unit', v.error);
+
+  const { data: realtor } = await db.from('realtors').select('id').eq('id', v.value.realtorId).maybeSingle();
+  if (!realtor) return refuse(400, 'invalid_realtor', 'Pick the agent who offered it.');
+
+  const { data: complex } = await db.from('complexes').select('name, district, city').eq('id', row.complex_id).maybeSingle();
+  if (!complex) return refuse(404, 'invalid_complex');
+  // The viewing flow is Ho Chi Minh City only; a unit elsewhere could never be requested.
+  if (complex.city !== 'ho_chi_minh') return refuse(409, 'outside_hcmc', 'Viewings are arranged in Ho Chi Minh City only.');
+
+  const id = crypto.randomUUID();
+  const { error } = await db.from('external_properties')
+    .insert(unitRow({ id, inquiryId: row.id, complex, unit: v.value, now: new Date() }));
+  if (error) {
+    console.error('[inquiry-actions] unit insert failed:', error);
+    return refuse(500, 'unit_failed');
+  }
+
+  const { data: saved } = await db.from('external_properties').select(LISTING_COLUMNS).eq('id', id).maybeSingle();
+  const { eligible, rejected } = screenCandidates([id], saved ? [saved as ShortlistCandidate] : []);
+  if (eligible.length === 0) {
+    await db.from('external_properties').delete().eq('id', id);
+    return refuse(422, 'not_requestable', rejected[0]?.reason ?? 'That unit could not be requested.');
+  }
+
+  const failed = await append(db, row.id, 'UNIT_CAPTURED', { listing_id: id, realtor_id: v.value.realtorId, note: v.value.note }, actor);
+  return failed ?? done({ recorded: 'UNIT_CAPTURED', listingId: id });
+}
+
+/**
+ * The agent says it is still free: good for another UNIT_FRESH_DAYS. A fact
+ * about the listing, not a step of the request, so no event.
+ */
+async function reconfirmUnit(db: Supa, row: InquiryRow, input: Record<string, unknown>): Promise<InquiryResult> {
+  const listingId = str(input.listingId);
+  const { data: listing } = listingId
+    ? await db.from('external_properties').select('id, source, external_id').eq('id', listingId).maybeSingle()
+    : { data: null };
+  if (!listing || !capturedFor(listing, row.id)) return refuse(404, 'not_captured', "Not one of this request's units.");
+  const now = new Date().toISOString();
+  await db.from('external_properties').update({
+    is_active: true, deactivated_at: null, last_verified_at: now,
+    last_verification_status: 'alive', last_verification_reason: 'agent_confirmed',
+  }).eq('id', listingId);
+  return done({ recorded: 'UNIT_RECONFIRMED' });
+}
+
+/**
+ * The one message with the units in it. Every unit must be requestable now,
+ * belong to this request (captured for it, or advertised at its building),
+ * and - if captured - have been confirmed by its agent within
+ * UNIT_FRESH_DAYS. Sent like any operator reply, then recorded three ways:
+ * on the thread, as UNITS_OFFERED, and in alert_items so the weekly alert
+ * does not offer the same places again.
+ */
+async function offerUnits(
+  db: Supa,
+  deps: { whatsapp: WhatsAppAdapter; messages: MessageStore; newKey?: () => string },
+  actor: string,
+  row: InquiryRow,
+  input: Record<string, unknown>,
+): Promise<InquiryResult> {
+  const ids: string[] = Array.isArray(input.listingIds)
+    ? [...new Set((input.listingIds as unknown[]).map(x => str(x)).filter(Boolean))]
+    : [];
+  if (ids.length === 0 || ids.length > MAX_OFFER_UNITS) {
+    return refuse(400, 'invalid_units', `Pick 1 to ${MAX_OFFER_UNITS} units.`);
+  }
+
+  let message: string | null = null;
+  if (str(input.message)) {
+    const checked = checkOperatorReply(str(input.message), 'SUBMITTED');
+    if (!checked.ok) return refuse(400, 'invalid_reply', checked.error);
+    message = checked.body;
+  }
+
+  const { data: found } = await db.from('external_properties').select(LISTING_COLUMNS).in('id', ids);
+  const listings = (found ?? []) as UnitListing[];
+  const { eligible, rejected } = screenCandidates(ids, listings);
+  if (rejected.length > 0) {
+    return refuse(422, 'not_requestable', `${rejected.length} of those cannot be requested: ${rejected[0].reason}`);
+  }
+
+  const { data: atBuilding } = await db.rpc('complex_listing_ids', { _complex_id: row.complex_id, _since: '-infinity' });
+  const onFile = new Set(((atBuilding ?? []) as unknown[])
+    .map(x => (typeof x === 'string' ? x : String((x as Record<string, unknown>).complex_listing_ids))));
+  const now = new Date();
+  for (const l of listings) {
+    const captured = capturedFor(l, row.id);
+    if (!captured && !onFile.has(l.id)) return refuse(422, 'not_this_building', `"${l.title}" is not at this building.`);
+    if (captured && unitStale(l.last_verified_at, now)) {
+      return refuse(409, 'stale_unit',
+        `"${l.title}" was last confirmed over ${UNIT_FRESH_DAYS} days ago - reconfirm it with the agent first.`);
+    }
+  }
+
+  const { data: complex } = await db.from('complexes').select('name').eq('id', row.complex_id).maybeSingle();
+  const byId = new Map(listings.map(l => [l.id, l]));
+  const body = renderOffer({
+    firstName: (row.full_name ?? '').trim().split(/\s+/)[0] || null,
+    complexName: complex?.name ?? 'the building',
+    inquiryId: row.id,
+    message,
+    now,
+    units: eligible.map(c => {
+      const l = byId.get(c.id)!;
+      return {
+        id: l.id, title: l.title ?? 'A place', priceVnd: Number(l.price_vnd), bedrooms: Number(l.bedrooms),
+        areaSqm: l.area_sqm ?? null, confirmedAt: capturedFor(l, row.id) ? l.last_verified_at : null,
+      };
+    }),
+  });
+
+  let sent: { messageId: string; status: string };
+  try {
+    sent = await sendConciergeWhatsApp(db, deps.messages, deps.whatsapp, {
+      inquiryId: row.id, body, key: str(input.key) || deps.newKey?.() || crypto.randomUUID(),
+    });
+  } catch (e) {
+    if (e instanceof ServiceWindowClosedError) {
+      return refuse(409, 'window_closed', 'Their WhatsApp window has closed. It reopens when they write to us.');
+    }
+    if (e instanceof ConsecutiveMessageError) {
+      return refuse(409, 'too_many_consecutive', 'They have not replied to our last two messages. Wait for them.');
+    }
+    if (e instanceof NoWhatsAppError) return refuse(409, 'awaiting_code', (e as Error).message);
+    throw e;
+  }
+  if (sent.status === 'FAILED') return refuse(502, 'send_failed', 'WhatsApp refused the message.');
+
+  await recordInquiryMessage(db, {
+    inquiryId: row.id, direction: 'outbound', source: 'dashboard', whatsappMessageId: sent.messageId, body, now,
+  });
+  await db.from('complex_inquiries').update({ last_message_at: now.toISOString() }).eq('id', row.id);
+  if (row.renter_id) {
+    // Already news to them, so the alert sweep must not send these again.
+    const { error } = await db.from('alert_items').insert(ids.map(listingId => ({
+      renter_id: row.renter_id, listing_id: listingId, watch_id: row.watch_id, source: 'WATCH',
+      message_id: sent.messageId, detail_sent_at: now.toISOString(),
+    })));
+    if (error && error.code !== '23505') console.error('[inquiry-actions] alert_items insert failed:', error.message ?? error);
+  }
+
+  const failed = await append(db, row.id, 'UNITS_OFFERED', { listing_ids: ids, message_id: sent.messageId }, actor);
+  return failed ?? done({ recorded: 'UNITS_OFFERED', messageId: sent.messageId });
 }

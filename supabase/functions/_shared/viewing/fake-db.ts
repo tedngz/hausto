@@ -25,6 +25,13 @@ export class FakeDb {
   private seq = 0;
   nextId(prefix: string) { return `${prefix}${++this.seq}`; }
 
+  /**
+   * A BEFORE INSERT trigger per table, for the one the code depends on:
+   * `sync_canonical_listing_fields()`, which fills a listing's canonical
+   * columns from its raw ones. A test that inserts a listing supplies it.
+   */
+  onInsert: Record<string, (row: FakeRow) => FakeRow> = {};
+
   /** The ops view, computed rather than stored - same join the migration does. */
   private opsItemsView(): FakeRow[] {
     return this.tables.request_items.map(ri => {
@@ -102,8 +109,10 @@ export class FakeDb {
             ...(table === 'events' ? { occurred_at: new Date().toISOString() } : {}),
             ...r,
           };
-          (this.tables[table] ??= []).push(withId);
-          inserted.push(withId);
+          const trigger = this.onInsert[table];
+          const stored = trigger ? trigger(withId) : withId;
+          (this.tables[table] ??= []).push(stored);
+          inserted.push(stored);
         }
         return {
           select: () => ({
