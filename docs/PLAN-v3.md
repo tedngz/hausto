@@ -31,6 +31,7 @@ and dialable brokers.
 | S4 intake + handshake | Done, and changed | Intake is `RequestViewingModal`: one button per card, a signed-in user, one credit per listing, 1-5 listings, no today or tomorrow (CLAUDE.md invariants 7-8). The `wa.me` handshake is as planned. WhatsApp is on the Cloud API. |
 | S5 ops console | Done | At https://hausto-ops.vercel.app, deployed on merge. Paste-parse is built (`ops-parse-reply`, #108). Its ≥80%-on-30-replies bar is **unmeasured**: no broker reply has been recorded yet. |
 | S6 itinerary + delivery | Done | Itinerary with clash warnings, one-message delivery, rules-based intent, reminders and the silence-clock property test landed in #92; substitutes and the agent followed (#94), and all five templates are approved (#101). |
+| S7 availability requests | Request built, handling not | The complex page's request is live on WhatsApp for any country's number (#123, #124). Six requests ever, all by email before that. 12 of 23 buildings have no known agent, so S7.0 - agents per building - comes before any S7 code. |
 
 Live traffic so far is one viewing request. The number to watch (below) has no
 denominator yet.
@@ -397,6 +398,116 @@ Intent classification on the reply. Four utility templates. Reminders. Opt-out.
 request can go more than 24h without the renter hearing something, asserted as a
 property test.
 
+### S7 - Availability requests: sourcing a building (added 2026-09-29)
+
+> The request itself is built (#123, #124, SPEC §11): a complex page's "Check
+> availability", confirmed by a code on WhatsApp, answered by a person within
+> 24 hours, any country's number. What is not built is the handling - how a
+> request becomes units the renter can ask to see. This milestone is that.
+
+Treat each request as a **sourcing job with a 24-hour clock**. Software finds,
+records and sends; a person, and later the AI operator, does the asking.
+
+**Supply is the bottleneck, not software.** Read from production on 2026-09-29:
+
+- Known agents per building, all time: 12 of 23 published buildings have none -
+  Empire City and Celadon, both asked about, among them. 8 have one; the best
+  have four.
+- Listings do not answer it either: Empire City has had 2 ever, Celadon 3, and
+  an ad stays up after its unit is let. Advertised is not available until an
+  agent says so.
+- `complexes.management_company` says Savills manages 10 of the 23 (all three
+  buildings requests have named) and CBRE 6. Their residential leasing teams
+  would reach 16 buildings. The column was seeded, so confirm before relying on
+  it.
+
+**The handling, per request:**
+
+| When | What | Who |
+|---|---|---|
+| T0, the code arrives | Confirmation carries any advertised units on file that fit, marked "advertised - we confirm with the agent"; the request brief is assembled | System |
+| T0 to T+12h | Ask 3-5 agents for that building: bedrooms, budget, move-in, pets, "photos, price, when can it be seen". Never the renter's identity | Operator, later the AI operator |
+| As agents answer | Each offered unit becomes a listing with photos and price, so Request viewing works on it | Operator |
+| Before T+24h | **One** WhatsApp message with up to five units, a link each | Operator |
+| After | Renter taps a unit, signs in (first viewing free), picks times; S4-S6 take over | Existing flow |
+
+One message, because the confirmation plus one more is the two-in-a-row limit
+and the window shuts at T+24h. If nothing is found, that message ends with a
+question ("widen to An Phu?") so a reply keeps the thread open.
+
+**S7.0 - Agents for the requested buildings.** Mostly not code. Join each
+building's Zalo and Facebook agent groups - a person reads them; the bridge
+never reads chats beyond the agents we are talking to - and approach the Savills
+and CBRE leasing teams. Code: a `complex_agents` table (building, agent, source
+`LISTING | MANUAL | MANAGEMENT`, last reply) and an "add agent to building"
+action in the ops console, reusing `RECORD_CONTACT`'s upsert by `toE164`.
+
+**S7.1 - The concierge workbench.** Agents still messaged by hand on Zalo, as
+the viewing flow was before the bridge.
+
+1. Move the queue from Admin Tools into the ops console: it touches agents, and
+   the SPA must not carry their contacts. It also drops the renter's name and
+   phone from the operator's view (invariant 4), whoever works it.
+2. Request brief: criteria, matching listings on file with their agents, the
+   building's roster, its management company, the window deadline.
+3. Typed steps, not free text - `inquiry_events`, append-only, status derived
+   by a reducer: `ASK_AGENT`, `AGENT_ANSWERED` (no units / units),
+   `CAPTURE_UNIT`, `OFFER_UNITS`, `CLOSE` (viewing requested / nothing found /
+   renter went quiet / rented elsewhere / lease signed). Invariants 1 and 2,
+   applied to sourcing: it is the record later automation learns from.
+4. Unit capture: a form creating an `external_properties` row with
+   `source = 'concierge'` and every field `screenCandidates` requires, plus
+   photos. No schema change. `verify-external-listings` must skip these rows
+   (today an unknown source is marked `error` and never deactivated), and a
+   daily job expires them after 14 days unless reconfirmed.
+5. Offer composer: pick units, preview the one message, send through
+   `sendConciergeWhatsApp`, record `OFFER_UNITS`.
+6. Handoff: offer links carry `?inq=`, stored as an additive
+   `viewing_requests.inquiry_id`; the request closes itself as viewing
+   requested - the conversion number.
+7. Deadline jobs at T+16h and T+22h alert the operator if nothing has gone out.
+8. Submit a Utility template, `request_update`: "Hi {{1}}, we have an update on
+   your request for {{2}}. Reply here to see it." It closes the gap after the
+   window shuts. Registry entry `approved: false` until Meta says otherwise.
+
+**S7.2 - Outreach through the bridge.** `realtor_messages.request_id` becomes
+nullable beside a new `inquiry_id` (exactly one set) and an
+`AVAILABILITY_CHECK` purpose. The bridge's watch list and reply routing learn
+inquiry-scoped messages - today such a reply is dropped, since routing and the
+watch list both come from `request_items`. The device forwards photos from
+watched agents only (today it forwards text). Replies get a suggested
+unit parse the operator confirms, as `ops-parse-reply` does. Cap first-time
+agents per day and messages per agent: cold messages from a personal Zalo
+account are the likeliest way to lose it.
+
+**S7.3 - The AI operator sources alone.** A new `ASK_AGENTS` action with its
+own gate, measured from how often operators sent its S7.2 proposals unchanged
+(invariant 10). The offer message stays human-approved longest - it is the
+promise to the renter. Start when requests pass about five a week.
+
+**Holes, and how they are closed:** units let fast (14-day expiry; the offer
+says "available as of <date>"); bad photos or prices from agents (a person
+approves every captured unit through S7.2); units that cannot be requested (the
+capture form demands what intake checks); a renter who goes quiet (close after
+7 days, alerts run to the watch's end); weekends with one person (the deadline
+jobs help, but "24 hours" needs someone on call or a different promise).
+
+**Charging:** the request stays free; viewing credits are spent as now. The
+natural revenue is agent-side - HCMC agents commonly pay a referral share of the
+landlord's commission on a signed lease - and needs only the `CLOSE` reason
+"lease signed" to track. No new payment surface (CLAUDE.md).
+
+**Done when:** a request for a building with a roster goes code → brief → agents
+asked → units captured → one offer message → a viewing request linked back to
+it, driven by buttons on `MockAdapter` with seeded data; every step is a typed
+event with reducer tests including out-of-order arrival; and no request can
+pass T+24h without either an offer or a deadline alert, asserted as a property
+test.
+
+**The numbers to watch:** time to first offer (under 24h, always); share of
+requests with at least one unit offered, per building - the supply number;
+offer-to-viewing-request conversion; agent reply rate, to prune the roster.
+
 ---
 
 ## The WhatsApp agent: scope it narrowly
@@ -492,6 +603,8 @@ See the Payments section of `CLAUDE.md` before touching any of it.
 ## Critical path
 
 S1 (3) and S2 (0.5) run in parallel. Then S3 (1.5) → S4 (3) → S5 (4) → S6 (3).
+S7 (added later) starts with S7.0, which is agent recruiting rather than code,
+and its later stages wait on volume rather than days.
 
 Roughly **11 working days**, down from v2's 15 - the saving is entirely S1 and S2
 no longer building what exists. S5 is the one milestone not to compress.
