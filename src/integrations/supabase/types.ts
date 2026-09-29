@@ -154,11 +154,13 @@ export type Database = {
           additional_notes: string | null
           admin_notes: string | null
           bedrooms_needed: number
-          budget_usd_max: number
-          budget_usd_min: number
+          budget_max_vnd: number | null
+          budget_usd_max: number | null
+          budget_usd_min: number | null
+          channel: string
           complex_id: string
           created_at: string
-          email: string
+          email: string | null
           full_name: string
           handled_at: string | null
           has_pets: boolean
@@ -168,20 +170,25 @@ export type Database = {
           lease_duration_months: number
           notified_at: string | null
           phone: string | null
+          renter_id: string | null
           status: string
           target_move_in_date: string
           updated_at: string
           user_id: string | null
+          watch_id: string | null
+          whatsapp_confirmed_at: string | null
         }
         Insert: {
           additional_notes?: string | null
           admin_notes?: string | null
           bedrooms_needed: number
-          budget_usd_max: number
-          budget_usd_min: number
+          budget_max_vnd?: number | null
+          budget_usd_max?: number | null
+          budget_usd_min?: number | null
+          channel: string
           complex_id: string
           created_at?: string
-          email: string
+          email?: string | null
           full_name: string
           handled_at?: string | null
           has_pets?: boolean
@@ -191,20 +198,25 @@ export type Database = {
           lease_duration_months: number
           notified_at?: string | null
           phone?: string | null
+          renter_id?: string | null
           status?: string
           target_move_in_date: string
           updated_at?: string
           user_id?: string | null
+          watch_id?: string | null
+          whatsapp_confirmed_at?: string | null
         }
         Update: {
           additional_notes?: string | null
           admin_notes?: string | null
           bedrooms_needed?: number
-          budget_usd_max?: number
-          budget_usd_min?: number
+          budget_max_vnd?: number | null
+          budget_usd_max?: number | null
+          budget_usd_min?: number | null
+          channel?: string
           complex_id?: string
           created_at?: string
-          email?: string
+          email?: string | null
           full_name?: string
           handled_at?: string | null
           has_pets?: boolean
@@ -214,10 +226,13 @@ export type Database = {
           lease_duration_months?: number
           notified_at?: string | null
           phone?: string | null
+          renter_id?: string | null
           status?: string
           target_move_in_date?: string
           updated_at?: string
           user_id?: string | null
+          watch_id?: string | null
+          whatsapp_confirmed_at?: string | null
         }
         Relationships: [
           {

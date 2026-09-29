@@ -225,9 +225,9 @@ export const ConciergeRequestsPanel = () => {
             .from('complex_inquiries')
             .select('id', { count: 'exact', head: true })
             .eq('status', status)
-            // A WhatsApp request whose code never arrived is an abandoned form:
-            // there is nobody to reply to, so it is not work.
-            .or('channel.eq.EMAIL,whatsapp_confirmed_at.not.is.null');
+            // WhatsApp requests are worked in the ops console (PLAN-v3 S7.1), where
+            // the operator never sees the renter's name or number.
+            .eq('channel', 'EMAIL');
           return [status, count ?? 0] as const;
         }),
       );
@@ -243,7 +243,7 @@ export const ConciergeRequestsPanel = () => {
         .from('complex_inquiries')
         .select('*, complexes(name, slug, district)')
         .eq('status', tab)
-        .or('channel.eq.EMAIL,whatsapp_confirmed_at.not.is.null')
+        .eq('channel', 'EMAIL')
         .order('last_message_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(100);
@@ -312,8 +312,8 @@ export const ConciergeRequestsPanel = () => {
           Concierge availability requests
         </CardTitle>
         <CardDescription>
-          Renters asking us to check live availability at a complex. Reply within 24 hours,
-          then mark the request contacted or closed.
+          Email requests, from before availability requests moved to WhatsApp. New requests
+          are worked in the ops console, under Availability.
         </CardDescription>
       </CardHeader>
       <CardContent>

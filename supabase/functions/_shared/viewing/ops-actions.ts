@@ -50,6 +50,7 @@ import {
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { toE164 } from '../whatsapp/inbound.ts';
 import { validateBuildingAgent } from './roster.ts';
+import { isInquiryAction, performInquiryAction } from './inquiry-actions.ts';
 import { deliver } from './deliver.ts';
 import { settlementFor, approvalOf, type ProposalRow, type DoneAction } from './proposals.ts';
 import { AUTONOMOUS_ACTIONS } from './autonomy.ts';
@@ -268,6 +269,8 @@ export async function performOpsAction(
   // A building's agents (PLAN-v3 S7.0) - about no request, so no proposals to settle.
   if (action === 'ADD_BUILDING_AGENT') return addBuildingAgent(db, actor, input);
   if (action === 'REMOVE_BUILDING_AGENT') return removeBuildingAgent(db, input);
+  // Availability requests (PLAN-v3 S7.1) - their own log, no proposals yet.
+  if (isInquiryAction(action)) return performInquiryAction(db, deps, actor, action, input);
   const result = await dispatch(db, deps, actor, action, input);
   if (result.status === 200) {
     try {

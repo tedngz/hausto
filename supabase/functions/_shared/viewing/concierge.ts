@@ -61,6 +61,11 @@ export async function confirmInquiryForWatch(
       inquiryId: inq.id, direction: 'inbound', source: 'whatsapp',
       whatsappMessageId: opts.inboundMessageId, body: opts.body, now: opts.now,
     });
+    // The state change, in the request's log (PLAN-v3 S7.1): its 24 hours start.
+    const { error } = await db.from('inquiry_events').insert({
+      inquiry_id: inq.id, type: 'CONFIRMED', payload: { renter_id: opts.renter.id }, actor: 'RENTER', occurred_at: now,
+    });
+    if (error) console.error(`[concierge] CONFIRMED for ${inq.id} failed:`, error.message ?? error);
   }
 
   return {
