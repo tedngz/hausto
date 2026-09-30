@@ -155,6 +155,7 @@ Deno.serve(async (req) => {
   let eligible = 0;
   let sent = 0;
   let refused = 0;
+  let held = 0;
   let viaWatch = 0;
 
   for (const r of renters.values()) {
@@ -212,6 +213,8 @@ Deno.serve(async (req) => {
         renterId: r.id, renterName: r.display_name, items: plan, now,
       });
       if (result.sent) sent++;
+      // An itinerary is waiting for their yes; next week's sweep tries again.
+      if (result.held) held++;
     } catch (e) {
       if (e instanceof UnapprovedTemplateError || e instanceof ConsecutiveMessageError) { refused++; continue; }
       console.error(`[viewing-digest-send] ${r.id}:`, (e as Error).message);
@@ -223,7 +226,7 @@ Deno.serve(async (req) => {
     renters: renters.size,
     digest_opted_in: (digestRenters ?? []).length,
     active_watches: watches.length,
-    eligible, via_watch: viaWatch, sent, refused, skipped, dry_run: !send,
+    eligible, via_watch: viaWatch, sent, refused, held, skipped, dry_run: !send,
   };
   if (refused > 0 && sent === 0 && send) {
     console.log(

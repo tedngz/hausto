@@ -12,6 +12,7 @@ import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { isWindowOpen, sendFreeForm, sendTemplate, type MessageStore } from '../whatsapp/send.ts';
 import { TEMPLATES } from '../whatsapp/templates.ts';
 import { digestPurpose } from './digest.ts';
+import { itineraryAwaitingAnswer } from './open-request.ts';
 import {
   ALERT_REPLY_DAYS,
   alertIntro,
@@ -29,6 +30,8 @@ export interface AlertSendResult {
   messageId?: string;
   /** True when the places went in the message itself, not a template. */
   detailed: boolean;
+  /** Not sent this week: an itinerary is waiting for the renter's yes. */
+  held?: boolean;
 }
 
 /**
@@ -46,6 +49,12 @@ export async function sendAlert(
   opts: { renterId: string; renterName: string | null; items: AlertCandidate[]; now: Date },
 ): Promise<AlertSendResult> {
   if (opts.items.length === 0) return { sent: false, deduplicated: false, detailed: false };
+  // A renter who owes us a yes on their itinerary does not also get "reply
+  // here if you would like to see them": their next "yes" is the plan's
+  // (routing.ts), and this can wait a week.
+  if (await itineraryAwaitingAnswer(db, opts.renterId)) {
+    return { sent: false, deduplicated: false, detailed: false, held: true };
+  }
 
   const renter = await store.getRenter(opts.renterId);
   if (!renter) throw new Error(`Unknown renter ${opts.renterId}`);
@@ -89,30 +98,24 @@ export async function sendAlert(
 /**
  * Is this inbound a reply to an alert whose places we have not sent yet?
  *
- * Only when the alert is the LAST thing we sent them. A bare "yes" is about
- * whatever we last asked - the same rule `resolveRequestId` follows - and if
- * an itinerary went out after the alert, "yes" is about the itinerary.
- * Returns the alert's message id.
+ * `answered` is the message the reply is about (routing.ts `answeredMessage`):
+ * the one they swiped to reply to, or else the last thing we sent them. A bare
+ * "yes" is about whatever we last asked, so if an itinerary went out after the
+ * alert, "yes" is about the itinerary. Returns the alert's message id.
  */
-export async function pendingAlert(db: Supa, phoneE164: string, now: Date): Promise<string | undefined> {
-  const { data: last } = await db
-    .from('messages')
-    .select('id, created_at')
-    .eq('to_phone', phoneE164)
-    .eq('direction', 'OUT')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!last) return undefined;
-  if (now.getTime() - Date.parse(String(last.created_at)) > ALERT_REPLY_DAYS * 86_400_000) return undefined;
-
+export async function pendingAlert(
+  db: Supa,
+  answered: { id: string; createdAt: string },
+  now: Date,
+): Promise<string | undefined> {
+  if (now.getTime() - Date.parse(answered.createdAt) > ALERT_REPLY_DAYS * 86_400_000) return undefined;
   const { data: items } = await db
     .from('alert_items')
     .select('id')
-    .eq('message_id', last.id)
+    .eq('message_id', answered.id)
     .is('detail_sent_at', null)
     .limit(1);
-  return (items ?? []).length > 0 ? String(last.id) : undefined;
+  return (items ?? []).length > 0 ? answered.id : undefined;
 }
 
 /**

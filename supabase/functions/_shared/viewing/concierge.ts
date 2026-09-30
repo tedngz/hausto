@@ -5,8 +5,9 @@
 // message - email or WhatsApp - so Admin Tools shows one conversation. A
 // WhatsApp message on that thread carries `whatsapp_message_id`, the
 // `messages` row it was, and that link is how a renter's next WhatsApp
-// message is known to be about the request: when the last thing we sent them
-// is on a request's thread, their reply belongs on it too.
+// message is known to be about the request: when the message they answer -
+// the one they swiped to reply to, or else the last thing we sent them - is on
+// a request's thread, their reply belongs on it too.
 
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { sendFreeForm, type MessageStore } from '../whatsapp/send.ts';
@@ -88,31 +89,25 @@ export async function confirmInquiryForWatch(
 }
 
 /**
- * Is this inbound a reply on a request's thread? Returns the request id.
+ * Which requests' threads this inbound replies on. Returns their ids.
  *
- * Only when the last thing we sent this phone is on that thread, and recently.
- * The same rule as `pendingAlert` and `resolveRequestId`: a message answers
- * whatever we last said.
+ * `answered` is the message the reply is about (routing.ts `answeredMessage`):
+ * the one they swiped to reply to, or else the last thing we sent them, and
+ * only recently. A message can be on more than one thread - one offer covering
+ * two buildings - and then the reply belongs on each.
  */
-export async function inquiryAwaitingReply(db: Supa, phoneE164: string, now: Date): Promise<string | undefined> {
-  const { data: last } = await db
-    .from('messages')
-    .select('id, created_at')
-    .eq('to_phone', phoneE164)
-    .eq('direction', 'OUT')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!last) return undefined;
-  if (now.getTime() - Date.parse(String(last.created_at)) > INQUIRY_REPLY_DAYS * 86_400_000) return undefined;
-
-  const { data: row } = await db
+export async function inquiriesAnswered(
+  db: Supa,
+  answered: { id: string; createdAt: string },
+  now: Date,
+): Promise<string[]> {
+  if (now.getTime() - Date.parse(answered.createdAt) > INQUIRY_REPLY_DAYS * 86_400_000) return [];
+  const { data: rows } = await db
     .from('complex_inquiry_messages')
     .select('inquiry_id')
-    .eq('whatsapp_message_id', last.id)
-    .limit(1)
-    .maybeSingle();
-  return row?.inquiry_id ? String(row.inquiry_id) : undefined;
+    .eq('whatsapp_message_id', answered.id);
+  return [...new Set(((rows ?? []) as { inquiry_id: string | null }[])
+    .map(r => r.inquiry_id).filter((id): id is string => !!id).map(String))];
 }
 
 /** A renter's WhatsApp message, filed on the request and stamped on it. */

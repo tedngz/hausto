@@ -84,3 +84,26 @@ export async function findJoinableRequest(
   // requests do not count as open for this purpose.
   return pickJoinable(candidates.filter(c => !c.optedOut), today) as OpenRequest | null;
 }
+
+/**
+ * The request whose itinerary is waiting for this renter's answer, or
+ * undefined: delivered, not yet confirmed or cancelled. The newest, if more
+ * than one.
+ *
+ * Read by routing, so a bare "yes" goes to the plan that asked for it
+ * whatever else we sent since, and by the alert sweep, which holds a weekly
+ * alert rather than put a second "reply if..." in front of a renter who owes
+ * us a yes.
+ */
+export async function itineraryAwaitingAnswer(db: Supa, renterId: string): Promise<string | undefined> {
+  const { data: requests } = await db
+    .from('viewing_requests').select('id').eq('renter_id', renterId)
+    .order('created_at', { ascending: false }).limit(5);
+  for (const r of (requests ?? []) as { id: string }[]) {
+    const { data: events } = await db
+      .from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
+      .eq('request_id', r.id).order('occurred_at', { ascending: true });
+    if (reduceRequest(r.id, (events ?? []) as DomainEvent[]).state === 'DELIVERED') return r.id;
+  }
+  return undefined;
+}

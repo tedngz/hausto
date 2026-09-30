@@ -166,8 +166,10 @@ Deno.serve(async (req) => {
       // After the renter's own reply above, so a slow mail send never delays it.
       if (outcome.watch?.kind === 'CONFIRMED' && outcome.watch.inquiry?.firstConfirm) {
         await notifyConcierge({ inquiryId: outcome.watch.inquiry.id });
-      } else if (outcome.inquiryId) {
-        await notifyConcierge({ inquiryId: outcome.inquiryId, event: 'WHATSAPP_REPLY' });
+      } else {
+        for (const inquiryId of outcome.inquiryIds ?? []) {
+          await notifyConcierge({ inquiryId, event: 'WHATSAPP_REPLY' });
+        }
       }
     } catch (e) {
       // One bad message must not cost us the rest of the batch, and must not
