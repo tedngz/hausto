@@ -517,8 +517,19 @@ closed or not.
 
 **Every outbound message is persisted before it is sent.** Write to `messages`
 with `status='QUEUED'`, then send, then update. Never send first. Idempotency key
-on every send, derived from `(request_id, purpose, attempt)` so a retry cannot
-double-send.
+on every send, derived from `(request_id, purpose)` - the purpose names the
+message (a holding update the silence it breaks, an itinerary its words) - so a
+retry cannot double-send:
+
+- a key already `SENT` is not sent again;
+- a key that `FAILED` is sent again on the same row;
+- a key left `QUEUED` by a crash is not re-sent - a lost message is caught by
+  the silence clock, a duplicate lands on a renter's phone;
+- a caller that loses a race to write the key (`DuplicateKeyError`) returns
+  the winner's row and sends nothing.
+
+The job runner no longer passes its retry count into the key: a new key per
+attempt was a second send after a crash.
 
 The Cloud API 24-hour customer service window is a real constraint:
 
@@ -721,12 +732,19 @@ something.** Asserted as a property test over randomly generated event logs
   a question. No holding update is owed - it would say we are still working
   and will send the plan - and an operator decides whether to chase or cancel
   (`RENTER_UNRESPONSIVE`). (Until 2026-09-30 one was owed, and sent daily.)
+- With the renter's window shut, a holding update goes as the `request_update`
+  template ("we have an update on your request for {{2}}, reply here"); their
+  reply opens the window and an operator answers it. Until Meta approves it the
+  send is refused as `template_unavailable` and tried again a day later.
+- A `DELIVERED` plan unanswered for 48 hours becomes a `CHASE_RENTER` to-do in
+  the console - never a message. The drain closes it once the renter answers,
+  an operator writes to them, or the request closes.
 - Each holding update is keyed on the silence it breaks
   (`HOLDING_UPDATE:<when the renter last heard from us>`), so the next one, a
   day later, is a new message. Keyed on the purpose alone, every one after a
   request's first was taken for a duplicate and never sent.
 - A holding update refused for a reason only the renter can lift - their
-  window is shut, or two messages already went unanswered - is completed with
+  window is shut, two messages already went unanswered, or they opted out - is completed with
   that reason, and the drain queues no other for that request until the
   renter writes again (`holdingUpdateOnHold`). There is no approved template
   that says "still working", so with the window shut nothing can reach them;

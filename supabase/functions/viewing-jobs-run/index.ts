@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       // renter's whole day, whichever of their requests' jobs gets here first.
       if (job.kind === 'VIEWING_DAY') {
         const day = await sendViewingDay(db, adapter, {
-          requestId, now: new Date(), attempt: job.attempts, actor: 'SYSTEM',
+          requestId, now: new Date(), actor: 'SYSTEM',
         });
         if (day.ok || VIEWING_DAY_FINAL.has(day.code)) {
           await db.from('jobs').update({
@@ -140,9 +140,9 @@ Deno.serve(async (req) => {
       const result = await deliver(db, adapter, {
         requestId,
         purpose: 'HOLDING_UPDATE',
-        // The attempt is the job's own retry count, so a retry reuses the same
-        // idempotency key only when it is genuinely the same attempt.
-        attempt: job.attempts,
+        // No attempt number: a retry is the same message on the same key. One
+        // that FAILED is sent again on it; one a crash left unconfirmed is not
+        // (send.ts), where a new key per attempt could send it twice.
         actor: 'SYSTEM',
       });
 
@@ -158,6 +158,7 @@ Deno.serve(async (req) => {
       // attempts discovering the same thing; the drain holds the next one
       // until they write (holdingUpdateOnHold).
       if (result.code === 'service_window_closed' || result.code === 'too_many_consecutive'
+        || result.code === 'opted_out' || result.code === 'template_unavailable'
         || result.code === 'unknown_request') {
         await db.from('jobs')
           .update({ completed_at: new Date().toISOString(), last_error: result.code })

@@ -3,7 +3,7 @@
 // Deliberately thin: every rule lives in send.ts, and this only knows how to
 // read and write rows. If a decision appears in here, it is in the wrong place.
 
-import type { MessageStore, NewMessage, StoredMessage, StoredRenter } from './send.ts';
+import { DuplicateKeyError, type MessageStore, type NewMessage, type StoredMessage, type StoredRenter } from './send.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -26,15 +26,16 @@ export class SupabaseMessageStore implements MessageStore {
 
     if (error) {
       // 23505 is the unique index on idempotency_key doing its job: two callers
-      // raced and the other one won. Its row is the message, so return that
-      // rather than failing - the point of the key is that this is not an error.
-      if (error.code === '23505') {
-        const existing = await this.findByIdempotencyKey(row.idempotency_key);
-        if (existing) return existing;
-      }
+      // raced and the other one won. Its row is the message - said as an error
+      // so the loser knows not to send it (send.ts persistThenSend).
+      if (error.code === '23505') throw new DuplicateKeyError(row.idempotency_key);
       throw error;
     }
     return data as StoredMessage;
+  }
+
+  async requeue(id: string): Promise<void> {
+    await this.db.from('messages').update({ status: 'QUEUED', error: null }).eq('id', id).eq('status', 'FAILED');
   }
 
   async markSent(id: string, providerId?: string): Promise<void> {
