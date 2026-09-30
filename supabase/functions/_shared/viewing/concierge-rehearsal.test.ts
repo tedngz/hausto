@@ -261,6 +261,25 @@ describe('availability request rehearsal', () => {
     expect(r.status).toBe(200);
     say('Hausto  [the offer, from the ops console]', String(adapter.delivered.at(-1)?.body));
     expect(adapter.delivered.at(-1)?.body).not.toMatch(/\+84|0907/);
+
+    // The same renter asked about Celadon City too. After they answer, the
+    // next offer covers both buildings in one message.
+    at('2026-09-29T10:00:00Z');
+    await inbound('Thanks! Anything at Celadon as well? I asked about it this morning.');
+    const inq2 = '22222222-2222-4333-8444-555555555555';
+    db.tables.complexes.push({ id: 'cx-2', name: 'Celadon City', district: 'Tan Phu', city: 'ho_chi_minh' });
+    db.tables.complex_inquiries.push({
+      ...db.tables.complex_inquiries[0], id: inq2, complex_id: 'cx-2', watch_id: null, bedrooms_needed: 2,
+    });
+    const c = await act({ action: 'INQUIRY_CAPTURE_UNIT', inquiryId: inq2, realtorId: AGENT, bedrooms: 2, areaSqm: 70, priceVnd: 19_000_000, floor: '12', tower: 'Ruby', furnishing: 'FULL' });
+    const d = await act({ action: 'INQUIRY_CAPTURE_UNIT', realtorId: AGENT, bedrooms: 2, areaSqm: 90, priceVnd: 25_000_000, floor: '27', tower: 'Tower Tilia', furnishing: 'FULL' });
+    at('2026-09-29T11:00:00Z');
+    const both = await act({
+      action: 'INQUIRY_OFFER_UNITS', listingIds: [d.body.listingId],
+      alsoFor: [{ inquiryId: inq2, listingIds: [c.body.listingId] }], key: 'offer-2',
+    });
+    expect(both.status).toBe(200);
+    say('Hausto  [one offer, two buildings]', String(adapter.delivered.at(-1)?.body));
   });
 
   it('files a redelivered code once, and confirms the request once', async () => {

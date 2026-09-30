@@ -439,6 +439,7 @@ export const INQUIRY_EVENT_TYPES = [
   'AGENT_ANSWERED', // what that agent said, as one of AGENT_ANSWERS
   'UNIT_CAPTURED',  // an agent's offered unit, entered as a listing (S7.1b)
   'UNITS_OFFERED',  // the one message to the renter with the units in it
+  'BRIEF_CHANGED',  // the renter said, in a message on the thread, what else they would take
   'CLOSED',         // with one of INQUIRY_CLOSE_REASONS
   'REOPENED',
 ] as const;
@@ -498,8 +499,23 @@ export interface InquiryView {
   /** Every listing put in front of the renter, and when the last offer went. */
   offeredListingIds: string[];
   offeredAt: string | null;
+  /**
+   * What the renter now says they would take, if they changed it on the
+   * thread (BRIEF_CHANGED). Replaces the form's bedrooms and budget for what
+   * may be offered; null means the form's still stand.
+   */
+  brief: InquiryBrief | null;
   closedReason: InquiryCloseReason | null;
   closedAt: string | null;
+}
+
+/**
+ * What may be offered: bedroom counts (4 meaning 4 or more) and a monthly
+ * budget in dong, null for none.
+ */
+export interface InquiryBrief {
+  bedrooms: number[];
+  budgetMaxVnd: number | null;
 }
 
 /** The promise the page and the confirmation make. */
@@ -513,7 +529,7 @@ export const INQUIRY_REPLY_WITHIN_MS = 24 * 60 * 60 * 1000;
 export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): InquiryView {
   const view: InquiryView = {
     inquiryId, state: 'AWAITING_CODE', confirmedAt: null, agents: {}, capturedListingIds: [], offeredListingIds: [],
-    offeredAt: null, closedReason: null, closedAt: null,
+    offeredAt: null, brief: null, closedReason: null, closedAt: null,
   };
   const agent = (id: string): InquiryAgentView =>
     (view.agents[id] ??= { realtorId: id, askedAt: null, medium: null, answer: null, answeredAt: null });
@@ -570,6 +586,20 @@ export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): Inquir
         for (const id of ids) if (!view.offeredListingIds.includes(id)) view.offeredListingIds.push(id);
         view.offeredAt = e.occurred_at;
         if (view.state !== 'CLOSED') view.state = 'OFFERED';
+        break;
+      }
+      case 'BRIEF_CHANGED': {
+        // The latest stands - "3 bedrooms is fine" then "actually any size".
+        // Moves no state: a wider brief is not progress.
+        const beds = Array.isArray(p.bedrooms)
+          ? [...new Set(p.bedrooms.filter((n): n is number => Number.isInteger(n) && n >= 1 && n <= 4))].sort((a, b) => a - b)
+          : [];
+        if (beds.length === 0) break;
+        const budget = p.budget_max_vnd;
+        view.brief = {
+          bedrooms: beds,
+          budgetMaxVnd: typeof budget === 'number' && Number.isInteger(budget) && budget > 0 ? budget : null,
+        };
         break;
       }
       case 'CLOSED': {

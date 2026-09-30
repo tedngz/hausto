@@ -17,7 +17,8 @@ import {
 import { describeInquiry } from '../../supabase/functions/_shared/viewing/inquiry';
 import { formatVnd, humanAge } from '../../supabase/functions/_shared/viewing/format';
 import {
-  FURNISHING, MAX_OFFER_UNITS, MAX_PHOTOS, UNIT_FRESH_DAYS, renderOffer, unitStale, type OfferUnit,
+  FURNISHING, MAX_COMBINED_UNITS, MAX_OFFER_UNITS, MAX_PHOTOS, UNIT_FRESH_DAYS, briefOf, misfit, priceCeiling,
+  renderOfferSections, unitStale, type Brief, type OfferSection, type OfferUnit,
 } from '../../supabase/functions/_shared/viewing/offer';
 
 interface Row {
@@ -53,6 +54,8 @@ interface Detail {
   thread: { id: string; direction: 'inbound' | 'outbound'; source: string; body: string; created_at: string }[];
   events: InquiryEvent[];
   units: CapturedUnit[];
+  /** The same renter's other recent requests - ids and buildings only. */
+  siblings?: { id: string; complex_name: string }[];
   on_file: {
     id: string; title: string; price_vnd: number; bedrooms: number; area_sqm: number; source: string;
     source_url: string; listed_at: string; realtor_id: string | null; realtor_name: string | null; realtor_phone: string | null;
@@ -230,6 +233,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
       <div className="card">
         <strong>What they need</strong>
         <p style={{ margin: '4px 0' }}>{summary(d)}</p>
+        <BriefLine d={d} v={v} closed={v.state === 'CLOSED'} busy={busy} run={run} />
         {d.notes && <p className="small muted" style={{ margin: 0 }}>“{d.notes}”</p>}
         <p className="small muted" style={{ margin: '4px 0 0' }}>
           Code arrived {hcmc(d.confirmed_at)} · reply promised by {hcmc(inquiryDeadline(v))} · window {windowOpen ? `open until ${hcmc(d.window_expires_at)}` : 'closed'}
@@ -297,7 +301,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
 
       <Units d={d} agents={[...agents, ...extra]} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId} />
 
-      <OfferComposer d={d} canReply={canReply} replyBlocked={replyBlocked} busy={busy} run={run} inquiryId={inquiryId} />
+      <OfferComposer d={d} canReply={canReply} replyBlocked={replyBlocked} busy={busy} run={run} />
 
       <div className="card">
         <strong>WhatsApp</strong>
@@ -499,63 +503,212 @@ function Units({ d, agents, closed, busy, run, inquiryId }: {
   );
 }
 
+/** What one request could offer now, read from its detail. */
+interface OfferPart {
+  inquiryId: string;
+  complexName: string;
+  brief: Brief;
+  /** Offered before and not answered since: the server refuses another. */
+  awaiting: boolean;
+  open: boolean;
+  candidates: (OfferUnit & { kind: string })[];
+}
+
+function offerPart(d: Detail, now: Date): OfferPart {
+  const v = reduceInquiry(d.id, d.events);
+  return {
+    inquiryId: d.id,
+    complexName: d.complex.name,
+    brief: briefOf({ bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd }, v.brief),
+    awaiting: !!v.offeredAt
+      && !d.thread.some(m => m.direction === 'inbound' && Date.parse(m.created_at) > Date.parse(v.offeredAt!)),
+    open: v.state !== 'CLOSED' && !!d.confirmed_at,
+    candidates: [
+      ...d.units.filter(u => u.is_active && !unitStale(u.last_verified_at, now)).map(u => ({
+        id: u.id, title: u.title, priceVnd: u.price_vnd, bedrooms: u.bedrooms, areaSqm: u.area_sqm,
+        confirmedAt: u.last_verified_at, kind: 'confirmed',
+      })),
+      ...d.on_file.map(l => ({
+        id: l.id, title: l.title, priceVnd: l.price_vnd, bedrooms: l.bedrooms, areaSqm: l.area_sqm,
+        confirmedAt: null, kind: 'advertised',
+      })),
+    ],
+  };
+}
+
 /**
- * The one message (SPEC §11). The preview is the same renderOffer the server
- * sends, with the renter's first name left out - the console never has it.
+ * The one message (SPEC §11). The preview is the same renderOfferSections the
+ * server sends, with the renter's first name left out - the console never has
+ * it. When the same renter has another open request, its units can go in the
+ * same message: two offers would leave the second waiting on a reply.
  */
-function OfferComposer({ d, canReply, replyBlocked, busy, run, inquiryId }: {
-  d: Detail; canReply: boolean; replyBlocked: string | null; busy: boolean; run: Run; inquiryId: string;
+function OfferComposer({ d, canReply, replyBlocked, busy, run }: {
+  d: Detail; canReply: boolean; replyBlocked: string | null; busy: boolean; run: Run;
 }) {
-  const [picked, setPicked] = useState<string[]>([]);
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [line, setLine] = useState('');
+  const [others, setOthers] = useState<OfferPart[]>([]);
   const now = new Date();
+  const siblingIds = (d.siblings ?? []).map(s => s.id).join(',');
 
-  const candidates: (OfferUnit & { kind: string })[] = [
-    ...d.units.filter(u => u.is_active && !unitStale(u.last_verified_at, now)).map(u => ({
-      id: u.id, title: u.title, priceVnd: u.price_vnd, bedrooms: u.bedrooms, areaSqm: u.area_sqm,
-      confirmedAt: u.last_verified_at, kind: 'confirmed',
-    })),
-    ...d.on_file.map(l => ({
-      id: l.id, title: l.title, priceVnd: l.price_vnd, bedrooms: l.bedrooms, areaSqm: l.area_sqm,
-      confirmedAt: null, kind: 'advertised',
-    })),
-  ];
-  const chosen = candidates.filter(c => picked.includes(c.id));
-  const toggle = (id: string) =>
-    setPicked(p => p.includes(id) ? p.filter(x => x !== id) : p.length >= MAX_OFFER_UNITS ? p : [...p, id]);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const loaded: OfferPart[] = [];
+      for (const id of siblingIds ? siblingIds.split(',') : []) {
+        const { data } = await supabase.rpc('ops_inquiry_detail', { _inquiry_id: id });
+        if (!data) continue;
+        const part = offerPart(data as Detail, new Date());
+        if (part.open && part.candidates.length > 0) loaded.push(part);
+      }
+      if (live) setOthers(loaded);
+    })();
+    return () => { live = false; };
+  }, [siblingIds]);
 
-  if (candidates.length === 0) return null;
+  const main = offerPart(d, now);
+  const parts = [main, ...others];
+  const usable = (p: OfferPart, c: OfferUnit) => !p.awaiting && !misfit(c, p.brief);
+  const sections: OfferSection[] = parts
+    .map(p => ({
+      complexName: p.complexName,
+      inquiryId: p.inquiryId,
+      units: p.candidates.filter(c => (picked[p.inquiryId] ?? []).includes(c.id) && usable(p, c)),
+    }))
+    .filter(s => s.units.length > 0);
+  const total = sections.reduce((n, s) => n + s.units.length, 0);
+  const mainSection = sections.find(s => s.inquiryId === d.id);
+
+  const toggle = (inquiryId: string, id: string) => setPicked(prev => {
+    const mine = prev[inquiryId] ?? [];
+    if (mine.includes(id)) return { ...prev, [inquiryId]: mine.filter(x => x !== id) };
+    if (mine.length >= MAX_OFFER_UNITS || total >= MAX_COMBINED_UNITS) return prev;
+    return { ...prev, [inquiryId]: [...mine, id] };
+  });
+
+  if (main.candidates.length === 0) return null;
+  const blocked = main.awaiting ? 'They have not answered the last offer yet - send more once they reply.' : replyBlocked;
+
   return (
     <div className="card">
       <strong>Offer units</strong>
-      <span className="small muted"> - one message with up to {MAX_OFFER_UNITS}; it uses one of the two messages they can get without replying.</span>
-      <div style={{ marginTop: 6 }}>
-        {candidates.map(c => (
-          <label key={c.id} className="row small" style={{ marginBottom: 2 }}>
-            <input type="checkbox" checked={picked.includes(c.id)} onChange={() => toggle(c.id)} />
-            <span>{c.title} · {formatVnd(c.priceVnd)}</span>
-            <span className={`tag ${c.kind === 'confirmed' ? 'good' : ''}`}>{c.kind}</span>
-          </label>
-        ))}
-      </div>
+      <span className="small muted">
+        {' '}- one message, up to {MAX_OFFER_UNITS} per building; it uses one of the two messages they can get without replying.
+      </span>
+      {parts.map(p => (
+        <div key={p.inquiryId} style={{ marginTop: 6 }}>
+          {others.length > 0 && (
+            <div className="small">
+              <strong>{p.complexName}</strong>
+              {p.inquiryId !== d.id && <span className="muted"> - the same renter's other request</span>}
+              {p.awaiting && <span className="tag warn">waiting for their answer to the last offer</span>}
+            </div>
+          )}
+          {p.candidates.map(c => {
+            const off = misfit(c, p.brief);
+            return (
+              <label key={c.id} className="row small" style={{ marginBottom: 2 }}>
+                <input type="checkbox" disabled={!usable(p, c)}
+                  checked={(picked[p.inquiryId] ?? []).includes(c.id) && usable(p, c)}
+                  onChange={() => toggle(p.inquiryId, c.id)} />
+                <span className={off ? 'muted' : ''}>{c.title} · {formatVnd(c.priceVnd)}</span>
+                <span className={`tag ${c.kind === 'confirmed' ? 'good' : ''}`}>{c.kind}</span>
+                {off && <span className="tag warn" title="Offer it only if they say they would take it">{off}</span>}
+              </label>
+            );
+          })}
+        </div>
+      ))}
       <input style={{ width: '100%', marginTop: 6 }} placeholder="Your own line, optional - e.g. which you would see first"
         value={line} onChange={e => setLine(e.target.value)} />
-      {chosen.length > 0 && (
+      {sections.length > 0 && (
         <div className="bubble" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>
-          {renderOffer({ firstName: '[first name]', complexName: d.complex.name, inquiryId, units: chosen, message: line, now })}
+          {renderOfferSections({ firstName: '[first name]', sections, message: line, now })}
         </div>
       )}
+      {sections.length > 0 && !mainSection && (
+        <p className="small muted" style={{ marginBottom: 0 }}>
+          Pick at least one unit here too, or send it from the other request's screen.
+        </p>
+      )}
       <div className="row" style={{ marginTop: 6 }}>
-        <span className="small muted">{replyBlocked ?? ''}</span>
+        <span className="small muted">{blocked ?? ''}</span>
         <div className="spacer" />
-        <button disabled={busy || !canReply || chosen.length === 0}
+        <button disabled={busy || !canReply || main.awaiting || !mainSection}
           onClick={() => void run(
-            { action: 'INQUIRY_OFFER_UNITS', listingIds: chosen.map(c => c.id), message: line, key: crypto.randomUUID() },
-            () => { setPicked([]); setLine(''); },
+            {
+              action: 'INQUIRY_OFFER_UNITS',
+              listingIds: mainSection!.units.map(u => u.id),
+              alsoFor: sections.filter(s => s.inquiryId !== d.id)
+                .map(s => ({ inquiryId: s.inquiryId, listingIds: s.units.map(u => u.id) })),
+              message: line,
+              key: crypto.randomUUID(),
+            },
+            () => { setPicked({}); setLine(''); },
           )}>
           Send offer on WhatsApp
         </button>
       </div>
+    </div>
+  );
+}
+
+const bedsText = (beds: number[]) => beds.map(n => (n >= 4 ? '4+' : String(n))).join(' or ') + ' BR';
+
+/**
+ * The brief in force, and a way to change it - only as the renter put it on
+ * the thread. Units outside it cannot be offered (INQUIRY_OFFER_UNITS), so
+ * "would you take a 3-bedroom?" is asked in a reply, and their answer recorded
+ * here against their message.
+ */
+function BriefLine({ d, v, closed, busy, run }: { d: Detail; v: InquiryView; closed: boolean; busy: boolean; run: Run }) {
+  const brief: Brief = briefOf({ bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd }, v.brief);
+  const said = [...d.thread].reverse().filter(m => m.direction === 'inbound');
+  const [open, setOpen] = useState(false);
+  const [messageId, setMessageId] = useState(said[0]?.id ?? '');
+  const [beds, setBeds] = useState<number[]>(brief.bedrooms);
+  const [budget, setBudget] = useState(brief.budgetMaxVnd ? String(brief.budgetMaxVnd / 1_000_000) : '');
+  const ceiling = priceCeiling(brief);
+
+  return (
+    <div className="small" style={{ margin: '2px 0 4px' }}>
+      <span className={v.brief ? '' : 'muted'}>
+        {v.brief ? 'They now take: ' : 'Offers must fit: '}
+        {bedsText(brief.bedrooms)}, {ceiling == null ? 'any price' : `up to ${formatVnd(ceiling)} (budget + 10%)`}
+      </span>
+      {!closed && said.length > 0 && !open && (
+        <button className="link" disabled={busy} onClick={() => setOpen(true)}>they changed what they want</button>
+      )}
+      {open && (
+        <div style={{ marginTop: 6 }}>
+          <div className="row wrap-row">
+            <span className="muted">Where they said it:</span>
+            <select value={messageId} onChange={e => setMessageId(e.target.value)} style={{ maxWidth: 420 }}>
+              {said.map(m => <option key={m.id} value={m.id}>{hcmc(m.created_at)} - {m.body.slice(0, 70)}</option>)}
+            </select>
+          </div>
+          <div className="row wrap-row" style={{ marginTop: 4 }}>
+            {[1, 2, 3, 4].map(n => (
+              <label key={n}>
+                <input type="checkbox" checked={beds.includes(n)}
+                  onChange={() => setBeds(b => b.includes(n) ? b.filter(x => x !== n) : [...b, n])} /> {n === 4 ? '4+' : n} BR
+              </label>
+            ))}
+            <input style={{ width: 90 }} placeholder="no limit" value={budget} onChange={e => setBudget(e.target.value)} />
+            <span className="muted">million ₫ a month (blank for no limit)</span>
+          </div>
+          <div className="row" style={{ marginTop: 4 }}>
+            <button className="primary" disabled={busy || !messageId || beds.length === 0}
+              onClick={() => void run({
+                action: 'INQUIRY_CHANGE_BRIEF', messageId, bedrooms: beds,
+                budgetMaxVnd: budget.trim() ? Math.round(Number(budget) * 1_000_000) : null,
+              }, () => setOpen(false))}>
+              Record it
+            </button>
+            <button disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

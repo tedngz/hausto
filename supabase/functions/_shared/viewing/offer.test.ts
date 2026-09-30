@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   offerLink, renderOffer, unitPhotoPath, unitRow, unitStale, validateUnit, UNIT_FRESH_DAYS, type UnitInput,
+  briefOf, misfit, priceCeiling, validateBriefChange,
 } from './offer.ts';
 
 const INQ = '11111111-2222-4333-8444-555555555555';
@@ -105,4 +106,42 @@ it(`calls a unit stale ${UNIT_FRESH_DAYS} days after its agent last confirmed it
   expect(unitStale('2026-10-10T00:00:00Z', now)).toBe(false);
   expect(unitStale('2026-10-01T00:00:00Z', now)).toBe(true);
   expect(unitStale(null, now)).toBe(true);
+});
+
+describe('what may be offered', () => {
+  const form = { bedrooms: 2, budgetMaxVnd: 20_000_000 };
+
+  it('is the form until the renter changes it', () => {
+    expect(briefOf(form, null)).toEqual({ bedrooms: [2], budgetMaxVnd: 20_000_000 });
+    expect(briefOf({ bedrooms: 5, budgetMaxVnd: null }, null)).toEqual({ bedrooms: [4], budgetMaxVnd: null });
+    expect(briefOf(form, { bedrooms: [2, 3], budgetMaxVnd: null })).toEqual({ bedrooms: [2, 3], budgetMaxVnd: null });
+  });
+
+  it('refuses other bedroom counts, and more than 10% over budget', () => {
+    const brief = briefOf(form, null);
+    expect(misfit({ bedrooms: 2, priceVnd: 20_000_000 }, brief)).toBeNull();
+    expect(misfit({ bedrooms: 2, priceVnd: 22_000_000 }, brief)).toBeNull();
+    expect(misfit({ bedrooms: 2, priceVnd: 22_000_001 }, brief)).toBe('22.000.001 ₫ - over their 20.000.000 ₫ budget');
+    expect(misfit({ bedrooms: 3, priceVnd: 18_000_000 }, brief)).toBe('3BR - they asked for 2 bedrooms');
+    expect(misfit({ bedrooms: 1, priceVnd: 18_000_000 }, brief)).not.toBeNull();
+  });
+
+  it('counts five bedrooms as four-plus', () => {
+    expect(misfit({ bedrooms: 5, priceVnd: 90_000_000 }, { bedrooms: [4], budgetMaxVnd: null })).toBeNull();
+    expect(misfit({ bedrooms: 5, priceVnd: 1 }, { bedrooms: [3], budgetMaxVnd: null })).toBe('4+BR - they asked for 3 bedrooms');
+  });
+
+  it('validates a change as the renter put it', () => {
+    const current = briefOf(form, null);
+    expect(validateBriefChange({ bedrooms: [3, 2] }, current)).toEqual({ ok: true, value: { bedrooms: [2, 3], budgetMaxVnd: 20_000_000 } });
+    expect(validateBriefChange({ budgetMaxVnd: null }, current)).toEqual({ ok: true, value: { bedrooms: [2], budgetMaxVnd: null } });
+    expect(validateBriefChange({ budgetMaxVnd: 25_000_000 }, current)).toMatchObject({ ok: true });
+    expect(validateBriefChange({ bedrooms: [] }, current).ok).toBe(false);
+    expect(validateBriefChange({ bedrooms: [7] }, current).ok).toBe(false);
+    expect(validateBriefChange({ budgetMaxVnd: 12.5 }, current).ok).toBe(false);
+    expect(validateBriefChange({ bedrooms: [2], budgetMaxVnd: 20_000_000 }, current)).toEqual({
+      ok: false, error: 'That is what they asked for already.',
+    });
+    expect(priceCeiling(current)).toBe(22_000_000);
+  });
 });

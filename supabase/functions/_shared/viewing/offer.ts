@@ -184,25 +184,136 @@ export function renderOffer(opts: {
   message?: string | null;
   now: Date;
 }): string {
-  const hello = `Hi ${opts.firstName?.trim() || 'there'}, here is what we found at ${opts.complexName}:`;
-  const lines = opts.units.map((u, i) => {
-    const facts = [
-      // Captured titles already lead with it (unitRow); an advertised one may not.
-      u.title.startsWith(bedsLabel(u.bedrooms)) ? null : bedsLabel(u.bedrooms),
-      `${formatVnd(u.priceVnd)} a month`,
-      u.areaSqm ? `${u.areaSqm} m²` : null,
-    ].filter(Boolean).join(' · ');
-    const standing = u.confirmedAt
-      ? `The agent confirmed it is free on ${dayMonth(u.confirmedAt)}.`
-      : 'Advertised - we confirm with the agent when you ask to see it.';
-    return `${i + 1}. ${u.title}\n${facts}\n${standing}\n${offerLink(u.id, opts.inquiryId)}`;
+  return renderOfferSections({
+    firstName: opts.firstName, message: opts.message, now: opts.now,
+    sections: [{ complexName: opts.complexName, inquiryId: opts.inquiryId, units: opts.units }],
+  });
+}
+
+/** One building's part of an offer. Its links carry its own request. */
+export interface OfferSection {
+  complexName: string;
+  inquiryId: string;
+  units: OfferUnit[];
+}
+
+/** Units in one message covering several of a renter's buildings. */
+export const MAX_COMBINED_UNITS = 8;
+
+/**
+ * The offer, for one building or several. A renter asking about Empire City
+ * and Celadon gets one message with both - the two-in-a-row limit is per
+ * renter, so a second offer would wait on a reply to the first. Numbered
+ * straight through, so "number 3" means one unit.
+ */
+export function renderOfferSections(opts: {
+  firstName: string | null;
+  sections: OfferSection[];
+  /** The operator's own line, already checked by checkOperatorReply. */
+  message?: string | null;
+  now: Date;
+}): string {
+  const name = opts.firstName?.trim() || 'there';
+  const single = opts.sections.length === 1;
+  const hello = single
+    ? `Hi ${name}, here is what we found at ${opts.sections[0].complexName}:`
+    : `Hi ${name}, here is what we found:`;
+  let n = 0;
+  const blocks = opts.sections.flatMap(section => {
+    const units = section.units.map(u => unitBlock(u, ++n, section.inquiryId));
+    return single ? units : [`At ${section.complexName}:`, ...units];
   });
   return [
     hello,
     ...(opts.message?.trim() ? [opts.message.trim()] : []),
-    ...lines,
+    ...blocks,
     'To see any of them, open it and tap Request viewing - your first viewing is free. Or reply here with a question.',
   ].join('\n\n');
+}
+
+function unitBlock(u: OfferUnit, n: number, inquiryId: string): string {
+  const facts = [
+    // Captured titles already lead with it (unitRow); an advertised one may not.
+    u.title.startsWith(bedsLabel(u.bedrooms)) ? null : bedsLabel(u.bedrooms),
+    `${formatVnd(u.priceVnd)} a month`,
+    u.areaSqm ? `${u.areaSqm} m²` : null,
+  ].filter(Boolean).join(' · ');
+  const standing = u.confirmedAt
+    ? `The agent confirmed it is free on ${dayMonth(u.confirmedAt)}.`
+    : 'Advertised - we confirm with the agent when you ask to see it.';
+  return `${n}. ${u.title}\n${facts}\n${standing}\n${offerLink(u.id, inquiryId)}`;
+}
+
+// ── What may be offered ─────────────────────────────────────────────────────
+//
+// An agent asked about a 2-bedroom under 20m will mention their 3-bedroom at
+// 35m. Nothing the renter did not ask for goes in front of them unless they
+// said, on the thread, that they would take it (BRIEF_CHANGED). This is the
+// renter's side of "we never spam them": the agent never reaches them, and
+// neither does anything the agent wants to push.
+
+/** Over budget by up to this much still fits - 15.5m for a 15m budget is worth a look. */
+export const BUDGET_TOLERANCE = 0.1;
+
+export interface Brief {
+  /** Acceptable bedroom counts, 4 meaning four or more. */
+  bedrooms: number[];
+  budgetMaxVnd: number | null;
+}
+
+/** The form's brief, or the renter's change to it when there is one. */
+export function briefOf(
+  form: { bedrooms: number; budgetMaxVnd: number | null },
+  changed: Brief | null,
+): Brief {
+  return changed ?? { bedrooms: [Math.min(form.bedrooms, MAX_BEDROOMS)], budgetMaxVnd: form.budgetMaxVnd };
+}
+
+/** The most a unit may cost and still be offered. */
+export function priceCeiling(brief: Brief): number | null {
+  return brief.budgetMaxVnd == null ? null : Math.round(brief.budgetMaxVnd * (1 + BUDGET_TOLERANCE));
+}
+
+const bedsWords = (beds: number[]) =>
+  beds.map(n => (n >= MAX_BEDROOMS ? `${MAX_BEDROOMS}+` : String(n))).join(' or ') + ' bedrooms';
+
+/** Why this unit is outside what they asked for, or null when it fits. */
+export function misfit(unit: { bedrooms: number; priceVnd: number }, brief: Brief): string | null {
+  if (!brief.bedrooms.includes(Math.min(unit.bedrooms, MAX_BEDROOMS))) {
+    return `${bedsLabel(unit.bedrooms)} - they asked for ${bedsWords(brief.bedrooms)}`;
+  }
+  const ceiling = priceCeiling(brief);
+  if (ceiling != null && unit.priceVnd > ceiling) {
+    return `${formatVnd(unit.priceVnd)} - over their ${formatVnd(brief.budgetMaxVnd!)} budget`;
+  }
+  return null;
+}
+
+export type BriefChange = { ok: true; value: Brief } | { ok: false; error: string };
+
+/**
+ * A change to the brief, as the renter put it. Bedroom counts 1-4; a budget in
+ * dong, or null when they said price does not matter. At least one of the
+ * two must actually change.
+ */
+// deno-lint-ignore no-explicit-any
+export function validateBriefChange(raw: any, current: Brief): BriefChange {
+  const beds = Array.isArray(raw?.bedrooms) ? [...new Set(raw.bedrooms.map(Number))] as number[] : current.bedrooms;
+  if (beds.length === 0 || beds.some(n => !(Number.isInteger(n) && n >= 1 && n <= MAX_BEDROOMS))) {
+    return { ok: false, error: 'Bedrooms is one or more of 1 to 4 (4 for four or more).' };
+  }
+  let budget = current.budgetMaxVnd;
+  if (raw && 'budgetMaxVnd' in raw) {
+    budget = raw.budgetMaxVnd === null ? null : Number(raw.budgetMaxVnd);
+    if (budget !== null && !(Number.isInteger(budget) && budget >= MIN_BUDGET_VND && budget <= MAX_BUDGET_VND)) {
+      return { ok: false, error: `Budget in dong, ${formatVnd(MIN_BUDGET_VND)} to ${formatVnd(MAX_BUDGET_VND)}, or none.` };
+    }
+  }
+  const value = { bedrooms: [...beds].sort((a, b) => a - b), budgetMaxVnd: budget };
+  if (value.budgetMaxVnd === current.budgetMaxVnd && value.bedrooms.join() === current.bedrooms.join()) {
+    return { ok: false, error: 'That is what they asked for already.' };
+  }
+  return { ok: true, value };
 }
 
 /** Whether a captured unit is past its freshness, from when it was last confirmed. */
