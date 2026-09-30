@@ -3,7 +3,7 @@ import { Bridge } from './bridge.ts';
 import { Journal } from './journal.ts';
 import type { ZaloClient, IncomingZalo } from './zalo.ts';
 import type { HaustoApi, PullResponse, Ack, Inbound } from './hausto.ts';
-import { toLocalPhone, textOf } from './zalo-text.ts';
+import { toLocalPhone, textOf, photoUrlsOf } from './zalo-text.ts';
 
 class FakeZalo implements ZaloClient {
   sent: { uid: string; text: string }[] = [];
@@ -137,6 +137,24 @@ describe('listening', () => {
     expect(api.inbounds).toEqual([{ fromPhone: '+84901234567', text: 'Còn em, thứ 7 10h nhé', providerMessageId: 'z100' }]);
   });
 
+  it("forwards a watched agent's photos, with or without a caption, and nobody else's", async () => {
+    api.next = { paused: false, watch: ['+84901234567'], outbox: [] };
+    const b = make();
+    await b.start();
+    await b.pass();
+
+    zalo.onMessage({ fromUid: 'uid-agent', text: '', photos: ['https://photo.zdn.vn/a.jpg'], msgId: 'z200' });
+    zalo.onMessage({ fromUid: 'uid-agent', text: 'Tầng 18', photos: ['https://photo.zdn.vn/b.jpg'], msgId: 'z201' });
+    zalo.onMessage({ fromUid: 'uid-mum', text: '', photos: ['https://photo.zdn.vn/family.jpg'], msgId: 'z202' });
+    zalo.onMessage({ fromUid: 'uid-agent', text: '', photos: ['http://insecure/c.jpg'], msgId: 'z203' });
+    await b.pass();
+
+    expect(api.inbounds).toEqual([
+      { fromPhone: '+84901234567', text: '', providerMessageId: 'z200', photos: ['https://photo.zdn.vn/a.jpg'] },
+      { fromPhone: '+84901234567', text: 'Tầng 18', providerMessageId: 'z201', photos: ['https://photo.zdn.vn/b.jpg'] },
+    ]);
+  });
+
   it('keeps a reply it could not forward and tries again next pass', async () => {
     api.next = { paused: false, watch: ['+84901234567'], outbox: [] };
     const b = make();
@@ -163,5 +181,19 @@ describe('the zca-js adapter\'s pure parts', () => {
     expect(textOf('hello')).toBe('hello');
     expect(textOf({ msg: 'from an object' })).toBe('from an object');
     expect(textOf({ href: 'a sticker' })).toBe('');
+  });
+
+  it('finds the largest image in a photo message, and nothing in anything else', () => {
+    const photo = {
+      title: '', href: 'https://photo.zdn.vn/w720/a.jpg', thumb: 'https://photo.zdn.vn/w240/a.jpg',
+      params: JSON.stringify({ hd: 'https://photo.zdn.vn/w2048/a.jpg', width: 2048 }),
+    };
+    expect(photoUrlsOf(photo, 'chat.photo')).toEqual(['https://photo.zdn.vn/w2048/a.jpg']);
+    expect(photoUrlsOf({ ...photo, params: 'not json' }, 'chat.photo')).toEqual(['https://photo.zdn.vn/w720/a.jpg']);
+    // A shared link has an href too; only a message typed as a photo counts.
+    expect(photoUrlsOf({ href: 'https://example.com/page' }, 'chat.recommended')).toEqual([]);
+    expect(photoUrlsOf(photo, undefined)).toEqual([]);
+    expect(photoUrlsOf({ href: 'http://photo.zdn.vn/a.jpg' }, 'chat.photo')).toEqual([]);
+    expect(photoUrlsOf('text', 'chat.photo')).toEqual([]);
   });
 });

@@ -286,6 +286,7 @@ provider_id     text
 error           text
 claimed_at      timestamptz               -- bridge lease, §10 stage 3
 on_sent_event   jsonb                     -- the event written when the bridge acks SENT (inquiry_events for an inquiry_id row)
+attachments     jsonb                     -- [{url}]: an agent's photos, copied into storage (§11, S7.2b)
 created_at      timestamptz default now()
 sent_at         timestamptz
 ```
@@ -1206,6 +1207,32 @@ sent them: when that was an availability check it is stored on the request
 conversations, and emailed to the ops team at once (`renderAgentReplyAlert`:
 the agent's words and the building, nothing about the renter). The operator
 records the answer as `AGENT_ANSWERED` and captures any unit, as before.
+
+### Agents' photos and suggested units (PLAN-v3 S7.2b)
+
+**Photos.** The device forwards photo messages from watched agents - the
+image URL of a message Zalo types `chat.photo`, the largest it offers - as
+well as text (device 0.2.0). For a reply about an availability request,
+`zalo-bridge` copies each photo into `external-property-images` under
+`concierge/<inquiry>/agent-<message>-<n>` - the folder a captured unit's photos
+must come from - shrunk like every listing photo, and lists them in the reply's
+`realtor_messages.attachments` (`[{url}]`). It fetches only from Zalo's hosts
+(`agentPhotoAllowed`: `zdn.vn`, `zadn.vn`, `zalo.me`, `zaloapp.com`, https,
+checked again after redirects), only images, at most 12 MB and 10 per message.
+A photo that could not be copied still leaves a reply saying so. A photo about a
+viewing request's unit is ignored, as before. One ops email per agent per
+request per batch - an album arrives as a message a photo. In the console each
+photo goes onto the unit being captured with one click.
+
+**Suggested units.** "Suggest a unit from this" on an agent's reply calls
+`ops-parse-reply` with `inquiryId`: one model call (`unit-parse.ts`, under the
+daily OpenAI cap) reads the reply into up to five units - bedrooms, area, rent,
+floor, tower, furnishing, pets, move-in - each with the words it came from.
+Every field is held to what the capture form accepts; one that is not (a rent
+of "24", unscaled) is dropped and flagged, as is anything missing and any unit
+outside the brief. "Fill the form" puts one into the capture form with the
+agent selected; nothing is added until the operator presses Add unit. The
+model never writes a row or an event.
 
 ### Building agents (PLAN-v3 S7.0)
 

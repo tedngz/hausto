@@ -62,8 +62,10 @@ export class Bridge {
     const phone = this.phoneByUid.get(m.fromUid);
     if (!phone || !this.watch.has(phone)) return;
     const text = String(m.text ?? '').trim();
-    if (!text) return;
-    this.inbox.push({ fromPhone: phone, text, providerMessageId: m.msgId });
+    // A photo from an agent is an answer too - often the whole answer (S7.2b).
+    const photos = (m.photos ?? []).filter(u => u.startsWith('https://')).slice(0, 10);
+    if (!text && photos.length === 0) return;
+    this.inbox.push({ fromPhone: phone, text, providerMessageId: m.msgId, ...(photos.length ? { photos } : {}) });
   }
 
   private async resolve(phone: string): Promise<string | null> {

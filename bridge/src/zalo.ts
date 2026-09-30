@@ -12,6 +12,8 @@ export interface IncomingZalo {
   /** The sender's Zalo user id. The bridge maps it back to a phone it resolved. */
   fromUid: string;
   text: string;
+  /** Image URLs, when the message is a photo (S7.2b). Its caption, if any, is `text`. */
+  photos?: string[];
   /** Zalo's id for the message - Hausto's idempotency key for it. */
   msgId: string;
 }

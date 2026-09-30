@@ -3,7 +3,7 @@
 export interface OutboxMessage { messageId: string; phone: string; body: string }
 export interface PullResponse { paused: boolean; outbox: OutboxMessage[]; watch: string[] }
 export interface Ack { messageId: string; sent: boolean; providerId?: string; error?: string }
-export interface Inbound { fromPhone: string; text: string; providerMessageId: string }
+export interface Inbound { fromPhone: string; text: string; providerMessageId: string; photos?: string[] }
 
 export interface HaustoApi {
   pull(heartbeat: { device: string; version: string; sentToday: number; error: string | null }): Promise<PullResponse>;

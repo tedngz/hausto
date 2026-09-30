@@ -5,7 +5,7 @@ import { Journal } from './journal.ts';
 import { HttpHaustoApi } from './hausto.ts';
 import { ZcaClient } from './zalo-zca.ts';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 function env(name: string, fallback?: string): string {
   const v = (process.env[name] ?? fallback ?? '').trim();

@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { Zalo, ThreadType, type API, type Credentials, type Message } from 'zca-js';
 import type { ZaloClient, IncomingZalo } from './zalo.ts';
-import { toLocalPhone, textOf } from './zalo-text.ts';
+import { toLocalPhone, textOf, photoUrlsOf } from './zalo-text.ts';
 
 export class ZcaClient implements ZaloClient {
   private api: API | null = null;
@@ -22,8 +22,12 @@ export class ZcaClient implements ZaloClient {
       // One-to-one only, and never our own messages: an agent answering us.
       if (m.isSelf || m.type !== ThreadType.User) return;
       const text = textOf(m.data.content);
-      if (!text) return;
-      onMessage({ fromUid: String(m.data.uidFrom ?? m.threadId), text, msgId: String(m.data.msgId) });
+      const photos = photoUrlsOf(m.data.content, m.data.msgType);
+      if (!text && photos.length === 0) return;
+      onMessage({
+        fromUid: String(m.data.uidFrom ?? m.threadId), text, msgId: String(m.data.msgId),
+        ...(photos.length ? { photos } : {}),
+      });
     });
     this.api.listener.on('error', (...args: unknown[]) => console.error('[zalo] listener error', ...args));
     // Reconnect by itself when Zalo drops the socket, rather than going deaf

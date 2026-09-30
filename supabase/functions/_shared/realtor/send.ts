@@ -36,6 +36,8 @@ export interface NewRealtorMessage {
   item_id: string | null;
   realtor_id: string | null;
   direction: 'OUT' | 'IN';
+  /** Photos an agent sent, copied into our storage (S7.2b). Inbound only. */
+  attachments?: { url: string }[] | null;
   medium: RealtorMedium;
   purpose: RealtorPurpose;
   body: string;
@@ -202,6 +204,7 @@ export async function recordRealtorReply(
     body: string;
     actor: string;
     idempotencyKey: string;
+    attachments?: { url: string }[];
   },
 ): Promise<StoredRealtorMessage> {
   if (!opts.requestId === !opts.inquiryId) throw new Error('A reply from an agent is about one request.');
@@ -218,6 +221,7 @@ export async function recordRealtorReply(
     item_id: opts.itemId ?? null,
     realtor_id: opts.realtorId,
     direction: 'IN',
+    ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
     medium: opts.medium,
     purpose: 'REPLY',
     body,

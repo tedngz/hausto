@@ -9,10 +9,17 @@
 // The reading is `_shared/viewing/parse-reply.ts`, pure and tested; this is the
 // I/O around it: prove the caller is ops, load the item's listing and the
 // renter's windows, spend one bounded model call under the daily cap.
+//
+// With `inquiryId` instead of `itemId` it reads a building agent's answer to
+// an availability check into suggested units (`unit-parse.ts`, S7.2b), for the
+// console's capture form. Same rule: it suggests, the operator adds the unit.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { PARSE_MODEL, MAX_REPLY_CHARS } from '../_shared/viewing/parse-reply.ts';
-import { callParseModel } from '../_shared/viewing/parse-call.ts';
+import { callParseModel, callUnitParseModel } from '../_shared/viewing/parse-call.ts';
+import { UNIT_PARSE_MODEL } from '../_shared/viewing/unit-parse.ts';
+import { briefOf } from '../_shared/viewing/offer.ts';
+import { reduceInquiry, type InquiryEvent } from '../_shared/viewing-domain.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
 
 const corsHeaders = {
@@ -46,10 +53,41 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
 
   const itemId = String(body.itemId ?? '');
+  const inquiryId = String(body.inquiryId ?? '');
   const reply = String(body.reply ?? '').trim();
-  if (!itemId || !reply) return json({ error: 'itemId and reply are required' }, 400);
+  if ((!itemId && !inquiryId) || !reply) return json({ error: 'itemId or inquiryId, and reply, are required' }, 400);
   if (reply.length > MAX_REPLY_CHARS) {
     return json({ error: 'reply_too_long', message: `Paste the agent's reply only - ${reply.length} characters is more than ${MAX_REPLY_CHARS}.` }, 400);
+  }
+  if (!OPENAI_API_KEY) return json({ error: 'openai_not_configured' }, 500);
+
+  if (inquiryId) {
+    const { data: inq } = await db.from('complex_inquiries')
+      .select('id, complex_id, bedrooms_needed, budget_max_vnd').eq('id', inquiryId).maybeSingle();
+    if (!inq) return json({ error: 'Unknown request' }, 404);
+    const [{ data: complex }, { data: events }] = await Promise.all([
+      db.from('complexes').select('name').eq('id', inq.complex_id).maybeSingle(),
+      db.from('inquiry_events').select('id, inquiry_id, type, payload, actor, occurred_at').eq('inquiry_id', inquiryId),
+    ]);
+    if (await isOpenAIBudgetExhausted()) {
+      return json({ error: 'budget_exhausted', message: 'Daily OpenAI budget reached - fill the unit in by hand.' }, 429);
+    }
+    const view = reduceInquiry(inquiryId, (events ?? []) as InquiryEvent[]);
+    const result = await callUnitParseModel({
+      reply,
+      complexName: String(complex?.name ?? 'the building'),
+      brief: briefOf({ bedrooms: Number(inq.bedrooms_needed), budgetMaxVnd: inq.budget_max_vnd ?? null }, view.brief),
+      now: new Date(),
+    }, OPENAI_API_KEY);
+    if (!result.ok) {
+      console.error('[ops-parse-reply] unit parse failed:', result.error);
+      return json({ error: 'llm_failed', message: 'The reply could not be read - fill the unit in by hand.' }, 502);
+    }
+    logOpenAIUsage({
+      fn: 'ops-parse-reply', model: UNIT_PARSE_MODEL,
+      usage: result.usage as { prompt_tokens?: number; completion_tokens?: number } | null, metadata: { inquiryId },
+    });
+    return json({ success: true, units: result.suggestion });
   }
 
   const { data: item } = await db
@@ -61,7 +99,6 @@ Deno.serve(async (req) => {
   const { data: request } = await db
     .from('viewing_requests').select('availability').eq('id', item.request_id).maybeSingle();
 
-  if (!OPENAI_API_KEY) return json({ error: 'openai_not_configured' }, 500);
   // The cap every OpenAI function honours. A spend cap one function ignores is
   // not a spend cap.
   if (await isOpenAIBudgetExhausted()) {

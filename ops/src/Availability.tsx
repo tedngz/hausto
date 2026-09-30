@@ -16,6 +16,7 @@ import {
 } from '../../supabase/functions/_shared/viewing-domain';
 import { describeInquiry } from '../../supabase/functions/_shared/viewing/inquiry';
 import { availabilityDraft } from '../../supabase/functions/_shared/realtor/drafts';
+import type { SuggestedUnit, UnitSuggestion } from '../../supabase/functions/_shared/viewing/unit-parse';
 import { formatVnd, humanAge } from '../../supabase/functions/_shared/viewing/format';
 import {
   FURNISHING, MAX_COMBINED_UNITS, MAX_OFFER_UNITS, MAX_PHOTOS, UNIT_FRESH_DAYS, briefOf, misfit, priceCeiling,
@@ -183,6 +184,8 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
   // console cannot read secrets (as RequestDetail reads it).
   const [bridge, setBridge] = useState(false);
   const [asking, setAsking] = useState<string | null>(null);
+  // What an agent's reply is adding to the capture form (S7.2b).
+  const [incoming, setIncoming] = useState<UnitIncoming | null>(null);
 
   const load = useCallback(async () => {
     const { data, error: err } = await supabase.rpc('ops_inquiry_detail', { _inquiry_id: inquiryId });
@@ -190,7 +193,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
     const detail = data as Detail | null;
     setD(detail);
     const [{ data: rm }, { data: controls }] = await Promise.all([
-      supabase.from('realtor_messages').select('id, realtor_id, direction, purpose, body, status, error, created_at')
+      supabase.from('realtor_messages').select('id, realtor_id, direction, purpose, body, status, error, created_at, attachments')
         .eq('inquiry_id', inquiryId).order('created_at', { ascending: true }),
       supabase.from('ai_operator_controls').select('last_state').eq('id', 'singleton').maybeSingle(),
     ]);
@@ -332,10 +335,14 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
         <AgentConversations
           messages={agentMessages}
           nameOf={id => [...agents, ...extra].find(a => a.realtor_id === id)?.name ?? 'Agent'}
+          inquiryId={inquiryId}
+          busy={busy || v.state === 'CLOSED'}
+          onUse={x => setIncoming({ ...x, key: Date.now() })}
         />
       </div>
 
-      <Units d={d} agents={[...agents, ...extra]} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId} />
+      <Units d={d} agents={[...agents, ...extra]} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId}
+        incoming={incoming} />
 
       <OfferComposer d={d} canReply={canReply} replyBlocked={replyBlocked} busy={busy} run={run} />
 
@@ -415,8 +422,9 @@ type Run = (body: Record<string, unknown>, after?: () => void) => Promise<void>;
  * storage from here - under concierge/<request>/, the only path the upload
  * policy allows - and the action takes their URLs.
  */
-function Units({ d, agents, closed, busy, run, inquiryId }: {
+function Units({ d, agents, closed, busy, run, inquiryId, incoming }: {
   d: Detail; agents: RosterAgent[]; closed: boolean; busy: boolean; run: Run; inquiryId: string;
+  incoming: UnitIncoming | null;
 }) {
   const [realtorId, setRealtorId] = useState('');
   const [bedrooms, setBedrooms] = useState('2');
@@ -431,6 +439,28 @@ function Units({ d, agents, closed, busy, run, inquiryId }: {
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // A suggested unit, or an agent's photos, from the conversation above. Fills
+  // the form; nothing is added until the operator presses Add unit.
+  useEffect(() => {
+    if (!incoming) return;
+    if (incoming.realtorId) setRealtorId(incoming.realtorId);
+    const u = incoming.unit;
+    if (u) {
+      if (u.bedrooms) setBedrooms(String(Math.min(u.bedrooms, 4)));
+      setArea(u.areaSqm ? String(u.areaSqm) : '');
+      setPriceM(u.priceVnd ? String(u.priceVnd / 1_000_000) : '');
+      setFloor(u.floor ?? '');
+      setTower(u.tower ?? '');
+      setFurnishing(u.furnishing ?? '');
+      setPets(u.petsOk == null ? '' : u.petsOk ? 'yes' : 'no');
+      setAvailableFrom(u.availableFrom ?? '');
+      setNote(u.quote ? `Agent: "${u.quote}"` : '');
+    }
+    if (incoming.addPhotos?.length) {
+      setPhotos(p => [...new Set([...p, ...incoming.addPhotos!])].slice(0, MAX_PHOTOS));
+    }
+  }, [incoming]);
 
   const upload = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -752,6 +782,8 @@ function BriefLine({ d, v, closed, busy, run }: { d: Detail; v: InquiryView; clo
 interface AgentMessage {
   id: string; realtor_id: string | null; direction: 'OUT' | 'IN'; purpose: string;
   body: string; status: string; error: string | null; created_at: string;
+  /** Photos the agent sent, copied into our storage by the bridge (S7.2b). */
+  attachments?: { url: string }[] | null;
 }
 
 /**
@@ -781,9 +813,42 @@ function AskBox({ agentName, initial, bridge, busy, onSend, onCancel }: {
   );
 }
 
-/** What each agent was sent about this request and what they said, oldest first. */
-function AgentConversations({ messages, nameOf }: { messages: AgentMessage[]; nameOf: (id: string | null) => string }) {
+/** What an agent's reply adds to the capture form: a suggested unit, or photos. */
+interface UnitIncoming {
+  key: number;
+  realtorId?: string | null;
+  unit?: SuggestedUnit;
+  addPhotos?: string[];
+}
+
+/**
+ * What each agent was sent about this request and what they said, oldest
+ * first. Their photos, copied into our storage by the bridge (S7.2b), go
+ * onto a unit with one click; a reply in words can be read into suggested
+ * units, which fill the capture form for the operator to check and add.
+ */
+function AgentConversations({ messages, nameOf, inquiryId, busy, onUse }: {
+  messages: AgentMessage[];
+  nameOf: (id: string | null) => string;
+  inquiryId: string;
+  busy: boolean;
+  onUse: (incoming: Omit<UnitIncoming, 'key'>) => void;
+}) {
+  const [reading, setReading] = useState<string | null>(null);
+  const [read, setRead] = useState<{ messageId: string; realtorId: string | null; suggestion: UnitSuggestion } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   if (messages.length === 0) return null;
+
+  const suggest = async (m: AgentMessage) => {
+    setReading(m.id);
+    setError(null);
+    const { data, error: err } = await supabase.functions.invoke('ops-parse-reply', { body: { inquiryId, reply: m.body } });
+    setReading(null);
+    const payload = data as { units?: UnitSuggestion; message?: string; error?: string } | null;
+    if (err || !payload?.units) { setError(payload?.message ?? payload?.error ?? err?.message ?? 'Could not read it'); return; }
+    setRead({ messageId: m.id, realtorId: m.realtor_id, suggestion: payload.units });
+  };
+
   return (
     <details style={{ marginTop: 8 }} open={messages.some(m => m.direction === 'IN')}>
       <summary className="small muted">Agent conversations ({messages.length})</summary>
@@ -795,9 +860,50 @@ function AgentConversations({ messages, nameOf }: { messages: AgentMessage[]; na
               {m.direction === 'OUT' && m.status !== 'SENT' ? ` · ${m.status.toLowerCase()}${m.error ? `: ${m.error}` : ''}` : ''}
             </div>
             <div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div>
+            {(m.attachments ?? []).length > 0 && (
+              <div className="row wrap-row" style={{ marginTop: 4 }}>
+                {(m.attachments ?? []).map(a => (
+                  <span key={a.url} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <a href={a.url} target="_blank" rel="noreferrer">
+                      <img src={a.url} alt="From the agent" style={{ width: 96, height: 72, objectFit: 'cover' }} />
+                    </a>
+                    <button className="link small" disabled={busy}
+                      onClick={() => onUse({ realtorId: m.realtor_id, addPhotos: [a.url] })}>add to unit</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {m.direction === 'IN' && !m.body.startsWith('(') && (
+              <button className="link small" disabled={busy || reading !== null} onClick={() => void suggest(m)}>
+                {reading === m.id ? 'reading...' : 'suggest a unit from this'}
+              </button>
+            )}
+            {read?.messageId === m.id && (
+              <div className="proposal" style={{ marginTop: 4 }}>
+                <div className="small">
+                  <span className={`tag ${read.suggestion.confidence === 'HIGH' ? 'good' : 'warn'}`}>
+                    {read.suggestion.answer.toLowerCase().replace('_', ' ')}
+                  </span>{' '}
+                  <span className="muted">{read.suggestion.note}</span>
+                </div>
+                {read.suggestion.units.map((u, i) => (
+                  <div key={i} className="row wrap-row small" style={{ marginTop: 4 }}>
+                    <span>
+                      {u.bedrooms ? `${u.bedrooms >= 4 ? '4+' : u.bedrooms}BR` : '?BR'}
+                      {u.areaSqm ? ` · ${u.areaSqm} m²` : ''}
+                      {u.priceVnd ? ` · ${formatVnd(u.priceVnd)}` : ''}
+                      {u.tower ? ` · ${u.tower}` : ''}{u.floor ? ` · floor ${u.floor}` : ''}
+                    </span>
+                    {u.problems.map(p => <span key={p} className="tag warn">{p}</span>)}
+                    <button className="link small" onClick={() => onUse({ realtorId: read.realtorId, unit: u })}>fill the form</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
+      {error && <p className="error small">{error}</p>}
     </details>
   );
 }
