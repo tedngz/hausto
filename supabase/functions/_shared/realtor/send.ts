@@ -26,10 +26,13 @@ export type RealtorPurpose =
   | 'NUDGE'             // chasing a silent broker
   | 'CONFIRM'           // the renter kept the viewing
   | 'RELEASE'           // the renter did not; stop holding the time
+  | 'AVAILABILITY_CHECK' // what is free at a building, for an availability request (S7.2)
   | 'REPLY';            // inbound: what the broker said
 
 export interface NewRealtorMessage {
-  request_id: string;
+  /** A viewing request's message, or else an availability request's - exactly one. */
+  request_id: string | null;
+  inquiry_id?: string | null;
   item_id: string | null;
   realtor_id: string | null;
   direction: 'OUT' | 'IN';
@@ -122,8 +125,10 @@ export async function sendToRealtor(
   store: RealtorMessageStore,
   channel: RealtorChannel,
   opts: {
-    requestId: string;
-    itemId: string;
+    /** Set for a viewing request; `inquiryId` instead for an availability request. */
+    requestId?: string | null;
+    itemId?: string | null;
+    inquiryId?: string | null;
     realtorId: string | null;
     medium: RealtorMedium;
     purpose: Exclude<RealtorPurpose, 'REPLY'>;
@@ -133,6 +138,7 @@ export async function sendToRealtor(
     renter?: { phone_e164?: string | null; display_name?: string | null };
   },
 ): Promise<SendResult> {
+  if (!opts.requestId === !opts.inquiryId) throw new Error('A message to an agent is about one request.');
   const body = opts.body.trim();
   if (!body) throw new Error('Nothing to send - the message is empty.');
   if (body.length > MAX_BODY) throw new Error(`Message is ${body.length} characters; the limit is ${MAX_BODY}.`);
@@ -151,8 +157,9 @@ export async function sendToRealtor(
   const message = existing
     ? await store.requeue(existing.id, body)
     : await store.insert({
-      request_id: opts.requestId,
-      item_id: opts.itemId,
+      request_id: opts.requestId ?? null,
+      ...(opts.inquiryId ? { inquiry_id: opts.inquiryId } : {}),
+      item_id: opts.itemId ?? null,
       realtor_id: opts.realtorId,
       direction: 'OUT',
       medium: opts.medium,
@@ -187,8 +194,9 @@ export async function sendToRealtor(
 export async function recordRealtorReply(
   store: RealtorMessageStore,
   opts: {
-    requestId: string;
-    itemId: string;
+    requestId?: string | null;
+    itemId?: string | null;
+    inquiryId?: string | null;
     realtorId: string | null;
     medium: RealtorMedium;
     body: string;
@@ -196,6 +204,7 @@ export async function recordRealtorReply(
     idempotencyKey: string;
   },
 ): Promise<StoredRealtorMessage> {
+  if (!opts.requestId === !opts.inquiryId) throw new Error('A reply from an agent is about one request.');
   const body = opts.body.trim();
   if (!body) throw new Error('The reply is empty.');
   if (body.length > MAX_BODY) throw new Error(`Reply is ${body.length} characters; the limit is ${MAX_BODY}.`);
@@ -204,8 +213,9 @@ export async function recordRealtorReply(
   if (existing) return existing;
 
   return store.insert({
-    request_id: opts.requestId,
-    item_id: opts.itemId,
+    request_id: opts.requestId ?? null,
+    ...(opts.inquiryId ? { inquiry_id: opts.inquiryId } : {}),
+    item_id: opts.itemId ?? null,
     realtor_id: opts.realtorId,
     direction: 'IN',
     medium: opts.medium,

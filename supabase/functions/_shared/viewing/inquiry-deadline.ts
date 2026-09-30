@@ -71,3 +71,28 @@ export function renderDeadlineAlert(opts: {
     ].join('\n'),
   };
 }
+
+/**
+ * An agent answered an availability check through the Zalo bridge (S7.2).
+ * The moment someone has to act - capture the unit, or ask the next agent -
+ * so the ops team hears at once, not at the next deadline. Carries the
+ * agent's own words and nothing about the renter.
+ */
+export function renderAgentReplyAlert(opts: {
+  complexName: string;
+  agentName: string | null;
+  text: string;
+}): { subject: string; text: string } {
+  const who = opts.agentName?.trim() || 'An agent';
+  const words = opts.text.length > 600 ? `${opts.text.slice(0, 600)}...` : opts.text;
+  return {
+    subject: `${opts.complexName} - ${who} replied about availability`,
+    text: [
+      `${who} answered our availability check for ${opts.complexName}:`,
+      '',
+      words.split('\n').map(l => `> ${l}`).join('\n'),
+      '',
+      'Record what they said, and capture any unit they offered, in the ops console under Availability: https://hausto-ops.vercel.app',
+    ].join('\n'),
+  };
+}

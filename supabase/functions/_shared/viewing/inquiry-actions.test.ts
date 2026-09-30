@@ -5,7 +5,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FakeDb } from './fake-db.ts';
 import { MockAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
-import { ManualChannel } from '../realtor/channel.ts';
+import { BridgeChannel, ManualChannel } from '../realtor/channel.ts';
+import { bridgeAck, bridgeInbound, bridgePull } from '../realtor/bridge.ts';
+import { availabilityDraft } from '../realtor/drafts.ts';
 import { SupabaseRealtorMessageStore } from '../realtor/store.ts';
 import { performOpsAction, type OpsDeps } from './ops-actions.ts';
 import { handleInbound } from './routing.ts';
@@ -439,4 +441,80 @@ it('leaves email requests to Admin Tools', async () => {
   const r = await act({ action: 'INQUIRY_CLOSE', inquiryId: INQ, reason: 'OTHER' });
   expect(r.status).toBe(409);
   expect(r.body.error).toBe('email_request');
+});
+
+describe("asking a building's agents on Zalo (S7.2)", () => {
+  const draft = availabilityDraft({
+    complexName: 'Empire City', bedrooms: 2, budgetMaxVnd: 25_000_000, moveInDate: '2026-11-15', leaseMonths: 12, hasPets: false,
+  });
+  const ask = (message = draft, realtorId = 'r-1') =>
+    act({ action: 'INQUIRY_ASK_AGENT', inquiryId: INQ, realtorId, medium: 'ZALO', message });
+
+  beforeEach(async () => {
+    db.tables.realtor_messages = [];
+    await renterSends(`Hi Hausto - please check availability at Empire City for me (${code})`);
+  });
+
+  it('through the bridge: queued, and "asked" only once the device has sent it', async () => {
+    deps.realtorChannel = new BridgeChannel();
+    const r = await ask();
+    expect(r).toMatchObject({ status: 200, body: { recorded: 'AGENT_ASKED', queued: true } });
+    const [row] = db.tables.realtor_messages;
+    expect(row).toMatchObject({
+      inquiry_id: INQ, request_id: null, item_id: null, realtor_id: 'r-1', direction: 'OUT',
+      purpose: 'AVAILABILITY_CHECK', status: 'QUEUED', body: draft,
+    });
+    expect(view().agents['r-1']).toBeUndefined();
+
+    // The device pulls it - and now listens for this agent's replies.
+    // deno-lint-ignore no-explicit-any
+    const pulled = await bridgePull(db as any, new Date());
+    expect(pulled.outbox.map(m => m.messageId)).toEqual([row.id]);
+    expect(pulled.watch).toContain('+84901234567');
+
+    at('2026-09-29T04:00:00Z');
+    // deno-lint-ignore no-explicit-any
+    await bridgeAck(db as any, { messageId: String(row.id), sent: true, providerId: 'z1' }, new Date());
+    expect(view().agents['r-1']).toMatchObject({ askedAt: '2026-09-29T04:00:00.000Z', medium: 'ZALO' });
+    expect(view().state).toBe('SOURCING');
+
+    // Their answer comes back to this request, not to any viewing request.
+    // deno-lint-ignore no-explicit-any
+    const back = await bridgeInbound(db as any, { fromPhone: '+84901234567', text: 'Còn 1 căn 2PN tầng 18, 24tr', providerMessageId: 'zin-1' });
+    expect(back).toMatchObject({ stored: true, inquiryId: INQ });
+    expect(db.tables.realtor_messages.at(-1)).toMatchObject({ inquiry_id: INQ, direction: 'IN', purpose: 'REPLY', request_id: null });
+  });
+
+  it('by hand: the words recorded and "asked" written at once', async () => {
+    const r = await ask();
+    expect(r).toMatchObject({ status: 200, body: { queued: false } });
+    expect(db.tables.realtor_messages[0]).toMatchObject({ status: 'SENT', inquiry_id: INQ });
+    expect(view().agents['r-1']?.medium).toBe('ZALO');
+    expect(db.tables.inquiry_events.at(-1)?.payload).toMatchObject({ message_id: db.tables.realtor_messages[0].id });
+  });
+
+  it("refuses a message carrying the renter's name or number, and records nothing", async () => {
+    for (const message of [`${draft}
+Khách tên Mai Nguyen`, `${draft}
+SĐT khách +44 7700 900123`]) {
+      const r = await ask(message);
+      expect(r.body.error).toBe('renter_identity');
+    }
+    expect(db.tables.realtor_messages).toHaveLength(0);
+    expect(view().agents['r-1']).toBeUndefined();
+  });
+
+  it('asks each agent about a request once', async () => {
+    expect((await ask()).status).toBe(200);
+    const again = await ask();
+    expect(again).toMatchObject({ status: 429, body: { error: 'outreach_capped' } });
+    expect(db.tables.realtor_messages).toHaveLength(1);
+  });
+
+  it('still records an ask by phone, with no words', async () => {
+    const r = await act({ action: 'INQUIRY_ASK_AGENT', inquiryId: INQ, realtorId: 'r-1', medium: 'PHONE' });
+    expect(r.status).toBe(200);
+    expect(db.tables.realtor_messages).toHaveLength(0);
+    expect(view().agents['r-1']?.medium).toBe('PHONE');
+  });
 });

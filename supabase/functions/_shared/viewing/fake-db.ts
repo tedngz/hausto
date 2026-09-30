@@ -71,6 +71,11 @@ export class FakeDb {
         return api;
       },
       is: (col: string, val: unknown) => { rows = rows.filter(r => (r[col] ?? null) === val); return api; },
+      // Only `.not(col, 'is', null)`, the one form the code uses.
+      not: (col: string, op: string, val: unknown) => {
+        if (op === 'is' && val === null) rows = rows.filter(r => r[col] != null);
+        return api;
+      },
       in: (col: string, vals: unknown[]) => { rows = rows.filter(r => vals.includes(r[col])); return api; },
       gte: (col: string, val: string) => { rows = rows.filter(r => String(r[col]) >= val); return api; },
       order: (col: string, o?: { ascending?: boolean }) => {

@@ -56,7 +56,13 @@ export async function bridgePull(db: Supa, now: Date): Promise<PullResult> {
   const { data: items } = requestIds.length
     ? await db.from('request_items').select('realtor_id').in('request_id', requestIds)
     : { data: [] };
-  const realtorIds = [...new Set(((items ?? []) as { realtor_id: string | null }[]).map(i => i.realtor_id).filter(Boolean))];
+  // And the building agents asked about an availability request (S7.2).
+  const { data: asked } = await db.from('realtor_messages')
+    .select('realtor_id').not('inquiry_id', 'is', null).eq('direction', 'OUT').gte('created_at', since);
+  const realtorIds = [...new Set([
+    ...((items ?? []) as { realtor_id: string | null }[]).map(i => i.realtor_id),
+    ...((asked ?? []) as { realtor_id: string | null }[]).map(m => m.realtor_id),
+  ].filter(Boolean))];
   const { data: realtors } = realtorIds.length
     ? await db.from('realtors').select('id, phone_e164').in('id', realtorIds)
     : { data: [] };
@@ -100,7 +106,7 @@ export async function bridgeAck(
   now: Date,
 ): Promise<AckResult> {
   const { data: m } = await db.from('realtor_messages')
-    .select('id, status, direction, on_sent_event').eq('id', ack.messageId).maybeSingle();
+    .select('id, status, direction, on_sent_event, inquiry_id').eq('id', ack.messageId).maybeSingle();
   if (!m || m.direction !== 'OUT') return { ok: false, error: 'Unknown message' };
   if (m.status === 'SENT') return { ok: true, eventWritten: false };
 
@@ -117,7 +123,8 @@ export async function bridgeAck(
 
   const event = m.on_sent_event as Record<string, unknown> | null;
   if (!event) return { ok: true, eventWritten: false };
-  const { error } = await db.from('events').insert({ ...event, occurred_at: now.toISOString() });
+  // An availability check's AGENT_ASKED goes in that request's own log.
+  const { error } = await db.from(m.inquiry_id ? 'inquiry_events' : 'events').insert({ ...event, occurred_at: now.toISOString() });
   if (error) {
     console.error('[bridge] event after send failed:', error);
     return { ok: false, error: 'event_failed' };
@@ -127,12 +134,14 @@ export async function bridgeAck(
 
 export type InboundResult =
   | { stored: true; requestId: string; itemId: string; messageId: string }
+  | { stored: true; inquiryId: string; messageId: string }
   | { stored: false; reason: string };
 
 /**
- * A message from an agent, as the device saw it. Attributed to the item we
- * most recently sent that agent something about - an agent answers the last
- * thing they were asked. Anyone who is not a known agent is dropped unstored.
+ * A message from an agent, as the device saw it. Attributed to what we most
+ * recently sent that agent something about - an item of a viewing request, or
+ * an availability request - since an agent answers the last thing they were
+ * asked. Anyone who is not a known agent is dropped unstored.
  */
 export async function bridgeInbound(
   db: Supa,
@@ -147,8 +156,22 @@ export async function bridgeInbound(
   if (!realtor) return { stored: false, reason: 'not a known agent' };
 
   const { data: last } = await db.from('realtor_messages')
-    .select('request_id, item_id').eq('realtor_id', realtor.id).eq('direction', 'OUT').eq('status', 'SENT')
+    .select('request_id, item_id, inquiry_id').eq('realtor_id', realtor.id).eq('direction', 'OUT').eq('status', 'SENT')
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
+
+  // The last thing we asked them was what is free at a building (S7.2).
+  if (last?.inquiry_id) {
+    const reply = await recordRealtorReply(new SupabaseRealtorMessageStore(db), {
+      inquiryId: String(last.inquiry_id),
+      realtorId: realtor.id,
+      medium: 'ZALO',
+      body: text.slice(0, 4000),
+      actor: 'BRIDGE',
+      idempotencyKey: `bridge:${m.providerMessageId}`,
+    });
+    return { stored: true, inquiryId: String(last.inquiry_id), messageId: reply.id };
+  }
+
   let target = last?.item_id ? { requestId: String(last.request_id), itemId: String(last.item_id) } : null;
   if (!target) {
     const { data: item } = await db.from('request_items')

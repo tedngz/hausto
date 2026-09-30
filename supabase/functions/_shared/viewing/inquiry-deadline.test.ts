@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  DEADLINE_STAGES, INQUIRY_DEADLINE_JOB, deadlineAlertNeeded, deadlineJobs, renderDeadlineAlert,
+  DEADLINE_STAGES, INQUIRY_DEADLINE_JOB, deadlineAlertNeeded, deadlineJobs, renderDeadlineAlert, renderAgentReplyAlert,
 } from './inquiry-deadline.ts';
 import { INQUIRY_REPLY_WITHIN_MS, reduceInquiry, type InquiryEvent, type InquiryView } from '../viewing-domain.ts';
 
@@ -93,5 +93,15 @@ describe('the reminder email', () => {
   it('carries nothing about the renter', () => {
     // renderDeadlineAlert takes no renter field at all; this pins the output.
     expect(alert.text).not.toMatch(/\+\d{6,}|Mai|@/);
+  });
+});
+
+describe('an agent answering an availability check (S7.2)', () => {
+  it('says who, where and what they said - nothing about the renter', () => {
+    const a = renderAgentReplyAlert({ complexName: 'Empire City', agentName: 'Linh', text: 'Còn 1 căn 2PN\ntầng 18, 24tr' });
+    expect(a.subject).toBe('Empire City - Linh replied about availability');
+    expect(a.text).toContain('> Còn 1 căn 2PN\n> tầng 18, 24tr');
+    expect(a.text).toContain('https://hausto-ops.vercel.app');
+    expect(renderAgentReplyAlert({ complexName: 'X', agentName: null, text: 'y'.repeat(700) }).text).toContain('y'.repeat(600) + '...');
   });
 });
