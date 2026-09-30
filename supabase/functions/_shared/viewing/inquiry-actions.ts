@@ -5,8 +5,9 @@
 // is a typed `inquiry_events` row (invariants 1 and 2); the reply is a message
 // on the request's thread, checked like any operator reply to a renter.
 //
-// Agents are asked by hand here - on Zalo or by phone - and the step records
-// that it happened. Asking through the bridge is S7.2.
+// Agents are asked on Zalo with the words recorded - through the bridge when
+// REALTOR_CHANNEL=bridge, by hand otherwise (S7.2) - or by phone, when the step
+// only records that it happened.
 
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import {
@@ -18,6 +19,14 @@ import {
   type MessageStore,
 } from '../whatsapp/send.ts';
 import { TEMPLATES } from '../whatsapp/templates.ts';
+import type { RealtorChannel } from '../realtor/channel.ts';
+import {
+  RenterIdentityError,
+  assertNoRenterIdentity,
+  sendToRealtor,
+  type RealtorMessageStore,
+} from '../realtor/send.ts';
+import { loadOutreach, outreachRefusal } from '../realtor/outreach.ts';
 import {
   AGENT_ANSWERS,
   INQUIRY_ASK_MEDIA,
@@ -131,9 +140,17 @@ function note(input: Record<string, unknown>): string | null {
   return str(input.note).slice(0, MAX_NOTE) || null;
 }
 
+type InquiryDeps = {
+  whatsapp: WhatsAppAdapter;
+  messages: MessageStore;
+  realtorChannel: RealtorChannel;
+  realtorMessages: RealtorMessageStore;
+  newKey?: () => string;
+};
+
 export async function performInquiryAction(
   db: Supa,
-  deps: { whatsapp: WhatsAppAdapter; messages: MessageStore; newKey?: () => string },
+  deps: InquiryDeps,
   actor: string,
   action: InquiryAction,
   input: Record<string, unknown>,
@@ -167,6 +184,7 @@ export async function performInquiryAction(
       if (!(INQUIRY_ASK_MEDIA as readonly string[]).includes(medium)) {
         return refuse(400, 'invalid_medium', 'Asked on ZALO or PHONE.');
       }
+      if (medium === 'ZALO' && str(input.message)) return askOnZalo(db, deps, actor, row, realtorId, input);
       return (await append(db, inquiryId, 'AGENT_ASKED', { realtor_id: realtorId, medium, note: note(input) }, actor))
         ?? done({ recorded: 'AGENT_ASKED' });
     }
@@ -247,6 +265,66 @@ async function changeBrief(
   return (await append(db, row.id, 'BRIEF_CHANGED', {
     bedrooms: changed.value.bedrooms, budget_max_vnd: changed.value.budgetMaxVnd, message_id: messageId, note: note(input),
   }, actor)) ?? done({ recorded: 'BRIEF_CHANGED' });
+}
+
+/**
+ * An availability check to one of the building's agents, with the words
+ * recorded (S7.2). Through the bridge it is queued and AGENT_ASKED waits on
+ * the device's ack - "asked" means the agent was sent something; by hand the
+ * operator already sent it, so it is written now. Capped (outreach.ts) and
+ * checked for the renter's identity like every message to an agent.
+ */
+async function askOnZalo(
+  db: Supa,
+  deps: InquiryDeps,
+  actor: string,
+  row: InquiryRow,
+  realtorId: string,
+  input: Record<string, unknown>,
+): Promise<InquiryResult> {
+  const now = new Date();
+  const facts = await loadOutreach(db, realtorId, now);
+  const why = outreachRefusal({ ...facts, inquiryId: row.id, now });
+  if (why) return refuse(429, 'outreach_capped', why);
+
+  // The renter, read for one purpose: making sure the message does not carry
+  // them. The form's name and the number the code came from, and the name on
+  // their renter row if it differs.
+  const { data: who } = await db.from('complex_inquiries').select('phone, full_name').eq('id', row.id).maybeSingle();
+  const { data: renter } = row.renter_id
+    ? await db.from('renters').select('phone_e164, display_name').eq('id', row.renter_id).maybeSingle()
+    : { data: null };
+
+  let sent;
+  try {
+    // The renter-row name, if it differs from the form's; sendToRealtor checks
+    // the form's name and the number itself.
+    if (renter?.display_name && renter.display_name !== who?.full_name) {
+      assertNoRenterIdentity(str(input.message), { display_name: renter.display_name });
+    }
+    sent = await sendToRealtor(deps.realtorMessages, deps.realtorChannel, {
+      inquiryId: row.id, realtorId, medium: 'ZALO', purpose: 'AVAILABILITY_CHECK',
+      body: str(input.message), actor, idempotencyKey: `${row.id}:${realtorId}:AVAILABILITY_CHECK`,
+      renter: { phone_e164: who?.phone ?? renter?.phone_e164 ?? null, display_name: who?.full_name ?? null },
+    });
+  } catch (e) {
+    if (e instanceof RenterIdentityError) return refuse(400, 'renter_identity', e.message);
+    return refuse(400, 'invalid_message', (e as Error).message);
+  }
+  if (sent.message.status === 'FAILED') return refuse(502, 'send_failed', 'The message could not be queued.');
+
+  const event = {
+    inquiry_id: row.id, type: 'AGENT_ASKED', actor,
+    payload: { realtor_id: realtorId, medium: 'ZALO', message_id: sent.message.id, note: note(input) },
+  };
+  if (sent.message.status === 'QUEUED') {
+    // Written by zalo-bridge when the device says it went (bridgeAck).
+    const { error } = await db.from('realtor_messages').update({ on_sent_event: event }).eq('id', sent.message.id);
+    if (error) return refuse(500, 'event_failed');
+    return done({ recorded: 'AGENT_ASKED', queued: true, messageId: sent.message.id });
+  }
+  return (await append(db, row.id, 'AGENT_ASKED', event.payload, actor))
+    ?? done({ recorded: 'AGENT_ASKED', queued: false, messageId: sent.message.id });
 }
 
 // ── Units (S7.1b) ───────────────────────────────────────────────────────────

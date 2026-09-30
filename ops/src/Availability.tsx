@@ -15,6 +15,7 @@ import {
   type InquiryEvent, type InquiryView, type AgentAnswer,
 } from '../../supabase/functions/_shared/viewing-domain';
 import { describeInquiry } from '../../supabase/functions/_shared/viewing/inquiry';
+import { availabilityDraft } from '../../supabase/functions/_shared/realtor/drafts';
 import { formatVnd, humanAge } from '../../supabase/functions/_shared/viewing/format';
 import {
   FURNISHING, MAX_COMBINED_UNITS, MAX_OFFER_UNITS, MAX_PHOTOS, UNIT_FRESH_DAYS, briefOf, misfit, priceCeiling,
@@ -177,12 +178,24 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState<string>('NOTHING_FOUND');
   const [closeNote, setCloseNote] = useState('');
+  const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
+  // Which way messages to agents leave, from what the planner last saw - the
+  // console cannot read secrets (as RequestDetail reads it).
+  const [bridge, setBridge] = useState(false);
+  const [asking, setAsking] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data, error: err } = await supabase.rpc('ops_inquiry_detail', { _inquiry_id: inquiryId });
     if (err) { setError(err.message); return; }
     const detail = data as Detail | null;
     setD(detail);
+    const [{ data: rm }, { data: controls }] = await Promise.all([
+      supabase.from('realtor_messages').select('id, realtor_id, direction, purpose, body, status, error, created_at')
+        .eq('inquiry_id', inquiryId).order('created_at', { ascending: true }),
+      supabase.from('ai_operator_controls').select('last_state').eq('id', 'singleton').maybeSingle(),
+    ]);
+    setAgentMessages((rm ?? []) as AgentMessage[]);
+    setBridge((controls?.last_state as { realtorChannel?: string } | null)?.realtorChannel === 'bridge');
     if (detail) {
       const { data: roster } = await supabase.rpc('ops_building_roster');
       const building = ((roster ?? []) as { id: string; agents: RosterAgent[] }[]).find(b => b.id === detail.complex.id);
@@ -271,6 +284,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
             <tbody>
               {[...agents, ...extra].map(a => {
                 const s = v.agents[a.realtor_id];
+                const lastOut = [...agentMessages].reverse().find(m => m.realtor_id === a.realtor_id && m.direction === 'OUT');
                 return (
                   <tr key={a.realtor_id}>
                     <td className="small">{a.name ?? 'no name'}{a.listings_total >= 30 && <span className="tag warn"> agency desk</span>}</td>
@@ -278,10 +292,14 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
                     <td className="small">{s?.askedAt ? `${hcmc(s.askedAt)}${s.medium ? ` · ${s.medium}` : ''}` : '-'}</td>
                     <td className="small">{s?.answer ? ANSWER_LABEL[s.answer] : '-'}</td>
                     <td className="row">
-                      {!s?.askedAt && (
+                      {lastOut?.status === 'QUEUED' && <span className="tag">queued for the Zalo device</span>}
+                      {lastOut?.status === 'FAILED' && <span className="tag warn" title={lastOut.error ?? ''}>not sent</span>}
+                      {(!s?.askedAt || lastOut?.status === 'FAILED') && (
                         <>
-                          <button disabled={busy} onClick={() => void run({ action: 'INQUIRY_ASK_AGENT', realtorId: a.realtor_id, medium: 'ZALO' })}>Asked on Zalo</button>
-                          <button disabled={busy} onClick={() => void run({ action: 'INQUIRY_ASK_AGENT', realtorId: a.realtor_id, medium: 'PHONE' })}>by phone</button>
+                          <button disabled={busy} onClick={() => setAsking(a.realtor_id)}>Ask on Zalo</button>
+                          {!s?.askedAt && (
+                            <button disabled={busy} onClick={() => void run({ action: 'INQUIRY_ASK_AGENT', realtorId: a.realtor_id, medium: 'PHONE' })}>asked by phone</button>
+                          )}
                         </>
                       )}
                       {s?.askedAt && AGENT_ANSWERS.map(ans => (
@@ -297,6 +315,24 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
             </tbody>
           </table>
         )}
+        {asking && (
+          <AskBox
+            key={asking}
+            agentName={[...agents, ...extra].find(a => a.realtor_id === asking)?.name ?? 'the agent'}
+            initial={availabilityDraft({
+              complexName: d.complex.name, bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd,
+              moveInDate: d.move_in, leaseMonths: d.lease_months, hasPets: d.has_pets,
+            })}
+            bridge={bridge}
+            busy={busy}
+            onSend={text => void run({ action: 'INQUIRY_ASK_AGENT', realtorId: asking, medium: 'ZALO', message: text }, () => setAsking(null))}
+            onCancel={() => setAsking(null)}
+          />
+        )}
+        <AgentConversations
+          messages={agentMessages}
+          nameOf={id => [...agents, ...extra].find(a => a.realtor_id === id)?.name ?? 'Agent'}
+        />
       </div>
 
       <Units d={d} agents={[...agents, ...extra]} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId} />
@@ -710,5 +746,58 @@ function BriefLine({ d, v, closed, busy, run }: { d: Detail; v: InquiryView; clo
         </div>
       )}
     </div>
+  );
+}
+
+interface AgentMessage {
+  id: string; realtor_id: string | null; direction: 'OUT' | 'IN'; purpose: string;
+  body: string; status: string; error: string | null; created_at: string;
+}
+
+/**
+ * The availability check to one agent (S7.2): the draft, editable - what is
+ * sent is what is recorded. Through the Zalo device when the bridge is on;
+ * otherwise the operator sends it from their phone and marks it sent.
+ */
+function AskBox({ agentName, initial, bridge, busy, onSend, onCancel }: {
+  agentName: string; initial: string; bridge: boolean; busy: boolean;
+  onSend: (text: string) => void; onCancel: () => void;
+}) {
+  const [text, setText] = useState(initial);
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="small muted">
+        To {agentName} on Zalo - no name or number of the renter; the server refuses both.
+      </div>
+      <textarea rows={9} value={text} onChange={e => setText(e.target.value)} style={{ marginTop: 4 }} />
+      <div className="row" style={{ marginTop: 6 }}>
+        <button onClick={() => void navigator.clipboard.writeText(text)}>Copy</button>
+        <button className="primary" disabled={busy || !text.trim()} onClick={() => onSend(text)}>
+          {bridge ? 'Send via the Zalo device' : 'Mark sent'}
+        </button>
+        <button disabled={busy} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/** What each agent was sent about this request and what they said, oldest first. */
+function AgentConversations({ messages, nameOf }: { messages: AgentMessage[]; nameOf: (id: string | null) => string }) {
+  if (messages.length === 0) return null;
+  return (
+    <details style={{ marginTop: 8 }} open={messages.some(m => m.direction === 'IN')}>
+      <summary className="small muted">Agent conversations ({messages.length})</summary>
+      <div className="thread">
+        {messages.map(m => (
+          <div key={m.id} className={`bubble ${m.direction === 'IN' ? 'in' : 'out'}`}>
+            <div className="small muted">
+              {m.direction === 'IN' ? nameOf(m.realtor_id) : `Hausto to ${nameOf(m.realtor_id)}`} · {hcmc(m.created_at)}
+              {m.direction === 'OUT' && m.status !== 'SENT' ? ` · ${m.status.toLowerCase()}${m.error ? `: ${m.error}` : ''}` : ''}
+            </div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }

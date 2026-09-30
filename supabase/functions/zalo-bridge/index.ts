@@ -14,6 +14,8 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { bridgePull, bridgeAck, bridgeInbound, bridgeHeartbeat } from '../_shared/realtor/bridge.ts';
+import { renderAgentReplyAlert } from '../_shared/viewing/inquiry-deadline.ts';
+import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -30,6 +32,28 @@ function sameToken(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
   return diff === 0;
+}
+
+/**
+ * Tell the ops team an agent answered an availability check (S7.2). One email
+ * per reply: they are few, and each is somebody's cue to act.
+ */
+// deno-lint-ignore no-explicit-any
+async function alertAgentReplies(db: any, replies: { inquiryId: string; fromPhone: string; text: string }[]): Promise<void> {
+  for (const r of replies) {
+    try {
+      const { data: inq } = await db.from('complex_inquiries').select('complex_id').eq('id', r.inquiryId).maybeSingle();
+      const { data: complex } = inq
+        ? await db.from('complexes').select('name').eq('id', inq.complex_id).maybeSingle()
+        : { data: null };
+      const { data: agent } = await db.from('realtors').select('display_name').eq('phone_e164', r.fromPhone).maybeSingle();
+      await sendIntakeAlert(db, renderAgentReplyAlert({
+        complexName: complex?.name ?? 'a building', agentName: agent?.display_name ?? null, text: r.text,
+      }), Deno.env.get('RESEND_API_KEY'));
+    } catch (e) {
+      console.warn('[zalo-bridge] agent reply alert failed:', (e as Error).message);
+    }
+  }
 }
 
 /** Ask the planner to read new replies now rather than at its next tick. */
@@ -93,16 +117,20 @@ Deno.serve(async (req) => {
       const messages = Array.isArray(body.messages) ? body.messages.slice(0, 50) : [];
       const results = [];
       const touched = new Set<string>();
+      const answered: { inquiryId: string; fromPhone: string; text: string }[] = [];
       for (const m of messages as Record<string, unknown>[]) {
         const r = await bridgeInbound(db, {
           fromPhone: String(m.fromPhone ?? ''), text: String(m.text ?? ''),
           providerMessageId: String(m.providerMessageId ?? ''),
         });
-        if (r.stored) touched.add(r.requestId);
+        if (r.stored && 'requestId' in r) touched.add(r.requestId);
+        if (r.stored && 'inquiryId' in r) {
+          answered.push({ inquiryId: r.inquiryId, fromPhone: String(m.fromPhone ?? ''), text: String(m.text ?? '') });
+        }
         results.push(r);
       }
-      const nudge = planNow([...touched]);
-      (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(nudge);
+      const after = Promise.all([planNow([...touched]), alertAgentReplies(db, answered)]);
+      (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(after);
       return json({ results });
     }
 

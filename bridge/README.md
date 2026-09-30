@@ -26,8 +26,9 @@ can do, not to look human.
 ## What it will and will not do
 
 - It only forwards messages from numbers on Hausto's **watch list**: agents on
-  requests from the last three weeks. Anything else on the account - friends,
-  family, other clients - never leaves the device.
+  viewing requests from the last three weeks, and building agents asked about
+  an availability request in that time (SPEC §11). Anything else on the
+  account - friends, family, other clients - never leaves the device.
 - It sends only what Hausto hands it, to the agent's own number. It has no
   way to message anyone else.
 - At most `DAILY_CAP` messages per day (Ho Chi Minh City time, default 60),

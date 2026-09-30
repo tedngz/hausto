@@ -69,6 +69,35 @@ export function draftForRealtor(opts: {
 }
 
 /**
+ * Asking a building's agent what is free, for an availability request (PLAN-v3
+ * S7.2). The brief, and the three things that let an offer be made without a
+ * second round: photos, the price, and when it can be seen. Nothing about who
+ * is asking - the brief is a flat, not a person.
+ */
+export function availabilityDraft(opts: {
+  complexName: string;
+  bedrooms: number;
+  budgetMaxVnd: number | null;
+  moveInDate: string;
+  leaseMonths: number;
+  hasPets: boolean;
+}): string {
+  const beds = opts.bedrooms >= 4 ? 'từ 4 phòng ngủ' : `${opts.bedrooms} phòng ngủ`;
+  return [
+    'Chào anh/chị,',
+    '',
+    `Em bên Hausto, đang tìm căn ở ${opts.complexName} cho khách:`,
+    `- ${beds}${opts.budgetMaxVnd ? `, tối đa ${vnd(opts.budgetMaxVnd)}/tháng` : ''}`,
+    `- vào ở khoảng ${dayMonth(opts.moveInDate)}, thuê ${opts.leaseMonths} tháng`,
+    opts.hasPets ? '- khách có nuôi thú cưng' : '- không nuôi thú cưng',
+    '',
+    'Anh/chị có căn nào đang trống phù hợp không ạ? Nếu có, anh/chị gửi em giúp hình, giá và khi nào xem được nhé.',
+    '',
+    'Em cảm ơn anh/chị.',
+  ].join('\n');
+}
+
+/**
  * Chasing a broker who has not answered. Short, and it repeats the listing -
  * a broker with forty chats open has lost the first message by now.
  */

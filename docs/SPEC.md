@@ -262,7 +262,8 @@ sent_at         timestamptz
 
 ### `realtor_messages`
 
-The broker transcript: every message to and from a realtor about an item.
+The broker transcript: every message to and from a realtor about an item of a
+viewing request, or about an availability request (§11, S7.2).
 Written only through `_shared/realtor/send.ts`, which persists before a message
 counts as sent, keys every row for idempotency, and refuses any outbound body
 carrying a phone number or this request's renter's name (§6). Ops and admin
@@ -270,12 +271,13 @@ read it; nothing in a browser writes it.
 
 ```
 id              uuid pk
-request_id      uuid not null
+request_id      uuid                      -- a viewing request's message, or
+inquiry_id      uuid                      -- an availability request's: exactly one is set
 item_id         uuid
 realtor_id      uuid
 direction       text not null             -- OUT | IN
 medium          text not null             -- ZALO | PHONE | WHATSAPP | SMS
-purpose         text not null             -- REQUEST_VIEWING | NUDGE | CONFIRM | RELEASE | REPLY
+purpose         text not null             -- REQUEST_VIEWING | NUDGE | CONFIRM | RELEASE | AVAILABILITY_CHECK | REPLY
 body            text not null
 status          text not null             -- QUEUED | SENT | FAILED | RECEIVED
 actor           text not null             -- OPS:<uuid> | AGENT:<version> | SYSTEM | BRIDGE
@@ -283,7 +285,7 @@ idempotency_key text unique not null
 provider_id     text
 error           text
 claimed_at      timestamptz               -- bridge lease, §10 stage 3
-on_sent_event   jsonb                     -- the event written when the bridge acks SENT
+on_sent_event   jsonb                     -- the event written when the bridge acks SENT (inquiry_events for an inquiry_id row)
 created_at      timestamptz default now()
 sent_at         timestamptz
 ```
@@ -1171,6 +1173,39 @@ while the window is shut, filed on the thread so the reply routes back. The
 template is in the registry `approved: false` and not yet submitted to Meta
 (`docs/whatsapp-go-live.md`), so until then the action is refused as
 `template_not_approved`.
+
+### Asking agents on Zalo (PLAN-v3 S7.2a)
+
+`INQUIRY_ASK_AGENT` with `medium: ZALO` and a `message` sends an availability
+check to one of the building's agents - `AVAILABILITY_CHECK` in
+`realtor_messages`, with `inquiry_id` set - through `sendToRealtor`, like any
+message to an agent: persisted first, idempotent (one key per request and
+agent), and refused if it carries a phone number or the renter's name (the
+form's, and their renter row's). The console's draft (`availabilityDraft`)
+gives the brief - bedrooms, budget, move-in, lease, pets - and asks for photos,
+the price and when it can be seen; it never says who is asking.
+
+- **Through the bridge** (`REALTOR_CHANNEL=bridge`): the row is queued and
+  `AGENT_ASKED` waits in `on_sent_event` until the device acks the send, then is
+  written to `inquiry_events`. "Asked" means the agent was sent something.
+- **By hand**: the operator sends from their phone and marks it sent;
+  `AGENT_ASKED` is written at once, with the words recorded.
+- **By phone**: `medium: PHONE` with no message records the ask only, as before.
+
+**Caps** (`_shared/realtor/outreach.ts`), because these are cold messages from
+a personal Zalo account and losing it loses every agent conversation: one
+availability check per agent per request; at most 3 to one agent in any 7
+days, across requests; at most 5 agents new to us per Ho Chi Minh City day.
+Refused as `outreach_capped` with the reason. Failed sends do not count. The
+device's own daily cap still bounds everything it sends.
+
+**Replies.** The bridge's watch list includes agents sent an availability check
+in the last three weeks. An agent's reply is attributed to the last thing we
+sent them: when that was an availability check it is stored on the request
+(`inquiry_id`, never a viewing request's item), shown in the console's agent
+conversations, and emailed to the ops team at once (`renderAgentReplyAlert`:
+the agent's words and the building, nothing about the renter). The operator
+records the answer as `AGENT_ANSWERED` and captures any unit, as before.
 
 ### Building agents (PLAN-v3 S7.0)
 
