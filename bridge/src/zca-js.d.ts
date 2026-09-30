@@ -26,6 +26,8 @@ declare module 'zca-js' {
     data: {
       msgId: string | number;
       uidFrom: string;
+      /** 'webchat' for text, 'chat.photo' for a picture, and others. */
+      msgType?: string;
       content: unknown;
     };
   }

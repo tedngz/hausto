@@ -29,6 +29,9 @@ can do, not to look human.
   viewing requests from the last three weeks, and building agents asked about
   an availability request in that time (SPEC §11). Anything else on the
   account - friends, family, other clients - never leaves the device.
+- From those agents it forwards text and, since 0.2.0, photos: the image URL
+  of a message Zalo types as a photo, which Hausto copies into its own storage
+  (SPEC §11, S7.2b). Stickers, links, voice and files are not forwarded.
 - It sends only what Hausto hands it, to the agent's own number. It has no
   way to message anyone else.
 - At most `DAILY_CAP` messages per day (Ho Chi Minh City time, default 60),

@@ -132,9 +132,33 @@ export async function bridgeAck(
   return { ok: true, eventWritten: true };
 }
 
+/** Photos copied per message - Zalo sends an album as one message a photo. */
+export const MAX_PHOTOS_PER_MESSAGE = 10;
+
+/**
+ * Zalo's own image hosts. The device sends URLs; this function fetches them
+ * with the service role's storage behind it, so it fetches from Zalo and
+ * nowhere else a forged inbound could point it.
+ */
+export function agentPhotoAllowed(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && /(^|\.)(zdn\.vn|zadn\.vn|zalo\.me|zaloapp\.com)$/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Copy one agent photo into storage at `path` (no extension) and return its
+ * public URL, or null if it could not be copied. zalo-bridge supplies the
+ * real one; tests a fake.
+ */
+export type StorePhoto = (url: string, path: string) => Promise<string | null>;
+
 export type InboundResult =
   | { stored: true; requestId: string; itemId: string; messageId: string }
-  | { stored: true; inquiryId: string; messageId: string }
+  | { stored: true; inquiryId: string; messageId: string; photos: number }
   | { stored: false; reason: string };
 
 /**
@@ -145,12 +169,14 @@ export type InboundResult =
  */
 export async function bridgeInbound(
   db: Supa,
-  m: { fromPhone: string; text: string; providerMessageId: string },
+  m: { fromPhone: string; text: string; providerMessageId: string; photos?: string[] },
+  storePhoto?: StorePhoto,
 ): Promise<InboundResult> {
   const phone = toE164(m.fromPhone);
   if (!phone) return { stored: false, reason: 'not a Vietnamese mobile number' };
   const text = String(m.text ?? '').trim();
-  if (!text) return { stored: false, reason: 'empty' };
+  const photos = (m.photos ?? []).map(String).filter(agentPhotoAllowed).slice(0, MAX_PHOTOS_PER_MESSAGE);
+  if (!text && photos.length === 0) return { stored: false, reason: 'empty' };
 
   const { data: realtor } = await db.from('realtors').select('id').eq('phone_e164', phone).maybeSingle();
   if (!realtor) return { stored: false, reason: 'not a known agent' };
@@ -159,18 +185,31 @@ export async function bridgeInbound(
     .select('request_id, item_id, inquiry_id').eq('realtor_id', realtor.id).eq('direction', 'OUT').eq('status', 'SENT')
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
 
-  // The last thing we asked them was what is free at a building (S7.2).
+  // The last thing we asked them was what is free at a building (S7.2). Their
+  // photos are copied under that request's folder - the path a captured
+  // unit's photos must come from (offer.ts unitPhotoPath) - so the operator
+  // can put them on the unit as they are.
   if (last?.inquiry_id) {
+    const inquiryId = String(last.inquiry_id);
+    const key = m.providerMessageId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || 'x';
+    const copied: { url: string }[] = [];
+    for (const [i, url] of photos.entries()) {
+      const stored = storePhoto ? await storePhoto(url, `concierge/${inquiryId}/agent-${key}-${i}`) : null;
+      if (stored) copied.push({ url: stored });
+    }
     const reply = await recordRealtorReply(new SupabaseRealtorMessageStore(db), {
-      inquiryId: String(last.inquiry_id),
+      inquiryId,
       realtorId: realtor.id,
       medium: 'ZALO',
-      body: text.slice(0, 4000),
+      body: (text || (copied.length ? '(photo)' : '(a photo that could not be copied - ask the agent to send it again)')).slice(0, 4000),
       actor: 'BRIDGE',
       idempotencyKey: `bridge:${m.providerMessageId}`,
+      attachments: copied,
     });
-    return { stored: true, inquiryId: String(last.inquiry_id), messageId: reply.id };
+    return { stored: true, inquiryId, messageId: reply.id, photos: copied.length };
   }
+  // About a viewing request's unit, a photo says nothing we act on.
+  if (!text) return { stored: false, reason: 'empty' };
 
   let target = last?.item_id ? { requestId: String(last.request_id), itemId: String(last.item_id) } : null;
   if (!target) {

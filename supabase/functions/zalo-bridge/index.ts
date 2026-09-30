@@ -13,7 +13,10 @@
 // service role. The logic is `_shared/realtor/bridge.ts`, tested.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { bridgePull, bridgeAck, bridgeInbound, bridgeHeartbeat } from '../_shared/realtor/bridge.ts';
+import {
+  bridgePull, bridgeAck, bridgeInbound, bridgeHeartbeat, agentPhotoAllowed, type StorePhoto,
+} from '../_shared/realtor/bridge.ts';
+import { prepareForStorage } from '../_shared/mirror-image.ts';
 import { renderAgentReplyAlert } from '../_shared/viewing/inquiry-deadline.ts';
 import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
 
@@ -34,13 +37,59 @@ function sameToken(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/** Largest agent photo copied. A phone photo is a few MB; more is not a photo. */
+const MAX_PHOTO_BYTES = 12 * 1024 * 1024;
+
 /**
- * Tell the ops team an agent answered an availability check (S7.2). One email
- * per reply: they are few, and each is somebody's cue to act.
+ * Copy an agent's photo from Zalo into the listing-images bucket (S7.2b).
+ * Only from Zalo's hosts - checked again after redirects - only images, and
+ * capped in size; shrunk like every listing photo (mirror-image.ts). Null on
+ * anything unexpected: the reply is still stored, saying the photo is missing.
  */
 // deno-lint-ignore no-explicit-any
-async function alertAgentReplies(db: any, replies: { inquiryId: string; fromPhone: string; text: string }[]): Promise<void> {
+function photoStore(db: any): StorePhoto {
+  return async (url, path) => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (!res.ok || !agentPhotoAllowed(res.url || url)) return null;
+      const type = res.headers.get('content-type') ?? '';
+      if (!type.startsWith('image/')) return null;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length === 0 || bytes.length > MAX_PHOTO_BYTES) return null;
+      const prepared = await prepareForStorage(bytes, type);
+      const full = `${path}.${prepared.ext}`;
+      const { error } = await db.storage.from('external-property-images')
+        .upload(full, prepared.bytes, { contentType: prepared.contentType, upsert: true });
+      if (error) { console.warn('[zalo-bridge] photo upload failed:', error.message); return null; }
+      return db.storage.from('external-property-images').getPublicUrl(full).data.publicUrl as string;
+    } catch (e) {
+      console.warn('[zalo-bridge] photo copy failed:', (e as Error).message);
+      return null;
+    }
+  };
+}
+
+/**
+ * Tell the ops team an agent answered an availability check (S7.2). One email
+ * per agent per request in a batch - an album arrives as a message a photo,
+ * and ten emails for one answer is how an alert stops being read.
+ */
+async function alertAgentReplies(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+  replies: { inquiryId: string; fromPhone: string; text: string; photos: number }[],
+): Promise<void> {
+  const grouped = new Map<string, { inquiryId: string; fromPhone: string; texts: string[]; photos: number }>();
   for (const r of replies) {
+    const key = `${r.inquiryId}:${r.fromPhone}`;
+    const g = grouped.get(key) ?? { inquiryId: r.inquiryId, fromPhone: r.fromPhone, texts: [], photos: 0 };
+    if (r.text.trim()) g.texts.push(r.text.trim());
+    g.photos += r.photos;
+    grouped.set(key, g);
+  }
+  for (const g of grouped.values()) {
+    const photoLine = g.photos ? [`(${g.photos} photo${g.photos === 1 ? '' : 's'})`] : [];
+    const r = { ...g, text: [...g.texts, ...photoLine].join('\n') || '(a message with nothing we could read)' };
     try {
       const { data: inq } = await db.from('complex_inquiries').select('complex_id').eq('id', r.inquiryId).maybeSingle();
       const { data: complex } = inq
@@ -117,15 +166,18 @@ Deno.serve(async (req) => {
       const messages = Array.isArray(body.messages) ? body.messages.slice(0, 50) : [];
       const results = [];
       const touched = new Set<string>();
-      const answered: { inquiryId: string; fromPhone: string; text: string }[] = [];
+      const answered: { inquiryId: string; fromPhone: string; text: string; photos: number }[] = [];
       for (const m of messages as Record<string, unknown>[]) {
         const r = await bridgeInbound(db, {
           fromPhone: String(m.fromPhone ?? ''), text: String(m.text ?? ''),
           providerMessageId: String(m.providerMessageId ?? ''),
-        });
+          photos: Array.isArray(m.photos) ? m.photos.map(String) : undefined,
+        }, photoStore(db));
         if (r.stored && 'requestId' in r) touched.add(r.requestId);
         if (r.stored && 'inquiryId' in r) {
-          answered.push({ inquiryId: r.inquiryId, fromPhone: String(m.fromPhone ?? ''), text: String(m.text ?? '') });
+          answered.push({
+            inquiryId: r.inquiryId, fromPhone: String(m.fromPhone ?? ''), text: String(m.text ?? ''), photos: r.photos,
+          });
         }
         results.push(r);
       }

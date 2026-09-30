@@ -1,7 +1,7 @@
 {
   "name": "hausto-zalo-bridge",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The always-on device that sends Hausto's approved messages to agents on Zalo and forwards their replies. See README.md.",
   "type": "module",
   "engines": {

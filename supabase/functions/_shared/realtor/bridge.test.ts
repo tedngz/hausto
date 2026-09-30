@@ -10,7 +10,7 @@ import { BridgeChannel } from './channel.ts';
 import { SupabaseRealtorMessageStore } from './store.ts';
 import { performOpsAction, type OpsDeps } from '../viewing/ops-actions.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
-import { bridgePull, bridgeAck, bridgeInbound, CLAIM_LEASE_MS } from './bridge.ts';
+import { bridgePull, bridgeAck, bridgeInbound, agentPhotoAllowed, CLAIM_LEASE_MS, type StorePhoto } from './bridge.ts';
 
 let db: FakeDb;
 let deps: OpsDeps;
@@ -139,5 +139,62 @@ describe('what the device hears', () => {
     const r = await bridgeInbound(db as any, { fromPhone: '0933333333', text: 'Con ăn cơm chưa?', providerMessageId: 'z1' });
     expect(r).toEqual({ stored: false, reason: 'not a known agent' });
     expect(db.tables.realtor_messages ?? []).toHaveLength(0);
+  });
+});
+
+describe("an agent's photos (S7.2b)", () => {
+  const INQ = '11111111-2222-4333-8444-555555555555';
+  const copied: { url: string; path: string }[] = [];
+  const store: StorePhoto = (url, path) => {
+    copied.push({ url, path });
+    return Promise.resolve(url.includes('broken') ? null : `https://storage.test/${path}.jpg`);
+  };
+  // deno-lint-ignore no-explicit-any
+  const inbound = (m: Record<string, unknown>) => bridgeInbound(db as any, { fromPhone: '+84901234567', text: '', providerMessageId: 'z', ...m } as never, store);
+
+  beforeEach(() => {
+    copied.length = 0;
+    // The last thing we sent this agent was an availability check.
+    db.tables.realtor_messages = [{
+      id: 'check-1', inquiry_id: INQ, request_id: null, item_id: null, realtor_id: 'realtor-1', direction: 'OUT',
+      purpose: 'AVAILABILITY_CHECK', status: 'SENT', body: 'Chào anh', created_at: '2026-09-30T02:00:00Z',
+    }];
+  });
+
+  it("copies them under the request's folder and keeps them on the reply", async () => {
+    const r = await inbound({ providerMessageId: 'z:77', text: 'Tầng 18 nè', photos: ['https://photo.zdn.vn/a.jpg', 'https://b-f1-zpg.zdn.vn/b.jpg'] });
+    expect(r).toMatchObject({ stored: true, inquiryId: INQ, photos: 2 });
+    expect(copied.map(c => c.path)).toEqual([`concierge/${INQ}/agent-z77-0`, `concierge/${INQ}/agent-z77-1`]);
+    expect(db.tables.realtor_messages.at(-1)).toMatchObject({
+      direction: 'IN', inquiry_id: INQ, body: 'Tầng 18 nè',
+      attachments: [{ url: `https://storage.test/concierge/${INQ}/agent-z77-0.jpg` }, { url: `https://storage.test/concierge/${INQ}/agent-z77-1.jpg` }],
+    });
+  });
+
+  it('stores a photo with no words, and says so when one could not be copied', async () => {
+    await inbound({ providerMessageId: 'p1', photos: ['https://photo.zdn.vn/a.jpg'] });
+    expect(db.tables.realtor_messages.at(-1)).toMatchObject({ body: '(photo)' });
+    await inbound({ providerMessageId: 'p2', photos: ['https://photo.zdn.vn/broken.jpg'] });
+    expect(db.tables.realtor_messages.at(-1)?.body).toMatch(/could not be copied/);
+    expect(db.tables.realtor_messages.at(-1)?.attachments).toBeUndefined();
+  });
+
+  it("fetches from Zalo's hosts only - a forged inbound cannot point it elsewhere", async () => {
+    const r = await inbound({ providerMessageId: 'p3', photos: ['https://evil.example/zdn.vn.jpg', 'http://photo.zdn.vn/a.jpg'] });
+    expect(r).toEqual({ stored: false, reason: 'empty' });
+    expect(copied).toHaveLength(0);
+    expect(agentPhotoAllowed('https://photo-stal-1.zdn.vn/x.jpg')).toBe(true);
+    expect(agentPhotoAllowed('https://zdn.vn.evil.com/x.jpg')).toBe(false);
+    expect(agentPhotoAllowed('https://evilzdn.vn/x.jpg')).toBe(false);
+    expect(agentPhotoAllowed('not a url')).toBe(false);
+  });
+
+  it("ignores a photo about a viewing request's unit, as before", async () => {
+    db.tables.realtor_messages = [{
+      id: 'ask-1', request_id: 'req-1', item_id: 'i1', realtor_id: 'realtor-1', direction: 'OUT',
+      purpose: 'REQUEST_VIEWING', status: 'SENT', body: 'Chào anh', created_at: '2026-09-30T02:00:00Z',
+    }];
+    expect(await inbound({ providerMessageId: 'p4', photos: ['https://photo.zdn.vn/a.jpg'] })).toEqual({ stored: false, reason: 'empty' });
+    expect(copied).toHaveLength(0);
   });
 });
