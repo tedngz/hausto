@@ -43,6 +43,11 @@ export interface InboundMessage {
   providerMessageId: string;
   text: string;
   timestamp: string;
+  /**
+   * When the renter swiped to reply to one of our messages: that message's
+   * WhatsApp id (`context.id`), which is our `messages.provider_id`.
+   */
+  contextId?: string;
 }
 
 // ── Phone numbers ─────────────────────────────────────────────────────────
@@ -153,6 +158,7 @@ export function parseInboundMessages(payload: any): InboundMessage[] {
           providerMessageId: String(m.id),
           text: String(text),
           timestamp: m?.timestamp ? new Date(Number(m.timestamp) * 1000).toISOString() : new Date().toISOString(),
+          ...(typeof m?.context?.id === 'string' && m.context.id ? { contextId: m.context.id } : {}),
         });
       }
     }

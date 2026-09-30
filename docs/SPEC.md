@@ -545,6 +545,26 @@ carries, falling back to the renter's newest request for a bare reply - and to
 nothing at all for a ref that does not resolve, since attaching a message to the
 wrong thread is worse than attaching it to none.
 
+**Which thread a reply answers** (`handleInbound` in `routing.ts`). A renter can
+have an itinerary, two buildings' availability requests and a weekly alert on
+the go at once, all in one WhatsApp chat. In order:
+
+1. A watch code is a watch code.
+2. **A swipe-reply names the message.** WhatsApp sends `context.id` - our
+   `messages.provider_id` - when the renter replies to a particular message, and
+   that wins over every guess: the older of two offers, the itinerary under
+   an alert. Only this renter's own messages count.
+3. **A bare "yes" goes to an itinerary waiting for one** (`DELIVERED`,
+   `itineraryAwaitingAnswer`), even if an offer went out since - "Reply YES to
+   lock these in" is the only question we ask that a bare yes answers. The
+   weekly alert is held while an itinerary waits, so its "reply if you would
+   like to see them" cannot collide with it.
+4. Otherwise the message it answers is the last one we sent: an alert whose
+   places have not gone out, or a request's thread - **every** thread that
+   message was filed on, so a reply to one offer covering two buildings is
+   filed on both (`inquiriesAnswered`).
+5. Otherwise a viewing request, by ref or the newest.
+
 `/dev/phone` is backed by the `dev-phone` function, which takes the same inbound
 path Meta's delivery does (`_shared/viewing/routing.ts`, shared by both) and
 refuses to run when `WHATSAPP_MODE=cloud` - an unauthenticated endpoint that
@@ -1001,11 +1021,12 @@ shows it whole. Additive: `channel` (`WHATSAPP` | `EMAIL`),
    gap; none exists yet. The consecutive-outbound rule (§5) holds: two
    messages without an answer and the next is refused - so the confirmation
    plus one concierge message, until the renter writes back.
-3. **The renter answers.** When the last thing we sent them is on a
-   request's thread (`inquiryAwaitingReply`), their message is filed there,
-   never attached to a viewing request (so a "yes" cannot confirm an
-   itinerary), answered by nothing automated, and mailed to the concierge as
-   "💬 replied on WhatsApp".
+3. **The renter answers.** When the message they answer - the one they
+   swiped to reply to, or else the last thing we sent - is on a request's
+   thread (`inquiriesAnswered`, §5), their message is filed there, answered by
+   nothing automated, and mailed to the concierge as "💬 replied on
+   WhatsApp". A bare "yes" while an itinerary waits for one goes to the
+   itinerary instead (§5).
 
 Admin Tools lists a WhatsApp request only once its code has arrived, with the
 hours left in the window.
@@ -1193,7 +1214,7 @@ writes; admins read `complex_watches`.
   nothing already in `alert_items`. One message per renter per ISO week
   (`DIGEST:<week>`): the `weekly_digest` template with the complex name as
   `{{3}}`, or free-form with the places in it if their window is open.
-- **Reply.** When the last thing we sent is an alert whose places have not
+- **Reply.** When the message they answer (§5) is an alert whose places have not
   gone out, anything but a no or STOP gets them free-form, with a link each
   (`ALERT_DETAILS`) - "show me" included, which the intent classifier reads
   as a search.

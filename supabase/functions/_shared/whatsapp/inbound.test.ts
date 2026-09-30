@@ -77,6 +77,15 @@ describe('payload parsing', () => {
     expect(got[0]).toMatchObject({ from: '+447700900123', providerMessageId: 'wamid.uk' });
   });
 
+  it('keeps which of our messages a swipe-reply answers', () => {
+    const got = parseInboundMessages(payload([
+      { from: '447700900123', id: 'wamid.r', text: { body: 'this one' }, context: { from: '84900000000', id: 'wamid.ours' } },
+      { from: '447700900123', id: 'wamid.s', text: { body: 'no swipe' } },
+    ]));
+    expect(got[0].contextId).toBe('wamid.ours');
+    expect(got[1]).not.toHaveProperty('contextId');
+  });
+
   it('returns nothing for a status callback', () => {
     // Delivery receipts arrive on the same endpoint with no messages array.
     expect(parseInboundMessages({ entry: [{ changes: [{ value: { statuses: [{ status: 'read' }] } }] }] })).toEqual([]);

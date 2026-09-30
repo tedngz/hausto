@@ -14,8 +14,9 @@ import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './se
 import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
 import { codeUsable, watchCodeFromMessage, type WatchProblem } from './watch.ts';
 import { pendingAlert } from './alerts.ts';
+import { itineraryAwaitingAnswer } from './open-request.ts';
 import {
-  confirmInquiryForWatch, inquiryAwaitingReply, recordInquiryInbound, type ConfirmedInquiry,
+  confirmInquiryForWatch, inquiriesAnswered, recordInquiryInbound, type ConfirmedInquiry,
 } from './concierge.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -65,8 +66,45 @@ export interface InboundOutcome {
   watch?: WatchOutcome;
   /** The alert this answers, when the last thing we sent was one (SPEC §11). */
   alertMessageId?: string;
-  /** The availability request this answers, when the last thing we sent was on its thread. */
+  /** The availability request this answers, when the message it answers was on its thread. */
   inquiryId?: string;
+  /** Every availability request it answers - one offer can cover several buildings. */
+  inquiryIds?: string[];
+}
+
+/** The message of ours a reply is about. */
+interface Answered {
+  id: string;
+  requestId: string | null;
+  createdAt: string;
+  /** True when WhatsApp told us: the renter swiped to reply to this message. */
+  explicit: boolean;
+}
+
+/**
+ * What a reply answers. When the renter swipes to reply to one of our
+ * messages, WhatsApp names it (`context.id`, our `provider_id`), and that wins
+ * over every guess: a renter with two buildings on the go can answer the older
+ * offer. Otherwise it is the last thing we sent them - a bare "yes" is about
+ * whatever we last asked.
+ */
+async function answeredMessage(db: Supa, phoneE164: string, contextId?: string): Promise<Answered | undefined> {
+  if (contextId) {
+    const { data } = await db
+      .from('messages').select('id, request_id, created_at')
+      .eq('provider_id', contextId).eq('to_phone', phoneE164).eq('direction', 'OUT')
+      .maybeSingle();
+    if (data) {
+      return { id: String(data.id), requestId: data.request_id ?? null, createdAt: String(data.created_at), explicit: true };
+    }
+  }
+  const { data: last } = await db
+    .from('messages').select('id, request_id, created_at')
+    .eq('to_phone', phoneE164).eq('direction', 'OUT')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return last
+    ? { id: String(last.id), requestId: last.request_id ?? null, createdAt: String(last.created_at), explicit: false }
+    : undefined;
 }
 
 export type WatchOutcome =
@@ -242,25 +280,42 @@ async function confirmWatch(
 export async function handleInbound(
   db: Supa,
   store: MessageStore,
-  m: { from: string; text: string; providerMessageId: string; timestamp: string },
+  m: { from: string; text: string; providerMessageId: string; timestamp: string; contextId?: string },
 ): Promise<InboundOutcome> {
   const renter = await upsertRenterByPhone(db, m.from);
   const now = new Date(m.timestamp);
+
+  // The reply is state, so it goes in the log - with what it meant, over the
+  // closed set in intent.ts.
+  const { intent } = classifyIntent(m.text);
 
   // A watch code, a reply to an alert, or a reply on an availability
   // request's thread is not about a viewing request - attaching it to their
   // newest one would put "yes" on the wrong thread, and on a delivered
   // itinerary it would confirm viewings they were not asked about. All three
   // are checked before the request is resolved, for that reason. The last two
-  // cannot both match: each asks what the last message we sent was.
+  // cannot both match: each asks which message of ours this answers.
+  //
+  // Except a "yes" while an itinerary waits for one. "Reply YES to lock these
+  // in" is the one question we ask that a bare yes answers, so an offer or an
+  // alert sent after it does not take the yes away from it - unless the
+  // renter swiped to reply to that other message, which says what they meant.
+  // (The weekly alert is held while an itinerary waits, so a yes to it cannot
+  // be mistaken for this.)
   const watchCode = watchCodeFromMessage(m.text);
-  const alertMessageId = watchCode ? undefined : await pendingAlert(db, renter.phone_e164, now);
-  const inquiryId = watchCode || alertMessageId
-    ? undefined
-    : await inquiryAwaitingReply(db, renter.phone_e164, now);
+  const answered = watchCode ? undefined : await answeredMessage(db, renter.phone_e164, m.contextId);
+  const awaitingYes = !watchCode && intent === 'CONFIRM' && !answered?.explicit
+    ? await itineraryAwaitingAnswer(db, renter.id)
+    : undefined;
+  const alertMessageId = watchCode || awaitingYes || !answered ? undefined : await pendingAlert(db, answered, now);
+  const inquiryIds = watchCode || awaitingYes || alertMessageId || !answered
+    ? []
+    : await inquiriesAnswered(db, answered, now);
+  const inquiryId = inquiryIds[0];
   const requestId = watchCode || alertMessageId || inquiryId
     ? undefined
-    : await resolveRequestId(db, renter.id, m.text);
+    : awaitingYes
+      ?? (answered?.explicit && answered.requestId ? answered.requestId : await resolveRequestId(db, renter.id, m.text));
 
   const message = await recordInbound(store, {
     renterId: renter.id,
@@ -269,10 +324,6 @@ export async function handleInbound(
     providerMessageId: m.providerMessageId,
     now: new Date(m.timestamp),
   });
-
-  // The reply is state, so it goes in the log - with what it meant, over the
-  // closed set in intent.ts.
-  const { intent } = classifyIntent(m.text);
 
   if (requestId) {
     // The wa.me handshake - the first message, carrying the ref the deep link
@@ -316,10 +367,10 @@ export async function handleInbound(
     if (inquiry) watch.inquiry = inquiry;
   }
 
-  // Filed on the request whatever it says - STOP included, since the
-  // concierge needs to see that too.
-  if (inquiryId) {
-    await recordInquiryInbound(db, { inquiryId, whatsappMessageId: message.id, body: m.text, now });
+  // Filed on each request it answers whatever it says - STOP included, since
+  // the concierge needs to see that too.
+  for (const id of inquiryIds) {
+    await recordInquiryInbound(db, { inquiryId: id, whatsappMessageId: message.id, body: m.text, now });
   }
 
   let optedOut = false;
@@ -335,6 +386,6 @@ export async function handleInbound(
     renterId: renter.id, requestId, message, optedOut, intent, confirmed, selection,
     ...(watch ? { watch } : {}),
     ...(alertMessageId ? { alertMessageId } : {}),
-    ...(inquiryId ? { inquiryId } : {}),
+    ...(inquiryId ? { inquiryId, inquiryIds } : {}),
   };
 }
