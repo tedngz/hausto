@@ -35,6 +35,24 @@ export class UnapprovedTemplateError extends Error {
   }
 }
 
+export class OptedOutError extends Error {
+  constructor(renterId: string, at: string) {
+    super(`Renter ${renterId} opted out at ${at}`);
+    this.name = 'OptedOutError';
+  }
+}
+
+/**
+ * The store's unique index said another caller already wrote this key. Its row
+ * is the message: the caller that lost the race must not send it again.
+ */
+export class DuplicateKeyError extends Error {
+  constructor(key: string) {
+    super(`A message with key ${key} already exists`);
+    this.name = 'DuplicateKeyError';
+  }
+}
+
 export class ConsecutiveMessageError extends Error {
   constructor(renterId: string, count: number) {
     super(
@@ -59,6 +77,11 @@ export interface MessageStore {
   /** Outbound messages since the renter's last inbound, newest first. */
   countConsecutiveOutbound(renterId: string): Promise<number>;
   getRenter(renterId: string): Promise<StoredRenter | null>;
+  /**
+   * Put a FAILED message back to QUEUED, to be sent again under the same key.
+   * Optional: a store without it treats a failed key as sent, as before.
+   */
+  requeue?(id: string): Promise<void>;
   touchServiceWindow(renterId: string, expiresAt: string): Promise<void>;
   /**
    * Meta's last-known status for a template, or null if never synced.
@@ -122,13 +145,34 @@ async function persistThenSend(
   delivery: Omit<DeliveryRequest, 'messageId'>,
 ): Promise<SendResult> {
   // Idempotency first: a retry must not produce a second row, let alone a
-  // second send.
+  // second send. A row that FAILED never reached anyone, so it is sent again on
+  // the same key - the key is what the message is, not how often we tried. A
+  // row left QUEUED by a crash may or may not have gone; it is not re-sent,
+  // because a lost message is caught by the silence clock and a duplicate one
+  // lands in a renter's phone.
   const existing = await store.findByIdempotencyKey(row.idempotency_key);
-  if (existing) return { message: existing, deduplicated: true };
-
-  // Persist. If the process dies after this line, the row is QUEUED and
-  // something can reconcile it. If it died before, nothing was sent.
-  const message = await store.insertQueued(row);
+  let message: StoredMessage;
+  if (existing && existing.status === 'FAILED' && store.requeue) {
+    await store.requeue(existing.id);
+    message = { ...existing, status: 'QUEUED' };
+  } else if (existing) {
+    return { message: existing, deduplicated: true };
+  } else {
+    // Persist. If the process dies after this line, the row is QUEUED and
+    // something can reconcile it. If it died before, nothing was sent.
+    try {
+      message = await store.insertQueued(row);
+    } catch (e) {
+      // Another send with this key got its row in between our read and our
+      // write. Theirs is the message; sending ours too is the double send the
+      // key exists to prevent.
+      if (e instanceof DuplicateKeyError) {
+        const theirs = await store.findByIdempotencyKey(row.idempotency_key);
+        if (theirs) return { message: theirs, deduplicated: true };
+      }
+      throw e;
+    }
+  }
 
   const result = await adapter.deliver({ ...delivery, messageId: message.id });
 
@@ -142,7 +186,7 @@ async function persistThenSend(
 
 async function assertCanSend(store: MessageStore, renter: StoredRenter): Promise<void> {
   if (renter.opted_out_at) {
-    throw new Error(`Renter ${renter.id} opted out at ${renter.opted_out_at}`);
+    throw new OptedOutError(renter.id, renter.opted_out_at);
   }
   const consecutive = await store.countConsecutiveOutbound(renter.id);
   if (consecutive >= MAX_CONSECUTIVE_OUTBOUND) {

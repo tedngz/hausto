@@ -12,7 +12,16 @@
 
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
-import { sendFreeForm, ServiceWindowClosedError, ConsecutiveMessageError } from '../whatsapp/send.ts';
+import {
+  sendFreeForm,
+  sendTemplate,
+  isWindowOpen,
+  ServiceWindowClosedError,
+  ConsecutiveMessageError,
+  OptedOutError,
+  UnapprovedTemplateError,
+} from '../whatsapp/send.ts';
+import { TEMPLATES } from '../whatsapp/templates.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import {
   assembleItinerary,
@@ -54,8 +63,19 @@ export interface DeliverOptions {
 
 export type DeliverResult =
   | { ok: true; messageId: string; deduplicated: boolean; stops: number; warnings: Warning[]; preview: string }
-  | { ok: false; code: 'unknown_request' | 'service_window_closed' | 'too_many_consecutive' | 'send_failed';
+  | { ok: false;
+      code: 'unknown_request' | 'service_window_closed' | 'too_many_consecutive' | 'opted_out' | 'template_unavailable' | 'send_failed';
       message: string; preview?: string };
+
+/** A short, stable fingerprint of a message's text (FNV-1a). */
+function fingerprint(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
 
 export async function deliver(
   db: Supa,
@@ -125,46 +145,70 @@ export async function deliver(
     text = renderHoldingUpdate({ ref: request.ref, view });
   }
 
-  // A holding update's key names the silence it breaks - when the renter last
-  // heard from us - so a retry of this one is the same message and the next
-  // one, a day on, is not. Keyed on the purpose alone, every holding update
-  // after a request's first was taken for a duplicate: it wrote no event, the
-  // clock never moved, and the drain queued it again every pass.
+  // The key says which message this is, so a retry is the same message and a
+  // different one is not. A holding update's names the silence it breaks -
+  // when the renter last heard from us - so the next, a day on, is new; keyed
+  // on the purpose alone, every one after a request's first was taken for a
+  // duplicate, wrote no event, and was queued again every pass. An
+  // itinerary's names its words, so sending the same plan twice is one
+  // message and sending a changed plan is a second, rather than a silent
+  // "already sent".
   const purpose = opts.purpose === 'HOLDING_UPDATE'
     ? `HOLDING_UPDATE:${new Date(lastHeardFromUs((events ?? []) as DomainEvent[], request.created_at)).toISOString()}`
-    : opts.purpose;
+    : `ITINERARY:${fingerprint(text)}`;
 
   const store = new SupabaseMessageStore(db);
   let messageId: string;
   let deduplicated = false;
+  // With their window shut, a holding update can still reach them as the
+  // request_update template - "we have an update on your request, reply here
+  // to see it". Their reply opens the window and an operator answers it. The
+  // itinerary has no such fallback here: it is the operator's to send.
+  let viaTemplate = false;
 
   try {
-    const result = await sendFreeForm(store, adapter, {
-      renterId: request.renter_id,
-      requestId: opts.requestId,
-      purpose,
-      body: text,
-      attempt: opts.attempt ?? 1,
-    });
+    const renter = opts.purpose === 'HOLDING_UPDATE' ? await store.getRenter(request.renter_id) : null;
+    viaTemplate = !!renter && !isWindowOpen(renter, new Date());
+    const result = viaTemplate
+      ? await sendTemplate(store, adapter, {
+        renterId: request.renter_id,
+        requestId: opts.requestId,
+        purpose,
+        templateName: TEMPLATES.REQUEST_UPDATE.name,
+        params: [await firstName(db, request.renter_id), listings.length === 1 ? listings[0].listingTitle : `${listings.length} places`],
+        attempt: opts.attempt ?? 1,
+      })
+      : await sendFreeForm(store, adapter, {
+        renterId: request.renter_id,
+        requestId: opts.requestId,
+        purpose,
+        body: text,
+        attempt: opts.attempt ?? 1,
+      });
     messageId = result.message.id;
     deduplicated = result.deduplicated;
+    if (result.message.status === 'FAILED') {
+      return { ok: false, code: 'send_failed', message: 'WhatsApp refused the message.', preview: text };
+    }
   } catch (e) {
     if (e instanceof ServiceWindowClosedError) {
-      // The human-blocked dependency surfacing, not a bug. Re-opening a window
-      // needs an approved template and none of the four are approved, so there
-      // is nothing to fall back to - and writing a SENT row for a message
+      // The itinerary, with the window shut. Writing a SENT row for a message
       // nobody receives would be worse than refusing.
       return {
         ok: false,
         code: 'service_window_closed',
-        message:
-          'The renter has not messaged us in 24h, so a free-form send is illegal. ' +
-          'Re-opening needs an approved template - none are approved yet (templates.ts).',
+        message: 'The renter has not messaged us in 24h, so a free-form send is illegal. It goes once they write.',
         preview: text,
       };
     }
+    if (e instanceof UnapprovedTemplateError) {
+      return { ok: false, code: 'template_unavailable', message: (e as Error).message, preview: text };
+    }
     if (e instanceof ConsecutiveMessageError) {
       return { ok: false, code: 'too_many_consecutive', message: (e as Error).message, preview: text };
+    }
+    if (e instanceof OptedOutError) {
+      return { ok: false, code: 'opted_out', message: (e as Error).message, preview: text };
     }
     return { ok: false, code: 'send_failed', message: (e as Error).message, preview: text };
   }
@@ -192,7 +236,7 @@ export async function deliver(
     // clock and nothing else. Only the itinerary is ITINERARY_DELIVERED,
     // because only that means the plan has gone out.
     type: opts.purpose === 'ITINERARY' ? 'ITINERARY_DELIVERED' : 'HOLDING_UPDATE_SENT',
-    payload: { message_id: messageId },
+    payload: { message_id: messageId, ...(viaTemplate ? { via: 'TEMPLATE' } : {}) },
     actor,
   });
 
@@ -253,4 +297,10 @@ async function findSubstitutes(db: Supa, requestId: string) {
     console.error('[deliver] substitute search failed, sending without:', (e as Error).message);
     return [];
   }
+}
+
+/** The renter's first name for a template, or "there". */
+async function firstName(db: Supa, renterId: string): Promise<string> {
+  const { data } = await db.from('renters').select('display_name').eq('id', renterId).maybeSingle();
+  return String(data?.display_name ?? '').trim().split(/\s+/)[0] || 'there';
 }

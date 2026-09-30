@@ -31,10 +31,14 @@ export const SILENCE_ACTION_MS = 20 * HOUR_MS;
 /** How long to leave a broker before chasing. */
 export const NUDGE_AFTER_MS = 6 * HOUR_MS;
 
+/** How long a delivered plan may go unanswered before a person looks at it. */
+export const CHASE_RENTER_AFTER_MS = 48 * HOUR_MS;
+
 export type ActionKind =
   | 'HOLDING_UPDATE'     // the renter has heard nothing and the clock is running out
   | 'NUDGE_REALTOR'      // a broker has been contacted and has not replied
   | 'VIEWING_DAY'        // a kept viewing is today: where, who, and the agent's number if agreed
+  | 'CHASE_RENTER'       // the plan went out and the renter has not answered - a person decides
   | 'CONFIRM_REALTOR'    // the renter kept this viewing; the broker has not been told
   | 'RELEASE_REALTOR';   // the broker is holding time nobody will use
 
@@ -114,6 +118,23 @@ export function dueActions(input: ScheduleInput): DueAction[] {
       });
     }
 
+    // The plan is with the renter and they have said nothing. Not a message -
+    // whether to ask again, wait, or cancel is a person's call, and a chaser
+    // sent by a timer to someone mulling over flats is how a number gets
+    // reported. A to-do in the console instead; the drain closes it once the
+    // renter answers or an operator writes to them.
+    if (view.state === 'DELIVERED') {
+      const last = lastHeardFromUs(events, createdAt);
+      const answered = events.some(e => e.type === 'RENTER_REPLIED' && Date.parse(e.occurred_at) > last);
+      if (!answered && now - last >= CHASE_RENTER_AFTER_MS) {
+        actions.push({
+          kind: 'CHASE_RENTER',
+          requestId,
+          reason: `no answer to the plan for ${Math.floor((now - last) / HOUR_MS)}h`,
+        });
+      }
+    }
+
     // Brokers contacted and silent. One nudge per pass; the two-nudge floor on
     // NO_RESPONSE (SPEC §4) is what these feed.
     for (const item of Object.values(view.items)) {
@@ -153,7 +174,18 @@ export function dueActions(input: ScheduleInput): DueAction[] {
  * their window shut nothing free-form may reach them, and after two unanswered
  * messages the third is refused. Writing to us lifts both.
  */
-export const RENTER_BOUND_REFUSALS = ['service_window_closed', 'too_many_consecutive'] as const;
+export const RENTER_BOUND_REFUSALS = ['service_window_closed', 'too_many_consecutive', 'opted_out'] as const;
+
+/**
+ * Why a holding update went unsent that only time can change: the
+ * request_update template it falls back to is not approved (or Meta paused it).
+ * Tried again a day later rather than every 15 minutes.
+ */
+export const TIMED_REFUSALS = ['template_unavailable'] as const;
+export const REFUSAL_HOLD_MS = 24 * HOUR_MS;
+
+/** Every refusal the drain holds on - the ones it should read back. */
+export const HELD_REFUSALS = [...RENTER_BOUND_REFUSALS, ...TIMED_REFUSALS];
 
 /**
  * Should a holding update wait, having been refused for one of those? Yes,
@@ -163,8 +195,17 @@ export const RENTER_BOUND_REFUSALS = ['service_window_closed', 'too_many_consecu
  * Without this the drain queued the same refusal every 15 minutes for as long
  * as the request lived - 955 rows for one renter who had stopped replying.
  */
-export function holdingUpdateOnHold(opts: { refusedAt: string | null; windowExpiresAt: string | null }): boolean {
+export function holdingUpdateOnHold(opts: {
+  refusedAt: string | null;
+  windowExpiresAt: string | null;
+  /** Why it was refused. Omitted, it is one only the renter can lift. */
+  reason?: string | null;
+  now?: number;
+}): boolean {
   if (!opts.refusedAt) return false;
+  if (opts.reason && (TIMED_REFUSALS as readonly string[]).includes(opts.reason)) {
+    return (opts.now ?? Date.now()) - Date.parse(opts.refusedAt) < REFUSAL_HOLD_MS;
+  }
   if (!opts.windowExpiresAt) return true;
   const lastInbound = Date.parse(opts.windowExpiresAt) - SERVICE_WINDOW_MS;
   return lastInbound <= Date.parse(opts.refusedAt);

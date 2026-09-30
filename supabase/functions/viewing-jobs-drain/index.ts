@@ -12,7 +12,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { reduceRequest, type DomainEvent } from '../_shared/viewing-domain.ts';
-import { dueActions, holdingUpdateOnHold, RENTER_BOUND_REFUSALS } from '../_shared/viewing/reminders.ts';
+import { dueActions, holdingUpdateOnHold, HELD_REFUSALS } from '../_shared/viewing/reminders.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
   // What is already queued, so a second pass does not double it.
   const { data: pending } = await db
     .from('jobs').select('kind, payload').is('completed_at', null)
-    .in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_DAY', 'CONFIRM_REALTOR', 'RELEASE_REALTOR']);
+    .in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_DAY', 'CONFIRM_REALTOR', 'RELEASE_REALTOR', 'CHASE_RENTER']);
   // A viewing-day job that finished without sending (a refusal no retry
   // fixes) counts as queued for the rest of the day. Otherwise every pass
   // would queue the same refusal again until the last viewing started.
@@ -97,12 +97,14 @@ Deno.serve(async (req) => {
   // Holding updates refused for a reason only the renter can lift, and when -
   // with each renter's window, whose start is when they last wrote.
   const { data: refused } = await db
-    .from('jobs').select('payload, completed_at').eq('kind', 'HOLDING_UPDATE')
-    .in('last_error', [...RENTER_BOUND_REFUSALS]).gte('completed_at', horizon);
-  const refusedAt = new Map<string, string>();
-  for (const j of (refused ?? []) as { payload: Record<string, unknown>; completed_at: string }[]) {
+    .from('jobs').select('payload, completed_at, last_error').eq('kind', 'HOLDING_UPDATE')
+    .in('last_error', HELD_REFUSALS).gte('completed_at', horizon);
+  const lastRefusal = new Map<string, { at: string; reason: string }>();
+  for (const j of (refused ?? []) as { payload: Record<string, unknown>; completed_at: string; last_error: string }[]) {
     const id = String(j.payload?.request_id ?? '');
-    if (id && (!refusedAt.has(id) || j.completed_at > refusedAt.get(id)!)) refusedAt.set(id, j.completed_at);
+    if (id && (!lastRefusal.has(id) || j.completed_at > lastRefusal.get(id)!.at)) {
+      lastRefusal.set(id, { at: j.completed_at, reason: j.last_error });
+    }
   }
   const renterIds = [...new Set((requests as { renter_id: string | null }[]).map(r => r.renter_id).filter(Boolean))];
   const { data: renters } = renterIds.length
@@ -113,16 +115,21 @@ Deno.serve(async (req) => {
 
   const rows: Record<string, unknown>[] = [];
   let held = 0;
+  // Requests whose "chase the renter" to-do is still owed this pass.
+  const stillChasing = new Set<string>();
   for (const r of requests as { id: string; created_at: string; renter_id: string | null }[]) {
     const events = byRequest.get(r.id) ?? [];
     const view = reduceRequest(r.id, events);
 
     for (const action of dueActions({ view, events, createdAt: r.created_at, now })) {
+      if (action.kind === 'CHASE_RENTER') stillChasing.add(r.id);
       if (queued.has(jobKey(action))) continue;
       // Refused last time for a reason a retry cannot fix, and the renter has
       // not written since: queueing it again is queueing the same refusal.
       if (action.kind === 'HOLDING_UPDATE' && holdingUpdateOnHold({
-        refusedAt: refusedAt.get(r.id) ?? null,
+        refusedAt: lastRefusal.get(r.id)?.at ?? null,
+        reason: lastRefusal.get(r.id)?.reason ?? null,
+        now,
         windowExpiresAt: r.renter_id ? windowOf.get(r.renter_id) ?? null : null,
       })) {
         held++;
@@ -138,6 +145,16 @@ Deno.serve(async (req) => {
         },
       });
     }
+  }
+
+  // A chase nobody needs any more - they answered, or an operator wrote to
+  // them, or the request closed - comes off the console by itself.
+  const scanned = new Set((requests as { id: string }[]).map(r => r.id));
+  for (const j of (pending ?? []) as { kind: string; payload: Record<string, unknown> }[]) {
+    const id = String(j.payload?.request_id ?? '');
+    if (j.kind !== 'CHASE_RENTER' || !scanned.has(id) || stillChasing.has(id)) continue;
+    await db.from('jobs').update({ completed_at: new Date(now).toISOString(), last_error: 'no longer owed' })
+      .eq('kind', 'CHASE_RENTER').is('completed_at', null).eq('payload->>request_id', id);
   }
 
   if (rows.length > 0) {

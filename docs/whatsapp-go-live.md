@@ -183,7 +183,7 @@ renamed or reordered template is a refusal, not a silent mis-send.
 | `viewing_reminder` | `renter_name`, `viewing_time`, `listing_address` | Utility | Since 2026-09-30 the viewing-day message when the window has shut (SPEC §9): sent the morning of, `viewing_time` is "today at 10:00", and `listing_address` carries every viewing that day on one line - where to meet, the agent's name, and their number if they agreed. |
 | `no_supply_substitutes` | `renter_name`, `request_ref` | Utility | Nothing could be confirmed. Never sent alone - it carries substitutes. |
 | `weekly_digest` | `renter_name`, `new_count`, `area_summary` | **Marketing** | The weekly new-listing digest. See the warning below. |
-| `request_update` | `renter_name`, `complex_name` | Utility | **Not yet submitted.** An availability request has news after the 24-hour window shut (SPEC §11). Carries no news itself: the renter replies and the offer goes free-form. |
+| `request_update` | `renter_name`, `complex_name` | Utility | **Not yet submitted.** An availability request has news after the 24-hour window shut (SPEC §11), or a viewing request owes a holding update with the window shut (SPEC §9; `{{2}}` is then the listing title or "3 places"). Carries no news itself: the renter replies and the detail goes free-form. |
 
 ### `weekly_digest` is not like the other four
 
