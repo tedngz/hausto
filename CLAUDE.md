@@ -69,8 +69,13 @@ Write to `messages` with `status='QUEUED'`, then send, then update. Never send
 first. Idempotency key on every send.
 
 **4. Never expose a renter's phone number or name to the ops console realtor
-view, and never put a realtor's phone number in renter-facing output.**
-Enforce at the query layer, not the template layer.
+view, and never put a realtor's phone number in renter-facing output - except
+on the day of a viewing the renter kept, with that agent's consent.**
+Enforce at the query layer, not the template layer. The exception (owner's
+decision, 2026-09-30) lives in one function, `dayStops` in
+`_shared/viewing/viewing-day.ts`, and the viewing-day message is its only
+caller (SPEC §6, §9). Do not add a second path that puts an agent's number in
+front of a renter.
 
 **5. Partial success is the happy path.**
 Any code that assumes all requested listings will be confirmed is wrong. Three of

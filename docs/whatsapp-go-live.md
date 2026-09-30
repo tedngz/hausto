@@ -180,7 +180,7 @@ renamed or reordered template is a refusal, not a silent mis-send.
 |---|---|---|---|
 | `request_received` | `renter_name`, `request_ref`, `listing_count` | Utility | Acknowledges intake. First contact, so there is no open window yet. |
 | `itinerary_ready` | `renter_name`, `confirmed_count`, `first_viewing_time` | Utility | The consolidated itinerary. One message carrying every confirmed viewing. |
-| `viewing_reminder` | `renter_name`, `viewing_time`, `listing_address` | Utility | Day-before reminder, typically outside the window. |
+| `viewing_reminder` | `renter_name`, `viewing_time`, `listing_address` | Utility | Since 2026-09-30 the viewing-day message when the window has shut (SPEC §9): sent the morning of, `viewing_time` is "today at 10:00", and `listing_address` carries every viewing that day on one line - where to meet, the agent's name, and their number if they agreed. |
 | `no_supply_substitutes` | `renter_name`, `request_ref` | Utility | Nothing could be confirmed. Never sent alone - it carries substitutes. |
 | `weekly_digest` | `renter_name`, `new_count`, `area_summary` | **Marketing** | The weekly new-listing digest. See the warning below. |
 | `request_update` | `renter_name`, `complex_name` | Utility | **Not yet submitted.** An availability request has news after the 24-hour window shut (SPEC §11). Carries no news itself: the renter replies and the offer goes free-form. |

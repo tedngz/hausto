@@ -36,6 +36,13 @@ export const EVENT_TYPES = [
   // RELEASE (stop holding the slot). Owed once per item after the request
   // closes - see reminders.ts. Moves no state; the item's outcome stands.
   'REALTOR_NOTIFIED',
+  // Where to meet, the agent's first name, and whether the agent agreed to
+  // their number going to the renter on the day (viewing-day.ts). Per item;
+  // the latest stands. Moves no state.
+  'VIEWING_DETAILS_RECORDED',
+  // The viewing-day message went out, for one Ho Chi Minh City date. Moves no
+  // state; the scheduler reads it so a day is sent once.
+  'VIEWING_DAY_SENT',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
   'REQUEST_FAILED',
@@ -172,6 +179,19 @@ export interface ItemView {
   realtorId?: string;
   /** Set once the broker has been told the renter's decision. */
   notified?: RealtorDecision;
+  /** How the renter finds the viewing on the day (VIEWING_DETAILS_RECORDED). */
+  details?: ViewingDetails;
+}
+
+/**
+ * What the viewing-day message needs from the agent, recorded by an operator.
+ * `sharePhone` is the agent's consent, not a preference of ours: without it the
+ * renter reaches the agent through us (CLAUDE.md invariant 4).
+ */
+export interface ViewingDetails {
+  meetingPoint: string;
+  agentFirstName: string | null;
+  sharePhone: boolean;
 }
 
 export interface RequestView {
@@ -184,6 +204,8 @@ export interface RequestView {
   failureReason?: string;
   substituteListingIds: string[];
   cancelledReason?: string;
+  /** Ho Chi Minh City dates whose viewing-day message has gone out. */
+  viewingDaysSent: string[];
 }
 
 /**
@@ -224,6 +246,7 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
     itineraryOrder: [],
     confirmedItemIds: [],
     substituteListingIds: [],
+    viewingDaysSent: [],
   };
 
   const item = (id: string): ItemView => {
@@ -318,6 +341,23 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         }
         break;
       }
+
+      case 'VIEWING_DETAILS_RECORDED': {
+        // Logistics, not progress: a meeting point moves no item. Kept whatever
+        // the item's state, so the log reduces the same in any order; whether
+        // the details are ever used is decided where they are read.
+        if (!e.item_id || typeof p.meeting_point !== 'string' || !p.meeting_point) break;
+        item(e.item_id).details = {
+          meetingPoint: p.meeting_point,
+          agentFirstName: typeof p.agent_first_name === 'string' && p.agent_first_name ? p.agent_first_name : null,
+          sharePhone: p.share_phone === true,
+        };
+        break;
+      }
+
+      case 'VIEWING_DAY_SENT':
+        if (typeof p.date === 'string' && !view.viewingDaysSent.includes(p.date)) view.viewingDaysSent.push(p.date);
+        break;
 
       case 'REPLY_SENT':
       case 'REPLIES_ACKNOWLEDGED':

@@ -20,13 +20,13 @@ const LABEL: Record<string, string> = {
   NUDGE_REALTOR: 'Chase the agent',
   RESOLVE_REALTOR: 'Find a working number',
   HOLDING_UPDATE: 'Holding update to the renter',
-  VIEWING_REMINDER: 'Viewing reminder',
+  VIEWING_DAY: 'Viewing-day message',
   CONFIRM_REALTOR: 'Confirm with the agent',
   RELEASE_REALTOR: 'Release the agent',
 };
 
 /** Kinds the runner sends by itself - shown for visibility, not as work. */
-const AUTOMATED = new Set(['HOLDING_UPDATE', 'VIEWING_REMINDER']);
+const AUTOMATED = new Set(['HOLDING_UPDATE', 'VIEWING_DAY']);
 
 export function Tasks({ requestId, titleFor }: { requestId: string; titleFor: (itemId: string) => string }) {
   const [jobs, setJobs] = useState<Job[]>([]);

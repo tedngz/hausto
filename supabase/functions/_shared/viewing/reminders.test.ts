@@ -3,7 +3,6 @@ import {
   dueActions,
   lastHeardFromUs,
   renderHoldingUpdate,
-  renderViewingReminder,
   HOUR_MS,
   MAX_SILENCE_MS,
   SILENCE_ACTION_MS,
@@ -101,20 +100,36 @@ describe('what is due', () => {
     expect(base(events, 400 * HOUR_MS)).toHaveLength(0);
   });
 
-  it('still reminds a confirmed request about tomorrow\'s viewing', () => {
-    // Closed for coordination is not closed for the renter.
+  it('still owes a confirmed request its viewing-day message, on the day', () => {
+    // Closed for coordination is not closed for the renter. T0 is 07:00 in Ho
+    // Chi Minh City, so 75h on is 10:00 there three days later, and the
+    // message is due from 07:00 that morning (72h).
     const events = logOf(
       ...submitted(1),
-      ev('OUTCOME_RECORDED', 1 * HOUR_MS, { outcome: 'CONFIRMED', slots: [{ starts_at: at(72 * HOUR_MS), duration_minutes: 30 }] }, 'i1'),
+      ev('OUTCOME_RECORDED', 1 * HOUR_MS, { outcome: 'CONFIRMED', slots: [{ starts_at: at(75 * HOUR_MS), duration_minutes: 30 }] }, 'i1'),
       ev('ITINERARY_DELIVERED', 2 * HOUR_MS, { message_id: 'm1' }),
       ev('REQUEST_CONFIRMED', 3 * HOUR_MS, { confirmed_item_ids: ['i1'] }),
     );
-    const slots = [{ itemId: 'i1', startsAt: at(72 * HOUR_MS) }];
     const view = reduceRequest('r', events);
-    const early = dueActions({ view, events, createdAt: at(0), now: T0 + 40 * HOUR_MS, slots });
-    expect(early.map(a => a.kind)).not.toContain('VIEWING_REMINDER');
-    const due = dueActions({ view, events, createdAt: at(0), now: T0 + 60 * HOUR_MS, slots });
-    expect(due.map(a => a.kind)).toContain('VIEWING_REMINDER');
+    const kinds = (h: number) => dueActions({ view, events, createdAt: at(0), now: T0 + h * HOUR_MS }).map(a => a.kind);
+    // Not the evening before: the agent's number goes out on the day or not at all.
+    expect(kinds(60)).not.toContain('VIEWING_DAY');
+    expect(kinds(71.9)).not.toContain('VIEWING_DAY');
+    expect(kinds(72)).toContain('VIEWING_DAY');
+    const due = dueActions({ view, events, createdAt: at(0), now: T0 + 73 * HOUR_MS });
+    expect(due.find(a => a.kind === 'VIEWING_DAY')).toMatchObject({ requestId: 'r', date: '2026-09-14' });
+  });
+
+  it('owes the viewing-day message once per day', () => {
+    const events = logOf(
+      ...submitted(1),
+      ev('OUTCOME_RECORDED', 1 * HOUR_MS, { outcome: 'CONFIRMED', slots: [{ starts_at: at(75 * HOUR_MS), duration_minutes: 30 }] }, 'i1'),
+      ev('ITINERARY_DELIVERED', 2 * HOUR_MS, { message_id: 'm1' }),
+      ev('REQUEST_CONFIRMED', 3 * HOUR_MS, { confirmed_item_ids: ['i1'] }),
+      ev('VIEWING_DAY_SENT', 72 * HOUR_MS, { date: '2026-09-14', message_id: 'm2' }),
+    );
+    const due = dueActions({ view: reduceRequest('r', events), events, createdAt: at(0), now: T0 + 73 * HOUR_MS });
+    expect(due.map(a => a.kind)).not.toContain('VIEWING_DAY');
   });
 
   it('does not remind about a viewing that has already happened', () => {
@@ -125,11 +140,8 @@ describe('what is due', () => {
       ev('REQUEST_CONFIRMED', 3 * HOUR_MS, { confirmed_item_ids: ['i1'] }),
     );
     const view = reduceRequest('r', events);
-    const due = dueActions({
-      view, events, createdAt: at(0), now: T0 + 20 * HOUR_MS,
-      slots: [{ itemId: 'i1', startsAt: at(10 * HOUR_MS) }],
-    });
-    expect(due.map(a => a.kind)).not.toContain('VIEWING_REMINDER');
+    const due = dueActions({ view, events, createdAt: at(0), now: T0 + 20 * HOUR_MS });
+    expect(due.map(a => a.kind)).not.toContain('VIEWING_DAY');
   });
 });
 
@@ -232,34 +244,6 @@ describe('the holding update', () => {
   it('does not claim progress it has not made', () => {
     const text = renderHoldingUpdate({ ref: 'HV-4KX7', view: reduceRequest('r', logOf(...submitted(4))) });
     expect(text).toContain('waiting on 4 agents');
-  });
-});
-
-describe('the viewing reminder', () => {
-  const opts = {
-    ref: 'HV-4KX7',
-    listingTitle: 'Sunny 2BR in Thao Dien',
-    startsAt: '2026-09-15T03:00:00Z',
-    districtCode: 'HCM-D2',
-  };
-
-  it('names the one viewing, in local time', () => {
-    // One viewing per message, not the whole plan again: this is a nudge about
-    // tomorrow, and 03:00Z is 10:00 in Ho Chi Minh City.
-    const text = renderViewingReminder(opts);
-    expect(text).toContain('Sunny 2BR in Thao Dien');
-    expect(text).toContain('10:00');
-    expect(text).not.toContain('03:00');
-  });
-
-  it('routes a change back through us, never to the broker', () => {
-    const text = renderViewingReminder(opts);
-    expect(text).toContain('Reply here');
-    expect(text).not.toMatch(/\+?84\d{7,}/);
-  });
-
-  it('stays one short message, because each one is billed', () => {
-    expect(renderViewingReminder(opts).split('\n')).toHaveLength(3);
   });
 });
 

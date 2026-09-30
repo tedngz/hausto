@@ -342,3 +342,44 @@ describe('what paste-parse suggested travels with the outcome', () => {
     expect(payload.suggested.outcome).toBeNull();
   });
 });
+
+describe('where to meet on the day (viewing-day.ts)', () => {
+  const details = { meetingPoint: 'Lobby of tower L4, 208 Nguyen Huu Canh', agentFirstName: 'Minh', sharePhone: false };
+
+  it('waits for the agent to confirm a time', async () => {
+    const r = await act({ action: 'VIEWING_DETAILS', itemId: 'i1', ...details });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe('not_confirmed');
+    expect(eventsOf('VIEWING_DETAILS_RECORDED')).toHaveLength(0);
+  });
+
+  it('records the details as an event that moves nothing', async () => {
+    seedEvent('OUTCOME_RECORDED', { outcome: 'CONFIRMED', slots: [{ starts_at: SLOT.startsAt, duration_minutes: 30 }] }, 'i1');
+    const r = await act({ action: 'VIEWING_DETAILS', itemId: 'i1', ...details });
+    expect(r.status).toBe(200);
+    expect(eventsOf('VIEWING_DETAILS_RECORDED')[0]).toMatchObject({
+      item_id: 'i1', actor: ACTOR,
+      payload: { meeting_point: details.meetingPoint, agent_first_name: 'Minh', share_phone: false },
+    });
+    expect(view().items.i1).toMatchObject({ state: 'CONFIRMED', details: { sharePhone: false } });
+  });
+
+  it('refuses a number typed into the meeting point, and records nothing', async () => {
+    seedEvent('OUTCOME_RECORDED', { outcome: 'CONFIRMED', slots: [{ starts_at: SLOT.startsAt, duration_minutes: 30 }] }, 'i1');
+    const r = await act({ action: 'VIEWING_DETAILS', itemId: 'i1', ...details, meetingPoint: 'Gate 2, call 0901 234 567' });
+    expect(r.status).toBe(400);
+    expect(eventsOf('VIEWING_DETAILS_RECORDED')).toHaveLength(0);
+  });
+
+  it('cannot promise to share a number nobody has', async () => {
+    seedEvent('OUTCOME_RECORDED', { outcome: 'CONFIRMED', slots: [{ starts_at: SLOT.startsAt, duration_minutes: 30 }] }, 'i1');
+    const refused = await act({ action: 'VIEWING_DETAILS', itemId: 'i1', ...details, sharePhone: true });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toBe('no_contact');
+
+    await act({ action: 'RECORD_CONTACT', itemId: 'i1', phone: '0901234567', name: 'Minh' });
+    const ok = await act({ action: 'VIEWING_DETAILS', itemId: 'i1', ...details, sharePhone: true });
+    expect(ok.status).toBe(200);
+    expect(view().items.i1.details?.sharePhone).toBe(true);
+  });
+});

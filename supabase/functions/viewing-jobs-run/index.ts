@@ -20,6 +20,7 @@ import { deliver } from '../_shared/viewing/deliver.ts';
 import { INQUIRY_DEADLINE_JOB } from '../_shared/viewing/inquiry-deadline.ts';
 import { runInquiryDeadline } from '../_shared/viewing/concierge.ts';
 import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
+import { sendViewingDay } from '../_shared/viewing/viewing-day.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,7 +31,10 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 /** Kinds this runner owns. Everything else is somebody's to-do, not a task. */
-const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_REMINDER', INQUIRY_DEADLINE_JOB];
+const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_DAY', INQUIRY_DEADLINE_JOB];
+
+/** A viewing-day refusal no retry can change: done, with the reason on the row. */
+const VIEWING_DAY_FINAL = new Set(['unknown_request', 'not_due', 'too_many_consecutive', 'template_unavailable']);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -116,10 +120,26 @@ Deno.serve(async (req) => {
     }
 
     try {
+      // The morning of a kept viewing (viewing-day.ts): one message for the
+      // renter's whole day, whichever of their requests' jobs gets here first.
+      if (job.kind === 'VIEWING_DAY') {
+        const day = await sendViewingDay(db, adapter, {
+          requestId, now: new Date(), attempt: job.attempts, actor: 'SYSTEM',
+        });
+        if (day.ok || VIEWING_DAY_FINAL.has(day.code)) {
+          await db.from('jobs').update({
+            completed_at: new Date().toISOString(),
+            last_error: day.ok ? null : day.code,
+          }).eq('id', job.id);
+          if (day.ok) sent++; else skipped++;
+          continue;
+        }
+        throw new Error(`${day.code}: ${day.message}`);
+      }
+
       const result = await deliver(db, adapter, {
         requestId,
-        purpose: job.kind === 'VIEWING_REMINDER' ? 'VIEWING_REMINDER' : 'HOLDING_UPDATE',
-        itemId: job.payload?.item_id ?? undefined,
+        purpose: 'HOLDING_UPDATE',
         // The attempt is the job's own retry count, so a retry reuses the same
         // idempotency key only when it is genuinely the same attempt.
         attempt: job.attempts,

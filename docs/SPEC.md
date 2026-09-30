@@ -369,6 +369,8 @@ Event types:
 | `OUTCOME_RECORDED` | item | `{outcome, slots[], actual_price_vnd, note, reply_message_id?, suggested?}` - see §4 |
 | `ITEM_NUDGED` | item | `{attempt, message_id?}` |
 | `REALTOR_NOTIFIED` | item | `{decision, message_id}` - `decision` ∈ `CONFIRM`, `RELEASE`. Moves no state; sets `notified` on the item view |
+| `VIEWING_DETAILS_RECORDED` | item | `{meeting_point, agent_first_name, share_phone}` - what the viewing-day message needs (§9). The latest stands; moves no state; sets `details` on the item view |
+| `VIEWING_DAY_SENT` | request | `{date, message_id, item_ids[], shared_phone_item_ids[]}` - the viewing-day message for one Ho Chi Minh City date, written on every request it covered. Moves no state; the scheduler reads it so a day is sent once |
 | `ITINERARY_ASSEMBLED` | request | `{ordered_item_ids[], warnings[]}` |
 | `ITINERARY_DELIVERED` | request | `{message_id}` |
 | `HOLDING_UPDATE_SENT` | request | `{message_id}` - something the renter heard that was not the itinerary |
@@ -481,6 +483,7 @@ same actions under `AGENT:<version>`, never a second implementation.
 | `OUTCOME` | item | optional IN row, `OUTCOME_RECORDED` with `reply_message_id` |
 | `RECORD_CONTACT` | item | `realtors` (by E.164), `request_items.realtor_id`, `REALTOR_RESOLVED {method: MANUAL}`; enriches `external_properties.realtor_id` and `realtor_identities`; completes `RESOLVE_REALTOR` |
 | `NOTIFY_REALTOR` | item | OUT row, `REALTOR_NOTIFIED`; refused unless the log says that decision is owed |
+| `VIEWING_DETAILS` | item | `VIEWING_DETAILS_RECORDED`; refused unless the item is `CONFIRMED`, when the free text carries any phone number, or when `sharePhone` is true and the item has no agent contact (§9) |
 | `REPLY` | request | `messages` via `sendFreeForm` (window and 3-in-a-row rules apply), `REPLY_SENT` |
 | `ACK_REPLIES` | request | `REPLIES_ACKNOWLEDGED`; refused when nothing is waiting |
 | `CANCEL_REQUEST` | request | `REQUEST_CANCELLED {reason, note?}`; completes open `CONFIRM_REALTOR`, `NUDGE_REALTOR` and `RESOLVE_REALTOR` jobs. Refunds nothing - credits paid for an operator's time, and a refund is a payments decision |
@@ -554,12 +557,27 @@ thread, because those are what decide whether the next send is legal.
 ## §6 Privacy
 
 **Never expose a renter's phone number or name to the ops console realtor view,
-and never put a realtor's phone number in renter-facing output.**
+and never put a realtor's phone number in renter-facing output - except on the
+day of a viewing the renter kept, and only with that agent's consent.**
 
 Enforce at the query layer, not the template layer. The ops realtor view reads
 from a view that does not select `renters.phone_e164` or `renters.display_name`
 at all, so a careless template change cannot leak one. Renter-facing itinerary
 rendering takes a DTO with no realtor contact field on it.
+
+**The one exception is the viewing-day message** (§9, decided 2026-09-30). By
+the morning of a viewing the renter confirmed, they are about to meet the agent
+in person, and a renter lost at the gate needs them rather than a thread we
+read later. Hiding the number before then is what stops a renter going round
+us, and it stays hidden before then. The exception is held in one place:
+`dayStops` in `_shared/viewing/viewing-day.ts` is the only function that puts
+a realtor's number in anything a renter reads, and only for a viewing that is
+kept, confirmed, on that date, with `share_phone` recorded as the agent's
+answer. `sendViewingDay` reads `realtors.phone_e164` only for agents who said
+yes. An operator cannot type a number in: the meeting point and name refuse
+anything phone-shaped, and the operator's reply check below still refuses a
+Vietnamese number. The renter's number still never reaches an agent - if the
+renter rings them, that is the renter's choice.
 
 The console reads the renter's WhatsApp thread through `ops_request_thread()`, a
 `SECURITY DEFINER` function that returns bodies, times, the window expiry and
@@ -674,7 +692,7 @@ something.** Asserted as a property test over randomly generated event logs
   already lost: the send has to happen, be delivered and be read, and the first
   can fail and need a retry.
 - A closed request owes the renter nothing, except that a `CONFIRMED` one still
-  gets its day-before viewing reminders. Closed for coordination is not closed
+  gets its viewing-day message (below). Closed for coordination is not closed
   for the renter - or for the brokers, who are owed its decision (§4).
 - Brokers are nudged after 6 hours of silence, measured from the last contact
   **or nudge**, which is what feeds the two-nudge floor on `NO_RESPONSE` (§4).
@@ -683,6 +701,34 @@ The decision is pure (`_shared/viewing/reminders.ts`); `viewing-jobs-drain`
 only runs it on a `pg_cron` schedule and enqueues a `jobs` row per action.
 Keeping the two apart is what makes the promise testable without a database and
 a clock.
+
+### The viewing day (`_shared/viewing/viewing-day.ts`)
+
+On the morning of a kept viewing the renter gets **one message for the whole
+day**: each viewing's time and title, where to meet, the agent's first name,
+and the agent's number **if the agent agreed**. It replaced a day-before
+reminder that named the flat and the time only, was one message per viewing (the
+third tripped the 3-in-a-row rule), and never went out once the window had shut.
+
+- **When**: 07:00 in Ho Chi Minh City, or two hours before the day's first
+  viewing if that is earlier, until the last viewing starts. Never the evening
+  before - the number goes out on the day or not at all. `VIEWING_DAY` jobs,
+  run by `viewing-jobs-run`.
+- **What counts**: only viewings the renter kept (`REQUEST_CONFIRMED`) that
+  their agent confirmed, in a request that is still `CONFIRMED`. A delivered
+  itinerary the renter has not answered is not a plan.
+- **Where to meet** comes from `VIEWING_DETAILS_RECORDED`, which the operator
+  records from the agent's answer - the confirmation draft (`confirmDraft`)
+  asks for the meeting point and for consent to share their number. Without it
+  the message falls back to the listing's `location`, which is often only a
+  street, and the console flags a kept viewing with no meeting point.
+- **One per renter per day**, across requests: the idempotency key is the
+  renter and the date, and `VIEWING_DAY_SENT` is written on every request the
+  message covered.
+- **Window open**: free-form, one block per viewing. **Window shut** (the usual
+  case, days after the "yes"): the approved `viewing_reminder` template, with
+  every viewing on one line in its place parameter, cut at 700 characters with
+  the rest left to the renter's reply.
 
 ---
 

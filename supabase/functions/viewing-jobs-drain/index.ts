@@ -12,7 +12,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { reduceRequest, type DomainEvent } from '../_shared/viewing-domain.ts';
-import { dueActions, type DueAction } from '../_shared/viewing/reminders.ts';
+import { dueActions } from '../_shared/viewing/reminders.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,10 +25,10 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-/** One job per (request, kind, item) per pass. Re-enqueueing the same nudge
- *  every five minutes is how a broker gets forty messages. */
-function jobKey(a: DueAction): string {
-  return `${a.kind}:${a.requestId}:${a.itemId ?? '-'}`;
+/** One job per (request, kind, item, date) per pass. Re-enqueueing the same
+ *  nudge every five minutes is how a broker gets forty messages. */
+function jobKey(a: { kind: string; requestId: string; itemId?: string | null; date?: string | null }): string {
+  return `${a.kind}:${a.requestId}:${a.itemId ?? '-'}:${a.date ?? '-'}`;
 }
 
 Deno.serve(async (req) => {
@@ -78,10 +78,20 @@ Deno.serve(async (req) => {
   // What is already queued, so a second pass does not double it.
   const { data: pending } = await db
     .from('jobs').select('kind, payload').is('completed_at', null)
-    .in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_REMINDER', 'CONFIRM_REALTOR', 'RELEASE_REALTOR']);
+    .in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_DAY', 'CONFIRM_REALTOR', 'RELEASE_REALTOR']);
+  // A viewing-day job that finished without sending (a refusal no retry
+  // fixes) counts as queued for the rest of the day. Otherwise every pass
+  // would queue the same refusal again until the last viewing started.
+  const { data: dayJobs } = await db
+    .from('jobs').select('kind, payload').eq('kind', 'VIEWING_DAY')
+    .gte('created_at', new Date(now - 20 * 60 * 60 * 1000).toISOString());
   const queued = new Set(
-    (pending ?? []).map((j: { kind: string; payload: Record<string, unknown> }) =>
-      `${j.kind}:${j.payload?.request_id ?? '-'}:${j.payload?.item_id ?? '-'}`),
+    [...(pending ?? []), ...(dayJobs ?? [])].map((j: { kind: string; payload: Record<string, unknown> }) => jobKey({
+      kind: j.kind,
+      requestId: String(j.payload?.request_id ?? '-'),
+      itemId: (j.payload?.item_id as string | null) ?? null,
+      date: (j.payload?.date as string | null) ?? null,
+    })),
   );
 
   const rows: Record<string, unknown>[] = [];
@@ -89,20 +99,16 @@ Deno.serve(async (req) => {
     const events = byRequest.get(r.id) ?? [];
     const view = reduceRequest(r.id, events);
 
-    // Confirmed slots, for the day-before reminder.
-    const slots = Object.values(view.items)
-      .filter(i => i.state === 'CONFIRMED')
-      .flatMap(i => (i.slots as { starts_at?: string }[])
-        .filter(s => typeof s?.starts_at === 'string')
-        .map(s => ({ itemId: i.itemId, startsAt: s.starts_at! })));
-
-    for (const action of dueActions({ view, events, createdAt: r.created_at, now, slots })) {
+    for (const action of dueActions({ view, events, createdAt: r.created_at, now })) {
       if (queued.has(jobKey(action))) continue;
       queued.add(jobKey(action));
       rows.push({
         kind: action.kind,
         run_after: new Date(now).toISOString(),
-        payload: { request_id: action.requestId, item_id: action.itemId ?? null, reason: action.reason },
+        payload: {
+          request_id: action.requestId, item_id: action.itemId ?? null, reason: action.reason,
+          ...(action.date ? { date: action.date } : {}),
+        },
       });
     }
   }
