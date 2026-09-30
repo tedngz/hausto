@@ -184,25 +184,64 @@ export function renderOffer(opts: {
   message?: string | null;
   now: Date;
 }): string {
-  const hello = `Hi ${opts.firstName?.trim() || 'there'}, here is what we found at ${opts.complexName}:`;
-  const lines = opts.units.map((u, i) => {
-    const facts = [
-      // Captured titles already lead with it (unitRow); an advertised one may not.
-      u.title.startsWith(bedsLabel(u.bedrooms)) ? null : bedsLabel(u.bedrooms),
-      `${formatVnd(u.priceVnd)} a month`,
-      u.areaSqm ? `${u.areaSqm} m²` : null,
-    ].filter(Boolean).join(' · ');
-    const standing = u.confirmedAt
-      ? `The agent confirmed it is free on ${dayMonth(u.confirmedAt)}.`
-      : 'Advertised - we confirm with the agent when you ask to see it.';
-    return `${i + 1}. ${u.title}\n${facts}\n${standing}\n${offerLink(u.id, opts.inquiryId)}`;
+  return renderOfferSections({
+    firstName: opts.firstName, message: opts.message, now: opts.now,
+    sections: [{ complexName: opts.complexName, inquiryId: opts.inquiryId, units: opts.units }],
+  });
+}
+
+/** One building's part of an offer. Its links carry its own request. */
+export interface OfferSection {
+  complexName: string;
+  inquiryId: string;
+  units: OfferUnit[];
+}
+
+/** Units in one message covering several of a renter's buildings. */
+export const MAX_COMBINED_UNITS = 8;
+
+/**
+ * The offer, for one building or several. A renter asking about Empire City
+ * and Celadon gets one message with both - the two-in-a-row limit is per
+ * renter, so a second offer would wait on a reply to the first. Numbered
+ * straight through, so "number 3" means one unit.
+ */
+export function renderOfferSections(opts: {
+  firstName: string | null;
+  sections: OfferSection[];
+  /** The operator's own line, already checked by checkOperatorReply. */
+  message?: string | null;
+  now: Date;
+}): string {
+  const name = opts.firstName?.trim() || 'there';
+  const single = opts.sections.length === 1;
+  const hello = single
+    ? `Hi ${name}, here is what we found at ${opts.sections[0].complexName}:`
+    : `Hi ${name}, here is what we found:`;
+  let n = 0;
+  const blocks = opts.sections.flatMap(section => {
+    const units = section.units.map(u => unitBlock(u, ++n, section.inquiryId));
+    return single ? units : [`At ${section.complexName}:`, ...units];
   });
   return [
     hello,
     ...(opts.message?.trim() ? [opts.message.trim()] : []),
-    ...lines,
+    ...blocks,
     'To see any of them, open it and tap Request viewing - your first viewing is free. Or reply here with a question.',
   ].join('\n\n');
+}
+
+function unitBlock(u: OfferUnit, n: number, inquiryId: string): string {
+  const facts = [
+    // Captured titles already lead with it (unitRow); an advertised one may not.
+    u.title.startsWith(bedsLabel(u.bedrooms)) ? null : bedsLabel(u.bedrooms),
+    `${formatVnd(u.priceVnd)} a month`,
+    u.areaSqm ? `${u.areaSqm} m²` : null,
+  ].filter(Boolean).join(' · ');
+  const standing = u.confirmedAt
+    ? `The agent confirmed it is free on ${dayMonth(u.confirmedAt)}.`
+    : 'Advertised - we confirm with the agent when you ask to see it.';
+  return `${n}. ${u.title}\n${facts}\n${standing}\n${offerLink(u.id, inquiryId)}`;
 }
 
 // ── What may be offered ─────────────────────────────────────────────────────

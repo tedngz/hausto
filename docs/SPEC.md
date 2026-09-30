@@ -1064,6 +1064,20 @@ refused (`awaiting_renter`) until the renter has written on the thread since the
 last one. More units arriving from agents wait for the renter to engage, rather
 than reaching them in instalments.
 
+**One message for several buildings.** The two-in-a-row limit is per renter,
+so a renter asking about Empire City and Celadon would have the second offer
+stuck behind a reply to the first. `INQUIRY_OFFER_UNITS` takes `alsoFor: [{
+inquiryId, listingIds }]` - only the same renter's open, confirmed requests,
+each held to its own building, brief, freshness and "then their answer" rule;
+up to 5 units per building and `MAX_COMBINED_UNITS` (8) in all. One message
+(`renderOfferSections`: "At Empire City:", "At Celadon City:", numbered
+straight through, each link carrying its own request), filed on every thread
+it covers - `complex_inquiry_messages.whatsapp_message_id` is unique per
+thread, not overall - with `UNITS_OFFERED` and `alert_items` written for each.
+A reply to it is filed on each thread too (§5). `ops_inquiry_detail()` returns
+`siblings` (the renter's other requests from the last 30 days: ids and
+building names only) so the console can offer them together.
+
 ### The handoff, the deadline and after the window (PLAN-v3 S7.1c)
 
 **Handoff.** An offer link `hausto.com/property/<id>?inq=<inquiry>` is

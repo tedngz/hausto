@@ -8,15 +8,26 @@
 --   1. allows BRIEF_CHANGED in inquiry_events;
 --   2. rebuilds ops_inquiry_detail so "on file that fits" uses the brief in
 --      force (the latest BRIEF_CHANGED, else the form) with the offer's 10%
---      budget tolerance, rather than the form's strict one.
+--      budget tolerance, rather than the form's strict one, and lists the
+--      renter's other recent requests ('siblings': ids and building names
+--      only) so one offer can cover several buildings;
+--   3. lets one WhatsApp message sit on several threads - that offer - by
+--      making whatsapp_message_id unique per thread rather than overall.
 --
--- Replay-safe: the constraint is dropped and re-added, the function replaced.
+-- Replay-safe: the constraint and index are dropped and re-added, the
+-- function replaced.
 
 ALTER TABLE public.inquiry_events DROP CONSTRAINT IF EXISTS inquiry_events_type_check;
 ALTER TABLE public.inquiry_events ADD CONSTRAINT inquiry_events_type_check CHECK (type IN (
   'SUBMITTED', 'CONFIRMED', 'AGENT_ASKED', 'AGENT_ANSWERED', 'UNIT_CAPTURED', 'UNITS_OFFERED',
   'BRIEF_CHANGED', 'CLOSED', 'REOPENED'
 ));
+
+-- Still a no-op for a redelivered message on the same thread, which is what
+-- recordInquiryMessage relies on; now the same message may be on two.
+DROP INDEX IF EXISTS public.idx_complex_inquiry_messages_whatsapp;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_complex_inquiry_messages_whatsapp
+  ON public.complex_inquiry_messages (inquiry_id, whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION public.ops_inquiry_detail(_inquiry_id uuid)
  RETURNS jsonb
@@ -80,6 +91,14 @@ BEGIN
     'window_expires_at', _renter.service_window_expires_at,
     'opted_out', _renter.opted_out_at IS NOT NULL,
     'consecutive_outbound', _consecutive,
+    -- The same renter's other requests from the last 30 days, so one offer
+    -- can cover them. Ids and building names only - nothing about the renter.
+    'siblings', coalesce((SELECT jsonb_agg(jsonb_build_object('id', s.id, 'complex_name', c.name)
+                ORDER BY s.whatsapp_confirmed_at DESC)
+              FROM public.complex_inquiries s
+              JOIN public.complexes c ON c.id = s.complex_id
+              WHERE s.renter_id = _i.renter_id AND s.id <> _i.id AND s.channel = 'WHATSAPP'
+                AND s.whatsapp_confirmed_at > now() - interval '30 days'), '[]'::jsonb),
     'thread', coalesce((SELECT jsonb_agg(jsonb_build_object(
                 'id', m.id, 'direction', m.direction, 'source', m.source, 'channel', m.channel,
                 'body', public.mask_phone_numbers(m.body, _renter.phone_e164),

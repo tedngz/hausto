@@ -32,11 +32,13 @@ import { NoWhatsAppError, recordInquiryMessage, sendConciergeWhatsApp } from './
 import { screenCandidates, type ShortlistCandidate } from './intake.ts';
 import {
   CONCIERGE_SOURCE,
+  MAX_COMBINED_UNITS,
   MAX_OFFER_UNITS,
   UNIT_FRESH_DAYS,
   briefOf,
   misfit,
-  renderOffer,
+  renderOfferSections,
+  type OfferSection,
   unitPhotoPath,
   unitRow,
   unitStale,
@@ -322,14 +324,18 @@ async function renterWroteSince(db: Supa, inquiryId: string, since: string): Pro
 }
 
 /**
- * The one message with the units in it. Every unit must be requestable now,
- * belong to this request (captured for it, or advertised at its building),
- * fit what the renter asked for - or what they have since said they would
- * take - and, if captured, have been confirmed by its agent within
- * UNIT_FRESH_DAYS. After the first offer, another waits for the renter to
- * answer it. Sent like any operator reply, then recorded three ways: on the
- * thread, as UNITS_OFFERED, and in alert_items so the weekly alert does not
- * offer the same places again.
+ * The one message with the units in it - for this request, and optionally the
+ * same renter's other open requests (`alsoFor`), so a renter asking about two
+ * buildings gets one message rather than a second offer stuck behind the
+ * two-in-a-row limit.
+ *
+ * Every unit must be requestable now, belong to its request (captured for it,
+ * or advertised at its building), fit what the renter asked for there - or
+ * what they have since said they would take - and, if captured, have been
+ * confirmed by its agent within UNIT_FRESH_DAYS. After a request's first offer,
+ * another for it waits for the renter to answer. Sent once, then recorded on
+ * each request three ways: on its thread, as UNITS_OFFERED, and in alert_items
+ * so the weekly alert does not offer the same places again.
  */
 async function offerUnits(
   db: Supa,
@@ -339,16 +345,27 @@ async function offerUnits(
   view: InquiryView,
   input: Record<string, unknown>,
 ): Promise<InquiryResult> {
-  const ids: string[] = Array.isArray(input.listingIds)
-    ? [...new Set((input.listingIds as unknown[]).map(x => str(x)).filter(Boolean))]
-    : [];
-  if (ids.length === 0 || ids.length > MAX_OFFER_UNITS) {
-    return refuse(400, 'invalid_units', `Pick 1 to ${MAX_OFFER_UNITS} units.`);
+  const idsOf = (v: unknown): string[] =>
+    Array.isArray(v) ? [...new Set((v as unknown[]).map(x => str(x)).filter(Boolean))] : [];
+
+  const parts: { row: InquiryRow; view: InquiryView; ids: string[] }[] = [{ row, view, ids: idsOf(input.listingIds) }];
+  for (const extra of Array.isArray(input.alsoFor) ? input.alsoFor as Record<string, unknown>[] : []) {
+    const otherId = str(extra?.inquiryId);
+    if (parts.some(p => p.row.id === otherId)) return refuse(400, 'invalid_units', 'Each request once.');
+    const other = await load(db, otherId);
+    // Only the same renter's own requests: one message to one person.
+    if (!other.ok || !row.renter_id || other.row.renter_id !== row.renter_id) {
+      return refuse(400, 'not_same_renter', 'Only this renter\'s other requests can go in the same message.');
+    }
+    if (other.view.state === 'CLOSED' || !other.row.whatsapp_confirmed_at) {
+      return refuse(409, 'closed', 'That other request is closed or not confirmed.');
+    }
+    parts.push({ row: other.row, view: other.view, ids: idsOf(extra?.listingIds) });
   }
-  // One offer, then their answer. A second list they did not ask for is the
-  // agents' stock arriving in instalments, however good each unit is.
-  if (view.offeredAt && !(await renterWroteSince(db, row.id, view.offeredAt))) {
-    return refuse(409, 'awaiting_renter', 'They have not answered the last offer yet. Send more once they reply.');
+  const total = parts.reduce((n, p) => n + p.ids.length, 0);
+  if (parts.some(p => p.ids.length === 0 || p.ids.length > MAX_OFFER_UNITS) || total > MAX_COMBINED_UNITS) {
+    return refuse(400, 'invalid_units',
+      `Pick 1 to ${MAX_OFFER_UNITS} units per building, ${MAX_COMBINED_UNITS} in all.`);
   }
 
   let message: string | null = null;
@@ -358,47 +375,19 @@ async function offerUnits(
     message = checked.body;
   }
 
-  const { data: found } = await db.from('external_properties').select(LISTING_COLUMNS).in('id', ids);
-  const listings = (found ?? []) as UnitListing[];
-  const { eligible, rejected } = screenCandidates(ids, listings);
-  if (rejected.length > 0) {
-    return refuse(422, 'not_requestable', `${rejected.length} of those cannot be requested: ${rejected[0].reason}`);
-  }
-
-  const { data: atBuilding } = await db.rpc('complex_listing_ids', { _complex_id: row.complex_id, _since: '-infinity' });
-  const onFile = new Set(((atBuilding ?? []) as unknown[])
-    .map(x => (typeof x === 'string' ? x : String((x as Record<string, unknown>).complex_listing_ids))));
   const now = new Date();
-  const brief = briefOf({ bedrooms: row.bedrooms_needed, budgetMaxVnd: row.budget_max_vnd }, view.brief);
-  for (const l of listings) {
-    const captured = capturedFor(l, row.id);
-    if (!captured && !onFile.has(l.id)) return refuse(422, 'not_this_building', `"${l.title}" is not at this building.`);
-    const off = misfit({ bedrooms: Number(l.bedrooms), priceVnd: Number(l.price_vnd) }, brief);
-    if (off) {
-      return refuse(422, 'outside_brief',
-        `"${l.title}" is ${off}. Offer it only if they say they would take it - record that as a change to what they want.`);
-    }
-    if (captured && unitStale(l.last_verified_at, now)) {
-      return refuse(409, 'stale_unit',
-        `"${l.title}" was last confirmed over ${UNIT_FRESH_DAYS} days ago - reconfirm it with the agent first.`);
-    }
+  const sections: OfferSection[] = [];
+  for (const p of parts) {
+    const checked = await offerableUnits(db, p.row, p.view, p.ids, now);
+    if ('status' in checked) return checked;
+    sections.push(checked);
   }
 
-  const { data: complex } = await db.from('complexes').select('name').eq('id', row.complex_id).maybeSingle();
-  const byId = new Map(listings.map(l => [l.id, l]));
-  const body = renderOffer({
+  const body = renderOfferSections({
     firstName: (row.full_name ?? '').trim().split(/\s+/)[0] || null,
-    complexName: complex?.name ?? 'the building',
-    inquiryId: row.id,
     message,
     now,
-    units: eligible.map(c => {
-      const l = byId.get(c.id)!;
-      return {
-        id: l.id, title: l.title ?? 'A place', priceVnd: Number(l.price_vnd), bedrooms: Number(l.bedrooms),
-        areaSqm: l.area_sqm ?? null, confirmedAt: capturedFor(l, row.id) ? l.last_verified_at : null,
-      };
-    }),
+    sections,
   });
 
   let sent: { messageId: string; status: string };
@@ -418,21 +407,84 @@ async function offerUnits(
   }
   if (sent.status === 'FAILED') return refuse(502, 'send_failed', 'WhatsApp refused the message.');
 
-  await recordInquiryMessage(db, {
-    inquiryId: row.id, direction: 'outbound', source: 'dashboard', whatsappMessageId: sent.messageId, body, now,
-  });
-  await db.from('complex_inquiries').update({ last_message_at: now.toISOString() }).eq('id', row.id);
-  if (row.renter_id) {
-    // Already news to them, so the alert sweep must not send these again.
-    const { error } = await db.from('alert_items').insert(ids.map(listingId => ({
-      renter_id: row.renter_id, listing_id: listingId, watch_id: row.watch_id, source: 'WATCH',
-      message_id: sent.messageId, detail_sent_at: now.toISOString(),
-    })));
-    if (error && error.code !== '23505') console.error('[inquiry-actions] alert_items insert failed:', error.message ?? error);
+  // The same message on each request's thread, so a reply to it is filed on
+  // each (concierge.ts), and each request's log says what it was offered.
+  let failed: InquiryResult | null = null;
+  for (const p of parts) {
+    await recordInquiryMessage(db, {
+      inquiryId: p.row.id, direction: 'outbound', source: 'dashboard', whatsappMessageId: sent.messageId, body, now,
+    });
+    await db.from('complex_inquiries').update({ last_message_at: now.toISOString() }).eq('id', p.row.id);
+    if (p.row.renter_id) {
+      // Already news to them, so the alert sweep must not send these again.
+      const { error } = await db.from('alert_items').insert(p.ids.map(listingId => ({
+        renter_id: p.row.renter_id, listing_id: listingId, watch_id: p.row.watch_id, source: 'WATCH',
+        message_id: sent.messageId, detail_sent_at: now.toISOString(),
+      })));
+      if (error && error.code !== '23505') console.error('[inquiry-actions] alert_items insert failed:', error.message ?? error);
+    }
+    failed = (await append(db, p.row.id, 'UNITS_OFFERED', { listing_ids: p.ids, message_id: sent.messageId }, actor)) ?? failed;
+  }
+  return failed ?? done({ recorded: 'UNITS_OFFERED', messageId: sent.messageId, requests: parts.length });
+}
+
+/**
+ * One request's units, checked for the offer, or the refusal. The rules of
+ * `offerUnits`, for a single building.
+ */
+async function offerableUnits(
+  db: Supa,
+  row: InquiryRow,
+  view: InquiryView,
+  ids: string[],
+  now: Date,
+): Promise<OfferSection | InquiryResult> {
+  const { data: complex } = await db.from('complexes').select('name').eq('id', row.complex_id).maybeSingle();
+  const where = complex?.name ?? 'the building';
+  // One offer, then their answer. A second list they did not ask for is the
+  // agents' stock arriving in instalments, however good each unit is.
+  if (view.offeredAt && !(await renterWroteSince(db, row.id, view.offeredAt))) {
+    return refuse(409, 'awaiting_renter',
+      `They have not answered the last offer for ${where} yet. Send more once they reply.`);
   }
 
-  const failed = await append(db, row.id, 'UNITS_OFFERED', { listing_ids: ids, message_id: sent.messageId }, actor);
-  return failed ?? done({ recorded: 'UNITS_OFFERED', messageId: sent.messageId });
+  const { data: found } = await db.from('external_properties').select(LISTING_COLUMNS).in('id', ids);
+  const listings = (found ?? []) as UnitListing[];
+  const { eligible, rejected } = screenCandidates(ids, listings);
+  if (rejected.length > 0) {
+    return refuse(422, 'not_requestable', `${rejected.length} of those cannot be requested: ${rejected[0].reason}`);
+  }
+
+  const { data: atBuilding } = await db.rpc('complex_listing_ids', { _complex_id: row.complex_id, _since: '-infinity' });
+  const onFile = new Set(((atBuilding ?? []) as unknown[])
+    .map(x => (typeof x === 'string' ? x : String((x as Record<string, unknown>).complex_listing_ids))));
+  const brief = briefOf({ bedrooms: row.bedrooms_needed, budgetMaxVnd: row.budget_max_vnd }, view.brief);
+  for (const l of listings) {
+    const captured = capturedFor(l, row.id);
+    if (!captured && !onFile.has(l.id)) return refuse(422, 'not_this_building', `"${l.title}" is not at ${where}.`);
+    const off = misfit({ bedrooms: Number(l.bedrooms), priceVnd: Number(l.price_vnd) }, brief);
+    if (off) {
+      return refuse(422, 'outside_brief',
+        `"${l.title}" is ${off}. Offer it only if they say they would take it - record that as a change to what they want.`);
+    }
+    if (captured && unitStale(l.last_verified_at, now)) {
+      return refuse(409, 'stale_unit',
+        `"${l.title}" was last confirmed over ${UNIT_FRESH_DAYS} days ago - reconfirm it with the agent first.`);
+    }
+  }
+
+  const byId = new Map(listings.map(l => [l.id, l]));
+  return {
+    complexName: where,
+    inquiryId: row.id,
+    units: eligible.map(c => {
+      const l = byId.get(c.id)!;
+      return {
+        id: l.id, title: l.title ?? 'A place', priceVnd: Number(l.price_vnd), bedrooms: Number(l.bedrooms),
+        areaSqm: l.area_sqm ?? null, confirmedAt: capturedFor(l, row.id) ? l.last_verified_at : null,
+      };
+    }),
+  };
 }
 
 // ── After the window (S7.1c) ────────────────────────────────────────────────

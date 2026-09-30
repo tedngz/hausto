@@ -278,6 +278,75 @@ describe('capturing units and offering them (S7.1b)', () => {
     expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [three.id] })).status).toBe(200);
   });
 
+  describe('a renter asking about two buildings', () => {
+    const INQ2 = '22222222-2222-4333-8444-555555555555';
+
+    beforeEach(async () => {
+      const code2 = generateWatchCode();
+      db.tables.complexes.push({ id: 'cx-2', name: 'Celadon City', district: 'Tan Phu', city: 'ho_chi_minh' });
+      db.tables.complex_watches.push({
+        id: 'w-2', complex_id: 'cx-2', code: code2, status: 'PENDING', renter_id: null, user_id: null, bedrooms: 3,
+        budget_max_vnd: 30_000_000, created_at: new Date().toISOString(), expires_at: watchExpiry(new Date(), '2026-11-15').toISOString(),
+      });
+      db.tables.complex_inquiries.push({
+        id: INQ2, complex_id: 'cx-2', full_name: 'Mai Nguyen', channel: 'WHATSAPP', watch_id: 'w-2',
+        bedrooms_needed: 3, budget_max_vnd: 30_000_000, target_move_in_date: '2026-11-15', lease_duration_months: 12,
+        has_pets: false, whatsapp_confirmed_at: null, renter_id: null, created_at: new Date().toISOString(),
+      });
+      at('2026-09-29T03:30:00Z');
+      await renterSends(`Hi Hausto - please check availability at Celadon City for me (${code2})`);
+    });
+
+    const captureAt = async (inquiryId: string, over: Record<string, unknown>) =>
+      (await act({ action: 'INQUIRY_CAPTURE_UNIT', inquiryId, ...unit, ...over })).body.listingId as string;
+
+    it('offers both in one message, filed and logged on each request', async () => {
+      const a = await capture();
+      const c = await captureAt(INQ2, { bedrooms: 3, priceVnd: 29_000_000 });
+      at('2026-09-29T05:00:00Z');
+      const before = whatsapp.delivered.length;
+      const r = await act({
+        action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [a.id],
+        alsoFor: [{ inquiryId: INQ2, listingIds: [c] }], key: 'both-1',
+      });
+      expect(r).toMatchObject({ status: 200, body: { requests: 2 } });
+      expect(whatsapp.delivered.length).toBe(before + 1);
+
+      const body = String(whatsapp.delivered.at(-1)!.body);
+      expect(body).toContain('Hi Mai, here is what we found:');
+      expect(body.indexOf('At Empire City:')).toBeLessThan(body.indexOf('At Celadon City:'));
+      expect(body).toContain('1. 2BR at Empire City');
+      expect(body).toContain('2. 3BR at Celadon City');
+      expect(body).toContain(`${c}?inq=${INQ2}`);
+      expect(body).toContain(`${a.id}?inq=${INQ}`);
+
+      const filed = db.tables.complex_inquiry_messages.filter(m => m.direction === 'outbound' && m.body === body);
+      expect(filed.map(m => m.inquiry_id).sort()).toEqual([INQ, INQ2]);
+      expect(new Set(filed.map(m => m.whatsapp_message_id)).size).toBe(1);
+      const offered = db.tables.inquiry_events.filter(e => e.type === 'UNITS_OFFERED');
+      expect(offered.map(e => [e.inquiry_id, (e.payload as { listing_ids: string[] }).listing_ids])).toEqual([
+        [INQ, [a.id]], [INQ2, [c]],
+      ]);
+    });
+
+    it("holds each building to its own brief, and refuses someone else's request", async () => {
+      const a = await capture();
+      const twoAtCeladon = await captureAt(INQ2, { bedrooms: 2, priceVnd: 20_000_000 });
+      const r = await act({
+        action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [a.id],
+        alsoFor: [{ inquiryId: INQ2, listingIds: [twoAtCeladon] }],
+      });
+      expect(r.body.error).toBe('outside_brief'); // Celadon was asked for 3 bedrooms
+
+      db.tables.complex_inquiries.find(i => i.id === INQ2)!.renter_id = 'someone-else';
+      const other = await act({
+        action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [a.id], alsoFor: [{ inquiryId: INQ2, listingIds: ['x'] }],
+      });
+      expect(other.body.error).toBe('not_same_renter');
+      expect(db.tables.inquiry_events.filter(e => e.type === 'UNITS_OFFERED')).toHaveLength(0);
+    });
+  });
+
   it('sends a second offer only after they answer the first', async () => {
     const a = await capture();
     const b = await capture({ floor: '9' });
