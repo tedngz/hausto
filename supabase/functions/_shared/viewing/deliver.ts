@@ -22,7 +22,7 @@ import {
   type StopListing,
   type Warning,
 } from './itinerary.ts';
-import { renderHoldingUpdate, renderViewingReminder } from './reminders.ts';
+import { renderHoldingUpdate } from './reminders.ts';
 import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
 
@@ -31,8 +31,10 @@ type Supa = any;
 
 // The closed set, exported as a value so callers taking a purpose off the wire
 // can check it rather than cast. Note there is no NO_SUPPLY: that message is
-// ITINERARY with nothing confirmed, which is how deliver() reaches it.
-export const DELIVERY_PURPOSES = ['ITINERARY', 'HOLDING_UPDATE', 'VIEWING_REMINDER'] as const;
+// ITINERARY with nothing confirmed, which is how deliver() reaches it. The
+// viewing-day message is not here either: it is about a renter's day, not one
+// request (viewing-day.ts).
+export const DELIVERY_PURPOSES = ['ITINERARY', 'HOLDING_UPDATE'] as const;
 export type DeliveryPurpose = typeof DELIVERY_PURPOSES[number];
 
 export interface DeliverOptions {
@@ -45,8 +47,6 @@ export interface DeliverOptions {
    * request picks its own - see findSubstitutes below.
    */
   substitutes?: { title: string; priceVnd: number; districtCode: string | null; listingId?: string }[];
-  /** Required for VIEWING_REMINDER: which viewing is being reminded about. */
-  itemId?: string;
   attempt?: number;
   /** `OPS:<uuid>` or `SYSTEM`. */
   actor?: string;
@@ -121,25 +121,6 @@ export async function deliver(
         alternatives: assembled.alternatives,
       });
     }
-  } else if (opts.purpose === 'VIEWING_REMINDER') {
-    const item = opts.itemId ? view.items[opts.itemId] : undefined;
-    const slot = item?.slots?.[0] as { starts_at?: string } | undefined;
-    const listing = listings.find(l => l.itemId === opts.itemId);
-    if (!item || !slot?.starts_at || !listing) {
-      // Nothing to remind about. Refusing beats sending "you have a viewing"
-      // with the time left blank.
-      return {
-        ok: false,
-        code: 'unknown_request',
-        message: `No confirmed viewing to remind about on item ${opts.itemId ?? '(none given)'}`,
-      };
-    }
-    text = renderViewingReminder({
-      ref: request.ref,
-      listingTitle: listing.listingTitle,
-      startsAt: slot.starts_at,
-      districtCode: listing.districtCode,
-    });
   } else {
     text = renderHoldingUpdate({ ref: request.ref, view });
   }
@@ -198,9 +179,9 @@ export async function deliver(
   }
   toWrite.push({
     request_id: opts.requestId,
-    // Both a holding update and a viewing reminder are things the renter
-    // heard: they move the silence clock and nothing else. Only the itinerary
-    // is ITINERARY_DELIVERED, because only that means the plan has gone out.
+    // A holding update is something the renter heard: it moves the silence
+    // clock and nothing else. Only the itinerary is ITINERARY_DELIVERED,
+    // because only that means the plan has gone out.
     type: opts.purpose === 'ITINERARY' ? 'ITINERARY_DELIVERED' : 'HOLDING_UPDATE_SENT',
     payload: { message_id: messageId },
     actor,

@@ -12,7 +12,7 @@
 import type { RequestView, RealtorDecision } from '../viewing-domain.ts';
 import { summarise } from '../viewing-domain.ts';
 import type { DomainEvent } from '../viewing-domain.ts';
-import { hcmcLong } from './format.ts';
+import { viewingDayDue } from './viewing-day.ts';
 
 export const HOUR_MS = 60 * 60 * 1000;
 
@@ -29,13 +29,10 @@ export const SILENCE_ACTION_MS = 20 * HOUR_MS;
 /** How long to leave a broker before chasing. */
 export const NUDGE_AFTER_MS = 6 * HOUR_MS;
 
-/** The day-before nudge for a viewing the renter has agreed to. */
-export const VIEWING_REMINDER_LEAD_MS = 24 * HOUR_MS;
-
 export type ActionKind =
   | 'HOLDING_UPDATE'     // the renter has heard nothing and the clock is running out
   | 'NUDGE_REALTOR'      // a broker has been contacted and has not replied
-  | 'VIEWING_REMINDER'   // a confirmed viewing is tomorrow
+  | 'VIEWING_DAY'        // a kept viewing is today: where, who, and the agent's number if agreed
   | 'CONFIRM_REALTOR'    // the renter kept this viewing; the broker has not been told
   | 'RELEASE_REALTOR';   // the broker is holding time nobody will use
 
@@ -43,6 +40,8 @@ export interface DueAction {
   kind: ActionKind;
   requestId: string;
   itemId?: string;
+  /** VIEWING_DAY only: the Ho Chi Minh City date it is for. */
+  date?: string;
   /** Why it fired. Goes in the job payload, read when one misbehaves. */
   reason: string;
 }
@@ -75,8 +74,6 @@ export interface ScheduleInput {
   events: DomainEvent[];
   createdAt: string;
   now: number;
-  /** Confirmed slots, so a viewing tomorrow can be reminded about. */
-  slots?: { itemId: string; startsAt: string }[];
 }
 
 /**
@@ -91,7 +88,7 @@ export function dueActions(input: ScheduleInput): DueAction[] {
   const actions: DueAction[] = [];
   const requestId = view.requestId;
 
-  // A confirmed request still owes its viewing reminders - it is closed for
+  // A confirmed request still owes its viewing-day message - it is closed for
   // coordination, not for the renter. Everything else about a closed request
   // is finished.
   const closed = CLOSED.has(view.state);
@@ -131,20 +128,11 @@ export function dueActions(input: ScheduleInput): DueAction[] {
     });
   }
 
-  if (view.state === 'CONFIRMED') {
-    for (const slot of input.slots ?? []) {
-      const startsAt = Date.parse(slot.startsAt);
-      const until = startsAt - now;
-      if (until > 0 && until <= VIEWING_REMINDER_LEAD_MS) {
-        actions.push({
-          kind: 'VIEWING_REMINDER',
-          requestId,
-          itemId: slot.itemId,
-          reason: `viewing in ${Math.floor(until / HOUR_MS)}h`,
-        });
-      }
-    }
-  }
+  // One per request per day, not one per viewing (viewing-day.ts). Two
+  // requests with viewings the same day still make one message: the send is
+  // keyed on the renter and the date.
+  const day = viewingDayDue(view, now);
+  if (day) actions.push({ kind: 'VIEWING_DAY', requestId, date: day, reason: `viewings on ${day}` });
 
   return actions;
 }
@@ -210,28 +198,6 @@ export function renderHoldingUpdate(opts: { ref: string; view: RequestView }): s
       ? `Still working on your viewings - we have heard back about ${heard} of ${s.total} so far.`
       : `Still working on your viewings - we are waiting on ${s.total} ${s.total === 1 ? 'agent' : 'agents'}.`,
     'We will send the full plan as soon as we have it, and by tomorrow at the latest.',
-    `Ref ${opts.ref}`,
-  ].join('\n');
-}
-
-/**
- * The day-before reminder for one confirmed viewing.
- *
- * One viewing per message, unlike the itinerary, because this is a nudge about
- * a thing happening tomorrow and a renter re-reading their whole plan the
- * night before is not what it is for. It carries no realtor contact: if plans
- * change the renter tells us, not the broker (§6).
- */
-export function renderViewingReminder(opts: {
-  ref: string;
-  listingTitle: string;
-  startsAt: string;
-  districtCode: string | null;
-}): string {
-  return [
-    `Reminder: you are viewing ${opts.listingTitle} at ${hcmcLong(opts.startsAt)}` +
-      (opts.districtCode ? ` (${opts.districtCode}).` : '.'),
-    'Reply here if you need to move it and we will sort it out.',
     `Ref ${opts.ref}`,
   ].join('\n');
 }

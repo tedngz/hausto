@@ -18,6 +18,7 @@ import { FakeDb } from './fake-db.ts';
 import { MockAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
 import { deliver } from './deliver.ts';
+import { sendViewingDay } from './viewing-day.ts';
 import { handleInbound } from './routing.ts';
 import { intakeEvents, buildDeepLink, generateRef } from './intake.ts';
 import { validateOutcome, outcomePayload, opsActor } from './outcomes.ts';
@@ -174,6 +175,45 @@ describe('dress rehearsal', () => {
     expect(reply.confirmed).toBe(true);
     expect(view().state).toBe('CONFIRMED');
     log(`\n  → state: ${view().state}\n`);
+
+    // 5. The morning of. The first agent agreed to their number going out; the
+    // second gave a meeting point but not their number; the third said
+    // nothing, so the renter gets the listing's location and us.
+    db.tables.realtors = [
+      { id: 'agent-1', phone_e164: '+84903334444', display_name: 'Minh' },
+      { id: 'agent-2', phone_e164: '+84905556666', display_name: 'Lan' },
+    ];
+    db.tables.request_items[0].realtor_id = 'agent-1';
+    db.tables.request_items[1].realtor_id = 'agent-2';
+    db.tables.external_properties[2].location = 'Street Phan Xich Long, Ward 2, Phu Nhuan, Ho Chi Minh City';
+    const details = (itemId: string, payload: Record<string, unknown>) => db.tables.events.push({
+      request_id: requestId, item_id: itemId, type: 'VIEWING_DETAILS_RECORDED', payload,
+      actor: opsActor('ops-user-1'), occurred_at: new Date().toISOString(),
+    });
+    details(itemIds[0], { meeting_point: 'Lobby of block B, 12 Thao Dien Street', agent_first_name: 'Minh', share_phone: true });
+    details(itemIds[1], { meeting_point: 'Front gate, 45 Le Loi, District 1', agent_first_name: 'Lan', share_phone: false });
+
+    const morning = new Date('2026-09-19T00:30:00Z'); // 07:30 in Ho Chi Minh City
+    // deno-lint-ignore no-explicit-any
+    const day = await sendViewingDay(db as any, adapter, { requestId, now: morning });
+    expect(day).toMatchObject({ ok: true, via: 'FREE_FORM', stops: 3 });
+    const dayText = String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    say('us → RENTER  (the morning of the viewings)', dayText);
+    expect(dayText).toContain('+84 90 333 4444');
+    expect(dayText).not.toContain('555');
+
+    // The same day with the window shut - days after the "yes", the usual case -
+    // goes as the approved viewing_reminder template.
+    db.tables.events = db.tables.events.filter(e => e.type !== 'VIEWING_DAY_SENT');
+    db.tables.messages = [];
+    db.tables.renters[0].service_window_expires_at = null;
+    // deno-lint-ignore no-explicit-any
+    const shut = await sendViewingDay(db as any, adapter, { requestId, now: morning, attempt: 2 });
+    expect(shut).toMatchObject({ ok: true, via: 'TEMPLATE' });
+    const params = adapter.delivered[adapter.delivered.length - 1].templateParams ?? [];
+    say('us → RENTER  (the same morning, window shut: viewing_reminder)',
+      `Hi ${params[0]}, a reminder that your viewing is ${params[1]} at ${params[2]}. ` +
+      'Reply here if anything has changed and we will rearrange it.');
   });
 
   it('plays the zero-confirmed path, which is the one that has to read well', async () => {

@@ -86,6 +86,10 @@ export function nudgeDraft(opts: { listingTitle: string }): string {
 /**
  * The renter kept this viewing. Names the time back to the broker, because a
  * confirmation that does not say when is one they have to ask about.
+ *
+ * It also asks the two things the viewing-day message needs (viewing-day.ts):
+ * where to meet, and whether their number may go to the renter that morning.
+ * Asked, never assumed - the operator records the answer as VIEWING_DETAILS.
  */
 export function confirmDraft(opts: { listingTitle: string; startsAt: string | null }): string {
   return [
@@ -95,6 +99,9 @@ export function confirmDraft(opts: { listingTitle: string; startsAt: string | nu
       ? `Khách đã chốt lịch xem căn ${opts.listingTitle} lúc ${slotVi(opts.startsAt)}.`
       : `Khách đã chốt lịch xem căn ${opts.listingTitle}.`,
     'Anh/chị giữ lịch giúp em nhé. Nếu có thay đổi em sẽ báo lại ngay.',
+    '',
+    'Anh/chị cho em xin chỗ hẹn gặp khách (toà nào, sảnh nào) nhé.',
+    'Sáng hôm xem em gửi số điện thoại của anh/chị cho khách để khách gọi khi cần - anh/chị có đồng ý không ạ?',
     '',
     'Em cảm ơn anh/chị.',
   ].join('\n');

@@ -38,7 +38,9 @@ export const TEMPLATES = {
   VIEWING_REMINDER: {
     name: 'viewing_reminder',
     params: ['renter_name', 'viewing_time', 'listing_address'],
-    purpose: 'Day-before reminder, typically outside the window.',
+    purpose:
+      'The viewing-day message when the window has shut (viewing-day.ts): the morning of, with every ' +
+      'viewing that day in listing_address - where to meet, the agent, their number if they agreed.',
     approved: true,
   },
   WEEKLY_DIGEST: {

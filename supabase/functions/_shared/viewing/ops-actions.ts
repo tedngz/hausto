@@ -19,6 +19,8 @@
 //   OUTCOME         one of the seven, optionally with the reply it came from
 //   RECORD_CONTACT  a working number the operator found
 //   NOTIFY_REALTOR  telling the broker the renter's decision
+//   VIEWING_DETAILS where to meet, the agent's first name, and whether their
+//                   number may go to the renter on the day (viewing-day.ts)
 //
 // Request actions - the renter side:
 //   REPLY           a free-text answer on WhatsApp, inside the 24h window
@@ -52,6 +54,7 @@ import { toE164 } from '../whatsapp/inbound.ts';
 import { validateBuildingAgent } from './roster.ts';
 import { isInquiryAction, performInquiryAction } from './inquiry-actions.ts';
 import { deliver } from './deliver.ts';
+import { validateViewingDetails } from './viewing-day.ts';
 import { settlementFor, approvalOf, type ProposalRow, type DoneAction } from './proposals.ts';
 import { AUTONOMOUS_ACTIONS } from './autonomy.ts';
 import { REALTOR_MEDIA, type RealtorChannel, type RealtorMedium } from '../realtor/channel.ts';
@@ -84,7 +87,9 @@ const done = (body: Record<string, unknown>): OpsResult => ({ status: 200, body:
 const refuse = (status: number, error: string, message?: string): OpsResult =>
   ({ status, body: { error, ...(message ? { message } : {}) } });
 
-export const ITEM_ACTIONS = ['CONTACTED', 'NUDGE', 'REALTOR_REPLY', 'OUTCOME', 'RECORD_CONTACT', 'NOTIFY_REALTOR'] as const;
+export const ITEM_ACTIONS = [
+  'CONTACTED', 'NUDGE', 'REALTOR_REPLY', 'OUTCOME', 'RECORD_CONTACT', 'NOTIFY_REALTOR', 'VIEWING_DETAILS',
+] as const;
 export const REQUEST_ACTIONS = ['REPLY', 'ACK_REPLIES', 'CANCEL_REQUEST', 'DELIVER'] as const;
 
 function str(v: unknown): string {
@@ -604,6 +609,34 @@ async function dispatch(
       if (failed) return failed;
       await completeJobs(db, [decision === 'CONFIRM' ? 'CONFIRM_REALTOR' : 'RELEASE_REALTOR'], item.id);
       return done({ recorded: 'REALTOR_NOTIFIED', decision, messageId: sent.id, queued: sent.status === 'QUEUED' });
+    }
+
+    case 'VIEWING_DETAILS': {
+      // What the renter is sent on the morning of the viewing. The consent is
+      // the agent's, recorded by the operator who asked them - the number
+      // itself is never typed here, it is read from the agent's contact.
+      const checked = validateViewingDetails(input);
+      if (!checked.ok) return refuse(400, 'invalid_details', checked.error);
+      const view = reduceRequest(item.request_id, await loadEvents(db, item.request_id));
+      const state = view.items[item.id];
+      if (state?.state !== 'CONFIRMED') {
+        return refuse(409, 'not_confirmed', 'Record where to meet once the agent has confirmed a time.');
+      }
+      if (checked.value.sharePhone && !(state.realtorId ?? item.realtor_id)) {
+        return refuse(409, 'no_contact', 'There is no number on file for this agent to share.');
+      }
+      const failed = await insertEvent(db, {
+        request_id: item.request_id,
+        item_id: item.id,
+        type: 'VIEWING_DETAILS_RECORDED',
+        payload: {
+          meeting_point: checked.value.meetingPoint,
+          agent_first_name: checked.value.agentFirstName,
+          share_phone: checked.value.sharePhone,
+        },
+        actor,
+      });
+      return failed ?? done({ recorded: 'VIEWING_DETAILS_RECORDED' });
     }
   }
   return refuse(400, `Unknown action: ${action}`);

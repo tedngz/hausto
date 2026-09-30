@@ -23,6 +23,7 @@ import {
   type RequestView,
   type RealtorDecision,
   type CancelReason,
+  type ViewingDetails,
 } from '../../supabase/functions/_shared/viewing-domain';
 import { formatVnd, hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { waitingReplies } from '../../supabase/functions/_shared/viewing/thread';
@@ -366,6 +367,18 @@ function ItemCard({
         </p>
       )}
 
+      {state?.state === 'CONFIRMED' && (
+        <ViewingDetailsForm
+          key={JSON.stringify(state.details ?? null)}
+          busy={busy}
+          details={state.details ?? null}
+          kept={view.state === 'CONFIRMED' && view.confirmedItemIds.includes(item.id)}
+          suggestedName={(item.realtor_name ?? '').trim().split(/\s+/)[0] ?? ''}
+          hasContact={!!item.realtor_phone}
+          onSave={details => post({ action: 'VIEWING_DETAILS', ...details })}
+        />
+      )}
+
       {state?.state === 'ALTERNATIVE_OFFERED' && state.slots.length > 0 && (
         <TakeOfferedTime
           busy={busy}
@@ -533,6 +546,79 @@ function TakeOfferedTime({
       <p className="small muted" style={{ marginBottom: 0 }}>
         Then tell the renter in the reply box - the itinerary has already gone out.
       </p>
+    </div>
+  );
+}
+
+/**
+ * What the renter is sent on the morning of the viewing: where to meet, the
+ * agent's first name, and their number - only if the agent said yes when the
+ * operator asked (the confirmation draft asks). Without a meeting point the
+ * renter gets the listing's location, which is often only a street.
+ */
+function ViewingDetailsForm({
+  busy,
+  details,
+  kept,
+  suggestedName,
+  hasContact,
+  onSave,
+}: {
+  busy: boolean;
+  details: ViewingDetails | null;
+  kept: boolean;
+  suggestedName: string;
+  hasContact: boolean;
+  onSave: (d: { meetingPoint: string; agentFirstName: string; sharePhone: boolean }) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [meetingPoint, setMeetingPoint] = useState(details?.meetingPoint ?? '');
+  const [name, setName] = useState(details?.agentFirstName ?? suggestedName);
+  const [share, setShare] = useState(details?.sharePhone ?? false);
+
+  if (!open) {
+    return (
+      <div className="row wrap-row small" style={{ marginTop: 8 }}>
+        {details
+          ? <span className="muted">
+              Viewing day: meet at {details.meetingPoint}
+              {details.agentFirstName ? `, agent ${details.agentFirstName}` : ''}
+              {details.sharePhone ? ' - number shared on the day' : ' - number not shared'}
+            </span>
+          : <span className={`tag ${kept ? 'warn' : ''}`}>no meeting point yet</span>}
+        <button className="link" disabled={busy} onClick={() => setOpen(true)}>
+          {details ? 'change' : 'add where to meet'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="small muted">For the renter's viewing-day message, sent that morning.</div>
+      <input
+        style={{ width: '100%', marginTop: 4 }}
+        placeholder="Where to meet, e.g. Lobby of tower L4, 208 Nguyen Huu Canh, Binh Thanh"
+        value={meetingPoint}
+        onChange={e => setMeetingPoint(e.target.value)}
+      />
+      <div className="row wrap-row" style={{ marginTop: 6 }}>
+        <input placeholder="Agent's first name" value={name} onChange={e => setName(e.target.value)} />
+        <label className="small">
+          <input type="checkbox" checked={share} disabled={!hasContact} onChange={e => setShare(e.target.checked)} />{' '}
+          Agent agreed to their number going to the renter on the day
+        </label>
+      </div>
+      <div className="row" style={{ marginTop: 6 }}>
+        <button
+          className="primary"
+          disabled={busy || meetingPoint.trim().length < 3}
+          onClick={async () => { if (await onSave({ meetingPoint, agentFirstName: name, sharePhone: share })) setOpen(false); }}
+        >
+          Save
+        </button>
+        <button disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
+      </div>
     </div>
   );
 }
