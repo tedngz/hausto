@@ -205,6 +205,78 @@ export function renderOffer(opts: {
   ].join('\n\n');
 }
 
+// ── What may be offered ─────────────────────────────────────────────────────
+//
+// An agent asked about a 2-bedroom under 20m will mention their 3-bedroom at
+// 35m. Nothing the renter did not ask for goes in front of them unless they
+// said, on the thread, that they would take it (BRIEF_CHANGED). This is the
+// renter's side of "we never spam them": the agent never reaches them, and
+// neither does anything the agent wants to push.
+
+/** Over budget by up to this much still fits - 15.5m for a 15m budget is worth a look. */
+export const BUDGET_TOLERANCE = 0.1;
+
+export interface Brief {
+  /** Acceptable bedroom counts, 4 meaning four or more. */
+  bedrooms: number[];
+  budgetMaxVnd: number | null;
+}
+
+/** The form's brief, or the renter's change to it when there is one. */
+export function briefOf(
+  form: { bedrooms: number; budgetMaxVnd: number | null },
+  changed: Brief | null,
+): Brief {
+  return changed ?? { bedrooms: [Math.min(form.bedrooms, MAX_BEDROOMS)], budgetMaxVnd: form.budgetMaxVnd };
+}
+
+/** The most a unit may cost and still be offered. */
+export function priceCeiling(brief: Brief): number | null {
+  return brief.budgetMaxVnd == null ? null : Math.round(brief.budgetMaxVnd * (1 + BUDGET_TOLERANCE));
+}
+
+const bedsWords = (beds: number[]) =>
+  beds.map(n => (n >= MAX_BEDROOMS ? `${MAX_BEDROOMS}+` : String(n))).join(' or ') + ' bedrooms';
+
+/** Why this unit is outside what they asked for, or null when it fits. */
+export function misfit(unit: { bedrooms: number; priceVnd: number }, brief: Brief): string | null {
+  if (!brief.bedrooms.includes(Math.min(unit.bedrooms, MAX_BEDROOMS))) {
+    return `${bedsLabel(unit.bedrooms)} - they asked for ${bedsWords(brief.bedrooms)}`;
+  }
+  const ceiling = priceCeiling(brief);
+  if (ceiling != null && unit.priceVnd > ceiling) {
+    return `${formatVnd(unit.priceVnd)} - over their ${formatVnd(brief.budgetMaxVnd!)} budget`;
+  }
+  return null;
+}
+
+export type BriefChange = { ok: true; value: Brief } | { ok: false; error: string };
+
+/**
+ * A change to the brief, as the renter put it. Bedroom counts 1-4; a budget in
+ * dong, or null when they said price does not matter. At least one of the
+ * two must actually change.
+ */
+// deno-lint-ignore no-explicit-any
+export function validateBriefChange(raw: any, current: Brief): BriefChange {
+  const beds = Array.isArray(raw?.bedrooms) ? [...new Set(raw.bedrooms.map(Number))] as number[] : current.bedrooms;
+  if (beds.length === 0 || beds.some(n => !(Number.isInteger(n) && n >= 1 && n <= MAX_BEDROOMS))) {
+    return { ok: false, error: 'Bedrooms is one or more of 1 to 4 (4 for four or more).' };
+  }
+  let budget = current.budgetMaxVnd;
+  if (raw && 'budgetMaxVnd' in raw) {
+    budget = raw.budgetMaxVnd === null ? null : Number(raw.budgetMaxVnd);
+    if (budget !== null && !(Number.isInteger(budget) && budget >= MIN_BUDGET_VND && budget <= MAX_BUDGET_VND)) {
+      return { ok: false, error: `Budget in dong, ${formatVnd(MIN_BUDGET_VND)} to ${formatVnd(MAX_BUDGET_VND)}, or none.` };
+    }
+  }
+  const value = { bedrooms: [...beds].sort((a, b) => a - b), budgetMaxVnd: budget };
+  if (value.budgetMaxVnd === current.budgetMaxVnd && value.bedrooms.join() === current.bedrooms.join()) {
+    return { ok: false, error: 'That is what they asked for already.' };
+  }
+  return { ok: true, value };
+}
+
 /** Whether a captured unit is past its freshness, from when it was last confirmed. */
 export function unitStale(lastVerifiedAt: string | null, now: Date): boolean {
   if (!lastVerifiedAt) return true;

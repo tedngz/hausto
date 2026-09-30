@@ -17,7 +17,8 @@ import {
 import { describeInquiry } from '../../supabase/functions/_shared/viewing/inquiry';
 import { formatVnd, humanAge } from '../../supabase/functions/_shared/viewing/format';
 import {
-  FURNISHING, MAX_OFFER_UNITS, MAX_PHOTOS, UNIT_FRESH_DAYS, renderOffer, unitStale, type OfferUnit,
+  FURNISHING, MAX_OFFER_UNITS, MAX_PHOTOS, UNIT_FRESH_DAYS, briefOf, misfit, priceCeiling, renderOffer, unitStale,
+  type Brief, type OfferUnit,
 } from '../../supabase/functions/_shared/viewing/offer';
 
 interface Row {
@@ -230,6 +231,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
       <div className="card">
         <strong>What they need</strong>
         <p style={{ margin: '4px 0' }}>{summary(d)}</p>
+        <BriefLine d={d} v={v} closed={v.state === 'CLOSED'} busy={busy} run={run} />
         {d.notes && <p className="small muted" style={{ margin: 0 }}>“{d.notes}”</p>}
         <p className="small muted" style={{ margin: '4px 0 0' }}>
           Code arrived {hcmc(d.confirmed_at)} · reply promised by {hcmc(inquiryDeadline(v))} · window {windowOpen ? `open until ${hcmc(d.window_expires_at)}` : 'closed'}
@@ -297,7 +299,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
 
       <Units d={d} agents={[...agents, ...extra]} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId} />
 
-      <OfferComposer d={d} canReply={canReply} replyBlocked={replyBlocked} busy={busy} run={run} inquiryId={inquiryId} />
+      <OfferComposer d={d} v={v} canReply={canReply} replyBlocked={replyBlocked} busy={busy} run={run} inquiryId={inquiryId} />
 
       <div className="card">
         <strong>WhatsApp</strong>
@@ -503,12 +505,16 @@ function Units({ d, agents, closed, busy, run, inquiryId }: {
  * The one message (SPEC §11). The preview is the same renderOffer the server
  * sends, with the renter's first name left out - the console never has it.
  */
-function OfferComposer({ d, canReply, replyBlocked, busy, run, inquiryId }: {
-  d: Detail; canReply: boolean; replyBlocked: string | null; busy: boolean; run: Run; inquiryId: string;
+function OfferComposer({ d, v, canReply, replyBlocked, busy, run, inquiryId }: {
+  d: Detail; v: InquiryView; canReply: boolean; replyBlocked: string | null; busy: boolean; run: Run; inquiryId: string;
 }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [line, setLine] = useState('');
   const now = new Date();
+  const brief = briefOf({ bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd }, v.brief);
+  // One offer, then their answer (the server refuses the same).
+  const awaiting = !!v.offeredAt && !d.thread.some(m => m.direction === 'inbound' && Date.parse(m.created_at) > Date.parse(v.offeredAt!));
+  const blocked = awaiting ? 'They have not answered the last offer yet - send more once they reply.' : replyBlocked;
 
   const candidates: (OfferUnit & { kind: string })[] = [
     ...d.units.filter(u => u.is_active && !unitStale(u.last_verified_at, now)).map(u => ({
@@ -520,7 +526,7 @@ function OfferComposer({ d, canReply, replyBlocked, busy, run, inquiryId }: {
       confirmedAt: null, kind: 'advertised',
     })),
   ];
-  const chosen = candidates.filter(c => picked.includes(c.id));
+  const chosen = candidates.filter(c => picked.includes(c.id) && !misfit(c, brief));
   const toggle = (id: string) =>
     setPicked(p => p.includes(id) ? p.filter(x => x !== id) : p.length >= MAX_OFFER_UNITS ? p : [...p, id]);
 
@@ -530,13 +536,17 @@ function OfferComposer({ d, canReply, replyBlocked, busy, run, inquiryId }: {
       <strong>Offer units</strong>
       <span className="small muted"> - one message with up to {MAX_OFFER_UNITS}; it uses one of the two messages they can get without replying.</span>
       <div style={{ marginTop: 6 }}>
-        {candidates.map(c => (
-          <label key={c.id} className="row small" style={{ marginBottom: 2 }}>
-            <input type="checkbox" checked={picked.includes(c.id)} onChange={() => toggle(c.id)} />
-            <span>{c.title} · {formatVnd(c.priceVnd)}</span>
-            <span className={`tag ${c.kind === 'confirmed' ? 'good' : ''}`}>{c.kind}</span>
-          </label>
-        ))}
+        {candidates.map(c => {
+          const off = misfit(c, brief);
+          return (
+            <label key={c.id} className="row small" style={{ marginBottom: 2 }}>
+              <input type="checkbox" disabled={!!off} checked={picked.includes(c.id) && !off} onChange={() => toggle(c.id)} />
+              <span className={off ? 'muted' : ''}>{c.title} · {formatVnd(c.priceVnd)}</span>
+              <span className={`tag ${c.kind === 'confirmed' ? 'good' : ''}`}>{c.kind}</span>
+              {off && <span className="tag warn" title="Offer it only if they say they would take it">{off}</span>}
+            </label>
+          );
+        })}
       </div>
       <input style={{ width: '100%', marginTop: 6 }} placeholder="Your own line, optional - e.g. which you would see first"
         value={line} onChange={e => setLine(e.target.value)} />
@@ -546,9 +556,9 @@ function OfferComposer({ d, canReply, replyBlocked, busy, run, inquiryId }: {
         </div>
       )}
       <div className="row" style={{ marginTop: 6 }}>
-        <span className="small muted">{replyBlocked ?? ''}</span>
+        <span className="small muted">{blocked ?? ''}</span>
         <div className="spacer" />
-        <button disabled={busy || !canReply || chosen.length === 0}
+        <button disabled={busy || !canReply || awaiting || chosen.length === 0}
           onClick={() => void run(
             { action: 'INQUIRY_OFFER_UNITS', listingIds: chosen.map(c => c.id), message: line, key: crypto.randomUUID() },
             () => { setPicked([]); setLine(''); },
@@ -556,6 +566,66 @@ function OfferComposer({ d, canReply, replyBlocked, busy, run, inquiryId }: {
           Send offer on WhatsApp
         </button>
       </div>
+    </div>
+  );
+}
+
+const bedsText = (beds: number[]) => beds.map(n => (n >= 4 ? '4+' : String(n))).join(' or ') + ' BR';
+
+/**
+ * The brief in force, and a way to change it - only as the renter put it on
+ * the thread. Units outside it cannot be offered (INQUIRY_OFFER_UNITS), so
+ * "would you take a 3-bedroom?" is asked in a reply, and their answer recorded
+ * here against their message.
+ */
+function BriefLine({ d, v, closed, busy, run }: { d: Detail; v: InquiryView; closed: boolean; busy: boolean; run: Run }) {
+  const brief: Brief = briefOf({ bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd }, v.brief);
+  const said = [...d.thread].reverse().filter(m => m.direction === 'inbound');
+  const [open, setOpen] = useState(false);
+  const [messageId, setMessageId] = useState(said[0]?.id ?? '');
+  const [beds, setBeds] = useState<number[]>(brief.bedrooms);
+  const [budget, setBudget] = useState(brief.budgetMaxVnd ? String(brief.budgetMaxVnd / 1_000_000) : '');
+  const ceiling = priceCeiling(brief);
+
+  return (
+    <div className="small" style={{ margin: '2px 0 4px' }}>
+      <span className={v.brief ? '' : 'muted'}>
+        {v.brief ? 'They now take: ' : 'Offers must fit: '}
+        {bedsText(brief.bedrooms)}, {ceiling == null ? 'any price' : `up to ${formatVnd(ceiling)} (budget + 10%)`}
+      </span>
+      {!closed && said.length > 0 && !open && (
+        <button className="link" disabled={busy} onClick={() => setOpen(true)}>they changed what they want</button>
+      )}
+      {open && (
+        <div style={{ marginTop: 6 }}>
+          <div className="row wrap-row">
+            <span className="muted">Where they said it:</span>
+            <select value={messageId} onChange={e => setMessageId(e.target.value)} style={{ maxWidth: 420 }}>
+              {said.map(m => <option key={m.id} value={m.id}>{hcmc(m.created_at)} - {m.body.slice(0, 70)}</option>)}
+            </select>
+          </div>
+          <div className="row wrap-row" style={{ marginTop: 4 }}>
+            {[1, 2, 3, 4].map(n => (
+              <label key={n}>
+                <input type="checkbox" checked={beds.includes(n)}
+                  onChange={() => setBeds(b => b.includes(n) ? b.filter(x => x !== n) : [...b, n])} /> {n === 4 ? '4+' : n} BR
+              </label>
+            ))}
+            <input style={{ width: 90 }} placeholder="no limit" value={budget} onChange={e => setBudget(e.target.value)} />
+            <span className="muted">million ₫ a month (blank for no limit)</span>
+          </div>
+          <div className="row" style={{ marginTop: 4 }}>
+            <button className="primary" disabled={busy || !messageId || beds.length === 0}
+              onClick={() => void run({
+                action: 'INQUIRY_CHANGE_BRIEF', messageId, bedrooms: beds,
+                budgetMaxVnd: budget.trim() ? Math.round(Number(budget) * 1_000_000) : null,
+              }, () => setOpen(false))}>
+              Record it
+            </button>
+            <button disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

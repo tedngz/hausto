@@ -34,10 +34,13 @@ import {
   CONCIERGE_SOURCE,
   MAX_OFFER_UNITS,
   UNIT_FRESH_DAYS,
+  briefOf,
+  misfit,
   renderOffer,
   unitPhotoPath,
   unitRow,
   unitStale,
+  validateBriefChange,
   validateUnit,
 } from './offer.ts';
 
@@ -50,6 +53,7 @@ export const INQUIRY_ACTIONS = [
   'INQUIRY_CAPTURE_UNIT',
   'INQUIRY_RECONFIRM_UNIT',
   'INQUIRY_OFFER_UNITS',
+  'INQUIRY_CHANGE_BRIEF',
   'INQUIRY_SEND_UPDATE',
   'INQUIRY_REPLY',
   'INQUIRY_CLOSE',
@@ -81,6 +85,8 @@ interface InquiryRow {
   full_name: string | null;
   renter_id: string | null;
   watch_id: string | null;
+  bedrooms_needed: number;
+  budget_max_vnd: number | null;
 }
 
 /** The request and its derived state, or a refusal. */
@@ -91,7 +97,7 @@ async function load(db: Supa, inquiryId: string): Promise<
   if (!/^[0-9a-f-]{36}$/i.test(inquiryId)) return { ok: false, result: refuse(400, 'inquiryId is required') };
   const { data: row } = await db
     .from('complex_inquiries')
-    .select('id, channel, whatsapp_confirmed_at, complex_id, full_name, renter_id, watch_id')
+    .select('id, channel, whatsapp_confirmed_at, complex_id, full_name, renter_id, watch_id, bedrooms_needed, budget_max_vnd')
     .eq('id', inquiryId).maybeSingle();
   if (!row) return { ok: false, result: refuse(404, 'not_found', 'No such request.') };
   if (row.channel !== 'WHATSAPP') {
@@ -173,7 +179,8 @@ export async function performInquiryAction(
 
   if (action === 'INQUIRY_CAPTURE_UNIT') return captureUnit(db, actor, row, input);
   if (action === 'INQUIRY_RECONFIRM_UNIT') return reconfirmUnit(db, row, input);
-  if (action === 'INQUIRY_OFFER_UNITS') return offerUnits(db, deps, actor, row, input);
+  if (action === 'INQUIRY_OFFER_UNITS') return offerUnits(db, deps, actor, row, view, input);
+  if (action === 'INQUIRY_CHANGE_BRIEF') return changeBrief(db, actor, row, view, input);
   if (action === 'INQUIRY_SEND_UPDATE') return sendUpdate(db, deps, row, input);
 
   if (action === 'INQUIRY_CLOSE') {
@@ -210,6 +217,34 @@ export async function performInquiryAction(
   });
   await db.from('complex_inquiries').update({ last_message_at: new Date().toISOString() }).eq('id', inquiryId);
   return done({ recorded: 'REPLIED', messageId: sent.messageId });
+}
+
+/**
+ * The renter said they would take something else - "3 bedrooms is fine too",
+ * "up to 25m". Recorded against the message on the thread where they said it,
+ * so a wider offer always traces back to the renter's own words, never to an
+ * agent's pitch or an operator's guess.
+ */
+async function changeBrief(
+  db: Supa,
+  actor: string,
+  row: InquiryRow,
+  view: InquiryView,
+  input: Record<string, unknown>,
+): Promise<InquiryResult> {
+  const messageId = str(input.messageId);
+  const { data: said } = messageId
+    ? await db.from('complex_inquiry_messages').select('id, inquiry_id, direction').eq('id', messageId).maybeSingle()
+    : { data: null };
+  if (!said || said.inquiry_id !== row.id || said.direction !== 'inbound') {
+    return refuse(400, 'no_renter_message', 'Pick the message where the renter said it.');
+  }
+  const current = briefOf({ bedrooms: row.bedrooms_needed, budgetMaxVnd: row.budget_max_vnd }, view.brief);
+  const changed = validateBriefChange(input, current);
+  if (!changed.ok) return refuse(400, 'invalid_brief', changed.error);
+  return (await append(db, row.id, 'BRIEF_CHANGED', {
+    bedrooms: changed.value.bedrooms, budget_max_vnd: changed.value.budgetMaxVnd, message_id: messageId, note: note(input),
+  }, actor)) ?? done({ recorded: 'BRIEF_CHANGED' });
 }
 
 // ── Units (S7.1b) ───────────────────────────────────────────────────────────
@@ -278,19 +313,30 @@ async function reconfirmUnit(db: Supa, row: InquiryRow, input: Record<string, un
   return done({ recorded: 'UNIT_RECONFIRMED' });
 }
 
+/** Has the renter written on this request's thread since `since`? */
+async function renterWroteSince(db: Supa, inquiryId: string, since: string): Promise<boolean> {
+  const { data } = await db
+    .from('complex_inquiry_messages').select('id, created_at')
+    .eq('inquiry_id', inquiryId).eq('direction', 'inbound').gte('created_at', since);
+  return ((data ?? []) as { created_at: string }[]).some(m => Date.parse(m.created_at) > Date.parse(since));
+}
+
 /**
  * The one message with the units in it. Every unit must be requestable now,
  * belong to this request (captured for it, or advertised at its building),
- * and - if captured - have been confirmed by its agent within
- * UNIT_FRESH_DAYS. Sent like any operator reply, then recorded three ways:
- * on the thread, as UNITS_OFFERED, and in alert_items so the weekly alert
- * does not offer the same places again.
+ * fit what the renter asked for - or what they have since said they would
+ * take - and, if captured, have been confirmed by its agent within
+ * UNIT_FRESH_DAYS. After the first offer, another waits for the renter to
+ * answer it. Sent like any operator reply, then recorded three ways: on the
+ * thread, as UNITS_OFFERED, and in alert_items so the weekly alert does not
+ * offer the same places again.
  */
 async function offerUnits(
   db: Supa,
   deps: { whatsapp: WhatsAppAdapter; messages: MessageStore; newKey?: () => string },
   actor: string,
   row: InquiryRow,
+  view: InquiryView,
   input: Record<string, unknown>,
 ): Promise<InquiryResult> {
   const ids: string[] = Array.isArray(input.listingIds)
@@ -298,6 +344,11 @@ async function offerUnits(
     : [];
   if (ids.length === 0 || ids.length > MAX_OFFER_UNITS) {
     return refuse(400, 'invalid_units', `Pick 1 to ${MAX_OFFER_UNITS} units.`);
+  }
+  // One offer, then their answer. A second list they did not ask for is the
+  // agents' stock arriving in instalments, however good each unit is.
+  if (view.offeredAt && !(await renterWroteSince(db, row.id, view.offeredAt))) {
+    return refuse(409, 'awaiting_renter', 'They have not answered the last offer yet. Send more once they reply.');
   }
 
   let message: string | null = null;
@@ -318,9 +369,15 @@ async function offerUnits(
   const onFile = new Set(((atBuilding ?? []) as unknown[])
     .map(x => (typeof x === 'string' ? x : String((x as Record<string, unknown>).complex_listing_ids))));
   const now = new Date();
+  const brief = briefOf({ bedrooms: row.bedrooms_needed, budgetMaxVnd: row.budget_max_vnd }, view.brief);
   for (const l of listings) {
     const captured = capturedFor(l, row.id);
     if (!captured && !onFile.has(l.id)) return refuse(422, 'not_this_building', `"${l.title}" is not at this building.`);
+    const off = misfit({ bedrooms: Number(l.bedrooms), priceVnd: Number(l.price_vnd) }, brief);
+    if (off) {
+      return refuse(422, 'outside_brief',
+        `"${l.title}" is ${off}. Offer it only if they say they would take it - record that as a change to what they want.`);
+    }
     if (captured && unitStale(l.last_verified_at, now)) {
       return refuse(409, 'stale_unit',
         `"${l.title}" was last confirmed over ${UNIT_FRESH_DAYS} days ago - reconfirm it with the agent first.`);

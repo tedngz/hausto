@@ -230,6 +230,70 @@ describe('capturing units and offering them (S7.1b)', () => {
     expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [id], message: 'Call Linh on 0907 654 321' })).status).toBe(400);
     expect(view().state).toBe('SOURCING');
   });
+
+  // They asked for 2 bedrooms under 25m. The agent has a 3-bedroom, and a
+  // 2-bedroom at 29m.
+  it('refuses anything outside what they asked for, sending nothing', async () => {
+    const three = await capture({ bedrooms: 3, priceVnd: 24_000_000 });
+    const dear = await capture({ priceVnd: 29_000_000 });
+    const close = await capture({ priceVnd: 27_000_000 }); // within 10%
+    const sentBefore = whatsapp.delivered.length;
+
+    const r3 = await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [close.id, three.id] });
+    expect(r3).toMatchObject({ status: 422, body: { error: 'outside_brief' } });
+    expect(String(r3.body.message)).toContain('3BR - they asked for 2 bedrooms');
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [dear.id] })).body.error).toBe('outside_brief');
+    expect(whatsapp.delivered.length).toBe(sentBefore);
+    expect(view().offeredListingIds).toEqual([]);
+
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [close.id] })).status).toBe(200);
+  });
+
+  it('offers wider only once the renter says so, recorded against their own message', async () => {
+    const three = await capture({ bedrooms: 3, priceVnd: 28_000_000 });
+    at('2026-09-29T05:00:00Z');
+    await act({ action: 'INQUIRY_REPLY', inquiryId: INQ, body: 'Nothing in 2BR yet. Would a 3-bedroom around 28m work?', key: 'q1' });
+    const asked = db.tables.complex_inquiry_messages.at(-1)!;
+    at('2026-09-29T06:00:00Z');
+    await renterSends('Yes, 3 bedrooms is fine, up to 30m');
+    const said = db.tables.complex_inquiry_messages.at(-1)!;
+    expect(said.direction).toBe('inbound');
+
+    // Our own question is not their answer, and neither is nothing.
+    for (const messageId of [asked.id, 'nope', undefined]) {
+      const r = await act({ action: 'INQUIRY_CHANGE_BRIEF', inquiryId: INQ, messageId, bedrooms: [2, 3], budgetMaxVnd: 30_000_000 });
+      expect(r.body.error).toBe('no_renter_message');
+    }
+    expect((await act({ action: 'INQUIRY_CHANGE_BRIEF', inquiryId: INQ, messageId: said.id, bedrooms: [2] })).body.error)
+      .toBe('invalid_brief');
+
+    const r = await act({ action: 'INQUIRY_CHANGE_BRIEF', inquiryId: INQ, messageId: said.id, bedrooms: [2, 3], budgetMaxVnd: 30_000_000 });
+    expect(r.status).toBe(200);
+    expect(db.tables.inquiry_events.at(-1)).toMatchObject({
+      type: 'BRIEF_CHANGED', actor: 'OPS:op-1',
+      payload: { bedrooms: [2, 3], budget_max_vnd: 30_000_000, message_id: said.id },
+    });
+    expect(view().brief).toEqual({ bedrooms: [2, 3], budgetMaxVnd: 30_000_000 });
+
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [three.id] })).status).toBe(200);
+  });
+
+  it('sends a second offer only after they answer the first', async () => {
+    const a = await capture();
+    const b = await capture({ floor: '9' });
+    at('2026-09-29T05:00:00Z');
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [a.id] })).status).toBe(200);
+
+    at('2026-09-29T07:00:00Z');
+    const early = await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [b.id] });
+    expect(early).toMatchObject({ status: 409, body: { error: 'awaiting_renter' } });
+    expect(whatsapp.delivered.filter(m => m.body?.includes('here is what we found'))).toHaveLength(1);
+
+    at('2026-09-29T08:00:00Z');
+    await renterSends('Not quite - anything on a higher floor?');
+    at('2026-09-29T09:00:00Z');
+    expect((await act({ action: 'INQUIRY_OFFER_UNITS', inquiryId: INQ, listingIds: [b.id] })).status).toBe(200);
+  });
 });
 
 

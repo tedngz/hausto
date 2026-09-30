@@ -147,3 +147,37 @@ describe('reduceInquiry - units (S7.1b)', () => {
     expect(reduceInquiry('inq-1', shuffled)).toEqual(reduceInquiry('inq-1', inOrder));
   });
 });
+
+describe('reduceInquiry - the brief', () => {
+  it('has none until the renter changes it, then the latest stands', () => {
+    expect(reduceInquiry('inq-1', [ev('CONFIRMED', T(1))]).brief).toBeNull();
+    const v = reduceInquiry('inq-1', [
+      ev('CONFIRMED', T(1)),
+      ev('BRIEF_CHANGED', T(2), { bedrooms: [3, 2], budget_max_vnd: 30_000_000, message_id: 'm1' }),
+      ev('BRIEF_CHANGED', T(4), { bedrooms: [2, 3, 4], budget_max_vnd: null, message_id: 'm2' }),
+    ]);
+    expect(v.brief).toEqual({ bedrooms: [2, 3, 4], budgetMaxVnd: null });
+    expect(v.state).toBe('NEW');
+  });
+
+  it('ignores a change with no usable bedrooms', () => {
+    const v = reduceInquiry('inq-1', [
+      ev('CONFIRMED', T(1)), ev('BRIEF_CHANGED', T(2), { bedrooms: [0, 9, 'two'], budget_max_vnd: 1 }),
+    ]);
+    expect(v.brief).toBeNull();
+  });
+
+  it('reduces the same in any order', () => {
+    const events = [
+      ev('CONFIRMED', T(1)),
+      ev('AGENT_ASKED', T(2), { realtor_id: 'r1' }),
+      ev('BRIEF_CHANGED', T(3), { bedrooms: [3], budget_max_vnd: 30_000_000 }),
+      ev('UNITS_OFFERED', T(4), { listing_ids: ['u1'] }),
+      ev('BRIEF_CHANGED', T(5), { bedrooms: [2, 3], budget_max_vnd: 35_000_000 }),
+    ];
+    const forwards = reduceInquiry('inq-1', events);
+    expect(reduceInquiry('inq-1', [...events].reverse())).toEqual(forwards);
+    expect(reduceInquiry('inq-1', [events[4], events[0], events[3], events[2], events[1]])).toEqual(forwards);
+    expect(forwards.brief).toEqual({ bedrooms: [2, 3], budgetMaxVnd: 35_000_000 });
+  });
+});

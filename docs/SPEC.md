@@ -979,8 +979,8 @@ DELETE and TRUNCATE revoked, service role included), by `reduceInquiry()` in
 ```
 id           bigint identity
 inquiry_id   uuid references complex_inquiries
-type         SUBMITTED | CONFIRMED | AGENT_ASKED | AGENT_ANSWERED | UNIT_CAPTURED | UNITS_OFFERED | CLOSED | REOPENED
-payload      jsonb      -- realtor_id, medium, answer, reason, note
+type         SUBMITTED | CONFIRMED | AGENT_ASKED | AGENT_ANSWERED | UNIT_CAPTURED | UNITS_OFFERED | BRIEF_CHANGED | CLOSED | REOPENED
+payload      jsonb      -- realtor_id, medium, answer, reason, note; bedrooms[], budget_max_vnd, message_id
 actor        text       -- RENTER, USER:<uuid>, OPS:<uuid>, AGENT:<version>
 occurred_at  timestamptz
 ```
@@ -1000,8 +1000,8 @@ is not a state.
 
 The brief: the criteria, the deadline (code + 24h), the window and
 consecutive-outbound count, the thread, the building's roster, and the listings
-on file that fit - requestable, within budget and bedrooms - with their agents,
-marked as advertised rather than available.
+on file that fit - requestable, within the brief in force (below) - with their
+agents, marked as advertised rather than available.
 
 ### Units and the offer (PLAN-v3 S7.1b)
 
@@ -1044,6 +1044,25 @@ by inviting a reply and books nothing. Sent through `sendConciergeWhatsApp`
 `UNITS_OFFERED {listing_ids, message_id}`, and written to `alert_items` so the
 weekly alert does not offer the same places again. The request becomes
 `OFFERED`, and stays so if more agents are asked afterwards.
+
+**Only what they asked for.** An agent asked about a 2-bedroom under 20m will
+pitch their 3-bedroom at 35m; the renter never talks to an agent, and neither
+does anything the agent wants to push. Every offered unit must fit the brief
+in force (`misfit()` in `offer.ts`): one of its bedroom counts (4 meaning four
+or more) and at most 10% over its budget (`BUDGET_TOLERANCE`). The brief is the
+form's, until the renter says on the thread that they would take something
+else - asked in a reply ("would a 3-bedroom around 28m work?"), and their answer
+recorded with `INQUIRY_CHANGE_BRIEF` as `BRIEF_CHANGED {bedrooms[],
+budget_max_vnd, message_id}`. `message_id` must be one of the renter's own
+inbound messages on this request's thread, so a wider offer always traces back
+to the renter's words, never to an agent's pitch or an operator's guess. The
+latest change stands; it moves no state. `ops_inquiry_detail()` lists on-file
+units against the same brief.
+
+**One offer, then their answer.** After the first `UNITS_OFFERED`, another is
+refused (`awaiting_renter`) until the renter has written on the thread since the
+last one. More units arriving from agents wait for the renter to engage, rather
+than reaching them in instalments.
 
 ### The handoff, the deadline and after the window (PLAN-v3 S7.1c)
 
