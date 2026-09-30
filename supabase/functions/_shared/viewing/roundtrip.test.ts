@@ -314,6 +314,16 @@ describe('the round trip, end to end on MockAdapter', () => {
       view: view(), events: db.tables.events as unknown as DomainEvent[], createdAt, now: late,
     });
     expect(after.map(a => a.kind)).not.toContain('HOLDING_UPDATE');
+
+    // The next silence gets its own message. Keyed on the purpose alone, every
+    // holding update after the first was taken for a duplicate and never sent.
+    const sentBefore = adapter.delivered.length;
+    db.tables.events.find(e => e.type === 'HOLDING_UPDATE_SENT')!.occurred_at = new Date(late).toISOString();
+    // deno-lint-ignore no-explicit-any
+    const next = await deliver(db as any, adapter, { requestId, purpose: 'HOLDING_UPDATE' });
+    expect(next).toMatchObject({ ok: true, deduplicated: false });
+    expect(adapter.delivered.length).toBe(sentBefore + 1);
+    expect(db.tables.events.filter(e => e.type === 'HOLDING_UPDATE_SENT')).toHaveLength(2);
   });
 
   it('never puts a realtor number in anything the renter receives', async () => {

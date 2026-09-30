@@ -704,7 +704,7 @@ yes its agent is owed a `CONFIRM` like any other.
 
 ### The silence clock
 
-**No open request goes more than 24 hours without the renter hearing
+**No request waiting on us goes more than 24 hours without the renter hearing
 something.** Asserted as a property test over randomly generated event logs
 (`reminders.test.ts`), not only as examples.
 
@@ -717,6 +717,20 @@ something.** Asserted as a property test over randomly generated event logs
 - A closed request owes the renter nothing, except that a `CONFIRMED` one still
   gets its viewing-day message (below). Closed for coordination is not closed
   for the renter - or for the brokers, who are owed its decision (§4).
+- A `DELIVERED` request waits on the renter, not on us: they have the plan and
+  a question. No holding update is owed - it would say we are still working
+  and will send the plan - and an operator decides whether to chase or cancel
+  (`RENTER_UNRESPONSIVE`). (Until 2026-09-30 one was owed, and sent daily.)
+- Each holding update is keyed on the silence it breaks
+  (`HOLDING_UPDATE:<when the renter last heard from us>`), so the next one, a
+  day later, is a new message. Keyed on the purpose alone, every one after a
+  request's first was taken for a duplicate and never sent.
+- A holding update refused for a reason only the renter can lift - their
+  window is shut, or two messages already went unanswered - is completed with
+  that reason, and the drain queues no other for that request until the
+  renter writes again (`holdingUpdateOnHold`). There is no approved template
+  that says "still working", so with the window shut nothing can reach them;
+  queueing the refusal every 15 minutes once left 955 rows for one renter.
 - Brokers are nudged after 6 hours of silence, measured from the last contact
   **or nudge**, which is what feeds the two-nudge floor on `NO_RESPONSE` (§4).
 

@@ -152,10 +152,13 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // A shut window is not a transient fault and retrying cannot fix it.
+      // A shut window, or two messages already unanswered, is not a transient
+      // fault and retrying cannot fix it - only the renter writing can.
       // Complete the job with the reason recorded rather than burning five
-      // attempts discovering the same thing.
-      if (result.code === 'service_window_closed' || result.code === 'unknown_request') {
+      // attempts discovering the same thing; the drain holds the next one
+      // until they write (holdingUpdateOnHold).
+      if (result.code === 'service_window_closed' || result.code === 'too_many_consecutive'
+        || result.code === 'unknown_request') {
         await db.from('jobs')
           .update({ completed_at: new Date().toISOString(), last_error: result.code })
           .eq('id', job.id);

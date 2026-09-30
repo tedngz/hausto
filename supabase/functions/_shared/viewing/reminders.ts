@@ -1,7 +1,8 @@
 // Nobody waits a day in silence.
 //
-// S6's acceptance criterion is that no request can go more than 24 hours
-// without the renter hearing something, asserted as a property test. This
+// S6's acceptance criterion is that no request waiting on us can go more than
+// 24 hours without the renter hearing something, asserted as a property test.
+// Once the plan is delivered it waits on the renter, not us. This
 // module is the thing that property is asserted about: a pure function from
 // (the log, the clock) to the messages that are now due.
 //
@@ -13,6 +14,7 @@ import type { RequestView, RealtorDecision } from '../viewing-domain.ts';
 import { summarise } from '../viewing-domain.ts';
 import type { DomainEvent } from '../viewing-domain.ts';
 import { viewingDayDue } from './viewing-day.ts';
+import { SERVICE_WINDOW_MS } from '../whatsapp/send.ts';
 
 export const HOUR_MS = 60 * 60 * 1000;
 
@@ -48,6 +50,15 @@ export interface DueAction {
 
 /** Terminal request states. Nothing is due for a request that is over. */
 const CLOSED = new Set(['CONFIRMED', 'CANCELLED', 'FAILED_NO_SUPPLY']);
+
+/**
+ * States in which the request waits on the renter, not on us: the plan is in
+ * their hands, with a question. A holding update then would be false - it
+ * says we are still working and will send the plan - and repeating ourselves
+ * is not what their silence calls for; an operator decides whether to chase
+ * or cancel (RENTER_UNRESPONSIVE).
+ */
+const WAITING_ON_RENTER = new Set(['DELIVERED']);
 
 /**
  * When the renter last heard from us.
@@ -95,7 +106,7 @@ export function dueActions(input: ScheduleInput): DueAction[] {
 
   if (!closed) {
     const silentFor = now - lastHeardFromUs(events, createdAt);
-    if (silentFor >= SILENCE_ACTION_MS) {
+    if (silentFor >= SILENCE_ACTION_MS && !WAITING_ON_RENTER.has(view.state)) {
       actions.push({
         kind: 'HOLDING_UPDATE',
         requestId,
@@ -135,6 +146,28 @@ export function dueActions(input: ScheduleInput): DueAction[] {
   if (day) actions.push({ kind: 'VIEWING_DAY', requestId, date: day, reason: `viewings on ${day}` });
 
   return actions;
+}
+
+/**
+ * Why a holding update went unsent that only the renter can change: with
+ * their window shut nothing free-form may reach them, and after two unanswered
+ * messages the third is refused. Writing to us lifts both.
+ */
+export const RENTER_BOUND_REFUSALS = ['service_window_closed', 'too_many_consecutive'] as const;
+
+/**
+ * Should a holding update wait, having been refused for one of those? Yes,
+ * until the renter has written to us since - which their window records: it
+ * runs 24 hours from their last message.
+ *
+ * Without this the drain queued the same refusal every 15 minutes for as long
+ * as the request lived - 955 rows for one renter who had stopped replying.
+ */
+export function holdingUpdateOnHold(opts: { refusedAt: string | null; windowExpiresAt: string | null }): boolean {
+  if (!opts.refusedAt) return false;
+  if (!opts.windowExpiresAt) return true;
+  const lastInbound = Date.parse(opts.windowExpiresAt) - SERVICE_WINDOW_MS;
+  return lastInbound <= Date.parse(opts.refusedAt);
 }
 
 /**
