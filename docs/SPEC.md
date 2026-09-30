@@ -328,6 +328,11 @@ created_at   timestamptz default now()
 `viewing-jobs-drain` decides what is owed and enqueues; `viewing-jobs-run`
 claims rows (`claim_jobs`) and runs them. Both are on `pg_cron`.
 
+A queue, not a record: what happened is in the event logs and `messages`.
+Finished rows are deleted 30 days after `completed_at` by the nightly
+`jobs-retention` cron; nothing reads one older than 21 days. Unfinished rows
+are never deleted.
+
 ---
 
 ## §2 Lifecycle
