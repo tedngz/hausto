@@ -8,6 +8,7 @@ import {
   SILENCE_ACTION_MS,
   NUDGE_AFTER_MS,
   realtorDecisionsOwed,
+  holdingUpdateOnHold,
 } from './reminders.ts';
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 
@@ -95,6 +96,14 @@ describe('what is due', () => {
     expect(base(events, 50 * HOUR_MS).filter(a => a.kind === 'NUDGE_REALTOR')).toHaveLength(0);
   });
 
+  it('owes no holding update once the plan is delivered - it waits on the renter then', () => {
+    // "Still working on your viewings, we will send the plan" is false once
+    // it has gone. This is what a delivered request with a silent renter got,
+    // every day, until their window shut.
+    const events = logOf(...submitted(1), ev('ITINERARY_DELIVERED', 1 * HOUR_MS, { message_id: 'm1' }));
+    expect(base(events, 60 * HOUR_MS).map(a => a.kind)).not.toContain('HOLDING_UPDATE');
+  });
+
   it('owes a closed request nothing, however long it sits', () => {
     const events = logOf(...submitted(3), ev('REQUEST_CANCELLED', 1 * HOUR_MS, { reason: 'renter' }));
     expect(base(events, 400 * HOUR_MS)).toHaveLength(0);
@@ -147,7 +156,7 @@ describe('what is due', () => {
 
 // ── The S6 acceptance criterion ─────────────────────────────────────────────
 
-describe('property: no open request goes 24h without the renter hearing something', () => {
+describe('property: no request waiting on us goes 24h without the renter hearing something', () => {
   /**
    * A tiny deterministic PRNG. Seeded so a failure is reproducible - a random
    * property test that cannot be replayed reports a bug you then cannot find.
@@ -202,10 +211,12 @@ describe('property: no open request goes 24h without the renter hearing somethin
       const viewNow = reduceRequest('r', visible);
       const silentFor = now - lastHeardFromUs(visible, at(0));
       const isClosed = ['CONFIRMED', 'CANCELLED', 'FAILED_NO_SUPPLY'].includes(viewNow.state);
+      // Delivered, the plan is in the renter's hands and the request waits on them.
+      const waitingOnUs = !isClosed && viewNow.state !== 'DELIVERED';
 
       const actions = dueActions({ view: viewNow, events: visible, createdAt: at(0), now });
 
-      if (!isClosed && silentFor >= SILENCE_ACTION_MS) {
+      if (waitingOnUs && silentFor >= SILENCE_ACTION_MS) {
         openAndSilentCases++;
         expect(
           actions.some(a => a.kind === 'HOLDING_UPDATE'),
@@ -213,8 +224,9 @@ describe('property: no open request goes 24h without the renter hearing somethin
         ).toBe(true);
       }
 
-      // The contrapositive: never nag a request that has just been answered.
-      if (silentFor < SILENCE_ACTION_MS) {
+      // The contrapositive: never nag a request that has just been answered,
+      // or one whose plan the renter already has.
+      if (silentFor < SILENCE_ACTION_MS || !waitingOnUs) {
         expect(actions.some(a => a.kind === 'HOLDING_UPDATE'), `trial ${trial}: nagged too early`).toBe(false);
       }
 
@@ -341,5 +353,20 @@ describe('a confirmed broker whose request is then cancelled', () => {
 
     const released = [...events, ev('REALTOR_NOTIFIED', 6 * HOUR_MS, { decision: 'RELEASE', message_id: 'rm2' }, 'i1')];
     expect(realtorDecisionsOwed(reduceRequest('r', released))).toEqual([]);
+  });
+});
+
+describe('a holding update only the renter can unblock', () => {
+  const refusedAt = '2026-09-21T10:00:00.000Z';
+
+  it('waits after a refusal until the renter writes again', () => {
+    // Their window runs 24h from their last message, so it says when that was.
+    expect(holdingUpdateOnHold({ refusedAt, windowExpiresAt: '2026-09-21T09:00:00.000Z' })).toBe(true);  // wrote 20 Sep
+    expect(holdingUpdateOnHold({ refusedAt, windowExpiresAt: null })).toBe(true);                        // never wrote
+    expect(holdingUpdateOnHold({ refusedAt, windowExpiresAt: '2026-09-22T12:00:00.000Z' })).toBe(false); // wrote 21 Sep, 12:00
+  });
+
+  it('never waits without a refusal', () => {
+    expect(holdingUpdateOnHold({ refusedAt: null, windowExpiresAt: null })).toBe(false);
   });
 });

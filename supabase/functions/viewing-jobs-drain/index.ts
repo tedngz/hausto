@@ -12,7 +12,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { reduceRequest, type DomainEvent } from '../_shared/viewing-domain.ts';
-import { dueActions } from '../_shared/viewing/reminders.ts';
+import { dueActions, holdingUpdateOnHold, RENTER_BOUND_REFUSALS } from '../_shared/viewing/reminders.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
   const horizon = new Date(now - 21 * 24 * 60 * 60 * 1000).toISOString();
   const { data: requests, error: reqErr } = await db
     .from('viewing_requests')
-    .select('id, ref, created_at')
+    .select('id, ref, created_at, renter_id')
     .gte('created_at', horizon)
     .order('created_at', { ascending: true })
     .limit(500);
@@ -94,13 +94,40 @@ Deno.serve(async (req) => {
     })),
   );
 
+  // Holding updates refused for a reason only the renter can lift, and when -
+  // with each renter's window, whose start is when they last wrote.
+  const { data: refused } = await db
+    .from('jobs').select('payload, completed_at').eq('kind', 'HOLDING_UPDATE')
+    .in('last_error', [...RENTER_BOUND_REFUSALS]).gte('completed_at', horizon);
+  const refusedAt = new Map<string, string>();
+  for (const j of (refused ?? []) as { payload: Record<string, unknown>; completed_at: string }[]) {
+    const id = String(j.payload?.request_id ?? '');
+    if (id && (!refusedAt.has(id) || j.completed_at > refusedAt.get(id)!)) refusedAt.set(id, j.completed_at);
+  }
+  const renterIds = [...new Set((requests as { renter_id: string | null }[]).map(r => r.renter_id).filter(Boolean))];
+  const { data: renters } = renterIds.length
+    ? await db.from('renters').select('id, service_window_expires_at').in('id', renterIds)
+    : { data: [] };
+  const windowOf = new Map(((renters ?? []) as { id: string; service_window_expires_at: string | null }[])
+    .map(r => [r.id, r.service_window_expires_at]));
+
   const rows: Record<string, unknown>[] = [];
-  for (const r of requests as { id: string; created_at: string }[]) {
+  let held = 0;
+  for (const r of requests as { id: string; created_at: string; renter_id: string | null }[]) {
     const events = byRequest.get(r.id) ?? [];
     const view = reduceRequest(r.id, events);
 
     for (const action of dueActions({ view, events, createdAt: r.created_at, now })) {
       if (queued.has(jobKey(action))) continue;
+      // Refused last time for a reason a retry cannot fix, and the renter has
+      // not written since: queueing it again is queueing the same refusal.
+      if (action.kind === 'HOLDING_UPDATE' && holdingUpdateOnHold({
+        refusedAt: refusedAt.get(r.id) ?? null,
+        windowExpiresAt: r.renter_id ? windowOf.get(r.renter_id) ?? null : null,
+      })) {
+        held++;
+        continue;
+      }
       queued.add(jobKey(action));
       rows.push({
         kind: action.kind,
@@ -124,6 +151,6 @@ Deno.serve(async (req) => {
   // Enqueue only. Executing the jobs is a separate pass so a slow send cannot
   // stall the scan, and so a job that fails is retried from its row rather
   // than lost with the request that produced it.
-  console.log(`[viewing-jobs-drain] scanned ${requests.length}, enqueued ${rows.length}`);
-  return json({ success: true, scanned: requests.length, enqueued: rows.length });
+  console.log(`[viewing-jobs-drain] scanned ${requests.length}, enqueued ${rows.length}, held ${held}`);
+  return json({ success: true, scanned: requests.length, enqueued: rows.length, held });
 });

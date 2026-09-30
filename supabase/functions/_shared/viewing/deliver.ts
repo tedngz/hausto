@@ -22,7 +22,7 @@ import {
   type StopListing,
   type Warning,
 } from './itinerary.ts';
-import { renderHoldingUpdate } from './reminders.ts';
+import { lastHeardFromUs, renderHoldingUpdate } from './reminders.ts';
 import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
 
@@ -125,6 +125,15 @@ export async function deliver(
     text = renderHoldingUpdate({ ref: request.ref, view });
   }
 
+  // A holding update's key names the silence it breaks - when the renter last
+  // heard from us - so a retry of this one is the same message and the next
+  // one, a day on, is not. Keyed on the purpose alone, every holding update
+  // after a request's first was taken for a duplicate: it wrote no event, the
+  // clock never moved, and the drain queued it again every pass.
+  const purpose = opts.purpose === 'HOLDING_UPDATE'
+    ? `HOLDING_UPDATE:${new Date(lastHeardFromUs((events ?? []) as DomainEvent[], request.created_at)).toISOString()}`
+    : opts.purpose;
+
   const store = new SupabaseMessageStore(db);
   let messageId: string;
   let deduplicated = false;
@@ -133,7 +142,7 @@ export async function deliver(
     const result = await sendFreeForm(store, adapter, {
       renterId: request.renter_id,
       requestId: opts.requestId,
-      purpose: opts.purpose,
+      purpose,
       body: text,
       attempt: opts.attempt ?? 1,
     });
