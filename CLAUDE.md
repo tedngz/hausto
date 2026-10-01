@@ -392,17 +392,26 @@ echo "SELECT public.base_viewing_allowance_remaining('<uuid>') AS base,
   | bash scripts/supabase-sql.sh
 ```
 
-Edge function logs are retained for roughly **three minutes**. Catching a
-failure means tailing while it is reproduced, not looking afterwards:
+Edge function logs go back about 24 hours. Every source sits in one `logs`
+table, filtered by `source` (`function_logs` for `console.log` output,
+`function_edge_logs` for one line per request, `postgres_logs`, `edge_logs`).
+The old `logs.all` endpoint and per-source tables such as `function_logs` were
+removed. Pass a time window: without one the endpoint answers
+"Backend error! Retry your query" rather than a useful error.
 
 ```sh
 TOKEN=$(cat "$HOME/.supabase/access-token") node -e "
-const u=new URL('https://api.supabase.com/v1/projects/gbgrwjdmytaksrztcyzs/analytics/endpoints/logs.all');
-u.searchParams.set('sql','select timestamp, event_message from function_logs order by timestamp desc limit 100');
+const u=new URL('https://api.supabase.com/v1/projects/gbgrwjdmytaksrztcyzs/analytics/endpoints/logs');
+u.searchParams.set('iso_timestamp_start', new Date(Date.now()-3600e3).toISOString());
+u.searchParams.set('iso_timestamp_end', new Date().toISOString());
+u.searchParams.set('sql',\"select timestamp, event_message from logs where source='function_logs' order by timestamp desc limit 100\");
 fetch(u,{headers:{Authorization:'Bearer '+process.env.TOKEN}}).then(r=>r.json()).then(b=>
-  (b.result||[]).reverse().forEach(r=>console.log(new Date(Number(r.timestamp)/1000).toISOString(), r.event_message)));
+  (b.result||[]).reverse().forEach(r=>console.log(r.timestamp, r.event_message)));
 "
 ```
+
+The window is capped at 24 hours. Narrow by function with
+`position(event_message, '[verify-external-listings]') > 0`.
 
 The access token is at `~/.supabase/access-token`, not under `$APPDATA`.
 
