@@ -226,6 +226,7 @@ const Hub = () => {
         <h1 className="sr-only">Your rental search on Hausto</h1>
         <HubNavigation
           onViewProfile={() => setShowProfile(true)}
+          onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
           onRestartOnboarding={() => {
             clearPreferences();
             setSkippedOnboarding(false);

@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { HaustoLogo } from '@/components/HaustoLogo';
 import { UserMenu } from '@/components/UserMenu';
+import { HubPlanPill } from '@/components/hub/HubPlanPill';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRoles } from '@/hooks/useUserRoles';
@@ -9,6 +10,7 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 interface HubNavigationProps {
   onViewProfile: () => void;
   onRestartOnboarding: () => void;
+  onOpenSubscription: () => void;
 }
 
 /**
@@ -19,7 +21,7 @@ interface HubNavigationProps {
  * retired. What remains is the building directory, and - for accounts that have
  * realtor access - the way back to the realtor dashboard.
  */
-export const HubNavigation = ({ onViewProfile, onRestartOnboarding }: HubNavigationProps) => {
+export const HubNavigation = ({ onViewProfile, onRestartOnboarding, onOpenSubscription }: HubNavigationProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isRealtor } = useUserRoles();
@@ -37,7 +39,8 @@ export const HubNavigation = ({ onViewProfile, onRestartOnboarding }: HubNavigat
       {/* No centred nav icons: everything they pointed at - search, browse,
           matches, complexes, the map - is a tab on this page now. */}
 
-      <div className="z-10 flex items-center">
+      <div className="z-10 flex items-center gap-1.5">
+        {user && <HubPlanPill onOpenSubscription={onOpenSubscription} />}
         {user ? (
           <UserMenu
             userType="renter"
