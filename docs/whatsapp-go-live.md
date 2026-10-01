@@ -345,17 +345,9 @@ optional; there is no mock rehearsal left after step 3.
 
 ## 6. Verifying it, and reading the failures
 
-Edge function logs are retained for roughly **three minutes**. Catching a
-failure means tailing while you reproduce it, not looking afterwards:
-
-```sh
-TOKEN=$(cat "$HOME/.supabase/access-token") node -e "
-const u=new URL('https://api.supabase.com/v1/projects/gbgrwjdmytaksrztcyzs/analytics/endpoints/logs.all');
-u.searchParams.set('sql','select timestamp, event_message from function_logs order by timestamp desc limit 100');
-fetch(u,{headers:{Authorization:'Bearer '+process.env.TOKEN}}).then(r=>r.json()).then(b=>
-  (b.result||[]).reverse().forEach(r=>console.log(new Date(Number(r.timestamp)/1000).toISOString(), r.event_message)));
-"
-```
+Edge function logs go back about 24 hours. The query that reads them is in
+CLAUDE.md, under "Verifying against production" - the endpoint this section
+used to show has been removed.
 
 What each failure actually means:
 

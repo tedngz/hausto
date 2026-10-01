@@ -23,6 +23,17 @@ const SUSPECT_REVERIFY_HOURS = 6;    // already failed once: confirm or clear it
 const RESURRECTION_BATCH = 20;       // dead nhatot rows re-probed per run - see resurrectNhatotAds
 const MAX_UNVERIFIED_AGE_DAYS = 45;  // unconfirmed past the lease window + grace: archive
 
+// batdongsan is the one source every check of which costs a Browserless
+// session (Cloudflare), so it runs on its own slower cadence and a daily
+// ceiling instead of the tiers above. On the 2-day tier its ~100 listings
+// spent ~50 units a day. The ceiling wins over the cadence: with more listings
+// due than it allows, the oldest-verified go first and the rest wait, which
+// still keeps every row well inside MAX_UNVERIFIED_AGE_DAYS. Counted from
+// rows verified in the last 24h, so nhatot's rare Browserless fallback is not
+// included - leave headroom for it.
+const BATDONGSAN_REVERIFY_DAYS = 7;
+const BATDONGSAN_DAILY_CHECKS = 4;
+
 // `livePrice` is set only by verifiers that can read the listing's own price
 // back. It is what separates "the URL still resolves" from "this unit is still
 // on offer at this price", which is the only version ops can act on.
@@ -417,11 +428,13 @@ Deno.serve(async (req) => {
     // Due = never verified, OR one dead result already on record (confirm or clear
     // it within hours rather than leaving a probably-gone listing up for days),
     // OR recent listing past its 2-day cadence, OR old listing past its 5-day one.
-    const { data: listings, error } = await supabase
+    // batdongsan is pulled separately below, under its own budget.
+    const { data: tiered, error } = await supabase
       .from('external_properties')
       .select('id, source, source_url, external_id, verification_failures, price, price_display')
       .eq('is_active', true)
       .neq('source', 'concierge')
+      .neq('source', 'batdongsan')
       .or(
         `last_verified_at.is.null,` +
         `and(verification_failures.gte.1,last_verified_at.lte.${suspectReverifyCutoff}),` +
@@ -432,7 +445,36 @@ Deno.serve(async (req) => {
       .limit(BATCH_SIZE);
 
     if (error) throw error;
-    if (!listings || listings.length === 0) {
+
+    const { count: bdsUsed, error: bdsCountError } = await supabase
+      .from('external_properties')
+      .select('id', { count: 'exact', head: true })
+      .eq('source', 'batdongsan')
+      .gte('last_verified_at', new Date(nowMs - dayMs).toISOString());
+    if (bdsCountError) throw bdsCountError;
+
+    const bdsBudget = Math.max(0, BATDONGSAN_DAILY_CHECKS - (bdsUsed ?? 0));
+    let bds: typeof tiered = [];
+    if (bdsBudget > 0) {
+      const bdsReverifyCutoff = new Date(nowMs - BATDONGSAN_REVERIFY_DAYS * dayMs).toISOString();
+      const { data, error: bdsError } = await supabase
+        .from('external_properties')
+        .select('id, source, source_url, external_id, verification_failures, price, price_display')
+        .eq('is_active', true)
+        .eq('source', 'batdongsan')
+        .or(
+          `last_verified_at.is.null,` +
+          `and(verification_failures.gte.1,last_verified_at.lte.${suspectReverifyCutoff}),` +
+          `last_verified_at.lte.${bdsReverifyCutoff}`
+        )
+        .order('last_verified_at', { ascending: true, nullsFirst: true })
+        .limit(Math.min(bdsBudget, BATCH_SIZE));
+      if (bdsError) throw bdsError;
+      bds = data ?? [];
+    }
+
+    const listings = [...(tiered ?? []), ...(bds ?? [])];
+    if (listings.length === 0) {
       return new Response(JSON.stringify({ message: 'No active external listings to verify', summary }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
