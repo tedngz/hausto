@@ -16,7 +16,6 @@ import { HomeAI } from '@/components/HomeAI';
 import { ChatDock, RAIL_MIN_VIEWPORT } from '@/components/chat/ChatDock';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HubNavigation } from '@/components/hub/HubNavigation';
-import { HubPreferenceBar } from '@/components/hub/HubPreferenceBar';
 import { HubModeTabs, type HubMode } from '@/components/hub/HubModeTabs';
 import { ViewingRequestsPane } from '@/components/hub/ViewingRequestsPane';
 import { HubNewListings } from '@/components/hub/HubNewListings';
@@ -240,12 +239,12 @@ const Hub = () => {
               stops scrolling there - profile has none, so it keeps the pane's. */}
           <main
             className={cn(
-              'flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:p-6',
+              'flex min-w-0 flex-1 flex-col overflow-y-auto',
               !showProfile && 'xl:overflow-hidden'
             )}
           >
             {showProfile ? (
-              <div className="mx-auto w-full max-w-6xl">
+              <div className="mx-auto w-full max-w-6xl p-4 lg:p-6">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -271,19 +270,31 @@ const Hub = () => {
               </div>
             ) : (
               <>
-            <HubPreferenceBar onOpenSubscription={() => setIsSubscriptionModalOpen(true)} />
+            {/* The pane's header. At xl it is the rail header's height, so the
+                two hairlines meet as one line across the page. */}
+            <HubModeTabs
+              className="h-12 shrink-0 xl:h-14"
+              mode={mode}
+              onChange={setMode}
+              counts={{ ai: resultsCount, matches: renterMatches.length }}
+              panelId="hub-panel"
+            />
 
+            {/* Below xl the whole pane scrolls, so this grows to its content
+                rather than shrinking into the pane and spilling past its own
+                bottom padding. */}
+            <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6 xl:min-h-0 xl:overflow-y-auto">
+            {/* Under the tabs rather than over them: it belongs to no one tab,
+                and here it scrolls away with the pane instead of holding a
+                band of a short screen for good. */}
             <HubNewListings />
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <HubModeTabs
-                mode={mode}
-                onChange={setMode}
-                counts={{ matches: renterMatches.length }}
-              />
-            </div>
-
-            <div className="min-h-0 flex-1 xl:overflow-y-auto">
+            <div
+              id="hub-panel"
+              role="tabpanel"
+              aria-labelledby={`hub-tab-${mode}`}
+              className="flex-1"
+            >
               {/* Opens unfiltered: the whole verified set is the point of the
                   Browse tab, and preference-shaped results are what the AI tab
                   and the new-listings strip are for. */}
@@ -349,6 +360,7 @@ const Hub = () => {
                   )}
                 </div>
               )}
+            </div>
             </div>
               </>
             )}
