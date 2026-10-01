@@ -26,7 +26,7 @@ import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ASSISTANT_OPEN_EVENT } from '@/lib/assistantEvents';
 import { DEEP_SCAN_EVENT } from '@/lib/deepScanEvents';
-import { rememberOfferInquiry } from '@/components/RequestViewingModal';
+import { rememberOfferInquiry } from '@/lib/offerInquiry';
 
 const PropertyDetail = () => {
   const { id } = useParams<{ id: string }>();

@@ -496,7 +496,7 @@ export const useProperties = () => {
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
 
-      let imageUrls = propertyData.existingImages || [];
+      const imageUrls = propertyData.existingImages || [];
 
       // Upload new images if any with retry logic
       if (propertyData.newImageFiles && propertyData.newImageFiles.length > 0) {

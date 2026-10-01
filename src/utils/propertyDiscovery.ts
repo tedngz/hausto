@@ -185,7 +185,7 @@ export const sortPropertiesForDiscovery = async (
   // Occasionally promote properties from lower tiers (10% chance each)
   // This ensures even lower-scored properties get seen sometimes
   const finalOrder: ScoredProperty[] = [];
-  let tierIndex = 0;
+  const tierIndex = 0;
   
   while (shuffledTiers.some(tier => tier.length > 0)) {
     // Mostly pick from top tier, but sometimes dip into lower tiers

@@ -321,7 +321,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
     };
     fetchFresh();
     return () => { cancelled = true; };
-  }, [isOpen, property?.id, property?.updated_at]);
+  }, [isOpen, property?.id, property?.updated_at, isExternal]);
 
   // Live-refresh amenities when property is re-analyzed elsewhere (e.g., batch)
   useEffect(() => {
@@ -378,7 +378,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isOpen, property?.id]);
+  }, [isOpen, property?.id, isExternal]);
   const handleNewImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {

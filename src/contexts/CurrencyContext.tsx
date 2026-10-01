@@ -59,6 +59,9 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 };
 
+// The hook lives beside its provider; editing this file reloads the page
+// rather than hot-swapping, which is the price of keeping the pair together.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useCurrency = () => {
   const context = useContext(CurrencyContext);
   if (context === undefined) {

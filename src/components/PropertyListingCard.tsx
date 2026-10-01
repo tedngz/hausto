@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, MapPin, Loader2, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getNormalizedAmenities } from '@/components/PropertyAmenities';
+import { getNormalizedAmenities } from '@/lib/amenities';
 import { MapViewModal } from '@/components/MapViewModal';
 import { VibeMatchPopover, type VibeMatchAttributes, type VibeScoreDetails } from '@/components/VibeMatchPopover';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -25,6 +25,10 @@ import { RequestViewingModal } from '@/components/RequestViewingModal';
 // Portrait photos are letterboxed over a blurred backdrop so nothing is cropped.
 
 const EASE = 'cubic-bezier(0.22,1,0.36,1)';
+
+// One array for every card with no photos. Built inline, it was a new array
+// each render, which re-ran the photo-fit probe on every render.
+const PLACEHOLDER_IMAGES = ['/placeholder-property.jpg'];
 
 const RATING_DOT: Record<string, string> = {
   perfect: 'bg-emerald-500',
@@ -62,7 +66,7 @@ export const PropertyListingCard = ({
   isBooking = false,
   shortlistable = false,
 }: PropertyListingCardProps) => {
-  const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
+  const images = apartment.images && apartment.images.length > 0 ? apartment.images : PLACEHOLDER_IMAGES;
   const [current, setCurrent] = useState(0);
   const [requestOpen, setRequestOpen] = useState(false);
   // Controlled so pressing the Deep Scan CTA can close it: the scan is read

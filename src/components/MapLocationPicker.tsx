@@ -142,7 +142,10 @@ export const MapLocationPicker = ({ latitude, longitude, onLocationChange, locat
         markerRef.current = null;
       }
     };
-  }, [isMapOpen]); // Only re-init when map opens
+    // Builds the map once per opening. Listing the coordinates and callbacks
+    // would tear it down and rebuild it on every click that moves the marker.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMapOpen]);
 
   // Sync marker position when lat/lng changes externally (e.g. from geocoding)
   useEffect(() => {

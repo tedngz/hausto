@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Heart, MapPin, Loader2, X, Share2, LayoutGrid, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VibeMatchPopover, type VibeScoreDetails, type VibeMatchAttributes } from '@/components/VibeMatchPopover';
-import { getNormalizedAmenities } from '@/components/PropertyAmenities';
+import { getNormalizedAmenities } from '@/lib/amenities';
 import { MapViewModal } from '@/components/MapViewModal';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { toast } from '@/hooks/use-toast';
@@ -121,6 +121,10 @@ const MAX_UPSCALE = 1.2;
 // the frame actually on screen.
 const MAX_CROP = 0.2;
 
+// One array for every card with no photos. Built inline, it was a new array
+// each render, which re-ran the photo-fit probe on every render.
+const PLACEHOLDER_IMAGES = ['/placeholder-property.jpg'];
+
 const RATING_DOT: Record<string, string> = {
   perfect: 'bg-emerald-500',
   strong: 'bg-blue-500',
@@ -158,7 +162,7 @@ export const EditorialPropertyCard = ({
   // against `external_properties`; offering this on an internal listing would
   // build a shortlist the intake function rejects.
   const showShortlist = shortlistable ?? propertyType === 'external';
-  const images = apartment.images && apartment.images.length > 0 ? apartment.images : ['/placeholder-property.jpg'];
+  const images = apartment.images && apartment.images.length > 0 ? apartment.images : PLACEHOLDER_IMAGES;
   const [current, setCurrent] = useState(Math.min(initialImageIndex, images.length - 1));
   const [fits, setFits] = useState<Record<number, 'cover' | 'contain'>>({});
   const frameRef = useRef<HTMLDivElement>(null);

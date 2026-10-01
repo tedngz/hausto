@@ -2,6 +2,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ANALYZE_COUNT } from '../_shared/vibe-policy.ts';
 import { assessRun } from '../_shared/crawl-telemetry.ts';
 
+// The Supabase edge runtime's own global, which Deno's types do not declare.
+// Type-only: erased at compile time, so it changes nothing that runs.
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -163,9 +167,7 @@ function selfInvokeFallback(payload: Record<string, unknown>, delaySec = 5): boo
         console.error('[scheduled-crawl] self-invoke fallback error:', err);
       }
     })();
-    // @ts-ignore — EdgeRuntime is available in Supabase edge runtime
     if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
-      // @ts-ignore
       EdgeRuntime.waitUntil(task);
     }
     return true;
@@ -848,7 +850,7 @@ Deno.serve(async (req) => {
           })
         )
       );
-      let bestRaw = rawLastSeen.find(r => r.ts === null) || rawLastSeen.sort((a, b) => (a.ts! - b.ts!))[0];
+      const bestRaw = rawLastSeen.find(r => r.ts === null) || rawLastSeen.sort((a, b) => (a.ts! - b.ts!))[0];
       if (!bestRaw) {
         return new Response(JSON.stringify({ success: true, message: 'No raw targets' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

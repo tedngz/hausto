@@ -110,6 +110,9 @@ export function ShortlistProvider({ children }: { children: React.ReactNode }) {
   return <ShortlistContext.Provider value={value}>{children}</ShortlistContext.Provider>;
 }
 
+// The hook lives beside its provider; editing this file reloads the page
+// rather than hot-swapping, which is the price of keeping the pair together.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useShortlist(): ShortlistApi {
   const ctx = useContext(ShortlistContext);
   if (!ctx) throw new Error('useShortlist must be used inside a ShortlistProvider');

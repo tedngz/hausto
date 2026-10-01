@@ -836,12 +836,12 @@ function extractRejections(text: string): string[] {
   const lower = text.toLowerCase();
   const out: string[] = [];
   const patterns: Array<[RegExp, string]> = [
-    [/(don'?t|do not|not) (like|want|need)\s+([a-z0-9\s\-]{2,30})/i, 'avoid: $3'],
-    [/no (more|other)?\s*([a-z0-9\s\-]{2,30})/i, 'no $2'],
+    [/(don'?t|do not|not) (like|want|need)\s+([a-z0-9\s-]{2,30})/i, 'avoid: $3'],
+    [/no (more|other)?\s*([a-z0-9\s-]{2,30})/i, 'no $2'],
     [/too (expensive|small|far|noisy|dark|cramped|cheap)/i, 'too $1'],
-    [/(skip|remove|hide|exclude)\s+([a-z0-9\s\-]{2,30})/i, 'exclude $2'],
+    [/(skip|remove|hide|exclude)\s+([a-z0-9\s-]{2,30})/i, 'exclude $2'],
     [/not (interested in|looking for|the right)/i, 'not interested'],
-    [/(hate|dislike)\s+([a-z0-9\s\-]{2,30})/i, 'dislikes $2'],
+    [/(hate|dislike)\s+([a-z0-9\s-]{2,30})/i, 'dislikes $2'],
   ];
   for (const [re, label] of patterns) {
     const m = lower.match(re);
@@ -858,7 +858,7 @@ function extractLikes(text: string): string[] {
   const lower = text.toLowerCase();
   const out: string[] = [];
   const patterns: Array<[RegExp, string]> = [
-    [/(love|like|prefer|want) (the )?([a-z0-9\s\-]{2,30})/i, 'likes $3'],
+    [/(love|like|prefer|want) (the )?([a-z0-9\s-]{2,30})/i, 'likes $3'],
     [/(perfect|great|nice|good) (for|fit|match)/i, 'positive reaction'],
     [/(this|that) (one|looks) (good|great|perfect|nice)/i, 'positive on shown option'],
     [/show me more like/i, 'wants more like previous'],

@@ -53,6 +53,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// The hook lives beside its provider; editing this file reloads the page
+// rather than hot-swapping, which is the price of keeping the pair together.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
