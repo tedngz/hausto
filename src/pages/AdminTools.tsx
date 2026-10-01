@@ -658,7 +658,7 @@ const AdminTools = () => {
 
       // Aggregate results across all location calls
       const allResults: any[] = [];
-      let totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
+      const totals = { totalFound: 0, totalNew: 0, totalUpdated: 0, totalDuplicatesSkipped: 0, totalVibeAnalyzed: 0, totalSkipped: 0, totalErrors: 0, totalStored: 0 };
       let remainingLocations: string[] | undefined = undefined;
       let locationIndex = 0;
       let totalLocations = 0;

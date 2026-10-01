@@ -135,6 +135,9 @@ export const useUsageTracking = () => {
     fetchUsage();
   }, [fetchUsage, authLoading]);
 
+  // Re-registered when fetchUsage changes, which is when the user does. Bound
+  // once, the handler kept the fetchUsage from mount - and a hook that mounted
+  // before auth resolved kept one with no user, so its refetches did nothing.
   useEffect(() => {
     const handler = (event: Event) => {
       const custom = event as CustomEvent;
@@ -151,7 +154,7 @@ export const useUsageTracking = () => {
     };
     window.addEventListener('usage:updated', handler as EventListener);
     return () => window.removeEventListener('usage:updated', handler as EventListener);
-  }, []);
+  }, [fetchUsage]);
 
   const updateUsage = async (type: 'match' | 'quiz' | 'ai-search') => {
     if (!user?.id) {
@@ -242,10 +245,11 @@ export const useUsageTracking = () => {
       case 'match':
       case 'quiz':
         return true;
-      case 'ai-search':
+      case 'ai-search': {
         const canAiSearch = todayUsage.aiSearches < FREE_TIER_LIMITS.dailyAiRequests;
         console.log(`[Usage Tracking] Can AI search: ${canAiSearch} (${todayUsage.aiSearches}/${FREE_TIER_LIMITS.dailyAiRequests})`);
         return canAiSearch;
+      }
       default:
         return false;
     }

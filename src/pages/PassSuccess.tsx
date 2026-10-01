@@ -66,7 +66,9 @@ const PassSuccess = () => {
     };
 
     captureOrder();
-  }, [user, searchParams]);
+    // capturedRef, not this list, keeps it to one capture: a re-run returns
+    // before it reaches the payment.
+  }, [user, searchParams, refetchPass, refetchQuota]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

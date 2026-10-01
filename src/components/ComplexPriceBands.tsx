@@ -43,7 +43,7 @@ function median(sorted: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-export function buildBands(listings: Apartment[]): Band[] {
+function buildBands(listings: Apartment[]): Band[] {
   const buckets = new Map<string, number[]>();
   for (const l of listings) {
     const label = bedroomLabel(l.rooms);

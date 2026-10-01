@@ -120,7 +120,7 @@ function extractListingId(url: string, marketplace: string): string | null {
     }
     if (marketplace === 'housingsgn') {
       // Updated to match whatever is after /properties/ (even if it's text instead of numbers)
-      const match = url.match(/\/properties\/([^\/\?#]+)/i);
+      const match = url.match(/\/properties\/([^/?#]+)/i);
       if (match) return `hs${match[1]}`;
     }
   } catch { /* ignore */ }
@@ -578,7 +578,7 @@ const USD_TO_VND = 25000;
 
 // Extract the property code from a housingsgn /properties/<code>-<slug>/ URL.
 function extractHousingsgnPropertyCode(url: string): string | null {
-  const m = url.match(/\/properties\/([^\/?#]+)/i);
+  const m = url.match(/\/properties\/([^/?#]+)/i);
   if (!m) return null;
   const slug = m[1].toLowerCase();
   // Codes look like "khh0219", "sag0002", "tb0117" or numeric "030324", and
@@ -1073,6 +1073,8 @@ interface ExternalProperty {
     amenities?: string[];
     vibe_scores?: Record<string, number>;
   };
+  /** Recovery anchors buildRawProperty carries into the save payload. */
+  raw_data?: { images: string[]; source_url: string; scraped_at: string };
 }
 
 interface SearchParams {
@@ -1389,7 +1391,7 @@ async function extractListingUrls(
     // Single properties only: /properties/<slug> carrying a property code.
     // Project and district archives (/apartment-for-rent-in-one-verandah-thu-duc)
     // are not listings, however much they look like one.
-    housingsgn: /housingsgn\.com\/properties\/[^\/?#]*(?:[a-z]{2,5}\d{3,6}|\d{6})[^\/?#]*/i,
+    housingsgn: /housingsgn\.com\/properties\/[^/?#]*(?:[a-z]{2,5}\d{3,6}|\d{6})[^/?#]*/i,
   };
 
   // Exclude any URL that clearly points to a buy/sell listing
@@ -1884,7 +1886,7 @@ RESPOND WITH VALID JSON: {"properties": [...]}`;
 
     if (!content) return [];
     
-    let cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     const parsed = JSON.parse(cleaned);
     const uniqueProps = new Map<string, any>();
@@ -1996,7 +1998,6 @@ function buildRawProperty(
     sourceProviderPhone: undefined,
     vibe: undefined,
     vibe_analysis: undefined,
-    // @ts-ignore - extra field carried into save payload
     // Recovery anchors only. The scraped page text used to be kept here, but
     // raw_data is readable by anon and those pages carry the agent's phone
     // number - the very field contact_phone is column-locked to protect.
@@ -2176,7 +2177,7 @@ Deno.serve(async (req) => {
       console.log(`[Pre-scrape] Card-image signal unusable (${Math.round(cardCheck.coverage * 100)}% coverage) - not filtering on it`);
     }
 
-    let properties: ExternalProperty[] = [];
+    const properties: ExternalProperty[] = [];
 
     if (listingLinks.length > 0) {
       // ── Pre-scrape dedup: check which listings already exist in DB ──
@@ -2464,7 +2465,6 @@ Deno.serve(async (req) => {
       console.log(`[scrape-marketplace] DirectSave result:`, JSON.stringify(saveResult));
 
       // Trigger phone extraction for newly saved properties missing phone numbers
-      let phoneExtracted = 0;
       // Skip phone extraction in raw mode to also save Browserless credits
       if (!rawMode && saveResult.newListings > 0) {
         try {

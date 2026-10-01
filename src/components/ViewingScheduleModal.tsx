@@ -77,6 +77,10 @@ export const ViewingScheduleModal = ({ isOpen, onClose, onSubmit, matchedPropert
     if (isOpen) {
       setSelectedPropertyIds((initialSelectedIds ?? []).slice(0, maxSelectable));
     }
+    // Compared by value. Callers build this array fresh on every render, so
+    // keying on the array itself would re-seed - undoing the renter's picks -
+    // whenever the page behind the modal re-rendered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialSelectedIds?.join(','), maxSelectable]);
 
   const handleAddDate = (date: Date | undefined) => {

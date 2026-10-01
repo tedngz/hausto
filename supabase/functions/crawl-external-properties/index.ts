@@ -116,7 +116,7 @@ function normalizeSourceUrl(url: string): string {
     // Sort remaining params for consistency
     u.searchParams.sort();
     // Remove trailing slash
-    let normalized = u.toString().replace(/\/+$/, '');
+    const normalized = u.toString().replace(/\/+$/, '');
     return normalized;
   } catch {
     // If URL parsing fails, do basic normalization
@@ -340,7 +340,7 @@ Return ONLY valid JSON:
     
     const data = await response.json();
     logOpenAIUsage({ fn: 'crawl-external-properties:vibe', model: 'gpt-4o-mini', usage: data?.usage });
-    let content = data.choices?.[0]?.message?.content || '';
+    const content = data.choices?.[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     

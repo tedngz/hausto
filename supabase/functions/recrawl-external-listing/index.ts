@@ -91,7 +91,7 @@ function extractImages(html: string, marketplace: string): string[] {
 const USD_TO_VND = 25000;
 
 function extractHousingsgnPropertyCode(url: string): string | null {
-  const m = url.match(/\/properties\/([^\/?#]+)/i);
+  const m = url.match(/\/properties\/([^/?#]+)/i);
   if (!m) return null;
   // Codes look like "khh0219", "sag0002" or numeric "030324", and are not
   // always the first token ("apartment-for-rent-030221-...").

@@ -83,6 +83,9 @@ const RealtorApply = () => {
       setLoading(false);
     };
     load();
+    // Prefills once per account. Listing the email and name would re-run it on
+    // a profile change and overwrite whatever has been typed into those fields.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -75,7 +75,7 @@ interface SearchResult {
  * Lifted out of the render so the hub can also parse the thread up front and
  * decide which reply's listings belong in the main pane.
  */
-export const parseAssistantMessage = (
+const parseAssistantMessage = (
   content: string,
 ): { searchResults: SearchResult | null; displayContent: string } => {
   const asResults = (o: any): SearchResult | null => {
@@ -127,7 +127,7 @@ const ANON_SEARCHES_KEY = 'haustoAnonSearches';
 
 const today = () => new Date().toISOString().split('T')[0];
 
-export const readAnonSearchCount = (): number => {
+const readAnonSearchCount = (): number => {
   try {
     const raw = localStorage.getItem(ANON_SEARCHES_KEY);
     if (!raw) return 0;
@@ -456,7 +456,7 @@ export const HomeAI = ({
       // Start fresh - no automatic loading of previous conversations
       startFreshChat();
     }
-  }, [user, startFreshChat]);
+  }, [user, currentConversationId, startFreshChat]);
 
   // Check for stored search query on component mount
   useEffect(() => {
@@ -469,6 +469,10 @@ export const HomeAI = ({
         setTimeout(() => handleSearch(storedQuery), 100);
       }
     }
+    // Keyed on sign-in alone. handleSearch is rebuilt every render, so listing
+    // it would run this on every render - and signed out, that would keep
+    // writing the stored query back over whatever is being typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
   // Opening message, auto-sent exactly once into an empty conversation: the
   // quiz hands over a preference-derived query, the landing page hands over
