@@ -30,7 +30,7 @@ const usd = (dong: number) => `US$${(Math.round(dong / 25_000 / 50) * 50).toLoca
 const hcmcToday = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 
 /**
- * "Check availability at Empire City" (SPEC §11).
+ * "Request availability at Empire City" (SPEC §11).
  *
  * A person on our team asks the agents who hold units in the building and
  * replies on WhatsApp within 24 hours. One form, then one message: the renter
@@ -145,7 +145,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Check availability</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">Request availability</DialogTitle>
               <DialogDescription>
                 {complexName} · Step 1 of 2
               </DialogDescription>
