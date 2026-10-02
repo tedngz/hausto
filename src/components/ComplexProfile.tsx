@@ -339,14 +339,13 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
                     ))}
                   </div>
                 ) : (
+                  // No button: the concierge card (and, on the page, the fixed
+                  // mobile bar) already asks for this.
                   <Card className="p-6 bg-muted/30 text-center">
-                    <p className="text-sm text-muted-foreground mb-4">
+                    <p className="text-sm text-muted-foreground">
                       No listings advertised at {complex.name} right now - which does not mean nothing is free.
                       We can ask the agents who hold units here.
                     </p>
-                    <Button onClick={() => setModalOpen(true)} size="sm">
-                      Check availability
-                    </Button>
                   </Card>
                 )}
               </section>
