@@ -988,7 +988,7 @@ the same screen stops everything the AI operator does alone.
 
 ## §11 Availability requests and complex watches
 
-"Check availability at Empire City." A complex page's one call to action is
+"Request availability at Empire City." A complex page's one call to action is
 a request to the concierge: a person on our team asks the agents who hold
 units in the building and replies within 24 hours. The crawl only knows what
 was advertised, and for most buildings that is nothing in a given month -
