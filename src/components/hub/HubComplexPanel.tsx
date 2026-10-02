@@ -31,7 +31,9 @@ export const HubComplexPanel = ({ complex, onClose, onAskAI }: HubComplexPanelPr
       // Reaching for the chat is not dismissing the profile - see
       // ListingPreviewDialog.
       onInteractOutside={(e) => e.preventDefault()}
-      className={`w-[min(100vw-2rem,56rem)] max-w-none overflow-y-auto p-0 [&>button]:hidden ${HUB_PANEL_POSITION}`}
+      // gap-0: the base dialog is a gap-4 grid, which opened a strip of
+      // background between the floating actions and the hero.
+      className={`w-[min(100vw-2rem,56rem)] max-w-none gap-0 overflow-y-auto p-0 [&>button]:hidden ${HUB_PANEL_POSITION}`}
     >
       {complex && (
         <>
@@ -41,28 +43,29 @@ export const HubComplexPanel = ({ complex, onClose, onAskAI }: HubComplexPanelPr
             <DialogTitle>{complex.name}</DialogTitle>
           </DialogHeader>
 
-          {/* Floats over the profile's hero, which scrolls under it */}
-          <div className="sticky top-0 z-20 flex justify-end gap-2 p-3">
-            <button
-              aria-label={`Ask the AI about ${complex.name}`}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/90 text-primary-foreground shadow-lg backdrop-blur-md hover:bg-primary"
-              onClick={() => onAskAI(complex)}
-            >
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <button
-              aria-label="Close"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground/70 text-background shadow-lg backdrop-blur-md hover:bg-foreground"
-              onClick={onClose}
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+          {/* Floats over the profile's hero, which scrolls under it. The row
+              is zero-height so the hero starts flush with the top edge rather
+              than below a pulled-back margin that has to match its height. */}
+          <div className="sticky top-0 z-20 h-0">
+            <div className="pointer-events-none flex justify-end gap-2 p-3">
+              <button
+                aria-label={`Ask the AI about ${complex.name}`}
+                className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-primary/90 text-primary-foreground shadow-lg backdrop-blur-md hover:bg-primary"
+                onClick={() => onAskAI(complex)}
+              >
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                aria-label="Close"
+                className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-foreground/70 text-background shadow-lg backdrop-blur-md hover:bg-foreground"
+                onClick={onClose}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
-          {/* Pulls the profile back up under the floating actions */}
-          <div className="-mt-14">
-            <ComplexProfile complex={complex} variant="panel" />
-          </div>
+          <ComplexProfile complex={complex} variant="panel" />
         </>
       )}
     </DialogContent>
