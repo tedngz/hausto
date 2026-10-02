@@ -75,7 +75,7 @@ describe('before the code arrives', () => {
 
 describe('once confirmed', () => {
   beforeEach(async () => {
-    await renterSends(`Hi Hausto - please check availability at Empire City for me (${code})`);
+    await renterSends(`Hi Hausto - I'd like to request availability at Empire City (${code})`);
   });
 
   it('writes CONFIRMED when the code arrives', () => {
@@ -155,7 +155,7 @@ describe('capturing units and offering them (S7.1b)', () => {
       price_confidence: 'HIGH',
       district_code: 'THU_DUC',
     });
-    await renterSends(`Hi Hausto - please check availability at Empire City for me (${code})`);
+    await renterSends(`Hi Hausto - I'd like to request availability at Empire City (${code})`);
   });
 
   const capture = async (over: Record<string, unknown> = {}) => {
@@ -296,7 +296,7 @@ describe('capturing units and offering them (S7.1b)', () => {
         has_pets: false, whatsapp_confirmed_at: null, renter_id: null, created_at: new Date().toISOString(),
       });
       at('2026-09-29T03:30:00Z');
-      await renterSends(`Hi Hausto - please check availability at Celadon City for me (${code2})`);
+      await renterSends(`Hi Hausto - I'd like to request availability at Celadon City (${code2})`);
     });
 
     const captureAt = async (inquiryId: string, over: Record<string, unknown>) =>
@@ -371,7 +371,7 @@ describe('capturing units and offering them (S7.1b)', () => {
 describe('the handoff, the deadlines and the update template (S7.1c)', () => {
   beforeEach(async () => {
     db.tables.jobs = [];
-    await renterSends(`Hi Hausto - please check availability at Empire City for me (${code})`);
+    await renterSends(`Hi Hausto - I'd like to request availability at Empire City (${code})`);
   });
 
   it('enqueues the 16h and 22h reminders when the code arrives', () => {
@@ -452,7 +452,7 @@ describe("asking a building's agents on Zalo (S7.2)", () => {
 
   beforeEach(async () => {
     db.tables.realtor_messages = [];
-    await renterSends(`Hi Hausto - please check availability at Empire City for me (${code})`);
+    await renterSends(`Hi Hausto - I'd like to request availability at Empire City (${code})`);
   });
 
   it('through the bridge: queued, and "asked" only once the device has sent it', async () => {

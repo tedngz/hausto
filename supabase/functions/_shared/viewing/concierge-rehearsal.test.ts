@@ -169,7 +169,7 @@ describe('availability request rehearsal', () => {
   });
 
   it('cannot reach WhatsApp once the window has shut - the concierge is told, not silently dropped', async () => {
-    await inbound(`Hi Hausto - please check availability at Empire City for me (${code})`);
+    await inbound(`Hi Hausto - I'd like to request availability at Empire City (${code})`);
     at('2026-09-30T04:00:00Z'); // 25 hours on
     await expect(
       // deno-lint-ignore no-explicit-any
@@ -201,7 +201,7 @@ describe('availability request rehearsal', () => {
     const payload = {
       entry: [{ changes: [{ value: { messages: [{
         from: '447700900123', id: 'wamid.uk', timestamp: '1790650000',
-        text: { body: `Hi Hausto - please check availability at Empire City for me (${code})` },
+        text: { body: `Hi Hausto - I'd like to request availability at Empire City (${code})` },
       }] } }] }],
     };
     const [m] = parseInboundMessages(payload);
@@ -233,7 +233,7 @@ describe('availability request rehearsal', () => {
     const inqId = '11111111-2222-4333-8444-555555555555';
     db.tables.complex_inquiries[0].id = inqId;
 
-    await inbound(`Hi Hausto - please check availability at Empire City for me (${code})`);
+    await inbound(`Hi Hausto - I'd like to request availability at Empire City (${code})`);
     const deps = {
       whatsapp: adapter, messages: store,
       realtorChannel: { mode: 'manual' as const, deliver: () => Promise.resolve({ ok: true as const, state: 'SENT' as const }) },
