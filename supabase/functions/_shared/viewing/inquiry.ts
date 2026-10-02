@@ -1,6 +1,6 @@
 // A concierge availability request, answered on WhatsApp (SPEC §11).
 //
-// "Check availability at Empire City" is a person's job: someone on our team
+// "Request availability at Empire City" is a person's job: someone on our team
 // asks the agents who hold units in that building and comes back with what is
 // really free. The crawl only knows what was advertised, and for most
 // buildings that is nothing this month - which is why the request, not an
@@ -94,7 +94,7 @@ export function validateInquiryInput(raw: any, now: Date): InquiryValidation {
  */
 export function buildInquiryLink(businessPhoneE164: string, code: string, complexName: string): string {
   const number = businessPhoneE164.replace(/[^0-9]/g, '');
-  const text = `Hi Hausto - please check availability at ${complexName} for me (${code})`;
+  const text = `Hi Hausto - I'd like to request availability at ${complexName} (${code})`;
   return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 }
 

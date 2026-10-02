@@ -68,7 +68,7 @@ describe('the handshake', () => {
   it('carries a code the webhook finds, and no viewing ref', () => {
     const link = buildInquiryLink('+84901112222', 'HW-4KX9', 'Empire City');
     const text = decodeURIComponent(link.split('?text=')[1]);
-    expect(text).toBe('Hi Hausto - please check availability at Empire City for me (HW-4KX9)');
+    expect(text).toBe("Hi Hausto - I'd like to request availability at Empire City (HW-4KX9)");
     expect(watchCodeFromMessage(text)).toBe('HW-4KX9');
     expect(refFromMessage(text)).toBeNull();
   });

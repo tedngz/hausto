@@ -1010,7 +1010,7 @@ requested the one way there is (invariant 8), from the listing page.
    (1-4+), the most they would pay a month in million ₫ (with a rough US$
    figure beside it, never stored), pets, optional notes, and their name.
 2. **Send it on WhatsApp.** `complex-inquiry-create` returns a wa.me link:
-   `Hi Hausto - please check availability at <complex> for me (HW-XXXX)`. The
+   `Hi Hausto - I'd like to request availability at <complex> (HW-XXXX)`. The
    form asks for no phone number: the message proves the number is theirs,
    opts them in, and opens the 24-hour window the concierge's promise is
    measured against.
