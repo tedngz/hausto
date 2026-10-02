@@ -391,14 +391,15 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
 
         {/* Mobile CTA. The page fixes it to the viewport; the panel makes it
             sticky to its own scrolling edge, since fixed there would float
-            over the whole app, chat included. */}
+            over the whole app, chat included. Same label as the card's button,
+            so a renter meets one name for the action at every width. */}
         <div
           className={`lg:hidden bg-background/95 backdrop-blur-md border-t border-border p-4 ${
             isPanel ? 'sticky bottom-0 z-20 mt-8' : 'fixed bottom-0 inset-x-0 z-50'
           }`}
         >
           <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
-            Check availability
+            Request availability
           </Button>
         </div>
 
