@@ -33,7 +33,11 @@ export const HubComplexPanel = ({ complex, onClose, onAskAI }: HubComplexPanelPr
       onInteractOutside={(e) => e.preventDefault()}
       // gap-0: the base dialog is a gap-4 grid, which opened a strip of
       // background between the floating actions and the hero.
-      className={`w-[min(100vw-2rem,56rem)] max-w-none gap-0 overflow-y-auto p-0 [&>button]:hidden ${HUB_PANEL_POSITION}`}
+      // On a phone it takes the listing preview's shape - full width up to
+      // max-w-md, 22px corners like EditorialPropertyCard - so a building and
+      // a listing open as the same kind of sheet. The sm: radius is repeated
+      // because the base dialog's sm:rounded-lg would otherwise win from sm up.
+      className={`w-full max-w-md sm:w-[min(100vw-2rem,56rem)] sm:max-w-none rounded-[22px] sm:rounded-[22px] gap-0 overflow-y-auto p-0 [&>button]:hidden ${HUB_PANEL_POSITION}`}
     >
       {complex && (
         <>
