@@ -34,7 +34,8 @@ interface ComplexProfileProps {
    * 'page' is the standalone route. 'panel' is the hub, where the profile sits
    * inside a scrolling dialog: no full-viewport hero, no back link (the panel
    * has a close button), and nothing fixed to the viewport - a fixed CTA there
-   * floats over the whole app, including the chat.
+   * floats over the whole app, including the chat. The concierge card is the
+   * panel's one CTA: beside the profile on wide screens, after it on narrow.
    */
   variant?: 'page' | 'panel';
 }
@@ -113,9 +114,11 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
         </div>
 
         <div className={`container mx-auto max-w-6xl relative z-10 ${isPanel ? 'px-5 -mt-10' : 'px-6 -mt-24'}`}>
-          <div className="grid lg:grid-cols-3 gap-8">
+          {/* The panel is at most 56rem wide, so a third of it squeezed the
+              card into a tall column; a fixed rail keeps it compact. */}
+          <div className={isPanel ? 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]' : 'grid lg:grid-cols-3 gap-8'}>
             {/* Main */}
-            <div className="lg:col-span-2 space-y-10">
+            <div className={isPanel ? 'min-w-0 space-y-10' : 'lg:col-span-2 space-y-10'}>
               {/* Title */}
               <div>
                 <div className="flex flex-wrap gap-1.5 mb-3">
@@ -349,23 +352,32 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
               </section>
             </div>
 
-            {/* Sticky CTA */}
-            <aside className="lg:col-span-1">
-              <div className="hidden lg:block sticky top-6">
-                <Card className="p-6 border-primary/30 shadow-xl">
-                  <div className="flex items-center gap-2 mb-3 text-primary">
-                    <CalendarCheck className="h-5 w-5" aria-hidden="true" />
+            {/* Sticky CTA. In the panel it sticks below the floating ask/close
+                buttons (12px inset + 36px tall), which it otherwise slid under. */}
+            <aside className={isPanel ? undefined : 'lg:col-span-1'}>
+              <div className={isPanel ? 'lg:sticky lg:top-16' : 'hidden lg:block sticky top-6'}>
+                <Card className={isPanel ? 'p-5 border-primary/30 shadow-lg' : 'p-6 border-primary/30 shadow-xl'}>
+                  <div className={`flex items-center gap-2 text-primary ${isPanel ? 'mb-2' : 'mb-3'}`}>
+                    <CalendarCheck className={isPanel ? 'h-4 w-4' : 'h-5 w-5'} aria-hidden="true" />
                     <span className="text-xs uppercase tracking-wider font-medium">Concierge</span>
                   </div>
-                  <h3 className="font-serif text-2xl leading-tight mb-2">Check what is free for your move-in date</h3>
-                  <p className="text-sm text-muted-foreground mb-5">
+                  <h3 className={`font-serif mb-2 ${isPanel ? 'text-xl leading-snug' : 'text-2xl leading-tight'}`}>
+                    Check what is free for your move-in date
+                  </h3>
+                  <p className={`text-sm text-muted-foreground ${isPanel ? 'mb-4' : 'mb-5'}`}>
                     Tell us your dates and budget. A person on our team asks the agents who hold units at {complex.name} and replies on WhatsApp.
                   </p>
-                  <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
+                  <Button className="w-full" size={isPanel ? 'default' : 'lg'} onClick={() => setModalOpen(true)}>
                     Request availability
                   </Button>
-                  <p className="text-xs text-muted-foreground mt-3 text-center">
-                    No fee · Reply within 24h · On WhatsApp
+                  {/* Each promise stays whole when the line wraps - "On" and
+                      "WhatsApp" used to land on different lines. */}
+                  <p className="text-xs text-muted-foreground mt-3 flex flex-wrap justify-center gap-x-1.5">
+                    <span>No fee</span>
+                    <span aria-hidden="true">·</span>
+                    <span>Reply within 24h</span>
+                    <span aria-hidden="true">·</span>
+                    <span>On WhatsApp</span>
                   </p>
                 </Card>
               </div>
@@ -373,12 +385,15 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
           </div>
         </div>
 
-        {/* Mobile fixed CTA */}
-        <div className={isPanel ? 'px-5 pb-2 pt-6' : 'lg:hidden fixed bottom-0 inset-x-0 bg-background/95 backdrop-blur-md border-t border-border p-4 z-50'}>
-          <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
-            Check availability
-          </Button>
-        </div>
+        {/* Mobile fixed CTA. Not in the panel, where the card above already is
+            the CTA at every width. */}
+        {!isPanel && (
+          <div className="lg:hidden fixed bottom-0 inset-x-0 bg-background/95 backdrop-blur-md border-t border-border p-4 z-50">
+            <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
+              Check availability
+            </Button>
+          </div>
+        )}
 
         <ConciergeCaptureModal
           open={modalOpen}
