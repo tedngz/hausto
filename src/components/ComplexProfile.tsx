@@ -34,8 +34,9 @@ interface ComplexProfileProps {
    * 'page' is the standalone route. 'panel' is the hub, where the profile sits
    * inside a scrolling dialog: no full-viewport hero, no back link (the panel
    * has a close button), and nothing fixed to the viewport - a fixed CTA there
-   * floats over the whole app, including the chat. The concierge card is the
-   * panel's one CTA: beside the profile on wide screens, after it on narrow.
+   * floats over the whole app, including the chat. The CTA follows the page:
+   * the concierge card beside the profile on wide screens, a bar pinned to the
+   * bottom on narrow ones - the panel's bottom edge rather than the viewport's.
    */
   variant?: 'page' | 'panel';
 }
@@ -94,8 +95,10 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
 
   const brackets = complex.average_rent_brackets ?? {};
 
+  // Below lg the panel ends on its pinned CTA bar, so its bottom padding is
+  // for the wide layout only - otherwise background shows under the bar.
   return (
-      <div className={isPanel ? 'bg-background pb-8' : 'min-h-screen bg-background pb-32 lg:pb-12'}>
+      <div className={isPanel ? 'bg-background lg:pb-8' : 'min-h-screen bg-background pb-32 lg:pb-12'}>
         {/* Hero */}
         <div className={`relative w-full overflow-hidden ${isPanel ? 'h-56' : 'h-[55vh] min-h-[400px]'}`}>
           {complex.hero_image && (
@@ -339,8 +342,8 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
                     ))}
                   </div>
                 ) : (
-                  // No button: the concierge card (and, on the page, the fixed
-                  // mobile bar) already asks for this.
+                  // No button: the concierge card, or the pinned bar below lg,
+                  // already asks for this.
                   <Card className="p-6 bg-muted/30 text-center">
                     <p className="text-sm text-muted-foreground">
                       No listings advertised at {complex.name} right now - which does not mean nothing is free.
@@ -351,10 +354,12 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
               </section>
             </div>
 
-            {/* Sticky CTA. In the panel it sticks below the floating ask/close
-                buttons (12px inset + 36px tall), which it otherwise slid under. */}
-            <aside className={isPanel ? undefined : 'lg:col-span-1'}>
-              <div className={isPanel ? 'lg:sticky lg:top-16' : 'hidden lg:block sticky top-6'}>
+            {/* Sticky CTA, wide screens only. In the panel it sticks below the
+                floating ask/close buttons (12px inset + 36px tall), which it
+                otherwise slid under; the panel hides the whole aside so an
+                empty grid row does not leave a gap above the bar. */}
+            <aside className={isPanel ? 'hidden lg:block' : 'lg:col-span-1'}>
+              <div className={isPanel ? 'sticky top-16' : 'hidden lg:block sticky top-6'}>
                 <Card className={isPanel ? 'p-5 border-primary/30 shadow-lg' : 'p-6 border-primary/30 shadow-xl'}>
                   <div className={`flex items-center gap-2 text-primary ${isPanel ? 'mb-2' : 'mb-3'}`}>
                     <CalendarCheck className={isPanel ? 'h-4 w-4' : 'h-5 w-5'} aria-hidden="true" />
@@ -384,15 +389,18 @@ export const ComplexProfile = ({ complex, variant = 'page' }: ComplexProfileProp
           </div>
         </div>
 
-        {/* Mobile fixed CTA. Not in the panel, where the card above already is
-            the CTA at every width. */}
-        {!isPanel && (
-          <div className="lg:hidden fixed bottom-0 inset-x-0 bg-background/95 backdrop-blur-md border-t border-border p-4 z-50">
-            <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
-              Check availability
-            </Button>
-          </div>
-        )}
+        {/* Mobile CTA. The page fixes it to the viewport; the panel makes it
+            sticky to its own scrolling edge, since fixed there would float
+            over the whole app, chat included. */}
+        <div
+          className={`lg:hidden bg-background/95 backdrop-blur-md border-t border-border p-4 ${
+            isPanel ? 'sticky bottom-0 z-20 mt-8' : 'fixed bottom-0 inset-x-0 z-50'
+          }`}
+        >
+          <Button className="w-full" size="lg" onClick={() => setModalOpen(true)}>
+            Check availability
+          </Button>
+        </div>
 
         <ConciergeCaptureModal
           open={modalOpen}
