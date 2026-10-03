@@ -245,6 +245,7 @@ export const HomeAI = ({
   const [anonSearchCount, setAnonSearchCount] = useState(() => readAnonSearchCount());
   const [wantsNewChat, setWantsNewChat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const initialQuerySentRef = useRef(false);
   const navigate = useNavigate();
   const {
@@ -1462,9 +1463,15 @@ export const HomeAI = ({
           visitor's pin marooned halfway up the pane. */}
       <div className={isRail ? `shrink-0 space-y-2 tall:space-y-4 xl:space-y-4${user || subjects.length > 0 ? '' : ' mt-auto'}` : 'space-y-4'}>
 
-          <div className="relative">
-            <Textarea value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={!user && anonLimitReached ? 'Sign in to keep searching...' : typedPlaceholder} disabled={isSendingMessage || isSearching || (!user && anonLimitReached)} className={`${isRail ? 'min-h-[68px] tall:min-h-[104px] xl:min-h-[104px]' : 'min-h-[140px] sm:min-h-[104px]'} pr-20 resize-none bg-transparent`} />
-          <div className="absolute bottom-3 right-3 flex gap-2">
+          {/* On the page the buttons get a row of their own inside the box, so
+              the text runs its full width - over a right-hand margin it wrapped
+              80px short on a phone. A tap on the row's empty part still lands in
+              the text, as it did when the whole box was the textarea. The rail
+              keeps the margin: a short screen gives it 68px, too little for a
+              second row. */}
+          <div className={isRail ? 'relative' : 'rounded-md border border-input ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'}>
+            <Textarea ref={composerRef} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyPress} placeholder={!user && anonLimitReached ? 'Sign in to keep searching...' : typedPlaceholder} disabled={isSendingMessage || isSearching || (!user && anonLimitReached)} className={`${isRail ? 'min-h-[68px] tall:min-h-[104px] xl:min-h-[104px] pr-20' : 'min-h-[96px] sm:min-h-[60px] border-0 focus-visible:ring-0 focus-visible:ring-offset-0'} resize-none bg-transparent`} />
+          <div className={isRail ? 'absolute bottom-3 right-3 flex gap-2' : 'flex justify-end gap-2 px-3 pb-3'} onClick={e => { if (e.target === e.currentTarget) composerRef.current?.focus(); }}>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSendingMessage || isSearching || uploadedImages.length >= 3 || (!user && anonLimitReached)} size="sm" variant="outline" aria-label="Upload image" className="h-8 w-8 p-0">
               <Upload className="h-4 w-4" aria-hidden="true" />

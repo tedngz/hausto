@@ -70,17 +70,15 @@ export const LiveListingsPreview = () => {
   return (
     <div className="mt-12 text-left">
       <div className="mb-6 text-center">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 flex items-center justify-center gap-2">
-          {/* Pulsing dot: the inventory is refreshed by the crawler, say so visually. */}
-          <span className="relative flex w-2 h-2">
+        <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Your curated rental hub</h2>
+        <p className="text-muted-foreground mt-3 max-w-xl mx-auto text-sm md:text-base">
+          {/* Pulsing dot: the inventory is refreshed by the crawler, say so visually.
+              Inline rather than flex, so a phone-width wrap keeps it on the first line. */}
+          <span className="relative inline-flex w-2 h-2 mr-2 align-middle">
             <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-500 opacity-70 animate-ping" />
             <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
           </span>
-          Live Inventory
-        </p>
-        <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Your curated rental hub</h2>
-        <p className="text-muted-foreground mt-3 max-w-xl mx-auto text-sm md:text-base">
-          Auto-curated from Vietnam's top rental platforms, verified fresh, no duplicates, dead listings removed.
+          {verifiedThisWeek > 0 ? `${verifiedThisWeek} live listings` : 'Live listings'} aggregated from Vietnam's top rental platforms
         </p>
       </div>
 
@@ -134,17 +132,12 @@ export const LiveListingsPreview = () => {
         })}
       </div>
 
-      {/* One number only — a count on the button next to a different count beside it
-          read as a contradiction. */}
-      <div className="mt-5 flex flex-col items-center justify-center gap-2">
+      {/* One number only, and it lives in the subtitle - a count on the button
+          beside a different count read as a contradiction. */}
+      <div className="mt-5 flex justify-center">
         <Button asChild size="lg" className="px-8">
           <Link to={browsePath}>Browse all listings →</Link>
         </Button>
-        {verifiedThisWeek > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {verifiedThisWeek} listings verified live this week
-          </p>
-        )}
       </div>
     </div>
   );
