@@ -35,10 +35,9 @@ const Browse = () => {
 
       <main className="container mx-auto px-4 pb-12 pt-2 max-w-6xl">
         <div className="text-center mb-8">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Live Inventory</p>
           <h1 className="font-serif text-3xl md:text-4xl tracking-tight">Browse rentals</h1>
           <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-xl mx-auto">
-            Auto-curated from Vietnam's top rental platforms, verified fresh, no duplicates, dead listings removed.
+            Live listings aggregated from Vietnam's top rental platforms
           </p>
         </div>
         <BrowseTable />
