@@ -66,15 +66,11 @@ export const LandingPage = () => {
       <main>
       <section className="container mx-auto px-4 py-8 md:py-12">
         <div className="text-center max-w-4xl mx-auto w-full">
-          <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-4 md:mb-6">
+          <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-6 md:mb-8">
             <span className="text-primary">Vibe check</span>
             <span className="block">your next home</span>
           </h1>
-          
-          <p className="text-muted-foreground mb-6 md:mb-8 max-w-2xl mx-auto leading-relaxed text-base md:text-lg">
-            {user ? "Find your perfect rental with AI-powered matching." : "Discover your dream rental with AI-powered matching and personalized recommendations."}
-          </p>
-          
+
           <div className="mb-4">
             {/* The hero chat takes the question and hands it to the hub, which
                 answers it - results need the width and the tabs beside them. */}
@@ -90,7 +86,6 @@ export const LandingPage = () => {
           {notableComplexes.length > 0 && (
             <div className="mt-12 text-left">
               <div className="mb-6 text-center">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">Featured Complexes</p>
                 <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Vetted homes renters love</h2>
                 <Link
                   to="/hub"
@@ -175,9 +170,6 @@ export const LandingPage = () => {
             <h2 className="text-foreground mb-6 text-3xl font-normal font-serif">
               List your properties on Hausto
             </h2>
-            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto text-base">
-              Vetted brokers and owners only. Apply to access our renter network, AI-matched leads, and the realtor dashboard.
-            </p>
             <div className="flex justify-center">
               <Button onClick={() => navigate('/realtor/apply')} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-6 text-lg font-semibold w-full sm:w-auto">
                 Apply as a realtor
