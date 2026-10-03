@@ -21,6 +21,18 @@ export interface IntakeAlert {
   text: string;
 }
 
+/**
+ * A requested place with no agent number. Nobody can be asked about it until
+ * someone finds one, so the alert puts it first: open the listing, press its
+ * show-number button, save the number on the request in the console.
+ */
+export interface MissingContact {
+  title: string;
+  url: string | null;
+  /** The masked number the listing shows ("0931 277 ***"), when it shows one. */
+  shows: string | null;
+}
+
 export function renderIntakeAlert(opts: {
   ref: string;
   placeCount: number;
@@ -28,36 +40,72 @@ export function renderIntakeAlert(opts: {
   added?: number;
   availability: { date: string; part: string }[];
   createdAt: Date;
+  /** The places just asked for that have no agent number. */
+  missingContact?: MissingContact[];
 }): IntakeAlert {
   const local = new Date(opts.createdAt.getTime() + 7 * 60 * 60 * 1000).toISOString();
   const at = `${local.slice(11, 16)} on ${local.slice(0, 10)}`;
   const windows = opts.availability.map(w => `${w.date} ${w.part.toLowerCase()}`).join(', ') || 'not stated';
   const places = `${opts.placeCount} place${opts.placeCount === 1 ? '' : 's'}`;
+  const missing = opts.missingContact ?? [];
+  const flag = missing.length ? ` - ${missing.length} with no agent number` : '';
+  const findFirst = missing.length
+    ? [
+      '',
+      `No agent number for ${missing.length === 1 ? 'this place' : `these ${missing.length} places`}, so nobody can be asked yet. ` +
+        'Open each, press its show-number button, and save the number on the request in the console:',
+      ...missing.map(m => `- ${m.title}${m.shows ? ` (shows ${m.shows})` : ''}: ${m.url ?? 'no link on file'}`),
+    ]
+    : [];
   if (opts.added) {
     const more = `${opts.added} more place${opts.added === 1 ? '' : 's'}`;
     return {
-      subject: `${opts.ref} - ${more} added, ${places} now`,
+      subject: `${opts.ref} - ${more} added, ${places} now${flag}`,
       text: [
         `The renter on ${opts.ref} asked for ${more} at ${at} (Ho Chi Minh City). It joins the same plan: ${places} now.`,
         `Same times as before: ${windows}.`,
         '',
         'The new agent has not been contacted yet. The itinerary waits until they answer.',
+        ...findFirst,
         '',
         `Open the queue: ${CONSOLE_URL}`,
       ].join('\n'),
     };
   }
   return {
-    subject: `New viewing request ${opts.ref} - ${places}`,
+    subject: `New viewing request ${opts.ref} - ${places}${flag}`,
     text: [
       `${opts.ref} came in at ${at} (Ho Chi Minh City) for ${places}.`,
       `Renter is free: ${windows}.`,
       '',
       'The renter has been promised news within 24 hours of now. The agents are the slow part - contact them first.',
+      ...findFirst,
       '',
       `Open the queue: ${CONSOLE_URL}`,
     ].join('\n'),
   };
+}
+
+/**
+ * The listings behind requested places that have no agent, for the alert.
+ * Read separately from intake's candidate columns, which stay narrow on
+ * purpose. Never throws: on a failed read the places are still flagged, just
+ * without their titles and links.
+ */
+export async function missingContactsFor(db: Supa, listingIds: string[]): Promise<MissingContact[]> {
+  if (listingIds.length === 0) return [];
+  let rows: { id: string; title: string | null; source_url: string | null; contact_phone: string | null }[] = [];
+  try {
+    const { data } = await db.from('external_properties').select('id, title, source_url, contact_phone').in('id', listingIds);
+    rows = data ?? [];
+  } catch (e) {
+    console.error('[ops-alert] missing-contact lookup failed:', (e as Error).message);
+  }
+  return listingIds.map(id => {
+    const r = rows.find(x => x.id === id);
+    const phone = r?.contact_phone?.trim() ?? '';
+    return { title: r?.title?.trim() || 'A listing', url: r?.source_url ?? null, shows: phone.includes('*') ? phone : null };
+  });
 }
 
 /** Email addresses of everyone with the ops role. Service role only - it reads auth users. */

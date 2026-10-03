@@ -30,7 +30,7 @@ import {
   MAX_ITEMS,
   type ShortlistCandidate,
 } from '../_shared/viewing/intake.ts';
-import { renderIntakeAlert, sendIntakeAlert, type IntakeAlert } from '../_shared/viewing/ops-alert.ts';
+import { renderIntakeAlert, sendIntakeAlert, missingContactsFor } from '../_shared/viewing/ops-alert.ts';
 import { findJoinableRequest } from '../_shared/viewing/open-request.ts';
 import { linkViewingToInquiry } from '../_shared/viewing/concierge.ts';
 
@@ -71,11 +71,21 @@ const creditsMessage = (n: number) =>
  * Tell the operators, after the charge and without waiting on it: the renter
  * gets their answer now, and an email that fails must not unmake a request
  * they have paid for. waitUntil keeps the isolate alive for the send.
+ *
+ * Places with no agent number are flagged in it, with their links, because
+ * they are the ones nobody can start on until a person finds the number.
  */
-function alertOps(db: Supa, alert: IntakeAlert) {
-  const sent = sendIntakeAlert(db, alert, Deno.env.get('RESEND_API_KEY')).then(r => {
-    if (r.skipped) console.warn(`[viewing-request-create] ops alert skipped: ${r.skipped}`);
-  });
+function alertOps(
+  db: Supa,
+  alert: Omit<Parameters<typeof renderIntakeAlert>[0], 'missingContact'>,
+  items: { listing_id: string; realtor_id: string | null }[],
+) {
+  const unresolved = items.filter(i => !i.realtor_id).map(i => i.listing_id);
+  const sent = missingContactsFor(db, unresolved)
+    .then(missingContact => sendIntakeAlert(db, renderIntakeAlert({ ...alert, missingContact }), Deno.env.get('RESEND_API_KEY')))
+    .then(r => {
+      if (r.skipped) console.warn(`[viewing-request-create] ops alert skipped: ${r.skipped}`);
+    });
   (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(sent);
 }
 
@@ -201,13 +211,13 @@ async function joinOpenRequest(
 
   const placeCount = open.listingIds.length + items.length;
   if (inquiryId) await linkViewingToInquiry(db, { inquiryId, requestId: open.requestId, now: new Date() });
-  alertOps(db, renderIntakeAlert({
+  alertOps(db, {
     ref: open.ref,
     placeCount,
     added: items.length,
     availability: open.availability,
     createdAt: new Date(),
-  }));
+  }, items);
 
   return json({
     success: true,
@@ -441,12 +451,12 @@ Deno.serve(async (req) => {
     }, 402);
   }
 
-  alertOps(db, renderIntakeAlert({
+  alertOps(db, {
     ref: request.ref,
     placeCount: items.length,
     availability: availability.value ?? [],
     createdAt: new Date(),
-  }));
+  }, items);
 
   // Made from an availability request's offer link (PLAN-v3 S7.1c).
   if (typeof body.inquiryId === 'string') {

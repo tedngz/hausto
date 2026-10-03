@@ -111,6 +111,42 @@ Unresolved listings stay searchable. They need a contact only when a renter
 shortlists them, and ops resolves those at request time. Every on-demand
 resolution enriches the table permanently. Do not chase full coverage.
 
+### The weekly contact check
+
+`extract-phone` reveals numbers from a remote browser, and batdongsan refuses
+it. A person's own browser is not refused, so once a week a Claude Cowork
+scheduled task (`weekly-realtor-contact-check`, in the owner's desktop app,
+not in this repo) opens listings with no agent in the owner's Chrome, presses
+the show-number button, and records each result. Places a renter asked for
+come first. It stops at a login or a bot check and never gets past one.
+
+Its whole write path is two functions, so every week's numbers pass the same
+checks rather than SQL written fresh each run. Both are service-role only.
+
+- `listings_missing_contact(limit)` - active listings with no agent, requested
+  places first, skipping any found to have no number or to be gone in the
+  last four weeks.
+- `record_contact_check(listing, result, phone, name, found_via, url, note)` -
+  `result` is `FOUND`, `NOT_FOUND`, `BLOCKED` or `GONE`. A found number must
+  be a Vietnamese mobile and must start with the digits the listing's mask
+  shows (`phone_mask_prefix`); a web-search find needs those digits to be
+  checked against at all. It links the agent to the listing and its
+  `realtor_identities`, never to a request: an item in a live request is
+  resolved in the console, and the result says `in_live_request` so the run
+  can name it.
+
+```
+contact_checks
+  listing_id    uuid references external_properties(id)
+  result        text      -- FOUND | NOT_FOUND | BLOCKED | GONE
+  phone_e164    text null -- set exactly when FOUND
+  found_via     text null -- REVEAL | PUBLISHED | WEB_SEARCH
+  evidence_url  text null
+  note          text null -- never parsed
+  checked_by    text      -- COWORK for the weekly task
+  checked_at    timestamptz
+```
+
 ### `renters`
 
 ```
@@ -499,6 +535,10 @@ same actions under `AGENT:<version>`, never a second implementation.
 A new request emails everyone with the `ops` role (`_shared/viewing/ops-alert.ts`,
 from `viewing-request-create` after the charge, never blocking it): the ref, the
 place count, the windows and a console link, and nothing about the renter.
+Places with no agent number are flagged in the subject ("- 2 with no agent
+number") and listed first in the body with their title, the masked number the
+listing shows and its link, because nobody can be asked about them until a
+person finds the number and saves it with `RECORD_CONTACT`.
 
 **A broker is owed the renter's decision once the request closes**
 (`realtorDecisionsOwed` in `reminders.ts`): `CONFIRM` for an item the renter
