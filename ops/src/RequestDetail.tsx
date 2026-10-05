@@ -14,7 +14,7 @@
 // number or name (invariant 4). A request is worked by its ref.
 
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import {
   reduceRequest,
   summarise,
@@ -249,9 +249,9 @@ function ItemCard({
       body: { itemId: item.id, ...body },
     });
     setBusy(false);
-    const payload = data as { error?: string; message?: string } | null;
-    if (err || payload?.error) {
-      setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed');
+    const failure = await invokeFailure(data, err);
+    if (failure) {
+      setError(failure);
       return false;
     }
     onChanged();
@@ -349,7 +349,8 @@ function ItemCard({
             });
             const payload = data as { suggestion?: ParseSuggestion; message?: string; error?: string } | null;
             if (err || !payload?.suggestion) {
-              if (payload?.message) setError(payload.message);
+              const reason = await invokeFailure(data, err) ?? payload?.message;
+              if (reason) setError(reason);
               return null;
             }
             return payload.suggestion;
@@ -652,8 +653,8 @@ function CancelRequest({ requestId, onDone }: { requestId: string; onDone: () =>
       body: { action: 'CANCEL_REQUEST', requestId, reason, note },
     });
     setBusy(false);
-    const payload = data as { error?: string; message?: string } | null;
-    if (err || payload?.error) { setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed'); return; }
+    const failure = await invokeFailure(data, err);
+    if (failure) { setError(failure); return; }
     setOpen(false);
     onDone();
   };

@@ -10,7 +10,7 @@
 // reading the thing that will arrive.
 
 import { useMemo, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import {
   assembleItinerary,
   renderItinerary,
@@ -77,9 +77,9 @@ export function Deliver({
       body: { requestId, purpose: 'ITINERARY', order: effective },
     });
     setBusy(false);
-    const payload = data as { error?: string; message?: string } | null;
-    if (err || payload?.error) {
-      setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed to send');
+    const failure = await invokeFailure(data, err, 'Failed to send');
+    if (failure) {
+      setError(failure);
       return;
     }
     onDelivered();
