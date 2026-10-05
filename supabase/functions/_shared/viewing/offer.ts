@@ -39,6 +39,12 @@ export interface UnitInput {
   photos: string[];
   /** For the operator and the log; never shown to the renter. */
   note: string | null;
+  /**
+   * Search for me: where an area's unit is - the building or street, and one
+   * of the area's district codes. A building's unit is at the building.
+   */
+  building?: string | null;
+  districtCode?: string | null;
 }
 
 export type UnitValidation = { ok: true; value: UnitInput } | { ok: false; error: string };
@@ -90,6 +96,8 @@ export function validateUnit(raw: any, photoPath: string): UnitValidation {
       petsOk: typeof raw?.petsOk === 'boolean' ? raw.petsOk : null,
       availableFrom,
       note: str(raw?.note).slice(0, 500) || null,
+      building: str(raw?.building).slice(0, 80) || null,
+      districtCode: /^[A-Z][A-Z0-9_]{1,19}$/.test(str(raw?.districtCode)) ? str(raw?.districtCode) : null,
     },
   };
 }

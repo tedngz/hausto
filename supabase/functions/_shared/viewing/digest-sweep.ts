@@ -100,7 +100,7 @@ export async function runDigestSweep(
   if (run === 1) {
     const { data: watchRows, error: watchErr } = await db
       .from('complex_watches')
-      .select('id, complex_id, renter_id, bedrooms, budget_max_vnd, confirmed_at')
+      .select('id, complex_id, area_district_codes, area_label, renter_id, bedrooms, budget_max_vnd, confirmed_at')
       .eq('status', 'ACTIVE')
       .gt('expires_at', now.toISOString())
       .not('renter_id', 'is', null)
@@ -144,7 +144,7 @@ export async function runDigestSweep(
 
   // Which of those belong to each watched complex. The match is by name and
   // alias, in SQL (`complex_listing_ids`), and is read once per complex.
-  const complexIds = [...new Set(watches.map(w => w.complex_id))];
+  const complexIds = [...new Set(watches.map(w => w.complex_id).filter((c): c is string => !!c))];
   const complexName = new Map<string, string>();
   const atComplex = new Map<string, WatchListing[]>();
   if (complexIds.length > 0) {
@@ -175,11 +175,16 @@ export async function runDigestSweep(
 
     // Their watches: explicit criteria, at one complex each.
     for (const w of watches.filter(w => w.renter_id === r.id)) {
-      for (const l of atComplex.get(w.complex_id) ?? []) {
+      // A building's new listings, or an area's (Search for me): in its districts.
+      const pool = w.complex_id
+        ? atComplex.get(w.complex_id) ?? []
+        : newListings.filter(l => !!l.district_code && (w.area_district_codes ?? []).includes(l.district_code));
+      for (const l of pool) {
         if (!matchesWatch(w, l)) continue;
         candidates.push({
           listingId: l.id, title: l.title, priceVnd: l.price_vnd, bedrooms: l.bedrooms,
-          source: 'WATCH', watchId: w.id, label: complexName.get(w.complex_id) ?? null,
+          source: 'WATCH', watchId: w.id,
+          label: w.complex_id ? complexName.get(w.complex_id) ?? null : l.district_code,
         });
       }
     }

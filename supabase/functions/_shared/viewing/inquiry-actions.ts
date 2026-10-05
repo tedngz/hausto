@@ -19,6 +19,7 @@ import {
   type MessageStore,
 } from '../whatsapp/send.ts';
 import { TEMPLATES } from '../whatsapp/templates.ts';
+import { districtLabel, inArea, placeOf } from './place.ts';
 import type { RealtorChannel } from '../realtor/channel.ts';
 import {
   RenterIdentityError,
@@ -92,7 +93,10 @@ interface InquiryRow {
   id: string;
   channel: string;
   whatsapp_confirmed_at: string | null;
-  complex_id: string;
+  /** Null for an area (Search for me): its districts are below. */
+  complex_id: string | null;
+  area_district_codes: string[] | null;
+  area_label: string | null;
   full_name: string | null;
   renter_id: string | null;
   watch_id: string | null;
@@ -108,7 +112,7 @@ async function load(db: Supa, inquiryId: string): Promise<
   if (!/^[0-9a-f-]{36}$/i.test(inquiryId)) return { ok: false, result: refuse(400, 'inquiryId is required') };
   const { data: row } = await db
     .from('complex_inquiries')
-    .select('id, channel, whatsapp_confirmed_at, complex_id, full_name, renter_id, watch_id, bedrooms_needed, budget_max_vnd')
+    .select('id, channel, whatsapp_confirmed_at, complex_id, area_district_codes, area_label, full_name, renter_id, watch_id, bedrooms_needed, budget_max_vnd')
     .eq('id', inquiryId).maybeSingle();
   if (!row) return { ok: false, result: refuse(404, 'not_found', 'No such request.') };
   if (row.channel !== 'WHATSAPP') {
@@ -351,8 +355,20 @@ async function captureUnit(db: Supa, actor: string, row: InquiryRow, input: Reco
   const { data: realtor } = await db.from('realtors').select('id').eq('id', v.value.realtorId).maybeSingle();
   if (!realtor) return refuse(400, 'invalid_realtor', 'Pick the agent who offered it.');
 
-  const { data: complex } = await db.from('complexes').select('name, district, city').eq('id', row.complex_id).maybeSingle();
-  if (!complex) return refuse(404, 'invalid_complex');
+  const place = await placeOf(db, row);
+  if (!place) return refuse(404, 'invalid_complex');
+  // An area's unit says where it is - one of the area's districts - so the
+  // canonical trigger can place it; a building's unit is at the building.
+  let complex: { name: string; district: string | null; city: string };
+  if (place.kind === 'AREA') {
+    const code = v.value.districtCode;
+    if (!code || !place.districtCodes.includes(code)) {
+      return refuse(400, 'invalid_district', `Pick which of ${place.name} it is in.`);
+    }
+    complex = { name: v.value.building || districtLabel(code), district: districtLabel(code), city: place.city };
+  } else {
+    complex = { name: place.name, district: place.district, city: place.city };
+  }
   // The viewing flow is Ho Chi Minh City only; a unit elsewhere could never be requested.
   if (complex.city !== 'ho_chi_minh') return refuse(409, 'outside_hcmc', 'Viewings are arranged in Ho Chi Minh City only.');
 
@@ -517,8 +533,8 @@ async function offerableUnits(
   ids: string[],
   now: Date,
 ): Promise<OfferSection | InquiryResult> {
-  const { data: complex } = await db.from('complexes').select('name').eq('id', row.complex_id).maybeSingle();
-  const where = complex?.name ?? 'the building';
+  const place = await placeOf(db, row);
+  const where = place?.name ?? 'the building';
   // One offer, then their answer. A second list they did not ask for is the
   // agents' stock arriving in instalments, however good each unit is.
   if (view.offeredAt && !(await renterWroteSince(db, row.id, view.offeredAt))) {
@@ -533,13 +549,18 @@ async function offerableUnits(
     return refuse(422, 'not_requestable', `${rejected.length} of those cannot be requested: ${rejected[0].reason}`);
   }
 
-  const { data: atBuilding } = await db.rpc('complex_listing_ids', { _complex_id: row.complex_id, _since: '-infinity' });
+  // On file: at the building, or - for an area - in its districts.
+  const { data: atBuilding } = row.complex_id
+    ? await db.rpc('complex_listing_ids', { _complex_id: row.complex_id, _since: '-infinity' })
+    : { data: listings.filter(l => !!place && inArea(place, l.district_code ?? null)).map(l => l.id) };
   const onFile = new Set(((atBuilding ?? []) as unknown[])
     .map(x => (typeof x === 'string' ? x : String((x as Record<string, unknown>).complex_listing_ids))));
   const brief = briefOf({ bedrooms: row.bedrooms_needed, budgetMaxVnd: row.budget_max_vnd }, view.brief);
   for (const l of listings) {
     const captured = capturedFor(l, row.id);
-    if (!captured && !onFile.has(l.id)) return refuse(422, 'not_this_building', `"${l.title}" is not at ${where}.`);
+    if (!captured && !onFile.has(l.id)) {
+      return refuse(422, 'not_this_building', `"${l.title}" is not ${place?.kind === 'AREA' ? 'in' : 'at'} ${where}.`);
+    }
     const off = misfit({ bedrooms: Number(l.bedrooms), priceVnd: Number(l.price_vnd) }, brief);
     if (off) {
       return refuse(422, 'outside_brief',
@@ -590,9 +611,9 @@ async function sendUpdate(
     return refuse(409, 'window_open', 'Their window is open - send a normal reply instead.');
   }
 
-  const { data: complex } = await db.from('complexes').select('name').eq('id', row.complex_id).maybeSingle();
+  const place = await placeOf(db, row);
   const firstName = (row.full_name ?? '').trim().split(/\s+/)[0] || null;
-  const complexName = complex?.name ?? 'the building';
+  const complexName = place?.name ?? 'the building';
 
   let sent: { message: { id: string; status: string } };
   try {

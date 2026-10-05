@@ -148,7 +148,10 @@ export async function alertItemsFor(db: Supa, messageId: string): Promise<AlertC
   const nameByWatch = new Map<string, string>();
   if (watchIds.length > 0) {
     const { data: watches } = await db.from('complex_watches').select('id, complex_id').in('id', watchIds);
-    const complexIds = [...new Set(((watches ?? []) as { complex_id: string }[]).map(w => w.complex_id))];
+    // An area watch (Search for me) has no complex; its places are labelled
+    // by district below.
+    const complexIds = [...new Set(((watches ?? []) as { complex_id: string | null }[])
+      .map(w => w.complex_id).filter((c): c is string => !!c))];
     const { data: complexes } = complexIds.length
       ? await db.from('complexes').select('id, name').in('id', complexIds)
       : { data: [] };

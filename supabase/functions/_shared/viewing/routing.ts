@@ -249,7 +249,7 @@ async function confirmWatch(
 ): Promise<WatchOutcome> {
   const { data: w } = await db
     .from('complex_watches')
-    .select('id, complex_id, status, renter_id, user_id, bedrooms, budget_max_vnd, expires_at, created_at')
+    .select('id, complex_id, area_label, status, renter_id, user_id, bedrooms, budget_max_vnd, expires_at, created_at')
     .eq('code', code)
     .maybeSingle();
 
@@ -272,11 +272,14 @@ async function confirmWatch(
     }
   }
 
-  const { data: complex } = await db.from('complexes').select('name').eq('id', w.complex_id).maybeSingle();
+  // A building's name, or an area's label (Search for me).
+  const { data: complex } = w.complex_id
+    ? await db.from('complexes').select('name').eq('id', w.complex_id).maybeSingle()
+    : { data: null };
   return {
     kind: 'CONFIRMED',
     watchId: String(w.id),
-    complexName: complex?.name ?? 'that building',
+    complexName: complex?.name ?? w.area_label ?? 'that building',
     bedrooms: w.bedrooms ?? null,
     budgetMaxVnd: w.budget_max_vnd ?? null,
     expiresAt: String(w.expires_at),

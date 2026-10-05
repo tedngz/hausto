@@ -20,6 +20,7 @@
 
 import { formatVnd, hcmcDate } from './format.ts';
 import { MAX_BEDROOMS, MAX_BUDGET_VND, MAX_MOVE_IN_DAYS, MIN_BUDGET_VND } from './watch.ts';
+import { MAX_AREA_DISTRICTS, REPLY_WITHIN_HOURS, isDistrictCode } from './place.ts';
 
 export const LEASE_MONTHS = [6, 12, 24] as const;
 export const MAX_NOTES = 1000;
@@ -34,7 +35,9 @@ export const CONCIERGE_REPLY_HOURS = 24;
 const DAY_MS = 86_400_000;
 
 export interface InquiryInput {
-  complexId: string;
+  /** One building, or - Search for me - an area of district codes. Exactly one. */
+  complexId: string | null;
+  areaDistrictCodes: string[] | null;
   name: string;
   moveInDate: string;
   leaseMonths: number;
@@ -49,8 +52,15 @@ export type InquiryValidation = { ok: true; value: InquiryInput } | { ok: false;
 
 // deno-lint-ignore no-explicit-any
 export function validateInquiryInput(raw: any, now: Date): InquiryValidation {
-  const complexId = String(raw?.complexId ?? '');
-  if (!/^[0-9a-f-]{36}$/i.test(complexId)) return { ok: false, error: 'Unknown building.' };
+  const area = Array.isArray(raw?.areaDistrictCodes) ? [...new Set((raw.areaDistrictCodes as unknown[]).map(String))] : null;
+  let complexId: string | null = null;
+  if (area) {
+    if (area.length === 0 || !area.every(isDistrictCode)) return { ok: false, error: 'Pick the areas to search.' };
+    if (area.length > MAX_AREA_DISTRICTS) return { ok: false, error: `Pick up to ${MAX_AREA_DISTRICTS} areas.` };
+  } else {
+    complexId = String(raw?.complexId ?? '');
+    if (!/^[0-9a-f-]{36}$/i.test(complexId)) return { ok: false, error: 'Unknown building.' };
+  }
 
   const name = String(raw?.name ?? '').trim().slice(0, MAX_NAME);
   if (!name) return { ok: false, error: 'Tell us your name.' };
@@ -82,7 +92,7 @@ export function validateInquiryInput(raw: any, now: Date): InquiryValidation {
   return {
     ok: true,
     value: {
-      complexId, name, moveInDate: moveIn, leaseMonths: lease, bedrooms, budgetMaxVnd: budget,
+      complexId, areaDistrictCodes: area, name, moveInDate: moveIn, leaseMonths: lease, bedrooms, budgetMaxVnd: budget,
       hasPets: raw?.hasPets === true, notes,
     },
   };
@@ -102,7 +112,10 @@ export function buildInquiryLink(businessPhoneE164: string, code: string, comple
 
 export interface InquirySummary {
   fullName: string;
+  /** The building's name, or the area's label. */
   complexName: string;
+  /** An area (Search for me) is promised 48 hours, not 24. */
+  kind?: 'BUILDING' | 'AREA';
   bedrooms: number;
   budgetMaxVnd: number | null;
   moveInDate: string;
@@ -138,11 +151,28 @@ export function describeInquiry(s: InquirySummary): string {
  * who is doing what by when, and that alerts come too.
  */
 export function renderInquiryConfirmed(s: InquirySummary & { watchExpiresAt: string }): string {
+  if (s.kind === 'AREA') {
+    // Search for me: a person searches agents' circles and groups, which is
+    // slower than asking a building's agents - so the promise is 48 hours, and
+    // every place offered is one an agent has confirmed.
+    return [
+      `Thanks ${firstName(s.fullName)} - your search in ${s.complexName} is in: ${describeInquiry(s)}.`,
+      `Someone on our team is searching agents' circles for it now, and will send the first places here within ${REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent.`,
+      `Until ${dayMonth(s.watchExpiresAt)} we will also message you when a new listing there fits. Reply STOP any time.`,
+    ].join('\n\n');
+  }
   return [
     `Thanks ${firstName(s.fullName)} - your request for ${s.complexName} is in: ${describeInquiry(s)}.`,
     `Someone on our team is asking the agents who hold units there now, and will reply here within ${CONCIERGE_REPLY_HOURS} hours.`,
     `Until ${dayMonth(s.watchExpiresAt)} we will also message you when a new listing there fits. Reply STOP any time.`,
   ].join('\n\n');
+}
+
+/** The wa.me link for a search (Search for me): the same handshake, worded as a search. */
+export function buildSearchLink(businessPhoneE164: string, code: string, areaName: string): string {
+  const number = businessPhoneE164.replace(/[^0-9]/g, '');
+  const text = `Hi Hausto - please search ${areaName} for me (${code})`;
+  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 }
 
 /** When a WhatsApp request's free-form window shuts, from the renter's last message. */

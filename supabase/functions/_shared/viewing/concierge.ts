@@ -14,6 +14,7 @@ import { sendFreeForm, type MessageStore } from '../whatsapp/send.ts';
 import { INQUIRY_REPLY_DAYS, describeInquiry, type InquirySummary } from './inquiry.ts';
 import { deadlineAlertNeeded, deadlineJobs, renderDeadlineAlert } from './inquiry-deadline.ts';
 import { reduceInquiry, type InquiryEvent } from '../viewing-domain.ts';
+import { REPLY_WITHIN_HOURS, placeOf } from './place.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -45,10 +46,12 @@ export async function confirmInquiryForWatch(
 ): Promise<ConfirmedInquiry | null> {
   const { data: inq } = await db
     .from('complex_inquiries')
-    .select('id, full_name, bedrooms_needed, budget_max_vnd, target_move_in_date, lease_duration_months, has_pets, whatsapp_confirmed_at')
+    .select('id, full_name, bedrooms_needed, budget_max_vnd, target_move_in_date, lease_duration_months, has_pets, whatsapp_confirmed_at, complex_id')
     .eq('watch_id', opts.watchId)
     .maybeSingle();
   if (!inq) return null;
+  // An area (Search for me) is promised 48 hours, a building 24.
+  const kind = inq.complex_id ? 'BUILDING' : 'AREA';
 
   const firstConfirm = !inq.whatsapp_confirmed_at;
   if (firstConfirm) {
@@ -71,7 +74,7 @@ export async function confirmInquiryForWatch(
     if (error) console.error(`[concierge] CONFIRMED for ${inq.id} failed:`, error.message ?? error);
     // The 16h and 22h reminders (inquiry-deadline.ts). Each decides at run
     // time whether it is still needed.
-    const { error: jobErr } = await db.from('jobs').insert(deadlineJobs(String(inq.id), now));
+    const { error: jobErr } = await db.from('jobs').insert(deadlineJobs(String(inq.id), now, REPLY_WITHIN_HOURS[kind] * 3_600_000));
     if (jobErr) console.error(`[concierge] deadline jobs for ${inq.id} failed:`, jobErr.message ?? jobErr);
   }
 
@@ -80,6 +83,7 @@ export async function confirmInquiryForWatch(
     firstConfirm,
     fullName: String(inq.full_name ?? ''),
     complexName: opts.complexName,
+    kind,
     bedrooms: Number(inq.bedrooms_needed),
     budgetMaxVnd: inq.budget_max_vnd ?? null,
     moveInDate: String(inq.target_move_in_date),
@@ -206,7 +210,7 @@ export async function runInquiryDeadline(
 ): Promise<'SENT' | 'NOT_NEEDED' | 'MISSING'> {
   const { data: inq } = await db
     .from('complex_inquiries')
-    .select('id, complex_id, bedrooms_needed, budget_max_vnd, target_move_in_date, lease_duration_months, has_pets')
+    .select('id, complex_id, area_district_codes, area_label, bedrooms_needed, budget_max_vnd, target_move_in_date, lease_duration_months, has_pets')
     .eq('id', inquiryId).maybeSingle();
   if (!inq) return 'MISSING';
 
@@ -226,9 +230,10 @@ export async function runInquiryDeadline(
 
   if (!deadlineAlertNeeded(view, answeredAt)) return 'NOT_NEEDED';
 
-  const { data: complex } = await db.from('complexes').select('name').eq('id', inq.complex_id).maybeSingle();
+  const place = await placeOf(db, inq);
   await send(renderDeadlineAlert({
-    complexName: complex?.name ?? 'a building',
+    complexName: place?.name ?? 'a building',
+    replyWithinMs: view.replyWithinMs,
     summary: describeInquiry({
       fullName: '', complexName: '', bedrooms: Number(inq.bedrooms_needed), budgetMaxVnd: inq.budget_max_vnd ?? null,
       moveInDate: String(inq.target_move_in_date), leaseMonths: Number(inq.lease_duration_months), hasPets: inq.has_pets === true,

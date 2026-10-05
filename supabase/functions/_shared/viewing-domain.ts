@@ -496,7 +496,7 @@ export function summarise(view: RequestView): {
 // events: what was said is not a state.
 
 export const INQUIRY_EVENT_TYPES = [
-  'SUBMITTED',      // the form (complex-inquiry-create)
+  'SUBMITTED',      // the form (complex-inquiry-create); carries the reply promise for an area
   'CONFIRMED',      // the WhatsApp code arrived - the 24 hours start
   'AGENT_ASKED',    // an operator asked an agent about the building
   'AGENT_ANSWERED', // what that agent said, as one of AGENT_ANSWERS
@@ -570,6 +570,11 @@ export interface InquiryView {
   brief: InquiryBrief | null;
   closedReason: InquiryCloseReason | null;
   closedAt: string | null;
+  /**
+   * How long the renter was promised a reply in, from the code: 24 hours for
+   * a building, 48 for an area (Search for me), as SUBMITTED recorded it.
+   */
+  replyWithinMs: number;
 }
 
 /**
@@ -592,7 +597,7 @@ export const INQUIRY_REPLY_WITHIN_MS = 24 * 60 * 60 * 1000;
 export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): InquiryView {
   const view: InquiryView = {
     inquiryId, state: 'AWAITING_CODE', confirmedAt: null, agents: {}, capturedListingIds: [], offeredListingIds: [],
-    offeredAt: null, brief: null, closedReason: null, closedAt: null,
+    offeredAt: null, brief: null, closedReason: null, closedAt: null, replyWithinMs: INQUIRY_REPLY_WITHIN_MS,
   };
   const agent = (id: string): InquiryAgentView =>
     (view.agents[id] ??= { realtorId: id, askedAt: null, medium: null, answer: null, answeredAt: null });
@@ -609,6 +614,9 @@ export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): Inquir
 
     switch (e.type as InquiryEventType) {
       case 'SUBMITTED':
+        if (typeof p.reply_within_hours === 'number' && p.reply_within_hours > 0) {
+          view.replyWithinMs = p.reply_within_hours * 3_600_000;
+        }
         break;
       case 'CONFIRMED':
         view.confirmedAt ??= e.occurred_at;
@@ -685,7 +693,7 @@ export function reduceInquiry(inquiryId: string, events: InquiryEvent[]): Inquir
   return view;
 }
 
-/** When the renter was promised a reply by: 24 hours from the code. */
+/** When the renter was promised a reply by: 24 hours from the code, 48 for an area. */
 export function inquiryDeadline(view: InquiryView): string | null {
-  return view.confirmedAt ? new Date(Date.parse(view.confirmedAt) + INQUIRY_REPLY_WITHIN_MS).toISOString() : null;
+  return view.confirmedAt ? new Date(Date.parse(view.confirmedAt) + view.replyWithinMs).toISOString() : null;
 }

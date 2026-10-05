@@ -15,6 +15,7 @@ import {
 } from "../_shared/concierge-email.ts";
 import { formatVnd } from "../_shared/viewing/format.ts";
 import { windowClosesAt } from "../_shared/viewing/inquiry.ts";
+import { placeOf } from "../_shared/viewing/place.ts";
 
 // Tells the concierge about an availability request on WhatsApp (SPEC §11).
 //
@@ -70,7 +71,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { data: inquiry, error } = await supabase
       .from("complex_inquiries")
       .select(
-        "id, complex_id, user_id, full_name, phone, target_move_in_date, lease_duration_months, budget_max_vnd, bedrooms_needed, has_pets, additional_notes, notified_at, channel, whatsapp_confirmed_at, last_inbound_at",
+        "id, complex_id, area_district_codes, area_label, user_id, full_name, phone, target_move_in_date, lease_duration_months, budget_max_vnd, bedrooms_needed, has_pets, additional_notes, notified_at, channel, whatsapp_confirmed_at, last_inbound_at",
       )
       .eq("id", inquiryId)
       .maybeSingle();
@@ -81,12 +82,10 @@ const handler = async (req: Request): Promise<Response> => {
       return json({ success: true, skipped: "email requests are retired" });
     }
 
-    const { data: complex } = await supabase
-      .from("complexes")
-      .select("name, slug, district")
-      .eq("id", inquiry.complex_id)
-      .maybeSingle();
-    const complexName = complex?.name ?? "Unknown complex";
+    // A building, or an area (Search for me), which has no complex row.
+    const place = await placeOf(supabase, inquiry);
+    const complex = place ? { slug: place.slug, district: place.district } : null;
+    const complexName = place?.name ?? "Unknown complex";
 
     // ── A renter's WhatsApp reply ───────────────────────────────────────────
     if (event === "WHATSAPP_REPLY") {
@@ -150,7 +149,7 @@ const handler = async (req: Request): Promise<Response> => {
       headers: conversationHeaders(inqToken(inquiry.id)),
       html: `
         <h1>New concierge availability request</h1>
-        <p>A renter asked the concierge to check live availability at
+        <p>A renter asked the concierge to ${place?.kind === "AREA" ? "search (Search for me, 48 hours)" : "check live availability at"}
         <strong>${esc(complexName)}</strong>${complex?.district ? ` (${esc(complex.district)})` : ""}.</p>
 
         <h2>Renter</h2>
