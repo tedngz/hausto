@@ -32,6 +32,7 @@ import {
   type Warning,
 } from './itinerary.ts';
 import { lastHeardFromUs, renderHoldingUpdate } from './reminders.ts';
+import { hcmcLong } from './format.ts';
 import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
 
@@ -62,7 +63,13 @@ export interface DeliverOptions {
 }
 
 export type DeliverResult =
-  | { ok: true; messageId: string; deduplicated: boolean; stops: number; warnings: Warning[]; preview: string }
+  | { ok: true; messageId: string; deduplicated: boolean; stops: number; warnings: Warning[]; preview: string;
+      /**
+       * The renter's window was shut, so a template told them the plan is
+       * ready and the plan itself waits for their reply (ITINERARY_HELD).
+       * `preview` is the plan that will go, not the template that went.
+       */
+      held: boolean }
   | { ok: false;
       code: 'unknown_request' | 'service_window_closed' | 'too_many_consecutive' | 'opted_out' | 'template_unavailable' | 'send_failed';
       message: string; preview?: string };
@@ -103,6 +110,8 @@ export async function deliver(
 
   let text: string;
   let stops = 0;
+  let firstStartsAt: string | null = null;
+  let alternativesOnly = false;
   let warnings: Warning[] = [];
   let orderedItemIds: string[] | null = null;
   let substitutes: { title: string; priceVnd: number; districtCode: string | null; listingId?: string }[] = [];
@@ -116,7 +125,9 @@ export async function deliver(
     stops = assembled.stops.length;
     warnings = assembled.warnings;
     orderedItemIds = assembled.stops.map(s => s.itemId);
-    if (stops === 0 && assembled.alternatives.length > 0) {
+    firstStartsAt = assembled.stops.map(s => s.startsAt).sort()[0] ?? null;
+    alternativesOnly = stops === 0 && assembled.alternatives.length > 0;
+    if (alternativesOnly) {
       // Nothing at their times, but agents offered others. That is not "none
       // are free" - these units are available and their agents are waiting on
       // an answer - so it is not the no-supply message and carries no
@@ -153,29 +164,43 @@ export async function deliver(
   // itinerary's names its words, so sending the same plan twice is one
   // message and sending a changed plan is a second, rather than a silent
   // "already sent".
-  const purpose = opts.purpose === 'HOLDING_UPDATE'
-    ? `HOLDING_UPDATE:${new Date(lastHeardFromUs((events ?? []) as DomainEvent[], request.created_at)).toISOString()}`
-    : `ITINERARY:${fingerprint(text)}`;
-
   const store = new SupabaseMessageStore(db);
   let messageId: string;
   let deduplicated = false;
-  // With their window shut, a holding update can still reach them as the
-  // request_update template - "we have an update on your request, reply here
-  // to see it". Their reply opens the window and an operator answers it. The
-  // itinerary has no such fallback here: it is the operator's to send.
-  let viaTemplate = false;
+
+  // With their window shut nothing free-form may reach them, so the message
+  // goes as the approved template that says it in outline and asks them to
+  // reply. A holding update ends there: their reply opens the window and an
+  // operator answers it. An itinerary is held (ITINERARY_HELD): their reply
+  // opens the window and releases it, free-form (releaseHeldItinerary).
+  const renter = await store.getRenter(request.renter_id);
+  const viaTemplate = !!renter && !isWindowOpen(renter, new Date());
+  const held = viaTemplate && opts.purpose === 'ITINERARY';
+  const place = listings.length === 1 ? listings[0].listingTitle : `${listings.length} places`;
+  const template = !viaTemplate
+    ? null
+    : opts.purpose === 'ITINERARY' && stops > 0 && firstStartsAt
+      ? { name: TEMPLATES.ITINERARY_READY.name, params: [String(stops), hcmcLong(firstStartsAt)] }
+      // Only with matches to send: the template says "we have found some".
+      : opts.purpose === 'ITINERARY' && !alternativesOnly && substitutes.length > 0
+        ? { name: TEMPLATES.NO_SUPPLY_SUBSTITUTES.name, params: [request.ref] }
+        // A holding update, other times on offer, or nothing found yet.
+        : { name: TEMPLATES.REQUEST_UPDATE.name, params: [place] };
+
+  // Keyed as above. A held plan's template has a key of its own, so the plan
+  // its release sends is a new message rather than a duplicate of it.
+  const purpose = opts.purpose === 'HOLDING_UPDATE'
+    ? `HOLDING_UPDATE:${new Date(lastHeardFromUs((events ?? []) as DomainEvent[], request.created_at)).toISOString()}`
+    : `${held ? 'ITINERARY_HELD' : 'ITINERARY'}:${fingerprint(text)}`;
 
   try {
-    const renter = opts.purpose === 'HOLDING_UPDATE' ? await store.getRenter(request.renter_id) : null;
-    viaTemplate = !!renter && !isWindowOpen(renter, new Date());
-    const result = viaTemplate
+    const result = template
       ? await sendTemplate(store, adapter, {
         renterId: request.renter_id,
         requestId: opts.requestId,
         purpose,
-        templateName: TEMPLATES.REQUEST_UPDATE.name,
-        params: [await firstName(db, request.renter_id), listings.length === 1 ? listings[0].listingTitle : `${listings.length} places`],
+        templateName: template.name,
+        params: [await firstName(db, request.renter_id), ...template.params],
         attempt: opts.attempt ?? 1,
       })
       : await sendFreeForm(store, adapter, {
@@ -192,8 +217,8 @@ export async function deliver(
     }
   } catch (e) {
     if (e instanceof ServiceWindowClosedError) {
-      // The itinerary, with the window shut. Writing a SENT row for a message
-      // nobody receives would be worse than refusing.
+      // The window shut between the check above and the send. Writing a SENT
+      // row for a message nobody receives would be worse than refusing.
       return {
         ok: false,
         code: 'service_window_closed',
@@ -217,7 +242,7 @@ export async function deliver(
   // have written were written then; writing them again would put two
   // ITINERARY_DELIVERED rows in an append-only log for one delivery.
   if (deduplicated) {
-    return { ok: true, messageId, deduplicated, stops, warnings, preview: text };
+    return { ok: true, messageId, deduplicated, stops, warnings, preview: text, held };
   }
 
   const actor = opts.actor ?? 'SYSTEM';
@@ -235,15 +260,20 @@ export async function deliver(
     // A holding update is something the renter heard: it moves the silence
     // clock and nothing else. Only the itinerary is ITINERARY_DELIVERED,
     // because only that means the plan has gone out.
-    type: opts.purpose === 'ITINERARY' ? 'ITINERARY_DELIVERED' : 'HOLDING_UPDATE_SENT',
-    payload: { message_id: messageId, ...(viaTemplate ? { via: 'TEMPLATE' } : {}) },
+    // A held itinerary is neither: the renter knows a plan exists and has not
+    // seen it, so nothing they say yet can confirm it.
+    type: held ? 'ITINERARY_HELD' : opts.purpose === 'ITINERARY' ? 'ITINERARY_DELIVERED' : 'HOLDING_UPDATE_SENT',
+    payload: held
+      ? { message_id: messageId, ordered_item_ids: orderedItemIds ?? [], template: template!.name }
+      : { message_id: messageId, ...(viaTemplate ? { via: 'TEMPLATE' } : {}) },
     actor,
   });
 
   // What was put in front of the renter, in the order shown. Without this a
   // reply of "2" resolves against nothing and the "reply with a number" line in
-  // the message is a promise we cannot keep.
-  if (offeredListingIds.length > 0) {
+  // the message is a promise we cannot keep. Not while held: the list has
+  // not been shown, and the release picks it again.
+  if (offeredListingIds.length > 0 && !held) {
     toWrite.push({
       request_id: opts.requestId,
       type: 'SUGGESTIONS_OFFERED',
@@ -255,7 +285,49 @@ export async function deliver(
   const { error: evErr } = await db.from('events').insert(toWrite);
   if (evErr) console.error('[deliver] event insert failed after a successful send:', evErr);
 
-  return { ok: true, messageId, deduplicated, stops, warnings, preview: text };
+  return { ok: true, messageId, deduplicated, stops, warnings, preview: text, held };
+}
+
+const CLOSED_STATES = new Set(['CONFIRMED', 'CANCELLED', 'FAILED_NO_SUPPLY']);
+
+/**
+ * Send the itinerary a template held for this renter, now that they have
+ * written. Both inbound paths call it after handleInbound has recorded the
+ * message, which is what opened the window.
+ *
+ * The newest held request only. Two would be two messages to one reply, and
+ * the other stays held for the next. The plan is reassembled rather than
+ * replayed, in the order on file: an outcome recorded while it was held is in
+ * it, which is what the renter should read now.
+ */
+export async function releaseHeldItinerary(
+  db: Supa,
+  adapter: WhatsAppAdapter,
+  renterId: string,
+): Promise<{ requestId: string; result: DeliverResult } | null> {
+  const { data: requests } = await db
+    .from('viewing_requests').select('id').eq('renter_id', renterId)
+    .order('created_at', { ascending: false }).limit(20);
+  const ids = (requests ?? []).map((r: { id: string }) => r.id);
+  if (ids.length === 0) return null;
+
+  const { data: heldEvents } = await db
+    .from('events').select('request_id').in('request_id', ids).eq('type', 'ITINERARY_HELD');
+  const candidates = new Set((heldEvents ?? []).map((e: { request_id: string }) => e.request_id));
+
+  for (const requestId of ids) {
+    if (!candidates.has(requestId)) continue;
+    const { data: events } = await db
+      .from('events').select('id, request_id, item_id, type, payload, actor, occurred_at')
+      .eq('request_id', requestId).order('occurred_at', { ascending: true });
+    const view = reduceRequest(requestId, (events ?? []) as DomainEvent[]);
+    if (!view.heldItinerary || CLOSED_STATES.has(view.state)) continue;
+    const result = await deliver(db, adapter, {
+      requestId, purpose: 'ITINERARY', order: view.heldItinerary.orderedItemIds, actor: 'SYSTEM',
+    });
+    return { requestId, result };
+  }
+  return null;
 }
 
 /**

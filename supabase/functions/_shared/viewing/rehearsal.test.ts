@@ -17,7 +17,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { FakeDb } from './fake-db.ts';
 import { MockAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
-import { deliver } from './deliver.ts';
+import { deliver, releaseHeldItinerary } from './deliver.ts';
 import { sendViewingDay } from './viewing-day.ts';
 import { handleInbound } from './routing.ts';
 import { intakeEvents, buildDeepLink, generateRef } from './intake.ts';
@@ -273,5 +273,66 @@ describe('dress rehearsal', () => {
     say('us → RENTER  (only other times offered)', body);
     expect(body).toContain('offered other times');
     expect(body).not.toMatch(/close matches/);
+  });
+  it('plays the itinerary with the window shut: the template, then the plan on their reply', async () => {
+    // The bodies as Meta approved them (docs/whatsapp-go-live.md). The send
+    // carries only the parameters, so the rehearsal fills them in.
+    const BODIES: Record<string, (p: string[]) => string> = {
+      itinerary_ready: p => `Hi ${p[0]}, good news - ${p[1]} of your viewings are confirmed. The first is ${p[2]}. ` +
+        'Reply here and we will send you the full schedule with addresses.',
+      no_supply_substitutes: p => `Hi ${p[0]}, an update on request ${p[1]} - none of the places you picked could be ` +
+        'confirmed for your times. We have found some close matches. Reply here and we will send them over.',
+      request_update: p => `Hi ${p[0]}, we have an update on your request for ${p[1]}. Reply here to see it.`,
+    };
+    const template = () => {
+      const d = adapter.delivered[adapter.delivered.length - 1];
+      return BODIES[String(d.templateName)](d.templateParams ?? []);
+    };
+    const lastBody = () => String(db.tables.messages.filter(m => m.direction === 'OUT').pop()!.body);
+    const shutAndSend = async (order: string[]) => {
+      db.tables.renters[0].service_window_expires_at = null;
+      // deno-lint-ignore no-explicit-any
+      const r = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order, actor: opsActor('ops-user-1') });
+      expect(r).toMatchObject({ ok: true, held: true });
+    };
+    const reply = async (text: string) => {
+      say('RENTER → us', text);
+      await inbound(text);
+      // deno-lint-ignore no-explicit-any
+      const released = await releaseHeldItinerary(db as any, adapter, db.tables.renters[0].id as string);
+      expect(released?.result).toMatchObject({ ok: true, held: false });
+    };
+
+    log('\n\n  ── The plan, with the window shut ───────────────────────────');
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    record(itemIds[0], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-19T02:00:00Z', durationMinutes: 30 }] });
+    record(itemIds[1], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-19T04:00:00Z', durationMinutes: 30 }] });
+    for (const id of itemIds.slice(2)) record(id, { outcome: 'ALREADY_RENTED' });
+    await shutAndSend([itemIds[0], itemIds[1]]);
+    say('us → RENTER  (window shut: itinerary_ready)', template());
+    await reply('ok great');
+    say('us → RENTER  (the plan, released by their reply)', lastBody());
+    expect(view().state).toBe('DELIVERED');
+
+    log('\n\n  ── Nothing confirmed, with the window shut ──────────────────');
+    seed();
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    for (const id of itemIds) record(id, { outcome: 'ALREADY_RENTED' });
+    await shutAndSend([]);
+    say(`us → RENTER  (window shut: ${adapter.delivered[adapter.delivered.length - 1].templateName})`, template());
+    await reply('oh no, what else is there?');
+    say('us → RENTER  (released by their reply)', lastBody());
+
+    log('\n\n  ── Other times offered, with the window shut ────────────────');
+    seed();
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    record(itemIds[0], { outcome: 'ALTERNATIVE_OFFERED', slots: [{ startsAt: '2026-09-20T03:00:00Z', durationMinutes: 30 }] });
+    for (const id of itemIds.slice(1)) record(id, { outcome: 'ALREADY_RENTED' });
+    await shutAndSend([]);
+    expect(adapter.delivered[adapter.delivered.length - 1].templateName).toBe('request_update');
+    say('us → RENTER  (window shut: request_update)', template());
+    await reply('hi');
+    say('us → RENTER  (released by their reply)', lastBody());
+    expect(lastBody()).not.toMatch(/\bbook(ed|ing)\b/i);
   });
 });

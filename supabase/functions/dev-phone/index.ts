@@ -20,6 +20,7 @@ import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
 import { decideAction } from '../_shared/viewing/agent.ts';
 import { performAction } from '../_shared/viewing/agent-act.ts';
 import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
+import { releaseHeldItinerary } from '../_shared/viewing/deliver.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -87,6 +88,14 @@ Deno.serve(async (req) => {
     providerMessageId: `mock-in-${crypto.randomUUID()}`,
     timestamp: new Date().toISOString(),
   });
+
+  // A held itinerary goes now, and stands the agent down - as the webhook.
+  const released = outcome.optedOut
+    ? null
+    : await releaseHeldItinerary(db, adapterFromEnv(Deno.env.toObject()), outcome.renterId);
+  if (released?.result.ok && !released.result.held) {
+    return json({ success: true, ...outcome, released, thread: await readThread(db, phone) });
+  }
 
   // The same decision the webhook makes, so what you see here is what a real
   // renter would get. SEARCH is the one exception: it is dispatched by the

@@ -31,8 +31,9 @@ export const TEMPLATES = {
     name: 'itinerary_ready',
     params: ['renter_name', 'confirmed_count', 'first_viewing_time'],
     purpose:
-      'The consolidated itinerary. One message carrying every confirmed viewing - ' +
-      'never one per listing, which is what the 3-in-a-row guard enforces.',
+      'The consolidated itinerary, when the renter\'s window is shut: it says how many are confirmed and ' +
+      'when the first is, and their reply releases the plan itself (deliver.ts, ITINERARY_HELD). ' +
+      'One message for every confirmed viewing - never one per listing.',
     approved: true,
   },
   VIEWING_REMINDER: {
@@ -59,8 +60,8 @@ export const TEMPLATES = {
     name: 'no_supply_substitutes',
     params: ['renter_name', 'request_ref'],
     purpose:
-      'Nothing on the shortlist could be confirmed. Never sent alone - it carries ' +
-      'substitutes, because FAILED_NO_SUPPLY with no alternative is a dead end.',
+      'Nothing on the shortlist could be confirmed, with the window shut. Sent only when close matches ' +
+      'were found - it says so - and their reply releases the message carrying them (deliver.ts).',
     approved: true,
   },
   REQUEST_UPDATE: {
@@ -70,8 +71,10 @@ export const TEMPLATES = {
       'An availability request (SPEC §11) has news but the 24-hour window shut before the concierge ' +
       'could send it, or a viewing request owes a holding update with the window shut (deliver.ts; {{2}} ' +
       'is then the listing, or "3 places"). Carries no news itself - the renter replies, the window opens, ' +
-      'and the detail goes free-form. Utility: it answers a request the renter made. Not yet submitted to Meta.',
-    approved: false,
+      'and the detail goes free-form. Utility: it answers a request the renter made. Also the itinerary\'s ' +
+      'with the window shut when it is neither ready nor a no-supply with matches - other times on offer, ' +
+      'or nothing found yet (deliver.ts). Approved by Meta on 2026-09-30.',
+    approved: true,
   },
 } as const;
 

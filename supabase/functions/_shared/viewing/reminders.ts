@@ -77,7 +77,8 @@ export function lastHeardFromUs(events: DomainEvent[], createdAt: string): numbe
     // REPLY_SENT counts: an operator answering their question is the renter
     // hearing from us, and a holding update on top of it would be the second
     // of two messages saying less than the first.
-    if (e.type === 'ITINERARY_DELIVERED' || e.type === 'HOLDING_UPDATE_SENT' || e.type === 'REPLY_SENT') {
+    if (e.type === 'ITINERARY_DELIVERED' || e.type === 'ITINERARY_HELD'
+      || e.type === 'HOLDING_UPDATE_SENT' || e.type === 'REPLY_SENT') {
       last = Math.max(last, Date.parse(e.occurred_at));
     }
   }
@@ -110,7 +111,10 @@ export function dueActions(input: ScheduleInput): DueAction[] {
 
   if (!closed) {
     const silentFor = now - lastHeardFromUs(events, createdAt);
-    if (silentFor >= SILENCE_ACTION_MS && !WAITING_ON_RENTER.has(view.state)) {
+    // A held itinerary waits on the renter too: they have been told the plan
+    // is ready, and "we are still working on it" a day later would contradict
+    // that. Their reply releases it.
+    if (silentFor >= SILENCE_ACTION_MS && !WAITING_ON_RENTER.has(view.state) && !view.heldItinerary) {
       actions.push({
         kind: 'HOLDING_UPDATE',
         requestId,

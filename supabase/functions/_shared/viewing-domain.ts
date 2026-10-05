@@ -16,6 +16,12 @@ export const EVENT_TYPES = [
   'ITEM_NUDGED',
   'ITINERARY_ASSEMBLED',
   'ITINERARY_DELIVERED',
+  // The plan was ready but the renter's 24-hour window had shut, so an
+  // approved template told them it was ready and asked them to reply. The plan
+  // waits on the view (heldItinerary) and goes out free-form on their next
+  // message (deliver.ts releaseHeldItinerary). Moves no state: nothing has
+  // been put in front of them that they could say yes to.
+  'ITINERARY_HELD',
   // Something the renter heard that was not the itinerary. It moves the
   // silence clock (S6's 24h promise) and nothing else - typing a holding
   // update as ITINERARY_DELIVERED would make the queue think the request was
@@ -200,6 +206,11 @@ export interface RequestView {
   items: Record<string, ItemView>;
   itineraryOrder: string[];
   deliveredMessageId?: string;
+  /**
+   * An itinerary waiting on the renter's reply, because their window was shut
+   * when it was sent (ITINERARY_HELD). Cleared once one is delivered.
+   */
+  heldItinerary?: { messageId: string; orderedItemIds: string[] };
   confirmedItemIds: string[];
   failureReason?: string;
   substituteListingIds: string[];
@@ -313,8 +324,19 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         if (view.state === 'SUBMITTED' || view.state === 'CONTACTING') view.state = 'ASSEMBLING';
         break;
 
+      case 'ITINERARY_HELD':
+        // A held plan behind a delivered one is history: the renter has the
+        // plan, and releasing it again would send it twice.
+        if (view.deliveredMessageId || typeof p.message_id !== 'string') break;
+        view.heldItinerary = {
+          messageId: p.message_id,
+          orderedItemIds: Array.isArray(p.ordered_item_ids) ? p.ordered_item_ids as string[] : [],
+        };
+        break;
+
       case 'ITINERARY_DELIVERED':
         if (typeof p.message_id === 'string') view.deliveredMessageId = p.message_id;
+        delete view.heldItinerary;
         if (view.state !== 'CONFIRMED' && view.state !== 'CANCELLED' && view.state !== 'FAILED_NO_SUPPLY') {
           view.state = 'DELIVERED';
         }

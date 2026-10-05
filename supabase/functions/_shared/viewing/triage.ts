@@ -117,6 +117,12 @@ export function triage(
     };
   }
 
+  // Sent as far as it can go: a template told them the plan is ready, and
+  // their reply releases it (deliver.ts). Nothing for an operator to do.
+  if (view.heldItinerary && !view.deliveredMessageId) {
+    return { urgency: 'OK', rank: 50, waitingOn: 'Plan held - goes when the renter replies', actionable: false };
+  }
+
   // Every item has landed. Whether that is an itinerary or a dead end, it is
   // the operator's move either way - and a zero-confirmed request ships with
   // substitutes rather than on its own (invariant 5).

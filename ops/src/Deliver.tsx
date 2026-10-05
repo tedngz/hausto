@@ -86,6 +86,8 @@ export function Deliver({
   };
 
   const alreadySent = !!view.deliveredMessageId;
+  // Their window was shut, so a template went instead and this waits for them.
+  const held = !alreadySent && !!view.heldItinerary;
 
   return (
     <div className="card">
@@ -95,7 +97,15 @@ export function Deliver({
           {assembled.stops.length} of {listings.length} confirmed
         </span>
         {alreadySent && <span className="tag good">already sent</span>}
+        {held && <span className="tag warn">waiting on their reply</span>}
       </div>
+
+      {held && (
+        <p className="small" style={{ marginBottom: 4 }}>
+          Their 24-hour window was shut, so a WhatsApp template told them the plan is ready and asked
+          them to reply. This goes to them, as it stands then, the moment they do.
+        </p>
+      )}
 
       {noStops && assembled.alternatives.length > 0 && (
         <p className="small" style={{ marginBottom: 4 }}>
