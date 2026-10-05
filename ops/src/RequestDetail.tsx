@@ -194,7 +194,7 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
       {s.unresolved === 0 && items.length > 0 && (
         <Deliver
           requestId={requestId}
-          ref={request.ref}
+          requestRef={request.ref}
           view={view}
           listings={items.map<StopListing>(i => ({
             itemId: i.id,

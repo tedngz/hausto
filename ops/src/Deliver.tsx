@@ -22,13 +22,13 @@ import type { RequestView } from '../../supabase/functions/_shared/viewing-domai
 
 export function Deliver({
   requestId,
-  ref,
+  requestRef,
   view,
   listings,
   onDelivered,
 }: {
   requestId: string;
-  ref: string;
+  requestRef: string;
   view: RequestView;
   listings: StopListing[];
   onDelivered: () => void;
@@ -55,11 +55,11 @@ export function Deliver({
   // Same three branches as deliver.ts, so the preview is the message.
   const noStops = assembled.stops.length === 0;
   const preview = noStops && assembled.alternatives.length > 0
-    ? renderAlternativesOnly({ ref, requestedCount: listings.length, alternatives: assembled.alternatives })
+    ? renderAlternativesOnly({ ref: requestRef, requestedCount: listings.length, alternatives: assembled.alternatives })
     : noStops
-      ? renderNoSupply({ ref, requestedCount: listings.length, substitutes: [] })
+      ? renderNoSupply({ ref: requestRef, requestedCount: listings.length, substitutes: [] })
       : renderItinerary({
-          ref, stops: assembled.stops, requestedCount: listings.length, alternatives: assembled.alternatives,
+          ref: requestRef, stops: assembled.stops, requestedCount: listings.length, alternatives: assembled.alternatives,
         });
 
   const move = (i: number, delta: number) => {
