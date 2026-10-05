@@ -20,3 +20,20 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
   },
 });
+
+/**
+ * Why an edge-function call failed, as the sentence the function wrote for the
+ * operator, or null if it did not fail. On a non-2xx supabase-js leaves `data`
+ * null and puts the response behind `error.context`, so reading `data` alone
+ * showed "Edge Function returned a non-2xx status code" in place of the reason.
+ */
+export async function invokeFailure(data: unknown, error: unknown, fallback = 'Failed'): Promise<string | null> {
+  const payload = data as { error?: string; message?: string } | null;
+  if (!error && !payload?.error) return null;
+  const context = (error as { context?: unknown } | null)?.context;
+  const detail = context instanceof Response
+    ? await context.clone().json().catch(() => null) as { error?: string; message?: string } | null
+    : null;
+  return detail?.message ?? detail?.error ?? payload?.message ?? payload?.error
+    ?? (error as Error | null)?.message ?? fallback;
+}

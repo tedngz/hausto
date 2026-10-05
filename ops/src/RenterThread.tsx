@@ -11,7 +11,7 @@
 // to write something that cannot be sent.
 
 import { useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { checkOperatorReply, type WaitingReply } from '../../supabase/functions/_shared/viewing/thread';
 import type { RequestState } from '../../supabase/functions/_shared/viewing-domain';
@@ -77,9 +77,9 @@ export function RenterThread({
       body: { requestId, ...body },
     });
     setBusy(false);
-    const payload = data as { error?: string; message?: string } | null;
-    if (err || payload?.error) {
-      setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed');
+    const failure = await invokeFailure(data, err);
+    if (failure) {
+      setError(failure);
       return false;
     }
     onChanged();

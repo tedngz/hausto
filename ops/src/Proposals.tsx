@@ -10,7 +10,7 @@
 // case and "send this" in the second, and the button says which.
 
 import { useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
 
 export interface ProposalRow {
@@ -59,9 +59,9 @@ export function Proposals({
   const ask = async () => {
     setAsking(true);
     setError(null);
-    const { error: err } = await supabase.functions.invoke('ai-operator-plan', { body: { requestId } });
+    const { data, error: err } = await supabase.functions.invoke('ai-operator-plan', { body: { requestId } });
     setAsking(false);
-    if (err) setError(err.message);
+    setError(await invokeFailure(data, err));
     onChanged();
   };
 
@@ -120,8 +120,8 @@ function ProposalCard({
     setError(null);
     const { data, error: err } = await supabase.functions.invoke('ops-record-outcome', { body });
     setBusy(false);
-    const payload = data as { error?: string; message?: string } | null;
-    if (err || payload?.error) { setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed'); return; }
+    const failure = await invokeFailure(data, err);
+    if (failure) { setError(failure); return; }
     onChanged();
   };
 

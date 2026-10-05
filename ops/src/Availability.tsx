@@ -9,7 +9,7 @@
 // functions behind it do not return them.
 
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import {
   AGENT_ANSWERS, INQUIRY_CLOSE_REASONS, inquiryDeadline, reduceInquiry,
   type InquiryEvent, type InquiryView, type AgentAnswer,
@@ -94,12 +94,7 @@ function clock(view: InquiryView): { text: string; cls: string } {
 
 async function act(body: Record<string, unknown>): Promise<string | null> {
   const { data, error } = await supabase.functions.invoke('ops-record-outcome', { body });
-  const payload = data as { error?: string; message?: string } | null;
-  if (error || payload?.error) {
-    const detail = await (error as { context?: Response } | null)?.context?.json().catch(() => null);
-    return detail?.message ?? payload?.message ?? payload?.error ?? error?.message ?? 'Failed';
-  }
-  return null;
+  return invokeFailure(data, error);
 }
 
 export function Availability() {
@@ -845,7 +840,7 @@ function AgentConversations({ messages, nameOf, inquiryId, busy, onUse }: {
     const { data, error: err } = await supabase.functions.invoke('ops-parse-reply', { body: { inquiryId, reply: m.body } });
     setReading(null);
     const payload = data as { units?: UnitSuggestion; message?: string; error?: string } | null;
-    if (err || !payload?.units) { setError(payload?.message ?? payload?.error ?? err?.message ?? 'Could not read it'); return; }
+    if (err || !payload?.units) { setError(await invokeFailure(data, err) ?? payload?.message ?? 'Could not read it'); return; }
     setRead({ messageId: m.id, realtorId: m.realtor_id, suggestion: payload.units });
   };
 

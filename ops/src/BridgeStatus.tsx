@@ -5,7 +5,7 @@
 // because pausing what we say is no reason to lose what they said.
 
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
 
 interface Status {
@@ -48,8 +48,8 @@ export function BridgeStatus() {
     setError(null);
     const { data, error: err } = await supabase.functions.invoke('ops-record-outcome', { body: { action: 'SET_BRIDGE', paused } });
     setBusy(false);
-    const payload = data as { error?: string; message?: string } | null;
-    if (err || payload?.error) { setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed'); return; }
+    const failure = await invokeFailure(data, err);
+    if (failure) { setError(failure); return; }
     void load();
   };
 

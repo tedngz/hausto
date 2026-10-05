@@ -10,7 +10,7 @@
 // same door every other operator action uses (invariant 10).
 
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import { ROSTER_TARGET, rosterGap } from '../../supabase/functions/_shared/viewing/roster';
 
 interface Agent {
@@ -46,14 +46,7 @@ const day = (iso: string | null) =>
 
 async function act(body: Record<string, unknown>): Promise<string | null> {
   const { data, error } = await supabase.functions.invoke('ops-record-outcome', { body });
-  const payload = data as { error?: string; message?: string } | null;
-  if (error || payload?.error) {
-    // A refusal carries a sentence meant for the operator; supabase-js hides it
-    // behind `context` on a non-2xx.
-    const detail = await (error as { context?: Response } | null)?.context?.json().catch(() => null);
-    return detail?.message ?? payload?.message ?? payload?.error ?? error?.message ?? 'Failed';
-  }
-  return null;
+  return invokeFailure(data, error);
 }
 
 function AddAgent({ building, onDone }: { building: Building; onDone: () => void }) {

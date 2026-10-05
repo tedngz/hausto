@@ -11,7 +11,7 @@
 // follow up with the renter, and closes the gate if it happens too often.
 
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, invokeFailure } from './supabase';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { GATE, AUTO_HOLD_MS } from '../../supabase/functions/_shared/viewing/autonomy';
 import type { AutonomyState } from '../../supabase/functions/_shared/viewing/autonomy';
@@ -68,8 +68,8 @@ export function Autonomy() {
     setError(null);
     const { data, error: err } = await supabase.functions.invoke('ops-record-outcome', { body });
     setBusy(false);
-    const payload = data as { error?: string; message?: string } | null;
-    if (err || payload?.error) { setError(payload?.message ?? payload?.error ?? err?.message ?? 'Failed'); return; }
+    const failure = await invokeFailure(data, err);
+    if (failure) { setError(failure); return; }
     void load();
   };
 
