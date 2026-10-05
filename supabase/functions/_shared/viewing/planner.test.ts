@@ -150,6 +150,15 @@ describe('the itinerary', () => {
     ];
     expect(byKey(plan(events, { items: items(1) }))['DELIVER:r']).toBeUndefined();
   });
+
+  it("is not proposed while a template holds it for the renter's reply", () => {
+    const events = [
+      ...submitted(1),
+      ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'CONFIRMED', slots: slot('2026-09-29T02:00:00Z') }, 'i1'),
+      ev('ITINERARY_HELD', 2 * HOUR_MS, { message_id: 't1', ordered_item_ids: ['i1'] }),
+    ];
+    expect(byKey(plan(events, { items: items(1) }))['DELIVER:r']).toBeUndefined();
+  });
 });
 
 describe('a place that joins a request already under way', () => {

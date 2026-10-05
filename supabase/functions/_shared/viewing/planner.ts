@@ -286,7 +286,9 @@ export function planRequest(p: PlanInput): Proposal[] {
   // one time. Ordered by the clock - the rules warn about the orderings that
   // are wrong, and a clash is a person's to fix.
   const s = summarise(view);
-  if (!view.deliveredMessageId && s.total > 0 && s.unresolved === 0) {
+  // A held plan has been sent as far as it can go; the renter's reply
+  // releases it (deliver.ts), not another proposal.
+  if (!view.deliveredMessageId && !view.heldItinerary && s.total > 0 && s.unresolved === 0) {
     const byTime = Object.values(view.items)
       .filter(i => i.state === 'CONFIRMED')
       .map(i => ({ id: i.itemId, at: (i.slots[0] as { starts_at?: string } | undefined)?.starts_at ?? '' }))

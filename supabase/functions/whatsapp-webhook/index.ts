@@ -23,6 +23,7 @@ import { handleInbound } from '../_shared/viewing/routing.ts';
 import { decideAction } from '../_shared/viewing/agent.ts';
 import { performAction } from '../_shared/viewing/agent-act.ts';
 import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
+import { releaseHeldItinerary } from '../_shared/viewing/deliver.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -125,11 +126,23 @@ Deno.serve(async (req) => {
       const outcome = await handleInbound(db, store, m);
       if (outcome.optedOut) console.log(`[whatsapp-webhook] ${outcome.renterId} opted out`);
 
+      // A plan a template told them was ready (ITINERARY_HELD) goes now that
+      // their message has opened the window - and is the one message this
+      // reply gets, so the agent stands down rather than make it two.
+      const released = outcome.optedOut
+        ? null
+        : await releaseHeldItinerary(db, adapterFromEnv(Deno.env.toObject()), outcome.renterId);
+      if (released) {
+        const r = released.result;
+        console.log(`[whatsapp-webhook] held itinerary for ${released.requestId}: ${r.ok ? (r.held ? 'still held' : 'released') : r.code}`);
+      }
+      const standDown = released?.result.ok === true && !released.result.held;
+
       // Then at most one automated reply - only if the switch is on, apart
       // from the complex-watch replies (SPEC §11), which the renter asked for
       // on the site. `decideAction` is pure and returns a single action;
       // everything it declines routes to an operator.
-      const action = decideAction({
+      const action = standDown ? { kind: 'NONE' as const, reason: 'held itinerary released' } : decideAction({
         enabled: AGENT_ENABLED,
         intent: outcome.intent,
         text: m.text,

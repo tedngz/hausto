@@ -794,7 +794,10 @@ async function requestAction(
       const status = r.code === 'unknown_request' ? 404 : r.code === 'send_failed' ? 502 : 409;
       return refuse(status, r.code, r.message);
     }
-    return done({ recorded: 'ITINERARY_DELIVERED', messageId: r.messageId, stops: r.stops, deduplicated: r.deduplicated });
+    return done({
+      recorded: r.held ? 'ITINERARY_HELD' : 'ITINERARY_DELIVERED',
+      messageId: r.messageId, stops: r.stops, deduplicated: r.deduplicated,
+    });
   }
 
   if (action === 'CANCEL_REQUEST') {

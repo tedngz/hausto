@@ -9,6 +9,7 @@ import { BridgeChannel, ManualChannel } from '../realtor/channel.ts';
 import { bridgeAck, bridgeInbound, bridgePull } from '../realtor/bridge.ts';
 import { availabilityDraft } from '../realtor/drafts.ts';
 import { SupabaseRealtorMessageStore } from '../realtor/store.ts';
+import { TEMPLATES } from '../whatsapp/templates.ts';
 import { performOpsAction, type OpsDeps } from './ops-actions.ts';
 import { handleInbound } from './routing.ts';
 import { linkViewingToInquiry, runInquiryDeadline } from './concierge.ts';
@@ -427,12 +428,18 @@ describe('the handoff, the deadlines and the update template (S7.1c)', () => {
     expect(view().state).not.toBe('CLOSED');
   });
 
-  it('refuses the update template while the window is open, and until Meta approves it', async () => {
+  it('refuses the update template while the window is open, and if it loses approval', async () => {
     expect((await act({ action: 'INQUIRY_SEND_UPDATE', inquiryId: INQ })).body.error).toBe('window_open');
     at('2026-09-30T05:00:00Z');
-    const r = await act({ action: 'INQUIRY_SEND_UPDATE', inquiryId: INQ });
-    expect(r.status).toBe(409);
-    expect(r.body.error).toBe('template_not_approved');
+    const approved = TEMPLATES.REQUEST_UPDATE.approved;
+    (TEMPLATES.REQUEST_UPDATE as { approved: boolean }).approved = false;
+    try {
+      const r = await act({ action: 'INQUIRY_SEND_UPDATE', inquiryId: INQ });
+      expect(r.status).toBe(409);
+      expect(r.body.error).toBe('template_not_approved');
+    } finally {
+      (TEMPLATES.REQUEST_UPDATE as { approved: boolean }).approved = approved;
+    }
   });
 });
 

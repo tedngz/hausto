@@ -417,6 +417,7 @@ Event types:
 | `VIEWING_DAY_SENT` | request | `{date, message_id, item_ids[], shared_phone_item_ids[]}` - the viewing-day message for one Ho Chi Minh City date, written on every request it covered. Moves no state; the scheduler reads it so a day is sent once |
 | `ITINERARY_ASSEMBLED` | request | `{ordered_item_ids[], warnings[]}` |
 | `ITINERARY_DELIVERED` | request | `{message_id}` |
+| `ITINERARY_HELD` | request | `{message_id, ordered_item_ids[], template}` - the plan was ready with the renter's window shut, so a template went instead (§9). Moves no state; sets `heldItinerary` on the view until an `ITINERARY_DELIVERED` clears it, and a hold logged after a delivery is ignored |
 | `HOLDING_UPDATE_SENT` | request | `{message_id}` - something the renter heard that was not the itinerary |
 | `SUGGESTIONS_OFFERED` | request | `{listing_ids[], source, message_id}` - listings put in front of the renter, in the order shown (today `source: SUBSTITUTES`). What a reply of "2" resolves against (`selection.ts`); answers a waiting `SEARCH` or `SELECTION` (§4). No state |
 | `RENTER_REPLIED` | request | `{intent, message_id, handshake?}` - `intent` ∈ `CONFIRM`, `DECLINE`, `RESCHEDULE`, `QUESTION`, `SELECTION`, `SEARCH`, `OPT_OUT`, `UNKNOWN`. `handshake: true` on the first ref-carrying message, which answers nothing |
@@ -758,6 +759,30 @@ takes one tells us; the operator records `CONFIRMED` with that slot ("Renter too
 an offered time" on the card), which makes it a stop, and once the renter says
 yes its agent is owed a `CONFIRM` like any other.
 
+**With the renter's window shut, the plan is held, not refused** (since
+2026-10-05). Free-form cannot reach them, so `deliver()` sends the approved
+template that says the same thing in outline and asks them to reply:
+
+| What is ready | Template | Params after the name |
+|---|---|---|
+| At least one stop | `itinerary_ready` | how many are confirmed, when the earliest is |
+| Nothing confirmed, close matches found | `no_supply_substitutes` | the request ref |
+| Other times on offer, or nothing found yet | `request_update` | the listing, or "5 places" |
+
+It writes `ITINERARY_ASSEMBLED` and `ITINERARY_HELD`, never
+`ITINERARY_DELIVERED`: the renter knows a plan exists and has not seen it, so
+nothing they say yet can confirm it, and the request stays `ASSEMBLING`. No
+`SUGGESTIONS_OFFERED` either - nothing has been shown. Their next message
+opens the window, and both inbound paths (`whatsapp-webhook`, `dev-phone`) then
+call `releaseHeldItinerary`, which reassembles the plan in the order on file and
+sends it free-form. That is the one message their reply gets, so the agent
+stands down for it. One held request per reply, the newest; a cancelled or
+otherwise closed one is never released. While a plan is held, the planner
+proposes no `DELIVER` and the silence clock owes no holding update (§9).
+
+Until 2026-10-05 the send was refused as `service_window_closed`, and nothing
+reached a renter who had gone quiet for a day while their agents answered.
+
 ### The silence clock
 
 **No request waiting on us goes more than 24 hours without the renter hearing
@@ -765,8 +790,11 @@ something.** Asserted as a property test over randomly generated event logs
 (`reminders.test.ts`), not only as examples.
 
 - The clock starts at intake - the confirmation page already made a promise -
-  and moves forward on `ITINERARY_DELIVERED`, `HOLDING_UPDATE_SENT` or
-  `REPLY_SENT`.
+  and moves forward on `ITINERARY_DELIVERED`, `ITINERARY_HELD`,
+  `HOLDING_UPDATE_SENT` or `REPLY_SENT`.
+- A held itinerary waits on the renter too: they were told the plan is ready,
+  and "still working on it" a day later would contradict that. No holding
+  update is owed while one is held; their reply releases it.
 - The scheduler acts at **20 hours**, not 24. A job firing on the deadline has
   already lost: the send has to happen, be delivered and be read, and the first
   can fail and need a retry.
@@ -779,8 +807,10 @@ something.** Asserted as a property test over randomly generated event logs
   (`RENTER_UNRESPONSIVE`). (Until 2026-09-30 one was owed, and sent daily.)
 - With the renter's window shut, a holding update goes as the `request_update`
   template ("we have an update on your request for {{2}}, reply here"); their
-  reply opens the window and an operator answers it. Until Meta approves it the
-  send is refused as `template_unavailable` and tried again a day later.
+  reply opens the window and an operator answers it. Meta approved it on
+  2026-09-30, but the registry kept `approved: false` until 2026-10-05, so
+  until then every such send was refused as `template_unavailable` and tried
+  again a day later. That is still what happens if Meta withdraws it.
 - A `DELIVERED` plan unanswered for 48 hours becomes a `CHASE_RENTER` to-do in
   the console - never a message. The drain closes it once the renter answers,
   an operator writes to them, or the request closes.

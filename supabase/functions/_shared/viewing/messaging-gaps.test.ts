@@ -157,3 +157,20 @@ describe('the send layer', () => {
     expect(await send('HOLDING_UPDATE')).toMatchObject({ ok: false, code: 'opted_out' });
   });
 });
+
+describe('an itinerary held for the renter\'s reply', () => {
+  const at = '2026-10-01T00:00:00.000Z';
+  const heldLog = (): DomainEvent[] => [
+    ...db.tables.events as unknown as DomainEvent[],
+    { id: 9, request_id: 'req-1', item_id: null, type: 'ITINERARY_HELD', payload: { message_id: 't1', ordered_item_ids: ['i1'] }, actor: 'OPS', occurred_at: at },
+  ];
+
+  it('owes no holding update: they were told the plan is ready, and a "still working" would contradict it', () => {
+    const events = heldLog();
+    const due = dueActions({
+      view: reduceRequest('req-1', events), events, createdAt: '2026-09-30T00:00:00.000Z',
+      now: Date.parse(at) + 72 * HOUR_MS,
+    }).map(a => a.kind);
+    expect(due).not.toContain('HOLDING_UPDATE');
+  });
+});

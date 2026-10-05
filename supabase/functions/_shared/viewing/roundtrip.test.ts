@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { FakeDb } from './fake-db.ts';
 import { MockAdapter } from '../whatsapp/adapter.ts';
 import { SupabaseMessageStore } from '../whatsapp/store.ts';
-import { deliver } from './deliver.ts';
+import { deliver, releaseHeldItinerary } from './deliver.ts';
 import { handleInbound } from './routing.ts';
 import { intakeEvents, buildDeepLink, generateRef } from './intake.ts';
 import { validateOutcome, outcomePayload, opsActor } from './outcomes.ts';
@@ -258,21 +258,86 @@ describe('the round trip, end to end on MockAdapter', () => {
     expect(text).toContain('come back to you today');
   });
 
-  it('refuses to send with the window shut, rather than logging a send nobody got', async () => {
-    // No inbound at all, so the window never opened. This is the human-blocked
-    // template dependency surfacing - the correct behaviour is refusal.
+  it('holds the plan behind a template with the window shut, and sends it when they write', async () => {
+    // No inbound at all, so the window never opened. The plan cannot go
+    // free-form; itinerary_ready says it exists and asks them to reply.
     record(itemIds[0], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-15T02:00:00Z', durationMinutes: 30 }] });
     for (let i = 1; i < 5; i++) record(itemIds[i], { outcome: 'ALREADY_RENTED' });
 
     // deno-lint-ignore no-explicit-any
     const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [itemIds[0]] });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe('service_window_closed');
-    expect(result.preview).toContain('Sunny 2BR');           // ops can still read it
-    expect(db.tables.messages.filter(m => m.direction === 'OUT')).toHaveLength(0);
-    expect(view().state).not.toBe('DELIVERED');              // and the log does not lie
+    expect(result).toMatchObject({ ok: true, held: true, stops: 1 });
+    if (!result.ok) return;
+    expect(result.preview).toContain('Sunny 2BR');           // ops reads the plan, not the template
+    expect(adapter.delivered).toHaveLength(1);
+    expect(adapter.delivered[0]).toMatchObject({
+      templateName: 'itinerary_ready', templateParams: ['there', '1', 'Tue 15 Sept, 09:00'],
+    });
+    // The log does not say the plan went: nothing they say yet can confirm it.
+    expect(view().state).not.toBe('DELIVERED');
+    expect(view().heldItinerary).toMatchObject({ orderedItemIds: [itemIds[0]] });
+
+    // A second press is the same template, not a second message.
+    // deno-lint-ignore no-explicit-any
+    expect(await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [itemIds[0]] }))
+      .toMatchObject({ ok: true, held: true, deduplicated: true });
+    expect(adapter.delivered).toHaveLength(1);
+
+    // Their reply - a yes to a plan they have not seen - opens the window and
+    // releases it. It confirms nothing: there was no plan to say yes to.
+    const outcome = await inbound('yes');
+    expect(outcome.confirmed).toBe(false);
+    // deno-lint-ignore no-explicit-any
+    const released = await releaseHeldItinerary(db as any, adapter, 'renter-1');
+    expect(released).toMatchObject({ requestId, result: { ok: true, held: false, stops: 1 } });
+    expect(adapter.delivered).toHaveLength(2);
+    expect(String(adapter.delivered[1].body)).toContain('Sunny 2BR');
+    expect(view().state).toBe('DELIVERED');
+    expect(view().heldItinerary).toBeUndefined();
+
+    // And it goes once: the next message finds nothing held.
+    await inbound('thanks');
+    // deno-lint-ignore no-explicit-any
+    expect(await releaseHeldItinerary(db as any, adapter, 'renter-1')).toBeNull();
+    expect(adapter.delivered).toHaveLength(2);
+  });
+
+  it('holds a zero-confirmed plan behind no_supply_substitutes when it has matches to send', async () => {
+    for (let i = 0; i < 5; i++) record(itemIds[i], { outcome: 'ALREADY_RENTED' });
+
+    // deno-lint-ignore no-explicit-any
+    const result = await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+
+    expect(result).toMatchObject({ ok: true, held: true, stops: 0 });
+    expect(adapter.delivered[0]).toMatchObject({ templateName: 'no_supply_substitutes', templateParams: ['there', ref] });
+    // The matches are offered when they are shown, not when the template goes.
+    expect(db.tables.events.some(e => e.type === 'SUGGESTIONS_OFFERED')).toBe(false);
+
+    await inbound('ok');
+    // deno-lint-ignore no-explicit-any
+    await releaseHeldItinerary(db as any, adapter, 'renter-1');
+    expect(String(adapter.delivered[1].body)).toContain('Bright 2BR, Thao Dien');
+    expect(db.tables.events.some(e => e.type === 'SUGGESTIONS_OFFERED')).toBe(true);
+  });
+
+  it('holds behind request_update when there is nothing to show yet, and not for a request since cancelled', async () => {
+    for (let i = 0; i < 5; i++) record(itemIds[i], { outcome: 'ALREADY_RENTED' });
+    // Nothing in their districts and band to offer.
+    db.tables.external_properties = db.tables.external_properties.filter(p => !String(p.id).startsWith('alt-'));
+
+    // deno-lint-ignore no-explicit-any
+    await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [] });
+    expect(adapter.delivered[0]).toMatchObject({ templateName: 'request_update', templateParams: ['there', '5 places'] });
+
+    db.tables.events.push({
+      request_id: requestId, item_id: null, type: 'REQUEST_CANCELLED', payload: { reason: 'RENTER_WITHDREW' },
+      actor: 'OPS', occurred_at: new Date().toISOString(),
+    });
+    await inbound('hello?');
+    // deno-lint-ignore no-explicit-any
+    expect(await releaseHeldItinerary(db as any, adapter, 'renter-1')).toBeNull();
+    expect(adapter.delivered).toHaveLength(1);
   });
 
   it('does not send the itinerary twice when ops presses send twice', async () => {

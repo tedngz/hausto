@@ -308,3 +308,44 @@ describe('stage-0 operator events move no state', () => {
     }
   });
 });
+
+describe('ITINERARY_HELD: a plan waiting on the renter\'s reply', () => {
+  const base = () => [
+    ev('REQUEST_SUBMITTED', { at: '2026-10-05T00:00:01.000Z' }),
+    ev('ITEM_ADDED', { item: 'i1', at: '2026-10-05T00:00:01.000Z' }),
+    ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'ALREADY_RENTED' }, at: '2026-10-05T00:00:02.000Z' }),
+    ev('ITINERARY_ASSEMBLED', { payload: { ordered_item_ids: [] }, at: '2026-10-05T00:00:03.000Z' }),
+  ];
+  const held = (at = '2026-10-05T00:00:04.000Z') =>
+    ev('ITINERARY_HELD', { payload: { message_id: 't1', ordered_item_ids: ['i1'], template: 'request_update' }, at });
+  const delivered = (at = '2026-10-05T00:00:09.000Z') =>
+    ev('ITINERARY_DELIVERED', { payload: { message_id: 'm1' }, at });
+
+  it('holds the plan and moves no state: nothing has been put in front of them', () => {
+    const view = reduceRequest(REQ, [...base(), held()]);
+    expect(view.heldItinerary).toEqual({ messageId: 't1', orderedItemIds: ['i1'] });
+    expect(view.state).toBe('ASSEMBLING');
+    expect(view.deliveredMessageId).toBeUndefined();
+  });
+
+  it('is released by the delivery, in any arrival order', () => {
+    for (const order of permutations([...base(), held(), delivered()])) {
+      const view = reduceRequest(REQ, order);
+      expect(view.heldItinerary).toBeUndefined();
+      expect(view.state).toBe('DELIVERED');
+    }
+  });
+
+  it('does not come back when a hold is logged after the plan already went', () => {
+    // A second press with the window shut again, after the release: the
+    // renter has the plan, so a hold behind it must not queue it a second time.
+    for (const order of permutations([...base(), delivered('2026-10-05T00:00:05.000Z'), held('2026-10-05T00:00:08.000Z')])) {
+      expect(reduceRequest(REQ, order).heldItinerary).toBeUndefined();
+    }
+  });
+
+  it('ignores a hold with no message id', () => {
+    const view = reduceRequest(REQ, [...base(), ev('ITINERARY_HELD', { payload: { ordered_item_ids: ['i1'] } })]);
+    expect(view.heldItinerary).toBeUndefined();
+  });
+});
