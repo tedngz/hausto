@@ -3,41 +3,44 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, Crown } from 'lucide-react';
+import { Check, Crown, Minus } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  PASS_DAYS,
-  PASS_PRICE_USD,
-  TOPUP_PRICE_USD,
-  TOPUP_VIEWINGS,
-  usePass,
-} from '@/hooks/usePass';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
 import { toast } from 'sonner';
+
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Matches and quiz retakes no longer have a ceiling, so neither can send anyone here. */
+  /** Why the renter landed here, if a limit sent them. */
   reason?: 'viewings' | 'ai';
 }
-export const SubscriptionModal = ({
-  isOpen,
-  onClose,
-  reason
-}: SubscriptionModalProps) => {
-  const {
-    user
-  } = useAuth();
-  const { pass, purchasePass, purchaseTopUp } = usePass();
-  const { quota } = useViewingQuota();
+
+/**
+ * The two plans, as the pricing rework set them (SPEC §9).
+ *
+ * Requests are free on both: we ask the agents either way. What a renter pays
+ * for is a viewing that happens - locked in once agents confirm - so the
+ * modal sells confirmed viewings, never request credits or counts. One row
+ * per thing the plans differ on, in the order a renter meets them.
+ */
+const ROWS: { label: string; free: string | null; pass: string }[] = [
+  { label: 'Viewing requests', free: 'Request any listing - we ask the agents', pass: 'Same' },
+  { label: 'Confirmed viewings', free: 'The first one is on us', pass: 'Every one, in one itinerary on WhatsApp' },
+  { label: 'AI search', free: '10 a day', pass: 'Unlimited' },
+  { label: 'Listing analysis', free: 'Basic vibe analysis', pass: 'Deep Scan' },
+];
+
+const reasonMessages = {
+  viewings: 'Lock in every viewing the agents confirm.',
+  ai: "You've used your 10 AI requests for today.",
+};
+
+export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModalProps) => {
+  const { user } = useAuth();
+  const { pass, purchasePass } = usePass();
   const [loading, setLoading] = useState(false);
-  const [addonLoading, setAddonLoading] = useState(false);
-  const reasonMessages = {
-    viewings: "You've used your free viewing request.",
-    ai: "You've used your 10 AI requests for today."
-  };
-  // Both are one-off Polar checkouts now - purchasePass/purchaseTopUp redirect to
-  // checkout themselves, so there's no approval URL to handle here.
+
+  // A one-off Polar checkout - purchasePass redirects there itself.
   const handleGetPass = async () => {
     if (!user) {
       toast.error('Please log in to get the Pass');
@@ -50,37 +53,9 @@ export const SubscriptionModal = ({
       setLoading(false);
     }
   };
-  const handleTopUp = async () => {
-    if (!user) {
-      toast.error('Please log in to top up');
-      return;
-    }
-    setAddonLoading(true);
-    try {
-      await purchaseTopUp();
-    } finally {
-      setAddonLoading(false);
-    }
-  };
-  // Browsing the curated list, matching and quiz retakes are unlimited on both
-  // tiers now, so they're stated once as the shared floor rather than sold.
-  const freeFeatures = [
-    'Full curated English listing list',
-    'Unlimited browsing, matches and quiz retakes',
-    'Basic vibe analysis on every listing',
-    '10 AI requests per day',
-    quota?.trialUsed
-      ? '1 free viewing request (used)'
-      : '1 free viewing request - we arrange it for you',
-  ];
-  const premiumFeatures = [
-    'Everything in Free',
-    'Deep Scan on any listing - design, fit, honest downsides',
-    'Neighbourhood and commute rated against your preferences',
-    'Unlimited AI requests',
-    '3 viewing requests',
-  ];
-  return <Dialog open={isOpen} onOpenChange={onClose}>
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
@@ -94,31 +69,33 @@ export const SubscriptionModal = ({
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
-          {/* Free Plan */}
           <Card className="relative">
             <CardHeader className="pb-4">
               <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span>Free Plan</span>
-                {/* Whichever plan is actually live wears this. It used to be
-                    nailed to the free card, so a pass holder - an admin's
-                    complimentary one included - was told Free was current
-                    while the other card offered to extend the pass they hold. */}
+                <span>Free</span>
+                {/* Whichever plan is actually live wears this. */}
                 {!pass?.active && <Badge variant="secondary">Current</Badge>}
               </CardTitle>
-              <CardDescription>Perfect for getting started</CardDescription>
-              <div className="text-2xl sm:text-3xl font-bold">$0<span className="text-sm font-normal">/month</span></div>
+              <CardDescription>Ask about any place, see one free</CardDescription>
+              <div className="text-2xl sm:text-3xl font-bold">$0</div>
             </CardHeader>
             <CardContent className="pt-0">
-              <ul className="space-y-2 sm:space-y-3">
-                {freeFeatures.map((feature, index) => <li key={index} className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="text-xs sm:text-sm">{feature}</span>
-                  </li>)}
-              </ul>
+              <dl className="space-y-3">
+                {ROWS.map(row => (
+                  <div key={row.label} className="flex items-start gap-2">
+                    {row.free
+                      ? <Check className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      : <Minus className="h-4 w-4 mt-0.5 text-muted-foreground/60 shrink-0" />}
+                    <div>
+                      <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                      <dd className="text-xs sm:text-sm">{row.free ?? 'No'}</dd>
+                    </div>
+                  </div>
+                ))}
+              </dl>
             </CardContent>
           </Card>
 
-          {/* The Hausto Pass */}
           <Card className="relative border-primary bg-primary/5">
             <div className="absolute -top-2 left-1/2 -translate-x-1/2">
               <Badge className="bg-primary text-primary-foreground">Recommended</Badge>
@@ -131,57 +108,35 @@ export const SubscriptionModal = ({
                 </span>
                 {pass?.active && <Badge variant="secondary">Current</Badge>}
               </CardTitle>
-              <CardDescription>Unlimited search, plus viewing requests</CardDescription>
+              <CardDescription>Every viewing we confirm, for {PASS_DAYS} days</CardDescription>
               <div className="text-2xl sm:text-3xl font-bold">
-                ${PASS_PRICE_USD}<span className="text-sm font-normal">/{PASS_DAYS} days</span>
+                ${PASS_PRICE_USD}<span className="text-sm font-normal"> for {PASS_DAYS} days, one-off</span>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-                {premiumFeatures.map((feature, index) => <li key={index} className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-primary shrink-0" />
-                    <span className="text-xs sm:text-sm font-medium">{feature}</span>
-                  </li>)}
-              </ul>
+              <dl className="space-y-3 mb-4 sm:mb-6">
+                {ROWS.map(row => (
+                  <div key={row.label} className="flex items-start gap-2">
+                    <Check className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                    <div>
+                      <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                      <dd className="text-xs sm:text-sm font-medium">{row.pass}</dd>
+                    </div>
+                  </div>
+                ))}
+              </dl>
               <Button onClick={handleGetPass} disabled={loading} className="w-full" size="lg">
-                {loading ? 'Processing...' : pass?.active ? 'Extend by 30 days' : 'Get the Pass'}
+                {loading ? 'Processing...' : pass?.active ? `Extend by ${PASS_DAYS} days` : 'Get the Pass'}
               </Button>
             </CardContent>
           </Card>
         </div>
-
-        {/* The top-up only makes sense on top of a live pass, so it only shows
-            there - the $20/10 pack it replaces is retired, though credits
-            already bought stay spendable until they lapse. */}
-        {pass?.active && (
-          <Card className="mt-4 sm:mt-6">
-            <CardContent className="pt-4 sm:pt-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-              <div className="flex-1">
-                <div className="font-semibold flex items-center gap-2">
-                  Need more viewings?
-                  <Badge variant="secondary">${TOPUP_PRICE_USD} one-off</Badge>
-                </div>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                  {TOPUP_VIEWINGS} more viewing requests, running until your pass ends.
-                  {!!quota?.packRemaining && ` ${quota.packRemaining} left on your account.`}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleTopUp}
-                disabled={addonLoading}
-                className="shrink-0"
-              >
-                {addonLoading ? 'Processing...' : 'Top up'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
         <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
           {/* No "cancel anytime" - nothing recurs, which is the better promise. */}
-          <p>✓ One-off payment, nothing recurring • ✓ Secure checkout by Polar • ✓ Fast activation</p>
+          <p>Requesting is free - you pay once a viewing is confirmed. One-off payment, nothing recurring.</p>
         </div>
       </DialogContent>
-    </Dialog>;
+    </Dialog>
+  );
 };

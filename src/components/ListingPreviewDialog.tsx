@@ -9,7 +9,6 @@ import {
   type VibeMatchAttributes,
 } from '@/components/EditorialPropertyCard';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
-import { useViewingQuota, INCLUDED_VIEWINGS_PER_CYCLE } from '@/hooks/useViewingQuota';
 import { usePass } from '@/hooks/usePass';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
@@ -71,7 +70,6 @@ export const ListingPreviewDialog = ({
   propertyType = 'internal',
 }: ListingPreviewDialogProps) => {
   const { pass } = usePass();
-  const { quota } = useViewingQuota();
 
   // Search truncates descriptions to 300 characters to keep the results
   // payload small, and both surfaces that open this preview - browse and the
@@ -119,17 +117,11 @@ export const ListingPreviewDialog = ({
       </ul>
       <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-border/60 pt-2.5">
         <span className="text-xs text-muted-foreground">
-          {quota?.hasPack
-            ? `${quota.remaining} viewing request${quota.remaining === 1 ? '' : 's'} left`
-            : quota?.trialAvailable
-              ? 'Your first viewing is on us'
-              : quota?.trialLocked
-                ? 'Match 3 listings to unlock your free viewing'
-                : quota?.trialUsed
-                ? `Free trial used - the Pass includes ${INCLUDED_VIEWINGS_PER_CYCLE}`
-                : pass?.active
-                  ? `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
-                  : 'Your first viewing is on us'}
+          {/* No counts since the pricing rework: requesting is free, and
+              what is paid for is locking in a plan agents confirmed. */}
+          {pass?.active
+            ? 'Free to request - your Pass covers every viewing we confirm'
+            : 'Free to request - your first confirmed viewing is on us'}
         </span>
         {source?.href && (
           <a

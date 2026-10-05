@@ -49,6 +49,12 @@ export const EVENT_TYPES = [
   // The viewing-day message went out, for one Ho Chi Minh City date. Moves no
   // state; the scheduler reads it so a day is sent once.
   'VIEWING_DAY_SENT',
+  // A Polar checkout for the Pass was opened from the lock-in page (the
+  // pricing rework, SPEC §9). Moves no state. A checkout opened before the
+  // lock-in deadline is honoured even if it completes after it, so the
+  // deadline waits for it to close rather than cancel under a renter who is
+  // paying (lock-in.ts `lockInLapsed`).
+  'LOCK_IN_CHECKOUT_OPENED',
   'REQUEST_CONFIRMED',
   'REQUEST_CANCELLED',
   'REQUEST_FAILED',
@@ -92,9 +98,18 @@ export const CANCEL_REASONS = [
   'RENTER_FOUND_PLACE',    // no longer looking
   'RENTER_UNRESPONSIVE',   // never answered the itinerary
   'DUPLICATE',             // the same request filed twice
+  'NOT_LOCKED_IN',         // the lock-in deadline passed with the plan not locked in (SPEC §9)
   'OTHER',
 ] as const;
 export type CancelReason = typeof CANCEL_REASONS[number];
+
+/**
+ * How a locked-in plan was paid for (`REQUEST_CONFIRMED.cover`). The Pass
+ * covers every stop; the free viewing covers one, once per WhatsApp number.
+ * A confirmation from before the pricing rework carries no cover.
+ */
+export const COVERS = ['PASS', 'FREE_VIEWING'] as const;
+export type Cover = typeof COVERS[number];
 
 /** What a broker is told once the renter has decided (REALTOR_NOTIFIED). */
 export const REALTOR_DECISIONS = ['CONFIRM', 'RELEASE'] as const;
@@ -212,6 +227,17 @@ export interface RequestView {
    */
   heldItinerary?: { messageId: string; orderedItemIds: string[] };
   confirmedItemIds: string[];
+  /** How the lock-in was paid for. Absent on confirmations from before it was recorded. */
+  confirmedCover?: Cover;
+  /**
+   * When the plan first reached the renter, held behind a template or in full
+   * - the lock-in deadline runs from here (lock-in.ts).
+   */
+  planArrivedAt?: string;
+  /** When the plan itself was last delivered, free-form. */
+  lastDeliveredAt?: string;
+  /** Pass checkouts opened from the lock-in page, oldest first. */
+  checkouts: { checkoutId: string; openedAt: string; expiresAt: string }[];
   failureReason?: string;
   substituteListingIds: string[];
   cancelledReason?: string;
@@ -258,6 +284,7 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
     confirmedItemIds: [],
     substituteListingIds: [],
     viewingDaysSent: [],
+    checkouts: [],
   };
 
   const item = (id: string): ItemView => {
@@ -328,6 +355,9 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         // A held plan behind a delivered one is history: the renter has the
         // plan, and releasing it again would send it twice.
         if (view.deliveredMessageId || typeof p.message_id !== 'string') break;
+        // Earliest wins whatever order the log arrives in: sortEvents has put
+        // it first by now, and a later one never moves it.
+        view.planArrivedAt ??= e.occurred_at;
         view.heldItinerary = {
           messageId: p.message_id,
           orderedItemIds: Array.isArray(p.ordered_item_ids) ? p.ordered_item_ids as string[] : [],
@@ -337,6 +367,8 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
       case 'ITINERARY_DELIVERED':
         if (typeof p.message_id === 'string') view.deliveredMessageId = p.message_id;
         delete view.heldItinerary;
+        view.planArrivedAt ??= e.occurred_at;
+        view.lastDeliveredAt = e.occurred_at;
         if (view.state !== 'CONFIRMED' && view.state !== 'CANCELLED' && view.state !== 'FAILED_NO_SUPPLY') {
           view.state = 'DELIVERED';
         }
@@ -393,8 +425,17 @@ export function reduceRequest(requestId: string, events: DomainEvent[]): Request
         // could be kept alive by saying so would never look stuck.
         break;
 
+      case 'LOCK_IN_CHECKOUT_OPENED':
+        // Bookkeeping for the deadline, not progress: opening a checkout is
+        // not paying. One entry per checkout, however often it is logged.
+        if (typeof p.checkout_id !== 'string' || typeof p.expires_at !== 'string') break;
+        if (view.checkouts.some(c => c.checkoutId === p.checkout_id)) break;
+        view.checkouts.push({ checkoutId: p.checkout_id, openedAt: e.occurred_at, expiresAt: p.expires_at });
+        break;
+
       case 'REQUEST_CONFIRMED':
         view.confirmedItemIds = Array.isArray(p.confirmed_item_ids) ? p.confirmed_item_ids as string[] : [];
+        if ((COVERS as readonly string[]).includes(p.cover as string)) view.confirmedCover = p.cover as Cover;
         if (view.state !== 'CANCELLED') view.state = 'CONFIRMED';
         break;
 

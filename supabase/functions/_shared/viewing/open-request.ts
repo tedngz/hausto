@@ -12,10 +12,12 @@
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import {
   MAX_DAYS_AHEAD,
+  pickBlocking,
   pickJoinable,
   type AvailabilityWindow,
   type JoinCandidate,
 } from './intake.ts';
+import { lockInStatus } from './lock-in.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -28,9 +30,9 @@ export interface OpenRequest extends JoinCandidate {
 /**
  * The signed-in account's joinable request, or null.
  *
- * Keyed on `renters.user_id`, not on a phone number: the account is what gets
- * charged for the place, and an account can have reached us from more than one
- * number. Only requests young enough to still have an offerable window are
+ * Keyed on `renters.user_id`, not on a phone number: the account is what
+ * locks plans in and what the one-request rule counts, and an account can have
+ * reached us from more than one number. Only requests young enough to still have an offerable window are
  * read - anything older than `MAX_DAYS_AHEAD` has none by construction.
  */
 export async function findJoinableRequest(
@@ -39,6 +41,21 @@ export async function findJoinableRequest(
   today: string,
   now: Date = new Date(),
 ): Promise<OpenRequest | null> {
+  return (await findOpenRequests(db, userId, today, now)).joinable;
+}
+
+/**
+ * The account's open requests, as intake needs them: the one a new place
+ * would join, and the one a new request would wait behind (intake.ts
+ * `pickBlocking`). Often the same request; a full one, or one whose plan has
+ * gone out, blocks without being joinable.
+ */
+export async function findOpenRequests(
+  db: Supa,
+  userId: string,
+  today: string,
+  now: Date = new Date(),
+): Promise<{ joinable: OpenRequest | null; blocking: OpenRequest | null }> {
   const since = new Date(now.getTime() - (MAX_DAYS_AHEAD + 1) * 24 * 60 * 60 * 1000).toISOString();
   const { data: rows, error } = await db
     .from('viewing_requests')
@@ -56,7 +73,7 @@ export async function findJoinableRequest(
     renters: { opted_out_at: string | null } | null;
     request_items: { listing_id: string }[] | null;
   }[];
-  if (requests.length === 0) return null;
+  if (requests.length === 0) return { joinable: null, blocking: null };
 
   const { data: evRows, error: evErr } = await db
     .from('events')
@@ -75,6 +92,7 @@ export async function findJoinableRequest(
       listingIds: (r.request_items ?? []).map(i => i.listing_id),
       state: view.state,
       delivered: !!view.deliveredMessageId,
+      lockIn: lockInStatus(view, now.getTime()),
       renterId: r.renter_id,
       optedOut: !!r.renters?.opted_out_at,
     };
@@ -82,7 +100,34 @@ export async function findJoinableRequest(
 
   // An opted-out number is not one we can deliver the joined plan to, so its
   // requests do not count as open for this purpose.
-  return pickJoinable(candidates.filter(c => !c.optedOut), today) as OpenRequest | null;
+  const reachable = candidates.filter(c => !c.optedOut);
+  return {
+    joinable: pickJoinable(reachable, today) as OpenRequest | null,
+    blocking: pickBlocking(reachable, today) as OpenRequest | null,
+  };
+}
+
+/**
+ * How many of the account's plans were cancelled for not being locked in by
+ * their deadline (CANCEL_REASONS `NOT_LOCKED_IN`), all time.
+ */
+export async function countLapsedPlans(db: Supa, userId: string): Promise<number> {
+  const { data: rows, error } = await db
+    .from('viewing_requests')
+    .select('id, renters!inner(user_id)')
+    .eq('renters.user_id', userId);
+  if (error) throw new Error(`lapsed plan lookup failed: ${error.message ?? error}`);
+  const ids = ((rows ?? []) as { id: string }[]).map(r => r.id);
+  if (ids.length === 0) return 0;
+  const { data: cancels, error: evErr } = await db
+    .from('events')
+    .select('request_id, payload')
+    .in('request_id', ids)
+    .eq('type', 'REQUEST_CANCELLED');
+  if (evErr) throw new Error(`lapsed plan events failed: ${evErr.message ?? evErr}`);
+  return new Set(((cancels ?? []) as { request_id: string; payload: { reason?: string } | null }[])
+    .filter(e => e.payload?.reason === 'NOT_LOCKED_IN')
+    .map(e => e.request_id)).size;
 }
 
 /**

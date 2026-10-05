@@ -23,6 +23,11 @@ import { handleInbound } from './routing.ts';
 import { intakeEvents, buildDeepLink, generateRef } from './intake.ts';
 import { validateOutcome, outcomePayload, opsActor } from './outcomes.ts';
 import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
+import { decideAction } from './agent.ts';
+import { performAction } from './agent-act.ts';
+import { loadLockIn, lockIn } from './lock-in-run.ts';
+import { lockInAfterPurchase } from './lock-in-run.ts';
+import { realtorDecisionsOwed } from './reminders.ts';
 
 const PHONE = '+84901234567';
 // Deliberately NOT the +84000000000 default: a rehearsal that silently used
@@ -67,8 +72,10 @@ function seed() {
     });
   });
 
+  // Signed up, no Pass: how every renter starts since the pricing rework
+  // (SPEC §9).
   db.tables.renters.push({
-    id: 'renter-1', phone_e164: PHONE,
+    id: 'renter-1', phone_e164: PHONE, user_id: 'user-1',
     service_window_expires_at: null, opted_out_at: null,
   });
 
@@ -169,12 +176,49 @@ describe('dress rehearsal', () => {
     expect(outbound).toHaveLength(1);
     log(`\n  → ${outbound.length} outbound message, not ${s.confirmed}.`);
 
-    // 4. One tap back.
+    // The plan is the pitch: places and times, no agent. And for a renter
+    // without the Pass, where to lock it in and what that costs.
+    expect(String(outbound[0].body)).toContain(`https://hausto.com/lock-in/${ref}`);
+    expect(String(outbound[0].body)).toContain('Your first viewing is on us');
+    expect(String(outbound[0].body)).not.toContain('Reply YES');
+
+    // 4. A "yes" anyway. It cannot lock the plan in - the free viewing is one
+    // place they choose, the Pass is a payment - so the one answer is where to.
     say('RENTER → us', 'yes please');
     const reply = await inbound('yes please');
-    expect(reply.confirmed).toBe(true);
+    expect(reply.confirmed).toBe(false);
+    const action = decideAction({
+      enabled: false, intent: reply.intent, text: 'yes please', requestId: reply.requestId,
+      optedOut: reply.optedOut, confirmed: reply.confirmed, lockIn: reply.lockIn,
+    });
+    expect(action.kind).toBe('LOCK_IN_LINK');
+    // deno-lint-ignore no-explicit-any
+    await performAction(db as any, adapter, action, {
+      renterId: reply.renterId, requestId: reply.requestId, providerMessageId: 'wamid.yes',
+    });
+    const answer = db.tables.messages.filter(m => m.direction === 'OUT').pop()!;
+    say('us → RENTER  (where to lock in)', String(answer.body));
+    expect(view().state).toBe('DELIVERED');
+
+    // 5. On the page they take the Pass, for all three. The checkout is opened
+    // from the page (create-pass-order logs it), and the purchase - recorded by
+    // the redirect or the webhook - locks the plan in. Confirmed on the web:
+    // nothing goes on WhatsApp, or the morning-of message would be a third in
+    // a row.
+    const before = db.tables.messages.length;
+    db.tables.events.push({
+      request_id: requestId, type: 'LOCK_IN_CHECKOUT_OPENED',
+      payload: { checkout_id: 'chk-1', expires_at: new Date(Date.now() + 3600_000).toISOString() },
+      actor: 'RENTER', occurred_at: new Date().toISOString(),
+    });
+    db.passHolders.add('user-1');
+    // deno-lint-ignore no-explicit-any
+    const locked = await lockInAfterPurchase(db as any, { requestId, checkoutId: 'chk-1', userId: 'user-1' });
+    expect(locked).toMatchObject({ ok: true, cover: 'PASS' });
     expect(view().state).toBe('CONFIRMED');
-    log(`\n  → state: ${view().state}\n`);
+    expect(view().confirmedItemIds).toHaveLength(3);
+    expect(db.tables.messages.length).toBe(before);
+    log(`\n  → paid on the web, all 3 locked in; state: ${view().state}; nothing sent on WhatsApp\n`);
 
     // 5. The morning of. The first agent agreed to their number going out; the
     // second gave a meeting point but not their number; the third said
@@ -214,6 +258,39 @@ describe('dress rehearsal', () => {
     say('us → RENTER  (the same morning, window shut: viewing_reminder)',
       `Hi ${params[0]}, a reminder that your viewing is ${params[1]} at ${params[2]}. ` +
       'Reply here if anything has changed and we will rearrange it.');
+  });
+
+  it('plays the free viewing: one place, picked on the page', async () => {
+    log('\n\n  ── The free viewing ─────────────────────────────────────────');
+    await inbound(decodeURIComponent(buildDeepLink(BUSINESS, ref).split('?text=')[1]));
+    record(itemIds[0], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-19T02:00:00Z', durationMinutes: 30 }] });
+    record(itemIds[1], { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-19T04:00:00Z', durationMinutes: 30 }] });
+    for (const id of itemIds.slice(2)) record(id, { outcome: 'ALREADY_RENTED' });
+    // deno-lint-ignore no-explicit-any
+    await deliver(db as any, adapter, { requestId, purpose: 'ITINERARY', order: [itemIds[0], itemIds[1]] });
+
+    // The page: the free viewing covers the one place they pick.
+    // deno-lint-ignore no-explicit-any
+    const ctx = (await loadLockIn(db as any, { requestId }, Date.now()))!;
+    expect(ctx.status).toBe('OPEN');
+    // deno-lint-ignore no-explicit-any
+    const kept = await lockIn(db as any, ctx, {
+      userId: 'user-1', choice: { cover: 'FREE_VIEWING', itemId: itemIds[1] }, actor: 'RENTER', now: Date.now(),
+    });
+    expect(kept).toMatchObject({ ok: true, cover: 'FREE_VIEWING', confirmedItemIds: [itemIds[1]] });
+    log(`\n  → locked in with the free viewing: ${ctx.stops.find(s => s.itemId === itemIds[1])!.title}`);
+
+    // The agent of the place they kept is told to expect them; the other, to
+    // stand down.
+    const owed = realtorDecisionsOwed(view());
+    expect(owed).toEqual(expect.arrayContaining([
+      { itemId: itemIds[1], decision: 'CONFIRM' },
+      { itemId: itemIds[0], decision: 'RELEASE' },
+    ]));
+
+    // And the number has had its free viewing.
+    // deno-lint-ignore no-explicit-any
+    expect(db.tables.free_viewings).toHaveLength(1);
   });
 
   it('plays the zero-confirmed path, which is the one that has to read well', async () => {

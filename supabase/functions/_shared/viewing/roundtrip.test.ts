@@ -63,7 +63,9 @@ async function seed() {
       price_vnd: 60_000_000, is_active: true, bedrooms: 4, area_sqm: 200, price_confidence: 'HIGH' },
   );
 
-  db.tables.renters.push({ id: 'renter-1', phone_e164: PHONE, service_window_expires_at: null, opted_out_at: null });
+  db.tables.renters.push({
+    id: 'renter-1', phone_e164: PHONE, service_window_expires_at: null, opted_out_at: null, user_id: 'user-1',
+  });
 
   ref = generateRef();
   requestId = 'request-1';
@@ -118,6 +120,9 @@ describe('the round trip, end to end on MockAdapter', () => {
   beforeEach(seed);
 
   it('closes: handshake, 3-of-5 outcomes, one itinerary, one reply, confirmed', async () => {
+    // A Pass holder: their "yes" locks the plan in, as before the pricing
+    // rework. lock-in.test.ts walks the renter without one.
+    db.passHolders.add('user-1');
     // ── 1. The renter sends the deep-link message, opening the window ──────
     const link = buildDeepLink(BUSINESS, ref);
     const handshakeText = decodeURIComponent(link.split('?text=')[1]);
@@ -163,6 +168,8 @@ describe('the round trip, end to end on MockAdapter', () => {
     expect(text).toContain(ref);
     expect(text).not.toContain('Loft in District 3');   // priced out, not a stop
     expect(text.toLowerCase()).not.toContain('booked'); // not CONFIRMED yet
+    expect(text).toContain('Reply YES to lock these in');
+    expect(text).not.toContain('/lock-in/');
 
     expect(view().state).toBe('DELIVERED');
 
@@ -174,6 +181,7 @@ describe('the round trip, end to end on MockAdapter', () => {
     const final = view();
     expect(final.state).toBe('CONFIRMED');
     expect(final.confirmedItemIds.sort()).toEqual([itemIds[0], itemIds[1], itemIds[2]].sort());
+    expect(final.confirmedCover).toBe('PASS');
 
     // ── 5. And nothing further is owed ─────────────────────────────────────
     const owed = dueActions({

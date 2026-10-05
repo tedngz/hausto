@@ -11,7 +11,7 @@ import { upsertRenterByPhone } from '../whatsapp/store.ts';
 import { refFromMessage } from './intake.ts';
 import { classifyIntent } from './intent.ts';
 import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './selection.ts';
-import { reduceRequest, summarise, type DomainEvent } from '../viewing-domain.ts';
+import { freeViewingAvailable, hasPassCover, loadLockIn, lockIn } from './lock-in-run.ts';
 import { codeUsable, watchCodeFromMessage, type WatchProblem } from './watch.ts';
 import { pendingAlert } from './alerts.ts';
 import { itineraryAwaitingAnswer } from './open-request.ts';
@@ -60,6 +60,11 @@ export interface InboundOutcome {
   intent: string;
   /** True when this reply closed the request. */
   confirmed: boolean;
+  /**
+   * Set when the reply was a "yes" to a plan the renter cannot lock in by
+   * replying - no Pass - so the one answer is where to lock it in (SPEC §9).
+   */
+  lockIn?: LockInPrompt;
   /** Set when the reply picked from a list we sent. */
   selection?: SelectionOutcome;
   /** Set when the message carried a complex-watch code (SPEC §11). */
@@ -165,42 +170,47 @@ async function resolveOffer(db: any, requestId: string, text: string, now: Date)
     : { positions, problem: resolved.reason };
 }
 
+/** Where a renter without the Pass locks a plan in, for the reply to their "yes". */
+export interface LockInPrompt {
+  ref: string;
+  deadline: string;
+  freeViewingAvailable: boolean;
+}
+
 /**
- * Write REQUEST_CONFIRMED, but only for a request that has actually been sent
- * an itinerary.
+ * Lock the plan in on a "yes" - for a Pass holder, whose Pass covers every
+ * stop. Anyone else cannot lock a plan in by replying (the free viewing is
+ * one place they choose, the Pass is a payment), so for them this returns
+ * where to do it instead (SPEC §9).
  *
- * A "yes" arriving before delivery is a renter agreeing to nothing in
- * particular - most often it is the wa.me handshake message itself, which is
- * the first thing they ever send us. Confirming on that would close a request
- * before a single broker had been rung.
+ * Only for a request that has actually been sent an itinerary. A "yes"
+ * arriving before delivery is a renter agreeing to nothing in particular -
+ * most often it is the wa.me handshake message itself, which is the first
+ * thing they ever send us. Confirming on that would close a request before a
+ * single broker had been rung. A plan held behind a template has not been
+ * seen either, so a "yes" to the template releases it and keeps nothing.
+ *
+ * Partial success is the happy path (invariant 5): a renter confirming three
+ * of five is confirming the request, not three fifths of one.
  */
 // deno-lint-ignore no-explicit-any
-async function confirmIfDelivered(db: any, requestId: string, timestamp: string): Promise<boolean> {
-  const { data: events } = await db
-    .from('events')
-    .select('id, request_id, item_id, type, payload, actor, occurred_at')
-    .eq('request_id', requestId)
-    .order('occurred_at', { ascending: true });
+async function confirmIfDelivered(db: any, requestId: string, timestamp: string): Promise<{
+  confirmed: boolean;
+  lockIn?: LockInPrompt;
+}> {
+  const now = Date.parse(timestamp);
+  const ctx = await loadLockIn(db, { requestId }, now);
+  if (!ctx || ctx.view.state !== 'DELIVERED' || ctx.stops.length === 0) return { confirmed: false };
 
-  const view = reduceRequest(requestId, (events ?? []) as DomainEvent[]);
-  if (view.state !== 'DELIVERED') return false;
-
-  const confirmedItemIds = Object.values(view.items)
-    .filter(i => i.state === 'CONFIRMED')
-    .map(i => i.itemId);
-
-  // Partial success is the happy path (invariant 5): a renter confirming three
-  // of five is confirming the request, not three fifths of one.
-  if (confirmedItemIds.length === 0 && summarise(view).total > 0) return false;
-
-  await db.from('events').insert({
-    request_id: requestId,
-    type: 'REQUEST_CONFIRMED',
-    payload: { confirmed_item_ids: confirmedItemIds },
-    actor: 'RENTER',
-    occurred_at: new Date(timestamp).toISOString(),
-  });
-  return true;
+  if (ctx.userId && await hasPassCover(db, ctx.userId)) {
+    const result = await lockIn(db, ctx, { userId: ctx.userId, choice: { cover: 'PASS' }, actor: 'RENTER', now });
+    return { confirmed: result.ok && !result.already };
+  }
+  if (ctx.status !== 'OPEN' || !ctx.deadline) return { confirmed: false };
+  return {
+    confirmed: false,
+    lockIn: { ref: ctx.ref, deadline: ctx.deadline, freeViewingAvailable: await freeViewingAvailable(db, ctx.phoneE164) },
+  };
 }
 
 /** Has this request heard from the renter before? */
@@ -344,8 +354,9 @@ export async function handleInbound(
   // automated reply inside a billed window costs more than a person reading
   // one line.
   let confirmed = false;
+  let lockInPrompt: LockInPrompt | undefined;
   if (intent === 'CONFIRM' && requestId) {
-    confirmed = await confirmIfDelivered(db, requestId, m.timestamp);
+    ({ confirmed, lockIn: lockInPrompt } = await confirmIfDelivered(db, requestId, m.timestamp));
   }
 
   // A selection resolves against the last list we showed them. Recorded here
@@ -384,6 +395,7 @@ export async function handleInbound(
 
   return {
     renterId: renter.id, requestId, message, optedOut, intent, confirmed, selection,
+    ...(lockInPrompt && !optedOut ? { lockIn: lockInPrompt } : {}),
     ...(watch ? { watch } : {}),
     ...(alertMessageId ? { alertMessageId } : {}),
     ...(inquiryId ? { inquiryId, inquiryIds } : {}),

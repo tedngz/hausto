@@ -8,10 +8,7 @@ import { RealtorProfileModal } from '@/components/RealtorProfileModal';
 import { UserProfile } from '@/components/LoginModal';
 import { useMatches } from '@/hooks/useMatches';
 import { useAuth } from '@/hooks/useAuth';
-import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
-import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
-import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
-import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { RequestViewingModal } from '@/components/RequestViewingModal';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -27,8 +24,8 @@ export const MatchesView = ({
   const [selectedRealtorId, setSelectedRealtorId] = useState<string | null>(null);
   // Fast-Track scheduling: which conversation/realtor the request belongs to,
   // and which property the renter clicked "Viewing" on.
-  const [scheduleContext, setScheduleContext] = useState<{ realtorId: string; propertyId: string } | null>(null);
-  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  /** The match a viewing is being requested for (invariant 8: one way to ask). */
+  const [requestFor, setRequestFor] = useState<Apartment | null>(null);
   const {
     renterMatches,
     isLoadingMatches,
@@ -36,8 +33,6 @@ export const MatchesView = ({
     isRemovingMatch
   } = useMatches();
   const { user } = useAuth();
-  const { quota } = useViewingQuota();
-  const { submitFastTrack } = useFastTrackRequest();
   const transformMatchToApartment = (match: any): Apartment | null => {
     // Filter out matches with null/undefined properties
     if (!match.properties) {
@@ -85,51 +80,14 @@ export const MatchesView = ({
     await removeMatch(matchId);
   };
 
-  // Primary CTA: Hausto books the viewings (Fast-Track). The first coordination
-  // is free; once the allowance is spent, the upgrade modal takes over.
-  const handleScheduleViewing = async (apartment: Apartment) => {
+  // Primary CTA: the request modal. Requests are free (SPEC §9), so there is
+  // nothing to check before it opens.
+  const handleScheduleViewing = (apartment: Apartment) => {
     if (!user?.id) {
-      toast.info('Please sign in to book a viewing.');
+      toast.info('Please sign in to request a viewing.');
       return;
     }
-    if (!quota) {
-      toast.info('Checking your viewing allowance - one moment.');
-      return;
-    }
-    if (!quota.canBook) {
-      const block = describeViewingBlock(quota);
-      toast.info(block.title, { description: block.description });
-      if (block.showPaywall) setIsSubscriptionModalOpen(true);
-      return;
-    }
-    const isExternal = apartment.realtor.id === HAUSTO_AGENT_ID;
-    const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
-    setScheduleContext({ realtorId, propertyId: apartment.id });
-  };
-
-  const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
-    if (!scheduleContext) return;
-    try {
-      const realtorApartments = allApartments.filter(a => a.realtor.id === scheduleContext.realtorId);
-      await submitFastTrack({
-        realtorId: scheduleContext.realtorId,
-        scheduleData,
-        properties: realtorApartments.map(a => ({
-          id: a.id,
-          title: a.title,
-          location: a.location,
-          price: a.price,
-          imageUrl: a.images?.[0] || '',
-        })),
-      });
-      toast.success('Viewing request sent!', {
-        description: 'Hausto will coordinate the viewings and get back to you soon.',
-      });
-      setScheduleContext(null);
-    } catch (error) {
-      console.error('Error submitting viewing schedule:', error);
-      toast.error('Failed to submit viewing request. Please try again.');
-    }
+    setRequestFor(apartment);
   };
 
   if (isLoadingMatches) {
@@ -215,26 +173,10 @@ export const MatchesView = ({
       {selectedRealtorId && <RealtorProfileModal realtorId={selectedRealtorId} isOpen={!!selectedRealtorId} onClose={() => setSelectedRealtorId(null)} />}
 
 
-      <ViewingScheduleModal
-        isOpen={!!scheduleContext}
-        onClose={() => setScheduleContext(null)}
-        onSubmit={handleViewingScheduleSubmit}
-        matchedProperties={allApartments
-          .filter(a => !scheduleContext || a.realtor.id === scheduleContext.realtorId)
-          .map(a => ({
-            id: a.id,
-            title: a.title,
-            images: a.images,
-            location: a.location,
-            price: a.price,
-          }))}
-        initialSelectedIds={scheduleContext ? [scheduleContext.propertyId] : []}
-      />
-
-      <SubscriptionModal
-        isOpen={isSubscriptionModalOpen}
-        onClose={() => setIsSubscriptionModalOpen(false)}
-        reason={quota?.trialUsed ? 'viewings' : undefined}
+      <RequestViewingModal
+        open={!!requestFor}
+        onOpenChange={o => { if (!o) setRequestFor(null); }}
+        seed={requestFor ? { listingId: requestFor.id, title: requestFor.title, imageUrl: requestFor.images?.[0] ?? null } : null}
       />
     </div>;
 };

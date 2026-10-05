@@ -88,6 +88,10 @@ serve(async (req) => {
         viewings: result.viewings,
         expiresAt: result.expiresAt,
         alreadyCaptured: result.status === 'already',
+        // The plan this Pass was bought to lock in, if any (SPEC §9).
+        lockIn: result.lockIn
+          ? { ref: result.lockIn.ref, lockedIn: result.lockIn.result.ok }
+          : null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );

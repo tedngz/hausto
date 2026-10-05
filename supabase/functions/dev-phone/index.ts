@@ -112,6 +112,7 @@ Deno.serve(async (req) => {
     watch: outcome.watch,
     alertMessageId: outcome.alertMessageId,
     inquiryId: outcome.inquiryId,
+    lockIn: outcome.lockIn,
   });
 
   let agent: unknown = { decided: action.kind, reason: action.kind === 'NONE' ? action.reason : undefined };

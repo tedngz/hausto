@@ -20,7 +20,7 @@
 //      see the top of `decideAction`.
 
 import type { Intent } from './intent.ts';
-import type { WatchOutcome } from './routing.ts';
+import type { LockInPrompt, WatchOutcome } from './routing.ts';
 import type { WatchProblem } from './watch.ts';
 import type { ConfirmedInquiry } from './concierge.ts';
 
@@ -47,7 +47,9 @@ export type AgentAction =
   /** They sent a code that is unknown or expired. Say what to do instead. */
   | { kind: 'WATCH_PROBLEM'; problem: WatchProblem }
   /** They answered an alert. Send the places it was about. */
-  | { kind: 'ALERT_DETAILS'; alertMessageId: string };
+  | { kind: 'ALERT_DETAILS'; alertMessageId: string }
+  /** They said yes to a plan without the Pass. Say where to lock it in (SPEC §9). */
+  | { kind: 'LOCK_IN_LINK'; lockIn: LockInPrompt };
 
 export interface AgentInput {
   enabled: boolean;
@@ -67,6 +69,8 @@ export interface AgentInput {
   alertMessageId?: string;
   /** The availability request this answers - a person replies to those. */
   inquiryId?: string;
+  /** Set when a "yes" cannot lock the plan in by itself (routing.ts). */
+  lockIn?: LockInPrompt;
 }
 
 /**
@@ -107,6 +111,13 @@ export function decideAction(input: AgentInput): AgentAction {
   // places go first, and their next message is searched as usual.
   if (!stopping && input.alertMessageId && input.intent !== 'DECLINE') {
     return { kind: 'ALERT_DETAILS', alertMessageId: input.alertMessageId };
+  }
+  // A "yes" to "lock these in" from a renter without the Pass. Not the
+  // agent's judgement either: the plan asked a question, the renter answered
+  // it, and a reply cannot lock it in - so the answer is where to, agent on or
+  // off. Silence here would leave a renter believing they had said yes.
+  if (!stopping && input.lockIn) {
+    return { kind: 'LOCK_IN_LINK', lockIn: input.lockIn };
   }
 
   if (!input.enabled) return { kind: 'NONE', reason: 'agent disabled' };

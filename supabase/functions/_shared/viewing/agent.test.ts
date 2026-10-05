@@ -151,3 +151,16 @@ describe('availability requests (SPEC §11)', () => {
     expect(a.kind === 'WATCH_CONFIRMED' && a.inquiry?.id).toBe('inq-1');
   });
 });
+
+describe('a yes without the Pass (SPEC §9)', () => {
+  const lockIn = { ref: 'HV-4KX2', deadline: '2026-09-17T03:00:00.000Z', freeViewingAvailable: true };
+
+  it('says where to lock in, even with the agent off - the plan asked the question', () => {
+    expect(decideAction(input({ enabled: false, intent: 'CONFIRM', lockIn }))).toEqual({ kind: 'LOCK_IN_LINK', lockIn });
+  });
+
+  it('says nothing to someone who opted out in the same breath', () => {
+    expect(decideAction(input({ intent: 'OPT_OUT', lockIn })).kind).toBe('NONE');
+    expect(decideAction(input({ optedOut: true, lockIn })).kind).toBe('NONE');
+  });
+});

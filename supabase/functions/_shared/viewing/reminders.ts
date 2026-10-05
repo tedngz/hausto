@@ -15,6 +15,7 @@ import { summarise } from '../viewing-domain.ts';
 import type { DomainEvent } from '../viewing-domain.ts';
 import { viewingDayDue } from './viewing-day.ts';
 import { SERVICE_WINDOW_MS } from '../whatsapp/send.ts';
+import { lockInDeadline, lockInStatus } from './lock-in.ts';
 
 export const HOUR_MS = 60 * 60 * 1000;
 
@@ -40,7 +41,8 @@ export type ActionKind =
   | 'VIEWING_DAY'        // a kept viewing is today: where, who, and the agent's number if agreed
   | 'CHASE_RENTER'       // the plan went out and the renter has not answered - a person decides
   | 'CONFIRM_REALTOR'    // the renter kept this viewing; the broker has not been told
-  | 'RELEASE_REALTOR';   // the broker is holding time nobody will use
+  | 'RELEASE_REALTOR'    // the broker is holding time nobody will use
+  | 'LOCK_IN_DEADLINE';  // the plan was not locked in by its deadline - cancel it by rule (SPEC §9)
 
 export interface DueAction {
   kind: ActionKind;
@@ -119,6 +121,17 @@ export function dueActions(input: ScheduleInput): DueAction[] {
         kind: 'HOLDING_UPDATE',
         requestId,
         reason: `renter has heard nothing for ${Math.floor(silentFor / HOUR_MS)}h`,
+      });
+    }
+
+    // Not locked in by the deadline the plan stated: it is cancelled by rule,
+    // which is what makes its agents owed a release. A checkout opened in time
+    // holds it (lock-in.ts), so a renter who is paying is never cancelled.
+    if (lockInStatus(view, now) === 'LAPSED') {
+      actions.push({
+        kind: 'LOCK_IN_DEADLINE',
+        requestId,
+        reason: `not locked in by ${lockInDeadline(view)}`,
       });
     }
 
