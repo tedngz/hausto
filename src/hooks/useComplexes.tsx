@@ -179,7 +179,7 @@ export function useComplexListings(complex: Complex | null | undefined) {
         highlights: e.highlights ?? [],
         amenities: e.amenities ?? [],
         vibe_analysis: e.vibe_analysis,
-        property_source_link: e.source_url,
+        property_source_link: undefined,
         property_source_provider_name: e.source,
         property_source_provider_phone: undefined,
         latitude: e.latitude,

@@ -98,17 +98,6 @@ export const useProperties = () => {
 
       if (!propertiesData.length && !externalData.length) return [];
 
-      // Fetch contact info for external properties via SECURITY DEFINER RPC
-      // (contact columns are not readable directly by authenticated users).
-      const externalIds = externalData.map((e: any) => e.id);
-      const contactMap = new Map<string, { contact_name: string | null; contact_phone: string | null }>();
-      if (externalIds.length > 0) {
-        const { data: contacts } = await supabase.rpc('get_external_property_contacts', { _property_ids: externalIds });
-        (contacts as any[] | null)?.forEach((c) => {
-          contactMap.set(c.id, { contact_name: c.contact_name, contact_phone: c.contact_phone });
-        });
-      }
-
 
       // Get all unique realtor IDs from internal properties
       const realtorIds = [...new Set(propertiesData.map(p => p.realtor_id))];
@@ -139,9 +128,10 @@ export const useProperties = () => {
         };
       });
 
-      // Transform external properties to match the same interface
+      // Transform external properties to match the same interface. No agent
+      // contact or source link: a renter reaches the agent through a viewing
+      // request (CLAUDE.md invariant 4).
       const transformedExternal = externalData.map(ext => {
-        const contact = contactMap.get(ext.id) || { contact_name: null, contact_phone: null };
         return {
         id: ext.id,
         realtor_id: `ext-${ext.source}`,
@@ -155,9 +145,9 @@ export const useProperties = () => {
         highlights: ext.highlights || [],
         images: ext.images || [],
         vibe_analysis: ext.vibe_analysis,
-        property_source_link: ext.source_url,
-        property_source_provider_name: contact.contact_name,
-        property_source_provider_phone: contact.contact_phone,
+        property_source_link: null,
+        property_source_provider_name: null,
+        property_source_provider_phone: null,
         amenities: ext.amenities || [],
         created_at: ext.created_at || ext.crawled_at || new Date().toISOString(),
         updated_at: ext.updated_at || new Date().toISOString(),
@@ -168,12 +158,11 @@ export const useProperties = () => {
         longitude: ext.longitude,
         _isExternal: true,
         _source: ext.source,
-        _sourceUrl: ext.source_url,
         realtor: {
           id: `ext-${ext.source}`,
-          name: contact.contact_name || ext.source || 'External Listing',
+          name: ext.source || 'External Listing',
           email: '',
-          phone: contact.contact_phone || '',
+          phone: '',
           avatar: ''
         }
         };

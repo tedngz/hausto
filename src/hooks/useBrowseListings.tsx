@@ -9,7 +9,8 @@ export type BrowseRow = {
   id: string;
   title: string;
   url: string;
-  source_url?: string;
+  /** Always null - the API keeps the field but never links to the source ad. */
+  source_url?: string | null;
   location: string;
   price_vnd: number | null;
   price_usd: number | null;

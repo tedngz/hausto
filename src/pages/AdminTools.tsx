@@ -23,6 +23,7 @@ import { ViewingFlowQueuePanel } from "@/components/admin/ViewingFlowQueuePanel"
 import { ConciergeRequestsPanel } from "@/components/admin/ConciergeRequestsPanel";
 import { ImageConflictsPanel } from "@/components/admin/ImageConflictsPanel";
 import { OpenAIUsagePanel } from "@/components/admin/OpenAIUsagePanel";
+import { withAdminSources } from "@/lib/adminListingSources";
 
 function getTimeAgo(timestamp: string): string {
   const diff = Date.now() - new Date(timestamp).getTime();
@@ -413,10 +414,10 @@ const AdminTools = () => {
     try {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, location, price, images, vibe, vibe_analysis, vibe_status, highlights, amenities, source, source_url, city, crawled_at, is_active, size, rooms')
+        .select('id, title, location, price, images, vibe, vibe_analysis, vibe_status, highlights, amenities, source, city, crawled_at, is_active, size, rooms')
         .in('id', propertyIds);
       if (error) throw error;
-      const rows = data || [];
+      const rows = await withAdminSources(data || []);
       let enriched = rows;
       if (rows.length > 0) {
         const { data: contacts } = await supabase.rpc('get_external_property_contacts', {
@@ -484,12 +485,12 @@ const AdminTools = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, source, source_url, last_verified_at, last_verification_status, last_verification_reason, verification_failures, phone_extraction_attempts')
+        .select('id, title, source, last_verified_at, last_verification_status, last_verification_reason, verification_failures, phone_extraction_attempts')
         .eq('is_active', true)
         .order('last_verified_at', { ascending: true, nullsFirst: true })
         .limit(20);
       if (error) throw error;
-      const rows = data || [];
+      const rows = await withAdminSources(data || []);
       if (rows.length > 0) {
         const { data: contacts } = await supabase.rpc('get_external_property_contacts', {
           _property_ids: rows.map((r: any) => r.id),
@@ -509,13 +510,13 @@ const AdminTools = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, title, source, source_url, deactivated_at, last_verification_reason, verification_failures, last_verified_at')
+        .select('id, title, source, deactivated_at, last_verification_reason, verification_failures, last_verified_at')
         .eq('is_active', false)
         .not('deactivated_at', 'is', null)
         .order('deactivated_at', { ascending: false })
         .limit(15);
       if (error) throw error;
-      return data || [];
+      return withAdminSources(data || []);
     },
     refetchInterval: 60_000,
     enabled: !!user && !!isAdmin,

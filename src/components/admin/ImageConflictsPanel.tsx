@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { withAdminSources } from '@/lib/adminListingSources';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,13 +34,13 @@ export const ImageConflictsPanel = () => {
       // image_location_conflict is newer than the generated Supabase types
       const { data, error } = await (supabase
         .from('external_properties')
-        .select('id, title, location, rooms, price, source, source_url, images')
+        .select('id, title, location, rooms, price, source, images')
         .eq('is_active', true) as any)
         .eq('image_location_conflict', true)
         .order('location')
         .limit(50);
       if (error) throw error;
-      return (data || []) as unknown as ConflictRow[];
+      return (await withAdminSources((data || []) as { id: string }[])) as unknown as ConflictRow[];
     },
   });
 

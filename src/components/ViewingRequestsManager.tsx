@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { withAdminSources } from '@/lib/adminListingSources';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -116,16 +117,22 @@ export const ViewingRequestsManager = ({ scope }: ViewingRequestsManagerProps) =
     enabled: allPropertyIds.length > 0,
     queryFn: async () => {
       const map = new Map<string, ListingLite>();
-      // Agent phone is admin-only (RLS); realtors see title/price via public columns
-      const extCols = scope === 'admin'
-        ? 'id, title, price, source_url, contact_name, contact_phone, is_active'
-        : 'id, title, price, source_url, is_active';
+      // The agent's contact and the source link are admin-only, and reach
+      // the admin through the functions that answer admins alone; a realtor
+      // sees title and price.
       const [ext, internal] = await Promise.all([
-        supabase.from('external_properties').select(extCols).in('id', allPropertyIds),
+        supabase.from('external_properties').select('id, title, price, is_active').in('id', allPropertyIds),
         supabase.from('properties').select('id, title, price, is_active').in('id', allPropertyIds),
       ]);
-      for (const p of (ext.data || []) as any[]) {
-        map.set(p.id, { contact_name: null, contact_phone: null, ...p, isExternal: true });
+      let extRows = (ext.data || []) as any[];
+      const contacts = new Map<string, { contact_name: string | null; contact_phone: string | null }>();
+      if (scope === 'admin' && extRows.length > 0) {
+        extRows = await withAdminSources(extRows);
+        const { data: c } = await supabase.rpc('get_external_property_contacts', { _property_ids: extRows.map(p => p.id) });
+        for (const row of c ?? []) contacts.set(row.id, { contact_name: row.contact_name, contact_phone: row.contact_phone });
+      }
+      for (const p of extRows) {
+        map.set(p.id, { source_url: null, contact_name: null, contact_phone: null, ...p, ...contacts.get(p.id), isExternal: true });
       }
       for (const p of (internal.data || []) as any[]) {
         map.set(p.id, { ...p, source_url: null, contact_name: null, contact_phone: null, isExternal: false });

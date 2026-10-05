@@ -46,46 +46,30 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
   const internalIds = matches.filter(m => m.property_type !== 'external').map(m => m.property_id);
   const externalIds = matches.filter(m => m.property_type === 'external').map(m => m.property_id);
 
-  // Contact details on both tables are column-locked and released by RPC:
-  // get_external_property_contacts for crawled listings,
-  // get_property_contacts for realtor listings. A matched renter is entitled
-  // to both, which is exactly who is looking at this screen.
-  const [internalResult, externalResult, contactsResult, internalContactsResult] = await Promise.all([
+  // No agent contact or source link, matched or not: a renter reaches the
+  // agent through a viewing request, and the agent's number only on the day of
+  // a viewing they kept (CLAUDE.md invariant 4). The fields stay on the shape,
+  // empty, so the screens that read them need no change.
+  const [internalResult, externalResult] = await Promise.all([
     internalIds.length > 0
-      ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, property_source_link, amenities').in('id', internalIds)
+      ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, amenities').in('id', internalIds)
       : Promise.resolve({ data: [] }),
     externalIds.length > 0
-      ? supabase.from('external_properties').select('id, title, location, price, vibe, images, description, highlights, size, vibe_analysis, amenities, source_url, source').in('id', externalIds)
-      : Promise.resolve({ data: [] }),
-    externalIds.length > 0
-      ? supabase.rpc('get_external_property_contacts', { _property_ids: externalIds })
-      : Promise.resolve({ data: [] }),
-    internalIds.length > 0
-      ? supabase.rpc('get_property_contacts', { _property_ids: internalIds })
+      ? supabase.from('external_properties').select('id, title, location, price, vibe, images, description, highlights, size, vibe_analysis, amenities, source').in('id', externalIds)
       : Promise.resolve({ data: [] }),
   ]);
-  const contactMap = new Map<string, { contact_name: string | null; contact_phone: string | null }>(
-    ((contactsResult as any).data || []).map((c: any) => [c.id, { contact_name: c.contact_name, contact_phone: c.contact_phone }])
-  );
-  const internalContactMap = new Map<string, { name: string | null; phone: string | null }>(
-    ((internalContactsResult as any).data || []).map((c: any) => [
-      c.id,
-      { name: c.property_source_provider_name, phone: c.property_source_provider_phone },
-    ])
-  );
 
   const propertyMap = new Map<string, any>();
   (internalResult.data || []).forEach(p => {
-    const c = internalContactMap.get(p.id);
     propertyMap.set(p.id, {
       ...p,
-      property_source_provider_name: c?.name ?? null,
-      property_source_provider_phone: c?.phone ?? null,
+      property_source_link: null,
+      property_source_provider_name: null,
+      property_source_provider_phone: null,
       _type: 'internal',
     });
   });
   (externalResult.data || []).forEach(p => {
-    const c = contactMap.get(p.id) || { contact_name: null, contact_phone: null };
     propertyMap.set(p.id, {
       id: p.id,
       title: p.title,
@@ -98,13 +82,13 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
       size: p.size,
       vibe_analysis: p.vibe_analysis,
       amenities: p.amenities,
-      property_source_link: p.source_url,
-      property_source_provider_name: c.contact_name,
-      property_source_provider_phone: c.contact_phone,
+      property_source_link: null,
+      property_source_provider_name: null,
+      property_source_provider_phone: null,
       realtor_id: `ext-${p.source}`,
-      source_url: p.source_url,
-      contact_name: c.contact_name,
-      contact_phone: c.contact_phone,
+      source_url: null,
+      contact_name: null,
+      contact_phone: null,
       _type: 'external',
     });
   });

@@ -75,7 +75,9 @@ Enforce at the query layer, not the template layer. The exception (owner's
 decision, 2026-09-30) lives in one function, `dayStops` in
 `_shared/viewing/viewing-day.ts`, and the viewing-day message is its only
 caller (SPEC §6, §9). Do not add a second path that puts an agent's number in
-front of a renter.
+front of a renter. The original listing counts as one - its ad carries the
+number - so no renter surface links to it, the contacts functions answer
+admins only, and `public-property-search` returns `source_url` as null.
 
 **5. Partial success is the happy path.**
 Any code that assumes all requested listings will be confirmed is wrong. Three of
