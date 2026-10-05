@@ -84,14 +84,19 @@ export const usePass = () => {
    * Starts a Pass purchase and hands off to Polar's hosted checkout. With a
    * request ref, the Pass is bought to lock that plan in: the plan is held
    * while the checkout is open, and locked in when the payment is recorded.
+   * `digestOptIn` is the box on our page, never assumed from buying.
    */
-  const purchasePass = async (requestRef?: string) => {
+  const purchasePass = async (requestRef?: string, opts: { digestOptIn?: boolean } = {}) => {
     try {
       const { data, error } = await supabase.functions.invoke('create-pass-order', {
         headers: {
           Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
-        body: { kind: 'pass', ...(requestRef ? { requestRef } : {}) },
+        body: {
+          kind: 'pass',
+          ...(requestRef ? { requestRef } : {}),
+          ...(opts.digestOptIn ? { digestOptIn: true } : {}),
+        },
       });
       // A refusal (a plan past its deadline, say) has its reason in the body.
       let reason = data?.error as string | undefined;

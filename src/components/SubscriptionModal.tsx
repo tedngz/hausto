@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Crown, Minus } from 'lucide-react';
+import { DigestOptIn } from '@/components/DigestOptIn';
 import { useAuth } from '@/hooks/useAuth';
 import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
 import { toast } from 'sonner';
@@ -26,6 +27,7 @@ interface SubscriptionModalProps {
 const ROWS: { label: string; free: string | null; pass: string }[] = [
   { label: 'Viewing requests', free: 'Request any listing - we ask the agents', pass: 'Same' },
   { label: 'Confirmed viewings', free: 'The first one is on us', pass: 'Every one, in one itinerary on WhatsApp' },
+  { label: 'New listings', free: null, pass: 'Places that fit you, on WhatsApp up to twice a week' },
   { label: 'AI search', free: '10 a day', pass: 'Unlimited' },
   { label: 'Listing analysis', free: 'Basic vibe analysis', pass: 'Deep Scan' },
 ];
@@ -39,6 +41,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
   const { user } = useAuth();
   const { pass, purchasePass } = usePass();
   const [loading, setLoading] = useState(false);
+  const [digestOptIn, setDigestOptIn] = useState(false);
 
   // A one-off Polar checkout - purchasePass redirects there itself.
   const handleGetPass = async () => {
@@ -48,7 +51,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
     }
     setLoading(true);
     try {
-      await purchasePass();
+      await purchasePass(undefined, { digestOptIn });
     } finally {
       setLoading(false);
     }
@@ -125,6 +128,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
                   </div>
                 ))}
               </dl>
+              <DigestOptIn checked={digestOptIn} onChange={setDigestOptIn} className="mb-3" />
               <Button onClick={handleGetPass} disabled={loading} className="w-full" size="lg">
                 {loading ? 'Processing...' : pass?.active ? `Extend by ${PASS_DAYS} days` : 'Get the Pass'}
               </Button>

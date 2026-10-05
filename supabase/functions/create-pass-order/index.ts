@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { hasPassCover, loadLockIn } from "../_shared/viewing/lock-in-run.ts";
+import { recordDigestOptIn } from "../_shared/viewing/account-link.ts";
 
 // Opens the Polar checkout session for a Hausto Pass ($25, 30 days).
 //
@@ -98,6 +99,14 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
         );
       }
+    }
+
+    // The digest's consent, ticked on our page before Polar's checkout - never
+    // assumed from buying. Recorded now: it is consent whether or not the
+    // payment completes, and the digest only reaches Pass holders anyway.
+    if (body?.digestOptIn === true) {
+      await recordDigestOptIn(supabaseClient, user.id, new Date());
+      logStep("Digest opt-in recorded", { userId: user.id });
     }
 
     const productId = Deno.env.get(PRODUCT_ENV_VAR[kind]);

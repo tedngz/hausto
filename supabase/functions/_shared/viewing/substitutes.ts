@@ -41,6 +41,11 @@ export interface RequestProfile {
   bedrooms: number[];
   /** Listing ids already on the shortlist - never suggest these back. */
   excludeListingIds: string[];
+  /**
+   * The renter's own price range, when they gave one (the quiz, for the
+   * digest). Used as the band instead of one drawn around the target.
+   */
+  priceBandVnd?: [number, number];
 }
 
 export interface Substitute {
@@ -103,8 +108,8 @@ export function rankSubstitutes(
   candidates: ShortlistCandidate[],
   limit = MAX_SUBSTITUTES,
 ): Substitute[] {
-  const floor = profile.targetPriceVnd * PRICE_FLOOR_RATIO;
-  const ceiling = profile.targetPriceVnd * PRICE_CEILING_RATIO;
+  const floor = profile.priceBandVnd?.[0] ?? profile.targetPriceVnd * PRICE_FLOOR_RATIO;
+  const ceiling = profile.priceBandVnd?.[1] ?? profile.targetPriceVnd * PRICE_CEILING_RATIO;
   const excluded = new Set(profile.excludeListingIds);
 
   const scored: Substitute[] = [];

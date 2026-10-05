@@ -12,6 +12,7 @@ import { refFromMessage } from './intake.ts';
 import { classifyIntent } from './intent.ts';
 import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './selection.ts';
 import { freeViewingAvailable, hasPassCover, loadLockIn, lockIn } from './lock-in-run.ts';
+import { linkAccount, linkCodeFromMessage, type LinkOutcome } from './account-link.ts';
 import { codeUsable, watchCodeFromMessage, type WatchProblem } from './watch.ts';
 import { pendingAlert } from './alerts.ts';
 import { itineraryAwaitingAnswer } from './open-request.ts';
@@ -65,6 +66,8 @@ export interface InboundOutcome {
    * replying - no Pass - so the one answer is where to lock it in (SPEC §9).
    */
   lockIn?: LockInPrompt;
+  /** Set when the message carried an account link code (account-link.ts). */
+  link?: LinkOutcome;
   /** Set when the reply picked from a list we sent. */
   selection?: SelectionOutcome;
   /** Set when the message carried a complex-watch code (SPEC §11). */
@@ -312,17 +315,21 @@ export async function handleInbound(
   // renter swiped to reply to that other message, which says what they meant.
   // (The weekly alert is held while an itinerary waits, so a yes to it cannot
   // be mistaken for this.)
-  const watchCode = watchCodeFromMessage(m.text);
-  const answered = watchCode ? undefined : await answeredMessage(db, renter.phone_e164, m.contextId);
-  const awaitingYes = !watchCode && intent === 'CONFIRM' && !answered?.explicit
+  // A link code from the Pass success page is about the account, not any
+  // thread - checked like a watch code, before anything else is resolved.
+  const linkCode = linkCodeFromMessage(m.text);
+  const watchCode = linkCode ? null : watchCodeFromMessage(m.text);
+  const coded = !!(watchCode || linkCode);
+  const answered = coded ? undefined : await answeredMessage(db, renter.phone_e164, m.contextId);
+  const awaitingYes = !coded && intent === 'CONFIRM' && !answered?.explicit
     ? await itineraryAwaitingAnswer(db, renter.id)
     : undefined;
-  const alertMessageId = watchCode || awaitingYes || !answered ? undefined : await pendingAlert(db, answered, now);
-  const inquiryIds = watchCode || awaitingYes || alertMessageId || !answered
+  const alertMessageId = coded || awaitingYes || !answered ? undefined : await pendingAlert(db, answered, now);
+  const inquiryIds = coded || awaitingYes || alertMessageId || !answered
     ? []
     : await inquiriesAnswered(db, answered, now);
   const inquiryId = inquiryIds[0];
-  const requestId = watchCode || alertMessageId || inquiryId
+  const requestId = coded || alertMessageId || inquiryId
     ? undefined
     : awaitingYes
       ?? (answered?.explicit && answered.requestId ? answered.requestId : await resolveRequestId(db, renter.id, m.text));
@@ -367,6 +374,7 @@ export async function handleInbound(
     selection = await resolveOffer(db, requestId, m.text, new Date(m.timestamp));
   }
 
+  const link = linkCode && intent !== 'OPT_OUT' ? await linkAccount(db, linkCode, renter, now) : undefined;
   const watch = watchCode ? await confirmWatch(db, watchCode, renter, now) : undefined;
   if (watch?.kind === 'CONFIRMED') {
     // A code from an availability request confirms the request too: the
@@ -396,6 +404,7 @@ export async function handleInbound(
   return {
     renterId: renter.id, requestId, message, optedOut, intent, confirmed, selection,
     ...(lockInPrompt && !optedOut ? { lockIn: lockInPrompt } : {}),
+    ...(link ? { link } : {}),
     ...(watch ? { watch } : {}),
     ...(alertMessageId ? { alertMessageId } : {}),
     ...(inquiryId ? { inquiryId, inquiryIds } : {}),

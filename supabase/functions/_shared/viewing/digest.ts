@@ -1,4 +1,7 @@
-// The weekly new-listing digest (PLAN-v3, the agent's fourth job).
+// The new-listing digest (PLAN-v3, the agent's fourth job) - a Pass benefit
+// since the pricing rework (SPEC §9, §11): Pass holders who opted in get new
+// places that fit them up to twice a week, Tuesday and Friday. Complex watches
+// keep their weekly alert on both tiers, on the Tuesday run only.
 //
 // Unlike the other three, this one is not a reply. Substitutes answer a failed
 // request, the search answers a question, a selection answers a list we sent -
@@ -22,8 +25,9 @@
 //     gets a WABA restricted rather than a template rejected.
 //
 // The criteria are not a form the renter fills in. They already told us what
-// they want by shortlisting five flats, so the profile comes from their own
-// request history - the same `profileOf` the substitute picker uses.
+// they want by shortlisting flats, so the profile comes from their own request
+// history - the same `profileOf` the substitute picker uses. A Pass holder with
+// no requests yet falls back to their quiz answers (`profileFromQuiz`).
 
 import { profileOf, rankSubstitutes, type RequestProfile } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
@@ -41,7 +45,15 @@ export interface DigestRenter {
   digest_opt_in_at: string | null;
 }
 
-export type Ineligible = 'OPTED_OUT' | 'NOT_OPTED_IN' | 'NO_HISTORY' | 'NOTHING_NEW';
+export type Ineligible = 'OPTED_OUT' | 'NOT_OPTED_IN' | 'NO_PASS' | 'NO_HISTORY' | 'NOTHING_NEW';
+
+/**
+ * The two runs a week. Run 1, Tuesday 09:00, carries the digest and the
+ * complex watches; run 2, Friday 09:00, the digest alone. "Up to" twice: a run
+ * that finds nothing new sends nothing.
+ */
+export const DIGEST_RUNS = [1, 2] as const;
+export type DigestRun = typeof DIGEST_RUNS[number];
 
 export type Eligibility =
   | { ok: true; profile: RequestProfile; matches: { listingId: string; title: string; districtCode: string | null }[] }
@@ -59,14 +71,17 @@ export function assessRenter(
   renter: DigestRenter,
   shortlistHistory: ShortlistCandidate[],
   newListings: ShortlistCandidate[],
+  opts: { hasPass: boolean; quiz?: RequestProfile | null },
 ): Eligibility {
   // Order matters: a blanket opt-out beats an opt-in, always. A renter who
   // said STOP has said it about everything.
   if (renter.opted_out_at) return { ok: false, reason: 'OPTED_OUT' };
   if (!renter.digest_opt_in_at) return { ok: false, reason: 'NOT_OPTED_IN' };
-  if (shortlistHistory.length === 0) return { ok: false, reason: 'NO_HISTORY' };
+  // The digest is what the Pass sells: a free renter's opt-in waits for one.
+  if (!opts.hasPass) return { ok: false, reason: 'NO_PASS' };
+  if (shortlistHistory.length === 0 && !opts.quiz) return { ok: false, reason: 'NO_HISTORY' };
 
-  const profile = profileOf(shortlistHistory);
+  const profile = shortlistHistory.length > 0 ? profileOf(shortlistHistory) : opts.quiz!;
   // Same ranker as substitutes: it already knows how to exclude what they have
   // seen, hold the price band, and refuse anything intake would reject.
   const ranked = rankSubstitutes(profile, newListings, MAX_DIGEST_LISTINGS);
@@ -137,14 +152,80 @@ export function isoWeek(now: Date): string {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-/** The send purpose, unique per renter per calendar week. */
-export function digestPurpose(now: Date): string {
-  return `DIGEST:${isoWeek(now)}`;
+/**
+ * The send purpose, unique per renter per run per calendar week. Run 1 keeps
+ * the key it always had, so a week's Tuesday message is never sent twice
+ * across the change.
+ */
+export function digestPurpose(now: Date, run: DigestRun = 1): string {
+  return run === 1 ? `DIGEST:${isoWeek(now)}` : `DIGEST:${isoWeek(now)}:${run}`;
 }
 
-/** How far back "new" reaches. A week, matching the cadence. */
+/**
+ * How far back "new" reaches. A week, so a place that came up after Friday's
+ * run is still new on Tuesday; nothing is news twice either way, because
+ * `alert_items` records what each renter was shown.
+ */
 export const NEW_SINCE_DAYS = 7;
 
 export function newSince(now: Date): string {
   return new Date(now.getTime() - NEW_SINCE_DAYS * 86_400_000).toISOString();
+}
+
+
+// ── The quiz, for a Pass holder with no requests yet ────────────────────────
+
+/** What the preference quiz recorded (`user_preferences`), as the digest reads it. */
+export interface QuizAnswers {
+  /** District codes, already mapped from the quiz's place names (vn_district_code). */
+  districtCodes: string[];
+  priceMinVnd: number | null;
+  priceMaxVnd: number | null;
+  /** `studio`, `1br`... - one value, or a JSON array of them as the quiz stores it. */
+  size: string | null;
+}
+
+/** Bedroom counts the quiz's size answer means. A studio is 0, as listings count it. */
+export function quizBedrooms(size: string | null): number[] {
+  if (!size) return [];
+  let values: unknown;
+  try { values = JSON.parse(size); } catch { values = size; }
+  const list = (Array.isArray(values) ? values : [values]).map(v => String(v).toLowerCase().trim());
+  const out = new Set<number>();
+  for (const v of list) {
+    if (v === 'studio') out.add(0);
+    const m = v.match(/^(\d)\s*br/);
+    if (m) out.add(Math.min(4, Number(m[1])));
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * A profile from the quiz, or null when it says too little to match on - no
+ * district and no budget is not a preference, and a digest of whatever is new
+ * would be noise. The renter's own range is the price band.
+ */
+export function profileFromQuiz(q: QuizAnswers): RequestProfile | null {
+  const min = q.priceMinVnd && q.priceMinVnd > 0 ? q.priceMinVnd : null;
+  const max = q.priceMaxVnd && q.priceMaxVnd > 0 ? q.priceMaxVnd : null;
+  if (q.districtCodes.length === 0 && !max) return null;
+  return {
+    targetPriceVnd: max ? Math.round(((min ?? 0) + max) / 2) : 0,
+    districts: [...new Set(q.districtCodes)],
+    bedrooms: quizBedrooms(q.size),
+    excludeListingIds: [],
+    ...(max ? { priceBandVnd: [min ?? 0, max] as [number, number] } : {}),
+  };
+}
+
+/**
+ * The city a quiz place name is in, as `vn_district_code` takes it. The quiz
+ * writes "District 1, Ho Chi Minh City", "Tay Ho, Hanoi".
+ */
+export function quizCity(place: string): 'ho_chi_minh' | 'hanoi' | 'da_nang' | null {
+  const p = place.toLowerCase();
+  if (/ho chi minh|hcmc|saigon|sai gon/.test(p)) return 'ho_chi_minh';
+  if (/ha ?noi/.test(p)) return 'hanoi';
+  if (/da ?nang/.test(p)) return 'da_nang';
+  return null;
 }
