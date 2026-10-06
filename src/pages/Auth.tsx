@@ -55,7 +55,8 @@ const Auth = () => {
 
     // Check if user is already logged in
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state change:', event, session);
+      // The event only: the session carries the access and refresh tokens.
+      console.log('Auth state change:', event);
       
       // Check if this is a password recovery event
       if (event === 'PASSWORD_RECOVERY') {

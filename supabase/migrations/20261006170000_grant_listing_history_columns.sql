@@ -1,0 +1,15 @@
+-- Let the renter app read the listing history columns.
+--
+-- external_properties has no table-level SELECT for anon or authenticated:
+-- 20260708165420 revoked it and granted the readable columns one by one. Two
+-- columns added later never got a grant - canonical_group_id (20260713090000)
+-- and is_relist (20260817121000) - and on 2026-08-18 the renter app started
+-- selecting both (EXTERNAL_PROPERTY_PUBLIC_COLUMNS). A query naming a column
+-- the role cannot read is refused whole, with a 403. So since then building
+-- pages told renters nothing was advertised there, and the realtor dashboard
+-- and listing dialogs silently dropped every crawled listing.
+--
+-- Neither column says anything about an agent: one flags a relisted ad, the
+-- other links duplicate ads of one unit. GRANT is idempotent, so a replay is
+-- harmless.
+GRANT SELECT (is_relist, canonical_group_id) ON public.external_properties TO anon, authenticated;
