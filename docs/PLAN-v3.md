@@ -28,10 +28,10 @@ and dialable brokers.
 | S1 supply | Retention built, depth not | 180 active (753 total) against an 800 gate. One new row across all three sources in the last 24 hours; housingsgn's newest is from 2026-09-12. The resurrection sweep, the 20% single-reason ceiling, `delisted_at` and `crawl_runs` telemetry are built. `auto-crawl-v2` is still scheduled; a Supabase support ticket to remove it was filed on 2026-09-28 (item 2). No new sources. |
 | S2 realtor identity | Scaffolding done, acquisition short | `realtors` has 34 rows; 84 of 180 active listings resolve to one, 83 have a dialable number (46%, bar 60%). `extract-phone` runs hourly. `source_agent_id` is captured on nhatot only (15 of 40 active), and `realtor_identities` has no rows, so resolution by agent id has never matched. |
 | S3 normalization | Done | Canonical columns populated; 157 of 180 active rows shortlistable. `vibe` is out of the response, the style filter reads `styles`, the `$730` rule is asserted in CI, and the title/description price cross-check runs every 30 minutes (#117, #118). |
-| S4 intake + handshake | Done, and changed | Intake is `RequestViewingModal`: one button per card, a signed-in user, one credit per listing, 1-5 listings, no today or tomorrow (CLAUDE.md invariants 7-8). The `wa.me` handshake is as planned. WhatsApp is on the Cloud API. |
+| S4 intake + handshake | Done, and changed | Intake is `RequestViewingModal`: one button per card, a signed-in user, 1-5 listings, no today or tomorrow (CLAUDE.md invariants 7-8). Requests are free since the pricing rework (2026-10-06); the renter pays to lock in a confirmed plan (SPEC §9). The `wa.me` handshake is as planned. WhatsApp is on the Cloud API. |
 | S5 ops console | Done | At https://hausto-ops.vercel.app, deployed on merge. Paste-parse is built (`ops-parse-reply`, #108). Its ≥80%-on-30-replies bar is **unmeasured**: no broker reply has been recorded yet. |
 | S6 itinerary + delivery | Done | Itinerary with clash warnings, one-message delivery, rules-based intent, reminders and the silence-clock property test landed in #92; substitutes and the agent followed (#94), and all five templates are approved (#101). |
-| S7 availability requests | Request built, handling not | The complex page's request is live on WhatsApp for any country's number (#123, #124). Six requests ever, all by email before that. 12 of 23 buildings have no known agent, so S7.0 - agents per building - comes first. Its code is built: the Buildings screen in the ops console and `complex_agents` (SPEC §11). Its work - recruiting agents - is not started. S7.1a is built: requests are worked on the console's Availability screen with typed steps (`inquiry_events`). S7.1b is built: an agent's offered unit becomes a requestable listing, and the one offer message goes from the console. S7.1c is built: offer links link the viewing request back, reminders fire at 16h and 22h, and `request_update` is written and registered but not yet submitted to Meta. S7.1 is done once that template is approved. S7.2a is built: agents are asked on Zalo through the bridge from the Availability screen, capped per agent and per day, and their replies come back to the request. S7.2b is built: agents' photos come through the bridge (device 0.2.0) onto units, and a reply can be read into suggested units the operator confirms. Both wait on S7.0's recruiting to be used; S7.3 (the AI operator sourcing alone) starts when requests pass about five a week. |
+| S7 availability requests | Request built, handling not | The complex page's request is live on WhatsApp for any country's number (#123, #124). Six requests ever, all by email before that. 12 of 23 buildings have no known agent, so S7.0 - agents per building - comes first. Its code is built: the Buildings screen in the ops console and `complex_agents` (SPEC §11). Its work - recruiting agents - is not started. S7.1a is built: requests are worked on the console's Availability screen with typed steps (`inquiry_events`). S7.1b is built: an agent's offered unit becomes a requestable listing, and the one offer message goes from the console. S7.1c is built: offer links link the viewing request back, reminders fire at 16h and 22h, and Meta approved `request_update` on 2026-09-30, so S7.1 is done. S7.4, Search for me (the pricing rework, 2026-10-06), is built: the same request for an area, the Pass's, worked on the same screen with a 48-hour promise. S7.2a is built: agents are asked on Zalo through the bridge from the Availability screen, capped per agent and per day, and their replies come back to the request. S7.2b is built: agents' photos come through the bridge (device 0.2.0) onto units, and a reply can be read into suggested units the operator confirms. Both wait on S7.0's recruiting to be used; S7.3 (the AI operator sourcing alone) starts when requests pass about five a week. |
 
 Live traffic so far is one viewing request. The number to watch (below) has no
 denominator yet.
@@ -469,6 +469,7 @@ the viewing flow was before the bridge.
 8. Submit a Utility template, `request_update`: "Hi {{1}}, we have an update on
    your request for {{2}}. Reply here to see it." It closes the gap after the
    window shuts. Registry entry `approved: false` until Meta says otherwise.
+   (Meta approved it on 2026-09-30.)
 
 **S7.2 - Outreach through the bridge.** `realtor_messages.request_id` becomes
 nullable beside a new `inquiry_id` (exactly one set) and an
@@ -492,8 +493,20 @@ capture form demands what intake checks); a renter who goes quiet (close after
 7 days, alerts run to the watch's end); weekends with one person (the deadline
 jobs help, but "24 hours" needs someone on call or a different promise).
 
-**Charging:** the request stays free. Since the pricing rework (2026-10-06,
-SPEC §9) so is every viewing request: the renter pays to lock in a plan agents
+**S7.4 - Search for me** (the pricing rework, step 5, 2026-10-06). The same
+workbench for an area rather than a building: up to four districts, with the
+budget, bedrooms, move-in and pets, asked for under a thin search in Browse or
+the chat. It is the Pass's - a signed-in Pass holder, one open search at a
+time - because it is a person's hours: the agents are found in Facebook and
+Zalo groups and agents' circles, entered by number, and every unit offered is
+one an agent confirmed. First places within 48 hours; a building keeps its 24.
+SPEC §11 "Search for me". What it needs from people: weekend cover, since 48
+hours includes weekends, and sourcing accounts on Facebook and Zalo kept apart
+from the bridge's.
+
+**Charging:** a building request stays free, and Search for me comes with the
+Pass. Since the pricing rework (2026-10-06, SPEC §9) every viewing request is
+free too: the renter pays to lock in a plan agents
 confirmed - the first viewing on us, then the Pass. The
 natural revenue is agent-side - HCMC agents commonly pay a referral share of the
 landlord's commission on a signed lease - and needs only the `CLOSE` reason

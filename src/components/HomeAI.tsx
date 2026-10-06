@@ -58,6 +58,12 @@ interface PropertyMatch {
   cached?: boolean;
   crawledAt?: string;
 }
+/**
+ * Blocks that read after a reply's listings rather than before them: the
+ * follow-up chips, and Search for me under a search that found little.
+ */
+const BELOW_RESULTS = new Set(['followups', 'search_for_me']);
+
 interface SearchResult {
   results: PropertyMatch[];
   summary: string;
@@ -1006,8 +1012,8 @@ export const HomeAI = ({
               displayContent: message.content,
             };
             // Separate non-followup blocks (text/district/etc.) from followup chips
-            const topBlocks = (searchResults?.blocks || []).filter((b: any) => b.type !== 'followups');
-            const followupBlocks = (searchResults?.blocks || []).filter((b: any) => b.type === 'followups');
+            const topBlocks = (searchResults?.blocks || []).filter((b: any) => !BELOW_RESULTS.has(b.type));
+            const followupBlocks = (searchResults?.blocks || []).filter((b: any) => BELOW_RESULTS.has(b.type));
             const cards = searchResults?.results ?? [];
             const isShowing = hoistResults && activeResultsIdx === index;
             return <div key={index} className="flex justify-start animate-slide-up">
@@ -1169,7 +1175,7 @@ export const HomeAI = ({
                   <p className="text-sm text-left text-foreground/90 leading-relaxed">{searchResults.summary}</p>
                 </div>}
               {/* Text/info blocks shown ABOVE results */}
-              <AIBlocks blocks={(searchResults.blocks || []).filter((b: any) => b.type !== 'followups')} onFollowup={handleFollowup} />
+              <AIBlocks blocks={(searchResults.blocks || []).filter((b: any) => !BELOW_RESULTS.has(b.type))} onFollowup={handleFollowup} />
               
               {searchResults.results.length > 0 && <div className="space-y-4 max-w-[680px]">
                   {/* Same editorial cards as logged-in users see - unless the
@@ -1235,8 +1241,8 @@ export const HomeAI = ({
 
 
               {/* Followup suggestions BELOW results */}
-              {(searchResults.blocks || []).some((b: any) => b.type === 'followups') && (
-                <AIBlocks blocks={(searchResults.blocks || []).filter((b: any) => b.type === 'followups')} onFollowup={handleFollowup} />
+              {(searchResults.blocks || []).some((b: any) => BELOW_RESULTS.has(b.type)) && (
+                <AIBlocks blocks={(searchResults.blocks || []).filter((b: any) => BELOW_RESULTS.has(b.type))} onFollowup={handleFollowup} />
               )}
             </div>
           </div>

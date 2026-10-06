@@ -15,7 +15,7 @@ import {
 } from "../_shared/concierge-email.ts";
 import { formatVnd } from "../_shared/viewing/format.ts";
 import { windowClosesAt } from "../_shared/viewing/inquiry.ts";
-import { placeOf } from "../_shared/viewing/place.ts";
+import { REPLY_WITHIN_HOURS, placeOf } from "../_shared/viewing/place.ts";
 
 // Tells the concierge about an availability request on WhatsApp (SPEC §11).
 //
@@ -175,7 +175,7 @@ const handler = async (req: Request): Promise<Response> => {
         <p style="margin-top: 20px; padding: 15px; background-color: #f0f9ff; border-left: 4px solid #3b82f6;">
           <strong>Just hit Reply</strong> to answer ${esc(inquiry.full_name)} - your words go to their WhatsApp
           from the Hausto number, and the reply shows up on this request in Admin Tools. We told them a person
-          would reply within 24 hours. ${windowNote(inquiry)}
+          would reply within ${REPLY_WITHIN_HOURS[place?.kind ?? "BUILDING"]} hours. ${windowNote(inquiry)}
         </p>
       `,
     });

@@ -27,6 +27,7 @@ interface SubscriptionModalProps {
 const ROWS: { label: string; free: string | null; pass: string }[] = [
   { label: 'Viewing requests', free: 'Request any listing - we ask the agents', pass: 'Same' },
   { label: 'Confirmed viewings', free: 'The first one is on us', pass: 'Every one, in one itinerary on WhatsApp' },
+  { label: 'Search for me', free: null, pass: "A person searches Facebook groups and agents' circles for you" },
   { label: 'New listings', free: null, pass: 'Places that fit you, on WhatsApp up to twice a week' },
   { label: 'AI search', free: '10 a day', pass: 'Unlimited' },
   { label: 'Listing analysis', free: 'Basic vibe analysis', pass: 'Deep Scan' },

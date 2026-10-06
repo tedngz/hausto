@@ -1,12 +1,16 @@
 // Availability requests: "check what is free at Empire City" (SPEC §11,
-// PLAN-v3 S7.1).
+// PLAN-v3 S7.1) - and Search for me, the same job for an area.
 //
-// A sourcing job with a 24-hour clock from the renter's WhatsApp code. The
-// brief shows what fits on file (advertised - an agent still has to say it is
-// free) and the building's agents; each step is one typed action, and the
-// state is derived from the log with the shared reducer (invariants 1, 2).
+// A sourcing job with a 24-hour clock from the renter's WhatsApp code (48 for
+// an area). The brief shows what fits on file (advertised - an agent still has
+// to say it is free) and the agents to ask; each step is one typed action, and
+// the state is derived from the log with the shared reducer (invariants 1, 2).
 // The renter's name and number never reach this screen (invariant 4): the
 // functions behind it do not return them.
+//
+// An area request has no building: its agents are the ones listing in its
+// districts, each unit is entered with where it is, and only units an agent
+// has confirmed can be offered - Search for me promises that.
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, invokeFailure } from './supabase';
@@ -16,6 +20,7 @@ import {
 } from '../../supabase/functions/_shared/viewing-domain';
 import { describeInquiry } from '../../supabase/functions/_shared/viewing/inquiry';
 import { availabilityDraft } from '../../supabase/functions/_shared/realtor/drafts';
+import { areaLabelVi, districtLabel } from '../../supabase/functions/_shared/viewing/place';
 import type { SuggestedUnit, UnitSuggestion } from '../../supabase/functions/_shared/viewing/unit-parse';
 import { formatVnd, humanAge } from '../../supabase/functions/_shared/viewing/format';
 import {
@@ -25,9 +30,11 @@ import {
 
 interface Row {
   id: string;
-  complex_id: string;
+  /** Null for an area (Search for me); `complex_name` is then its label. */
+  complex_id: string | null;
   complex_name: string;
   district: string | null;
+  area_district_codes: string[] | null;
   bedrooms: number;
   budget_max_vnd: number | null;
   move_in: string;
@@ -42,7 +49,10 @@ interface Row {
 
 interface Detail {
   id: string;
-  complex: { id: string; name: string; slug: string | null; district: string | null; management_company: string | null };
+  /** For an area, the area in this shape: its label, and no id. */
+  complex: { id: string | null; name: string; slug: string | null; district: string | null; management_company: string | null };
+  /** Search for me: the districts searched. Null for a building. */
+  area_district_codes: string[] | null;
   bedrooms: number;
   budget_max_vnd: number | null;
   move_in: string;
@@ -60,7 +70,8 @@ interface Detail {
   siblings?: { id: string; complex_name: string }[];
   on_file: {
     id: string; title: string; price_vnd: number; bedrooms: number; area_sqm: number; source: string;
-    source_url: string; listed_at: string; realtor_id: string | null; realtor_name: string | null; realtor_phone: string | null;
+    source_url: string; district_code: string | null; listed_at: string;
+    realtor_id: string | null; realtor_name: string | null; realtor_phone: string | null;
   }[];
 }
 
@@ -83,7 +94,7 @@ const hcmc = (iso: string | null) => iso
   ? new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   : '-';
 
-/** Time left to the 24-hour promise, as the queue shows it. */
+/** Time left to the promise (24 hours, 48 for an area), as the queue shows it. */
 function clock(view: InquiryView): { text: string; cls: string } {
   const due = inquiryDeadline(view);
   if (!due || view.state === 'CLOSED') return { text: '-', cls: 'muted' };
@@ -140,7 +151,7 @@ export function Availability() {
       {visible.length > 0 && (
         <table>
           <thead>
-            <tr><th>Building</th><th>What they need</th><th>State</th><th>Reply due</th><th>Agents asked</th><th>Renter</th></tr>
+            <tr><th>Building or area</th><th>What they need</th><th>State</th><th>Reply due</th><th>Agents asked</th><th>Renter</th></tr>
           </thead>
           <tbody>
             {visible.map(({ r, v }) => {
@@ -150,7 +161,10 @@ export function Availability() {
               const waiting = !!r.last_renter_at && (!r.last_ours_at || r.last_renter_at > r.last_ours_at);
               return (
                 <tr key={r.id} onClick={() => setOpenId(r.id)}>
-                  <td><strong>{r.complex_name}</strong> <span className="small muted">{r.district ?? ''}</span></td>
+                  <td>
+                    <strong>{r.complex_name}</strong>{' '}
+                    {r.area_district_codes ? <span className="tag">Search for me</span> : <span className="small muted">{r.district ?? ''}</span>}
+                  </td>
                   <td className="small">{summary(r)}</td>
                   <td className="small">{v.state}{v.closedReason ? ` · ${v.closedReason}` : ''}</td>
                   <td className={c.cls}>{c.text}</td>
@@ -179,6 +193,11 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
   // console cannot read secrets (as RequestDetail reads it).
   const [bridge, setBridge] = useState(false);
   const [asking, setAsking] = useState<string | null>(null);
+  // An agent met in a group while searching, not on file yet: asked by number.
+  const [newAgent, setNewAgent] = useState({ phone: '', name: '' });
+  // Agents already on this request who are on no roster - mostly a search's,
+  // found in groups - so they stay listed once asked.
+  const [onRequest, setOnRequest] = useState<RosterAgent[]>([]);
   // What an agent's reply is adding to the capture form (S7.2b).
   const [incoming, setIncoming] = useState<UnitIncoming | null>(null);
 
@@ -194,10 +213,25 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
     ]);
     setAgentMessages((rm ?? []) as AgentMessage[]);
     setBridge((controls?.last_state as { realtorChannel?: string } | null)?.realtorChannel === 'bridge');
-    if (detail) {
+    const involved = [...new Set([
+      ...(detail?.events ?? []).map(e => (e.payload as { realtor_id?: string } | null)?.realtor_id),
+      ...(detail?.units ?? []).map(u => u.realtor_id),
+      ...((rm ?? []) as AgentMessage[]).map(m => m.realtor_id),
+    ].filter((id): id is string => !!id))];
+    const { data: people } = involved.length
+      ? await supabase.from('realtors').select('id, display_name, phone_e164').in('id', involved)
+      : { data: [] };
+    setOnRequest(((people ?? []) as { id: string; display_name: string | null; phone_e164: string }[]).map(p => ({
+      realtor_id: p.id, name: p.display_name, phone: p.phone_e164, sources: ['REQUEST'], listings_total: 0,
+    })));
+    if (detail?.complex.id) {
       const { data: roster } = await supabase.rpc('ops_building_roster');
       const building = ((roster ?? []) as { id: string; agents: RosterAgent[] }[]).find(b => b.id === detail.complex.id);
       setAgents(building?.agents ?? []);
+    } else if (detail?.area_district_codes) {
+      // An area's agents: those listing in its districts, who answer us first.
+      const { data: roster } = await supabase.rpc('ops_area_roster', { _district_codes: detail.area_district_codes });
+      setAgents((roster ?? []) as RosterAgent[]);
     }
   }, [inquiryId]);
 
@@ -224,17 +258,36 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
     : !windowOpen ? 'Their WhatsApp window has closed. It reopens when they write to us.'
     : d.consecutive_outbound >= 2 ? 'Two messages without an answer - wait for them.'
     : null;
-  // Agents on file who are not on the roster yet (it has every listing agent, so rarely).
+  // Agents on file who are not on the roster yet (it has every listing agent,
+  // so rarely), then agents on this request who are on no roster at all.
   const known = new Set(agents.map(a => a.realtor_id));
-  const extra = d.on_file.filter(l => l.realtor_id && !known.has(l.realtor_id))
-    .map(l => ({ realtor_id: l.realtor_id!, name: l.realtor_name, phone: l.realtor_phone ?? '', sources: ['LISTING'], listings_total: 0 }));
+  const extra: RosterAgent[] = [];
+  for (const a of [
+    ...d.on_file.filter(l => l.realtor_id).map(l => ({
+      realtor_id: l.realtor_id!, name: l.realtor_name, phone: l.realtor_phone ?? '', sources: ['LISTING'], listings_total: 0,
+    })),
+    ...onRequest,
+  ]) {
+    if (known.has(a.realtor_id)) continue;
+    known.add(a.realtor_id);
+    extra.push(a);
+  }
+  const everyone = [...agents, ...extra];
+  const area = d.area_district_codes;
+  const here = area ? 'in these districts' : 'at this building';
+  const ask = (who: Record<string, unknown>, medium: 'ZALO' | 'PHONE', message?: string) => void run(
+    { action: 'INQUIRY_ASK_AGENT', ...who, medium, ...(message ? { message } : {}) },
+    () => { setAsking(null); if (!('realtorId' in who)) setNewAgent({ phone: '', name: '' }); },
+  );
 
   return (
     <>
       <div className="row" style={{ marginBottom: 8 }}>
         <button onClick={onBack}>Back</button>
         <h2 style={{ fontSize: 15, margin: 0 }}>{d.complex.name}</h2>
-        <span className="small muted">{d.complex.district ?? ''}{d.complex.management_company ? ` · ${d.complex.management_company}` : ''}</span>
+        {area
+          ? <span className="tag">Search for me</span>
+          : <span className="small muted">{d.complex.district ?? ''}{d.complex.management_company ? ` · ${d.complex.management_company}` : ''}</span>}
         <div className="spacer" />
         <span className="tag">{v.state}{v.closedReason ? ` · ${v.closedReason}` : ''}</span>
         <span className={c.cls}>{c.text}</span>
@@ -252,19 +305,41 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
       </div>
 
       <div className="card">
-        <strong>On file that fits</strong> <span className="small muted">- advertised, not confirmed: ask the agent</span>
-        {d.on_file.length === 0 && <p className="small muted">Nothing advertised at this building fits.</p>}
+        <strong>On file that fits</strong>
+        <span className="small muted">
+          {area
+            ? ' - advertised, so leads only: ask the agent, and add what they confirm as a unit. Only confirmed units can be offered for a search.'
+            : ' - advertised, not confirmed: ask the agent'}
+        </span>
+        {d.on_file.length === 0 && <p className="small muted">Nothing advertised {here} fits.</p>}
         {d.on_file.length > 0 && (
           <table style={{ marginTop: 6 }}>
-            <thead><tr><th>Listing</th><th>Price</th><th>Size</th><th>Agent</th><th>Listed</th></tr></thead>
+            <thead><tr><th>Listing</th><th>Price</th><th>Size</th>{area && <th>District</th>}<th>Agent</th><th>Listed</th>{area && <th />}</tr></thead>
             <tbody>
               {d.on_file.map(l => (
                 <tr key={l.id}>
                   <td className="small"><a href={l.source_url} target="_blank" rel="noreferrer">{l.title}</a></td>
                   <td className="small">{formatVnd(l.price_vnd)}</td>
                   <td className="small">{l.bedrooms}BR · {l.area_sqm}m²</td>
+                  {area && <td className="small">{l.district_code ? districtLabel(l.district_code) : '-'}</td>}
                   <td className="small">{l.realtor_name ?? <span className="muted">no agent on file</span>}</td>
                   <td className="small">{hcmc(l.listed_at)}</td>
+                  {area && (
+                    <td>
+                      {v.state !== 'CLOSED' && (
+                        <button className="link small" disabled={busy} title="Once its agent has confirmed it is free"
+                          onClick={() => setIncoming({
+                            key: Date.now(), realtorId: l.realtor_id, districtCode: l.district_code,
+                            unit: {
+                              bedrooms: l.bedrooms, areaSqm: l.area_sqm, priceVnd: l.price_vnd, floor: null, tower: null,
+                              furnishing: null, petsOk: null, availableFrom: null, quote: l.title, problems: [],
+                            },
+                          })}>
+                          confirmed - fill the form
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -273,14 +348,18 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
       </div>
 
       <div className="card">
-        <strong>Agents for this building</strong>
-        <span className="small muted"> - ask by hand on Zalo or by phone, then record it. Add agents on the Buildings screen.</span>
-        {agents.length + extra.length === 0 && <p className="small muted">Nobody on file for this building yet.</p>}
-        {agents.length + extra.length > 0 && (
+        <strong>{area ? 'Agents for this search' : 'Agents for this building'}</strong>
+        <span className="small muted">
+          {area
+            ? ' - those listing in these districts, who answer us first at the top, and anyone you have asked. Ask on Zalo or by phone, then record it.'
+            : ' - ask by hand on Zalo or by phone, then record it. Add agents on the Buildings screen.'}
+        </span>
+        {everyone.length === 0 && <p className="small muted">Nobody on file {here} yet.</p>}
+        {everyone.length > 0 && (
           <table style={{ marginTop: 6 }}>
             <thead><tr><th>Agent</th><th>Phone</th><th>Asked</th><th>Answer</th><th /></tr></thead>
             <tbody>
-              {[...agents, ...extra].map(a => {
+              {everyone.map(a => {
                 const s = v.agents[a.realtor_id];
                 const lastOut = [...agentMessages].reverse().find(m => m.realtor_id === a.realtor_id && m.direction === 'OUT');
                 return (
@@ -296,7 +375,7 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
                         <>
                           <button disabled={busy} onClick={() => setAsking(a.realtor_id)}>Ask on Zalo</button>
                           {!s?.askedAt && (
-                            <button disabled={busy} onClick={() => void run({ action: 'INQUIRY_ASK_AGENT', realtorId: a.realtor_id, medium: 'PHONE' })}>asked by phone</button>
+                            <button disabled={busy} onClick={() => ask({ realtorId: a.realtor_id }, 'PHONE')}>asked by phone</button>
                           )}
                         </>
                       )}
@@ -313,30 +392,49 @@ function InquiryDetail({ inquiryId, onBack }: { inquiryId: string; onBack: () =>
             </tbody>
           </table>
         )}
+        {/* A search's agents are mostly met in Facebook and Zalo groups, not on
+            file: recorded by their number, they are added and stay listed above.
+            They are reached from the sourcing accounts, not the bridge's, so
+            this records the ask rather than sending one. */}
+        {area && v.state !== 'CLOSED' && (
+          <div className="row wrap-row" style={{ marginTop: 6 }}>
+            <span className="small muted">Asked someone from a group:</span>
+            <input style={{ width: 140 }} placeholder="Their number" value={newAgent.phone}
+              onChange={e => setNewAgent(n => ({ ...n, phone: e.target.value }))} />
+            <input style={{ width: 160 }} placeholder="Name (optional)" value={newAgent.name}
+              onChange={e => setNewAgent(n => ({ ...n, name: e.target.value }))} />
+            <button disabled={busy || !newAgent.phone.trim()}
+              onClick={() => ask({ agentPhone: newAgent.phone, agentName: newAgent.name }, 'ZALO')}>asked on Zalo</button>
+            <button disabled={busy || !newAgent.phone.trim()}
+              onClick={() => ask({ agentPhone: newAgent.phone, agentName: newAgent.name }, 'PHONE')}>asked by phone</button>
+          </div>
+        )}
         {asking && (
           <AskBox
             key={asking}
-            agentName={[...agents, ...extra].find(a => a.realtor_id === asking)?.name ?? 'the agent'}
+            agentName={everyone.find(a => a.realtor_id === asking)?.name ?? 'the agent'}
             initial={availabilityDraft({
-              complexName: d.complex.name, bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd,
+              // An area reads "khu vực Quận 2 và Binh Thanh" to an agent.
+              complexName: area ? `khu vực ${areaLabelVi(area)}` : d.complex.name,
+              bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd,
               moveInDate: d.move_in, leaseMonths: d.lease_months, hasPets: d.has_pets,
             })}
             bridge={bridge}
             busy={busy}
-            onSend={text => void run({ action: 'INQUIRY_ASK_AGENT', realtorId: asking, medium: 'ZALO', message: text }, () => setAsking(null))}
+            onSend={text => ask({ realtorId: asking }, 'ZALO', text)}
             onCancel={() => setAsking(null)}
           />
         )}
         <AgentConversations
           messages={agentMessages}
-          nameOf={id => [...agents, ...extra].find(a => a.realtor_id === id)?.name ?? 'Agent'}
+          nameOf={id => everyone.find(a => a.realtor_id === id)?.name ?? 'Agent'}
           inquiryId={inquiryId}
           busy={busy || v.state === 'CLOSED'}
           onUse={x => setIncoming({ ...x, key: Date.now() })}
         />
       </div>
 
-      <Units d={d} agents={[...agents, ...extra]} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId}
+      <Units d={d} agents={everyone} closed={v.state === 'CLOSED'} busy={busy} run={run} inquiryId={inquiryId}
         incoming={incoming} />
 
       <OfferComposer d={d} canReply={canReply} replyBlocked={replyBlocked} busy={busy} run={run} />
@@ -416,12 +514,21 @@ type Run = (body: Record<string, unknown>, after?: () => void) => Promise<void>;
  * Units an agent offered, entered as listings (S7.1b). Photos go straight to
  * storage from here - under concierge/<request>/, the only path the upload
  * policy allows - and the action takes their URLs.
+ *
+ * A search's unit also says where it is - the building or street, and which
+ * of the search's districts - and its agent may be one met in a group, entered
+ * by number.
  */
 function Units({ d, agents, closed, busy, run, inquiryId, incoming }: {
   d: Detail; agents: RosterAgent[]; closed: boolean; busy: boolean; run: Run; inquiryId: string;
   incoming: UnitIncoming | null;
 }) {
+  const districts = d.area_district_codes;
   const [realtorId, setRealtorId] = useState('');
+  const [agentPhone, setAgentPhone] = useState('');
+  const [agentName, setAgentName] = useState('');
+  const [building, setBuilding] = useState('');
+  const [districtCode, setDistrictCode] = useState(districts?.length === 1 ? districts[0] : '');
   const [bedrooms, setBedrooms] = useState('2');
   const [area, setArea] = useState('');
   const [priceM, setPriceM] = useState('');
@@ -440,6 +547,7 @@ function Units({ d, agents, closed, busy, run, inquiryId, incoming }: {
   useEffect(() => {
     if (!incoming) return;
     if (incoming.realtorId) setRealtorId(incoming.realtorId);
+    if (incoming.districtCode) setDistrictCode(incoming.districtCode);
     const u = incoming.unit;
     if (u) {
       if (u.bedrooms) setBedrooms(String(Math.min(u.bedrooms, 4)));
@@ -475,12 +583,15 @@ function Units({ d, agents, closed, busy, run, inquiryId, incoming }: {
 
   const reset = () => {
     setArea(''); setPriceM(''); setFloor(''); setTower(''); setFurnishing(''); setPets('');
-    setAvailableFrom(''); setNote(''); setPhotos([]);
+    setAvailableFrom(''); setNote(''); setPhotos([]); setBuilding('');
+    // A new agent is on file now, and listed above under their name.
+    if (realtorId === 'new') { setRealtorId(''); setAgentPhone(''); setAgentName(''); }
   };
 
   const capture = () => void run({
     action: 'INQUIRY_CAPTURE_UNIT',
-    realtorId,
+    ...(realtorId === 'new' ? { agentPhone, agentName } : { realtorId }),
+    ...(districts ? { building, districtCode } : {}),
     bedrooms: Number(bedrooms),
     areaSqm: Number(area),
     priceVnd: Math.round(Number(priceM) * 1_000_000),
@@ -526,7 +637,26 @@ function Units({ d, agents, closed, busy, run, inquiryId, incoming }: {
             <select value={realtorId} onChange={e => setRealtorId(e.target.value)}>
               <option value="">Agent who offered it</option>
               {agents.map(a => <option key={a.realtor_id} value={a.realtor_id}>{a.name ?? a.phone}</option>)}
+              {districts && <option value="new">Someone new, from a group...</option>}
             </select>
+            {realtorId === 'new' && (
+              <>
+                <input style={{ width: 130 }} placeholder="Their Zalo number" value={agentPhone} onChange={e => setAgentPhone(e.target.value)} />
+                <input style={{ width: 130 }} placeholder="Name (optional)" value={agentName} onChange={e => setAgentName(e.target.value)} />
+              </>
+            )}
+          </div>
+          {districts && (
+            <div className="row wrap-row" style={{ marginTop: 6 }}>
+              <input style={{ width: 220 }} placeholder="Building or street, e.g. Masteri Thao Dien" value={building}
+                onChange={e => setBuilding(e.target.value)} />
+              <select value={districtCode} onChange={e => setDistrictCode(e.target.value)}>
+                <option value="">Which district?</option>
+                {districts.map(code => <option key={code} value={code}>{districtLabel(code)}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="row wrap-row" style={{ marginTop: 6 }}>
             <select value={bedrooms} onChange={e => setBedrooms(e.target.value)}>
               {[1, 2, 3, 4].map(b => <option key={b} value={b}>{b === 4 ? '4+' : b} BR</option>)}
             </select>
@@ -555,7 +685,13 @@ function Units({ d, agents, closed, busy, run, inquiryId, incoming }: {
           </div>
           <div className="row" style={{ marginTop: 6 }}>
             <input style={{ flex: 1 }} placeholder="Note for us - what the agent said (never shown to the renter)" value={note} onChange={e => setNote(e.target.value)} />
-            <button disabled={busy || uploading || !realtorId || !area || !priceM} onClick={capture}>Add unit</button>
+            <button
+              disabled={busy || uploading || !area || !priceM
+                || (realtorId === 'new' ? !agentPhone.trim() : !realtorId)
+                || (!!districts && !districtCode)}
+              onClick={capture}>
+              Add unit
+            </button>
           </div>
           {uploadError && <p className="error small">{uploadError}</p>}
         </div>
@@ -568,6 +704,8 @@ function Units({ d, agents, closed, busy, run, inquiryId, incoming }: {
 interface OfferPart {
   inquiryId: string;
   complexName: string;
+  /** A search finds in an area: "in District 2", not "at". */
+  place: 'BUILDING' | 'AREA';
   brief: Brief;
   /** Offered before and not answered since: the server refuses another. */
   awaiting: boolean;
@@ -580,6 +718,7 @@ function offerPart(d: Detail, now: Date): OfferPart {
   return {
     inquiryId: d.id,
     complexName: d.complex.name,
+    place: d.area_district_codes ? 'AREA' : 'BUILDING',
     brief: briefOf({ bedrooms: d.bedrooms, budgetMaxVnd: d.budget_max_vnd }, v.brief),
     awaiting: !!v.offeredAt
       && !d.thread.some(m => m.direction === 'inbound' && Date.parse(m.created_at) > Date.parse(v.offeredAt!)),
@@ -589,7 +728,9 @@ function offerPart(d: Detail, now: Date): OfferPart {
         id: u.id, title: u.title, priceVnd: u.price_vnd, bedrooms: u.bedrooms, areaSqm: u.area_sqm,
         confirmedAt: u.last_verified_at, kind: 'confirmed',
       })),
-      ...d.on_file.map(l => ({
+      // A search offers only what an agent confirmed (the server refuses the
+      // rest); what is advertised in its districts is a lead, not a candidate.
+      ...(d.area_district_codes ? [] : d.on_file).map(l => ({
         id: l.id, title: l.title, priceVnd: l.price_vnd, bedrooms: l.bedrooms, areaSqm: l.area_sqm,
         confirmedAt: null, kind: 'advertised',
       })),
@@ -633,6 +774,7 @@ function OfferComposer({ d, canReply, replyBlocked, busy, run }: {
   const sections: OfferSection[] = parts
     .map(p => ({
       complexName: p.complexName,
+      kind: p.place,
       inquiryId: p.inquiryId,
       units: p.candidates.filter(c => (picked[p.inquiryId] ?? []).includes(c.id) && usable(p, c)),
     }))
@@ -654,7 +796,7 @@ function OfferComposer({ d, canReply, replyBlocked, busy, run }: {
     <div className="card">
       <strong>Offer units</strong>
       <span className="small muted">
-        {' '}- one message, up to {MAX_OFFER_UNITS} per building; it uses one of the two messages they can get without replying.
+        {' '}- one message, up to {MAX_OFFER_UNITS} per {d.area_district_codes ? 'search' : 'building'}; it uses one of the two messages they can get without replying.
       </span>
       {parts.map(p => (
         <div key={p.inquiryId} style={{ marginTop: 6 }}>
@@ -814,6 +956,8 @@ interface UnitIncoming {
   realtorId?: string | null;
   unit?: SuggestedUnit;
   addPhotos?: string[];
+  /** A search's unit from an advertised listing: the district it is in. */
+  districtCode?: string | null;
 }
 
 /**

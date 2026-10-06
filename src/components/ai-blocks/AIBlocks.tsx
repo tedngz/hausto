@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Building2, MapPin, Route, ArrowRight, Search, MessageCircle } from 'lucide-react';
+import { SearchForMePrompt } from '@/components/SearchForMePrompt';
 
 // Parse "[Search] ..." or "[Ask] ..." prefix from an AI follow-up suggestion.
 // Defaults to "ask" when no tag is present so the chip still works.
@@ -50,7 +51,16 @@ export type AIBlock =
       bikeMinutes?: number;
       notes?: string;
     }
-  | { type: 'followups'; suggestions: string[] };
+  | { type: 'followups'; suggestions: string[] }
+  | {
+      // Added by chat-ai, never the model: a search that found little, and
+      // what it asked for, so Search for me opens filled in.
+      type: 'search_for_me';
+      found?: number;
+      districts?: string[];
+      bedrooms?: number | null;
+      budgetMaxVnd?: number | null;
+    };
 
 interface AIBlocksProps {
   blocks?: AIBlock[] | null;
@@ -262,6 +272,16 @@ export const AIBlocks = ({ blocks, onFollowup }: AIBlocksProps) => {
                   );
                 })}
               </div>
+            );
+
+          case 'search_for_me':
+            return (
+              <SearchForMePrompt
+                key={i}
+                className="max-w-[640px]"
+                found={block.found ?? 0}
+                prefill={{ districts: block.districts, bedrooms: block.bedrooms, budgetMaxVnd: block.budgetMaxVnd }}
+              />
             );
 
           default:

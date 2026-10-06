@@ -19,7 +19,7 @@ import {
   type MessageStore,
 } from '../whatsapp/send.ts';
 import { TEMPLATES } from '../whatsapp/templates.ts';
-import { districtLabel, inArea, placeOf } from './place.ts';
+import { districtLabel, placeOf } from './place.ts';
 import type { RealtorChannel } from '../realtor/channel.ts';
 import {
   RenterIdentityError,
@@ -28,6 +28,9 @@ import {
   type RealtorMessageStore,
 } from '../realtor/send.ts';
 import { loadOutreach, outreachRefusal } from '../realtor/outreach.ts';
+import { upsertRealtor } from '../realtor/store.ts';
+import { toE164 } from '../whatsapp/inbound.ts';
+import { MAX_AGENT_NAME } from './roster.ts';
 import {
   AGENT_ANSWERS,
   INQUIRY_ASK_MEDIA,
@@ -177,11 +180,9 @@ export async function performInquiryAction(
   }
 
   if (action === 'INQUIRY_ASK_AGENT' || action === 'INQUIRY_AGENT_ANSWERED') {
-    const realtorId = str(input.realtorId);
-    const { data: realtor } = realtorId
-      ? await db.from('realtors').select('id').eq('id', realtorId).maybeSingle()
-      : { data: null };
-    if (!realtor) return refuse(400, 'invalid_realtor', 'Pick an agent from the building\'s roster.');
+    const agent = await agentFor(db, input, 'Pick an agent from the roster, or enter a new one\'s number.');
+    if (typeof agent !== 'string') return agent;
+    const realtorId = agent;
 
     if (action === 'INQUIRY_ASK_AGENT') {
       const medium = (str(input.medium) || 'ZALO').toUpperCase();
@@ -331,6 +332,27 @@ async function askOnZalo(
     ?? done({ recorded: 'AGENT_ASKED', queued: false, messageId: sent.message.id });
 }
 
+/**
+ * The agent a step is about, as a realtor id: one on file (`realtorId`), or
+ * one met in a Facebook or Zalo group while searching - by their number
+ * (`agentPhone`, and `agentName` if known), added to `realtors` so the ask,
+ * the unit and the bridge all key on them. A search's agents are mostly not on
+ * file: no building roster lists them, and they have never listed with us.
+ */
+async function agentFor(db: Supa, input: Record<string, unknown>, pick: string): Promise<string | InquiryResult> {
+  const realtorId = str(input.realtorId);
+  if (realtorId) {
+    const { data: realtor } = await db.from('realtors').select('id').eq('id', realtorId).maybeSingle();
+    return realtor ? realtorId : refuse(400, 'invalid_realtor', pick);
+  }
+  if (!str(input.agentPhone)) return refuse(400, 'invalid_realtor', pick);
+  // Agents are +84 only (toE164); a renter may be on any number, an agent not.
+  const phone = toE164(str(input.agentPhone));
+  if (!phone) return refuse(400, 'invalid_phone', `Not a Vietnamese mobile number: ${str(input.agentPhone)}`);
+  const realtor = await upsertRealtor(db, phone, str(input.agentName).slice(0, MAX_AGENT_NAME) || null);
+  return realtor ? realtor.id : refuse(500, 'realtor_failed');
+}
+
 // ── Units (S7.1b) ───────────────────────────────────────────────────────────
 
 const LISTING_COLUMNS =
@@ -349,11 +371,10 @@ const capturedFor = (listing: { source?: unknown; external_id?: unknown }, inqui
  * removed and the reason returned.
  */
 async function captureUnit(db: Supa, actor: string, row: InquiryRow, input: Record<string, unknown>): Promise<InquiryResult> {
-  const v = validateUnit(input, unitPhotoPath(row.id));
+  const agent = await agentFor(db, input, 'Pick the agent who offered it, or enter their number.');
+  if (typeof agent !== 'string') return agent;
+  const v = validateUnit({ ...input, realtorId: agent }, unitPhotoPath(row.id));
   if (!v.ok) return refuse(400, 'invalid_unit', v.error);
-
-  const { data: realtor } = await db.from('realtors').select('id').eq('id', v.value.realtorId).maybeSingle();
-  if (!realtor) return refuse(400, 'invalid_realtor', 'Pick the agent who offered it.');
 
   const place = await placeOf(db, row);
   if (!place) return refuse(404, 'invalid_complex');
@@ -385,6 +406,16 @@ async function captureUnit(db: Supa, actor: string, row: InquiryRow, input: Reco
   if (eligible.length === 0) {
     await db.from('external_properties').delete().eq('id', id);
     return refuse(422, 'not_requestable', rejected[0]?.reason ?? 'That unit could not be requested.');
+  }
+  // The trigger places a unit by its location, so a building named after
+  // another district ("Thu Duc House" in District 2) would land there - and an
+  // area's offer, its watch and the itinerary's district checks would all
+  // believe it.
+  if (place.kind === 'AREA' && saved?.district_code !== v.value.districtCode) {
+    await db.from('external_properties').delete().eq('id', id);
+    return refuse(422, 'wrong_district',
+      `"${complex.name}" reads as ${districtLabel(String(saved?.district_code))}, not ${complex.district}. ` +
+      `Leave the district out of the building's name.`);
   }
 
   const failed = await append(db, row.id, 'UNIT_CAPTURED', { listing_id: id, realtor_id: v.value.realtorId, note: v.value.note }, actor);
@@ -424,7 +455,8 @@ async function renterWroteSince(db: Supa, inquiryId: string, since: string): Pro
  * two-in-a-row limit.
  *
  * Every unit must be requestable now, belong to its request (captured for it,
- * or advertised at its building), fit what the renter asked for there - or
+ * or advertised at its building - an area takes captured units only), fit
+ * what the renter asked for there - or
  * what they have since said they would take - and, if captured, have been
  * confirmed by its agent within UNIT_FRESH_DAYS. After a request's first offer,
  * another for it waits for the renter to answer. Sent once, then recorded on
@@ -549,10 +581,21 @@ async function offerableUnits(
     return refuse(422, 'not_requestable', `${rejected.length} of those cannot be requested: ${rejected[0].reason}`);
   }
 
-  // On file: at the building, or - for an area - in its districts.
+  // Search for me promises every place is confirmed with its agent: an ad is
+  // not availability. So an area's offer carries only its captured units - an
+  // advertised listing in its districts is a lead, asked about and then added.
+  if (place?.kind === 'AREA') {
+    const ad = listings.find(l => !capturedFor(l, row.id));
+    if (ad) {
+      return refuse(422, 'not_confirmed',
+        `"${ad.title}" is advertised, not confirmed. Ask its agent, then add it as a unit.`);
+    }
+  }
+
+  // On file: advertised at the building.
   const { data: atBuilding } = row.complex_id
     ? await db.rpc('complex_listing_ids', { _complex_id: row.complex_id, _since: '-infinity' })
-    : { data: listings.filter(l => !!place && inArea(place, l.district_code ?? null)).map(l => l.id) };
+    : { data: [] };
   const onFile = new Set(((atBuilding ?? []) as unknown[])
     .map(x => (typeof x === 'string' ? x : String((x as Record<string, unknown>).complex_listing_ids))));
   const brief = briefOf({ bedrooms: row.bedrooms_needed, budgetMaxVnd: row.budget_max_vnd }, view.brief);
@@ -576,6 +619,7 @@ async function offerableUnits(
   return {
     complexName: where,
     inquiryId: row.id,
+    kind: place?.kind ?? 'BUILDING',
     units: eligible.map(c => {
       const l = byId.get(c.id)!;
       return {

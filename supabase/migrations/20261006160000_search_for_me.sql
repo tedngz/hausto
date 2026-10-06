@@ -179,7 +179,7 @@ BEGIN
     'on_file', coalesce((SELECT jsonb_agg(jsonb_build_object(
                 'id', e.id, 'title', e.title, 'price_vnd', e.price_vnd, 'bedrooms', e.bedrooms,
                 'area_sqm', e.area_sqm, 'source', e.source, 'source_url', e.source_url,
-                'listed_at', coalesce(e.crawled_at, e.created_at),
+                'district_code', e.district_code, 'listed_at', coalesce(e.crawled_at, e.created_at),
                 'realtor_id', e.realtor_id, 'realtor_name', r.display_name, 'realtor_phone', r.phone_e164
               ) ORDER BY e.price_vnd)
               FROM public.external_properties e

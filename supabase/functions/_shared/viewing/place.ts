@@ -30,6 +30,12 @@ export const MAX_AREA_DISTRICTS = 4;
 /** A promise per kind: a building's agents are few and known; an area's are not. */
 export const REPLY_WITHIN_HOURS: Record<PlaceKind, number> = { BUILDING: 24, AREA: 48 };
 
+/**
+ * A search showing fewer places than this is thin, and Browse and the chat
+ * offer Search for me under it - prefilled from that search.
+ */
+export const THIN_SEARCH = 3;
+
 const DISTRICT_CODE = /^[A-Z][A-Z0-9_]{1,19}$/;
 
 export function isDistrictCode(code: unknown): code is string {
@@ -44,12 +50,30 @@ export function districtLabel(code: string): string {
 }
 
 /**
- * The same, for the Vietnamese draft to agents: `D2` -> "Quận 2". Named
- * districts are written without their marks, which every agent reads.
+ * `districtLabel` backwards, for the renter app's district names: "District 2"
+ * -> `D2`, "Binh Thanh" -> `BINH_THANH`. The codes are vn_district_code's.
+ */
+export function districtCodeOf(label: string): string | null {
+  const n = label.trim().match(/^District (\d{1,2})$/i);
+  const code = n ? `D${Number(n[1])}` : label.trim().toUpperCase().replace(/\s+/g, '_');
+  return isDistrictCode(code) ? code : null;
+}
+
+/** Ho Chi Minh City's named districts, as an agent writes them. */
+const NAMED_VI: Record<string, string> = {
+  BINH_THANH: 'Bình Thạnh', TAN_BINH: 'Tân Bình', TAN_PHU: 'Tân Phú', PHU_NHUAN: 'Phú Nhuận',
+  GO_VAP: 'Gò Vấp', THU_DUC: 'Thủ Đức', BINH_TAN: 'Bình Tân', NHA_BE: 'Nhà Bè',
+  BINH_CHANH: 'Bình Chánh', HOC_MON: 'Hóc Môn', CU_CHI: 'Củ Chi', CAN_GIO: 'Cần Giờ',
+};
+
+/**
+ * The same, for the Vietnamese draft to agents: `D2` -> "Quận 2",
+ * `BINH_THANH` -> "Bình Thạnh". A code with no spelling here falls back to the
+ * English, unmarked, which an agent still reads.
  */
 export function districtLabelVi(code: string): string {
   const n = code.match(/^D(\d{1,2})$/);
-  return n ? `Quận ${Number(n[1])}` : districtLabel(code);
+  return n ? `Quận ${Number(n[1])}` : NAMED_VI[code] ?? districtLabel(code);
 }
 
 export function areaLabelVi(codes: string[]): string {
@@ -88,10 +112,5 @@ export async function placeOf(
     kind: 'BUILDING', name: String(c.name), district: (c.district as string | null) ?? null,
     city: String(c.city ?? 'ho_chi_minh'), complexId: String(c.id), districtCodes: [], slug: (c.slug as string | null) ?? null,
   };
-}
-
-/** Is this listing in the place? An area by district code; a building is asked of SQL. */
-export function inArea(place: InquiryPlace, districtCode: string | null): boolean {
-  return place.kind === 'AREA' && !!districtCode && place.districtCodes.includes(districtCode);
 }
 

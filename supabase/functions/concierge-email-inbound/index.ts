@@ -30,6 +30,7 @@ import { adapterFromEnv } from "../_shared/whatsapp/adapter.ts";
 import { SupabaseMessageStore } from "../_shared/whatsapp/store.ts";
 import { ConsecutiveMessageError, ServiceWindowClosedError } from "../_shared/whatsapp/send.ts";
 import { sendConciergeWhatsApp } from "../_shared/viewing/concierge.ts";
+import { placeOf } from "../_shared/viewing/place.ts";
 
 // Receives mail sent to hello@hausto.com and files it onto the matching
 // availability request, then pings ted.ngz@gmail.com so nothing sits unseen.
@@ -454,12 +455,12 @@ serve(async (req) => {
     // that no longer resolves (deleted request, mangled address) falls back to
     // the most recent request from that sender rather than dropping the mail.
     const tokenId = inquiryIdFromAddresses(mail.recipients) ?? inquiryIdFromText(mail.subject);
-    let inquiry: { id: string; full_name: string; email: string | null; status: string; complex_id: string; handled_at: string | null; channel: string } | null = null;
+    let inquiry: { id: string; full_name: string; email: string | null; status: string; complex_id: string | null; area_district_codes: string[] | null; area_label: string | null; handled_at: string | null; channel: string } | null = null;
 
     if (tokenId) {
       const { data } = await supabase
         .from("complex_inquiries")
-        .select("id, full_name, email, status, complex_id, handled_at, channel")
+        .select("id, full_name, email, status, complex_id, area_district_codes, area_label, handled_at, channel")
         .eq("id", tokenId)
         .maybeSingle();
       inquiry = data ?? null;
@@ -478,7 +479,7 @@ serve(async (req) => {
         if (data?.inquiry_id) {
           const { data: row } = await supabase
             .from("complex_inquiries")
-            .select("id, full_name, email, status, complex_id, handled_at, channel")
+            .select("id, full_name, email, status, complex_id, area_district_codes, area_label, handled_at, channel")
             .eq("id", data.inquiry_id)
             .maybeSingle();
           inquiry = row ?? null;
@@ -496,7 +497,7 @@ serve(async (req) => {
     if (!inquiry) {
       const { data } = await supabase
         .from("complex_inquiries")
-        .select("id, full_name, email, status, complex_id, handled_at, channel")
+        .select("id, full_name, email, status, complex_id, area_district_codes, area_label, handled_at, channel")
         .eq("email", mail.from)
         .order("created_at", { ascending: false })
         .limit(10);
@@ -525,11 +526,9 @@ serve(async (req) => {
       return await handleStandaloneMail(supabase, mail, senderInquiries.length);
     }
 
-    const { data: complex } = await supabase
-      .from("complexes")
-      .select("name")
-      .eq("id", inquiry.complex_id)
-      .maybeSingle();
+    // A building, or an area (Search for me).
+    const place = await placeOf(supabase, inquiry);
+    const complex = place ? { name: place.name } : null;
 
     // A message from our own side (admin replying in Gmail) is outbound even
     // though it arrived here as inbound mail. Only our own addresses may be

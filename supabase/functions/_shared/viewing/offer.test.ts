@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  offerLink, renderOffer, unitPhotoPath, unitRow, unitStale, validateUnit, UNIT_FRESH_DAYS, type UnitInput,
+  offerLink, renderOffer, renderOfferSections, unitPhotoPath, unitRow, unitStale, validateUnit, UNIT_FRESH_DAYS, type UnitInput,
   briefOf, misfit, priceCeiling, validateBriefChange,
 } from './offer.ts';
 
@@ -98,6 +98,34 @@ describe('the offer message', () => {
     expect(body).toMatch(/reply here with a question\.$/);
     expect(body).not.toMatch(/\bbook(ed|ing)?\b/i);
     expect(body).not.toMatch(/[—–]/);
+  });
+});
+
+describe('the offer for a search (Search for me)', () => {
+  const units = [
+    { id: 'u-1', title: '2BR at Masteri Thao Dien, floor 12', priceVnd: 24_000_000, bedrooms: 2, areaSqm: 80, confirmedAt: '2026-10-06T06:00:00Z' },
+  ];
+  const now = new Date('2026-10-06T08:00:00Z');
+
+  it('says where it looked, and that the Pass covers the viewings', () => {
+    const body = renderOfferSections({
+      firstName: 'Mai', now, sections: [{ complexName: 'District 2 and Binh Thanh', inquiryId: INQ, units, kind: 'AREA' }],
+    });
+    expect(body.startsWith('Hi Mai, here is what we found in District 2 and Binh Thanh:')).toBe(true);
+    expect(body).toContain('your Pass covers the viewings');
+    expect(body).not.toContain('first viewing is free');
+  });
+
+  it('heads each part by where, and keeps the free viewing when a building is in it too', () => {
+    const body = renderOfferSections({
+      firstName: 'Mai', now, sections: [
+        { complexName: 'Empire City', inquiryId: INQ, units, kind: 'BUILDING' },
+        { complexName: 'District 2', inquiryId: '22222222-2222-4333-8444-555555555555', units: [{ ...units[0], id: 'u-2' }], kind: 'AREA' },
+      ],
+    });
+    expect(body).toContain('\n\nAt Empire City:\n\n');
+    expect(body).toContain('\n\nIn District 2:\n\n');
+    expect(body).toContain('your first viewing is free');
   });
 });
 

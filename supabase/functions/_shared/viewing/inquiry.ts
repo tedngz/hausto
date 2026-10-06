@@ -157,7 +157,7 @@ export function renderInquiryConfirmed(s: InquirySummary & { watchExpiresAt: str
     // every place offered is one an agent has confirmed.
     return [
       `Thanks ${firstName(s.fullName)} - your search in ${s.complexName} is in: ${describeInquiry(s)}.`,
-      `Someone on our team is searching agents' circles for it now, and will send the first places here within ${REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent.`,
+      `Someone on our team is searching Facebook groups and agents' circles for it now, and will send the first places here within ${REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent.`,
       `Until ${dayMonth(s.watchExpiresAt)} we will also message you when a new listing there fits. Reply STOP any time.`,
     ].join('\n\n');
   }

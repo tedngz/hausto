@@ -4,6 +4,7 @@ import { Redis } from "https://esm.sh/@upstash/redis@latest";
 import { detectLifestyleIntent, findRelevantKB, formatKBBlock, hasShoppingKeyword } from "../_shared/lifestyle-kb.ts";
 import { askCompare } from "../_shared/compare-listings.ts";
 import { logOpenAIUsage } from "../_shared/openai-usage.ts";
+import { MAX_AREA_DISTRICTS, THIN_SEARCH } from "../_shared/viewing/place.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -795,6 +796,26 @@ const DISTRICT_SUB_AREAS: Record<string, string[]> = {
 const MAIN_DISTRICT_NAMES = ['district 1', 'district 2', 'district 3', 'district 4', 'district 5',
   'district 7', 'district 9', 'district 10', 'district 12', 'binh thanh', 'phu nhuan', 'thu duc',
   'go vap', 'tan binh', 'tan phu', 'binh tan'];
+
+/**
+ * Search for me, offered under a thin search (the pricing rework, step 5):
+ * the criteria this conversation has settled on, in the renter app's words -
+ * "District 2", "Binh Thanh" - so its form opens filled in rather than asking
+ * again. Wards are left out; their district is already in the list.
+ */
+function searchForMeBlock(context: AccumulatedContext, found: number) {
+  const districts = context.specificDistricts
+    .filter(d => MAIN_DISTRICT_NAMES.includes(d))
+    .map(d => d.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
+    .slice(0, MAX_AREA_DISTRICTS);
+  const bedrooms = context.bedrooms === 'studio' ? 1
+    : context.bedrooms === '4+' ? 4
+    : context.bedrooms ? Number(context.bedrooms) : null;
+  // The form takes 3 to 500 million a month; anything else is left for the renter.
+  const budget = context.maxPrice && context.maxPrice >= 3_000_000 && context.maxPrice <= 500_000_000
+    ? Math.round(context.maxPrice) : null;
+  return { type: 'search_for_me', found, districts, bedrooms, budgetMaxVnd: budget };
+}
 
 // Is this listing in `district`? `searchableText` is location + title, so a
 // complex name in the title counts as being in the area it names.
@@ -3393,6 +3414,24 @@ Maximum ${maxResults} properties in results.`;
           }
         }
       } catch { /* non-JSON reply, nothing to strip */ }
+    }
+
+    // A search in Ho Chi Minh City that found little gets Search for me under
+    // it, prefilled from what this conversation asked for (searchForMeBlock).
+    // Attached here, before the reply is persisted, because a signed-in
+    // renter's thread renders from chat_messages. Only when this message was
+    // a search (a home, a size or a price in it) - never small talk, and never
+    // an answer about a place or a pinned listing.
+    const searched = (shoppingOverride || hasShoppingNumeric) && !isInfoTurn;
+    if (searched && accContext.city !== 'hanoi' && accContext.city !== 'danang') {
+      try {
+        const parsed = JSON.parse(responseContent);
+        const shown = Array.isArray(parsed?.results) ? parsed.results.length : 0;
+        if (parsed && typeof parsed === 'object' && shown < THIN_SEARCH) {
+          parsed.blocks = [...(Array.isArray(parsed.blocks) ? parsed.blocks : []), searchForMeBlock(accContext, shown)];
+          responseContent = JSON.stringify(parsed);
+        }
+      } catch { /* a prose reply: nothing to attach it to */ }
     }
 
     // Save search results for authenticated users

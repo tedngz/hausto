@@ -25,6 +25,7 @@ import {
 import type { RequestProfile } from './substitutes.ts';
 import { matchesWatch, planAlert, type ActiveWatch, type AlertCandidate, type WatchListing } from './watch.ts';
 import { sendAlert } from './alerts.ts';
+import { districtLabel } from './place.ts';
 import { hasPassCover } from './lock-in-run.ts';
 import type { ShortlistCandidate } from './intake.ts';
 
@@ -184,7 +185,8 @@ export async function runDigestSweep(
         candidates.push({
           listingId: l.id, title: l.title, priceVnd: l.price_vnd, bedrooms: l.bedrooms,
           source: 'WATCH', watchId: w.id,
-          label: w.complex_id ? complexName.get(w.complex_id) ?? null : l.district_code,
+          // A search's place is the district it is in, in words: "District 2".
+          label: w.complex_id ? complexName.get(w.complex_id) ?? null : l.district_code ? districtLabel(l.district_code) : null,
         });
       }
     }
