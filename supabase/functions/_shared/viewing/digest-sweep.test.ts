@@ -108,3 +108,23 @@ describe('the Friday digest', () => {
     expect(outbound('+84902222222')).toHaveLength(0);
   });
 });
+
+describe('the number holds it', () => {
+  // whatsapp-template-sync's hourly reading (number-health.ts). Marketing is
+  // what lowers the rating of the number every itinerary goes out from.
+  it('sends nothing while Meta rates the number yellow, and says why', async () => {
+    db.tables.whatsapp_number_status = [{ id: 'singleton', quality_rating: 'YELLOW', status: 'CONNECTED' }];
+    // deno-lint-ignore no-explicit-any
+    const summary = await runDigestSweep(db as any, store, adapter, { run: 2, send: true, now: NOW });
+    expect(summary).toMatchObject({ eligible: 1, sent: 0, dry_run: true, quality_hold: 'Meta rates the number YELLOW' });
+    expect(outbound('+84901111111')).toHaveLength(0);
+  });
+
+  it('sends as usual once a reading comes back green', async () => {
+    db.tables.whatsapp_number_status = [{ id: 'singleton', quality_rating: 'GREEN', status: 'CONNECTED' }];
+    // deno-lint-ignore no-explicit-any
+    const summary = await runDigestSweep(db as any, store, adapter, { run: 2, send: true, now: NOW });
+    expect(summary).toMatchObject({ sent: 1, dry_run: false, quality_hold: null });
+    expect(outbound('+84901111111')).toHaveLength(1);
+  });
+});
