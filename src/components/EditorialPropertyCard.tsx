@@ -758,8 +758,10 @@ export const EditorialPropertyCard = ({
           </div>
         )}
 
+        {/* No rule above it: the footer is the CTA's small print, and a line
+            between them cut it off from the button it explains. */}
         {footer && (
-          <div className="border-t border-border/60 pt-3" onClick={e => e.stopPropagation()}>
+          <div className="-mt-1" onClick={e => e.stopPropagation()}>
             {footer}
           </div>
         )}

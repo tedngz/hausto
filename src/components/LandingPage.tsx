@@ -66,15 +66,26 @@ export const LandingPage = () => {
       <main>
       <section className="container mx-auto px-4 py-8 md:py-12">
         <div className="text-center max-w-4xl mx-auto w-full">
-          <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-6 md:mb-8">
-            <span className="text-primary">Vibe check</span>
-            <span className="block">your next home</span>
-          </h1>
+          {/* The hero owns the first screen. It is centred in what is left of
+              the viewport once the header, the section padding and the next
+              heading are taken off, so only "Your curated rental hub" shows
+              under it until the renter scrolls. The offsets are those heights:
+              header 68/84px, padding 32/48px, the preview's mt-12, its heading
+              36/40px, and 12px below it - the heading's own mt-3 gap to the
+              subtitle, so the subtitle starts at the fold. svh, so a phone's
+              address bar cannot push the heading out of sight. A taller hero
+              (a phone, a signed-in renter's chat controls) just grows past it. */}
+          <div className="flex min-h-[calc(100svh-12.25rem)] flex-col justify-center md:min-h-[calc(100svh-14.5rem)]">
+            <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-6 md:mb-8">
+              <span className="text-primary">Vibe check</span>
+              <span className="block">your next home</span>
+            </h1>
 
-          <div className="mb-4">
-            {/* The hero chat takes the question and hands it to the hub, which
-                answers it - results need the width and the tabs beside them. */}
-            <HomeAI handoffToHub />
+            <div className="mb-4">
+              {/* The hero chat takes the question and hands it to the hub, which
+                  answers it - results need the width and the tabs beside them. */}
+              <HomeAI handoffToHub />
+            </div>
           </div>
 
           {/* The verified-listings table is the center of the platform: it gets
