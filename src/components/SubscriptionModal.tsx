@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, Crown, Minus } from 'lucide-react';
+import { Check, Crown } from 'lucide-react';
 import { DigestOptIn } from '@/components/DigestOptIn';
 import { useAuth } from '@/hooks/useAuth';
 import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
@@ -21,22 +20,48 @@ interface SubscriptionModalProps {
  *
  * Requests are free on both: we ask the agents either way. What a renter pays
  * for is a viewing that happens - locked in once agents confirm - so the
- * modal sells confirmed viewings, never request credits or counts. One row
- * per thing the plans differ on, in the order a renter meets them.
+ * modal sells confirmed viewings, never request credits or counts.
+ *
+ * The Pass lists only what it adds over Free. A row-for-row comparison made
+ * every line say "Same" or "No" on one side, which was most of the reading
+ * and none of the information. Each line leads with the thing, then the
+ * detail, so a renter can read the bold words alone.
  */
-const ROWS: { label: string; free: string | null; pass: string }[] = [
-  { label: 'Viewing requests', free: 'Request any listing - we ask the agents', pass: 'Same' },
-  { label: 'Confirmed viewings', free: 'The first one is on us', pass: 'Every one, in one itinerary on WhatsApp' },
-  { label: 'Search for me', free: null, pass: "A person searches Facebook groups and agents' circles for you" },
-  { label: 'New listings', free: null, pass: 'Places that fit you, on WhatsApp up to twice a week' },
-  { label: 'AI search', free: '10 a day', pass: 'Unlimited' },
-  { label: 'Listing analysis', free: 'Basic vibe analysis', pass: 'Deep Scan' },
+type Feature = { lead: string; rest?: string };
+
+const FREE: Feature[] = [
+  { lead: 'Request any listing', rest: ' - we ask the agents' },
+  { lead: 'First confirmed viewing', rest: ' on us' },
+  { lead: 'AI search', rest: ', 10 a day' },
+  { lead: 'Basic vibe analysis' },
+];
+
+const PASS: Feature[] = [
+  { lead: 'Every confirmed viewing', rest: ', not just the first' },
+  { lead: 'Search for me', rest: " - a person checks Facebook groups and agents' circles" },
+  { lead: 'New listings that fit you', rest: ', on WhatsApp up to twice a week' },
+  { lead: 'Unlimited AI search' },
+  { lead: 'Deep Scan', rest: ' on any listing' },
 ];
 
 const reasonMessages = {
   viewings: 'Lock in every viewing the agents confirm.',
-  ai: "You've used your 10 AI requests for today.",
+  ai: "You've used your 10 AI searches for today.",
 };
+
+const FeatureList = ({ features, accent }: { features: Feature[]; accent?: boolean }) => (
+  <ul className="space-y-2.5 text-sm">
+    {features.map(({ lead, rest }) => (
+      <li key={lead} className="flex items-start gap-2.5">
+        <Check className={`h-4 w-4 mt-0.5 shrink-0 ${accent ? 'text-primary' : 'text-muted-foreground'}`} aria-hidden="true" />
+        <span className="text-muted-foreground leading-snug">
+          <span className="font-medium text-foreground">{lead}</span>
+          {rest}
+        </span>
+      </li>
+    ))}
+  </ul>
+);
 
 export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModalProps) => {
   const { user } = useAuth();
@@ -58,88 +83,79 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
     }
   };
 
+  // A complimentary pass never runs out, so it has no days to count.
+  const daysLeft = pass?.active && !pass.isComplimentary && pass.daysLeft > 0 ? pass.daysLeft : null;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
-            <Crown className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pr-6">
+          <DialogTitle className="flex items-center gap-2 font-serif text-2xl">
+            <Crown className="h-5 w-5 text-primary" aria-hidden="true" />
             {pass?.active ? 'Your Hausto Pass' : 'Get the Hausto Pass'}
           </DialogTitle>
-          {/* Only speaks up when there's a reason the renter landed here. */}
-          <DialogDescription className={`text-sm sm:text-lg ${reason ? '' : 'sr-only'}`}>
-            {reason ? reasonMessages[reason] : 'Compare the Hausto plans.'}
+          {/* The model is the part nobody guesses, so it is said once, up
+              here, before either plan. A renter a limit sent here reads why
+              instead. */}
+          <DialogDescription className="text-sm sm:text-base">
+            {reason
+              ? reasonMessages[reason]
+              : pass?.active
+                ? 'Your Pass covers every viewing we confirm while it runs.'
+                : 'Requesting is free, and so is your first confirmed viewing. The Pass covers every one after that.'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
-          <Card className="relative">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span>Free</span>
-                {/* Whichever plan is actually live wears this. */}
-                {!pass?.active && <Badge variant="secondary">Current</Badge>}
-              </CardTitle>
-              <CardDescription>Ask about any place, see one free</CardDescription>
-              <div className="text-2xl sm:text-3xl font-bold">$0</div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <dl className="space-y-3">
-                {ROWS.map(row => (
-                  <div key={row.label} className="flex items-start gap-2">
-                    {row.free
-                      ? <Check className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                      : <Minus className="h-4 w-4 mt-0.5 text-muted-foreground/60 shrink-0" />}
-                    <div>
-                      <dt className="text-xs text-muted-foreground">{row.label}</dt>
-                      <dd className="text-xs sm:text-sm">{row.free ?? 'No'}</dd>
-                    </div>
-                  </div>
-                ))}
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card className="relative border-primary bg-primary/5">
-            <div className="absolute -top-2 left-1/2 -translate-x-1/2">
-              <Badge className="bg-primary text-primary-foreground">Recommended</Badge>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+          <section className="flex flex-col rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold">Free</h3>
+              {/* Stacked on a phone, where the button below is not shown. */}
+              {!pass?.active && <Badge variant="secondary" className="md:hidden">Current</Badge>}
             </div>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                  Hausto Pass
-                </span>
-                {pass?.active && <Badge variant="secondary">Current</Badge>}
-              </CardTitle>
-              <CardDescription>Every viewing we confirm, for {PASS_DAYS} days</CardDescription>
-              <div className="text-2xl sm:text-3xl font-bold">
-                ${PASS_PRICE_USD}<span className="text-sm font-normal"> for {PASS_DAYS} days, one-off</span>
+            <p className="mt-3 font-serif text-3xl font-semibold tracking-tight">$0</p>
+            <p className="mt-1 text-xs text-muted-foreground">No card needed</p>
+            <div className="my-5 border-t border-border" />
+            <FeatureList features={FREE} />
+            {/* Level with the Pass's button, so side by side the two cards end
+                on one line. Stacked, it would only push the Pass further down. */}
+            {!pass?.active && (
+              <div className="mt-auto hidden pt-6 md:block">
+                <Button variant="outline" size="lg" className="w-full rounded-full" disabled>
+                  Your current plan
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <dl className="space-y-3 mb-4 sm:mb-6">
-                {ROWS.map(row => (
-                  <div key={row.label} className="flex items-start gap-2">
-                    <Check className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                    <div>
-                      <dt className="text-xs text-muted-foreground">{row.label}</dt>
-                      <dd className="text-xs sm:text-sm font-medium">{row.pass}</dd>
-                    </div>
-                  </div>
-                ))}
-              </dl>
-              <DigestOptIn checked={digestOptIn} onChange={setDigestOptIn} className="mb-3" />
-              <Button onClick={handleGetPass} disabled={loading} className="w-full" size="lg">
-                {loading ? 'Processing...' : pass?.active ? `Extend by ${PASS_DAYS} days` : 'Get the Pass'}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            )}
+          </section>
 
-        <div className="text-center text-xs sm:text-sm text-muted-foreground mt-4 px-4">
-          {/* No "cancel anytime" - nothing recurs, which is the better promise. */}
-          <p>Requesting is free - you pay once a viewing is confirmed. One-off payment, nothing recurring.</p>
+          <section className="flex flex-col rounded-2xl border border-primary bg-primary/5 p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <Crown className="h-4 w-4 text-primary" aria-hidden="true" />
+                Hausto Pass
+              </h3>
+              {pass?.active ? (
+                <Badge variant="secondary">{daysLeft ? `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left` : 'Current'}</Badge>
+              ) : (
+                <Badge className="bg-primary text-primary-foreground hover:bg-primary">Recommended</Badge>
+              )}
+            </div>
+            <p className="mt-3 font-serif text-3xl font-semibold tracking-tight">
+              ${PASS_PRICE_USD}
+              <span className="font-sans text-sm font-normal text-muted-foreground"> for {PASS_DAYS} days</span>
+            </p>
+            {/* No "cancel anytime" - nothing recurs, which is the better promise. */}
+            <p className="mt-1 text-xs text-muted-foreground">One-off payment, nothing recurring</p>
+            <div className="my-5 border-t border-primary/20" />
+            <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Everything in Free, plus</p>
+            <FeatureList features={PASS} accent />
+            <div className="mt-auto pt-6 space-y-3">
+              <DigestOptIn checked={digestOptIn} onChange={setDigestOptIn} />
+              <Button onClick={handleGetPass} disabled={loading} className="w-full rounded-full" size="lg">
+                {loading ? 'Processing...' : pass?.active ? `Extend by ${PASS_DAYS} days` : `Get the Pass - $${PASS_PRICE_USD}`}
+              </Button>
+            </div>
+          </section>
         </div>
       </DialogContent>
     </Dialog>

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { CalendarCheck, Languages, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -47,10 +47,12 @@ interface ListingPreviewDialogProps {
   propertyType?: PropertyType;
 }
 
+// Icons in the card's own accent, as its amenities are - a green tick here
+// read as a second design system bolted under the button.
 const OFFER_POINTS = [
-  'English-speaking coordination',
-  'Complete privacy - no spam or shared contact info',
-  'Zero back-and-forth messaging',
+  { icon: CalendarCheck, text: 'We arrange it with the agent' },
+  { icon: Languages, text: 'English-speaking coordination' },
+  { icon: ShieldCheck, text: 'Your contact details stay private' },
 ];
 
 export const ListingPreviewDialog = ({
@@ -100,43 +102,40 @@ export const ListingPreviewDialog = ({
       : apartment;
 
   // Why book through Hausto rather than calling the number on the original
-  // posting. Sits above the way out to that posting, deliberately: the offer
-  // has to be legible before the exit is.
+  // posting. It is the button's small print, so it hangs off the button with
+  // no rules of its own: what it costs first, then what we do, then the way
+  // out to that posting - the offer has to be legible before the exit is.
   const bookingOffer = onSchedule ? (
-    <>
-      <p className="text-sm font-medium">
-        Just pick a time, we&rsquo;ll arrange with the agent/owner.
+    <div className="flex flex-col items-center gap-2.5 text-center">
+      <p className="text-[12.5px] text-muted-foreground [text-wrap:balance]">
+        {/* No counts since the pricing rework: requesting is free, and
+            what is paid for is locking in a plan agents confirmed. */}
+        <span className="font-medium text-foreground">Free to request</span>
+        {pass?.active
+          ? ' - your Pass covers every viewing we confirm'
+          : ' - your first confirmed viewing is on us'}
       </p>
-      <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
-        {OFFER_POINTS.map((point) => (
-          <li key={point} className="flex items-start gap-1.5">
-            <Check className="w-3.5 h-3.5 mt-px flex-shrink-0 text-emerald-600" />
-            <span>{point}</span>
+      <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
+        {OFFER_POINTS.map(({ icon: Icon, text }) => (
+          <li key={text} className="flex items-center gap-1.5">
+            <Icon className="w-3.5 h-3.5 flex-shrink-0 text-primary" aria-hidden="true" />
+            <span>{text}</span>
           </li>
         ))}
       </ul>
-      <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-border/60 pt-2.5">
-        <span className="text-xs text-muted-foreground">
-          {/* No counts since the pricing rework: requesting is free, and
-              what is paid for is locking in a plan agents confirmed. */}
-          {pass?.active
-            ? 'Free to request - your Pass covers every viewing we confirm'
-            : 'Free to request - your first confirmed viewing is on us'}
-        </span>
-        {/* Our own page only. A crawled listing's original ad carries the
-            agent's number, and renters reach agents through a viewing
-            request (CLAUDE.md invariant 4) - so an outside link is dropped
-            here even if a caller passes one. */}
-        {source?.href?.startsWith('/') && (
-          <a
-            href={source.href}
-            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground whitespace-nowrap"
-          >
-            View on {source.name}
-          </a>
-        )}
-      </div>
-    </>
+      {/* Our own page only. A crawled listing's original ad carries the
+          agent's number, and renters reach agents through a viewing
+          request (CLAUDE.md invariant 4) - so an outside link is dropped
+          here even if a caller passes one. */}
+      {source?.href?.startsWith('/') && (
+        <a
+          href={source.href}
+          className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          View on {source.name}
+        </a>
+      )}
+    </div>
   ) : null;
 
   return (
