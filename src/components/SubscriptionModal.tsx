@@ -6,6 +6,7 @@ import { Check, Crown } from 'lucide-react';
 import { DigestOptIn } from '@/components/DigestOptIn';
 import { useAuth } from '@/hooks/useAuth';
 import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
+import { FREE_TIER_LIMITS } from '@/hooks/useUsageTracking';
 import { toast } from 'sonner';
 
 interface SubscriptionModalProps {
@@ -24,29 +25,32 @@ interface SubscriptionModalProps {
  *
  * The Pass lists only what it adds over Free. A row-for-row comparison made
  * every line say "Same" or "No" on one side, which was most of the reading
- * and none of the information. Each line leads with the thing, then the
- * detail, so a renter can read the bold words alone.
+ * and none of the information. Each line leads with the amount, in bold -
+ * "1 free confirmed viewing", "Unlimited AI credits" - so the bold words
+ * alone compare the plans, and any detail follows in muted text.
  */
 type Feature = { lead: string; rest?: string };
 
+const AI_CREDITS = FREE_TIER_LIMITS.dailyAiRequests;
+
 const FREE: Feature[] = [
-  { lead: 'Request any listing', rest: ' - we ask the agents' },
-  { lead: 'First confirmed viewing', rest: ' on us' },
-  { lead: 'AI search', rest: ', 10 a day' },
+  { lead: 'Free viewing requests', rest: ' - we ask the agents' },
+  { lead: '1 free confirmed viewing' },
+  { lead: `${AI_CREDITS} AI credits`, rest: ' a day' },
   { lead: 'Basic vibe analysis' },
 ];
 
 const PASS: Feature[] = [
-  { lead: 'Every confirmed viewing', rest: ', not just the first' },
-  { lead: 'Search for me', rest: " - a person checks Facebook groups and agents' circles" },
-  { lead: 'New listings that fit you', rest: ', on WhatsApp up to twice a week' },
-  { lead: 'Unlimited AI search' },
-  { lead: 'Deep Scan', rest: ' on any listing' },
+  { lead: 'Unlimited confirmed viewings' },
+  { lead: 'Priority search', rest: ' - our team puts your search first and sends you places that fit' },
+  { lead: 'Match alerts', rest: ' - new places that fit you, up to 2 a week on WhatsApp' },
+  { lead: 'Unlimited AI credits' },
+  { lead: 'Unlimited Deep Scans' },
 ];
 
 const reasonMessages = {
   viewings: 'Lock in every viewing the agents confirm.',
-  ai: "You've used your 10 AI searches for today.",
+  ai: `You've used today's ${AI_CREDITS} AI credits.`,
 };
 
 const FeatureList = ({ features, accent }: { features: Feature[]; accent?: boolean }) => (

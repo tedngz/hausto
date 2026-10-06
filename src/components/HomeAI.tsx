@@ -19,7 +19,7 @@ import { UserPreferences } from '@/types';
 import { useHomeAI } from '@/hooks/useHomeAI';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
-import { useUsageTracking } from '@/hooks/useUsageTracking';
+import { FREE_TIER_LIMITS, useUsageTracking } from '@/hooks/useUsageTracking';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFunction } from '@/integrations/supabase/functions-client';
 import { RequestViewingModal, type RequestSeed } from '@/components/RequestViewingModal';
@@ -682,8 +682,8 @@ export const HomeAI = ({
     // Check AI request limits for logged-in users
     if (user && !canPerformAction('ai-search')) {
       toast({
-        title: "Daily AI Search Limit Reached",
-        description: "Free tier users can make 10 AI searches per day. Upgrade to premium for unlimited searches or try again tomorrow.",
+        title: "You've used today's AI credits",
+        description: `Free accounts get ${FREE_TIER_LIMITS.dailyAiRequests} AI credits a day. The Pass makes them unlimited, or try again tomorrow.`,
         variant: "destructive"
       });
       return;

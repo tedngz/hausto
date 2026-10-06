@@ -40,7 +40,7 @@ export const UsageMeter = () => {
   const usageItems = [
     {
       icon: MessageSquare,
-      label: 'Daily AI requests',
+      label: 'Daily AI credits',
       current: todayUsage.aiSearches,
       limit: limits.dailyAiRequests,
       color: 'text-green-500',

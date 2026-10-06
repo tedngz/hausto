@@ -194,7 +194,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         ) : gate === 'SIGN_IN' || gate === 'PASS' ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Search for me</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">Priority search</DialogTitle>
               <DialogDescription>When the place you want is not in the table</DialogDescription>
             </DialogHeader>
             <p className="text-sm">
@@ -257,7 +257,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">{isSearch ? 'Search for me' : 'Request availability'}</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">{isSearch ? 'Priority search' : 'Request availability'}</DialogTitle>
               <DialogDescription>
                 {isSearch ? 'Step 1 of 2' : `${complexName} · Step 1 of 2`}
               </DialogDescription>

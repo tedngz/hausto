@@ -1208,7 +1208,9 @@ rather than a building - up to four districts - and is the Pass's: a person
 searches Facebook groups and agents' circles, the first places are promised
 within 48 hours, and every place offered is one an agent confirmed. A building
 request stays free for everyone. See "Search for me" below; everything else in
-this section holds for both.
+this section holds for both. Renters see it as **Priority search** (2026-10-07),
+the name the Pass sells it by; "Search for me" stays its name in the code and
+here.
 
 ### The form (`ConciergeCaptureModal`)
 
