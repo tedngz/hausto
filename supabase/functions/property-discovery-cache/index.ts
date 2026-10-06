@@ -6,7 +6,10 @@ const corsHeaders = {
 };
 
 const CACHE_TTL = 60 * 5; // 5 minutes for property listings
-const CACHE_KEY = 'properties:all'; // Single fixed key for simplicity
+// The only key this function touches. It needs no login, and the Redis behind
+// it also holds the AI usage counters, chat-ai's anonymous limits and
+// scrape-marketplace's cache - a caller-chosen key could read or rewrite those.
+const CACHE_KEY = 'properties:all';
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -22,7 +25,13 @@ Deno.serve(async (req) => {
     });
 
     const { action, cacheKey, properties } = await req.json();
-    const key = cacheKey || CACHE_KEY;
+    if (cacheKey !== undefined && cacheKey !== CACHE_KEY) {
+      return new Response(JSON.stringify({ error: `Only ${CACHE_KEY} is cached here` }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const key = CACHE_KEY;
 
     console.log(`[Property Discovery Cache] Action: ${action}, Key: ${key}`);
 
@@ -44,6 +53,17 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'set') {
+      // What is cached here is served to everyone who reads it, so only the
+      // service role may write it. Browsers used to fill it, which let anyone
+      // replace the list other people see.
+      const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+      if (!token || token !== Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+        return new Response(JSON.stringify({ error: 'Only the service role can write this cache' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Cache property list - limit size to prevent CPU issues
       const propsToCache = Array.isArray(properties) ? properties.slice(0, 200) : properties;
       await redis.setex(key, CACHE_TTL, JSON.stringify(propsToCache));
@@ -71,7 +91,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('[Property Discovery Cache] Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
