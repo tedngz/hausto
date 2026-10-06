@@ -48,3 +48,40 @@ export class SupabaseRealtorMessageStore implements RealtorMessageStore {
       .eq('id', id);
   }
 }
+
+/**
+ * The agent with this number, created if new. A name or agency fills a blank,
+ * never overwrites one - the first operator to learn it is as likely right as
+ * the second. Shared by RECORD_CONTACT, ADD_BUILDING_AGENT, and an agent found
+ * in a group for a search (inquiry-actions.ts).
+ */
+export async function upsertRealtor(
+  db: Supa,
+  phone: string,
+  name: string | null,
+  agency: string | null = null,
+): Promise<{ id: string } | null> {
+  let { data: realtor } = await db
+    .from('realtors').select('id, display_name, agency').eq('phone_e164', phone).maybeSingle();
+  if (!realtor) {
+    const { data, error } = await db
+      .from('realtors').insert({ phone_e164: phone, display_name: name, agency })
+      .select('id, display_name, agency').single();
+    if (error?.code === '23505') {
+      ({ data: realtor } = await db.from('realtors').select('id, display_name, agency').eq('phone_e164', phone).maybeSingle());
+    } else if (error) {
+      console.error('[realtor-store] realtor insert failed:', error);
+      return null;
+    } else {
+      realtor = data;
+    }
+  } else {
+    const patch: Record<string, unknown> = {};
+    if (!realtor.display_name && name) patch.display_name = name;
+    if (!realtor.agency && agency) patch.agency = agency;
+    if (Object.keys(patch).length) {
+      await db.from('realtors').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', realtor.id);
+    }
+  }
+  return realtor ? { id: String(realtor.id) } : null;
+}

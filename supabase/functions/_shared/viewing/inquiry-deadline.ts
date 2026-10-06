@@ -15,21 +15,24 @@ import { INQUIRY_REPLY_WITHIN_MS, type InquiryView } from '../viewing-domain.ts'
 
 export const INQUIRY_DEADLINE_JOB = 'INQUIRY_DEADLINE';
 
-/** When the reminders fire, measured from the code. Both well inside the 24 hours. */
+/**
+ * When the reminders fire: 8 and 2 hours before the promise - 16h and 22h
+ * for a building's 24, 40h and 46h for an area's 48 (Search for me).
+ */
 export const DEADLINE_STAGES = [
-  { stage: '16H', afterMs: 16 * 3_600_000 },
-  { stage: '22H', afterMs: 22 * 3_600_000 },
+  { stage: '16H', beforeMs: 8 * 3_600_000 },
+  { stage: '22H', beforeMs: 2 * 3_600_000 },
 ] as const;
 export type DeadlineStage = typeof DEADLINE_STAGES[number]['stage'];
 
 /** The `jobs` rows to enqueue when a request's code arrives. */
-export function deadlineJobs(inquiryId: string, confirmedAt: string): {
+export function deadlineJobs(inquiryId: string, confirmedAt: string, replyWithinMs = INQUIRY_REPLY_WITHIN_MS): {
   kind: string; run_after: string; payload: { inquiry_id: string; stage: DeadlineStage };
 }[] {
-  const t0 = Date.parse(confirmedAt);
+  const due = Date.parse(confirmedAt) + replyWithinMs;
   return DEADLINE_STAGES.map(s => ({
     kind: INQUIRY_DEADLINE_JOB,
-    run_after: new Date(t0 + s.afterMs).toISOString(),
+    run_after: new Date(due - s.beforeMs).toISOString(),
     payload: { inquiry_id: inquiryId, stage: s.stage },
   }));
 }
@@ -51,8 +54,9 @@ export function renderDeadlineAlert(opts: {
   confirmedAt: string;
   now: Date;
   agentsAsked: number;
+  replyWithinMs?: number;
 }): { subject: string; text: string } {
-  const due = Date.parse(opts.confirmedAt) + INQUIRY_REPLY_WITHIN_MS;
+  const due = Date.parse(opts.confirmedAt) + (opts.replyWithinMs ?? INQUIRY_REPLY_WITHIN_MS);
   const hoursLeft = Math.max(0, Math.round((due - opts.now.getTime()) / 3_600_000));
   const dueLocal = new Date(due + 7 * 3_600_000).toISOString();
   return {
@@ -60,7 +64,9 @@ export function renderDeadlineAlert(opts: {
     text: [
       `A renter asked us to check availability at ${opts.complexName} (${opts.summary}).`,
       `Nobody has replied yet. The reply is promised by ${dueLocal.slice(11, 16)} on ${dueLocal.slice(0, 10)} (HCMC),`,
-      `when their WhatsApp window also closes - after that nothing can reach them until they write again.`,
+      (opts.replyWithinMs ?? INQUIRY_REPLY_WITHIN_MS) > INQUIRY_REPLY_WITHIN_MS
+        ? `Their WhatsApp window closes 24 hours after their last message - past that only the request_update template reaches them.`
+        : `when their WhatsApp window also closes - after that nothing can reach them until they write again.`,
       '',
       opts.agentsAsked > 0
         ? `${opts.agentsAsked} agent${opts.agentsAsked === 1 ? ' has' : 's have'} been asked so far.`

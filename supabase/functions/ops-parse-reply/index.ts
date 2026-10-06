@@ -19,6 +19,7 @@ import { PARSE_MODEL, MAX_REPLY_CHARS } from '../_shared/viewing/parse-reply.ts'
 import { callParseModel, callUnitParseModel } from '../_shared/viewing/parse-call.ts';
 import { UNIT_PARSE_MODEL } from '../_shared/viewing/unit-parse.ts';
 import { briefOf } from '../_shared/viewing/offer.ts';
+import { placeOf } from '../_shared/viewing/place.ts';
 import { reduceInquiry, type InquiryEvent } from '../_shared/viewing-domain.ts';
 import { isOpenAIBudgetExhausted, logOpenAIUsage } from '../_shared/openai-usage.ts';
 
@@ -63,10 +64,11 @@ Deno.serve(async (req) => {
 
   if (inquiryId) {
     const { data: inq } = await db.from('complex_inquiries')
-      .select('id, complex_id, bedrooms_needed, budget_max_vnd').eq('id', inquiryId).maybeSingle();
+      .select('id, complex_id, area_district_codes, area_label, bedrooms_needed, budget_max_vnd').eq('id', inquiryId).maybeSingle();
     if (!inq) return json({ error: 'Unknown request' }, 404);
-    const [{ data: complex }, { data: events }] = await Promise.all([
-      db.from('complexes').select('name').eq('id', inq.complex_id).maybeSingle(),
+    // A building, or an area (Search for me).
+    const [place, { data: events }] = await Promise.all([
+      placeOf(db, inq),
       db.from('inquiry_events').select('id, inquiry_id, type, payload, actor, occurred_at').eq('inquiry_id', inquiryId),
     ]);
     if (await isOpenAIBudgetExhausted()) {
@@ -75,7 +77,7 @@ Deno.serve(async (req) => {
     const view = reduceInquiry(inquiryId, (events ?? []) as InquiryEvent[]);
     const result = await callUnitParseModel({
       reply,
-      complexName: String(complex?.name ?? 'the building'),
+      complexName: place?.name ?? 'the building',
       brief: briefOf({ bedrooms: Number(inq.bedrooms_needed), budgetMaxVnd: inq.budget_max_vnd ?? null }, view.brief),
       now: new Date(),
     }, OPENAI_API_KEY);

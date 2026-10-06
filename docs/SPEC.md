@@ -1203,6 +1203,13 @@ A request is not a viewing request. It spends no credit and is not in the
 event log: it asks a person to look, and viewings of what they find are
 requested the one way there is (invariant 8), from the listing page.
 
+**Search for me** (the pricing rework, step 5) is the same request for an area
+rather than a building - up to four districts - and is the Pass's: a person
+searches Facebook groups and agents' circles, the first places are promised
+within 48 hours, and every place offered is one an agent confirmed. A building
+request stays free for everyone. See "Search for me" below; everything else in
+this section holds for both.
+
 ### The form (`ConciergeCaptureModal`)
 
 1. **What you need** - move-in date, lease (6, 12 or 24+ months), bedrooms
@@ -1227,7 +1234,13 @@ budget_max_vnd         bigint          -- the form's ceiling
 watch_id               uuid references complex_watches -- the handshake
 renter_id              uuid references renters        -- set when the code arrives
 whatsapp_confirmed_at  timestamptz     -- the concierge's clock starts
+complex_id             uuid            -- now nullable: NULL for an area
+area_district_codes    text[]          -- Search for me: 1-4 district_code values
+area_label             text            -- "District 2 and Binh Thanh"
 ```
+
+A row is a building or an area, never both
+(`complex_inquiries_building_or_area`).
 
 `channel` has no default: a new request says what it is. `email` and the old
 `budget_usd_*` are nullable now; an EMAIL request must have an email.
@@ -1253,11 +1266,11 @@ shows it whole. Additive: `channel` (`WHATSAPP` | `EMAIL`),
 2. **The concierge replies.** From Admin Tools (`concierge-email-reply`,
    which sends by the request's channel) or by hitting Reply in Gmail
    (`concierge-email-inbound` relays it to WhatsApp). Free-form only, inside
-   the window. When it has closed nothing can reach the renter until they
-   write again: the dashboard says so and disables the reply, and a Gmail
-   reply comes back to the admin as "did not go out" with the reason. An
-   approved utility template for "we have an update" is what would close that
-   gap; none exists yet. The consecutive-outbound rule (§5) holds: two
+   the window. When it has closed nothing free-form can reach the renter until
+   they write again: the dashboard says so and disables the reply, and a Gmail
+   reply comes back to the admin as "did not go out" with the reason. The
+   `request_update` template closes that gap (S7.1c below). The
+   consecutive-outbound rule (§5) holds: two
    messages without an answer and the next is refused - so the confirmation
    plus one concierge message, until the renter writes back.
 3. **The renter answers.** When the message they answer - the one they
@@ -1292,7 +1305,7 @@ occurred_at  timestamptz
 ```
 
 `AWAITING_CODE` (form sent, no WhatsApp message) → `NEW` (code arrived; the 24
-hours start) → `SOURCING` (an agent asked, or a unit captured) → `OFFERED` (units
+hours start, or an area's 48) → `SOURCING` (an agent asked, or a unit captured) → `OFFERED` (units
 sent to the renter; S7.1b below) → `CLOSED` (one of
 `INQUIRY_CLOSE_REASONS`), reopenable. An agent's first ask stands; their latest
 answer (`HAS_UNITS | NO_UNITS | NO_REPLY`) stands. SUBMITTED is written by
@@ -1304,10 +1317,11 @@ operator steps through `performOpsAction` (invariant 10): `INQUIRY_ASK_AGENT`,
 before its code arrives. Messages stay in the thread, not the log: what was said
 is not a state.
 
-The brief: the criteria, the deadline (code + 24h), the window and
-consecutive-outbound count, the thread, the building's roster, and the listings
-on file that fit - requestable, within the brief in force (below) - with their
-agents, marked as advertised rather than available.
+The brief: the criteria, the deadline (code + 24h; + 48h for an area, read from
+`SUBMITTED {reply_within_hours}` so the reducer and the console agree), the
+window and consecutive-outbound count, the thread, the building's roster, and
+the listings on file that fit - requestable, within the brief in force (below) -
+with their agents, marked as advertised rather than available.
 
 ### Units and the offer (PLAN-v3 S7.1b)
 
@@ -1396,7 +1410,8 @@ else's - it sets `viewing_requests.inquiry_id` and writes `CLOSED
 {reason: VIEWING_REQUESTED, request_id}` if the request is still open.
 
 **Deadline.** When the code arrives, two `jobs` of kind `INQUIRY_DEADLINE` are
-enqueued, at 16 and 22 hours (`inquiry-deadline.ts`). `viewing-jobs-run` runs
+enqueued, 8 and 2 hours before the promise - at 16 and 22 hours for a building,
+40 and 46 for an area (`inquiry-deadline.ts`). `viewing-jobs-run` runs
 them: each emails the ops team (`sendIntakeAlert`, nothing about the renter)
 only if the request is still unanswered - no message of ours after the code
 other than the automatic confirmation, nothing offered, not closed - and is
@@ -1406,10 +1421,10 @@ property test.
 
 **After the window.** `INQUIRY_SEND_UPDATE` sends the `request_update` template
 ("we have an update on your request for {{2}} - reply here to see it"), only
-while the window is shut, filed on the thread so the reply routes back. The
-template is in the registry `approved: false` and not yet submitted to Meta
-(`docs/whatsapp-go-live.md`), so until then the action is refused as
-`template_not_approved`.
+while the window is shut, filed on the thread so the reply routes back. Meta
+approved it on 2026-09-30; should its live status ever change, the action is
+refused as `template_not_approved`. A search runs past the first 24 hours by
+design, so this is how its first places reach a renter who has gone quiet.
 
 ### Asking agents on Zalo (PLAN-v3 S7.2a)
 
@@ -1499,6 +1514,80 @@ how many listings they have there and citywide, when they last listed, and when
 they last replied to us - who to ask first. `BUILDING_AGENT_SOURCES` in
 `viewing-domain.ts`; the target is `ROSTER_TARGET` (3) per building.
 
+### Search for me (the pricing rework, step 5)
+
+A Pass holder who cannot find a fit in Browse or the chat asks us to look, and
+a person searches Facebook groups and agents' circles for them. It is the
+request above for an area: the same table, thread, typed steps and offer, with
+the place a set of district codes instead of a complex.
+`_shared/viewing/place.ts` is the one module that knows the difference
+(`placeOf`): the console, the emails, the capture and the offer ask it rather
+than reading `complexes`.
+
+**Where it starts.** Under a thin search - fewer than `THIN_SEARCH` (3) places -
+in Ho Chi Minh City. Below Browse's table, prefilled from its filters (districts,
+bedrooms, the dollar ceiling at 25.000 ₫ to the dollar). In the chat, `chat-ai`
+attaches a `search_for_me` block to a search turn that showed fewer, carrying the
+districts, bedrooms and budget the conversation settled on; the model cannot
+emit one (its blocks are allowlisted). Both open `ConciergeCaptureModal` with
+`search`: a district picker (up to `MAX_AREA_DISTRICTS`, 4) over the same brief.
+Signed out it asks for a sign-in; without the Pass it pitches the Pass, with the
+digest box; with it, the form.
+
+**The rules** (`_shared/viewing/inquiry-create.ts`, behind
+`complex-inquiry-create`):
+
+- A signed-in Pass holder (`hasPassCover`, read at the request), or 401
+  `sign_in_required` / 402 `pass_required`.
+- One open search per account - one confirmed and not closed, or one whose code
+  can still arrive (`CONFIRM_TTL_DAYS`) - or 409 `one_open_search`. Building
+  requests are not counted.
+- 1-4 `district_code` values, once each (`validateInquiryInput`); the label is
+  `areaLabel()`, "District 2 and Binh Thanh".
+- `SUBMITTED {area_district_codes, reply_within_hours: 48}`, which moves the
+  reducer's deadline (`InquiryView.replyWithinMs`) and the reminders. A building
+  stays at 24 hours, so the paid search is never the slower one for the same ask.
+- The handshake reads as a search - `Hi Hausto - please search <area> for me
+  (HW-XXXX)` - and the confirmation promises the first places within 48 hours,
+  each confirmed with its agent.
+
+**Worked the same way, with three differences**, on the console's Availability
+screen:
+
+- **Agents.** `ops_area_roster(codes)` lists everyone with listings in the
+  districts, those who answered us most recently first, and the screen adds
+  anyone already on the request. An agent met in a group is recorded as asked,
+  or credited with a unit, by number (`agentPhone`, `agentName`): `toE164`,
+  added to `realtors` (`upsertRealtor`), and from then on like any agent. They
+  are reached from the dedicated sourcing accounts, not the bridge's Zalo
+  account, so the console records that ask rather than sending it; an ask sent
+  through the bridge later is held to its caps like any other. The bridge's
+  draft names the area in Vietnamese ("khu vực Quận 2 và Bình Thạnh").
+- **Where a unit is.** The building or street, and which of the search's
+  districts (`invalid_district` otherwise). The row's location is
+  `<building>, <district>` for the trigger, and a unit the trigger files under
+  another district - a building named after one - is removed
+  (`wrong_district`), since the offer, the watch and the itinerary's district
+  checks would all believe it.
+- **Only confirmed units are offered**: an ad is not availability.
+  `ops_inquiry_detail()` lists what is advertised in the districts as leads,
+  each with a "fill the form" for once its agent confirms, and
+  `INQUIRY_OFFER_UNITS` refuses an uncaptured listing for an area
+  (`not_confirmed`). The offer reads "here is what we found in District 2 and
+  Binh Thanh", and says the Pass covers the viewings rather than offering the
+  free one.
+
+**Area watches.** The request's watch follows the area: `complex_id` NULL and
+`area_district_codes` / `area_label` set, under the same building-or-area check
+as the request. The Tuesday sweep matches its new listings by district code
+rather than `complex_listing_ids()`, and labels each place by its district.
+
+**People.** It is all manual - reading groups cannot be automated, so the AI
+operator does not take it over - and the 48 hours run through weekends.
+`search-for-me-rehearsal.test.ts` walks it end to end: the brief, the code,
+agents asked on Zalo and by number, units captured, one offer, the reply, and
+the viewing request it closes on.
+
 ### Complex watches
 
 The alert half. Created by a WhatsApp request; there is no separate entry
@@ -1507,7 +1596,9 @@ point.
 ```
 complex_watches
 id              uuid pk
-complex_id      uuid not null references complexes
+complex_id      uuid references complexes -- NULL for an area (Search for me)
+area_district_codes text[]                -- the area's districts, 1-4
+area_label      text                      -- "District 2 and Binh Thanh"
 code            text unique not null      -- HW-XXXX, the ref alphabet
 user_id         uuid                      -- the account that set it up, if any
 renter_id       uuid references renters   -- set when the code arrives
@@ -1541,7 +1632,8 @@ writes; admins read `complex_watches`.
   new listings at the complex (`complex_listing_ids`: name or alias in the
   title or location, the complex page's rule) created after `confirmed_at`
   that pass the intake gate (`screenCandidates`) and fit the bedrooms and
-  budget. Merged with the renter's digest picks, watches first, three at most,
+  budget; for an area watch, new listings in its districts. Merged with the
+  renter's digest picks, watches first, three at most,
   nothing already in `alert_items`. One message per renter per ISO week
   (`DIGEST:<week>`): the `weekly_digest` template with the complex name as
   `{{3}}`, or free-form with the places in it if their window is open.

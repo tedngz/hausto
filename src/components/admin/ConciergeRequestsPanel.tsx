@@ -24,7 +24,9 @@ interface MessageRow {
 
 interface InquiryRow {
   id: string;
-  complex_id: string;
+  /** Null for Search for me, which asks about an area: `area_label` says which. */
+  complex_id: string | null;
+  area_label: string | null;
   user_id: string | null;
   full_name: string;
   email: string | null;
@@ -342,7 +344,7 @@ export const ConciergeRequestsPanel = () => {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium">
-                        {row.complexes?.name ?? 'Unknown complex'}
+                        {row.complexes?.name ?? (row.area_label ? `Search for me: ${row.area_label}` : 'Unknown complex')}
                         {row.complexes?.slug && (
                           <a
                             href={`/complexes/${row.complexes.slug}`}

@@ -153,12 +153,14 @@ export type Database = {
         Row: {
           additional_notes: string | null
           admin_notes: string | null
+          area_district_codes: string[] | null
+          area_label: string | null
           bedrooms_needed: number
           budget_max_vnd: number | null
           budget_usd_max: number | null
           budget_usd_min: number | null
           channel: string
-          complex_id: string
+          complex_id: string | null
           created_at: string
           email: string | null
           full_name: string
@@ -181,12 +183,14 @@ export type Database = {
         Insert: {
           additional_notes?: string | null
           admin_notes?: string | null
+          area_district_codes?: string[] | null
+          area_label?: string | null
           bedrooms_needed: number
           budget_max_vnd?: number | null
           budget_usd_max?: number | null
           budget_usd_min?: number | null
           channel: string
-          complex_id: string
+          complex_id?: string | null
           created_at?: string
           email?: string | null
           full_name: string
@@ -209,12 +213,14 @@ export type Database = {
         Update: {
           additional_notes?: string | null
           admin_notes?: string | null
+          area_district_codes?: string[] | null
+          area_label?: string | null
           bedrooms_needed?: number
           budget_max_vnd?: number | null
           budget_usd_max?: number | null
           budget_usd_min?: number | null
           channel?: string
-          complex_id?: string
+          complex_id?: string | null
           created_at?: string
           email?: string | null
           full_name?: string

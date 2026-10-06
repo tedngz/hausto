@@ -19,6 +19,7 @@ import {
 import { prepareForStorage } from '../_shared/mirror-image.ts';
 import { renderAgentReplyAlert } from '../_shared/viewing/inquiry-deadline.ts';
 import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
+import { placeOf } from '../_shared/viewing/place.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -91,13 +92,13 @@ async function alertAgentReplies(
     const photoLine = g.photos ? [`(${g.photos} photo${g.photos === 1 ? '' : 's'})`] : [];
     const r = { ...g, text: [...g.texts, ...photoLine].join('\n') || '(a message with nothing we could read)' };
     try {
-      const { data: inq } = await db.from('complex_inquiries').select('complex_id').eq('id', r.inquiryId).maybeSingle();
-      const { data: complex } = inq
-        ? await db.from('complexes').select('name').eq('id', inq.complex_id).maybeSingle()
-        : { data: null };
+      const { data: inq } = await db.from('complex_inquiries')
+        .select('complex_id, area_district_codes, area_label').eq('id', r.inquiryId).maybeSingle();
+      // A building, or an area (Search for me).
+      const place = inq ? await placeOf(db, inq) : null;
       const { data: agent } = await db.from('realtors').select('display_name').eq('phone_e164', r.fromPhone).maybeSingle();
       await sendIntakeAlert(db, renderAgentReplyAlert({
-        complexName: complex?.name ?? 'a building', agentName: agent?.display_name ?? null, text: r.text,
+        complexName: place?.name ?? 'a building', agentName: agent?.display_name ?? null, text: r.text,
       }), Deno.env.get('RESEND_API_KEY'));
     } catch (e) {
       console.warn('[zalo-bridge] agent reply alert failed:', (e as Error).message);

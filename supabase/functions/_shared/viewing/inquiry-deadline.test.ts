@@ -73,7 +73,16 @@ describe('no request passes 24 hours unanswered without a reminder (property)', 
   });
 
   it('keeps every stage inside the 24 hours', () => {
-    for (const s of DEADLINE_STAGES) expect(s.afterMs).toBeLessThan(INQUIRY_REPLY_WITHIN_MS);
+    for (const s of DEADLINE_STAGES) {
+      expect(s.beforeMs).toBeGreaterThan(0);
+      expect(s.beforeMs).toBeLessThan(INQUIRY_REPLY_WITHIN_MS);
+    }
+    // At 16h and 22h after the code, as before Search for me.
+    expect(deadlineJobs('i', iso(T0)).map(j => Date.parse(j.run_after) - T0)).toEqual([16 * H, 22 * H]);
+  });
+
+  it('moves the stages out with an area search, promised in 48 hours', () => {
+    expect(deadlineJobs('i', iso(T0), 48 * H).map(j => Date.parse(j.run_after) - T0)).toEqual([40 * H, 46 * H]);
   });
 });
 

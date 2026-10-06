@@ -39,6 +39,12 @@ export interface UnitInput {
   photos: string[];
   /** For the operator and the log; never shown to the renter. */
   note: string | null;
+  /**
+   * Search for me: where an area's unit is - the building or street, and one
+   * of the area's district codes. A building's unit is at the building.
+   */
+  building?: string | null;
+  districtCode?: string | null;
 }
 
 export type UnitValidation = { ok: true; value: UnitInput } | { ok: false; error: string };
@@ -90,6 +96,8 @@ export function validateUnit(raw: any, photoPath: string): UnitValidation {
       petsOk: typeof raw?.petsOk === 'boolean' ? raw.petsOk : null,
       availableFrom,
       note: str(raw?.note).slice(0, 500) || null,
+      building: str(raw?.building).slice(0, 80) || null,
+      districtCode: /^[A-Z][A-Z0-9_]{1,19}$/.test(str(raw?.districtCode)) ? str(raw?.districtCode) : null,
     },
   };
 }
@@ -192,10 +200,16 @@ export function renderOffer(opts: {
 
 /** One building's part of an offer. Its links carry its own request. */
 export interface OfferSection {
+  /** The building's name, or a search's area ("District 2 and Binh Thanh"). */
   complexName: string;
   inquiryId: string;
   units: OfferUnit[];
+  /** A search (Search for me) found these in an area, not at a building. */
+  kind?: 'BUILDING' | 'AREA';
 }
+
+/** "at Empire City", "in District 2 and Binh Thanh". */
+const placed = (s: OfferSection) => `${s.kind === 'AREA' ? 'in' : 'at'} ${s.complexName}`;
 
 /** Units in one message covering several of a renter's buildings. */
 export const MAX_COMBINED_UNITS = 8;
@@ -216,18 +230,24 @@ export function renderOfferSections(opts: {
   const name = opts.firstName?.trim() || 'there';
   const single = opts.sections.length === 1;
   const hello = single
-    ? `Hi ${name}, here is what we found at ${opts.sections[0].complexName}:`
+    ? `Hi ${name}, here is what we found ${placed(opts.sections[0])}:`
     : `Hi ${name}, here is what we found:`;
   let n = 0;
   const blocks = opts.sections.flatMap(section => {
     const units = section.units.map(u => unitBlock(u, ++n, section.inquiryId));
-    return single ? units : [`At ${section.complexName}:`, ...units];
+    const heading = placed(section);
+    return single ? units : [`${heading.charAt(0).toUpperCase()}${heading.slice(1)}:`, ...units];
   });
+  // A search is the Pass's, so its renter has the Pass: the free viewing is
+  // not theirs to be told about.
+  const searchOnly = opts.sections.every(s => s.kind === 'AREA');
   return [
     hello,
     ...(opts.message?.trim() ? [opts.message.trim()] : []),
     ...blocks,
-    'To see any of them, open it and tap Request viewing - your first viewing is free. Or reply here with a question.',
+    searchOnly
+      ? 'To see any of them, open it and tap Request viewing - your Pass covers the viewings. Or reply here with a question.'
+      : 'To see any of them, open it and tap Request viewing - your first viewing is free. Or reply here with a question.',
   ].join('\n\n');
 }
 

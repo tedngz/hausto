@@ -58,6 +58,7 @@ import { validateViewingDetails } from './viewing-day.ts';
 import { settlementFor, approvalOf, type ProposalRow, type DoneAction } from './proposals.ts';
 import { AUTONOMOUS_ACTIONS } from './autonomy.ts';
 import { REALTOR_MEDIA, type RealtorChannel, type RealtorMedium } from '../realtor/channel.ts';
+import { upsertRealtor } from '../realtor/store.ts';
 import {
   sendToRealtor,
   recordRealtorReply,
@@ -643,50 +644,6 @@ async function dispatch(
 }
 
 /**
- * A working number for this item's broker (gap 4 in the AI operator plan).
- *
- * "Find a working number" was a to-do nothing could complete: the console had
- * no way to save what the operator found. One resolution also enriches every
- * future listing from the same broker (SPEC §1) - the listing row and, where
- * the source gave us one, the broker's source identity.
- */
-/**
- * The agent with this number, created if new. A name or agency fills a blank,
- * never overwrites one - the first operator to learn it is as likely right as
- * the second. Shared by RECORD_CONTACT and ADD_BUILDING_AGENT.
- */
-async function upsertRealtor(
-  db: Supa,
-  phone: string,
-  name: string | null,
-  agency: string | null = null,
-): Promise<{ id: string } | null> {
-  let { data: realtor } = await db
-    .from('realtors').select('id, display_name, agency').eq('phone_e164', phone).maybeSingle();
-  if (!realtor) {
-    const { data, error } = await db
-      .from('realtors').insert({ phone_e164: phone, display_name: name, agency })
-      .select('id, display_name, agency').single();
-    if (error?.code === '23505') {
-      ({ data: realtor } = await db.from('realtors').select('id, display_name, agency').eq('phone_e164', phone).maybeSingle());
-    } else if (error) {
-      console.error('[ops-actions] realtor insert failed:', error);
-      return null;
-    } else {
-      realtor = data;
-    }
-  } else {
-    const patch: Record<string, unknown> = {};
-    if (!realtor.display_name && name) patch.display_name = name;
-    if (!realtor.agency && agency) patch.agency = agency;
-    if (Object.keys(patch).length) {
-      await db.from('realtors').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', realtor.id);
-    }
-  }
-  return realtor ? { id: String(realtor.id) } : null;
-}
-
-/**
  * An agent for a building (PLAN-v3 S7.0). Not an event: a roster entry is a
  * contact, not a state of any request, and removing one is allowed.
  * Re-adding the same agent updates the source and note rather than failing.
@@ -723,6 +680,14 @@ async function removeBuildingAgent(db: Supa, input: Record<string, unknown>): Pr
   return done({ recorded: 'BUILDING_AGENT_REMOVED' });
 }
 
+/**
+ * A working number for this item's broker (gap 4 in the AI operator plan).
+ *
+ * "Find a working number" was a to-do nothing could complete: the console had
+ * no way to save what the operator found. One resolution also enriches every
+ * future listing from the same broker (SPEC §1) - the listing row and, where
+ * the source gave us one, the broker's source identity.
+ */
 async function recordContact(db: Supa, item: Item, actor: string, input: Record<string, unknown>): Promise<OpsResult> {
   const phone = toE164(str(input.phone));
   if (!phone) return refuse(400, 'invalid_phone', `Not a Vietnamese mobile number: ${str(input.phone) || '(empty)'}`);

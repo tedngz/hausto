@@ -484,3 +484,8 @@ WhatsApp "yes" alike:
   (`LOCK_IN_CHECKOUT_OPENED`), and `_shared/polar-pass.ts` locks the plan in
   where the purchase is recorded, on both paths. The number to watch: lock-ins
   with no Pass and no free viewing - always zero.
+
+Search for me - an availability request for an area rather than a building
+(SPEC §11) - is the Pass's too, read the same way (`hasPassCover`) when the
+request is made, one open search per account. A building request stays free
+for everyone; it is what fills the agent roster.

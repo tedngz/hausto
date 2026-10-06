@@ -84,6 +84,17 @@ describe('reduceInquiry', () => {
     expect(inquiryDeadline(reduceInquiry('inq-1', [ev('CONFIRMED', T(2))]))).toBe(new Date(Date.UTC(2026, 8, 30, 2)).toISOString());
     expect(inquiryDeadline(reduceInquiry('inq-1', []))).toBeNull();
   });
+
+  it('holds a search to the 48 hours its SUBMITTED promised, whatever order the log arrives in', () => {
+    const events = [ev('SUBMITTED', T(1), { area_district_codes: ['D2'], reply_within_hours: 48 }), ev('CONFIRMED', T(2))];
+    const due = new Date(Date.UTC(2026, 9, 1, 2)).toISOString();
+    expect(inquiryDeadline(reduceInquiry('inq-1', events))).toBe(due);
+    expect(inquiryDeadline(reduceInquiry('inq-1', [...events].reverse()))).toBe(due);
+    // A promise that is not a number of hours keeps the building's 24.
+    for (const bad of ['48', 0, -5, null]) {
+      expect(reduceInquiry('inq-1', [ev('SUBMITTED', T(1), { reply_within_hours: bad })]).replyWithinMs).toBe(24 * 3_600_000);
+    }
+  });
 });
 
 describe('reduceInquiry - units (S7.1b)', () => {
