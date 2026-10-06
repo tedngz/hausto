@@ -4,7 +4,8 @@
 // a job that fails should be retried from its row rather than lost with the
 // pass that produced it.
 //
-// **It only runs the renter-facing sends.** NUDGE_REALTOR, RESOLVE_REALTOR,
+// **It only runs the renter-facing sends**, and one rule: LOCK_IN_DEADLINE,
+// which cancels a plan nobody locked in (SPEC §9). NUDGE_REALTOR, RESOLVE_REALTOR,
 // CONFIRM_REALTOR and RELEASE_REALTOR are enqueued by the drain and by ops
 // actions, and they stay pending until a
 // person does them - the realtor channel is Zalo and Zalo is a human this
@@ -21,6 +22,10 @@ import { INQUIRY_DEADLINE_JOB } from '../_shared/viewing/inquiry-deadline.ts';
 import { runInquiryDeadline } from '../_shared/viewing/concierge.ts';
 import { sendIntakeAlert } from '../_shared/viewing/ops-alert.ts';
 import { sendViewingDay } from '../_shared/viewing/viewing-day.ts';
+import { LOCK_IN_DEADLINE_JOB, runLockInDeadline } from '../_shared/viewing/lock-in-deadline.ts';
+import { SupabaseMessageStore } from '../_shared/whatsapp/store.ts';
+import { realtorChannelFromEnv } from '../_shared/realtor/channel.ts';
+import { SupabaseRealtorMessageStore } from '../_shared/realtor/store.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +36,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 /** Kinds this runner owns. Everything else is somebody's to-do, not a task. */
-const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_DAY', INQUIRY_DEADLINE_JOB];
+const AUTOMATED_KINDS = ['HOLDING_UPDATE', 'VIEWING_DAY', INQUIRY_DEADLINE_JOB, LOCK_IN_DEADLINE_JOB];
 
 /** A viewing-day refusal no retry can change: done, with the reason on the row. */
 const VIEWING_DAY_FINAL = new Set(['unknown_request', 'not_due', 'too_many_consecutive', 'template_unavailable']);
@@ -120,6 +125,25 @@ Deno.serve(async (req) => {
     }
 
     try {
+      // A plan not locked in by its deadline (SPEC §9): cancelled by rule,
+      // read again here so a lock-in or a checkout since the drain wins.
+      // Never retried into a second cancel - the reducer would refuse it.
+      if (job.kind === LOCK_IN_DEADLINE_JOB) {
+        const env = Deno.env.toObject();
+        const outcome = await runLockInDeadline(db, {
+          whatsapp: adapter,
+          messages: new SupabaseMessageStore(db),
+          realtorChannel: realtorChannelFromEnv(env),
+          realtorMessages: new SupabaseRealtorMessageStore(db),
+        }, requestId, Date.now());
+        await db.from('jobs').update({
+          completed_at: new Date().toISOString(),
+          last_error: outcome === 'CANCELLED' ? null : outcome,
+        }).eq('id', job.id);
+        if (outcome === 'CANCELLED') sent++; else skipped++;
+        continue;
+      }
+
       // The morning of a kept viewing (viewing-day.ts): one message for the
       // renter's whole day, whichever of their requests' jobs gets here first.
       if (job.kind === 'VIEWING_DAY') {

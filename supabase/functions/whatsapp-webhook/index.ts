@@ -153,6 +153,7 @@ Deno.serve(async (req) => {
         watch: outcome.watch,
         alertMessageId: outcome.alertMessageId,
         inquiryId: outcome.inquiryId,
+        lockIn: outcome.lockIn,
       });
 
       if (action.kind === 'NONE') {

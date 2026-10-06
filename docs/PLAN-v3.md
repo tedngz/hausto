@@ -492,7 +492,9 @@ capture form demands what intake checks); a renter who goes quiet (close after
 7 days, alerts run to the watch's end); weekends with one person (the deadline
 jobs help, but "24 hours" needs someone on call or a different promise).
 
-**Charging:** the request stays free; viewing credits are spent as now. The
+**Charging:** the request stays free. Since the pricing rework (2026-10-06,
+SPEC §9) so is every viewing request: the renter pays to lock in a plan agents
+confirmed - the first viewing on us, then the Pass. The
 natural revenue is agent-side - HCMC agents commonly pay a referral share of the
 landlord's commission on a signed lease - and needs only the `CLOSE` reason
 "lease signed" to track. No new payment surface (CLAUDE.md).

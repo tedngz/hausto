@@ -1,10 +1,12 @@
 // Request intake. The renter surface's one write into the viewing domain.
 //
-// Signed in, as of the Fast-Track retirement. It was public - a renter had no
-// Supabase session and there was no cookie before the first request - but a
-// request now spends viewing credits, and credits belong to an account. An
-// anonymous caller cannot be charged, and an endpoint that writes coordinator
-// work without charging anyone is one curl away from being expensive.
+// Signed in. Requests are free since the pricing rework (SPEC §9) - the renter
+// pays, if at all, when they lock a confirmed plan in - but each one is real
+// operator hours and agents' slots, so the limits that keep that bounded
+// belong to an account: one request being worked at a time, Pass holders
+// included, and the Pass to request again after two plans lapsed unlocked.
+// An endpoint that writes coordinator work for anonymous callers is one curl
+// away from being expensive.
 //
 // Still rate-limited by IP on top of that, still accepts only ids and chips,
 // and still reads every price from the database rather than from the caller -
@@ -31,7 +33,10 @@ import {
   type ShortlistCandidate,
 } from '../_shared/viewing/intake.ts';
 import { renderIntakeAlert, sendIntakeAlert, missingContactsFor } from '../_shared/viewing/ops-alert.ts';
-import { findJoinableRequest } from '../_shared/viewing/open-request.ts';
+import { countLapsedPlans, findJoinableRequest, findOpenRequests } from '../_shared/viewing/open-request.ts';
+import { hasPassCover } from '../_shared/viewing/lock-in-run.ts';
+import { MAX_LAPSED_WITHOUT_PASS } from '../_shared/viewing/intake.ts';
+import { PASS_DAYS, PASS_PRICE_USD } from '../_shared/viewing/lock-in.ts';
 import { linkViewingToInquiry } from '../_shared/viewing/concierge.ts';
 
 const corsHeaders = {
@@ -64,13 +69,10 @@ const json = (body: unknown, status = 200) =>
 // deno-lint-ignore no-explicit-any
 type Supa = any;
 
-const creditsMessage = (n: number) =>
-  `This request covers ${n} place${n === 1 ? '' : 's'} and needs ${n} viewing credit${n === 1 ? '' : 's'}.`;
-
 /**
- * Tell the operators, after the charge and without waiting on it: the renter
- * gets their answer now, and an email that fails must not unmake a request
- * they have paid for. waitUntil keeps the isolate alive for the send.
+ * Tell the operators, once the request is whole and without waiting on it:
+ * the renter gets their answer now, and an email that fails must not unmake
+ * their request. waitUntil keeps the isolate alive for the send.
  *
  * Places with no agent number are flagged in it, with their links, because
  * they are the ones nobody can start on until a person finds the number.
@@ -99,8 +101,8 @@ function alertOps(
  * request - the renter was shown "adding to HV-4KX2" and should not be handed
  * a different ref without being asked for the times that go with it.
  *
- * Same write order as a new request, for the same reasons: rows, then the log,
- * then the charge last; undo on failure. Undo here is deleting the new items,
+ * Same write order as a new request, for the same reasons: rows, then the
+ * log; undo on failure. Undo here is deleting the new items,
  * which takes their events with them (ON DELETE CASCADE) and leaves the rest of
  * the request exactly as it was.
  */
@@ -155,18 +157,6 @@ async function joinOpenRequest(
     }, 422);
   }
 
-  const { data: affordable, error: quotaErr } = await db.rpc('can_create_fast_track_request', {
-    _user_id: userId,
-    _needed: eligible.length,
-  });
-  if (quotaErr) {
-    console.error('[viewing-request-create] quota check failed:', quotaErr);
-    return json({ error: 'quota_check_failed' }, 500);
-  }
-  if (!affordable) {
-    return json({ error: 'insufficient_credits', message: creditsMessage(eligible.length), needed: eligible.length }, 402);
-  }
-
   const { data: items, error: itemsErr } = await db
     .from('request_items')
     .insert(eligible.map((c, i) => ({
@@ -196,17 +186,6 @@ async function joinOpenRequest(
     console.error('[viewing-request-create] join event insert failed:', eventsErr);
     await undo();
     return json({ error: 'events_failed' }, 500);
-  }
-
-  const { error: chargeErr } = await db.rpc('consume_viewing_credits', {
-    _user_id: userId,
-    _needed: items.length,
-    _request_id: open.requestId,
-  });
-  if (chargeErr) {
-    console.error('[viewing-request-create] join charge failed:', chargeErr);
-    await undo();
-    return json({ error: 'insufficient_credits', message: creditsMessage(items.length), needed: items.length }, 402);
   }
 
   const placeCount = open.listingIds.length + items.length;
@@ -315,29 +294,44 @@ Deno.serve(async (req) => {
     }, 422);
   }
 
-  // ── Can they afford it? ───────────────────────────────────────────────────
-  // One credit per listing: four places in one request costs the same as four
-  // separate requests, because it is the same four hours of a coordinator's
-  // day. Asked before anything is written, so the common refusal costs no rows.
-  const { data: affordable, error: quotaErr } = await db.rpc('can_create_fast_track_request', {
-    _user_id: user.id,
-    _needed: eligible.length,
-  });
-  if (quotaErr) {
-    console.error('[viewing-request-create] quota check failed:', quotaErr);
-    return json({ error: 'quota_check_failed' }, 500);
+  // ── May they open one? ────────────────────────────────────────────────────
+  // Requests are free, so these are the limits on operator hours (SPEC §1).
+  // Asked before anything is written, so the common refusal costs no rows.
+  // One being worked at a time, for everyone: a place asked for meanwhile
+  // joins it while its agents are being asked (joinRef, above), otherwise it
+  // waits for the plan to be locked in or to lapse.
+  let blocking: { ref: string } | null;
+  let lapsed: number;
+  let hasPass: boolean;
+  try {
+    [{ blocking }, lapsed, hasPass] = await Promise.all([
+      findOpenRequests(db, user.id, hcmcDate(new Date())),
+      countLapsedPlans(db, user.id),
+      hasPassCover(db, user.id),
+    ]);
+  } catch (e) {
+    console.error('[viewing-request-create] open request check failed:', e);
+    return json({ error: 'lookup_failed' }, 500);
   }
-  if (!affordable) {
+  if (blocking) {
     return json({
-      error: 'insufficient_credits',
-      message: creditsMessage(eligible.length),
-      needed: eligible.length,
+      error: 'one_open_request',
+      message: `We are still working on ${blocking.ref}. Once you lock its plan in, or it lapses, you can request more places.`,
+      ref: blocking.ref,
+    }, 409);
+  }
+  // Agents held slots for each lapsed plan and were told to stand down.
+  if (lapsed >= MAX_LAPSED_WITHOUT_PASS && !hasPass) {
+    return json({
+      error: 'pass_required',
+      message: `${lapsed} of your plans lapsed without being locked in, so the next request needs the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`,
     }, 402);
   }
 
   // ── The renter ────────────────────────────────────────────────────────────
-  // user_id links the phone-keyed renter row to the account being charged. It
-  // is how the hub answers "my requests" and how the ledger attributes items.
+  // user_id links the phone-keyed renter row to the account that locks plans
+  // in and that the request limits count against. It is how the hub answers
+  // "my requests" and how the lock-in page knows whose plan it is.
   const { data: renter, error: renterErr } = await db
     .from('renters')
     .upsert(
@@ -424,33 +418,9 @@ Deno.serve(async (req) => {
     return json({ error: 'events_failed' }, 500);
   }
 
-  // ── The charge ────────────────────────────────────────────────────────────
-  // Last, and only once the request is whole. One credit per item.
-  //
-  // Charged after the write rather than before it because the windowed
-  // allowance is derived by counting request_items - it has to see them to
-  // answer. The affordability check above is what keeps the common refusal
-  // cheap; this is what makes it true.
-  //
-  // If it raises, the request is removed. A request nobody paid for is worse
-  // than no request: it queues real work for an operator against an account
-  // with nothing left to spend. Nothing has been sent at this point - intake
-  // writes no message - so there is no half-told renter to worry about.
-  const { error: chargeErr } = await db.rpc('consume_viewing_credits', {
-    _user_id: user.id,
-    _needed: items.length,
-    _request_id: request.id,
-  });
-  if (chargeErr) {
-    console.error('[viewing-request-create] charge failed:', chargeErr);
-    await db.from('viewing_requests').delete().eq('id', request.id);
-    return json({
-      error: 'insufficient_credits',
-      message: creditsMessage(items.length),
-      needed: items.length,
-    }, 402);
-  }
-
+  // No charge. Since the pricing rework a request is free and the renter pays,
+  // if at all, when they lock in a plan agents have confirmed (SPEC §9) - so a
+  // place already rented costs them nothing.
   alertOps(db, {
     ref: request.ref,
     placeCount: items.length,

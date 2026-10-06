@@ -10,18 +10,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Loader2, MapPin, Scale, Sparkles, X } from 'lucide-react';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatches } from '@/hooks/useMatches';
 import { useBrowseListings, type BrowseRow } from '@/hooks/useBrowseListings';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
-import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
+import { RequestViewingModal } from '@/components/RequestViewingModal';
+import { MAX_ITEMS } from '../../supabase/functions/_shared/viewing/intake.ts';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
 import { VibeMatchPopover } from '@/components/VibeMatchPopover';
-import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
 import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { calculateVibeScore, getVibeAttributeMatch } from '@/utils/vibeScoring';
@@ -179,20 +177,18 @@ export const BrowseTable = ({
   const [sortKey, setSortKey] = useState<SortKey>('last_verified_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  // Compare + fast-track + preview
+  // Compare + request + preview
   const [selected, setSelected] = useState<BrowseRow[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  /** Listings handed to the schedule modal - the compare selection, or one previewed listing */
+  /** Listings handed to the request modal - the compare selection, or one previewed listing */
   const [scheduleTargets, setScheduleTargets] = useState<BrowseRow[]>([]);
   // In-place chat: "Ask Hausto" opens the thread over browse, no navigation.
   const [preview, setPreview] = useState<BrowseRow | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [liking, setLiking] = useState(false);
-  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const { user } = useAuth();
   const { createMatch } = useMatches();
-  const { quota, refetchQuota } = useViewingQuota();
 
   // Saved vibe preferences (from the onboarding quiz) power the compare
   // dialog's match scores; absent for users who skipped the quiz. Read through
@@ -270,85 +266,21 @@ export const BrowseTable = ({
     }
   };
 
-  const openFastTrack = (targets: BrowseRow[]) => {
+  // One way to ask for a viewing (invariant 8): the request modal, with every
+  // place selected. Requests are free - nothing to check before it opens - and
+  // one day of viewings holds five places.
+  const openRequest = (targets: BrowseRow[]) => {
     if (targets.length === 0) return;
     if (!user) {
       navigate('/auth', { state: { returnTo } });
       return;
     }
-    // Free tier gets one coordination on the house; after that (and after a
-    // premium cycle runs out) the upgrade path takes over.
-    if (!quota) {
-      toast.info('Checking your viewing allowance - one moment.');
-      return;
-    }
-    if (!quota.canBook) {
-      const block = describeViewingBlock(quota);
-      if (block.showPaywall) {
-        setSubscriptionOpen(true);
-      } else {
-        toast.info(block.title, { description: block.description });
-      }
+    if (targets.length > MAX_ITEMS) {
+      toast.info(`Pick up to ${MAX_ITEMS} places - one day of viewings.`);
       return;
     }
     setScheduleTargets(targets);
     setScheduleOpen(true);
-  };
-
-  const submitFastTrack = async (scheduleData: ViewingScheduleData) => {
-    if (!user) return;
-    try {
-      // Browse requests have no chat conversation or matched realtor yet -
-      // ops picks them up from the admin queue and coordinates directly.
-      const { error: insertError } = await supabase.from('fast_track_requests').insert({
-        conversation_id: null,
-        realtor_id: null,
-        renter_id: user.id,
-        property_ids: scheduleData.selectedPropertyIds,
-        preferred_dates: scheduleData.dates.map((d) => format(d, 'yyyy-MM-dd')),
-        preferred_times: scheduleData.preferredTimes,
-        special_requirements: scheduleData.specialRequirements || null,
-        status: 'pending',
-        source: 'browse',
-      } as any);
-      if (insertError) throw insertError;
-
-      // Notification is best-effort; the request row is the source of truth.
-      try {
-        const { data: profile } = await supabase
-          .from('profiles').select('name, email').eq('id', user.id).single();
-        const chosen = scheduleTargets.filter((r) => scheduleData.selectedPropertyIds.includes(r.id));
-        await supabase.functions.invoke('notify-fast-track-request', {
-          body: {
-            renterName: profile?.name || 'User',
-            renterEmail: profile?.email || user.email || '',
-            preferredDates: scheduleData.dates.map((d) => format(d, 'MMM dd, yyyy')),
-            preferredTimes: scheduleData.preferredTimes,
-            specialRequirements: scheduleData.specialRequirements || '',
-            properties: chosen.map((r) => ({
-              id: r.id, title: r.title, location: r.location,
-              price: r.price_vnd || 0, imageUrl: r.images?.[0] || '',
-            })),
-            conversationId: null,
-          },
-        });
-      } catch (e) {
-        console.error('Fast-track notification failed:', e);
-      }
-
-      refetchQuota();
-      setScheduleOpen(false);
-      setPreview(null);
-      // Drop only what was actually booked so an in-progress compare survives a
-      // single-listing request made from the preview card.
-      setSelected((cur) => cur.filter((r) => !scheduleData.selectedPropertyIds.includes(r.id)));
-      toast.success('Viewing request sent', {
-        description: "We'll confirm availability with the agents and send you a schedule.",
-      });
-    } catch (e) {
-      console.error('Fast-track request failed:', e);
-      toast.error('Could not send the request. Please try again.');
-    }
   };
 
   const filtered = useMemo(() => {
@@ -668,7 +600,7 @@ export const BrowseTable = ({
           <Button size="sm" variant="secondary" className="rounded-full h-7 text-xs sm:text-sm px-2 sm:px-3 shrink-0" disabled={selected.length < 2} onClick={openCompare}>
             Compare
           </Button>
-          <Button size="sm" className="rounded-full h-7 text-xs sm:text-sm px-2 sm:px-3 shrink-0" onClick={() => openFastTrack(selected)}>
+          <Button size="sm" className="rounded-full h-7 text-xs sm:text-sm px-2 sm:px-3 shrink-0" onClick={() => openRequest(selected)}>
             <CalendarCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5 shrink-0" />
             <span className="hidden sm:inline">Request viewings</span>
             <span className="sm:hidden">Viewings</span>
@@ -726,7 +658,7 @@ export const BrowseTable = ({
             scoreContext="preferences"
             liked={!!preview && likedIds.has(preview.id)}
             onLike={preview ? () => handleLike(preview) : undefined}
-            onSchedule={preview ? () => openFastTrack([preview]) : undefined}
+            onSchedule={preview ? () => openRequest([preview]) : undefined}
             source={preview ? { name: sourceName, href: isHausto ? `/property/${preview.id}` : null } : undefined}
             // Browse mixes both ledgers: a Hausto listing is a properties row,
             // everything else came from the crawler.
@@ -735,16 +667,10 @@ export const BrowseTable = ({
         );
       })()}
 
-      <ViewingScheduleModal
-        isOpen={scheduleOpen}
-        onClose={() => setScheduleOpen(false)}
-        onSubmit={submitFastTrack}
-        matchedProperties={scheduleTargets.map((r) => ({
-          id: r.id, title: r.title, images: r.images,
-          location: r.location, price: r.price_vnd || undefined,
-        }))}
-        initialSelectedIds={scheduleTargets.map((r) => r.id)}
-        onPropertyClick={(id) => navigate(`/property/${id}`)}
+      <RequestViewingModal
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        seeds={scheduleTargets.map((r) => ({ listingId: r.id, title: r.title, imageUrl: r.images?.[0] ?? null }))}
       />
 
       {/* Softens the table behind the comparison without reaching the chat -
@@ -837,11 +763,6 @@ export const BrowseTable = ({
       {/* Opens over browse from the preview card's "Ask Hausto" - the renter
           keeps their filters, scroll position and shortlist. */}
 
-      <SubscriptionModal
-        isOpen={subscriptionOpen}
-        onClose={() => setSubscriptionOpen(false)}
-        reason={quota?.trialUsed ? 'viewings' : undefined}
-      />
     </div>
   );
 };

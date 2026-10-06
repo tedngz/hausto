@@ -333,6 +333,8 @@ export interface JoinCandidate {
   /** Derived state (viewing-domain `RequestState`). */
   state: string;
   delivered: boolean;
+  /** Where its plan stands (lock-in.ts `LockInStatus`), once it has one. */
+  lockIn?: string;
 }
 
 /**
@@ -347,10 +349,7 @@ export interface JoinCandidate {
  * and only while at least one of its windows is still offerable under
  * `MIN_LEAD_DAYS`. The new agent is asked about the request's windows, not
  * fresh ones, so a request whose times are all tomorrow or earlier has nothing
- * left to offer the place joining it. That also keeps a join inside the
- * 30-day entitlement window, which counts listings by the request's
- * `created_at`: windows are at most `MAX_DAYS_AHEAD` out, so an offerable
- * request is at most two weeks old.
+ * left to offer the place joining it.
  *
  * The most recent wins if there is more than one.
  */
@@ -363,6 +362,43 @@ export function pickJoinable(candidates: JoinCandidate[], today: string): JoinCa
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return open[0] ?? null;
 }
+
+// ── One request at a time ───────────────────────────────────────────────────
+// Requests are free since the pricing rework (SPEC §1, §9), and each one is
+// real hours of an operator's day and a slot in agents' diaries. So every
+// renter - Pass holders included, or $25 buys unlimited operator hours - has
+// one request being worked at a time. A place asked for meanwhile joins it
+// while its agents are still being asked (pickJoinable); otherwise it waits.
+
+/**
+ * Is this request still being worked - so a new one must wait?
+ *
+ * Before the plan: while its agents are being asked and one of its windows is
+ * still ahead. A request whose windows have all gone is stuck, not worked, and
+ * must not lock its renter out until a person notices. After the plan: while
+ * it can still be locked in, or a payment for it is going through. A plan
+ * with nothing to lock in (nothing confirmed) blocks nothing.
+ */
+export function blocksNewRequest(c: JoinCandidate, today: string): boolean {
+  if (c.lockIn === 'OPEN' || c.lockIn === 'PAYING') return true;
+  if (c.state === 'SUBMITTED' || c.state === 'CONTACTING' || (c.state === 'ASSEMBLING' && !c.delivered)) {
+    return c.availability.some(w => w.date >= today);
+  }
+  return false;
+}
+
+/** The request a new one waits behind, or null. The newest, if several. */
+export function pickBlocking(candidates: JoinCandidate[], today: string): JoinCandidate | null {
+  return candidates
+    .filter(c => blocksNewRequest(c, today))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
+}
+
+/**
+ * Plans a renter without the Pass may let lapse before they need it to request
+ * again. Each lapsed plan held agents' slots for nothing.
+ */
+export const MAX_LAPSED_WITHOUT_PASS = 2;
 
 // ── The handshake ───────────────────────────────────────────────────────────
 

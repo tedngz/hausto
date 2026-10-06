@@ -97,7 +97,10 @@ export class FakeDb {
         for (const r of list) {
           // The unique index on messages.idempotency_key, modelled - the
           // persist-then-send path depends on 23505 coming back.
-          if (table === 'messages' && this.tables.messages.some(m => m.idempotency_key === r.idempotency_key)) {
+          // And the free viewing's primary key on the WhatsApp number (SPEC §9):
+          // a second lock-in on one number must come back 23505 too.
+          if ((table === 'messages' && this.tables.messages.some(m => m.idempotency_key === r.idempotency_key))
+            || (table === 'free_viewings' && (this.tables.free_viewings ?? []).some(f => f.phone_e164 === r.phone_e164))) {
             return {
               select: () => ({ single: () => Promise.resolve({ data: null, error: { code: '23505' } }) }),
               then: (resolve: (x: { data: null; error: { code: string } }) => unknown) =>
@@ -178,8 +181,17 @@ export class FakeDb {
     return api;
   }
 
+  /**
+   * Accounts holding a live Pass. `has_active_pass` answers from this, which
+   * is all the lock-in reads (lock-in-run.ts `hasPassCover`); every other
+   * rpc answers null, as before.
+   */
+  passHolders = new Set<string>();
+
   // deno-lint-ignore no-explicit-any
-  rpc(_name: string, _args?: Record<string, unknown>): Promise<{ data: any; error: null }> {
+  rpc(name: string, args?: Record<string, unknown>): Promise<{ data: any; error: null }> {
+    if (name === 'has_active_pass') return Promise.resolve({ data: this.passHolders.has(String(args?._user_id)), error: null });
+    if (name === 'has_complimentary_pass') return Promise.resolve({ data: false, error: null });
     return Promise.resolve({ data: null, error: null });
   }
 

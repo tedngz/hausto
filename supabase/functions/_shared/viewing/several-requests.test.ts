@@ -51,7 +51,11 @@ beforeEach(() => {
   store = new SupabaseMessageStore(db as any);
   db.tables.renters.push({
     id: 'renter-1', phone_e164: PHONE, display_name: 'Sam', service_window_expires_at: '2026-10-02T00:00:00Z', opted_out_at: null,
+    user_id: 'user-1',
   });
+  // A Pass holder, so a "yes" locks the plan in (SPEC §9) - what these tests
+  // are about is which thread the yes lands on.
+  db.passHolders.add('user-1');
   db.tables.complex_inquiry_messages = [];
   db.tables.complex_inquiries = [
     { id: 'inq-A', renter_id: 'renter-1', channel: 'WHATSAPP' },

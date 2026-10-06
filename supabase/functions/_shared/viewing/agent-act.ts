@@ -17,6 +17,8 @@ import { renderAlertDetails, renderWatchConfirmed, renderWatchProblem } from './
 import { alertItemsFor, markAlertDetailed } from './alerts.ts';
 import { renderInquiryConfirmed } from './inquiry.ts';
 import { recordInquiryMessage } from './concierge.ts';
+import { renderLockInReply } from './lock-in.ts';
+import { SITE_URL } from './watch.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -105,6 +107,18 @@ export async function performAction(
         body: renderAlertDetails(items),
       });
       await markAlertDetailed(db, action.alertMessageId, new Date());
+      return { performed: action.kind, messageId: result.message.id };
+    }
+
+    if (action.kind === 'LOCK_IN_LINK') {
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        requestId: ctx.requestId,
+        // Keyed on the inbound message: one answer per "yes", however often
+        // Meta redelivers it.
+        purpose: `LOCK_IN_LINK:${ctx.providerMessageId}`,
+        body: renderLockInReply({ siteUrl: SITE_URL, ...action.lockIn }),
+      });
       return { performed: action.kind, messageId: result.message.id };
     }
 

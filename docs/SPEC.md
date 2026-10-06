@@ -163,8 +163,8 @@ updated_at                timestamptz default now()
 
 The phone is the identity for everything inbound, because a WhatsApp message
 arrives with nothing else to key on. `user_id` links it to the Supabase account
-that filed a request (intake requires one, since a request spends that
-account's viewing credits); RLS lets a signed-in user read their own renter
+that filed a request (intake requires one: the account is what locks plans in
+and what the request limits below count against); RLS lets a signed-in user read their own renter
 row, requests and items through it. It is nullable because a renter who
 arrived over WhatsApp and never signed up is still a renter.
 
@@ -223,17 +223,31 @@ the single source for all of it):
   verification runs every 20 minutes and can deactivate a row in between. A
   listing that falls through is reported to the renter by name; the request
   proceeds on the rest as long as `MIN_ITEMS` (1) survives.
-- Intake requires a signed-in user and charges one viewing credit per listing
-  through `consume_viewing_credits()`, called last, after the log is written;
-  if the charge raises, the request is deleted. See the Payments section of
-  `CLAUDE.md` for why it is a call and not a trigger, and why
-  `viewing_listings_booked_since()` counts both request tables.
-- Once charged, everyone with the `ops` role is emailed the new request
+- Intake requires a signed-in user and **charges nothing** (since the pricing
+  rework, 2026-10-06). The renter pays, if at all, when they lock in a plan
+  agents have confirmed (§9, "Lock-in"), so a place already rented costs them
+  nothing. Until then intake charged one viewing credit per listing through
+  `consume_viewing_credits()`; that function and the ledger stay as history,
+  and Fast-Track's trigger still uses them.
+- **One request being worked at a time**, for every renter, Pass holders
+  included - requests are free and each is real operator hours.
+  `pickBlocking` in `intake.ts` decides: a request blocks a new one while its
+  agents are being asked and one of its windows is still ahead, or while its
+  plan can still be locked in or is being paid for (§9). A place asked for
+  meanwhile joins it while that is possible (below); otherwise
+  `viewing-request-create` answers `409 one_open_request`, and the modal says
+  so before the renter picks anything. A plan with nothing confirmed, or a
+  request whose windows have all gone, blocks nothing.
+- **After two lapsed plans, the Pass.** An account with
+  `MAX_LAPSED_WITHOUT_PASS` (2) requests cancelled `NOT_LOCKED_IN` and no Pass
+  is refused with `402 pass_required`: agents held slots for each of them.
+- Once written, everyone with the `ops` role is emailed the new request
   (`_shared/viewing/ops-alert.ts`, §4). Nothing is sent to the renter (§5).
 
-**One place at a time, one plan.** The renter modal asks for one listing, the
-one it was opened from. A renter who wants three seen requests from three
-cards, and the second and third **join the first request** rather than each
+**One place at a time, one plan.** The renter modal asks for the listing it
+was opened from (or the places selected in Browse, up to five). A renter who
+wants three seen requests from three cards, and the second and third **join
+the first request** rather than each
 opening their own - otherwise they would get three itineraries, three billed
 messages (§5) and no clash warning between viewings that were never in the
 same plan. `pickJoinable` in `intake.ts` decides which request is open to
@@ -249,15 +263,33 @@ join:
   not counting opted-out numbers.
 
 A joining place takes the request's windows and WhatsApp thread, so the modal
-asks for neither. The renter can choose different times instead, which makes it
-a request of its own. `viewing-request-open` tells the modal which request it
+asks for neither. Choosing different times instead - a request of its own - was
+possible until the one-request rule above; it no longer is. `viewing-request-open` tells the modal which request it
 would join; `viewing-request-create` decides again at submit (with `joinRef`)
 and answers `409 join_closed` if that request has moved on, rather than
 quietly opening a different one. A join writes only `ITEM_ADDED` (and
 `REALTOR_RESOLVED` where known) through the same `itemEvents` builder a new
 request uses, so the planner, console and itinerary cannot tell the
-difference. It charges one credit per place and undoes by deleting the new
-items, whose events cascade with them. The ops alert says "1 more place added".
+difference. It undoes by deleting the new items, whose events cascade with
+them. The ops alert says "1 more place added".
+
+### `free_viewings`
+
+The free viewing, **once per WhatsApp number** - not per account, since with
+requests free and the quiz gate gone every new email address would otherwise
+earn another. Claimed at lock-in, not at request (§9).
+
+```
+phone_e164   text pk          -- the number that had it
+user_id      uuid             -- who locked in with it
+request_id   uuid references viewing_requests(id) on delete set null
+item_id      uuid             -- the one place it covered
+used_at      timestamptz default now()
+```
+
+The primary key is what stops two tabs spending it twice: `lockIn` inserts
+first and takes a `23505` as "already used". Service role only.
+`viewing_trials`, the per-account ledger it replaces, stays as history.
 
 ### `events`
 
@@ -388,6 +420,11 @@ ships with substitutes, never on its own.
 A request moves to `ASSEMBLING` when every item has left `PENDING`/`CONTACTED`,
 or when the assembly deadline fires - whichever comes first. Ops can force it.
 
+`DELIVERED` → `CONFIRMED` is the **lock-in** (§9): the renter keeps the plan
+with the Pass or the free viewing, on the lock-in page, or - a Pass holder -
+by replying yes. A plan not locked in by its deadline goes `CANCELLED`
+(`NOT_LOCKED_IN`), by rule.
+
 An `ITEM_ADDED` that arrives while a request is `ASSEMBLING` (a place joining
 it, §1, raced against an operator assembling) moves it back to `CONTACTING`:
 the order on file no longer covers every place. From `DELIVERED` on, it moves
@@ -423,8 +460,9 @@ Event types:
 | `RENTER_REPLIED` | request | `{intent, message_id, handshake?}` - `intent` ∈ `CONFIRM`, `DECLINE`, `RESCHEDULE`, `QUESTION`, `SELECTION`, `SEARCH`, `OPT_OUT`, `UNKNOWN`. `handshake: true` on the first ref-carrying message, which answers nothing |
 | `REPLY_SENT` | request | `{message_id}` - an operator's free-text WhatsApp reply. Moves the silence clock (§9) and clears waiting replies; no state |
 | `REPLIES_ACKNOWLEDGED` | request | `{message_ids[]}` - replies read and judged to need no answer. Clears waiting replies; no state, no clock |
-| `REQUEST_CONFIRMED` | request | `{confirmed_item_ids[]}` |
-| `REQUEST_CANCELLED` | request | `{reason, note?}` - `reason` ∈ `CANCEL_REASONS` (`RENTER_DECLINED`, `RENTER_FOUND_PLACE`, `RENTER_UNRESPONSIVE`, `DUPLICATE`, `OTHER`); who cancelled is the event's `actor` |
+| `LOCK_IN_CHECKOUT_OPENED` | request | `{checkout_id, expires_at}` - a Pass checkout opened from the lock-in page (§9). Moves no state; adds to `checkouts` on the view, once per checkout. One opened before the deadline holds the plan until it expires |
+| `REQUEST_CONFIRMED` | request | `{confirmed_item_ids[], cover?, checkout_id?}` - the lock-in (§9). `cover` ∈ `PASS`, `FREE_VIEWING` (`COVERS`); absent on confirmations from before the pricing rework. Sets `confirmedCover` on the view |
+| `REQUEST_CANCELLED` | request | `{reason, note?}` - `reason` ∈ `CANCEL_REASONS` (`RENTER_DECLINED`, `RENTER_FOUND_PLACE`, `RENTER_UNRESPONSIVE`, `DUPLICATE`, `NOT_LOCKED_IN`, `OTHER`); who cancelled is the event's `actor` - `SYSTEM` for `NOT_LOCKED_IN` (§9) |
 | `REQUEST_FAILED` | request | `{reason, substitute_listing_ids[]}` |
 
 Reducer rules:
@@ -531,7 +569,7 @@ same actions under `AGENT:<version>`, never a second implementation.
 | `VIEWING_DETAILS` | item | `VIEWING_DETAILS_RECORDED`; refused unless the item is `CONFIRMED`, when the free text carries any phone number, or when `sharePhone` is true and the item has no agent contact (§9) |
 | `REPLY` | request | `messages` via `sendFreeForm` (window and 3-in-a-row rules apply), `REPLY_SENT` |
 | `ACK_REPLIES` | request | `REPLIES_ACKNOWLEDGED`; refused when nothing is waiting |
-| `CANCEL_REQUEST` | request | `REQUEST_CANCELLED {reason, note?}`; completes open `CONFIRM_REALTOR`, `NUDGE_REALTOR` and `RESOLVE_REALTOR` jobs. Refunds nothing - credits paid for an operator's time, and a refund is a payments decision |
+| `CANCEL_REQUEST` | request | `REQUEST_CANCELLED {reason, note?}`; completes open `CONFIRM_REALTOR`, `NUDGE_REALTOR` and `RESOLVE_REALTOR` jobs. Refunds nothing: requests are free, and a refund for a locked-in plan that collapses is a person's, in Polar, under the written policy (§9). The lock-in deadline reaches this same action as `SYSTEM` |
 
 A new request emails everyone with the `ops` role (`_shared/viewing/ops-alert.ts`,
 from `viewing-request-create` after the charge, never blocking it): the ref, the
@@ -829,8 +867,10 @@ something.** Asserted as a property test over randomly generated event logs
   for the renter - or for the brokers, who are owed its decision (§4).
 - A `DELIVERED` request waits on the renter, not on us: they have the plan and
   a question. No holding update is owed - it would say we are still working
-  and will send the plan - and an operator decides whether to chase or cancel
-  (`RENTER_UNRESPONSIVE`). (Until 2026-09-30 one was owed, and sent daily.)
+  and will send the plan. A plan with stops is cancelled by rule at its
+  lock-in deadline (above); one with nothing to lock in waits on an operator,
+  who decides whether to chase or cancel (`RENTER_UNRESPONSIVE`). (Until
+  2026-09-30 a holding update was owed, and sent daily.)
 - With the renter's window shut, a holding update goes as the `request_update`
   template ("we have an update on your request for {{2}}, reply here"); their
   reply opens the window and an operator answers it. Meta approved it on
@@ -838,7 +878,8 @@ something.** Asserted as a property test over randomly generated event logs
   until then every such send was refused as `template_unavailable` and tried
   again a day later. That is still what happens if Meta withdraws it.
 - A `DELIVERED` plan unanswered for 48 hours becomes a `CHASE_RENTER` to-do in
-  the console - never a message. The drain closes it once the renter answers,
+  the console - never a message. Since lock-in deadlines are at most a day, in
+  practice only a plan with nothing to lock in gets there. The drain closes it once the renter answers,
   an operator writes to them, or the request closes.
 - Each holding update is keyed on the silence it breaks
   (`HOLDING_UPDATE:<when the renter last heard from us>`), so the next one, a
@@ -857,6 +898,66 @@ The decision is pure (`_shared/viewing/reminders.ts`); `viewing-jobs-drain`
 only runs it on a `pg_cron` schedule and enqueues a `jobs` row per action.
 Keeping the two apart is what makes the promise testable without a database and
 a clock.
+
+### Lock-in (`_shared/viewing/lock-in.ts`, the pricing rework, 2026-10-06)
+
+**Requests are free; locking in a confirmed plan is the one paid step.**
+Agents confirm a time before anyone pays, and the plan - each stop's place,
+day and time, and no field for an agent - is the pitch, so showing it before
+payment gives nothing away. Nothing confirmed, nothing owed: a request where
+no agent confirms ends with substitutes or offered times, as before.
+
+**How a plan is covered** (`decideLockIn`, the one function that decides, for
+the page, the payment and a WhatsApp "yes" alike):
+
+| Renter | Lock-in |
+|---|---|
+| Holds the Pass (bought or complimentary) | Every stop, cover `PASS`. They never spend the free viewing |
+| No Pass, free viewing unused on this number | One stop they pick, cover `FREE_VIEWING`; the other agents are owed a release |
+| No Pass, free viewing used | Buy the Pass from the page, which locks in every stop |
+
+**The message.** The itinerary itself is unchanged apart from its last line.
+A Pass holder still reads "Reply YES to lock these in", and their yes locks it
+in (`routing.ts`). Anyone else reads where to lock in, by when and for how
+much - "Lock these in by Thu 17 Sept, 10:00: https://hausto.com/lock-in/HV-4KX2"
+- and a yes from them is answered with that link (`LOCK_IN_LINK`, one reply,
+agent on or off) and keeps nothing. The link appears only in free-form
+messages, never in a template: a sales pitch reclasses a template as
+marketing. A plan held behind `itinerary_ready` gets its link when it is
+released.
+
+**The page** (`/lock-in/:ref`, `viewing-lock-in`): signed in, for the account
+the request belongs to only. It shows the plan and the deadline and offers the
+free viewing (pick a place) or the Pass. Lock-in is confirmed on the web and
+nothing is sent on WhatsApp: paying is not a reply, and a "locked in" message
+would make the viewing-day message a refused third in a row.
+
+**Paying.** The page opens a Polar checkout through `create-pass-order` with
+the ref, refused once the deadline has passed, and writes
+`LOCK_IN_CHECKOUT_OPENED` before sending the renter to pay. The plan is locked
+in where the purchase is recorded (`_shared/polar-pass.ts`), which both the
+redirect and the webhook run, so a renter who pays and closes the tab keeps the
+plan; the second to arrive finds it locked in. A payment that lands after the
+plan was cancelled buys a Pass and keeps nothing - a person refunds or extends
+it under the written policy.
+
+**The deadline** (`lockInDeadline`): the earlier of 24 hours after the plan
+arrived (held or delivered, whichever came first) and 18:00 the day before the
+first stop, but never less than three hours after the plan itself was
+delivered, rounded up to the quarter hour. A checkout opened before the
+deadline holds the plan until the checkout expires (`PAYING`), and its payment
+is honoured even if it completes after.
+
+**At the deadline the plan is cancelled by rule.** The drain enqueues
+`LOCK_IN_DEADLINE` (`reminders.ts`); `viewing-jobs-run` reads the plan again
+and, if it is still `LAPSED`, cancels it through the console's own
+`CANCEL_REQUEST` as `SYSTEM`, reason `NOT_LOCKED_IN`
+(`lock-in-deadline.ts`). Every agent holding a slot is then owed a release
+(`realtorDecisionsOwed`), as for any cancelled request. This reverses the rule
+that a person decides to cancel an unanswered plan: the renter was shown the
+deadline in the plan, and agents holding slots for a plan nobody pays for was
+the biggest risk the rework carried. The AI operator still may not cancel
+(§10) - this is a rule, not its judgement. Nothing is sent to the renter.
 
 ### The viewing day (`_shared/viewing/viewing-day.ts`)
 
@@ -1057,7 +1158,9 @@ message nobody sent. Each has its own gate on its own stage 1 record; the
 device like any approved one and the event waits for the device's ack, carrying
 `AGENT:auto-v1` - so the log says the AI operator contacted the agent only once
 the bridge has sent it. The daily cap, the device pause and the 5-minute hold
-all apply. `NO_RESPONSE`, the itinerary and cancelling stay with people.
+all apply. `NO_RESPONSE`, the itinerary and cancelling stay with people; the
+lock-in deadline's cancellation (§9) is a rule run as `SYSTEM`, not the AI
+operator's.
 
 **The planner does not message agents about windows that have passed.** Once
 every availability window on a request is over (`windowsAllPassed` in

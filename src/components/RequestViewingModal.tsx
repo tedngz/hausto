@@ -4,20 +4,28 @@
 // a fixed header, one scrolling column of numbered steps, and a footer that
 // stays put so the action is never a scroll away. Two questions, always in the
 // same order - when, and where to reach you - and nothing else: no counters,
-// no reassurance lines, nothing the renter has to read past to find the button.
+// nothing the renter has to read past to find the button.
 //
 // **The place is the one the renter opened this from**, so the modal does not
-// show it back to them. It used to be a single choice over their matches,
-// which mostly offered a way to request a flat they were not looking at.
-// Someone who wants three seen taps "Request viewing" on three cards.
+// show it back to them. Someone who wants three seen taps "Request viewing" on
+// three cards - or selects them in Browse, which opens this with all of them.
 //
 // **And those three become one plan.** While the renter has a request whose
 // agents are still being asked, a new place joins it (intake.ts
 // `pickJoinable`): it takes that request's times, its WhatsApp thread, and a
 // seat in its one itinerary message. Three separate requests would be three
 // itineraries, three billed messages and no clash warning between viewings
-// that were never in the same plan. The renter can still choose different
-// times, which makes it a request of its own.
+// that were never in the same plan.
+//
+// **One request at a time** (the pricing rework, SPEC §1, §9). Requests are
+// free and each is real operator hours, so once a request is past joining -
+// its plan assembled or sent - a new one waits until that plan is locked in or
+// lapses. The modal says so before the renter picks anything.
+//
+// **The price is said here.** Requesting is free; locking a confirmed plan in
+// is the paid step - the first viewing on us, then the Pass. A renter who
+// requested for free and then met a price may report the message, and reports
+// lower the WhatsApp number's quality rating.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -35,11 +43,12 @@ import { cn } from '@/lib/utils';
 import { offerInquiryFor } from '@/lib/offerInquiry';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
+import { usePass } from '@/hooks/usePass';
 import { useRenterIdentity } from '@/hooks/useRenterIdentity';
 import {
   DAY_PARTS,
   MAX_DAYS_AHEAD,
+  MAX_ITEMS,
   MIN_LEAD_DAYS,
   addDays,
   hcmcDate,
@@ -48,6 +57,7 @@ import {
   type AvailabilityWindow,
   type DayPart,
 } from '../../supabase/functions/_shared/viewing/intake.ts';
+import { PASS_DAYS, PASS_PRICE_USD } from '../../supabase/functions/_shared/viewing/lock-in.ts';
 
 const MAX_WINDOWS = 6;
 
@@ -67,7 +77,10 @@ export interface RequestSeed {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The place the modal was opened from. */
   seed?: RequestSeed | null;
+  /** Or the places, when opened from a selection. At most five - one day of viewings. */
+  seeds?: RequestSeed[];
 }
 
 interface Submitted { ref: string; waLink: string; joined?: boolean; placeCount?: number }
@@ -77,6 +90,22 @@ interface OpenRequest {
   ref: string;
   availability: AvailabilityWindow[];
   listingIds: string[];
+}
+
+interface OpenState {
+  open: OpenRequest | null;
+  /** The request a new one waits behind, when it cannot be joined. */
+  blocking: { ref: string; listingIds: string[] } | null;
+  /** Two plans lapsed without being locked in, and no Pass. */
+  passRequired: boolean;
+  hasPass: boolean;
+}
+
+/** What locking in costs, said on every request screen (SPEC §9). */
+export function lockInPriceLine(hasPass: boolean): string {
+  return hasPass
+    ? 'Requesting is free, and your Pass covers every viewing the agents confirm.'
+    : `Requesting is free. Once agents confirm, your first viewing is on us; after that, locking in a plan takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`;
 }
 
 function partsOf(iso: string) {
@@ -110,11 +139,15 @@ function Step({ n, title, hint, children }: {
   );
 }
 
-export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
+export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { quota } = useViewingQuota();
+  const { pass, purchasePass } = usePass();
   const { identity } = useRenterIdentity();
+  const places = useMemo(
+    () => (seeds?.length ? seeds : seed ? [seed] : []).slice(0, MAX_ITEMS),
+    [seed, seeds],
+  );
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -123,8 +156,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const [touched, setTouched] = useState({ name: false, phone: false });
-  /** The renter chose their own times over joining their open request. */
-  const [separate, setSeparate] = useState(false);
 
   useEffect(() => {
     if (!identity) return;
@@ -135,7 +166,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   // Asked every time the modal opens, never cached across opens: the request
   // it names may have moved on to its itinerary in the meantime. The server
   // decides again at submit either way - this is what the renter is shown.
-  const { data: openRequest, isLoading: openLoading } = useQuery<OpenRequest | null>({
+  const { data: openState, isLoading: openLoading } = useQuery<OpenState | null>({
     queryKey: ['viewing-open-request', user?.id],
     enabled: open && !!user,
     staleTime: 0,
@@ -143,14 +174,19 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     retry: false,
     queryFn: async () => {
       const { data, error: err } = await supabase.functions.invoke('viewing-request-open', { body: {} });
-      // A failed lookup falls back to asking for times, which is always safe.
+      // A failed lookup falls back to asking for times; submit decides.
       if (err) return null;
-      return ((data as { open?: OpenRequest | null })?.open) ?? null;
+      return (data as OpenState) ?? null;
     },
   });
 
-  const join = openRequest && !separate ? openRequest : null;
-  const alreadyIn = !!seed && !!openRequest?.listingIds.includes(seed.listingId);
+  const join = openState?.open ?? null;
+  // Past joining - its plan assembled or sent - so a new request waits.
+  const waitingOn = !join ? openState?.blocking ?? null : null;
+  const passRequired = !join && !waitingOn && !!openState?.passRequired;
+  const hasPass = !!openState?.hasPass || !!pass?.active;
+  const fresh = places.filter(p => !join?.listingIds.includes(p.listingId));
+  const alreadyIn = !!join && places.length > 0 && fresh.length === 0;
 
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
@@ -175,9 +211,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     }
     return [...byDate.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
   }, [join, today]);
-
-  const credits = quota?.remaining ?? 0;
-  const shortOnCredits = !!quota && credits < 1;
 
   const toggleDay = (date: string) => {
     setPicked(prev => {
@@ -205,26 +238,29 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
   };
 
   const submit = async () => {
-    if (!seed) return;
+    if (places.length === 0) return;
     setError(null);
     if (!join && !toRenterE164(phone)) {
       setError(RENTER_PHONE_HINT);
       return;
     }
     setBusy(true);
+    const listingIds = (join ? fresh : places).map(p => p.listingId);
     const { data, error: err } = await supabase.functions.invoke('viewing-request-create', {
       body: {
         ...(join
-          ? { listingIds: [seed.listingId], joinRef: join.ref }
-          : { phone, displayName: name, listingIds: [seed.listingId], availability: picked }),
-        inquiryId: offerInquiryFor(seed.listingId),
+          ? { listingIds, joinRef: join.ref }
+          : { phone, displayName: name, listingIds, availability: picked }),
+        // An offer link carries the availability request it came from; with
+        // several places, the first that has one.
+        inquiryId: places.map(p => offerInquiryFor(p.listingId)).find(Boolean) ?? null,
       },
     });
     setBusy(false);
 
     // A non-2xx arrives as `err` with the body still readable on its context.
-    // The join refusals are 409s the renter can act on, so they are read out
-    // rather than flattened into "something went wrong".
+    // The refusals are ones the renter can act on, so they are read out rather
+    // than flattened into "something went wrong".
     let payload = data as (Submitted & { error?: string; message?: string }) | null;
     if (err) {
       const ctx = (err as { context?: Response }).context;
@@ -233,27 +269,27 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
     }
     if (payload?.error) {
       setError(payload.message ?? payload.error);
-      // The request moved on to its itinerary between opening and submitting.
-      // Ask again; with nothing open, the modal becomes an ordinary request.
-      if (payload.error === 'join_closed') {
+      // The request moved on between opening and submitting. Ask again: the
+      // modal then shows what is true now.
+      if (payload.error === 'join_closed' || payload.error === 'one_open_request') {
         queryClient.invalidateQueries({ queryKey: ['viewing-open-request'] });
       }
       return;
     }
     setSubmitted(payload);
-    queryClient.invalidateQueries({ queryKey: ['viewing-quota'] });
     queryClient.invalidateQueries({ queryKey: ['my-viewing-requests'] });
   };
 
   const close = () => {
     onOpenChange(false);
     setError(null);
-    setSeparate(false);
     if (submitted) { setSubmitted(null); setPicked([]); }
   };
 
-  const canSubmit = !busy && !!seed && !alreadyIn && !shortOnCredits && !openLoading
+  const canSubmit = !busy && places.length > 0 && !alreadyIn && !waitingOn && !passRequired && !openLoading
     && (join ? true : picked.length > 0);
+
+  const priceLine = lockInPriceLine(hasPass);
 
   return (
     <Dialog open={open} onOpenChange={o => (o ? onOpenChange(true) : close())}>
@@ -267,14 +303,15 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
               <DialogHeader>
                 <DialogTitle>Added to request {submitted.ref}</DialogTitle>
                 <DialogDescription>
-                  One plan, one message: we fit this place in with the
-                  {submitted.placeCount && submitted.placeCount > 2 ? ' others' : ' other one'} and
+                  One plan, one message: we fit {fresh.length > 1 ? 'these places' : 'this place'} in with the
+                  {submitted.placeCount && submitted.placeCount - fresh.length > 1 ? ' others' : ' other one'} and
                   send you every time together on WhatsApp.
                 </DialogDescription>
               </DialogHeader>
               <p className="text-sm text-muted-foreground">
-                We are contacting this agent now, at the same times you gave before.
+                We are contacting the {fresh.length > 1 ? 'agents' : 'agent'} now, at the same times you gave before.
               </p>
+              <p className="text-xs text-muted-foreground">{priceLine}</p>
               <Button className="w-full" onClick={close}>Done</Button>
               <p className="text-center text-xs text-muted-foreground">
                 Not messaged us about {submitted.ref} yet?{' '}
@@ -292,10 +329,11 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                 </DialogDescription>
               </DialogHeader>
               <p className="text-sm text-muted-foreground">
-                We are contacting the agent now. You will hear from us on WhatsApp with
-                the times that are actually free, usually within a day. Want to see more
-                places? Request them the same way and we fit them into this plan.
+                We are contacting the {places.length > 1 ? 'agents' : 'agent'} now. You will hear from us on
+                WhatsApp with the times that are actually free, usually within a day, and a link to lock
+                them in.
               </p>
+              <p className="text-xs text-muted-foreground">{priceLine}</p>
               <Button asChild className="w-full">
                 <a href={submitted.waLink} target="_blank" rel="noreferrer">Open WhatsApp</a>
               </Button>
@@ -307,7 +345,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
             <DialogHeader>
               <DialogTitle>Sign in to request a viewing</DialogTitle>
               <DialogDescription>
-                Your requests and viewing requests balance live on your account.
+                Requesting is free. Your requests and plans live on your account.
               </DialogDescription>
             </DialogHeader>
             <Button asChild className="w-full"><Link to="/auth">Sign in</Link></Button>
@@ -315,28 +353,44 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
         ) : (
           <>
             <DialogHeader className="shrink-0 space-y-1 border-b p-4 text-left sm:p-6 sm:pb-4">
-              <DialogTitle>Request a viewing</DialogTitle>
+              <DialogTitle>{places.length > 1 ? `Request ${places.length} viewings` : 'Request a viewing'}</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                We contact the agent for you and come back with the times that are
-                free. They never get your number.
+                We contact the {places.length > 1 ? 'agents' : 'agent'} for you and come back with the times
+                that are free. They never get your number.
               </DialogDescription>
             </DialogHeader>
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
-              {/* ── 1. When ──────────────────────────────────────────── */}
               {/* No "which place" step: the modal opens from the listing, so
                   the renter is already looking at it. */}
               {openLoading ? (
                 <Step n={1} title="When are you free?">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </Step>
+              ) : waitingOn ? (
+                <div className="space-y-2 rounded-md border bg-muted/40 p-4 text-sm">
+                  <p className="font-medium">We are still working on {waitingOn.ref}</p>
+                  <p className="text-muted-foreground">
+                    One request at a time: once you lock in its plan, or it lapses, you can request
+                    more places. Its plan comes on WhatsApp with a link to lock it in.
+                  </p>
+                </div>
+              ) : passRequired ? (
+                <div className="space-y-3 rounded-md border bg-muted/40 p-4 text-sm">
+                  <p className="font-medium">Two plans lapsed without being locked in</p>
+                  <p className="text-muted-foreground">
+                    Agents held times for both. To request again, get the Pass (${PASS_PRICE_USD} for {PASS_DAYS} days):
+                    it covers every viewing we confirm.
+                  </p>
+                  <Button size="sm" onClick={() => void purchasePass()}>Get the Pass</Button>
+                </div>
               ) : join ? (
                 <Step
                   n={1}
                   title="When"
                   hint={alreadyIn
-                    ? `This place is already in your request ${join.ref}. We will be in touch on WhatsApp.`
-                    : `Adding this to your request ${join.ref}, at the times you already gave. We fit it into the same plan and send one message with every time.`}
+                    ? `${places.length > 1 ? 'These places are' : 'This place is'} already in your request ${join.ref}. We will be in touch on WhatsApp.`
+                    : `Adding ${fresh.length > 1 ? 'these' : 'this'} to your request ${join.ref}, at the times you already gave. We fit it into the same plan and send one message with every time.`}
                 >
                   <ul className="space-y-1.5">
                     {joinDays.map(([date, parts]) => (
@@ -348,15 +402,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                       </li>
                     ))}
                   </ul>
-                  {!alreadyIn && (
-                    <button
-                      type="button"
-                      onClick={() => { setSeparate(true); setError(null); }}
-                      className="mt-2 text-xs text-muted-foreground underline"
-                    >
-                      Different times? Make it a separate request
-                    </button>
-                  )}
                 </Step>
               ) : (
                 <Step
@@ -364,18 +409,6 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
                   title="When are you free?"
                   hint={`We need two days to reach the agents, so the soonest is ${prettyDate(earliest)}.`}
                 >
-                  {openRequest && (
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      This will be a separate request from {openRequest.ref}.{' '}
-                      <button
-                        type="button"
-                        onClick={() => { setSeparate(false); setError(null); }}
-                        className="underline"
-                      >
-                        Add it to {openRequest.ref} instead
-                      </button>
-                    </p>
-                  )}
                   <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
                     {days.map(date => {
                       const p = partsOf(date);
@@ -435,7 +468,7 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
               {/* ── 2. You ───────────────────────────────────────────── */}
               {/* Not asked when joining: the answer goes to the WhatsApp thread
                   the open request already has. */}
-              {!join && !openLoading && (
+              {!join && !waitingOn && !passRequired && !openLoading && (
                 <>
                   <Separator />
                   <Step n={2} title="Where do we reach you?">
@@ -465,23 +498,19 @@ export function RequestViewingModal({ open, onOpenChange, seed }: Props) {
 
             {/* ── Footer: always reachable ───────────────────────────── */}
             <div className="shrink-0 space-y-2 border-t bg-background p-4 sm:p-6 sm:pt-4">
-              {/* Only when it explains a disabled button. */}
-              {shortOnCredits && (
-                <p className="text-sm text-amber-700">
-                  A request uses one viewing request and you have none left. Top up to
-                  carry on.
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">{priceLine}</p>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button className="w-full" disabled={!canSubmit} onClick={submit}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {alreadyIn
                   ? 'Already requested'
-                  : join
-                    ? `Add to request ${join.ref}`
-                    : picked.length === 0
-                      ? 'Pick a time'
-                      : 'Request viewing'}
+                  : waitingOn
+                    ? `Waiting on ${waitingOn.ref}`
+                    : join
+                      ? `Add to request ${join.ref}`
+                      : picked.length === 0
+                        ? 'Pick a time'
+                        : places.length > 1 ? `Request ${places.length} viewings` : 'Request viewing'}
               </Button>
             </div>
           </>

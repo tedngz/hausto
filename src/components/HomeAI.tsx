@@ -22,13 +22,10 @@ import { useMatches } from '@/hooks/useMatches';
 import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeFunction } from '@/integrations/supabase/functions-client';
-import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
-import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
+import { RequestViewingModal, type RequestSeed } from '@/components/RequestViewingModal';
+import { MAX_ITEMS } from '../../supabase/functions/_shared/viewing/intake.ts';
 import { setChatHandoff } from '@/lib/chatHandoff';
 import { DEEP_SCAN_EVENT, type DeepScanDetail } from '@/lib/deepScanEvents';
-import { format } from 'date-fns';
-import { toast as sonnerToast } from 'sonner';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AIBlocks } from '@/components/ai-blocks/AIBlocks';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
@@ -223,12 +220,10 @@ export const HomeAI = ({
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [likedProperties, setLikedProperties] = useState<Set<string>>(new Set());
-  const [isViewingScheduleOpen, setIsViewingScheduleOpen] = useState(false);
-  const [scheduleInitialIds, setScheduleInitialIds] = useState<string[]>([]);
-  // A listing booked straight from its preview. Liked listings are already in
-  // the scheduler's list; this one has to be put there by hand, and has to
-  // outlive the preview - which the renter can close behind the scheduler.
-  const [scheduleExtra, setScheduleExtra] = useState<PropertyMatch | null>(null);
+  // The places handed to the request modal: the liked ones from the banner,
+  // or one listing from its preview. Kept apart from the preview so it
+  // outlives it - the renter can close the preview behind the modal.
+  const [requestSeeds, setRequestSeeds] = useState<RequestSeed[] | null>(null);
   const [isFastTrackBannerDismissed, setIsFastTrackBannerDismissed] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [tempUserMessage, setTempUserMessage] = useState<string | null>(null);
@@ -264,10 +259,6 @@ export const HomeAI = ({
     createMatch,
     renterMatches
   } = useMatches();
-  const { quota, refetchQuota } = useViewingQuota();
-  // Viewing access: the free trial booking, or a live Hausto Pass and any
-  // top-ups bought against it.
-  const canFastTrack = !!quota?.canBook;
   const {
     canPerformAction,
     updateUsage,
@@ -552,9 +543,12 @@ export const HomeAI = ({
       console.log(`Conversation ${conversationId} appears to be empty`);
     }
   };
+  // One way to ask for a viewing (invariant 8). Crawled listings only - the
+  // viewing flow requests against them - and one day of viewings holds five.
+  const seedOf = (p: PropertyMatch): RequestSeed => ({ listingId: p.id, title: p.title, imageUrl: p.images?.[0] ?? null });
   const openScheduleForIds = (ids: string[]) => {
-    setScheduleInitialIds(ids.slice(0, 3));
-    setIsViewingScheduleOpen(true);
+    const seeds = allResults.filter(p => ids.includes(p.id) && p.isExternal).slice(0, MAX_ITEMS).map(seedOf);
+    if (seeds.length > 0) setRequestSeeds(seeds);
     setIsFastTrackBannerDismissed(false);
   };
 
@@ -622,68 +616,6 @@ export const HomeAI = ({
     }
   };
 
-  // Properties available for the viewing scheduler: the ones liked in this
-  // session, plus whichever listing was booked from its own preview.
-  const matchedPropertiesForSchedule = useMemo(() => {
-    const rows = allResults.filter(p => likedProperties.has(p.id));
-    if (scheduleExtra && !rows.some(p => p.id === scheduleExtra.id)) rows.push(scheduleExtra);
-    return rows.map(p => ({
-      id: p.id,
-      title: p.title,
-      images: p.images,
-      location: p.location,
-      price: p.price,
-    }));
-  }, [allResults, likedProperties, scheduleExtra]);
-
-  const handleViewingScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
-    if (!user?.id) return;
-    try {
-      // Use the active AI conversation as the conversation_id when present
-      const conversationId = currentConversationId || crypto.randomUUID();
-
-      const { error: requestError } = await supabase.from('fast_track_requests').insert({
-        conversation_id: conversationId,
-        renter_id: user.id,
-        realtor_id: HAUSTO_AGENT_ID,
-        property_ids: scheduleData.selectedPropertyIds,
-        preferred_dates: scheduleData.dates.map(d => format(d, 'yyyy-MM-dd')),
-        preferred_times: scheduleData.preferredTimes,
-        special_requirements: scheduleData.specialRequirements || null,
-        status: 'pending',
-      });
-
-      if (requestError) throw requestError;
-
-      // Notify Hausto and the renter (best-effort)
-      try {
-        const selected = matchedPropertiesForSchedule.filter(p =>
-          scheduleData.selectedPropertyIds.includes(p.id)
-        );
-        await supabase.functions.invoke('notify-fast-track-request', {
-          body: {
-            renterEmail: user.email,
-            properties: selected,
-            preferredDates: scheduleData.dates.map(d => format(d, 'MMM dd, yyyy')),
-            preferredTimes: scheduleData.preferredTimes,
-            specialRequirements: scheduleData.specialRequirements || '',
-          },
-        });
-      } catch (notificationError) {
-        console.error('Error sending fast track notification:', notificationError);
-      }
-
-      sonnerToast.success('Viewing request sent!', {
-        description: 'Hausto Agent will reach out shortly to confirm your viewings.',
-      });
-      refetchQuota();
-      setIsViewingScheduleOpen(false);
-      setIsFastTrackBannerDismissed(true);
-    } catch (error) {
-      console.error('Error submitting viewing schedule:', error);
-      sonnerToast.error('Failed to submit viewing schedule. Please try again.');
-    }
-  };
 
   const handleFollowup = (suggestion: string) => {
     if (!suggestion?.trim()) return;
@@ -1320,31 +1252,19 @@ export const HomeAI = ({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-tight">
-                {quota?.trialAvailable
-                  ? 'Your first viewing is on us'
-                  : canFastTrack
-                    ? `You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`
-                    : 'Hausto arranges the viewings for you'}
+                {`You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`}
               </p>
               <p className="text-xs text-muted-foreground leading-tight mt-0.5">
-                {canFastTrack
-                  ? 'Pick your times — Hausto contacts the agents and confirms the viewings.'
-                  : 'Skip the back-and-forth: pick times, and our team coordinates every viewing for you.'}
+                Pick your times and we ask the agents. Requesting is free, and your first confirmed viewing is on us.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap pl-12 sm:pl-0">
             <Button
               size="sm"
-              onClick={() => {
-                if (canFastTrack) {
-                  openScheduleForIds(Array.from(likedProperties));
-                } else {
-                  setIsSubscriptionModalOpen(true);
-                }
-              }}
+              onClick={() => openScheduleForIds(Array.from(likedProperties))}
             >
-              {quota?.trialAvailable ? 'Book my free viewing' : canFastTrack ? 'Schedule viewings' : 'Book my viewings'}
+              Request viewings
             </Button>
             <Button
               size="sm"
@@ -1606,36 +1526,23 @@ export const HomeAI = ({
         quoteFallback={selectedProperty?.matchReason}
         liked={selectedProperty ? likedProperties.has(selectedProperty.id) : false}
         onLike={selectedProperty ? () => handleLikeProperty(selectedProperty.id, selectedProperty.realtor_id) : undefined}
-        // The same gate the chat's own viewing banner keeps, so booking a
-        // listing behaves the same wherever the renter presses it: signed out
-        // goes to sign-in, out of allowance goes to the upgrade.
-        onSchedule={selectedProperty ? () => {
+        // Signed out goes to sign-in; otherwise the request modal. Requests
+        // are free, so there is no allowance to check.
+        onSchedule={selectedProperty?.isExternal ? () => {
           if (!user) {
             navigate('/auth', { state: { returnTo: '/hub' } });
             return;
           }
-          if (!canFastTrack) {
-            setIsSubscriptionModalOpen(true);
-            return;
-          }
-          setScheduleExtra(selectedProperty);
-          setScheduleInitialIds([selectedProperty.id]);
-          setIsViewingScheduleOpen(true);
+          setRequestSeeds([seedOf(selectedProperty)]);
         } : undefined}
         source={selectedProperty ? previewSourceOf(selectedProperty) : undefined}
         propertyType={selectedProperty?.isExternal ? 'external' : 'internal'}
       />
 
-      {/* Viewing Schedule Modal */}
-      <ViewingScheduleModal
-        isOpen={isViewingScheduleOpen}
-        onClose={() => {
-          setIsViewingScheduleOpen(false);
-          setScheduleExtra(null);
-        }}
-        onSubmit={handleViewingScheduleSubmit}
-        matchedProperties={matchedPropertiesForSchedule}
-        initialSelectedIds={scheduleInitialIds}
+      <RequestViewingModal
+        open={!!requestSeeds}
+        onOpenChange={o => { if (!o) setRequestSeeds(null); }}
+        seeds={requestSeeds ?? []}
       />
 
       <SubscriptionModal

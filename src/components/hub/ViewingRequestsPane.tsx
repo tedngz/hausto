@@ -114,6 +114,11 @@ export const ViewingRequestsPane = () => {
                   with the times that are free.
                 </p>
               </div>
+              {/* The plan page reduces the log server-side, so it can say
+                  what this pane cannot: whether there is a plan to lock in. */}
+              <Button asChild size="sm" variant="ghost">
+                <Link to={`/lock-in/${r.ref}`}>Plan</Link>
+              </Button>
               <Button asChild size="sm" variant="outline">
                 <a
                   href={`https://wa.me/?text=${encodeURIComponent(`Hi Hausto - my viewing request is ${r.ref}`)}`}

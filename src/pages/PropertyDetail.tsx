@@ -8,13 +8,6 @@ import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { HomeAI } from '@/components/HomeAI';
 import { ChatDock, RAIL_MIN_VIEWPORT } from '@/components/chat/ChatDock';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
-import { useMatches } from '@/hooks/useMatches';
-import { describeViewingBlock, useViewingQuota } from '@/hooks/useViewingQuota';
-import { useFastTrackRequest } from '@/hooks/useFastTrackRequest';
-import { ViewingScheduleModal, ViewingScheduleData } from '@/components/ViewingScheduleModal';
-import { SubscriptionModal } from '@/components/SubscriptionModal';
-import { HAUSTO_AGENT_ID } from '@/constants/haustoAgent';
-import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { shareProperty } from '@/utils/shareProperty';
@@ -45,14 +38,6 @@ const PropertyDetail = () => {
   useEffect(() => {
     if (id) rememberOfferInquiry(id, new URLSearchParams(window.location.search).get('inq'));
   }, [id]);
-  const [isBooking, setIsBooking] = useState(false);
-  // Set once the listing has a conversation to hang the request off; opening
-  // the schedule modal is what it gates.
-  const [scheduleContext, setScheduleContext] = useState<{ realtorId: string } | null>(null);
-  const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
-  const { createMatch } = useMatches();
-  const { quota } = useViewingQuota();
-  const { submitFastTrack } = useFastTrackRequest();
 
   // The chat docks the same way it does on the hub: a rail beside the listing
   // at desktop widths, a draggable sheet along the bottom below them.
@@ -241,72 +226,6 @@ const PropertyDetail = () => {
   const vibeScore = preferences ? calculateVibeScore(apartment, preferences) : null;
   const vibeMatch = preferences ? getVibeAttributeMatch(apartment, preferences) : undefined;
 
-  // Booking saves the listing to Matches and opens Fast-Track coordination -
-  // the renter picks times and Hausto handles the owner. External listings have
-  // no realtor account, so the Hausto agent is the counterpart.
-  const handleBookViewing = async () => {
-    if (!user || !apartment) return;
-    if (!quota) {
-      toast({ title: 'Checking your viewing allowance', description: 'One moment.' });
-      return;
-    }
-    // Free tier gets one coordination on the house; past that the upgrade path
-    // takes over rather than a dead button.
-    if (!quota.canBook) {
-      const block = describeViewingBlock(quota);
-      if (block.showPaywall) {
-        setIsSubscriptionOpen(true);
-      } else {
-        toast({ title: block.title, description: block.description });
-      }
-      return;
-    }
-    setIsBooking(true);
-    try {
-      const isExternal = source === 'external';
-      const realtorId = isExternal ? HAUSTO_AGENT_ID : apartment.realtor.id;
-      try {
-        await createMatch(apartment.id, realtorId, isExternal ? 'external' : 'internal');
-      } catch (err) {
-        // useMatches already toasts each case. Only an existing match should
-        // still proceed; limits and real failures stop here.
-        if ((err as Error)?.message !== 'ALREADY_MATCHED') return;
-      }
-
-      setScheduleContext({ realtorId });
-    } finally {
-      setIsBooking(false);
-    }
-  };
-
-  const handleScheduleSubmit = async (scheduleData: ViewingScheduleData) => {
-    if (!scheduleContext || !apartment) return;
-    try {
-      await submitFastTrack({
-        realtorId: scheduleContext.realtorId,
-        scheduleData,
-        properties: [{
-          id: apartment.id,
-          title: apartment.title,
-          location: apartment.location,
-          price: apartment.price,
-          imageUrl: apartment.images?.[0] || '',
-        }],
-      });
-      toast({
-        title: 'Viewing request sent',
-        description: 'Hausto will coordinate the viewing and get back to you soon.',
-      });
-      setScheduleContext(null);
-    } catch (error) {
-      console.error('Error submitting viewing schedule:', error);
-      toast({
-        title: 'Could not send the request',
-        description: 'Please try again.',
-        variant: 'destructive',
-      });
-    }
-  };
 
   const jsonLd = apartment ? {
     "@context": "https://schema.org",
@@ -393,35 +312,14 @@ const PropertyDetail = () => {
               vibeScore={vibeScore ? { overall: Number(vibeScore.overall), breakdown: vibeScore.breakdown } : undefined}
               preferences={preferences}
               vibeMatch={vibeMatch}
-              onBookViewing={user ? handleBookViewing : undefined}
-              isBooking={isBooking}
-              // Crawled listings only. The viewing flow requests against
-              // `external_properties`; an internal listing books through the
-              // Fast-Track path above instead.
+              // Crawled listings only: the viewing flow requests against
+              // `external_properties`. A realtor's own listing has no request
+              // path since Fast-Track retired (invariant 8) - none is live.
               shortlistable={source === 'external'}
             />
 
           </div>
 
-          <ViewingScheduleModal
-            isOpen={!!scheduleContext}
-            onClose={() => setScheduleContext(null)}
-            onSubmit={handleScheduleSubmit}
-            matchedProperties={[{
-              id: apartment.id,
-              title: apartment.title,
-              images: apartment.images,
-              location: apartment.location,
-              price: apartment.price,
-            }]}
-            initialSelectedIds={[apartment.id]}
-          />
-
-          <SubscriptionModal
-            isOpen={isSubscriptionOpen}
-            onClose={() => setIsSubscriptionOpen(false)}
-            reason={quota?.trialUsed ? 'viewings' : undefined}
-          />
 
           <ListingHistoryNote
             listingId={apartment.id}

@@ -35,6 +35,9 @@ import { lastHeardFromUs, renderHoldingUpdate } from './reminders.ts';
 import { hcmcLong } from './format.ts';
 import { profileOf, rankSubstitutes, toRenderable } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
+import { lockInDeadline, renderLockInLine } from './lock-in.ts';
+import { freeViewingAvailable, hasPassCover } from './lock-in-run.ts';
+import { SITE_URL } from './watch.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -150,6 +153,7 @@ export async function deliver(
       text = renderItinerary({
         ref: request.ref, stops: assembled.stops, requestedCount: listings.length,
         alternatives: assembled.alternatives,
+        lockInLine: await lockInLineFor(db, request, view),
       });
     }
   } else {
@@ -369,6 +373,38 @@ async function findSubstitutes(db: Supa, requestId: string) {
     console.error('[deliver] substitute search failed, sending without:', (e as Error).message);
     return [];
   }
+}
+
+/**
+ * The lock-in line for a renter without the Pass, or undefined for one with
+ * it - a Pass holder's "yes" locks the plan in, as it always did (SPEC §9).
+ *
+ * The deadline is the one this delivery will set: the plan arrives now unless
+ * it already has, and the three-hour floor runs from this send. Once the plan
+ * has gone out it is fixed, so sending the same plan again is the same text,
+ * and the same message.
+ */
+async function lockInLineFor(
+  db: Supa,
+  request: { ref: string; renter_id: string },
+  view: ReturnType<typeof reduceRequest>,
+): Promise<string | undefined> {
+  const { data: renter } = await db
+    .from('renters').select('user_id, phone_e164').eq('id', request.renter_id).maybeSingle();
+  if (await hasPassCover(db, renter?.user_id ?? null)) return undefined;
+  const now = new Date().toISOString();
+  const deadline = lockInDeadline({
+    ...view,
+    planArrivedAt: view.planArrivedAt ?? now,
+    lastDeliveredAt: view.lastDeliveredAt ?? now,
+  });
+  if (!deadline) return undefined;
+  return renderLockInLine({
+    siteUrl: SITE_URL,
+    ref: request.ref,
+    deadline,
+    freeViewingAvailable: renter?.phone_e164 ? await freeViewingAvailable(db, renter.phone_e164) : true,
+  });
 }
 
 /** The renter's first name for a template, or "there". */

@@ -1,13 +1,18 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { hasPassCover, loadLockIn } from "../_shared/viewing/lock-in-run.ts";
 
-// Opens the Polar checkout session for a Hausto Pass ($25, 30 days) or a
-// viewing top-up ($10, 2 more coordination). One function for both because the
-// flow is identical - only the product, the copy and the eligibility check
-// differ.
+// Opens the Polar checkout session for a Hausto Pass ($25, 30 days).
 //
-// A top-up is refused without a live pass: its credits would lapse the moment
-// they were bought, which is a charge for nothing.
+// Since the pricing rework (SPEC §9) the Pass covers every confirmed viewing
+// for 30 days, and the $10 top-up for two more viewings is retired: a request
+// for one is refused, and the product is archived in Polar by hand.
+//
+// Bought from the lock-in page, the checkout carries the request it is for
+// (`requestRef`). It is refused once the plan's deadline has passed, and the
+// checkout is written to the request's log, so the deadline waits for a
+// renter who started paying in time rather than cancel under them. The plan
+// is locked in where the purchase is recorded (_shared/polar-pass.ts).
 //
 // Price lives on the Polar product, not here. Polar is the merchant of record,
 // so the amount it charges (plus whatever tax it collects) is the one that
@@ -64,27 +69,46 @@ serve(async (req) => {
     const kind: Kind = body?.kind === 'topup' ? 'topup' : 'pass';
     logStep("User authenticated", { userId: user.id, kind });
 
+    if (kind === 'topup') {
+      return new Response(
+        JSON.stringify({ error: "The top-up is retired - the Hausto Pass now covers every confirmed viewing." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      );
+    }
+
+    // A Pass bought to lock in a plan: only while that plan is still open.
+    const requestRef = typeof body?.requestRef === 'string' ? body.requestRef.trim().toUpperCase() : '';
+    const lockInFor = requestRef ? await loadLockIn(supabaseClient, { ref: requestRef }, Date.now()) : null;
+    if (requestRef) {
+      if (!lockInFor || lockInFor.userId !== user.id) {
+        return new Response(
+          JSON.stringify({ error: `We could not find ${requestRef} on this account.` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 },
+        );
+      }
+      if (lockInFor.status !== 'OPEN') {
+        return new Response(
+          JSON.stringify({ error: "This plan can no longer be locked in.", status: lockInFor.status }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
+        );
+      }
+      if (await hasPassCover(supabaseClient, user.id)) {
+        return new Response(
+          JSON.stringify({ error: "You already hold the Pass - lock the plan in on its page." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
+        );
+      }
+    }
+
     const productId = Deno.env.get(PRODUCT_ENV_VAR[kind]);
     if (!productId) {
       throw new Error(`${PRODUCT_ENV_VAR[kind]} is not configured`);
     }
 
-    if (kind === 'topup') {
-      const { data: hasPass, error: passError } = await supabaseClient
-        .rpc('has_active_pass', { _user_id: user.id });
-      if (passError) throw passError;
-      if (!hasPass) {
-        return new Response(
-          JSON.stringify({ error: "A top-up needs a live Hausto Pass - its credits expire with the pass." }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-        );
-      }
-    }
-
     const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/$/, '') || '';
     // Polar substitutes {CHECKOUT_ID} at redirect time; /pass-success reads it
     // back and asks capture-pass-order to confirm the session.
-    const successUrl = `${origin}/pass-success?checkout_id={CHECKOUT_ID}`;
+    const successUrl = `${origin}/pass-success?checkout_id={CHECKOUT_ID}${lockInFor ? `&ref=${lockInFor.ref}` : ''}`;
 
     const checkoutResponse = await fetch(`${apiBase}/v1/checkouts/`, {
       method: "POST",
@@ -101,7 +125,7 @@ serve(async (req) => {
         external_customer_id: user.id,
         // Set here and read back from Polar's API on capture - never from the
         // client - so what was bought is decided server-side on both ends.
-        metadata: { kind, renter_id: user.id },
+        metadata: { kind, renter_id: user.id, ...(lockInFor ? { request_id: lockInFor.requestId } : {}) },
       }),
     });
     const checkout = await checkoutResponse.json();
@@ -112,6 +136,22 @@ serve(async (req) => {
       throw new Error("No checkout URL found in Polar response");
     }
     logStep("Polar checkout created", { checkoutId: checkout.id, kind });
+
+    // Logged before the renter is sent to pay, or not at all: a checkout the
+    // log does not know about cannot hold the deadline, and a payment that
+    // lands after it would buy a Pass and keep no plan.
+    if (lockInFor) {
+      const expiresAt = typeof checkout.expires_at === 'string'
+        ? checkout.expires_at
+        : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const { error: evErr } = await supabaseClient.from('events').insert({
+        request_id: lockInFor.requestId,
+        type: 'LOCK_IN_CHECKOUT_OPENED',
+        payload: { checkout_id: checkout.id, expires_at: expiresAt },
+        actor: 'RENTER',
+      });
+      if (evErr) throw new Error(`Could not hold the plan for checkout: ${evErr.message}`);
+    }
 
     return new Response(JSON.stringify({ checkoutId: checkout.id, checkoutUrl: checkout.url, kind }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

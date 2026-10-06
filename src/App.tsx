@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 import AdminTools from "./pages/AdminTools";
 import AdminComplexes from "./pages/AdminComplexes";
 import PassSuccess from "./pages/PassSuccess";
+import LockIn from "./pages/LockIn";
 import ComplexDetail from "./pages/ComplexDetail";
 import ComplexMap from "./pages/ComplexMap";
 import RealtorApply from "./pages/RealtorApply";
@@ -67,6 +68,7 @@ const App = () => (
               <Route path="/admin/complexes" element={<AdminComplexes />} />
               <Route path="/realtor/apply" element={<RealtorApply />} />
               <Route path="/pass-success" element={<PassSuccess />} />
+              <Route path="/lock-in/:ref" element={<LockIn />} />
               <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
               {/* The mock WhatsApp thread (SPEC §5). Its function refuses to run
                   when WHATSAPP_MODE is cloud, so the route being reachable in

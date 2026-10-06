@@ -133,6 +133,11 @@ verify_jwt = false
 # platform's bare 401, same as viewing-request-create.
 verify_jwt = false
 
+[functions.viewing-lock-in]
+# The lock-in page (SPEC §9): shows a plan and locks it in. Verifies the
+# caller's JWT itself and answers only for the account the request belongs to.
+verify_jwt = false
+
 [functions.dev-phone]
 # /dev/phone, the mock WhatsApp thread. Refuses outright when WHATSAPP_MODE is
 # cloud - simulating inbound messages against a real number would forge service

@@ -28,6 +28,7 @@ import {
 import { formatVnd, hcmc } from '../../supabase/functions/_shared/viewing/triage';
 import { waitingReplies } from '../../supabase/functions/_shared/viewing/thread';
 import { realtorDecisionsOwed } from '../../supabase/functions/_shared/viewing/reminders';
+import { lockInDeadline, lockInStatus } from '../../supabase/functions/_shared/viewing/lock-in';
 import {
   draftForRealtor,
   nudgeDraft,
@@ -153,6 +154,20 @@ export function RequestDetail({ requestId, onBack }: { requestId: string; onBack
         Requested {hcmc(request.created_at)}. Renter is free:{' '}
         {(request.availability ?? []).map(w => `${w.date} ${w.part.toLowerCase()}`).join(', ') || 'not stated'}
       </p>
+
+      {/* The one paid step (SPEC §9): who covered a kept plan, or when an
+          unlocked one is cancelled by rule and its agents released. */}
+      {view.state === 'CONFIRMED' && view.confirmedCover && (
+        <p className="small muted" style={{ marginTop: 0 }}>
+          Locked in with {view.confirmedCover === 'PASS' ? 'the Pass' : 'the free viewing (one place)'}.
+        </p>
+      )}
+      {view.state !== 'CONFIRMED' && lockInDeadline(view) && (
+        <p className="small muted" style={{ marginTop: 0 }}>
+          Lock-in: {lockInStatus(view, Date.now()).toLowerCase().replace('_', ' ')}, deadline {hcmc(lockInDeadline(view)!)}.
+          {' '}Not locked in by then, it is cancelled and its agents are owed a release.
+        </p>
+      )}
 
       <Proposals
         requestId={requestId}
@@ -629,6 +644,7 @@ const CANCEL_LABEL: Record<CancelReason, string> = {
   RENTER_FOUND_PLACE: 'Renter found a place',
   RENTER_UNRESPONSIVE: 'Renter never answered',
   DUPLICATE: 'Duplicate request',
+  NOT_LOCKED_IN: 'Not locked in by the deadline',
   OTHER: 'Other',
 };
 

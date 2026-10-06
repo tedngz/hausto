@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
   // What is already queued, so a second pass does not double it.
   const { data: pending } = await db
     .from('jobs').select('kind, payload').is('completed_at', null)
-    .in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_DAY', 'CONFIRM_REALTOR', 'RELEASE_REALTOR', 'CHASE_RENTER']);
+    .in('kind', ['HOLDING_UPDATE', 'NUDGE_REALTOR', 'VIEWING_DAY', 'CONFIRM_REALTOR', 'RELEASE_REALTOR', 'CHASE_RENTER', 'LOCK_IN_DEADLINE']);
   // A viewing-day job that finished without sending (a refusal no retry
   // fixes) counts as queued for the rest of the day. Otherwise every pass
   // would queue the same refusal again until the last viewing started.

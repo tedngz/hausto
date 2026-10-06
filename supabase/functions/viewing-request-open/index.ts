@@ -1,9 +1,15 @@
-// The signed-in renter's request that a new place would join, if any.
+// What the request modal needs to know before the renter picks anything.
 //
-// The modal asks this when it opens, so it can say "adding to HV-4KX2" and
-// show that request's times before the renter commits, instead of asking for
-// times the join would not use. `viewing-request-create` decides again at
-// submit - this is a preview, not a promise.
+//   open      - the request a new place would join, if any. The modal says
+//               "adding to HV-4KX2" and shows its times, rather than asking
+//               for times the join would not use.
+//   blocking  - the request a new one would wait behind (one request being
+//               worked at a time, SPEC §1). Often the same request; a full one,
+//               or one whose plan has gone out, blocks without being joinable.
+//   passRequired - two plans lapsed without being locked in, and no Pass.
+//
+// `viewing-request-create` decides all of it again at submit - this is a
+// preview, not a promise.
 //
 // Returns only what the renter already knows about their own request: its
 // ref, the windows they gave, and which listings are in it. No state (a
@@ -12,8 +18,9 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
-import { hcmcDate } from '../_shared/viewing/intake.ts';
-import { findJoinableRequest } from '../_shared/viewing/open-request.ts';
+import { hcmcDate, MAX_LAPSED_WITHOUT_PASS } from '../_shared/viewing/intake.ts';
+import { countLapsedPlans, findOpenRequests } from '../_shared/viewing/open-request.ts';
+import { hasPassCover } from '../_shared/viewing/lock-in-run.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,21 +56,27 @@ Deno.serve(async (req) => {
   if (!user) return json({ error: 'sign_in_required' }, 401);
 
   try {
-    const open = await findJoinableRequest(
-      createClient(SUPABASE_URL, SERVICE_ROLE), user.id, hcmcDate(new Date()),
-    );
+    const db = createClient(SUPABASE_URL, SERVICE_ROLE);
+    const [{ joinable, blocking }, lapsed, hasPass] = await Promise.all([
+      findOpenRequests(db, user.id, hcmcDate(new Date())),
+      countLapsedPlans(db, user.id),
+      hasPassCover(db, user.id),
+    ]);
     return json({
-      open: open
+      open: joinable
         ? {
-          ref: open.ref,
-          availability: open.availability,
-          listingIds: open.listingIds,
+          ref: joinable.ref,
+          availability: joinable.availability,
+          listingIds: joinable.listingIds,
         }
         : null,
+      blocking: blocking ? { ref: blocking.ref, listingIds: blocking.listingIds } : null,
+      passRequired: lapsed >= MAX_LAPSED_WITHOUT_PASS && !hasPass,
+      hasPass,
     });
   } catch (e) {
     console.error('[viewing-request-open]', e);
-    // The modal falls back to asking for times, which is always safe.
-    return json({ open: null, error: 'lookup_failed' }, 500);
+    // The modal falls back to asking for times; the server decides at submit.
+    return json({ open: null, blocking: null, passRequired: false, error: 'lookup_failed' }, 500);
   }
 });

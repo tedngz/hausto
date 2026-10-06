@@ -2,7 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Crown, RefreshCw } from 'lucide-react';
 import { usePass, PASS_PRICE_USD, PASS_DAYS } from '@/hooks/usePass';
-import { useViewingQuota } from '@/hooks/useViewingQuota';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -19,7 +18,6 @@ interface SubscriptionStatusProps {
  */
 export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
   const { pass, isLoading: loading, refetchPass } = usePass();
-  const { quota, refetchQuota } = useViewingQuota();
   const [refreshing, setRefreshing] = useState(false);
 
   const active = !!pass?.active;
@@ -28,7 +26,7 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
   // runs out. Refresh re-reads the ledger rather than calling a processor.
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refetchPass(), refetchQuota()]);
+    await refetchPass();
     setRefreshing(false);
     toast.success('Plan status refreshed');
   };
@@ -43,10 +41,6 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
         </CardContent>
       </Card>;
   }
-
-  const viewingsLine = quota
-    ? `${quota.remaining} viewing request${quota.remaining === 1 ? '' : 's'} left`
-    : null;
 
   return (
     <Card>
@@ -68,21 +62,18 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
               {pass.isComplimentary
                 ? 'Included with your admin account'
                 : `${pass.daysLeft} day${pass.daysLeft === 1 ? '' : 's'} left`}
-              {viewingsLine ? ` · ${viewingsLine}` : ''}
+ · every viewing we confirm is covered
             </p>
-            {/* A complimentary pass has no cycle to extend, but its holder
-                still needs the way in to top up viewings - so the button
-                changes what it offers rather than disappearing. */}
-            <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
-              {pass.isComplimentary ? 'Buy more viewings' : `Extend by ${PASS_DAYS} days`}
-            </Button>
+            {/* A complimentary pass has no end to extend. */}
+            {!pass.isComplimentary && (
+              <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
+                {`Extend by ${PASS_DAYS} days`}
+              </Button>
+            )}
           </> : <>
             <p className="text-sm text-muted-foreground">
-              {quota?.trialAvailable
-                ? 'Your first viewing is on us. The Pass adds 3 more, plus a Deep Scan on any listing before you spend a Saturday on it.'
-                : quota?.trialLocked
-                  ? 'Answer the preference quiz and match 3 listings to unlock your free viewing request.'
-                  : 'Free viewing request used. The Pass unlocks Deep Scan and 3 more viewings.'}
+              Requesting viewings is free, and your first confirmed viewing is on us. The Pass covers
+              every one after, plus a Deep Scan on any listing before you spend a Saturday on it.
             </p>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />

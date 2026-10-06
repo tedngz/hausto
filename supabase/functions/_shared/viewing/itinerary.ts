@@ -227,6 +227,12 @@ export interface ItineraryMessage {
   requestedCount: number;
   /** Other times agents offered. Listed apart from the plan, never in it. */
   alternatives?: OfferedAlternative[];
+  /**
+   * How a renter without the Pass locks the plan in - the page, the deadline,
+   * the price (lock-in.ts `renderLockInLine`). Absent, the renter has the
+   * Pass and a "yes" locks it in, as before the pricing rework.
+   */
+  lockInLine?: string;
 }
 
 /** `Sat 28 Sep 10:00 or Sun 29 Sep 15:00` - the day named each time, since these are choices, not a route. */
@@ -301,9 +307,16 @@ export function renderItinerary(m: ItineraryMessage): string {
       : `the other ${missing === 1 ? 'one' : missing}`;
     lines.push(`We could not confirm ${other} for these times.`);
   }
-  lines.push(alternatives.length > 0
-    ? 'Reply YES to lock these in. If one of the other times suits you, tell us which.'
-    : 'Reply YES to lock these in, or tell us what to change.');
+  if (m.lockInLine) {
+    lines.push(m.lockInLine);
+    lines.push(alternatives.length > 0
+      ? 'If one of the other times suits you, tell us which.'
+      : 'Or tell us what to change.');
+  } else {
+    lines.push(alternatives.length > 0
+      ? 'Reply YES to lock these in. If one of the other times suits you, tell us which.'
+      : 'Reply YES to lock these in, or tell us what to change.');
+  }
   lines.push(`Ref ${m.ref}`);
 
   return lines.join('\n');

@@ -98,11 +98,13 @@ a window the function will refuse.
 Cards carry a single "Request viewing" button, which opens
 `RequestViewingModal`. "Shortlist" and "Book viewing" used to sit side by side
 and asked the renter to care about a distinction that was ours. Fast-Track is
-retired as a renter surface; its plumbing stays for history and entitlements.
-The modal requests the one place it was opened from; a second place asked for
-while the first request's agents are still being asked joins that request
-(`pickJoinable` in `intake.ts`, SPEC §1), so several requests make one plan
-and one itinerary message rather than one each.
+retired as a renter surface, and since the pricing rework no screen opens its
+scheduler; its plumbing stays for history. The modal requests the place it was
+opened from (or the places selected in Browse); a place asked for while a
+request's agents are still being asked joins that request (`pickJoinable` in
+`intake.ts`, SPEC §1), so several requests make one plan and one itinerary
+message rather than one each. Past that, a new request waits: one request
+being worked at a time, for everyone (`pickBlocking`).
 
 **9. New-flow requests are visible to operators, never to realtors.**
 `ViewingFlowQueuePanel` is admin scope only and read-only - status is derived
@@ -172,8 +174,8 @@ Do not build these even if they seem natural:
   beyond the agents Hausto is talking to.
 - Realtor-facing accounts, login, or portal.
 - Renter authentication beyond Supabase auth on the request surface. Intake
-  requires a signed-in user, because a request spends viewing credits and
-  credits belong to an account; the phone number stays the identity for
+  requires a signed-in user, because plans are locked in and request limits
+  counted per account; the phone number stays the identity for
   everything inbound, since a WhatsApp message arrives with nothing else to key
   on. `renters.user_id` links the two and is nullable - a renter who arrived
   over WhatsApp and never signed up is still a renter.
@@ -183,11 +185,11 @@ Do not build these even if they seem natural:
   `district_code`.
 
 **Payments are not on this list.** They are live and shipping - see the Payments
-section below. The rule is: build no new payment surface for the viewing flow,
-and leave the Pass alone. The viewing flow spends the existing entitlement
-rather than inventing one: one credit per listing, so four places in a request
-cost the same as four separate requests, because it is the same four hours of a
-coordinator's day.
+section below. Since the pricing rework (2026-10-06) requests are free and the
+renter pays to **lock in** a plan agents have confirmed: the first viewing on
+us, once per WhatsApp number, then the Pass, which covers every confirmed
+viewing for 30 days (SPEC §9). The Pass is the one product; build no other
+payment surface for the viewing flow.
 
 ### Conventions
 
@@ -466,16 +468,19 @@ whichever table it was requested through, and
 itself. Counting only one would give a complimentary-cover account three
 coordinations from each.
 
-The two flows spend the same credits by different routes, and neither route may
-be duplicated:
+Since the pricing rework the viewing flow spends no credits at all, and the
+credit ledger - `passes.viewings_used`, `consume_viewing_credits()`,
+`viewing_trials` - is history. Fast-Track's trigger still charges it, and no
+screen opens Fast-Track any more. What the viewing flow charges is the lock-in,
+and **one function decides cover** - `decideLockIn` in
+`_shared/viewing/lock-in.ts` - for the lock-in page, the payment and a
+WhatsApp "yes" alike:
 
-- Fast-Track charges in a trigger on insert, reading `NEW.property_ids`.
-- The viewing flow calls `consume_viewing_credits()` from
-  `viewing-request-create`, because its listings arrive as `request_items`
-  *after* the request row exists, so there is no row to hang a trigger on. It
-  charges last, after the log is written, and deletes the request if the charge
-  raises - a request nobody paid for queues real operator work against an
-  account with nothing left.
-- That function also stamps `viewing_trials`. Fast-Track does it with an
-  `AFTER INSERT` trigger the new flow has no insert to hang off, and without it
-  the free trial is infinite through the new modal.
+- The Pass covers every stop. `has_active_pass` or `has_complimentary_pass`,
+  read at lock-in, not at request.
+- The free viewing covers one stop, once per WhatsApp number, claimed in
+  `free_viewings` (primary key on the number) at lock-in.
+- A Pass bought from the lock-in page carries the request in its checkout's log
+  (`LOCK_IN_CHECKOUT_OPENED`), and `_shared/polar-pass.ts` locks the plan in
+  where the purchase is recorded, on both paths. The number to watch: lock-ins
+  with no Pass and no free viewing - always zero.

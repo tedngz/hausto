@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { lockInAfterPurchase, type LockInResult } from "./viewing/lock-in-run.ts";
 
 // Recording a paid Polar checkout as a pass or top-up.
 //
@@ -14,16 +15,23 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0
 // wrong in one path only would hand out days nobody paid for.
 
 export const PASS_DAYS = 30;
+// Written on every pass row, and read by nothing since the pricing rework: the
+// Pass covers every confirmed viewing for its 30 days (SPEC §9), so the count
+// is history. The top-up is retired and no longer sold; one bought before
+// that still records here.
 export const PASS_VIEWINGS = 3;
 export const TOPUP_VIEWINGS = 2;
 
 export type PassKind = 'pass' | 'topup';
 
+/** The plan a Pass was bought to lock in, and what became of it. */
+export type PurchaseLockIn = { ref: string | null; result: LockInResult | { ok: false; reason: 'UNKNOWN_REQUEST' } };
+
 export type RecordResult =
   /** Written just now. */
-  | { status: 'recorded'; kind: PassKind; viewings: number; expiresAt: string }
+  | { status: 'recorded'; kind: PassKind; viewings: number; expiresAt: string; lockIn?: PurchaseLockIn }
   /** The other path got there first, or this is a redelivery. */
-  | { status: 'already'; kind: PassKind; viewings: number; expiresAt: string }
+  | { status: 'already'; kind: PassKind; viewings: number; expiresAt: string; lockIn?: PurchaseLockIn }
   /** Polar has not marked the checkout succeeded yet. Nothing written. */
   | { status: 'pending'; checkoutStatus: string };
 
@@ -56,10 +64,54 @@ const SETTLE_DELAY_MS = 1000;
 async function existingPass(supabase: SupabaseClient, checkoutId: string) {
   const { data } = await supabase
     .from('passes')
-    .select('id, kind, viewings_included, expires_at')
+    .select('id, kind, viewings_included, expires_at, renter_id')
     .eq('provider_order_id', checkoutId)
     .maybeSingle();
   return data;
+}
+
+/**
+ * The request a checkout was opened to lock in, from its log
+ * (LOCK_IN_CHECKOUT_OPENED, written by create-pass-order before the renter was
+ * sent to pay). Read from the log rather than the checkout's metadata so the
+ * second path to arrive - which never fetches the checkout - finds it too.
+ */
+async function lockInRequestFor(supabase: SupabaseClient, checkoutId: string) {
+  const { data } = await supabase
+    .from('events')
+    .select('request_id')
+    .eq('type', 'LOCK_IN_CHECKOUT_OPENED')
+    .eq('payload->>checkout_id', checkoutId)
+    .limit(1)
+    .maybeSingle();
+  if (!data?.request_id) return null;
+  const { data: req } = await supabase.from('viewing_requests').select('id, ref').eq('id', data.request_id).maybeSingle();
+  return req ? { id: String(req.id), ref: String(req.ref) } : null;
+}
+
+/**
+ * Lock in the plan this Pass was bought for, if it was bought for one. Both
+ * purchase paths run it - idempotent, the second finds it locked in - so a
+ * renter who pays and closes the tab keeps the plan. Never throws: the Pass is
+ * paid for and recorded whatever happens to the plan, and a person sorts out a
+ * plan that could not be kept (Before launch: the refund policy).
+ */
+async function lockInPurchasedPlan(
+  supabase: SupabaseClient,
+  checkoutId: string,
+  renterId: string,
+  log: (step: string, details?: unknown) => void,
+): Promise<PurchaseLockIn | undefined> {
+  try {
+    const request = await lockInRequestFor(supabase, checkoutId);
+    if (!request) return undefined;
+    const result = await lockInAfterPurchase(supabase, { requestId: request.id, checkoutId, userId: renterId });
+    log(result.ok ? 'Plan locked in' : 'Plan not locked in', { ref: request.ref, ...result });
+    return { ref: request.ref, result };
+  } catch (e) {
+    log('Lock-in after purchase failed', { checkoutId, message: (e as Error).message });
+    return undefined;
+  }
 }
 
 /**
@@ -82,6 +134,9 @@ export async function recordPolarPurchase(args: RecordArgs): Promise<RecordResul
       kind: already.kind as PassKind,
       viewings: already.viewings_included,
       expiresAt: already.expires_at,
+      lockIn: already.renter_id
+        ? await lockInPurchasedPlan(supabase, checkoutId, String(already.renter_id), log)
+        : undefined,
     };
   }
 
@@ -192,11 +247,15 @@ export async function recordPolarPurchase(args: RecordArgs): Promise<RecordResul
         kind: raced.kind as PassKind,
         viewings: raced.viewings_included,
         expiresAt: raced.expires_at,
+        lockIn: await lockInPurchasedPlan(supabase, checkoutId, renterId, log),
       };
     }
     throw insertError;
   }
 
   log('Purchase recorded', { renterId, kind, expiresAt });
-  return { status: 'recorded', kind, viewings, expiresAt };
+  return {
+    status: 'recorded', kind, viewings, expiresAt,
+    lockIn: kind === 'pass' ? await lockInPurchasedPlan(supabase, checkoutId, renterId, log) : undefined,
+  };
 }
