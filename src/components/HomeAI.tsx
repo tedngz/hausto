@@ -926,12 +926,12 @@ export const HomeAI = ({
   const handleBrowseAll = () => {
     navigate('/hub');
   };
-  // The way out of the preview to the original posting: a Hausto listing points
-  // at its own page, a crawled one at the marketplace it came from.
+  // Where the preview says a listing came from. A Hausto listing links to its
+  // own page; a crawled one names its marketplace and links nowhere - the
+  // original ad carries the agent's number (CLAUDE.md invariant 4).
   const previewSourceOf = (property: PropertyMatch): { name: string; href?: string | null } => {
     if (!property.isExternal) return { name: 'Hausto', href: `/property/${property.id}` };
-    const href = property.sourceUrl || property.property_source_link || null;
-    return { name: getPropertySourceLogo(href || property.source || '').name, href };
+    return { name: getPropertySourceLogo(property.source || '').name, href: null };
   };
 
   // A Deep Scan asked for from a card on this page. The chat is already here,

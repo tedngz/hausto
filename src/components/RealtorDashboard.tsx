@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { withAdminSources } from '@/lib/adminListingSources';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -112,12 +113,13 @@ export const RealtorDashboard = ({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_properties')
-        .select('id, external_id, source, source_url, title, location, location_normalized, city, price, price_display, size, description, highlights, amenities, images, vibe, vibe_analysis, crawled_at, last_verified_at, is_active, created_at, updated_at, latitude, longitude, rooms, verification_failures, last_verification_status, last_verification_reason, deactivated_at, phone_extraction_attempts, vibe_status, raw_only, raw_data')
+        .select('id, external_id, source, title, location, location_normalized, city, price, price_display, size, description, highlights, amenities, images, vibe, vibe_analysis, crawled_at, last_verified_at, is_active, created_at, updated_at, latitude, longitude, rooms, verification_failures, last_verification_status, last_verification_reason, deactivated_at, phone_extraction_attempts, vibe_status, raw_only')
         .eq('raw_only', showRawHarvested)
         .order('crawled_at', { ascending: false })
         .limit(500);
       if (error) throw error;
-      let listings: any[] = data || [];
+      // The source link and raw_data are admin-only reads.
+      let listings: any[] = await withAdminSources(data || []);
 
       // Admin: fetch contact info via SECURITY DEFINER RPC (contact columns are
       // not directly readable by authenticated users, but the RPC allows admins).

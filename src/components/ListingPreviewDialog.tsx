@@ -131,14 +131,16 @@ export const ListingPreviewDialog = ({
                   ? `${quota?.remaining ?? INCLUDED_VIEWINGS_PER_CYCLE} viewing requests left this cycle`
                   : 'Your first viewing is on us'}
         </span>
-        {source?.href && (
+        {/* Our own page only. A crawled listing's original ad carries the
+            agent's number, and renters reach agents through a viewing
+            request (CLAUDE.md invariant 4) - so an outside link is dropped
+            here even if a caller passes one. */}
+        {source?.href?.startsWith('/') && (
           <a
             href={source.href}
-            target={source.href.startsWith('/') ? undefined : '_blank'}
-            rel={source.href.startsWith('/') ? undefined : 'noopener noreferrer'}
             className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground whitespace-nowrap"
           >
-            View original on {source.name}
+            View on {source.name}
           </a>
         )}
       </div>

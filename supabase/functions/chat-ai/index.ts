@@ -19,13 +19,35 @@ const corsHeaders = {
 const WANTS_OTHER_LISTINGS =
   /\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i;
 
-// Listing unlocks a free renter gets per day - one per listing, covering both
-// the owner contact and the original listing link, because the source posting
-// carries the phone number too. Counted in Redis under
-// `usage:<user>:<date>:contact-reveals`, which the retired ai-assistant
-// function also wrote to; anything new that hands over contacts must use the
-// same key rather than start a second counter.
-const FREE_DAILY_CONTACT_REVEALS = 10;
+// The chat never hands a renter an agent's number or the original listing,
+// on any tier. Both lead to the same place - the source posting carries the
+// phone - and a renter holding either can arrange the viewing and the lease
+// without us, which is what the Pass sells (CLAUDE.md invariant 4: the one
+// path to an agent's number is the viewing-day message). Listings are loaded
+// with their contact and source columns, so `withoutAgentFields` runs on every
+// object that can reach the model or the reply.
+const AGENT_FIELDS = [
+  'providerName',
+  'providerPhone',
+  'property_source_provider_name',
+  'property_source_provider_phone',
+  'property_source_link',
+  'contact_name',
+  'contact_phone',
+  'source_url',
+  '_sourceUrl',
+  'sourceUrl',
+  'sourceProviderName',
+  'sourceProviderPhone',
+] as const;
+
+// deno-lint-ignore no-explicit-any
+function withoutAgentFields<T extends Record<string, any>>(r: T): T {
+  if (!r || typeof r !== 'object') return r;
+  const out: Record<string, unknown> = { ...r };
+  for (const k of AGENT_FIELDS) if (k in out) out[k] = null;
+  return out as T;
+}
 
 // Initialize Upstash Redis client
 const redis = new Redis({
@@ -1185,9 +1207,6 @@ interface PropertyWithScore {
   vibe: string;
   rooms?: string;
   vibe_analysis?: any;
-  property_source_link?: string;
-  providerName?: string;
-  providerPhone?: string;
   // Scoring
   matchScore: number;
   priceMatch: boolean;
@@ -1478,9 +1497,6 @@ function filterAndScoreProperties(
       vibe: p.vibe || styles.join(', ') || 'Modern',
       rooms: p.rooms || null,
       vibe_analysis: p.vibe_analysis || null,
-      property_source_link: p.property_source_link || p._sourceUrl || null,
-      providerName: p.property_source_provider_name || p.contact_name || null,
-      providerPhone: p.property_source_provider_phone || p.contact_phone || null,
       matchScore: score,
       priceMatch,
       locationMatch,
@@ -1491,7 +1507,6 @@ function filterAndScoreProperties(
       isExactSubAreaMatch,
       isExternal: !!p._isExternal,
       source: p._source || null,
-      sourceUrl: p._sourceUrl || null,
     });
   }
   
@@ -1539,12 +1554,8 @@ function validateAndFixAIResults(
       highlights: actualProperty.highlights,
       vibe_analysis: actualProperty.vibe_analysis || null,
       rooms: actualProperty.rooms || null,
-      property_source_link: actualProperty.property_source_link || null,
-      sourceProviderName: actualProperty.providerName || null,
-      sourceProviderPhone: actualProperty.providerPhone || null,
       isExternal: !!actualProperty.isExternal,
       source: actualProperty.source || null,
-      sourceUrl: actualProperty.sourceUrl || null,
     };
     
     // Verify price constraint
@@ -1768,17 +1779,15 @@ serve(async (req) => {
       last_activated_at: ext.crawled_at,
       is_active: true,
       rooms: ext.rooms || null,
-      property_source_link: ext.source_url,
-      property_source_provider_name: ext.contact_name || null,
-      property_source_provider_phone: ext.contact_phone || null,
       latitude: ext.latitude,
       longitude: ext.longitude,
       _isExternal: true, // Internal flag for later use
       _source: ext.source,
-      _sourceUrl: ext.source_url,
     }));
     
-    const properties = [...(internalResult.data || []), ...externalProperties];
+    // Realtor listings carry their source contact and link as columns; nothing
+    // below may see them (see AGENT_FIELDS).
+    const properties = [...(internalResult.data || []).map(withoutAgentFields), ...externalProperties];
     console.log(`Found ${internalResult.data?.length || 0} internal + ${externalProperties.length} external = ${properties.length} total properties`);
 
     // Helper functions
@@ -2175,17 +2184,7 @@ Pick 1-3 styles and 1-2 colors that best match.`
           isComparisonResponse: true // Flag for frontend
         };
 
-        if (isAnonymous) {
-          comparisonResponse.results = comparisonResponse.results.map((r: any) => ({
-            ...r,
-            providerName: null,
-            providerPhone: null,
-            property_source_provider_name: null,
-            property_source_provider_phone: null,
-            contact_name: null,
-            contact_phone: null,
-          }));
-        }
+        comparisonResponse.results = comparisonResponse.results.map(withoutAgentFields);
         const responseContent = JSON.stringify(comparisonResponse);
 
         // Save only the assistant message, NOT ai_searches
@@ -2532,10 +2531,8 @@ ${scoredPreviousProperties.map((p, i) => `
     const promptProperties = (isPureLifestyle || isComplexInfoTurn || isSubjectComparison || isSubjectQuestion) ? [] : topProperties;
 
     // ---- Subject listings: the "ask about this one" half of the chat ----
-    // Loaded for their titles and for whether we hold a contact or a source
-    // link. The phone number and the URL are deliberately NOT put in the
-    // prompt: the model asks for them by id below, and the server attaches
-    // them only after spending the renter's daily allowance.
+    // Loaded without their contact and source columns: the chat never hands
+    // either over (AGENT_FIELDS), so it has no reason to hold them.
     let subjectProperties: any[] = [];
     // Pinned ids can also be COMPLEXES - the hub lets a renter pin a building
     // the same way they pin a listing, so both arrive on this one channel.
@@ -2547,11 +2544,11 @@ ${scoredPreviousProperties.map((p, i) => `
       const [{ data: internalSubjects }, { data: externalSubjects }, { data: complexSubjects }] = await Promise.all([
         supabase
           .from('properties')
-          .select('id, title, location, price, size, rooms, vibe, description, highlights, amenities, property_source_provider_name, property_source_provider_phone, property_source_link')
+          .select('id, title, location, price, size, rooms, vibe, description, highlights, amenities')
           .in('id', subjectIds),
         supabase
           .from('external_properties')
-          .select('id, title, location, price, size, rooms, vibe, description, highlights, amenities, contact_name, contact_phone, source_url')
+          .select('id, title, location, price, size, rooms, vibe, description, highlights, amenities')
           .in('id', subjectIds),
         supabase
           .from('complexes')
@@ -2575,10 +2572,10 @@ ${scoredPreviousProperties.map((p, i) => `
     //
     // Needs at least two listings resolved: with one (or none, if the ids were
     // stale) there is nothing to weigh, and the main prompt answers better.
-    // A request for the owner's number goes there too - the handover lives on
-    // that path, behind the renter's daily allowance.
-    const wantsHandover = /\b(contact|phone|number|call|whatsapp|zalo|owner|landlord|agent|realtor|link|url|listing page)\b/i.test(message);
-    if (isSubjectComparison && subjectProperties.length >= 2 && !wantsHandover) {
+    // A request for the owner's number goes there too - that prompt is the
+    // one that says why we don't hand it over, and what we do instead.
+    const asksForAgent = /\b(contact|phone|number|call|whatsapp|zalo|owner|landlord|agent|realtor|link|url|listing page)\b/i.test(message);
+    if (isSubjectComparison && subjectProperties.length >= 2 && !asksForAgent) {
       const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
       if (OPENAI_API_KEY) {
         try {
@@ -2634,7 +2631,7 @@ ${scoredPreviousProperties.map((p, i) => `
 
           console.log(`[chat-ai:compare] answered on ${subjectProperties.length} pinned listing(s), no search`);
           return new Response(
-            JSON.stringify({ response: comparisonContent, contactsRemaining: null, limitReached: false }),
+            JSON.stringify({ response: comparisonContent }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
           );
         } catch (compareError) {
@@ -2663,21 +2660,16 @@ Answer about these buildings from the data above. They are BUILDINGS, not indivi
     const subjectBlock = subjectProperties.length === 0 ? '' : `
 📌 LISTINGS THE USER IS ASKING ABOUT (they pinned these to the conversation):
 ${subjectProperties.map((p, i) => {
-  const hasContact = !!(p.property_source_provider_phone || p.property_source_provider_name || p.contact_phone || p.contact_name);
-  const hasLink = !!(p.property_source_link || p.source_url);
-  return `Subject ${i + 1} [id ${p.id}]: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? 'size n/a'}, rooms: ${p.rooms ?? 'n/a'}. Vibe: ${p.vibe ?? 'n/a'}. Highlights: ${((p.highlights as string[]) || []).join(', ')}. Amenities: ${((p.amenities as string[]) || []).join(', ')}. Contact on file: ${hasContact ? 'yes' : 'no'}. Original listing on file: ${hasLink ? 'yes' : 'no'}.${p.description ? ` Description: ${String(p.description).slice(0, 300)}` : ''}`;
+  return `Subject ${i + 1} [id ${p.id}]: ${p.title} at ${p.location} — ${Number(p.price).toLocaleString()} VND/mo, ${p.size ?? 'size n/a'}, rooms: ${p.rooms ?? 'n/a'}. Vibe: ${p.vibe ?? 'n/a'}. Highlights: ${((p.highlights as string[]) || []).join(', ')}. Amenities: ${((p.amenities as string[]) || []).join(', ')}.${p.description ? ` Description: ${String(p.description).slice(0, 300)}` : ''}`;
 }).join('\n')}
 
 When the user says "this one", "it", "these", or asks a question without naming a property, they mean these.
 
 ⚠️ A question about pinned listings is NOT a search. Comparing them, weighing tradeoffs, checking which suits the user, answering anything about them - all of these are answered in "blocks" with a "text" block, and you MUST NOT include a "results" array. Adding listings they did not ask for buries the answer they did ask for. Return "results" only if they explicitly ask you to find something NEW ("find me similar", "show me other options", "what else is there").
 
-HANDING OVER CONTACT DETAILS AND SOURCE LINKS:
-- Never write a phone number, an owner name, or a listing URL into your own text, and never guess one - you are not given them.
-- To share the owner/realtor contact, set "reveal_contact_property_id" to that subject's id. The system attaches it and enforces the user's daily allowance.
-- To share the original listing, set "reveal_listing_link_property_id" to that subject's id. Same allowance.
-- Do this whenever the user asks, AND whenever the answer genuinely needs the owner (live availability, price negotiation, deposit or contract terms, move-in dates) - answer what you can from the data, then attach the contact so they can call.
-- If a subject says "Contact on file: no", say Hausto has no direct contact for it and offer viewing coordination instead. If it says "Original listing on file: no", say we don't have a source link rather than offering a substitute.
+AGENTS' CONTACT DETAILS AND THE ORIGINAL LISTING:
+- Hausto does not hand out agents' or owners' numbers, names or the original listing, to anyone. You are not given them; never write a phone number, an agent's name or a listing URL, and never guess one.
+- When the user asks for one, or the answer needs the agent (live availability, price negotiation, deposit or contract terms, move-in dates): answer what you can from the data, then say plainly that we don't share agents' details and that tapping "Request viewing" on the listing has us ask the agent for them - availability, price and times - and set the viewing up.
 ` ;
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.
@@ -2685,7 +2677,7 @@ HANDING OVER CONTACT DETAILS AND SOURCE LINKS:
 You are the renter's ONE assistant, not a search box. You do three things, and which one depends entirely on what they just asked:
 1. Find places to live - search the inventory and show listings.
 2. Answer questions - renting in Vietnam (deposits, contracts, agent fees, utilities, what to check at a viewing, moving here), neighbourhoods, buildings, commutes, cost of living. Answer these properly, in prose, without attaching listings nobody asked for.
-3. Help with listings they are already looking at - the ones pinned below, or ones you showed earlier. Compare them, weigh tradeoffs, and hand over the owner's contact or the original listing when they need it.
+3. Help with listings they are already looking at - the ones pinned below, or ones you showed earlier. Compare them, weigh tradeoffs, and when they need the agent, point them to "Request viewing" - we ask the agent for them.
 A question is not a failed search. If they ask something you can answer, answer it.
 
 🎯 USER'S ACCUMULATED REQUIREMENTS (from this conversation):
@@ -2721,7 +2713,6 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    Styles: ${p.styles.join(', ') || 'Not specified'}
    Images: ${JSON.stringify(p.images)}
    Realtor ID: ${p.realtor_id}
-   ${p.providerName ? `Provider: ${p.providerName} (${p.providerPhone})` : ''}
 `).join('\n') : ((isPureLifestyle || isComplexInfoTurn || isSubjectComparison || isSubjectQuestion) ? '(Skipped — info turn, no listings needed.)' : 'No properties currently match these criteria in our database.')}
 
 
@@ -2826,11 +2817,6 @@ ${promptProperties.length > 0 ? promptProperties.map((p, i) => `
    - **ALWAYS include a conversational answer** in the "summary" field or a "text" block if the user is asking an informational question. Never leave the user hanging without a text explanation.
    - You may MIX A and B: a shopping turn can also carry a "text" block ("Heads up: under 15M in D1 is rare — these are mostly studios") or a "followups" block.
    - If you only have a quick conversational reply (clarifying question, simple advice), return { "summary": "...", "blocks": [ { "type": "followups", "suggestions": ["[Search] ...", "[Ask] ..."] } ] } with no "results".
-
-   C. HANDOVER fields (optional, only when LISTINGS THE USER IS ASKING ABOUT is present above): alongside "summary"/"blocks", set
-     "reveal_contact_property_id": "<subject id>" to attach that listing's owner contact, and/or
-     "reveal_listing_link_property_id": "<subject id>" to attach its original listing URL.
-     Both are ids only - never the phone number or the URL itself. The system attaches the real values and enforces the daily allowance. Omit or null when not handing anything over.
 
 10. **WHEN to use which intent**: shopping → user says "show me", "find", "any 2BR", uploads images, gives budget/area/feature filters. Info → user asks "tell me about X", "what's it like in Y", "how far is A from B", "should I pick X or Y", "is X pet friendly". Mixed → "show me 2BRs in Thao Dien and tell me about the area" → include both results and blocks.
 
@@ -3236,9 +3222,6 @@ Maximum ${maxResults} properties in results.`;
         amenities: p.amenities,
         vibe_analysis: p.vibe_analysis || null,
         rooms: p.rooms || null,
-        property_source_link: p.property_source_link || null,
-        sourceProviderName: p.providerName || null,
-        sourceProviderPhone: p.providerPhone || null,
         matchScore: p.matchScore,
         matchReason: p.matchReasons.length > 0 
           ? p.matchReasons.join(', ') 
@@ -3467,203 +3450,39 @@ Maximum ${maxResults} properties in results.`;
       }
     }
 
-    // Contact details leave this function under the same rule as
-    // get_external_property_contacts: admins and the renter matched to that
-    // listing. The model is handed provider contacts so it can answer questions
-    // about a match, so the release decision is made here - by asking the
-    // database as the caller rather than by trusting "is signed in". Anonymous
-    // callers keep the blanket strip, including internal listings.
+    // Nothing in a reply carries an agent's contact or the original listing
+    // (AGENT_FIELDS). Listings are scrubbed where they are loaded; this is the
+    // second line, over whatever the model wrote back, because a field it
+    // echoed from an earlier turn would otherwise reach the renter and the
+    // stored thread.
     try {
       const parsed = JSON.parse(responseContent);
-      const items: any[] = [];
-      if (Array.isArray(parsed?.results)) items.push(...parsed.results);
+      let touched = false;
+      if (Array.isArray(parsed?.results)) {
+        parsed.results = parsed.results.map(withoutAgentFields);
+        touched = true;
+      }
       if (Array.isArray(parsed?.blocks)) {
-        parsed.blocks.forEach((b: any) => {
-          if (Array.isArray(b?.properties)) items.push(...b.properties);
-        });
+        parsed.blocks = parsed.blocks.map((b: any) =>
+          Array.isArray(b?.properties) ? { ...b, properties: b.properties.map(withoutAgentFields) } : b);
+        touched = true;
       }
-
-      if (items.length > 0) {
-        // External listings carry a synthetic realtor id ("ext-<source>")
-        const isExternal = (r: any) => typeof r?.realtor_id === 'string' && r.realtor_id.startsWith('ext-');
-        const entitled = new Set<string>();
-
-        if (!isAnonymous && authHeader) {
-          const asUser = createClient(supabaseUrl, supabaseAnonKey, {
-            global: { headers: { Authorization: authHeader } },
-            auth: { persistSession: false },
-          });
-          // Crawled listings and realtor listings have their own gatekeeper
-          // function; both answer the same question - is this caller entitled?
-          const lookups: [string, string[]][] = [
-            ['get_external_property_contacts', [...new Set(items.filter(isExternal).map(r => r?.id).filter(Boolean))]],
-            ['get_property_contacts', [...new Set(items.filter(r => !isExternal(r)).map(r => r?.id).filter(Boolean))]],
-          ];
-          for (const [rpc, ids] of lookups) {
-            if (ids.length === 0) continue;
-            try {
-              const { data, error } = await asUser.rpc(rpc, { _property_ids: ids });
-              if (error) {
-                console.warn(`[chat-ai] ${rpc} failed, withholding contacts:`, error.message);
-              } else {
-                for (const row of (data as any[] | null) ?? []) entitled.add(row.id);
-              }
-            } catch (e) {
-              console.warn(`[chat-ai] ${rpc} threw, withholding contacts:`, String(e).substring(0, 120));
-            }
-          }
-        }
-
-        const stripContact = (r: any) => {
-          if (r && typeof r === 'object') {
-            r.providerName = null;
-            r.providerPhone = null;
-            r.property_source_provider_name = null;
-            r.property_source_provider_phone = null;
-            r.contact_name = null;
-            r.contact_phone = null;
-          }
-        };
-
-        for (const r of items) {
-          if (isAnonymous || !entitled.has(r?.id)) stripContact(r);
-        }
-        responseContent = JSON.stringify(parsed);
+      // Retired handover fields: dropped if a cached prompt still asks for them.
+      if ('reveal_contact_property_id' in (parsed ?? {}) || 'reveal_listing_link_property_id' in (parsed ?? {})) {
+        delete parsed.reveal_contact_property_id;
+        delete parsed.reveal_listing_link_property_id;
+        touched = true;
       }
+      if (touched) responseContent = JSON.stringify(parsed);
     } catch { /* non-JSON content, leave as-is */ }
-
-    // ---- Contact / source-link handover, under one daily allowance ----
-    //
-    // Deliberately the SAME Redis key the standalone assistant uses. A contact
-    // and a source posting are the same handover in practice (the posting
-    // carries the phone number), and so are the two chats - letting them keep
-    // separate counters would just mean asking whichever one still had budget.
-    let contactsRemaining: number | null = null;
-    let limitReached = false;
-
-    try {
-      if (user && subjectProperties.length > 0) {
-        // Cover is a live Hausto Pass, or the complimentary one an admin holds -
-        // not the retired $10/mo plan. This read was still asking `subscribers`
-        // for a premium tier nobody can hold any more, so every Pass holder was
-        // capped at the free allowance: paying for unlimited and getting three.
-        const [{ data: boughtPass }, { data: complimentary }] = await Promise.all([
-          supabase.rpc('has_active_pass', { _user_id: user.id }),
-          supabase.rpc('has_complimentary_pass', { _user_id: user.id }),
-        ]);
-        const hasPass = boughtPass === true || complimentary === true;
-        const today = new Date().toISOString().split('T')[0];
-        const revealsKey = `usage:${user.id}:${today}:contact-reveals`;
-        const unlocked = new Set<string>();
-        contactsRemaining = hasPass ? null : FREE_DAILY_CONTACT_REVEALS;
-
-        if (!hasPass) {
-          try {
-            contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
-          } catch (e) {
-            console.warn('[chat-ai] reveal count read failed:', String(e).slice(0, 160));
-            contactsRemaining = null;
-          }
-        }
-
-        // Records what actually succeeded rather than comparing ids: a listing
-        // with no contact on file never reaches the allowance, and its link -
-        // then the only route to the owner - still has to pay.
-        const spendReveal = async (propertyId: string): Promise<boolean> => {
-          if (unlocked.has(propertyId)) return true;
-          if (hasPass) { unlocked.add(propertyId); return true; }
-          try {
-            if ((await redis.sismember(revealsKey, propertyId)) === 1) {
-              unlocked.add(propertyId);
-              return true;
-            }
-            if ((await redis.scard(revealsKey)) >= FREE_DAILY_CONTACT_REVEALS) {
-              limitReached = true;
-              contactsRemaining = 0;
-              return false;
-            }
-            await redis.sadd(revealsKey, propertyId);
-            await redis.expire(revealsKey, 60 * 60 * 48);
-            contactsRemaining = Math.max(0, FREE_DAILY_CONTACT_REVEALS - (await redis.scard(revealsKey)));
-            unlocked.add(propertyId);
-            return true;
-          } catch (e) {
-            console.warn('[chat-ai] allowance check failed (allowing):', String(e).slice(0, 160));
-            unlocked.add(propertyId);
-            return true;
-          }
-        };
-
-        const handover: string[] = [];
-        let exhaustedNoted = false;
-        const noteExhausted = () => {
-          if (exhaustedNoted) return;
-          exhaustedNoted = true;
-          handover.push(`You've used all ${FREE_DAILY_CONTACT_REVEALS} of today's free listing unlocks - a contact and its original listing link count as one. Upgrade to Premium for unlimited unlocks, or come back tomorrow.`);
-        };
-
-        const decision = extractedJson ?? {};
-        const subjectById = (id: unknown) =>
-          typeof id === 'string' ? subjectProperties.find((p) => p.id === id) : undefined;
-
-        const contactTarget = subjectById(decision.reveal_contact_property_id);
-        if (contactTarget) {
-          const name = (contactTarget.property_source_provider_name ?? contactTarget.contact_name) as string | null;
-          const phone = (contactTarget.property_source_provider_phone ?? contactTarget.contact_phone) as string | null;
-          if (!name && !phone) {
-            handover.push(`I don't have a direct owner/realtor contact on file for "${contactTarget.title}". Hausto viewing coordination can reach the listing provider for you.`);
-          } else if (await spendReveal(contactTarget.id)) {
-            const lines = [`📞 Contact for "${contactTarget.title}":`];
-            if (name) lines.push(`Name: ${name}`);
-            lines.push(phone ? `Phone: ${phone}` : 'Phone: not listed');
-            handover.push(lines.join('\n'));
-          } else {
-            noteExhausted();
-          }
-        }
-
-        const linkTarget = subjectById(decision.reveal_listing_link_property_id);
-        if (linkTarget) {
-          const url = (linkTarget.property_source_link ?? linkTarget.source_url) as string | null;
-          if (!url) {
-            handover.push(`I don't have the original listing link on file for "${linkTarget.title}".`);
-          } else if (await spendReveal(linkTarget.id)) {
-            handover.push(`🔗 Original listing: ${url}`);
-          } else {
-            noteExhausted();
-          }
-        }
-
-        // Appended as a text block so it renders as prose in the thread, the same
-        // way any other non-listing answer does.
-        if (handover.length > 0) {
-          try {
-            const parsed = JSON.parse(responseContent);
-            parsed.blocks = [
-              ...(Array.isArray(parsed.blocks) ? parsed.blocks : []),
-              { type: 'text', body: handover.join('\n\n') },
-            ];
-            responseContent = JSON.stringify(parsed);
-          } catch {
-            responseContent = `${responseContent}\n\n${handover.join('\n\n')}`;
-          }
-        }
-      }
-    } catch (handoverError) {
-      // A handover that falls over costs the renter the contact, not the whole
-      // answer - the reply is persisted and returned either way.
-      console.error('[chat-ai] handover failed:', handoverError);
-    }
 
     // ---- Persist the reply, last ----
     //
-    // Deliberately after everything that shapes it: the pinned-subject strip,
-    // the entitlement strip on contacts, and the handover block above all
-    // rewrite responseContent. A signed-in renter's thread renders from
-    // chat_messages rather than from this response, so a mutation made after
-    // the insert never reaches them - the revealed contact was missing from
-    // the thread while the reveal still spent their daily allowance, and
-    // contacts the caller was not entitled to were being written to the row.
+    // Deliberately after everything that shapes it: the pinned-subject strip
+    // and the scrub above both rewrite responseContent. A signed-in renter's
+    // thread renders from chat_messages rather than from this response, so a
+    // mutation made after the insert never reaches them, and anything the
+    // scrub missed would be written to the row.
     if (canPersist) {
       const { error: saveError } = await supabase.from('chat_messages').insert({
         conversation_id: conversationId,
@@ -3673,7 +3492,7 @@ Maximum ${maxResults} properties in results.`;
       if (saveError) console.error('[chat-ai] failed to persist assistant message:', saveError.message);
     }
 
-    return new Response(JSON.stringify({ response: responseContent, contactsRemaining, limitReached }), {
+    return new Response(JSON.stringify({ response: responseContent }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
