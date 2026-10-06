@@ -13,7 +13,7 @@ const ctx: DraftContext = {
   state: 'DELIVERED',
   now: new Date('2026-09-27T03:00:00Z'),
   listings: [{
-    itemId: 'i1', title: 'Sunny 2BR in Thao Dien', districtCode: 'HCM-D2', location: 'Thao Dien, Thu Duc',
+    itemId: 'i1', title: 'Sunny 2BR in Thao Dien', districtCode: 'D2', location: 'Thao Dien, Thu Duc',
     priceVnd: 15_000_000, bedrooms: 2, areaSqm: 70, amenities: ['pool', 'gym'],
     description: 'Fully furnished, pets allowed. Call Mr Hung 0901 234 567 to view.',
     status: 'confirmed for Tue 29 Sept, 09:00',
@@ -31,7 +31,7 @@ describe('what the model is shown', () => {
     expect(input).toContain('Sunny 2BR in Thao Dien');
     expect(input).toContain('Status: confirmed for Tue 29 Sept, 09:00');
     expect(input).toContain('15.000.000 ₫/month');
-    expect(input).toContain('2 bedrooms, 70 m2, HCM-D2');
+    expect(input).toContain('2 bedrooms, 70 m2, District 2');
     expect(input).toContain('Amenities: pool, gym');
     expect(input).toContain('Request HV-4KX9, state DELIVERED');
   });

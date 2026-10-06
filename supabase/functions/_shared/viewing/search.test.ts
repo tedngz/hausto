@@ -106,9 +106,9 @@ describe('the query string', () => {
 
 describe('the reply', () => {
   const results: SearchResult[] = [
-    { id: 'a1', title: 'Sunny 2BR in Thao Dien', price_vnd: 18_000_000, district_code: 'HCM-D2', rooms: '2 Bedrooms', size: '70 m2' },
-    { id: 'a2', title: 'Studio near Ben Thanh', price_vnd: 11_500_000, district_code: 'HCM-D1', rooms: 'Studio' },
-    { id: 'a3', title: 'Quiet 1BR, Phu Nhuan', price_vnd: 9_000_000, district_code: 'HCM-PN' },
+    { id: 'a1', title: 'Sunny 2BR in Thao Dien', price_vnd: 18_000_000, district_code: 'D2', rooms: '2 Bedrooms', size: '70 m2' },
+    { id: 'a2', title: 'Studio near Ben Thanh', price_vnd: 11_500_000, district_code: 'D1', rooms: 'Studio' },
+    { id: 'a3', title: 'Quiet 1BR, Phu Nhuan', price_vnd: 9_000_000, district_code: 'PHU_NHUAN' },
   ];
 
   it('is one message carrying every result', () => {
@@ -117,6 +117,13 @@ describe('the reply', () => {
     const text = renderSearchResults({ results, siteUrl: 'https://hausto.com' });
     expect(typeof text).toBe('string');
     for (const r of results) expect(text).toContain(r.title);
+  });
+
+  it('names each district in words, never by its code', () => {
+    const text = renderSearchResults({ results, siteUrl: 'https://hausto.com' });
+    expect(text).toContain('2 Bedrooms - 70 m2 - District 2');
+    expect(text).toContain('Phu Nhuan');
+    expect(text).not.toMatch(/PHU_NHUAN|\bD[12]\b/);
   });
 
   it('gives each result a deep link to its page', () => {

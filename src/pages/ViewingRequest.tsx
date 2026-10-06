@@ -23,6 +23,7 @@ import {
   type AvailabilityWindow,
   type DayPart,
 } from '../../supabase/functions/_shared/viewing/intake.ts';
+import { districtLabel } from '../../supabase/functions/_shared/viewing/place.ts';
 
 /**
  * What the shortlist row shows, read back from the listing rather than cached
@@ -177,7 +178,7 @@ export default function ViewingRequest() {
                       ? 'Checking...'
                       : d.gone
                         ? 'No longer listed - remove it to continue'
-                        : `${d.priceVnd != null ? formatVnd(d.priceVnd) : 'Price unconfirmed'}${d.districtCode ? ` - ${d.districtCode}` : ''}`}
+                        : `${d.priceVnd != null ? formatVnd(d.priceVnd) : 'Price unconfirmed'}${d.districtCode ? ` - ${districtLabel(d.districtCode)}` : ''}`}
                   </div>
                 </div>
                 <button

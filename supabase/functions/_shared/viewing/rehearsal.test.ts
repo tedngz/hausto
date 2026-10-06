@@ -58,11 +58,11 @@ function seed() {
   store = new SupabaseMessageStore(db as any);
 
   const listings = [
-    { title: 'Sunny 2BR in Thao Dien', district: 'HCM-D2', price: 15_000_000 },
-    { title: 'Studio near Ben Thanh', district: 'HCM-D1', price: 16_000_000 },
-    { title: 'Quiet 1BR, Phu Nhuan', district: 'HCM-PN', price: 17_000_000 },
-    { title: 'Riverside 2BR, Binh Thanh', district: 'HCM-BT', price: 18_000_000 },
-    { title: 'Loft in District 3', district: 'HCM-D3', price: 19_000_000 },
+    { title: 'Sunny 2BR in Thao Dien', district: 'D2', price: 15_000_000 },
+    { title: 'Studio near Ben Thanh', district: 'D1', price: 16_000_000 },
+    { title: 'Quiet 1BR, Phu Nhuan', district: 'PHU_NHUAN', price: 17_000_000 },
+    { title: 'Riverside 2BR, Binh Thanh', district: 'BINH_THANH', price: 18_000_000 },
+    { title: 'Loft in District 3', district: 'D3', price: 19_000_000 },
   ];
   listings.forEach((l, i) => {
     db.tables.external_properties.push({

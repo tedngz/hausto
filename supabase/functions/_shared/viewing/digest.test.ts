@@ -15,7 +15,7 @@ import type { ShortlistCandidate } from './intake.ts';
 
 const listing = (over: Partial<ShortlistCandidate> = {}): ShortlistCandidate => ({
   id: 'x', is_active: true, price_vnd: 15_000_000, price_confidence: 'HIGH',
-  bedrooms: 2, area_sqm: 70, district_code: 'HCM-D2', realtor_id: null, title: 'A flat', ...over,
+  bedrooms: 2, area_sqm: 70, district_code: 'D2', realtor_id: null, title: 'A flat', ...over,
 });
 
 const renter = (over: Partial<DigestRenter> = {}): DigestRenter => ({
@@ -90,8 +90,13 @@ describe('what goes in it', () => {
 
 describe('the template parameters', () => {
   it('says how many and where, because that is what decides whether to open it', () => {
-    const p = digestParams({ renterName: 'Mai', matches: [{ districtCode: 'HCM-D2' }, { districtCode: 'HCM-D2' }] });
-    expect(p).toEqual(['Mai', '2', 'HCM-D2']);
+    const p = digestParams({ renterName: 'Mai', matches: [{ districtCode: 'D2' }, { districtCode: 'D2' }] });
+    expect(p).toEqual(['Mai', '2', 'District 2']);
+  });
+
+  it('names a district in words, never by its code', () => {
+    const p = digestParams({ renterName: 'Mai', matches: [{ districtCode: 'BINH_THANH' }, { districtCode: 'D10' }] });
+    expect(p[2]).toBe('Binh Thanh and District 10');
   });
 
   it('joins two districts and abbreviates three', () => {
@@ -153,13 +158,13 @@ describe('a Pass benefit (the pricing rework)', () => {
   });
 
   it('falls back to the quiz for a Pass holder with no requests yet', () => {
-    const quiz = profileFromQuiz({ districtCodes: ['HCM-D2'], priceMinVnd: 10_000_000, priceMaxVnd: 20_000_000, size: '["2br"]' });
+    const quiz = profileFromQuiz({ districtCodes: ['D2'], priceMinVnd: 10_000_000, priceMaxVnd: 20_000_000, size: '["2br"]' });
     const r = assessRenter(renter(), [], fresh, { hasPass: true, quiz });
     expect(r.ok && r.matches.map(m => m.listingId)).toEqual(['n1', 'n2']);
   });
 
   it('holds the quiz budget as the band, not a band around its middle', () => {
-    const quiz = profileFromQuiz({ districtCodes: ['HCM-D2'], priceMinVnd: 10_000_000, priceMaxVnd: 20_000_000, size: '2br' });
+    const quiz = profileFromQuiz({ districtCodes: ['D2'], priceMinVnd: 10_000_000, priceMaxVnd: 20_000_000, size: '2br' });
     const r = assessRenter(renter(), [], [
       listing({ id: 'in', price_vnd: 19_500_000 }),
       listing({ id: 'over', price_vnd: 21_000_000 }),

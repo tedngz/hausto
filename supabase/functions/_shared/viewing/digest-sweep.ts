@@ -216,7 +216,7 @@ export async function runDigestSweep(
           const l = listingById.get(m.listingId);
           candidates.push({
             listingId: m.listingId, title: m.title, priceVnd: l?.price_vnd ?? null, bedrooms: l?.bedrooms ?? null,
-            source: 'DIGEST', watchId: null, label: m.districtCode,
+            source: 'DIGEST', watchId: null, label: m.districtCode ? districtLabel(m.districtCode) : null,
           });
         }
       } else if (candidates.length === 0) {

@@ -147,7 +147,6 @@ export async function alertItemsFor(db: Supa, messageId: string): Promise<AlertC
   // The complex name for each watch, so a line says where it is.
   const watchIds = [...new Set(items.map(i => i.watch_id).filter((w): w is string => !!w))];
   const nameByWatch = new Map<string, string>();
-  const areaWatches = new Set<string>();
   if (watchIds.length > 0) {
     const { data: watches } = await db.from('complex_watches').select('id, complex_id').in('id', watchIds);
     // An area watch (Search for me) has no complex; its places are labelled
@@ -159,7 +158,7 @@ export async function alertItemsFor(db: Supa, messageId: string): Promise<AlertC
       : { data: [] };
     const nameByComplex = new Map(((complexes ?? []) as { id: string; name: string }[]).map(c => [c.id, c.name]));
     for (const w of (watches ?? []) as { id: string; complex_id: string | null }[]) {
-      if (!w.complex_id) { areaWatches.add(w.id); continue; }
+      if (!w.complex_id) continue;
       const name = nameByComplex.get(w.complex_id);
       if (name) nameByWatch.set(w.id, name);
     }
@@ -176,11 +175,10 @@ export async function alertItemsFor(db: Supa, messageId: string): Promise<AlertC
       bedrooms: (l.bedrooms as number) ?? null,
       source: i.source,
       watchId: i.watch_id,
-      // The same label the sweep gave it: the complex for a watch, the
-      // district in words for an area watch, the district for a digest pick.
+      // The same label the sweep gave it: the complex for a watch, otherwise
+      // the district in words - an area watch's place or a digest pick.
       label: (i.watch_id && nameByWatch.get(i.watch_id))
-        || (i.watch_id && areaWatches.has(i.watch_id) && l.district_code ? districtLabel(String(l.district_code)) : null)
-        || (l.district_code as string) || null,
+        || (l.district_code ? districtLabel(String(l.district_code)) : null),
     });
   }
   return out;

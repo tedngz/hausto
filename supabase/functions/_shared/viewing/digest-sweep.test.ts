@@ -72,7 +72,7 @@ describe('the Friday digest', () => {
     if (process.env.REHEARSAL_PRINT === '1') console.log(`\n  ── Friday digest, window open ──\n${body}\n`);
     // District ranks first but does not exclude - the same ranker as the
     // shortlist-based digest - and the quiz budget is the band.
-    expect(body).toContain('3 new places in D2 and D7 fit what you are looking for');
+    expect(body).toContain('3 new places in District 2 and District 7 fit what you are looking for');
     expect(body.indexOf('Bright 2BR, Thao Dien')).toBeLessThan(body.indexOf('2BR, District 7'));
     expect(body).toContain('Quiet 2BR, An Phu');
     expect(body).not.toContain('Penthouse');

@@ -18,6 +18,7 @@
 import { checkOperatorReply } from './thread.ts';
 import { formatVnd, hcmcLong } from './format.ts';
 import type { RequestState } from '../viewing-domain.ts';
+import { districtLabel } from './place.ts';
 
 export const REPLY_MODEL = 'gpt-4o-mini';
 
@@ -97,7 +98,8 @@ export function buildDraftInput(ctx: DraftContext): string {
     `   ${[
       l.bedrooms != null ? `${l.bedrooms === 0 ? 'Studio' : `${l.bedrooms} bedroom${l.bedrooms === 1 ? '' : 's'}`}` : '',
       l.areaSqm != null ? `${l.areaSqm} m2` : '',
-      l.districtCode ?? '',
+      // In words, so the draft says "Binh Thanh" rather than echoing `BINH_THANH`.
+      l.districtCode ? districtLabel(l.districtCode) : '',
       l.location ?? '',
     ].filter(Boolean).join(', ')}`,
     l.amenities.length ? `   Amenities: ${l.amenities.slice(0, 20).join(', ')}` : '',

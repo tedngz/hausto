@@ -150,7 +150,7 @@ describe('availability request rehearsal', () => {
     at('2026-10-03T00:00:00Z');
     db.tables.external_properties.push({
       id: 'l-new', is_active: true, price_vnd: 23_000_000, price_confidence: 'HIGH', bedrooms: 2,
-      area_sqm: 80, district_code: 'HCM-D2', realtor_id: null, title: '2BR, Empire City Tilia',
+      area_sqm: 80, district_code: 'D2', realtor_id: null, title: '2BR, Empire City Tilia',
       created_at: new Date().toISOString(),
     });
     at('2026-10-06T02:00:00Z');

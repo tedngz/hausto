@@ -281,7 +281,7 @@ async function seedDelivered(requestId = 'req-1', ref = 'HV-4KX2', userId = 'use
   db.tables.viewing_requests.push({ id: requestId, ref, renter_id: 'renter-1', created_at: new Date().toISOString() });
   const titles = ['Sunny 2BR in Thao Dien', 'Studio near Ben Thanh'];
   titles.forEach((title, i) => {
-    db.tables.external_properties.push({ id: `${requestId}-l${i}`, title, district_code: 'HCM-D2', price_vnd: 15_000_000, is_active: true });
+    db.tables.external_properties.push({ id: `${requestId}-l${i}`, title, district_code: 'D2', price_vnd: 15_000_000, is_active: true });
     db.tables.request_items.push({ id: `${requestId}-i${i}`, request_id: requestId, listing_id: `${requestId}-l${i}`, price_vnd_at_request: 15_000_000, realtor_id: null });
   });
   // Viewings three days out, so the deadline is 24 hours after delivery.

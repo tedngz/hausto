@@ -42,7 +42,7 @@ async function seed() {
     'Sunny 2BR in Thao Dien', 'Studio near Ben Thanh', 'Quiet 1BR, Phu Nhuan',
     'Riverside 2BR, Binh Thanh', 'Loft in District 3',
   ];
-  const districts = ['HCM-D2', 'HCM-D1', 'HCM-PN', 'HCM-BT', 'HCM-D3'];
+  const districts = ['D2', 'D1', 'PHU_NHUAN', 'BINH_THANH', 'D3'];
   titles.forEach((title, i) => {
     db.tables.external_properties.push({
       id: `listing-${i + 1}`, title, district_code: districts[i],
@@ -55,11 +55,11 @@ async function seed() {
   // find. Two are plausible neighbours; one is priced far out of their band and
   // must not be offered.
   db.tables.external_properties.push(
-    { id: 'alt-1', title: 'Bright 2BR, Thao Dien', district_code: 'HCM-D2',
+    { id: 'alt-1', title: 'Bright 2BR, Thao Dien', district_code: 'D2',
       price_vnd: 16_000_000, is_active: true, bedrooms: 2, area_sqm: 68, price_confidence: 'HIGH' },
-    { id: 'alt-2', title: 'Corner 2BR near Ben Thanh', district_code: 'HCM-D1',
+    { id: 'alt-2', title: 'Corner 2BR near Ben Thanh', district_code: 'D1',
       price_vnd: 14_500_000, is_active: true, bedrooms: 2, area_sqm: 65, price_confidence: 'HIGH' },
-    { id: 'alt-rich', title: 'Penthouse, Thao Dien', district_code: 'HCM-D2',
+    { id: 'alt-rich', title: 'Penthouse, Thao Dien', district_code: 'D2',
       price_vnd: 60_000_000, is_active: true, bedrooms: 4, area_sqm: 200, price_confidence: 'HIGH' },
   );
 
@@ -222,7 +222,7 @@ describe('the round trip, end to end on MockAdapter', () => {
     // deno-lint-ignore no-explicit-any
     const result = await deliver(db as any, adapter, {
       requestId, purpose: 'ITINERARY', order: [],
-      substitutes: [{ title: 'Flat A', priceVnd: 14_000_000, districtCode: 'HCM-D3' }],
+      substitutes: [{ title: 'Flat A', priceVnd: 14_000_000, districtCode: 'D3' }],
     });
     expect(result.ok).toBe(true);
 
