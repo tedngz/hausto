@@ -144,7 +144,7 @@ describe('the shortlist gate', () => {
 describe('screening candidates', () => {
   const ok = (over: Partial<ShortlistCandidate> = {}): ShortlistCandidate => ({
     id: 'a', is_active: true, price_vnd: 15_000_000, price_confidence: 'HIGH',
-    bedrooms: 2, area_sqm: 70, district_code: 'HCM-BINH-THANH', realtor_id: null,
+    bedrooms: 2, area_sqm: 70, district_code: 'BINH_THANH', realtor_id: null,
     title: 'A flat', ...over,
   });
 

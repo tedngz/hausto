@@ -89,7 +89,7 @@ const watch = (over: Partial<ActiveWatch> = {}): ActiveWatch => ({
 
 const listing = (over: Partial<WatchListing> = {}): WatchListing => ({
   id: 'l1', is_active: true, price_vnd: 25_000_000, price_confidence: 'HIGH', bedrooms: 2,
-  area_sqm: 80, district_code: 'HCM-D2', realtor_id: null, title: '2BR at Empire City',
+  area_sqm: 80, district_code: 'D2', realtor_id: null, title: '2BR at Empire City',
   created_at: '2026-09-25T00:00:00Z', ...over,
 });
 
@@ -131,8 +131,8 @@ const cand = (over: Partial<AlertCandidate> = {}): AlertCandidate => ({
 describe('one message', () => {
   it('puts watches before the digest, and holds three at most', () => {
     const plan = planAlert([
-      cand({ listingId: 'd1', source: 'DIGEST', watchId: null, label: 'HCM-D2' }),
-      cand({ listingId: 'd2', source: 'DIGEST', watchId: null, label: 'HCM-D2' }),
+      cand({ listingId: 'd1', source: 'DIGEST', watchId: null, label: 'D2' }),
+      cand({ listingId: 'd2', source: 'DIGEST', watchId: null, label: 'D2' }),
       cand({ listingId: 'w1' }),
       cand({ listingId: 'w2' }),
     ], new Set());

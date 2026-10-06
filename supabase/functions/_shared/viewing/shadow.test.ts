@@ -54,8 +54,8 @@ beforeEach(() => {
   });
   db.tables.realtors = [{ id: 'realtor-1', phone_e164: '+84901234567' }];
   db.tables.external_properties.push(
-    { id: 'l1', title: 'Căn hộ Thảo Điền', source_url: 'https://example.com/l1', district_code: 'HCM-D2' },
-    { id: 'l2', title: 'Studio Quận 1', source_url: null, district_code: 'HCM-D1' },
+    { id: 'l1', title: 'Căn hộ Thảo Điền', source_url: 'https://example.com/l1', district_code: 'D2' },
+    { id: 'l2', title: 'Studio Quận 1', source_url: null, district_code: 'D1' },
   );
   db.tables.request_items.push(
     { id: 'i1', request_id: 'req-1', listing_id: 'l1', realtor_id: 'realtor-1', price_vnd_at_request: 15_000_000 },

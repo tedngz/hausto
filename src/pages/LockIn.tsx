@@ -20,6 +20,7 @@ import { usePass } from '@/hooks/usePass';
 import { cn } from '@/lib/utils';
 import { DigestOptIn } from '@/components/DigestOptIn';
 import { formatVnd, hcmcLong } from '../../supabase/functions/_shared/viewing/format.ts';
+import { districtLabel } from '../../supabase/functions/_shared/viewing/place.ts';
 
 interface PlanStop {
   itemId: string;
@@ -169,7 +170,7 @@ export default function LockIn() {
                     </div>
                     <div className="text-right text-sm">
                       <p>{formatVnd(stop.priceVnd)}/month</p>
-                      {stop.districtCode && <p className="text-muted-foreground">{stop.districtCode}</p>}
+                      {stop.districtCode && <p className="text-muted-foreground">{districtLabel(stop.districtCode)}</p>}
                     </div>
                   </div>
                   {isKept && <p className="mt-1 text-xs text-primary">Locked in</p>}

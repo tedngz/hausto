@@ -19,6 +19,10 @@
 
 import { formatVnd, hcmcLong, hcmcTime, hcmcDate } from './format.ts';
 import type { RequestView } from '../viewing-domain.ts';
+import { districtLabel } from './place.ts';
+
+/** ` - District 2` after a price, or nothing. Renters read names, not `D2` or `BINH_THANH`. */
+const inDistrict = (code: string | null): string => (code ? ` - ${districtLabel(code)}` : '');
 
 /** A listing, as the itinerary needs it. No realtor field - see §6 below. */
 export interface StopListing {
@@ -243,7 +247,7 @@ function offeredTimes(startsAt: string[]): string {
 
 function alternativeLines(alternatives: OfferedAlternative[]): string[] {
   return alternatives.map(a =>
-    `- ${a.listingTitle} - ${formatVnd(a.priceVnd)}/month${a.districtCode ? ` - ${a.districtCode}` : ''}: ${offeredTimes(a.startsAt)}`);
+    `- ${a.listingTitle} - ${formatVnd(a.priceVnd)}/month${inDistrict(a.districtCode)}: ${offeredTimes(a.startsAt)}`);
 }
 
 /**
@@ -273,7 +277,7 @@ export function renderItinerary(m: ItineraryMessage): string {
     const when = date === lastDate ? hcmcTime(stop.startsAt) : hcmcLong(stop.startsAt);
     lastDate = date;
     lines.push(`${i + 1}. ${when} - ${stop.listingTitle}`);
-    lines.push(`   ${formatVnd(stop.priceVnd)}/month${stop.districtCode ? ` - ${stop.districtCode}` : ''}`);
+    lines.push(`   ${formatVnd(stop.priceVnd)}/month${inDistrict(stop.districtCode)}`);
   });
 
   const alternatives = m.alternatives ?? [];
@@ -366,7 +370,7 @@ export function renderNoSupply(opts: {
     lines.push('');
     lines.push('These are close matches that are available now:');
     for (const s of opts.substitutes) {
-      lines.push(`- ${s.title} - ${formatVnd(s.priceVnd)}/month${s.districtCode ? ` - ${s.districtCode}` : ''}`);
+      lines.push(`- ${s.title} - ${formatVnd(s.priceVnd)}/month${inDistrict(s.districtCode)}`);
     }
     lines.push('');
     lines.push('Reply with a number and we will arrange those viewings.');

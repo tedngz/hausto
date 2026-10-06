@@ -115,7 +115,7 @@ async function sweepFor(renterId: string) {
 function listing(id: string, over: Record<string, unknown>) {
   db.tables.external_properties.push({
     id, complex_id: 'cx-1', is_active: true, price_vnd: 25_000_000, price_confidence: 'HIGH',
-    bedrooms: 2, area_sqm: 78, district_code: 'HCM-D2', realtor_id: null,
+    bedrooms: 2, area_sqm: 78, district_code: 'D2', realtor_id: null,
     created_at: new Date().toISOString(), ...over,
   });
 }

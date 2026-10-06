@@ -16,6 +16,8 @@
 // First-time discovery is explicitly out - the style layer is visual and
 // WhatsApp cannot render a filterable grid.
 
+import { districtLabel } from './place.ts';
+
 /** Exactly the parameters `public-property-search` accepts. Nothing else. */
 export interface SearchFilters {
   city?: string;
@@ -199,7 +201,7 @@ export function renderSearchResults(opts: {
 
   shown.forEach((r, i) => {
     const price = r.price_vnd != null ? vnd(r.price_vnd) : (r.price_display ?? 'price on request');
-    const facts = [r.rooms, r.size, r.district_code].filter(Boolean).join(' - ');
+    const facts = [r.rooms, r.size, r.district_code && districtLabel(r.district_code)].filter(Boolean).join(' - ');
     lines.push(`${i + 1}. ${r.title}`);
     lines.push(`   ${price}/month${facts ? ` - ${facts}` : ''}`);
     lines.push(`   ${r.url || `${opts.siteUrl}/property/${r.id}`}`);

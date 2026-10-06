@@ -27,7 +27,7 @@ function build(n: number, outcomes: Record<number, Record<string, unknown>> = {}
   for (let i = 1; i <= n; i++) {
     events.push(ev('ITEM_ADDED', { listing_id: `l${i}`, price_vnd_at_request: 15_000_000 }, `i${i}`));
     listings.push({
-      itemId: `i${i}`, listingTitle: `Flat ${i}`, districtCode: 'HCM-D1', priceVndAtRequest: 15_000_000,
+      itemId: `i${i}`, listingTitle: `Flat ${i}`, districtCode: 'D1', priceVndAtRequest: 15_000_000,
     });
     if (outcomes[i]) events.push(ev('OUTCOME_RECORDED', outcomes[i], `i${i}`));
   }
@@ -112,31 +112,31 @@ describe('assembling', () => {
 
 describe('warnings', () => {
   const stop = (over: Partial<ItineraryStop>): ItineraryStop => ({
-    itemId: 'i', listingTitle: 'Flat', districtCode: 'HCM-D1', priceVnd: 1,
+    itemId: 'i', listingTitle: 'Flat', districtCode: 'D1', priceVnd: 1,
     startsAt: '2026-09-15T02:00:00Z', durationMinutes: 30, ...over,
   });
 
   it('catches a district hop with no time to make it', () => {
     const w = warningsFor([
-      stop({ itemId: 'a', districtCode: 'HCM-D1', startsAt: '2026-09-15T02:00:00Z' }),
-      stop({ itemId: 'b', districtCode: 'HCM-D7', startsAt: '2026-09-15T02:40:00Z' }),
+      stop({ itemId: 'a', districtCode: 'D1', startsAt: '2026-09-15T02:00:00Z' }),
+      stop({ itemId: 'b', districtCode: 'D7', startsAt: '2026-09-15T02:40:00Z' }),
     ]);
     expect(w[0].kind).toBe('DISTRICT_HOP');
-    expect(w[0].message).toContain('HCM-D1 to HCM-D7');
+    expect(w[0].message).toContain('D1 to D7');
   });
 
   it('allows the same hop with enough of a gap', () => {
     const w = warningsFor([
-      stop({ itemId: 'a', districtCode: 'HCM-D1', startsAt: '2026-09-15T02:00:00Z' }),
-      stop({ itemId: 'b', districtCode: 'HCM-D7', startsAt: `2026-09-15T0${2 + 2}:00:00Z` }),
+      stop({ itemId: 'a', districtCode: 'D1', startsAt: '2026-09-15T02:00:00Z' }),
+      stop({ itemId: 'b', districtCode: 'D7', startsAt: `2026-09-15T0${2 + 2}:00:00Z` }),
     ]);
     expect(w).toHaveLength(0);
   });
 
   it('does not warn about two stops in the same district, however tight', () => {
     const w = warningsFor([
-      stop({ itemId: 'a', districtCode: 'HCM-D1', startsAt: '2026-09-15T02:00:00Z' }),
-      stop({ itemId: 'b', districtCode: 'HCM-D1', startsAt: '2026-09-15T02:35:00Z' }),
+      stop({ itemId: 'a', districtCode: 'D1', startsAt: '2026-09-15T02:00:00Z' }),
+      stop({ itemId: 'b', districtCode: 'D1', startsAt: '2026-09-15T02:35:00Z' }),
     ]);
     expect(w).toHaveLength(0);
   });
@@ -144,8 +144,8 @@ describe('warnings', () => {
   it('does not measure a gap across a night', () => {
     // 18:00 one day to 09:00 the next is not a journey with five minutes spare.
     const w = warningsFor([
-      stop({ itemId: 'a', districtCode: 'HCM-D1', startsAt: '2026-09-15T11:00:00Z' }),
-      stop({ itemId: 'b', districtCode: 'HCM-D7', startsAt: '2026-09-16T02:00:00Z' }),
+      stop({ itemId: 'a', districtCode: 'D1', startsAt: '2026-09-15T11:00:00Z' }),
+      stop({ itemId: 'b', districtCode: 'D7', startsAt: '2026-09-16T02:00:00Z' }),
     ]);
     expect(w).toHaveLength(0);
   });
@@ -155,15 +155,15 @@ describe('warnings', () => {
     // district means the check cannot run - not that the hop is fine.
     const w = warningsFor([
       stop({ itemId: 'a', districtCode: null, startsAt: '2026-09-15T02:00:00Z' }),
-      stop({ itemId: 'b', districtCode: 'HCM-D7', startsAt: '2026-09-15T02:40:00Z' }),
+      stop({ itemId: 'b', districtCode: 'D7', startsAt: '2026-09-15T02:40:00Z' }),
     ]);
     expect(w[0].kind).toBe('UNKNOWN_DISTRICT');
   });
 
   it('reports an overlap once, not also as a hop', () => {
     const w = warningsFor([
-      stop({ itemId: 'a', districtCode: 'HCM-D1', startsAt: '2026-09-15T02:00:00Z', durationMinutes: 60 }),
-      stop({ itemId: 'b', districtCode: 'HCM-D7', startsAt: '2026-09-15T02:30:00Z' }),
+      stop({ itemId: 'a', districtCode: 'D1', startsAt: '2026-09-15T02:00:00Z', durationMinutes: 60 }),
+      stop({ itemId: 'b', districtCode: 'D7', startsAt: '2026-09-15T02:30:00Z' }),
     ]);
     expect(w).toHaveLength(1);
     expect(w[0].kind).toBe('OVERLAP');
@@ -176,9 +176,9 @@ describe('warnings', () => {
 
 describe('the message', () => {
   const stops: ItineraryStop[] = [
-    { itemId: 'i1', listingTitle: 'Sunny 2BR in Thao Dien', districtCode: 'HCM-D2', priceVnd: 18_000_000, startsAt: '2026-09-15T02:00:00Z', durationMinutes: 30 },
-    { itemId: 'i2', listingTitle: 'Studio near Ben Thanh', districtCode: 'HCM-D1', priceVnd: 11_500_000, startsAt: '2026-09-15T04:00:00Z', durationMinutes: 30 },
-    { itemId: 'i3', listingTitle: 'Quiet 1BR, Phu Nhuan', districtCode: 'HCM-PN', priceVnd: 9_000_000, startsAt: '2026-09-16T03:00:00Z', durationMinutes: 30 },
+    { itemId: 'i1', listingTitle: 'Sunny 2BR in Thao Dien', districtCode: 'D2', priceVnd: 18_000_000, startsAt: '2026-09-15T02:00:00Z', durationMinutes: 30 },
+    { itemId: 'i2', listingTitle: 'Studio near Ben Thanh', districtCode: 'D1', priceVnd: 11_500_000, startsAt: '2026-09-15T04:00:00Z', durationMinutes: 30 },
+    { itemId: 'i3', listingTitle: 'Quiet 1BR, Phu Nhuan', districtCode: 'PHU_NHUAN', priceVnd: 9_000_000, startsAt: '2026-09-16T03:00:00Z', durationMinutes: 30 },
   ];
 
   it('is one message carrying every stop', () => {
@@ -187,6 +187,13 @@ describe('the message', () => {
     const text = renderItinerary({ ref: 'HV-4KX7', stops, requestedCount: 5 });
     expect(typeof text).toBe('string');
     for (const s of stops) expect(text).toContain(s.listingTitle);
+  });
+
+  it('names each district in words, never by its code', () => {
+    const text = renderItinerary({ ref: 'HV-4KX7', stops, requestedCount: 5 });
+    expect(text).toContain('18.000.000 ₫/month - District 2');
+    expect(text).toContain('9.000.000 ₫/month - Phu Nhuan');
+    expect(text).not.toMatch(/PHU_NHUAN|\bD[12]\b/);
   });
 
   it('leads with what the renter got', () => {
@@ -269,13 +276,15 @@ describe('nothing confirmed', () => {
       ref: 'HV-4KX7',
       requestedCount: 4,
       substitutes: [
-        { title: 'Flat A', priceVnd: 14_000_000, districtCode: 'HCM-D3' },
-        { title: 'Flat B', priceVnd: 15_500_000, districtCode: 'HCM-BT' },
+        { title: 'Flat A', priceVnd: 14_000_000, districtCode: 'D3' },
+        { title: 'Flat B', priceVnd: 15_500_000, districtCode: 'BINH_THANH' },
       ],
     });
     expect(text).toContain('Flat A');
     expect(text).toContain('Flat B');
     expect(text).toContain('Reply with a number');
+    expect(text).toContain('15.500.000 ₫/month - Binh Thanh');
+    expect(text).not.toContain('BINH_THANH');
   });
 
   it('promises a follow-up rather than ending on a dead end', () => {
@@ -315,7 +324,7 @@ describe('other times an agent offered (gap 7)', () => {
     expect(text).toContain('1 of the 3 places');
     expect(text).toContain('The agent for one more offered different times:');
     // 03:00Z is 10:00 in Ho Chi Minh City, 08:00Z is 15:00.
-    expect(text).toContain('Flat 2 - 15.000.000 ₫/month - HCM-D1: Fri 18 Sept, 10:00 or Sat 19 Sept, 15:00');
+    expect(text).toContain('Flat 2 - 15.000.000 ₫/month - District 1: Fri 18 Sept, 10:00 or Sat 19 Sept, 15:00');
     expect(text).toContain('We could not confirm the last one for these times.');
     expect(text).toContain('If one of the other times suits you, tell us which.');
     expect(text).not.toMatch(/book/i);

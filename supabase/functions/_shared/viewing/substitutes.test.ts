@@ -11,7 +11,7 @@ import type { ShortlistCandidate } from './intake.ts';
 
 const listing = (over: Partial<ShortlistCandidate> = {}): ShortlistCandidate => ({
   id: 'x', is_active: true, price_vnd: 15_000_000, price_confidence: 'HIGH',
-  bedrooms: 2, area_sqm: 70, district_code: 'HCM-D2', realtor_id: null, title: 'A flat', ...over,
+  bedrooms: 2, area_sqm: 70, district_code: 'D2', realtor_id: null, title: 'A flat', ...over,
 });
 
 /** A shortlist of three 2BR flats in Thao Dien around 15m. */
@@ -31,8 +31,8 @@ describe('reading what the renter wanted', () => {
   });
 
   it('collects the districts and bedroom counts they actually chose', () => {
-    const p = profileOf([listing({ id: 'a', district_code: 'HCM-D1', bedrooms: 1 }), listing({ id: 'b' })]);
-    expect(p.districts.sort()).toEqual(['HCM-D1', 'HCM-D2']);
+    const p = profileOf([listing({ id: 'a', district_code: 'D1', bedrooms: 1 }), listing({ id: 'b' })]);
+    expect(p.districts.sort()).toEqual(['D1', 'D2']);
     expect(p.bedrooms.sort()).toEqual([1, 2]);
   });
 
@@ -102,9 +102,9 @@ describe('ranking', () => {
   it('puts district above bedrooms above price', () => {
     const p = profileOf(shortlist); // D2, 2 bed, 15m
     const subs = rankSubstitutes(p, [
-      listing({ id: 'wrongDistrict', district_code: 'HCM-D7', bedrooms: 2, price_vnd: 15_000_000 }),
-      listing({ id: 'rightAll', district_code: 'HCM-D2', bedrooms: 2, price_vnd: 15_000_000 }),
-      listing({ id: 'rightDistrictWrongBeds', district_code: 'HCM-D2', bedrooms: 1, price_vnd: 15_000_000 }),
+      listing({ id: 'wrongDistrict', district_code: 'D7', bedrooms: 2, price_vnd: 15_000_000 }),
+      listing({ id: 'rightAll', district_code: 'D2', bedrooms: 2, price_vnd: 15_000_000 }),
+      listing({ id: 'rightDistrictWrongBeds', district_code: 'D2', bedrooms: 1, price_vnd: 15_000_000 }),
     ], 10);
     expect(subs.map(s => s.listingId)).toEqual(['rightAll', 'rightDistrictWrongBeds', 'wrongDistrict']);
   });
@@ -127,7 +127,7 @@ describe('ranking', () => {
 
   it('explains itself', () => {
     const subs = rankSubstitutes(profileOf(shortlist), [listing({ id: 'c1', price_vnd: 14_000_000 })]);
-    expect(subs[0].reasons).toContain('same district (HCM-D2)');
+    expect(subs[0].reasons).toContain('same district (D2)');
     expect(subs[0].reasons).toContain('2 bed, as shortlisted');
     expect(subs[0].reasons).toContain('same price or cheaper');
   });
@@ -147,7 +147,7 @@ describe('handing them to the renderer', () => {
   it('drops the scoring, which is ours and not the renter\'s business', () => {
     const subs = rankSubstitutes(profileOf(shortlist), [listing({ id: 'c1' })]);
     const rendered = toRenderable(subs);
-    expect(rendered[0]).toEqual({ title: 'A flat', priceVnd: 15_000_000, districtCode: 'HCM-D2' });
+    expect(rendered[0]).toEqual({ title: 'A flat', priceVnd: 15_000_000, districtCode: 'D2' });
     expect(Object.keys(rendered[0])).not.toContain('score');
   });
 });

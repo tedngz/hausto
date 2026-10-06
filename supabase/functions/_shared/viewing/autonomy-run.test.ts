@@ -59,7 +59,7 @@ beforeEach(() => {
   db.tables.renters.push({ id: 'renter-1', phone_e164: '+84912345678', display_name: null,
     service_window_expires_at: at(6 * 3600_000).toISOString(), opted_out_at: null });
   db.tables.viewing_requests.push({ id: 'req-1', ref: 'HV-4KX9', renter_id: 'renter-1', created_at: at(-3600_000).toISOString(), availability: [] });
-  db.tables.external_properties.push({ id: 'l1', title: 'Sunny 2BR', district_code: 'HCM-D2' });
+  db.tables.external_properties.push({ id: 'l1', title: 'Sunny 2BR', district_code: 'D2' });
   db.tables.request_items.push({ id: 'i1', request_id: 'req-1', listing_id: 'l1', realtor_id: null, price_vnd_at_request: 15_000_000 });
   db.tables.messages.push({ id: 'in-1', request_id: 'req-1', direction: 'IN', to_phone: '+84912345678',
     body: 'Are pets allowed?', status: 'QUEUED', idempotency_key: 'inbound:w1', created_at: at(-60_000).toISOString() });

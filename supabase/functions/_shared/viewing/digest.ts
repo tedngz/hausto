@@ -31,6 +31,7 @@
 
 import { profileOf, rankSubstitutes, type RequestProfile } from './substitutes.ts';
 import type { ShortlistCandidate } from './intake.ts';
+import { districtLabel } from './place.ts';
 
 /** Listings named in one digest. The template summarises; it does not list. */
 export const MAX_DIGEST_LISTINGS = 3;
@@ -112,7 +113,7 @@ export function digestParams(opts: {
     // gave a name gets a greeting that still reads as one.
     opts.renterName?.trim() || 'there',
     String(opts.matches.length),
-    placeSummary(opts.matches.map(m => m.districtCode)),
+    placeSummary(opts.matches.map(m => m.districtCode && districtLabel(m.districtCode))),
   ];
 }
 
