@@ -697,6 +697,32 @@ anything phone-shaped, and the operator's reply check below still refuses a
 Vietnamese number. The renter's number still never reaches an agent - if the
 renter rings them, that is the renter's choice.
 
+**Nothing else hands a renter an agent's number or the original listing**
+(the pricing rework, decided 2026-10-06). The original ad carries the agent's
+number, so a source link is the same leak by one more click. Until then a
+renter reached agents four ways: the chat's daily "listing unlocks", "View
+original" links in the Browse and chat previews, `get_external_property_contacts`
+for any renter matched to the listing (matching is free), and
+`public-property-search`'s `source_url`. All four are closed at the server:
+
+- `get_external_property_contacts`, `get_external_property_contact` and
+  `admin_external_listing_sources` (the source link and `raw_data`) answer
+  admins only; `get_property_contacts` answers admins and the listing's own
+  realtor. They do not open on the viewing day either - that would be a second
+  path beside `dayStops`.
+- `chat-ai` loads no contact or source column it could repeat, scrubs both from
+  every result (`withoutAgentFields`), and points the renter to "Request
+  viewing" instead. `get-public-property` returns them as null to everyone.
+- `public-property-search` keeps `source_url` in its contract and returns it as
+  null; `url` already points at our page.
+- `source_url` and `raw_data` lose their column grants to `anon` and
+  `authenticated` in a migration that ships after the renter app that stops
+  selecting them is published, so a renter cannot read them with the anon key
+  either.
+
+The ads stay public on the marketplaces, so a determined renter can still find
+an agent. The point is that we do not hand them over.
+
 The console reads the renter's WhatsApp thread through `ops_request_thread()`, a
 `SECURITY DEFINER` function that returns bodies, times, the window expiry and
 the consecutive-outbound count - never `to_phone`, never a name - and masks

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { PROPERTY_PUBLIC_COLUMNS } from '@/lib/propertyColumns';
+import { EXTERNAL_PROPERTY_PUBLIC_COLUMNS } from '@/lib/externalPropertyColumns';
 import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { EditorialPropertyCard } from '@/components/EditorialPropertyCard';
@@ -30,7 +31,8 @@ const toApartment = (p: any, external: boolean): Apartment => ({
   amenities: p.amenities || [],
   vibe_analysis: p.vibe_analysis,
   rooms: p.rooms ?? null,
-  property_source_link: external ? p.source_url : p.property_source_link,
+  // Never the original listing: it carries the agent's number.
+  property_source_link: external ? undefined : p.property_source_link,
   last_verified_at: external ? p.last_verified_at ?? null : null,
   realtor: { id: external ? 'external' : p.realtor_id, name: 'Property Owner', phone: '', email: '' },
 });
@@ -49,7 +51,7 @@ export const ListingCardDialog = ({ propertyId, open, onOpenChange }: ListingCar
 
       const { data: external } = await supabase
         .from('external_properties')
-        .select('*')
+        .select(EXTERNAL_PROPERTY_PUBLIC_COLUMNS)
         .eq('id', propertyId!)
         .maybeSingle();
       return external ? { apartment: toApartment(external, true), external: true } : null;

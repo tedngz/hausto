@@ -153,7 +153,7 @@ serve(async (req) => {
     if (source !== 'internal') {
       let externalQuery = supabase
         .from('external_properties')
-        .select('id, title, location, price_vnd, size, rooms, images, highlights, amenities, description, source, source_url, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
+        .select('id, title, location, price_vnd, size, rooms, images, highlights, amenities, description, source, created_at, last_verified_at, crawled_at, canonical_group_id, image_location_conflict, style_tags:vibe_analysis->styles, image_analyses:vibe_analysis->image_analyses')
         .eq('is_active', true)
         // Raw-harvested rows bypassed the ingest quality gates - never browse them
         .eq('raw_only', false)
@@ -220,7 +220,10 @@ serve(async (req) => {
             id: p.id,
             title: p.title,
             url: `${BASE_URL}/property/${p.id}`,
-            source_url: p.source_url,
+            // Kept in the contract, always null: the source ad carries the
+            // agent's number, and `url` already sends people to us (the
+            // pricing rework, decided 2026-10-06). Not even selected above.
+            source_url: null,
             location: p.location,
             price_vnd: p.price_vnd ?? null,
             price_usd: p.price_vnd ? Math.round(p.price_vnd / VND_TO_USD) : null,

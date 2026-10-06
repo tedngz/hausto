@@ -1861,6 +1861,14 @@ export type Database = {
     }
     Functions: {
       active_pass_expires_at: { Args: { _user_id: string }; Returns: string }
+      admin_external_listing_sources: {
+        Args: { _ids: string[] }
+        Returns: {
+          id: string
+          raw_data: Json
+          source_url: string
+        }[]
+      }
       apply_realtor_contacts: {
         Args: never
         Returns: {

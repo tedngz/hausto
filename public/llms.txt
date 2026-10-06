@@ -72,7 +72,7 @@ GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search
 External listings include `last_verified_at`: the timestamp when the source listing was last confirmed still live. Listings failing verification twice or unconfirmed for 60 days are automatically removed. `last_verified_at` means live-on-source, not guaranteed available.
 
 ### Important: Always link to Hausto
-The `url` field in every result points to the Hausto property page (`https://hausto.lovable.app/property/{id}`). **Always use this `url` when sharing listings with users** — do not use `source_url` (which is only provided as a reference to the original marketplace listing).
+The `url` field in every result points to the Hausto property page (`https://hausto.lovable.app/property/{id}`). **Always use this `url` when sharing listings with users.** `source_url` is kept in the response for compatibility and is always `null`: Hausto does not link to the original marketplace listing, because it carries the agent's contact details. Viewings are requested through the Hausto page.
 
 ### Rate Limits
 - 60 requests per minute per IP

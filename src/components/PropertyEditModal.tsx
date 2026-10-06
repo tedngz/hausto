@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { withAdminSources } from '@/lib/adminListingSources';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -252,7 +253,7 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
       
       const table = isExternal ? 'external_properties' : 'properties';
       const selectFields = isExternal
-        ? 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, source_url, updated_at'
+        ? 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, updated_at'
         : 'id, amenities, vibe_analysis, highlights, images, title, description, location, price, size, property_source_link, property_source_provider_name, property_source_provider_phone, updated_at';
       
       const { data: fresh, error } = await supabase
@@ -265,6 +266,9 @@ export const PropertyEditModal = ({ isOpen, onClose, property, isExternal = fals
         return;
       }
       if (!cancelled && fresh && isExternal) {
+        // Admin-only reads: the source link and the agent's contact.
+        const [withSource] = await withAdminSources([{ id: property.id }]);
+        (fresh as any).source_url = withSource?.source_url ?? null;
         const { data: contactRows } = await supabase.rpc('get_external_property_contact', { _property_id: property.id });
         const contact = Array.isArray(contactRows) ? contactRows[0] : contactRows;
         (fresh as any).contact_name = contact?.contact_name ?? null;

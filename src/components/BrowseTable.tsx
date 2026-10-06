@@ -554,15 +554,14 @@ export const BrowseTable = ({
                           {verifiedLabel(r.last_verified_at)}
                         </span>
                       </TableCell>
-                      {/* Provenance only. The outbound link lives in the preview
-                          modal, below the Hausto CTAs - a one-click exit on every
-                          row hands the lead to the source before we've made the
-                          case for booking through us. */}
+                      {/* Provenance only. There is no outbound link anywhere:
+                          the source ad carries the agent's number, and renters
+                          reach agents through a viewing request. */}
                       <TableCell>
                         {(() => {
                           const info = r.source === 'hausto'
                             ? { name: 'Hausto', logo: '/logos/hausto-wordmark.svg' }
-                            : getPropertySourceLogo(r.source_url || r.source);
+                            : getPropertySourceLogo(r.source);
                           return (
                             <span title={info.name} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                               <img loading="lazy"
@@ -623,7 +622,7 @@ export const BrowseTable = ({
           ? ''
           : isHausto
             ? 'Hausto'
-            : getPropertySourceLogo(preview.source_url || preview.source).name;
+            : getPropertySourceLogo(preview.source).name;
         return (
           <ListingPreviewDialog
             open={!!preview}
@@ -660,7 +659,7 @@ export const BrowseTable = ({
             liked={!!preview && likedIds.has(preview.id)}
             onLike={preview ? () => handleLike(preview) : undefined}
             onSchedule={preview ? () => openRequest([preview]) : undefined}
-            source={preview ? { name: sourceName, href: isHausto ? `/property/${preview.id}` : preview.source_url } : undefined}
+            source={preview ? { name: sourceName, href: isHausto ? `/property/${preview.id}` : null } : undefined}
             // Browse mixes both ledgers: a Hausto listing is a properties row,
             // everything else came from the crawler.
             propertyType={isHausto ? 'internal' : 'external'}
