@@ -48,32 +48,10 @@ export const useProperties = () => {
     queryKey: ['properties', user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
+      // Straight from the database. This used to read and fill a shared Redis
+      // cache (property-discovery-cache), and a list one browser wrote there was
+      // served to everyone - so anyone could replace it.
 
-      const cacheKey = 'properties:all';
-
-      // Try to get from cache first
-      try {
-        const { data: cachedData, error: cacheError } = await supabase.functions.invoke(
-          'property-discovery-cache',
-          {
-            body: {
-              action: 'get',
-              cacheKey,
-            },
-          }
-        );
-
-        if (!cacheError && cachedData?.properties) {
-          console.log('[Properties] Cache hit - returning cached properties');
-          return cachedData.properties;
-        }
-      } catch (cacheError) {
-        console.log('[Properties] Cache error, fetching from DB:', cacheError);
-      }
-
-      // Cache miss - fetch from database
-      console.log('[Properties] Cache miss - fetching from database');
-      
       // Fetch internal and external properties in parallel
       const [internalResult, externalResult] = await Promise.all([
         supabase
@@ -169,26 +147,7 @@ export const useProperties = () => {
       });
 
 
-      const transformedProperties = [...transformedInternal, ...transformedExternal];
-
-      // Cache the result (fire and forget)
-      supabase.functions
-        .invoke('property-discovery-cache', {
-          body: {
-            action: 'set',
-            cacheKey,
-            properties: transformedProperties,
-          },
-        })
-        .then(({ error }) => {
-          if (error) {
-            console.error('[Properties] Error caching properties:', error);
-          } else {
-            console.log('[Properties] Cached properties successfully');
-          }
-        });
-
-      return transformedProperties;
+      return [...transformedInternal, ...transformedExternal];
     },
   });
 

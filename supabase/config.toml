@@ -211,3 +211,45 @@ verify_jwt = false
 # pg_cron calls this with the cron secret, which it checks itself. verify_jwt
 # would reject the request before the code could.
 verify_jwt = false
+
+# The eight below ran with verify_jwt = false in production with no entry here
+# (found 2026-10-06). Each checks its caller in the function or is public on
+# purpose; these entries only make the file say what production does.
+
+[functions.backfill-external-images]
+# An admin's JWT, checked against user_roles in the function.
+verify_jwt = false
+
+[functions.backfill-property-features]
+# The service role key (maintenance runs) or an admin's JWT, checked in the
+# function.
+verify_jwt = false
+
+[functions.bulk-import-properties]
+# A realtor's or an admin's JWT, checked against user_roles in the function.
+verify_jwt = false
+
+[functions.get-public-property]
+# Public on purpose: a listing page anyone can open. It reads with the service
+# role, so it strips agent contacts, source_url and raw_data itself
+# (invariant 4).
+verify_jwt = false
+
+[functions.mcp]
+# Public on purpose: the MCP endpoint AI clients call. It queries with the
+# caller's own token, never the service role, so RLS and column grants apply.
+verify_jwt = false
+
+[functions.mirror-status]
+# An admin's JWT, checked against user_roles in the function.
+verify_jwt = false
+
+[functions.property-discovery-cache]
+# Anyone may read or clear properties:all, the only key it touches; writing it
+# takes the service role key. Its Redis is shared with other functions.
+verify_jwt = false
+
+[functions.recrawl-external-listing]
+# An admin's JWT, checked against user_roles in the function. Spends Firecrawl
+# and OpenAI budget per call.
+verify_jwt = false
