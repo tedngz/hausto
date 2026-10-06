@@ -294,7 +294,12 @@ export function renderAlertDetails(
 }
 
 /** The free-form intro when the window is already open and no template is needed. */
-export function alertIntro(items: AlertCandidate[]): string {
+export function alertIntro(items: AlertCandidate[], opts: { run?: 1 | 2 } = {}): string {
   const n = items.length;
-  return `${n === 1 ? 'A new place' : `${n} new places`} this week in ${placeSummary(items.map(i => i.label))}:`;
+  const places = placeSummary(items.map(i => i.label));
+  // The Friday digest is the week's second: "this week" again would read as a
+  // repeat, so it says what it is instead - the new_places template's words.
+  return opts.run === 2
+    ? `${n === 1 ? 'A new place' : `${n} new places`} in ${places} ${n === 1 ? 'fits' : 'fit'} what you are looking for:`
+    : `${n === 1 ? 'A new place' : `${n} new places`} this week in ${places}:`;
 }

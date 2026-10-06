@@ -156,7 +156,7 @@ display_name              text
 user_id                   uuid references auth.users -- nullable, unique when set
 service_window_expires_at timestamptz    -- see §5
 opted_out_at              timestamptz
-digest_opt_in_at          timestamptz    -- weekly digest consent, default NULL
+digest_opt_in_at          timestamptz    -- digest consent, default NULL (§11)
 created_at                timestamptz default now()
 updated_at                timestamptz default now()
 ```
@@ -1537,7 +1537,7 @@ writes; admins read `complex_watches`.
 - **Confirm.** The code works for `CONFIRM_TTL_DAYS` (7), only from the phone
   that first sent it, and clears an earlier `opted_out_at` - sending it is the
   renter opting back in. It links `renters.user_id` if that is empty.
-- **Sweep.** `viewing-digest-send`, Tuesday 09:00 ICT. For each active watch,
+- **Sweep.** `viewing-digest-send` (`_shared/viewing/digest-sweep.ts`), Tuesday 09:00 ICT. For each active watch,
   new listings at the complex (`complex_listing_ids`: name or alias in the
   title or location, the complex page's rule) created after `confirmed_at`
   that pass the intake gate (`screenCandidates`) and fit the bedrooms and
@@ -1545,6 +1545,27 @@ writes; admins read `complex_watches`.
   nothing already in `alert_items`. One message per renter per ISO week
   (`DIGEST:<week>`): the `weekly_digest` template with the complex name as
   `{{3}}`, or free-form with the places in it if their window is open.
+- **The digest is a Pass benefit** (the pricing rework, 2026-10-06). A renter
+  who opted in gets digest picks only while their account holds the Pass
+  (`NO_PASS` otherwise), up to twice a week: the Tuesday run above, and a
+  Friday 09:00 run (`run: 2`, cron `viewing-digest-friday`) that carries the
+  digest alone - watches stay weekly. Friday's key is `DIGEST:<week>:2`, its
+  free-form intro and its template, `new_places`, say the places "fit what you
+  are looking for" rather than "this week". Until Meta approves `new_places`,
+  Friday reaches only renters whose window is open. A Pass holder with no
+  requests yet is matched on their quiz answers (`profileFromQuiz`: districts
+  through `vn_district_code`, their own budget as the band, bedrooms from the
+  size). Nothing is news twice across runs - `alert_items` again.
+- **Consent before checkout.** A box on our page, unticked, before Polar's
+  checkout (the pricing modal and the lock-in page) - never inferred from
+  buying. `create-pass-order` records it on the account
+  (`account_digest_opt_ins`) and on every number already linked to it.
+- **Linking a number.** An account with no WhatsApp number has nobody to
+  send to, so the Pass success page offers a wa.me link carrying a one-off
+  code (`HL-4KX2`, `account_link_codes`, a week). The message it sends links
+  the number to the account (never one linked to another account) and carries
+  the account's opt-in onto it, unless that number said STOP; one reply says
+  which (`ACCOUNT_LINKED`, agent on or off).
 - **Reply.** When the message they answer (§5) is an alert whose places have not
   gone out, anything but a no or STOP gets them free-form, with a link each
   (`ALERT_DETAILS`) - "show me" included, which the intent classifier reads

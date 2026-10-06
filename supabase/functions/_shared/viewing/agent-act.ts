@@ -18,6 +18,7 @@ import { alertItemsFor, markAlertDetailed } from './alerts.ts';
 import { renderInquiryConfirmed } from './inquiry.ts';
 import { recordInquiryMessage } from './concierge.ts';
 import { renderLockInReply } from './lock-in.ts';
+import { renderLinkOutcome } from './account-link.ts';
 import { SITE_URL } from './watch.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -107,6 +108,15 @@ export async function performAction(
         body: renderAlertDetails(items),
       });
       await markAlertDetailed(db, action.alertMessageId, new Date());
+      return { performed: action.kind, messageId: result.message.id };
+    }
+
+    if (action.kind === 'ACCOUNT_LINKED') {
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        purpose: `ACCOUNT_LINKED:${ctx.providerMessageId}`,
+        body: renderLinkOutcome(action.link),
+      });
       return { performed: action.kind, messageId: result.message.id };
     }
 

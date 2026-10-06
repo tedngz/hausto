@@ -23,6 +23,7 @@ import type { Intent } from './intent.ts';
 import type { LockInPrompt, WatchOutcome } from './routing.ts';
 import type { WatchProblem } from './watch.ts';
 import type { ConfirmedInquiry } from './concierge.ts';
+import type { LinkOutcome } from './account-link.ts';
 
 export type AgentAction =
   /** Nothing to do - an operator handles it, or there is nothing to handle. */
@@ -49,7 +50,9 @@ export type AgentAction =
   /** They answered an alert. Send the places it was about. */
   | { kind: 'ALERT_DETAILS'; alertMessageId: string }
   /** They said yes to a plan without the Pass. Say where to lock it in (SPEC §9). */
-  | { kind: 'LOCK_IN_LINK'; lockIn: LockInPrompt };
+  | { kind: 'LOCK_IN_LINK'; lockIn: LockInPrompt }
+  /** They sent an account link code. Say whether it worked (account-link.ts). */
+  | { kind: 'ACCOUNT_LINKED'; link: LinkOutcome };
 
 export interface AgentInput {
   enabled: boolean;
@@ -71,6 +74,8 @@ export interface AgentInput {
   inquiryId?: string;
   /** Set when a "yes" cannot lock the plan in by itself (routing.ts). */
   lockIn?: LockInPrompt;
+  /** Set when the message carried an account link code. */
+  link?: LinkOutcome;
 }
 
 /**
@@ -88,6 +93,9 @@ export function decideAction(input: AgentInput): AgentAction {
   // both would get silence, on a thread where we promised a reply. Still one
   // reply per inbound, and an opt-out still outranks them.
   const stopping = input.optedOut || input.intent === 'OPT_OUT';
+  // A link code: the success page told them to send it, so it is answered
+  // like a watch code, agent on or off.
+  if (!stopping && input.link) return { kind: 'ACCOUNT_LINKED', link: input.link };
   if (!stopping && input.watch) {
     return input.watch.kind === 'CONFIRMED'
       ? {

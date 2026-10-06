@@ -78,6 +78,7 @@ export class FakeDb {
       },
       in: (col: string, vals: unknown[]) => { rows = rows.filter(r => vals.includes(r[col])); return api; },
       gte: (col: string, val: string) => { rows = rows.filter(r => String(r[col]) >= val); return api; },
+      gt: (col: string, val: string) => { rows = rows.filter(r => r[col] != null && String(r[col]) > val); return api; },
       order: (col: string, o?: { ascending?: boolean }) => {
         const dir = o?.ascending === false ? -1 : 1;
         rows = [...rows].sort((a, b) => {
@@ -188,8 +189,12 @@ export class FakeDb {
    */
   passHolders = new Set<string>();
 
+  /** Answers for any other rpc a test needs (`vn_district_code`, say). */
+  rpcResults: Record<string, (args: Record<string, unknown>) => unknown> = {};
+
   // deno-lint-ignore no-explicit-any
   rpc(name: string, args?: Record<string, unknown>): Promise<{ data: any; error: null }> {
+    if (this.rpcResults[name]) return Promise.resolve({ data: this.rpcResults[name](args ?? {}), error: null });
     if (name === 'has_active_pass') return Promise.resolve({ data: this.passHolders.has(String(args?._user_id)), error: null });
     if (name === 'has_complimentary_pass') return Promise.resolve({ data: false, error: null });
     return Promise.resolve({ data: null, error: null });

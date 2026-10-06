@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePass } from '@/hooks/usePass';
 import { cn } from '@/lib/utils';
+import { DigestOptIn } from '@/components/DigestOptIn';
 import { formatVnd, hcmcLong } from '../../supabase/functions/_shared/viewing/format.ts';
 
 interface PlanStop {
@@ -55,6 +56,7 @@ export default function LockIn() {
   const [picked, setPicked] = useState<string | null>(null);
   const [busy, setBusy] = useState<'free' | 'pass' | 'all' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [digestOptIn, setDigestOptIn] = useState(false);
 
   const { data: plan, isLoading, error: loadError } = useQuery<Plan>({
     queryKey: ['lock-in', ref, user?.id],
@@ -85,7 +87,7 @@ export default function LockIn() {
     setBusy('pass');
     // Hands off to Polar's checkout; the plan is held while it is open and
     // locked in when the payment is recorded, even if they never come back.
-    await purchasePass(ref);
+    await purchasePass(ref, { digestOptIn });
     setBusy(null);
   };
 
@@ -202,6 +204,7 @@ export default function LockIn() {
                     : `Lock in ${plan.stops.find(s => s.itemId === chosen)?.title ?? 'it'} - free`}
                 </Button>
               )}
+              <DigestOptIn checked={digestOptIn} onChange={setDigestOptIn} className="text-left" />
               <Button
                 className="w-full" size="lg" variant={plan.freeViewingAvailable && n === 1 ? 'outline' : 'default'}
                 disabled={!!busy} onClick={() => void buyPass()}

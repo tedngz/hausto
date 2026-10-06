@@ -21,6 +21,8 @@ const PassSuccess = () => {
   const [status, setStatus] = useState<'capturing' | 'success' | 'pending' | 'error'>('capturing');
   const [kind, setKind] = useState<'pass' | 'topup'>('pass');
   const [lockIn, setLockIn] = useState<{ ref: string | null; lockedIn: boolean } | null>(null);
+  /** Offered when the account has no WhatsApp number to send anything to. */
+  const [whatsappLink, setWhatsappLink] = useState<string | null>(null);
   const capturedRef = useRef(false);
   const planRef = searchParams.get('ref');
 
@@ -55,6 +57,7 @@ const PassSuccess = () => {
         // A top-up bought before it was retired still records here.
         setKind(data?.kind === 'topup' ? 'topup' : 'pass');
         setLockIn(data?.lockIn ?? null);
+        setWhatsappLink(data?.whatsappLink ?? null);
         refetchPass();
         setStatus('success');
         toast.success(
@@ -100,6 +103,17 @@ const PassSuccess = () => {
                     ? `Your Pass is live, but ${lockIn.ref ?? 'that plan'} could not be locked in - its time had passed. We will be in touch about it.`
                     : 'Every viewing we confirm, unlimited AI and Deep Scan, for the next 30 days.'}
             </p>
+            {whatsappLink && (
+              <div className="mb-6 rounded-md border p-4 text-left text-sm">
+                <p className="font-medium">One more step: link your WhatsApp</p>
+                <p className="mt-1 text-muted-foreground">
+                  Your plans, and the new places you asked for, come on WhatsApp. Send us the message this opens.
+                </p>
+                <Button asChild className="mt-3 w-full">
+                  <a href={whatsappLink} target="_blank" rel="noreferrer">Open WhatsApp</a>
+                </Button>
+              </div>
+            )}
             {ref && !lockIn?.lockedIn && lockIn === null ? (
               <Button onClick={() => navigate(`/lock-in/${ref}`)} size="lg">Back to your plan</Button>
             ) : (

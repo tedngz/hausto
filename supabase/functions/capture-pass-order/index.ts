@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { recordPolarPurchase } from "../_shared/polar-pass.ts";
+import { buildLinkDeepLink, hasLinkedNumber, linkCodeFor } from "../_shared/viewing/account-link.ts";
 
 // Confirms a Polar checkout when the renter lands back on /pass-success.
 //
@@ -81,9 +82,18 @@ serve(async (req) => {
       );
     }
 
+    // An account with no WhatsApp number has nobody to send its viewings or
+    // its new places to, so the success page offers to link one.
+    let whatsappLink: string | null = null;
+    if (result.kind === 'pass' && !(await hasLinkedNumber(supabaseClient, user.id))) {
+      const code = await linkCodeFor(supabaseClient, user.id, new Date());
+      whatsappLink = buildLinkDeepLink(Deno.env.get('WHATSAPP_BUSINESS_PHONE') || '+84000000000', code);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
+        whatsappLink,
         kind: result.kind,
         viewings: result.viewings,
         expiresAt: result.expiresAt,

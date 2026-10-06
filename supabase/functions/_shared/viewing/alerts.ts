@@ -11,7 +11,7 @@
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import { isWindowOpen, sendFreeForm, sendTemplate, type MessageStore } from '../whatsapp/send.ts';
 import { TEMPLATES } from '../whatsapp/templates.ts';
-import { digestPurpose } from './digest.ts';
+import { digestPurpose, type DigestRun } from './digest.ts';
 import { itineraryAwaitingAnswer } from './open-request.ts';
 import {
   ALERT_REPLY_DAYS,
@@ -46,8 +46,9 @@ export async function sendAlert(
   db: Supa,
   store: MessageStore,
   adapter: WhatsAppAdapter,
-  opts: { renterId: string; renterName: string | null; items: AlertCandidate[]; now: Date },
+  opts: { renterId: string; renterName: string | null; items: AlertCandidate[]; now: Date; run?: DigestRun },
 ): Promise<AlertSendResult> {
+  const run = opts.run ?? 1;
   if (opts.items.length === 0) return { sent: false, deduplicated: false, detailed: false };
   // A renter who owes us a yes on their itinerary does not also get "reply
   // here if you would like to see them": their next "yes" is the plan's
@@ -60,18 +61,22 @@ export async function sendAlert(
   if (!renter) throw new Error(`Unknown renter ${opts.renterId}`);
   const detailed = isWindowOpen(renter, opts.now);
 
-  const purpose = digestPurpose(opts.now);
+  const purpose = digestPurpose(opts.now, run);
+  // Tuesday's carries watches and says "this week"; Friday's is the digest
+  // alone, in the new_places wording - which, until Meta approves it, means a
+  // Friday digest reaches only a renter whose window is open (send.ts refuses
+  // an unapproved template, and the sweep counts it as refused).
   const result = detailed
     ? await sendFreeForm(store, adapter, {
       renterId: opts.renterId,
       purpose,
-      body: renderAlertDetails(opts.items, { intro: alertIntro(opts.items) }),
+      body: renderAlertDetails(opts.items, { intro: alertIntro(opts.items, { run }) }),
       now: opts.now,
     })
     : await sendTemplate(store, adapter, {
       renterId: opts.renterId,
       purpose,
-      templateName: TEMPLATES.WEEKLY_DIGEST.name,
+      templateName: run === 2 ? TEMPLATES.NEW_PLACES.name : TEMPLATES.WEEKLY_DIGEST.name,
       params: alertParams(opts.renterName, opts.items),
     });
 
