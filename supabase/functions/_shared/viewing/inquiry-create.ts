@@ -78,7 +78,7 @@ export async function createInquiry(
     // Search for me is the Pass's: a person's hours, not a form's.
     if (!userId) return refuse(401, 'sign_in_required', 'Sign in to ask us to search for you.');
     if (!(await hasPassCover(db, userId))) {
-      return refuse(402, 'pass_required', `Search for me comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`);
+      return refuse(402, 'pass_required', `Priority search comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`);
     }
     const open = await openSearch(db, userId, now);
     if (open) {

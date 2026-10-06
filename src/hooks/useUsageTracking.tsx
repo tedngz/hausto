@@ -18,7 +18,7 @@ interface UsageLimits {
 // the plan rework - the curated list is what Hausto is for, so walling it off
 // was metering the promise. Matches and retakes are still counted into
 // daily_usage as telemetry, there is just no ceiling on either any more.
-const FREE_TIER_LIMITS = {
+export const FREE_TIER_LIMITS = {
   dailyAiRequests: 10,
 };
 

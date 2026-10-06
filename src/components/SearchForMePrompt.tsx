@@ -24,12 +24,14 @@ export function SearchForMePrompt({ prefill, found, className }: {
         <p className="text-sm font-medium">{found === 0 ? 'Nothing here that fits?' : 'Only a few here?'} We can look for you.</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           A person searches Facebook groups and agents' circles, and sends places that fit on WhatsApp within{' '}
-          {REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent. It comes with the Pass.
+          {REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent. Priority search comes with the Pass.
         </p>
       </div>
+      {/* Renters know it as Priority search, the name the Pass sells it by;
+          "Search for me" is still its name in the code and the SPEC. */}
       <Button size="sm" className="shrink-0" onClick={() => setOpen(true)}>
         <Search className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-        Search for me
+        Start a priority search
       </Button>
       <ConciergeCaptureModal open={open} onOpenChange={setOpen} search={prefill} />
     </div>
