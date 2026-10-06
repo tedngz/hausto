@@ -214,6 +214,20 @@ report them - which is exactly why `weekly_digest` is the one that has to go in
 as Marketing anyway, per the warning above. Category is decided by what the
 message *is*, not by which bill you would rather receive.
 
+### The number's quality rating holds the digest
+
+Since 2026-10-06 the hourly `whatsapp-template-sync` also reads the number's
+own rating at Meta (`quality_rating`, and `status` where Meta gives it) into
+`whatsapp_number_status`. While Meta rates the number YELLOW or RED, or has
+flagged or restricted it, the digest sweep runs dry and reports
+`quality_hold` instead of sending (`_shared/whatsapp/number-health.ts`). It
+resumes by itself at the first GREEN reading. Itineraries and replies are not
+held: they are what the number is for.
+
+The ops console shows the reading on the AI operator page. While the digest is
+held, or one of our templates is rated YELLOW or RED or has been paused, a
+banner shows on every screen. A number Meta has not rated yet holds nothing.
+
 ### The bodies as submitted
 
 The registry pins names and parameter order; the wording lives here. Each ends

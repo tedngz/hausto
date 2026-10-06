@@ -13,6 +13,7 @@ import { RequestDetail } from './RequestDetail';
 import { ShadowStats } from './ShadowStats';
 import { Buildings } from './Buildings';
 import { Availability } from './Availability';
+import { NumberAlert } from './NumberStatus';
 
 export function App() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -71,6 +72,7 @@ export function App() {
         <div className="spacer" />
         <button onClick={signOut}>Sign out</button>
       </div>
+      <NumberAlert />
       {requestId
         ? <RequestDetail requestId={requestId} onBack={() => setRequestId(null)} />
         : screen === 'shadow' ? <ShadowStats /> : screen === 'buildings' ? <Buildings /> : screen === 'availability' ? <Availability /> : <Queue onOpen={setRequestId} />}

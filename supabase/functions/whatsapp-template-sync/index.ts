@@ -11,9 +11,14 @@
 // so. What it does is cache Meta's side in `whatsapp_template_status`, which
 // `sendTemplate` consults alongside the flag - so a withdrawn approval stops a
 // send, while a new approval still waits for a human.
+//
+// It also reads the number's own quality rating into `whatsapp_number_status`
+// (number-health.ts), which the ops console shows and the digest sweep checks
+// before it sends any marketing.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { parseMetaTemplates, reconcile, statusRows, summarise } from '../_shared/whatsapp/template-status.ts';
+import { marketingHold, numberStatusRow, parseNumberHealth } from '../_shared/whatsapp/number-health.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,9 +30,58 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const WABA_ID = Deno.env.get('WHATSAPP_WABA_ID') || '';
 const ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN') || '';
 const GRAPH_VERSION = Deno.env.get('WHATSAPP_GRAPH_VERSION') || 'v21.0';
+const PHONE_NUMBER_ID = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+// ── The number's own rating (number-health.ts) ─────────────────────────────
+// Read before the templates and never allowed to fail the sync: a reading that
+// could not be taken leaves the last one in place, with the error beside it.
+// deno-lint-ignore no-explicit-any
+async function syncNumber(db: any): Promise<Record<string, unknown> | null> {
+  if (!PHONE_NUMBER_ID) return null;
+  const now = new Date();
+  try {
+    const health = parseNumberHealth(await fetchNumber());
+    const { data: prev } = await db
+      .from('whatsapp_number_status').select('quality_rating').eq('id', 'singleton').maybeSingle();
+    const row = numberStatusRow(health, (prev?.quality_rating as string | null) ?? null, now);
+    const { error } = await db.from('whatsapp_number_status').upsert(row, { onConflict: 'id' });
+    if (error) throw new Error(`store failed: ${error.message}`);
+
+    const hold = marketingHold({ quality_rating: health.qualityRating, status: health.status });
+    if (hold) {
+      console.error(`[whatsapp-template-sync] NUMBER QUALITY: ${hold} - the digest holds itself until a reading comes back GREEN`);
+    } else {
+      console.log(`[whatsapp-template-sync] number: ${health.qualityRating}${health.status ? `, ${health.status}` : ''}`);
+    }
+    return { rating: health.qualityRating, status: health.status, hold };
+  } catch (e) {
+    const message = (e as Error).message;
+    console.error('[whatsapp-template-sync] number check failed:', message);
+    await db.from('whatsapp_number_status')
+      .upsert({ id: 'singleton', last_error: message.slice(0, 300), updated_at: now.toISOString() }, { onConflict: 'id' });
+    return { error: message };
+  }
+}
+
+/** The number's reading; `quality_rating` alone if Meta refuses the wider field list. */
+async function fetchNumber(): Promise<unknown> {
+  let last = '';
+  for (const fields of ['quality_rating,status', 'quality_rating']) {
+    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${PHONE_NUMBER_ID}?fields=${fields}`, {
+      headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok) return body;
+    last = `graph_${res.status}: ${JSON.stringify(body?.error?.message ?? body).slice(0, 200)}`;
+    // Only a field Meta does not know is worth a narrower retry.
+    if (res.status !== 400) break;
+  }
+  throw new Error(last);
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -53,6 +107,8 @@ Deno.serve(async (req) => {
     console.log(`[whatsapp-template-sync] skipped: ${missing} not set`);
     return json({ success: true, skipped: true, reason: `not configured: ${missing}` });
   }
+
+  const number = await syncNumber(db);
 
   // ── Ask Meta ──────────────────────────────────────────────────────────────
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${WABA_ID}/message_templates` +
@@ -112,5 +168,6 @@ Deno.serve(async (req) => {
     metaTemplates: templates.length,
     drifts,
     urgent: summary.urgent,
+    number,
   });
 });

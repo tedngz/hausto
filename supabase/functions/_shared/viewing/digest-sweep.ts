@@ -18,6 +18,7 @@
 import type { WhatsAppAdapter } from '../whatsapp/adapter.ts';
 import type { MessageStore } from '../whatsapp/send.ts';
 import { UnapprovedTemplateError, ConsecutiveMessageError } from '../whatsapp/send.ts';
+import { marketingHold, readNumberStatus } from '../whatsapp/number-health.ts';
 import {
   assessRenter, newSince, profileFromQuiz, quizCity,
   type DigestRenter, type DigestRun, type Ineligible,
@@ -53,6 +54,11 @@ export interface SweepSummary {
   held: number;
   skipped: Record<Ineligible | 'NO_MATCH', number>;
   dry_run: boolean;
+  /**
+   * What is wrong with the number, when something is (number-health.ts). While
+   * it is set, a run asked to send runs dry.
+   */
+  quality_hold: string | null;
 }
 
 /** A Pass holder's quiz answers as a profile, with place names mapped to district codes. */
@@ -85,7 +91,15 @@ export async function runDigestSweep(
   adapter: WhatsAppAdapter,
   opts: { run: DigestRun; send: boolean; now: Date },
 ): Promise<SweepSummary> {
-  const { run, send, now } = opts;
+  const { run, now } = opts;
+
+  // ── The number first ──────────────────────────────────────────────────────
+  // The digest is marketing, and marketing is what lowers a number's rating -
+  // the number every itinerary goes out from. While Meta's last reading says
+  // anything is wrong, a run asked to send runs dry instead and says why.
+  const qualityHold = marketingHold(await readNumberStatus(db));
+  const send = opts.send && !qualityHold;
+  if (opts.send && qualityHold) console.warn(`[digest-sweep] run ${run} held: ${qualityHold}`);
 
   // ── Who asked ─────────────────────────────────────────────────────────────
   const { data: digestRenters, error: renterErr } = await db
@@ -128,6 +142,7 @@ export async function runDigestSweep(
   const summary: SweepSummary = {
     run, renters: renters.size, digest_opted_in: (digestRenters ?? []).length, active_watches: watches.length,
     eligible: 0, via_watch: 0, sent: 0, refused: 0, held: 0, skipped, dry_run: !send,
+    quality_hold: qualityHold,
   };
   if (renters.size === 0) return summary;
 
