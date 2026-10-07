@@ -557,8 +557,8 @@ export const BrowseTable = ({
                         </span>
                       </TableCell>
                       {/* Provenance only, no outbound link: the source ad
-                          carries the agent's number, which a renter gets in
-                          the preview this row opens, signed in (AgentContact). */}
+                          carries the agent's number, which a renter gets
+                          behind "Request viewing", signed in (ViewingChoice). */}
                       <TableCell>
                         {(() => {
                           const info = r.source === 'hausto'

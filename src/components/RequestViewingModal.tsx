@@ -26,6 +26,11 @@
 // is the paid step - the first viewing on us, then the Pass. A renter who
 // requested for free and then met a price may report the message, and reports
 // lower the WhatsApp number's quality rating.
+//
+// **For one place whose ad lists the agent's number, it opens on a choice**
+// (ViewingChoice, SPEC §6): we arrange it, or call the agent yourself. The
+// card still carries one button; the choice is behind it. Several places, or
+// an ad with no number, go straight to the steps below.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -45,6 +50,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePass } from '@/hooks/usePass';
 import { useRenterIdentity } from '@/hooks/useRenterIdentity';
+import { useHasAgentNumber } from '@/hooks/useHasAgentNumber';
+import { ViewingChoice } from '@/components/ViewingChoice';
 import {
   DAY_PARTS,
   MAX_DAYS_AHEAD,
@@ -156,6 +163,18 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const [touched, setTouched] = useState({ name: false, phone: false });
+  // Past the choice: the renter picked "We arrange it". Every opening starts
+  // at the choice again.
+  const [arranging, setArranging] = useState(false);
+  useEffect(() => {
+    if (!open) setArranging(false);
+  }, [open]);
+
+  const single = places.length === 1 ? places[0] : null;
+  const { data: agentInfo, isLoading: agentLoading } = useHasAgentNumber(single?.listingId, open && !!single);
+  const beforeChoice = !!single && !submitted && !arranging;
+  const checkingChoice = beforeChoice && agentLoading;
+  const choosing = beforeChoice && agentInfo?.hasNumber === true;
 
   useEffect(() => {
     if (!identity) return;
@@ -340,6 +359,20 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
               <Button variant="ghost" className="w-full" onClick={close}>Done</Button>
             </div>
           )
+        ) : checkingChoice ? (
+          // Usually instant: the listing page and the preview have asked already.
+          <div className="flex flex-1 items-center justify-center p-10">
+            <DialogTitle className="sr-only">Request a viewing</DialogTitle>
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
+          </div>
+        ) : choosing && single ? (
+          <ViewingChoice
+            listingId={single.listingId}
+            title={single.title}
+            hasPass={hasPass}
+            sourceName={agentInfo?.sourceName}
+            onArrange={() => setArranging(true)}
+          />
         ) : !user ? (
           <div className="space-y-4 p-6">
             <DialogHeader>

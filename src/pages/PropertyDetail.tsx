@@ -8,8 +8,8 @@ import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { HomeAI } from '@/components/HomeAI';
 import { ChatDock, RAIL_MIN_VIEWPORT } from '@/components/chat/ChatDock';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
-import { AgentContact } from '@/components/AgentContact';
-import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
+import { useQueryClient } from '@tanstack/react-query';
+import { agentNumberKey, marketplaceName, type AgentNumberInfo } from '@/hooks/useHasAgentNumber';
 import { Button } from '@/components/ui/button';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { shareProperty } from '@/utils/shareProperty';
@@ -34,10 +34,7 @@ const PropertyDetail = () => {
   const [source, setSource] = useState<'internal' | 'external'>('internal');
   const [isRelist, setIsRelist] = useState(false);
   const [firstSeenAt, setFirstSeenAt] = useState<string | null>(null);
-  // Whether the original ad carries a number - never the number, which a
-  // signed-in renter asks for (AgentContact).
-  const [hasAgentNumber, setHasAgentNumber] = useState(false);
-  const [marketplace, setMarketplace] = useState<string | undefined>(undefined);
+  const queryClient = useQueryClient();
 
   // Opened from an availability request's offer (`?inq=`): remembered so the
   // viewing request made from here links back to it.
@@ -166,9 +163,12 @@ const PropertyDetail = () => {
           const extProperty = data.property;
           setIsRelist(!!extProperty.is_relist);
           setFirstSeenAt(extProperty.created_at ?? null);
-          setHasAgentNumber(extProperty.has_agent_number === true);
-          const sourceName = getPropertySourceLogo(extProperty.source || '').name;
-          setMarketplace(sourceName === 'External Source' ? undefined : sourceName);
+          // Whether the ad carries a number - never the number. Seeded so
+          // "Request viewing" opens straight on its choice (ViewingChoice).
+          queryClient.setQueryData<AgentNumberInfo>(agentNumberKey(extProperty.id), {
+            hasNumber: extProperty.has_agent_number === true,
+            sourceName: marketplaceName(extProperty.source),
+          });
           const transformedApartment: Apartment = {
             id: extProperty.id,
             images: extProperty.images || [],
@@ -206,7 +206,7 @@ const PropertyDetail = () => {
     };
 
     fetchProperty();
-  }, [id]);
+  }, [id, queryClient]);
 
 
   if (loading) {
@@ -325,11 +325,6 @@ const PropertyDetail = () => {
               // `external_properties`. A realtor's own listing has no request
               // path since Fast-Track retired (invariant 8) - none is live.
               shortlistable={source === 'external'}
-              requestFooter={
-                source === 'external' && hasAgentNumber ? (
-                  <AgentContact listingId={apartment.id} sourceName={marketplace} hasNumber />
-                ) : undefined
-              }
             />
           </div>
 

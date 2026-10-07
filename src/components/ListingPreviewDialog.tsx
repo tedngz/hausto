@@ -12,7 +12,8 @@ import type { PropertyType } from '@/hooks/useDeepAnalysis';
 import { usePass } from '@/hooks/usePass';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
-import { AgentContact } from '@/components/AgentContact';
+import { ListingHistoryNote } from '@/components/ListingHistoryNote';
+import { useHasAgentNumber } from '@/hooks/useHasAgentNumber';
 
 // The one way a listing opens over the page it was found on - browse, the AI's
 // results, anywhere a card is clicked. There used to be a second, older modal
@@ -80,20 +81,31 @@ export const ListingPreviewDialog = ({
   // nothing behind the card's "more" toggle. The full text only exists on the
   // row, and this is the one preview both surfaces share, so it is topped up
   // here rather than in each caller.
-  const { data: fullDescription } = useQuery({
-    queryKey: ['listing-description', propertyType, apartment?.id],
+  //
+  // A crawled listing's history note needs when we first saw it and whether
+  // it is a relist, which no caller passes, so they come with the same read.
+  const isExternal = propertyType === 'external';
+  const { data: listingFacts } = useQuery({
+    queryKey: ['listing-preview-facts', propertyType, apartment?.id],
     enabled: open && !!apartment?.id,
     staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<string | null> => {
-      const table = propertyType === 'external' ? 'external_properties' : 'properties';
-      const { data } = await supabase
-        .from(table)
-        .select('description')
-        .eq('id', apartment!.id)
-        .maybeSingle();
-      return (data as { description?: string | null } | null)?.description ?? null;
+    queryFn: async (): Promise<{ description: string | null; createdAt: string | null; isRelist: boolean }> => {
+      const { data } = isExternal
+        ? await supabase.from('external_properties').select('description, created_at, is_relist').eq('id', apartment!.id).maybeSingle()
+        : await supabase.from('properties').select('description').eq('id', apartment!.id).maybeSingle();
+      const row = data as { description?: string | null; created_at?: string | null; is_relist?: boolean | null } | null;
+      return {
+        description: row?.description ?? null,
+        createdAt: row?.created_at ?? null,
+        isRelist: !!row?.is_relist,
+      };
     },
   });
+  const fullDescription = listingFacts?.description ?? null;
+
+  // Asked as the preview opens, so "Request viewing" opens straight on its
+  // choice - we arrange it, or call the agent - where the ad lists a number.
+  useHasAgentNumber(apartment?.id, open && isExternal && !!onSchedule);
 
   // Only ever lengthens it: a row that is genuinely short must not be replaced
   // by a stale or empty read.
@@ -125,9 +137,9 @@ export const ListingPreviewDialog = ({
         ))}
       </ul>
       {/* Our own page only. A crawled listing's original ad carries the
-          agent's number, which reaches a renter only through AgentContact,
-          signed in and logged (CLAUDE.md invariant 4) - so an outside link
-          is dropped here even if a caller passes one. */}
+          agent's number, which reaches a renter only through the request
+          modal's choice, signed in and logged (CLAUDE.md invariant 4) - so an
+          outside link is dropped here even if a caller passes one. */}
       {source?.href?.startsWith('/') && (
         <a
           href={source.href}
@@ -138,18 +150,6 @@ export const ListingPreviewDialog = ({
       )}
     </div>
   ) : null;
-
-  // The other choice, under the offer it is the alternative to: call the
-  // agent yourself. Crawled listings only - the number is the one on the
-  // original ad - and only where that ad lists one, which AgentContact asks.
-  const footer = bookingOffer && (
-    <>
-      {bookingOffer}
-      {propertyType === 'external' && apartment?.id && (
-        <AgentContact listingId={apartment.id} sourceName={source?.name} />
-      )}
-    </>
-  );
 
   return (
     <>
@@ -191,8 +191,24 @@ export const ListingPreviewDialog = ({
               onClose={() => onOpenChange(false)}
               onSchedule={onSchedule}
               scheduleLabel="Request viewing"
-              footer={footer}
+              footer={bookingOffer}
             />
+          )}
+          {/* What we have seen of it over time, as the listing page shows it
+              under its card. Facts about the place, not an action, so it sits
+              outside the card rather than in its footer. */}
+          {/* Wrapped: in the dialog's grid the note's own mx-auto would
+              shrink it to its text instead of the card's width. */}
+          {apartment && isExternal && (
+            <div>
+              <ListingHistoryNote
+                listingId={apartment.id}
+                enabled
+                firstSeenAt={listingFacts?.createdAt ?? null}
+                isRelist={listingFacts?.isRelist ?? false}
+                className="mt-3 max-w-none rounded-2xl border-border bg-card"
+              />
+            </div>
           )}
         </DialogContent>
       </Dialog>

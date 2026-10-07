@@ -694,7 +694,7 @@ thread, because those are what decide whether the next send is legal.
 
 **Never expose a renter's phone number or name to an agent or to the ops
 console realtor view. An agent's number reaches a renter by two paths only:
-the number printed on a crawled listing's own ad, under that listing's
+the number printed on a crawled listing's own ad, behind that listing's
 "Request viewing" for a signed-in renter; and any agent's number on the day of
 a viewing the renter kept, with that agent's consent.**
 
@@ -706,17 +706,21 @@ rendering takes a DTO with no realtor contact field on it.
 **The number on the ad** (decided 2026-10-07). Hausto is paid by renters only,
 so the number a crawled ad prints is no longer something to keep from them: the
 ad is public on its marketplace, and what the Pass sells is dealing with the
-agents, not owning their numbers. `AgentContact` offers it as the other
-choice, directly under the "Request viewing" button on the listing page and in
-the listing preview (Browse, the chat's results): an "or", then "Call the agent
-yourself - this ad lists their number." as a text link, never a second button
-(invariant 8). Revealed, it says what calling costs: the agent gets the
-renter's number. It is held in one place:
+agents, not owning their numbers. It is offered behind "Request viewing", not
+beside it (invariant 8): for one place whose ad lists a number,
+`RequestViewingModal` opens on a choice (`ViewingChoice`), "How do you want to
+see it?" - **We arrange it** (the request, free to make; the first confirmed
+viewing free, then the Pass) or **Call the agent yourself** (free; the agent
+gets the renter's number, and many speak only Vietnamese). Several places, or
+an ad with no number, go straight to the request. The same modal opens from
+every card, the listing page and the listing preview, so there is one place to
+change. It is held in one place:
 
 - `reveal_listing_contact(listing_id)` answers a signed-in renter only, with
   `external_properties.contact_phone_e164` and the ad's `source_url`, for an
   active listing whose ad carries a number. It writes `contact_reveals` (§1) the
-  first time, and refuses a 31st new listing in a day.
+  first time, and refuses a 31st new listing in a day. Its one caller in the
+  renter app is `useAgentReveal`, behind `ViewingChoice`.
 - That column is the ad's own number: written by the crawler and
   `extract-phone`, or resolved by hand against the ad's masked digits (the
   contact import, the weekly contact check). `RECORD_CONTACT` sets `realtor_id`
@@ -757,7 +761,7 @@ previews, `get_external_property_contacts` for any matched renter, and
   "Request viewing" or the listing page's number, without saying whether a
   given listing has one. A model repeating a number would be a path with no
   log, and could repeat one no ad printed.
-- Beyond `AgentContact`, cards, Browse and the previews link nowhere outside
+- Beyond `ViewingChoice`, cards, Browse and the previews link nowhere outside
   Hausto.
 - `public-property-search` keeps `source_url` in its contract and returns it as
   null; `url` already points at our page. It serves AI crawlers, and sending
@@ -951,7 +955,7 @@ payment gives nothing away. Nothing confirmed, nothing owed: a request where
 no agent confirms ends with substitutes or offered times, as before.
 
 Since 2026-10-07 that is not quite true. Where a stop's ad lists the agent's
-number, the listing page and preview show it (§6), so a renter holding a plan knows which
+number, "Request viewing" offers it (§6), so a renter holding a plan knows which
 places are free and can ring those agents rather than lock in. That is
 accepted: the Pass sells not having to. The number to watch is reveals in
 `contact_reveals` on stops of the renter's own plan, made between delivery and

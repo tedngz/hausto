@@ -47,7 +47,7 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
   const externalIds = matches.filter(m => m.property_type === 'external').map(m => m.property_id);
 
   // No agent contact or source link, matched or not: a crawled ad's number is
-  // for a signed-in renter through AgentContact (`reveal_listing_contact`), and
+  // for a signed-in renter through ViewingChoice (`reveal_listing_contact`), and
   // nowhere else (CLAUDE.md invariant 4). The fields stay on the shape, empty,
   // so the screens that read them need no change.
   const [internalResult, externalResult] = await Promise.all([
