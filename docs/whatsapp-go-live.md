@@ -183,7 +183,7 @@ renamed or reordered template is a refusal, not a silent mis-send.
 | `viewing_reminder` | `renter_name`, `viewing_time`, `listing_address` | Utility | Since 2026-09-30 the viewing-day message when the window has shut (SPEC §9): sent the morning of, `viewing_time` is "today at 10:00", and `listing_address` carries every viewing that day on one line - where to meet, the agent's name, and their number if they agreed. |
 | `no_supply_substitutes` | `renter_name`, `request_ref` | Utility | Nothing could be confirmed and close matches were found, with the window shut. Their reply releases the message carrying the matches (SPEC §9). |
 | `weekly_digest` | `renter_name`, `new_count`, `area_summary` | **Marketing** | The weekly new-listing digest. See the warning below. |
-| `new_places` | `renter_name`, `new_count`, `area_summary` | **Marketing** | **To submit.** The digest twice a week for Pass holders (SPEC §11). `weekly_digest` says "this week", which reads wrong on a Friday. Registry `approved: false` until Meta approves it; until then the Friday run reaches only renters whose window is open. |
+| `new_places` | `renter_name`, `new_count`, `area_summary` | **Marketing** | Approved 2026-10-07. The digest twice a week for Pass holders (SPEC §11). `weekly_digest` says "this week", which reads wrong on a Friday. |
 | `request_update` | `renter_name`, `complex_name` | Utility | Approved 2026-09-30. An availability request has news after the 24-hour window shut (SPEC §11), a viewing request owes a holding update with the window shut, or its itinerary is held behind it - other times on offer, or nothing found yet (SPEC §9; `{{2}}` is then the listing title or "3 places"). Carries no news itself: the renter replies and the detail goes free-form. |
 
 ### `weekly_digest` is not like the other four
@@ -268,9 +268,9 @@ renter-facing copy until state is CONFIRMED.
 > would like to see them.
 
 **`new_places`** - **Marketing**. Samples: `Minh`, `3`,
-`Thao Dien and District 1`. Added 2026-10-06 for the twice-weekly Pass digest;
-not yet submitted. Once Meta approves it, set `approved: true` in
-`_shared/whatsapp/templates.ts`.
+`Thao Dien and District 1`. Added 2026-10-06 for the twice-weekly Pass digest,
+submitted the same day and approved by Meta on 2026-10-07; `approved` in
+`_shared/whatsapp/templates.ts` was flipped on 2026-10-08.
 
 > Hi {{1}}, {{2}} new places in {{3}} fit what you are looking for. Reply here
 > if you would like to see them.

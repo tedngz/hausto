@@ -1723,8 +1723,8 @@ writes; admins read `complex_watches`.
   Friday 09:00 run (`run: 2`, cron `viewing-digest-friday`) that carries the
   digest alone - watches stay weekly. Friday's key is `DIGEST:<week>:2`, its
   free-form intro and its template, `new_places`, say the places "fit what you
-  are looking for" rather than "this week". Until Meta approves `new_places`,
-  Friday reaches only renters whose window is open. A Pass holder with no
+  are looking for" rather than "this week"; Meta approved `new_places` on
+  2026-10-07, so Friday reaches renters whose window is shut too. A Pass holder with no
   requests yet is matched on their quiz answers (`profileFromQuiz`: districts
   through `vn_district_code`, their own budget as the band, bedrooms from the
   size). Nothing is news twice across runs - `alert_items` again.

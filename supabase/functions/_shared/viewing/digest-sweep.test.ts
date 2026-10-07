@@ -80,12 +80,14 @@ describe('the Friday digest', () => {
     expect(outbound('+84902222222')).toHaveLength(0);
   });
 
-  it('waits for new_places to be approved when the window is shut', async () => {
+  it('reaches a renter whose window is shut through new_places', async () => {
     db.tables.renters[0].service_window_expires_at = null;
     // deno-lint-ignore no-explicit-any
     const summary = await runDigestSweep(db as any, store, adapter, { run: 2, send: true, now: NOW });
-    expect(summary).toMatchObject({ sent: 0, refused: 1 });
-    expect(adapter.delivered).toHaveLength(0);
+    expect(summary).toMatchObject({ sent: 1, refused: 0 });
+    expect(adapter.delivered).toHaveLength(1);
+    expect(adapter.delivered[0].templateName).toBe('new_places');
+    expect(adapter.delivered[0].templateParams).toEqual(['Mai', '3', 'District 2 and District 7']);
   });
 
   it('never repeats a place, and sends once per run', async () => {
