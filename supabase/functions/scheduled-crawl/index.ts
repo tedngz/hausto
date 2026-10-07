@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ANALYZE_COUNT } from '../_shared/vibe-policy.ts';
 import { assessRun, BLIND_STREAK, blindStreak } from '../_shared/crawl-telemetry.ts';
 import { sameBodyHash } from '../_shared/qstash-body-hash.ts';
+import { firecrawlCreditsLeft, planRun, upstashCounter } from '../_shared/firecrawl-budget.ts';
 
 // The Supabase edge runtime's own global, which Deno's types do not declare.
 // Type-only: erased at compile time, so it changes nothing that runs.
@@ -351,9 +352,17 @@ async function setLastCrawlTime(location: string, marketplace: string): Promise<
   console.log(`[scheduled-crawl] Verified crawl time: key=${key}, readBack=${readBack}`);
 }
 
-// High-value center districts only (20 districts to optimize Firecrawl credits)
+// Ho Chi Minh City's central districts only. Viewings are arranged there and
+// nowhere else, so Hanoi (7 districts) and Da Nang (3) were dropped on
+// 2026-10-08 (owner's decision): they took half the rotation and every
+// Firecrawl credit it spent. Listings already held there stay searchable.
+//
+// The schedule is what keeps Firecrawl under its 50 a day
+// (_shared/firecrawl-budget.ts, which also enforces it): 10 districts x 3
+// sources, each every frequencyMinutes (2880), is 5 runs a source a day. At 3
+// listings a run that is at most 45 credits - a search page each, and a detail
+// page per new listing on batdongsan and housingsgn.
 const CRAWL_LOCATIONS: { city: string; location: string }[] = [
-  // ===== Ho Chi Minh City (10) =====
   { city: 'ho_chi_minh', location: 'Quận 1' },
   { city: 'ho_chi_minh', location: 'Quận 3' },
   { city: 'ho_chi_minh', location: 'Quận 4' },
@@ -364,18 +373,6 @@ const CRAWL_LOCATIONS: { city: string; location: string }[] = [
   { city: 'ho_chi_minh', location: 'Tân Bình' },
   { city: 'ho_chi_minh', location: 'Gò Vấp' },
   { city: 'ho_chi_minh', location: 'Thủ Đức' },
-  // ===== Hanoi (7) =====
-  { city: 'hanoi', location: 'Ba Đình' },
-  { city: 'hanoi', location: 'Hoàn Kiếm' },
-  { city: 'hanoi', location: 'Đống Đa' },
-  { city: 'hanoi', location: 'Cầu Giấy' },
-  { city: 'hanoi', location: 'Hai Bà Trưng' },
-  { city: 'hanoi', location: 'Tây Hồ' },
-  { city: 'hanoi', location: 'Long Biên' },
-  // ===== Da Nang (3) =====
-  { city: 'da_nang', location: 'Hải Châu' },
-  { city: 'da_nang', location: 'Sơn Trà' },
-  { city: 'da_nang', location: 'Ngũ Hành Sơn' },
 ];
 
 const MARKETPLACES = ['batdongsan', 'nhatot', 'housingsgn'] as const;
@@ -1199,8 +1196,26 @@ Deno.serve(async (req) => {
 
     // Cap maxListingsPerRun to remaining daily budget
     const remainingBudget = dailyCap - dailyCount;
-    const effectiveMax = Math.min(config.maxListingsPerRun, remainingBudget);
-    console.log(`[scheduled-crawl] Daily budget for ${bestTarget.marketplace}: ${dailyCount}/${dailyCap} used, effective max this run: ${effectiveMax}`);
+    const wantedMax = Math.min(config.maxListingsPerRun, remainingBudget);
+
+    // And to the Firecrawl credits left today (_shared/firecrawl-budget.ts):
+    // a search page, then a detail page per listing where the source needs
+    // one. scrape-marketplace enforces the ceiling call by call; planning here
+    // keeps a run from buying a search page it cannot follow up.
+    const creditsLeft = await firecrawlCreditsLeft(upstashCounter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN));
+    const plan = planRun(bestTarget.marketplace, creditsLeft, wantedMax);
+    if (!plan.run) {
+      console.log(`[scheduled-crawl] Firecrawl budget: ${creditsLeft} credit(s) left today, not enough for ${bestTarget.marketplace}. Skipping.`);
+      return new Response(JSON.stringify({
+        success: true,
+        message: `Firecrawl budget: ${creditsLeft} credit(s) left today`,
+        config,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const effectiveMax = plan.maxResults;
+    console.log(`[scheduled-crawl] Daily budget for ${bestTarget.marketplace}: ${dailyCount}/${dailyCap} used, ${creditsLeft} Firecrawl credit(s) left, effective max this run: ${effectiveMax}`);
 
     // Mark this location+marketplace as crawled NOW (even before scraping starts)
     await setLastCrawlTime(bestTarget.location, bestTarget.marketplace);

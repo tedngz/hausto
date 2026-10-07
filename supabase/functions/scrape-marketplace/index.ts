@@ -14,6 +14,7 @@ import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo } from '../_shared/nhatot.ts';
 import { looksVietnamese, normalizeListingCopy } from '../_shared/listing-language.ts';
 import { normalizeLocationForEnglishDisplay } from '../_shared/location-language.ts';
+import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -1494,7 +1495,13 @@ async function firecrawlFetch(url: string): Promise<{ html: string; markdown: st
   if (!FIRECRAWL_API_KEY) {
     throw new Error('FIRECRAWL_API_KEY not configured');
   }
-  
+
+  // Never past the day's 50 credits (_shared/firecrawl-budget.ts). Throws
+  // FirecrawlBudgetError, which the search page and detail callers already
+  // treat as a page that could not be fetched.
+  const spent = await spendFirecrawlCredit(upstashCounter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN));
+  console.log(`[firecrawl] credit ${spent} of today's budget: ${url}`);
+
   const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
     method: 'POST',
     headers: {
