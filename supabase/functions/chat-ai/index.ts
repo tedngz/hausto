@@ -5,6 +5,7 @@ import { detectLifestyleIntent, findRelevantKB, formatKBBlock, hasShoppingKeywor
 import { askCompare } from "../_shared/compare-listings.ts";
 import { logOpenAIUsage } from "../_shared/openai-usage.ts";
 import { MAX_AREA_DISTRICTS, THIN_SEARCH } from "../_shared/viewing/place.ts";
+import { aiCreditKey, creditAllows, CREDITS_USED_REPLY } from "../_shared/ai-credits.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1599,6 +1600,11 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // The AI credit this request spent, if it spent one - given back if the
+  // request fails (the catch at the bottom), so an error costs the renter
+  // nothing.
+  let spentCreditKey: string | null = null;
+
   try {
     // Cross-project: function may run on a different Supabase project than the
     // database/auth. See ../_shared/db-client.ts.
@@ -1760,6 +1766,59 @@ serve(async (req) => {
       );
     }
 
+    // The free tier's AI credits, held here and not only in the renter app,
+    // whose check runs before it sends and so binds nobody calling this
+    // function directly (_shared/ai-credits.ts). Spent before any model runs.
+    // Fails open: a Redis or database outage must not silence a renter.
+    if (user?.id && !isAnonymous) {
+      const userId = user.id;
+      const key = aiCreditKey(userId);
+      let allowed = true;
+      try {
+        const spent = await redis.incr(key);
+        await redis.expire(key, 60 * 60 * 48);
+        spentCreditKey = key;
+        allowed = await creditAllows(spent, async () => {
+          const { data: covered, error: passError } = await supabase.rpc('has_active_pass', { _user_id: userId });
+          if (passError) throw passError;
+          return covered === true;
+        });
+      } catch (creditError) {
+        console.error('[chat-ai] AI credit check failed, letting the message through:', creditError);
+      }
+
+      if (!allowed) {
+        // A refused message spends nothing, so the count stays what was used.
+        spentCreditKey = null;
+        await redis.decr(key).catch(() => {});
+        console.log(`[chat-ai] AI credits used up for ${userId}`);
+        // A signed-in renter's thread renders from chat_messages, so the answer
+        // is written there as the agent's reply - the renter app shows it as it
+        // stands, without knowing about this refusal. Only into their own
+        // conversation.
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(conversationId ?? ''))) {
+          const { data: own } = await supabase
+            .from('chat_conversations')
+            .select('id')
+            .eq('id', conversationId)
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (own) {
+            const { error: saveError } = await supabase.from('chat_messages').insert({
+              conversation_id: conversationId,
+              role: 'assistant',
+              content: CREDITS_USED_REPLY,
+            });
+            if (saveError) console.error('[chat-ai] failed to persist the credits reply:', saveError.message);
+          }
+        }
+        return new Response(
+          JSON.stringify({ response: CREDITS_USED_REPLY, limitReached: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
+    }
+
     // Fetch active internal properties
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
@@ -1829,6 +1888,7 @@ serve(async (req) => {
         .single();
       
       if (convError || !conversation) {
+        if (spentCreditKey) await redis.decr(spentCreditKey).catch(() => {});
         return new Response(
           JSON.stringify({ error: 'Conversation not found or access denied' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
@@ -2912,6 +2972,7 @@ Maximum ${maxResults} properties in results.`;
       console.error('[AI] OpenAI error:', aiResponse.status, errorText);
 
       if (aiResponse.status === 429) {
+        if (spentCreditKey) await redis.decr(spentCreditKey).catch(() => {});
         return new Response(
           JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
@@ -3540,6 +3601,7 @@ Maximum ${maxResults} properties in results.`;
 
   } catch (error) {
     console.error('Error in chat-ai function:', error);
+    if (spentCreditKey) await redis.decr(spentCreditKey).catch(() => {});
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error occurred' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }

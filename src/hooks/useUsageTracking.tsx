@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePass } from '@/hooks/usePass';
 import { toast } from 'sonner';
+import { FREE_DAILY_AI_CREDITS } from '../../supabase/functions/_shared/ai-credits.ts';
 
 interface UsageLimits {
   propertiesMatched: number;
@@ -18,8 +19,11 @@ interface UsageLimits {
 // the plan rework - the curated list is what Hausto is for, so walling it off
 // was metering the promise. Matches and retakes are still counted into
 // daily_usage as telemetry, there is just no ceiling on either any more.
+//
+// The number lives in _shared/ai-credits.ts because chat-ai holds it too: this
+// check is the friendly wall before sending, the server's is the one that binds.
 export const FREE_TIER_LIMITS = {
-  dailyAiRequests: 10,
+  dailyAiRequests: FREE_DAILY_AI_CREDITS,
 };
 
 export const useUsageTracking = () => {
