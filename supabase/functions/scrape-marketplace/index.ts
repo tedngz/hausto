@@ -14,6 +14,7 @@ import { detectCity, isOutOfScopeLocation } from '../_shared/geo.ts';
 import { fetchNhatotAd, fetchNhatotMedia, buildNhatotListing, type PropertyVideo } from '../_shared/nhatot.ts';
 import { looksVietnamese, normalizeListingCopy } from '../_shared/listing-language.ts';
 import { normalizeLocationForEnglishDisplay } from '../_shared/location-language.ts';
+import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const UPSTASH_REDIS_REST_URL = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -23,6 +24,13 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const CACHE_TTL = 60 * 60 * 2; // 2 hours
 const MAX_DETAIL_PAGES = 10; // Max individual listings to scrape
+// Listing URLs read off a search page, before anything is known about them.
+// Deliberately far above MAX_DETAIL_PAGES: the per-run cap is on detail pages
+// fetched, and it must be applied AFTER the listings we already hold are
+// dropped. Applied before, as it was until 2026-10-08, a run asked for one
+// listing took the page's first - usually a pinned ad already in the index -
+// found it known, and stopped. 89-126 links a page, one looked at.
+const MAX_SEARCH_CANDIDATES = 60;
 const DETAIL_SCRAPE_TIMEOUT = 15000; // 15s per detail page
 
 // ─── Data Safety Helpers ─────────────────────────────────────────
@@ -1487,7 +1495,13 @@ async function firecrawlFetch(url: string): Promise<{ html: string; markdown: st
   if (!FIRECRAWL_API_KEY) {
     throw new Error('FIRECRAWL_API_KEY not configured');
   }
-  
+
+  // Never past the day's 50 credits (_shared/firecrawl-budget.ts). Throws
+  // FirecrawlBudgetError, which the search page and detail callers already
+  // treat as a page that could not be fetched.
+  const spent = await spendFirecrawlCredit(upstashCounter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN));
+  console.log(`[firecrawl] credit ${spent} of today's budget: ${url}`);
+
   const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
     method: 'POST',
     headers: {
@@ -2147,11 +2161,13 @@ Deno.serve(async (req) => {
     console.log(`[Phase 1] Total from all pages: ${allLinks.length} links`);
 
     // ── Phase 2: Extract listing URLs and scrape detail pages ──
+    // Every listing on the page; effectiveMaxResults caps the NEW ones below,
+    // once the ones already in the index are known.
     const allListingLinks = await extractListingUrls(
       allMarkdown,
       allLinks,
       marketplace,
-      effectiveMaxResults,
+      MAX_SEARCH_CANDIDATES,
       rawMode,
     );
 
@@ -2178,6 +2194,12 @@ Deno.serve(async (req) => {
     }
 
     const properties: ExternalProperty[] = [];
+    // What the page held that we already have, and what it held that we do
+    // not. Reported to the caller: "the page was full of listings we know" is a
+    // healthy quiet run, "the page had no listings" is not, and until these
+    // were counted the crawl telemetry could not tell them apart.
+    let knownOnPage = 0;
+    let unseenOnPage = 0;
 
     if (listingLinks.length > 0) {
       // ── Pre-scrape dedup: check which listings already exist in DB ──
@@ -2206,7 +2228,7 @@ Deno.serve(async (req) => {
       }
 
       // Split into new vs existing
-      const newLinks: ListingLink[] = [];
+      const unseenLinks: ListingLink[] = [];
       const existingLinks: ListingLink[] = [];
       for (const link of listingLinks) {
         const cid = extractListingId(link.url, marketplace);
@@ -2214,11 +2236,17 @@ Deno.serve(async (req) => {
         if ((cid && existingIds.has(cid)) || existingUrls.has(nurl)) {
           existingLinks.push(link);
         } else {
-          newLinks.push(link);
+          unseenLinks.push(link);
         }
       }
+      knownOnPage = existingLinks.length;
+      unseenOnPage = unseenLinks.length;
 
-      console.log(`[Pre-dedup] ${listingLinks.length} listings: ${newLinks.length} new, ${existingLinks.length} already in DB`);
+      // The run's cap, on detail pages - each one a Firecrawl fetch and a
+      // vision pass - and only now that the known ones are out.
+      const newLinks = unseenLinks.slice(0, effectiveMaxResults);
+
+      console.log(`[Pre-dedup] ${listingLinks.length} listings: ${unseenLinks.length} new (taking ${newLinks.length}), ${existingLinks.length} already in DB`);
 
       // Refresh last_verified_at for existing listings (no Firecrawl credits spent)
       if (existingLinks.length > 0) {
@@ -2533,6 +2561,9 @@ Deno.serve(async (req) => {
         ...saveResult,
         phoneExtractionTriggered: saveResult.newListings > 0,
         totalScraped: filteredProperties.length,
+        listingsOnPage: listingLinks.length,
+        knownOnPage,
+        unseenOnPage,
         source: marketplace,
         crawlMethod: 'detail-page-paginated-directsave',
         pagesScraped: effectivePagesToScrape,

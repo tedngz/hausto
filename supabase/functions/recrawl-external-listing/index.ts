@@ -7,6 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logOpenAIUsage } from '../_shared/openai-usage.ts';
 import { isVideoOrAnimatedUrl, isMapOrDiagramUrl, STORE_TARGET } from '../_shared/vibe-policy.ts';
 import { fetchNhatotMedia, type PropertyVideo } from '../_shared/nhatot.ts';
+import { spendFirecrawlCredit, upstashCounter } from '../_shared/firecrawl-budget.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,6 +33,8 @@ async function directFetch(url: string): Promise<string> {
 
 async function firecrawlFetch(url: string): Promise<{ html: string; markdown: string }> {
   if (!FIRECRAWL_API_KEY) throw new Error('FIRECRAWL_API_KEY missing');
+  // The same 50-a-day ceiling as the crawler (_shared/firecrawl-budget.ts).
+  await spendFirecrawlCredit(upstashCounter(Deno.env.get('UPSTASH_REDIS_REST_URL'), Deno.env.get('UPSTASH_REDIS_REST_TOKEN')));
   const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FIRECRAWL_API_KEY}` },

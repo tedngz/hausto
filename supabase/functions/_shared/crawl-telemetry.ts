@@ -69,6 +69,8 @@ export function assessRun(counts: RunCounts): RunAssessment {
 
   // Nothing to judge. A target whose search page was empty is not a fault -
   // it is a quiet day, and flagging it would train everyone to ignore the flag.
+  // Listings the page showed that we already hold count as duplicates, so this
+  // means the page itself had none; a run of these is blindStreak's to judge.
   if (attempted === 0) {
     return { healthy: true, verdict: 'NOTHING_ATTEMPTED', message: 'No candidates on the page; nothing to judge.' };
   }
@@ -117,6 +119,33 @@ export function assessRun(counts: RunCounts): RunAssessment {
     dominantReason: top?.reason,
     dominantShare: share,
   };
+}
+
+/**
+ * How many runs in a row may see nothing at all before the source is called
+ * blind.
+ *
+ * One empty search page is a quiet target - a Hanoi district on housingsgn,
+ * which only lists Ho Chi Minh City, is empty every time. Ten in a row, across
+ * the rotation's districts, is a source we have stopped seeing. That is what
+ * the crawler looked like from 2026-09-14 to 2026-10-08: every run took the
+ * page's first listing only, found it known, did not count it, and reported
+ * NOTHING_ATTEMPTED as healthy - so supply fell from 27 new listings a week to
+ * one, and nothing said so.
+ */
+export const BLIND_STREAK = 10;
+
+/**
+ * The source's most recent runs, newest first, as crawl_runs records them.
+ * Returns a message when the last BLIND_STREAK of them all attempted nothing;
+ * null otherwise, or when there are too few runs to judge.
+ */
+export function blindStreak(source: string, recent: { attempted: number | null }[]): string | null {
+  const window = recent.slice(0, BLIND_STREAK);
+  if (window.length < BLIND_STREAK) return null;
+  if (window.some((r) => (r.attempted ?? 0) > 0)) return null;
+  return `${source} saw no listings at all on its last ${BLIND_STREAK} search pages. ` +
+    'One empty page is a quiet district; this many is a source we have stopped seeing.';
 }
 
 // ── Verification passes ─────────────────────────────────────────────────────

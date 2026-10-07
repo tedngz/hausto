@@ -7,6 +7,8 @@ import {
   DEACTIVATION_REASON_SHARE,
   MIN_SAMPLE,
   type RunCounts,
+  blindStreak,
+  BLIND_STREAK,
 } from './crawl-telemetry.ts';
 
 const run = (over: Partial<RunCounts> = {}): RunCounts => ({
@@ -140,5 +142,44 @@ describe('verification passes', () => {
     const a = assessVerification({ checked: 50, reasons: { timeout: 40 } });
     expect(a.message).toContain('timeout');
     expect(a.message).toContain('80%');
+  });
+});
+
+describe('a source gone blind', () => {
+  const quiet = (n: number) => Array.from({ length: n }, () => ({ attempted: 0 }));
+
+  it('is called after BLIND_STREAK empty pages in a row', () => {
+    const msg = blindStreak('housingsgn', quiet(BLIND_STREAK));
+    expect(msg).toContain('housingsgn');
+    expect(msg).toContain(String(BLIND_STREAK));
+  });
+
+  it('is not called on one quiet district, or on too few runs to judge', () => {
+    expect(blindStreak('housingsgn', quiet(BLIND_STREAK - 1))).toBeNull();
+    expect(blindStreak('housingsgn', [])).toBeNull();
+  });
+
+  it('clears the moment one recent page shows anything - known listings included', () => {
+    const recent = quiet(BLIND_STREAK + 5);
+    recent[3] = { attempted: 42 }; // 42 listings on the page, all already held
+    expect(blindStreak('batdongsan', recent)).toBeNull();
+  });
+
+  it('judges only the newest BLIND_STREAK runs', () => {
+    const recent = [...quiet(BLIND_STREAK), { attempted: 30 }];
+    expect(blindStreak('nhatot', recent)).not.toBeNull();
+  });
+
+  it('reads a run still missing its counts as empty', () => {
+    expect(blindStreak('nhatot', Array.from({ length: BLIND_STREAK }, () => ({ attempted: null })))).not.toBeNull();
+  });
+});
+
+describe('a page full of listings we already hold', () => {
+  it('is a healthy quiet run, not an empty one', () => {
+    // 60 on the page, all known: scheduled-crawl now counts them as duplicates.
+    const a = assessRun({ attempted: 60, written: 0, updated: 0, duplicates: 60, rejected: 0, reasons: {} });
+    expect(a.healthy).toBe(true);
+    expect(a.verdict).toBe('OK');
   });
 });
