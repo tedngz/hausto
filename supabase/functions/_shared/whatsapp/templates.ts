@@ -63,10 +63,9 @@ export const TEMPLATES = {
       'The digest twice a week for Pass holders (the pricing rework, SPEC §11): "Hi {{1}}, {{2}} new ' +
       'places in {{3}} fit what you are looking for. Reply here if you would like to see them." ' +
       'weekly_digest says "this week", which reads wrong on a Friday, so this replaces it for the ' +
-      'digest once approved; watches keep weekly_digest. Marketing, like it, and opt-in only. ' +
-      'Submitted to Meta, not yet approved - until then the Friday run reaches only renters whose ' +
-      'window is open, free-form.',
-    approved: false,
+      'digest; watches keep weekly_digest. Marketing, like it, and opt-in only. Approved by Meta ' +
+      '2026-10-07, so the Friday run reaches a renter whose window is shut too.',
+    approved: true,
   },
   NO_SUPPLY_SUBSTITUTES: {
     name: 'no_supply_substitutes',

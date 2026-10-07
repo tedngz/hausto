@@ -64,9 +64,8 @@ export async function sendAlert(
 
   const purpose = digestPurpose(opts.now, run);
   // Tuesday's carries watches and says "this week"; Friday's is the digest
-  // alone, in the new_places wording - which, until Meta approves it, means a
-  // Friday digest reaches only a renter whose window is open (send.ts refuses
-  // an unapproved template, and the sweep counts it as refused).
+  // alone, in the new_places wording (approved by Meta 2026-10-07), so a
+  // Friday digest reaches a renter whose window is shut as well.
   const result = detailed
     ? await sendFreeForm(store, adapter, {
       renterId: opts.renterId,
