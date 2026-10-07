@@ -1262,7 +1262,7 @@ export const HomeAI = ({
                 {`You've liked ${likedProperties.size >= 3 ? '3+' : likedProperties.size} ${likedProperties.size === 1 ? 'property' : 'properties'}`}
               </p>
               <p className="text-xs text-muted-foreground leading-tight mt-0.5">
-                Pick your times and we ask the agents. Requesting is free, and your first confirmed viewing is on us.
+                Pick your times and we ask the agents. Your first viewing is on us; after that, the Pass.
               </p>
             </div>
           </div>

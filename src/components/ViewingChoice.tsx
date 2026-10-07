@@ -18,9 +18,9 @@ interface ViewingChoiceProps {
 /**
  * The first screen of RequestViewingModal for one place whose ad lists the
  * agent's number: how does the renter want to see it? (SPEC §6, owner's
- * decision 2026-10-07.) We arrange it - the request, free to make, its plan
- * locked in with the first viewing free and then the Pass - or they call the
- * agent themselves, free, with the number from the ad.
+ * decision 2026-10-07.) We arrange it - the Pass's, with one free place per
+ * WhatsApp number (requestGate) - or they call the agent themselves, free,
+ * with the number from the ad.
  *
  * Still one button on the card (invariant 8): the choice is behind it, not
  * beside it. "We arrange it" comes first and carries the primary button,
@@ -51,8 +51,8 @@ export function ViewingChoice({ listingId, title, hasPass, sourceName, onArrange
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             {hasPass
-              ? 'Your Pass covers every viewing we confirm.'
-              : `Free to request. Your first confirmed viewing is on us; after that, the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
+              ? 'Your Pass covers every viewing we arrange.'
+              : `Your first viewing is on us - one place, once. After that, it takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`}
           </p>
           <Button className="mt-3 w-full rounded-full" onClick={onArrange}>
             Request a viewing

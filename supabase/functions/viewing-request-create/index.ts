@@ -1,10 +1,10 @@
 // Request intake. The renter surface's one write into the viewing domain.
 //
-// Signed in. Requests are free since the pricing rework (SPEC §9) - the renter
-// pays, if at all, when they lock a confirmed plan in - but each one is real
-// operator hours and agents' slots, so the limits that keep that bounded
-// belong to an account: one request being worked at a time, Pass holders
-// included, and the Pass to request again after two plans lapsed unlocked.
+// Signed in. Having us arrange viewings needs the Pass (owner's decision,
+// 2026-10-07, SPEC §9): without it a renter gets one place, once per WhatsApp
+// number, as their free viewing (requestGate). Each request is real operator
+// hours and agents' slots, so the limits that keep that bounded belong to an
+// account: one request being worked at a time, Pass holders included.
 // An endpoint that writes coordinator work for anonymous callers is one curl
 // away from being expensive.
 //
@@ -34,8 +34,8 @@ import {
 } from '../_shared/viewing/intake.ts';
 import { renderIntakeAlert, sendIntakeAlert, missingContactsFor } from '../_shared/viewing/ops-alert.ts';
 import { countLapsedPlans, findJoinableRequest, findOpenRequests } from '../_shared/viewing/open-request.ts';
-import { hasPassCover } from '../_shared/viewing/lock-in-run.ts';
-import { MAX_LAPSED_WITHOUT_PASS } from '../_shared/viewing/intake.ts';
+import { freeViewingAvailable, hasPassCover } from '../_shared/viewing/lock-in-run.ts';
+import { requestGate, requestGateMessage } from '../_shared/viewing/intake.ts';
 import { PASS_DAYS, PASS_PRICE_USD } from '../_shared/viewing/lock-in.ts';
 import { linkViewingToInquiry } from '../_shared/viewing/concierge.ts';
 
@@ -247,8 +247,30 @@ Deno.serve(async (req) => {
   if (typeof body.joinRef === 'string' && body.joinRef.trim()) {
     const places = validateShortlist(body.listingIds);
     if (!places.ok) return json({ error: 'invalid_shortlist', message: places.error }, 400);
+    const joinDb = createClient(SUPABASE_URL, SERVICE_ROLE);
+    // Adding a place is having us arrange more: the Pass's (requestGate).
+    let joinGate: ReturnType<typeof requestGate>;
+    try {
+      joinGate = requestGate({
+        hasPass: await hasPassCover(joinDb, user.id),
+        placeCount: places.value!.length,
+        joining: true,
+        freeViewingAvailable: null,
+        lapsedPlans: 0,
+      });
+    } catch (e) {
+      console.error('[viewing-request-create] pass check failed:', e);
+      return json({ error: 'lookup_failed' }, 500);
+    }
+    if (!joinGate.ok) {
+      return json({
+        error: 'pass_required',
+        reason: joinGate.reason,
+        message: requestGateMessage(joinGate.reason, PASS_PRICE_USD, PASS_DAYS),
+      }, 402);
+    }
     return await joinOpenRequest(
-      createClient(SUPABASE_URL, SERVICE_ROLE), user.id, body.joinRef.trim(), places.value!,
+      joinDb, user.id, body.joinRef.trim(), places.value!,
       typeof body.inquiryId === 'string' ? body.inquiryId : null,
     );
   }
@@ -295,19 +317,22 @@ Deno.serve(async (req) => {
   }
 
   // ── May they open one? ────────────────────────────────────────────────────
-  // Requests are free, so these are the limits on operator hours (SPEC §1).
-  // Asked before anything is written, so the common refusal costs no rows.
-  // One being worked at a time, for everyone: a place asked for meanwhile
-  // joins it while its agents are being asked (joinRef, above), otherwise it
-  // waits for the plan to be locked in or to lapse.
+  // Arranging viewings is the Pass's, with one free place per WhatsApp number
+  // (requestGate, SPEC §9), and every request is real operator hours (SPEC
+  // §1). Asked before anything is written, so the common refusal costs no
+  // rows. One being worked at a time, for everyone: a place asked for
+  // meanwhile joins it while its agents are being asked (joinRef, above),
+  // otherwise it waits for the plan to be locked in or to lapse.
   let blocking: { ref: string } | null;
   let lapsed: number;
   let hasPass: boolean;
+  let freeViewing: boolean;
   try {
-    [{ blocking }, lapsed, hasPass] = await Promise.all([
+    [{ blocking }, lapsed, hasPass, freeViewing] = await Promise.all([
       findOpenRequests(db, user.id, hcmcDate(new Date())),
       countLapsedPlans(db, user.id),
       hasPassCover(db, user.id),
+      freeViewingAvailable(db, phone),
     ]);
   } catch (e) {
     console.error('[viewing-request-create] open request check failed:', e);
@@ -320,11 +345,18 @@ Deno.serve(async (req) => {
       ref: blocking.ref,
     }, 409);
   }
-  // Agents held slots for each lapsed plan and were told to stand down.
-  if (lapsed >= MAX_LAPSED_WITHOUT_PASS && !hasPass) {
+  const gate = requestGate({
+    hasPass,
+    placeCount: eligible.length,
+    joining: false,
+    freeViewingAvailable: freeViewing,
+    lapsedPlans: lapsed,
+  });
+  if (!gate.ok) {
     return json({
       error: 'pass_required',
-      message: `${lapsed} of your plans lapsed without being locked in, so the next request needs the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`,
+      reason: gate.reason,
+      message: requestGateMessage(gate.reason, PASS_PRICE_USD, PASS_DAYS),
     }, 402);
   }
 

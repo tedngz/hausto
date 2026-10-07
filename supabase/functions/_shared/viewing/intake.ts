@@ -364,8 +364,8 @@ export function pickJoinable(candidates: JoinCandidate[], today: string): JoinCa
 }
 
 // ── One request at a time ───────────────────────────────────────────────────
-// Requests are free since the pricing rework (SPEC §1, §9), and each one is
-// real hours of an operator's day and a slot in agents' diaries. So every
+// Each request is real hours of an operator's day and a slot in agents'
+// diaries (SPEC §1, §9; who may make one at all is requestGate). So every
 // renter - Pass holders included, or $25 buys unlimited operator hours - has
 // one request being worked at a time. A place asked for meanwhile joins it
 // while its agents are still being asked (pickJoinable); otherwise it waits.
@@ -399,6 +399,53 @@ export function pickBlocking(candidates: JoinCandidate[], today: string): JoinCa
  * again. Each lapsed plan held agents' slots for nothing.
  */
 export const MAX_LAPSED_WITHOUT_PASS = 2;
+
+/**
+ * Who may ask us to arrange viewings (owner's decision, 2026-10-07, SPEC §9).
+ * Arranging them is what the Pass sells; calling the agent yourself is the
+ * free way (SPEC §6). A renter without the Pass gets one taste: a request for
+ * one place, on a WhatsApp number whose free viewing is unspent, which locks
+ * in free as before. Anything past that - a second place, adding a place to
+ * an open request, a spent free viewing, two lapsed plans - needs the Pass.
+ *
+ * `viewing-request-create` decides with this at submit, and
+ * `viewing-request-open` with the same function before the renter picks
+ * anything, so the modal never offers a request the server will refuse.
+ * `freeViewingAvailable` is null where the number is not yet known - a renter
+ * on their first request - and is then taken as unspent; submit, which has
+ * the number, decides again.
+ */
+export type RequestGateRefusal = 'PASS_FOR_MORE_PLACES' | 'PASS_TO_ADD' | 'FREE_VIEWING_USED' | 'LAPSED_PLANS';
+
+export function requestGate(input: {
+  hasPass: boolean;
+  placeCount: number;
+  joining: boolean;
+  freeViewingAvailable: boolean | null;
+  lapsedPlans: number;
+}): { ok: true; freeViewing: boolean } | { ok: false; reason: RequestGateRefusal } {
+  if (input.hasPass) return { ok: true, freeViewing: false };
+  if (input.joining) return { ok: false, reason: 'PASS_TO_ADD' };
+  if (input.lapsedPlans >= MAX_LAPSED_WITHOUT_PASS) return { ok: false, reason: 'LAPSED_PLANS' };
+  if (input.freeViewingAvailable === false) return { ok: false, reason: 'FREE_VIEWING_USED' };
+  if (input.placeCount > 1) return { ok: false, reason: 'PASS_FOR_MORE_PLACES' };
+  return { ok: true, freeViewing: true };
+}
+
+/** What each refusal tells the renter. One sentence, then the Pass. */
+export function requestGateMessage(reason: RequestGateRefusal, priceUsd: number, days: number): string {
+  const pass = `the Pass ($${priceUsd} for ${days} days)`;
+  switch (reason) {
+    case 'PASS_FOR_MORE_PLACES':
+      return `Without the Pass we arrange one place for you, free. To have us arrange more, get ${pass}.`;
+    case 'PASS_TO_ADD':
+      return `Adding places to a request needs ${pass}.`;
+    case 'FREE_VIEWING_USED':
+      return `You have had your free viewing. To have us arrange more, get ${pass}.`;
+    case 'LAPSED_PLANS':
+      return `Two of your plans lapsed without being locked in, so the next request needs ${pass}.`;
+  }
+}
 
 // ── The handshake ───────────────────────────────────────────────────────────
 

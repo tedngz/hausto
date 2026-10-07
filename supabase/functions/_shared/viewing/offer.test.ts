@@ -127,6 +127,18 @@ describe('the offer for a search (Search for me)', () => {
     expect(body).toContain('\n\nIn District 2:\n\n');
     expect(body).toContain('your first viewing is free');
   });
+
+  it('says what is true for this renter when the sender knows - a building is the Pass\'s since 2026-10-07', () => {
+    const building = { complexName: 'Empire City', inquiryId: INQ, units, kind: 'BUILDING' as const };
+    const withPass = renderOfferSections({ firstName: 'Mai', now, sections: [building], hasPass: true });
+    expect(withPass).toContain('your Pass covers the viewings');
+    expect(withPass).not.toContain('first viewing is free');
+    const lapsed = renderOfferSections({
+      firstName: 'Mai', now, hasPass: false,
+      sections: [{ complexName: 'District 2', inquiryId: INQ, units, kind: 'AREA' }],
+    });
+    expect(lapsed).toContain('your first viewing is free');
+  });
 });
 
 it(`calls a unit stale ${UNIT_FRESH_DAYS} days after its agent last confirmed it`, () => {

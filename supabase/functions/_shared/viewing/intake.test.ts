@@ -16,6 +16,9 @@ import {
   hcmcDate,
   addDays,
   toE164,
+  requestGate,
+  requestGateMessage,
+  MAX_LAPSED_WITHOUT_PASS,
   type JoinCandidate,
   type ShortlistCandidate,
 } from './intake.ts';
@@ -311,5 +314,40 @@ describe('conventions', () => {
       expect(toE164(raw)).toBe('+84901234567');
     }
     expect(toE164('12345')).toBeNull();
+  });
+});
+
+describe('requestGate - arranging viewings needs the Pass, with one free taste', () => {
+  const base = { hasPass: false, placeCount: 1, joining: false, freeViewingAvailable: true, lapsedPlans: 0 };
+
+  it('lets a Pass holder request any number of places, and add to an open request', () => {
+    expect(requestGate({ ...base, hasPass: true, placeCount: 5 })).toEqual({ ok: true, freeViewing: false });
+    expect(requestGate({ ...base, hasPass: true, joining: true })).toEqual({ ok: true, freeViewing: false });
+    expect(requestGate({ ...base, hasPass: true, freeViewingAvailable: false, lapsedPlans: 4 }))
+      .toEqual({ ok: true, freeViewing: false });
+  });
+
+  it('gives a renter without the Pass one place, as their free viewing', () => {
+    expect(requestGate(base)).toEqual({ ok: true, freeViewing: true });
+  });
+
+  it('takes an unknown number as an unspent free viewing - submit decides with the number', () => {
+    expect(requestGate({ ...base, freeViewingAvailable: null })).toEqual({ ok: true, freeViewing: true });
+  });
+
+  it('asks for the Pass past the one free place', () => {
+    expect(requestGate({ ...base, placeCount: 2 })).toEqual({ ok: false, reason: 'PASS_FOR_MORE_PLACES' });
+    expect(requestGate({ ...base, joining: true })).toEqual({ ok: false, reason: 'PASS_TO_ADD' });
+    expect(requestGate({ ...base, freeViewingAvailable: false })).toEqual({ ok: false, reason: 'FREE_VIEWING_USED' });
+    expect(requestGate({ ...base, lapsedPlans: MAX_LAPSED_WITHOUT_PASS }))
+      .toEqual({ ok: false, reason: 'LAPSED_PLANS' });
+  });
+
+  it('names the Pass and its price in every refusal', () => {
+    for (const reason of ['PASS_FOR_MORE_PLACES', 'PASS_TO_ADD', 'FREE_VIEWING_USED', 'LAPSED_PLANS'] as const) {
+      const m = requestGateMessage(reason, 25, 30);
+      expect(m).toContain('the Pass ($25 for 30 days)');
+      expect(m).not.toMatch(/book/i);
+    }
   });
 });

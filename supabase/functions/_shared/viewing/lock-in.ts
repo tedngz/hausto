@@ -1,10 +1,11 @@
 // Locking in a plan: the one paid step (the pricing rework, SPEC §9).
 //
-// Requests are free. Agents confirm times before anyone pays, and the plan -
-// each stop's place, day and time, never an agent - is the pitch. The renter
-// then locks it in: with the Pass, which covers every stop, or with the free
-// viewing, which covers one stop, once per WhatsApp number. Nothing confirmed,
-// nothing owed.
+// Since 2026-10-07 a request itself needs the Pass, past one free place per
+// WhatsApp number (intake.ts `requestGate`), so most plans arrive here already
+// covered. The renter locks the plan in: with the Pass, which covers every
+// stop, or with the free viewing, which covers one stop, once per WhatsApp
+// number - the one place a renter without the Pass may ask for, and the
+// requests made before the gate, which run on the rules they were made under.
 //
 // Agents hold a slot until then, so a plan has a deadline. At it, a plan that
 // is not locked in is cancelled by rule (CANCEL_REASONS `NOT_LOCKED_IN`), and

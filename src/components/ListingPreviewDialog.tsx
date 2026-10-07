@@ -9,7 +9,7 @@ import {
   type VibeMatchAttributes,
 } from '@/components/EditorialPropertyCard';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
-import { usePass } from '@/hooks/usePass';
+import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
 import { ListingHistoryNote } from '@/components/ListingHistoryNote';
@@ -121,12 +121,19 @@ export const ListingPreviewDialog = ({
   const bookingOffer = onSchedule ? (
     <div className="flex flex-col items-center gap-2.5 text-center">
       <p className="text-[12.5px] text-muted-foreground [text-wrap:balance]">
-        {/* No counts since the pricing rework: requesting is free, and
-            what is paid for is locking in a plan agents confirmed. */}
-        <span className="font-medium text-foreground">Free to request</span>
-        {pass?.active
-          ? ' - your Pass covers every viewing we confirm'
-          : ' - your first confirmed viewing is on us'}
+        {/* Arranging viewings is the Pass's, with one free place per
+            WhatsApp number (requestGate, SPEC §9). */}
+        {pass?.active ? (
+          <>
+            <span className="font-medium text-foreground">Covered by your Pass</span>
+            {' - every viewing we arrange'}
+          </>
+        ) : (
+          <>
+            <span className="font-medium text-foreground">Your first viewing is on us</span>
+            {` - then the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days)`}
+          </>
+        )}
       </p>
       <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
         {OFFER_POINTS.map(({ icon: Icon, text }) => (

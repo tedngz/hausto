@@ -18,8 +18,9 @@
 - **Listings from Vietnamese marketplaces** and realtor uploads, checked as still live on their source. Search covers Ho Chi Minh City, Hanoi and Da Nang; viewings are arranged in Ho Chi Minh City.
 
 ## Pricing
-- Searching and requesting viewings are free, and so is the first confirmed viewing.
-- The Hausto Pass - USD 25 for 30 days, a one-off payment with nothing recurring - covers every confirmed viewing after that, plus Priority search (Hausto's team finds places that fit), Match alerts on WhatsApp, unlimited AI credits and unlimited Deep Scans.
+- Searching is free, and so is calling an agent yourself where the original ad lists their number.
+- The first viewing Hausto arranges is free: one place, once per WhatsApp number.
+- The Hausto Pass - USD 25 for 30 days, a one-off payment with nothing recurring - is what has Hausto arrange viewings after that, as many places as you like, and ask about availability at any building. It also includes Priority search (Hausto's team finds places that fit), Match alerts on WhatsApp, unlimited AI credits and unlimited Deep Scans.
 
 ## Public Property Search API
 

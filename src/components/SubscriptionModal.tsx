@@ -17,22 +17,20 @@ interface SubscriptionModalProps {
 }
 
 /**
- * The two plans, as the pricing rework set them (SPEC §9).
+ * The two plans (SPEC §9; owner's decision, 2026-10-07).
  *
- * Requests are free on both: we ask the agents either way. What a renter pays
- * for is a viewing that happens - locked in once agents confirm - so the
- * modal sells confirmed viewings, never request credits or counts.
+ * Having us arrange viewings is the Pass's. Free gets a taste - one place,
+ * once per WhatsApp number (requestGate) - and the agents' numbers to call
+ * itself (SPEC §6); the Pass sells not having to, for every place and every
+ * building. Never request credits or counts.
  *
  * What Hausto is for - dealing with the agents, in Vietnamese, without the
- * renter's number reaching them - is true on both plans, so the header says it
- * rather than the Pass's list. Calling the agent yourself is on Free: the
- * number on an ad is the renter's to use since 2026-10-07 (SPEC §6), and the
- * Pass sells not having to.
+ * renter's number reaching them - is said once, in the header.
  *
  * The Pass lists only what it adds over Free. A row-for-row comparison made
  * every line say "Same" or "No" on one side, which was most of the reading
  * and none of the information. Each line leads with the amount, in bold -
- * "1 free confirmed viewing", "Unlimited AI credits" - so the bold words
+ * "1 free viewing", "Unlimited AI credits" - so the bold words
  * alone compare the plans, and any detail follows in muted text.
  */
 type Feature = { lead: string; rest?: string };
@@ -40,15 +38,15 @@ type Feature = { lead: string; rest?: string };
 const AI_CREDITS = FREE_TIER_LIMITS.dailyAiRequests;
 
 const FREE: Feature[] = [
-  { lead: 'Free viewing requests', rest: ' - we ask the agents for you' },
-  { lead: '1 free confirmed viewing' },
+  { lead: '1 free viewing', rest: ' - we arrange one place with its agent' },
   { lead: "Agents' numbers", rest: ' - where the ad lists one, to call yourself' },
   { lead: `${AI_CREDITS} AI credits`, rest: ' a day' },
   { lead: 'Basic vibe analysis' },
 ];
 
 const PASS: Feature[] = [
-  { lead: 'Unlimited confirmed viewings', rest: ' - every agent dealt with, one plan on WhatsApp' },
+  { lead: 'Unlimited viewings arranged', rest: ' - every agent dealt with, one plan on WhatsApp' },
+  { lead: 'Availability at any building', rest: ' - we ask the agents who hold units there' },
   { lead: 'Priority search', rest: ' - our team puts your search first and sends you places that fit' },
   { lead: 'Match alerts', rest: ' - new places that fit you, up to 2 a week on WhatsApp' },
   { lead: 'Unlimited AI credits' },
@@ -56,7 +54,7 @@ const PASS: Feature[] = [
 ];
 
 const reasonMessages = {
-  viewings: 'Lock in every viewing the agents confirm.',
+  viewings: 'Have us arrange every viewing you want.',
   ai: `You've used today's ${AI_CREDITS} AI credits.`,
 };
 
@@ -113,7 +111,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
               ? reasonMessages[reason]
               : pass?.active
                 ? 'Your Pass covers every viewing we confirm while it runs.'
-                : 'We deal with the agents for you, in Vietnamese, and your number never reaches them. Requesting is free, and so is your first confirmed viewing - the Pass covers every one after that.'}
+                : 'We deal with the agents for you, in Vietnamese, and your number never reaches them. Your first viewing is on us - the Pass has us arrange every one after that.'}
           </DialogDescription>
         </DialogHeader>
 

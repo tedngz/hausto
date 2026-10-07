@@ -201,10 +201,15 @@ Do not build these even if they seem natural:
   `district_code`.
 
 **Payments are not on this list.** They are live and shipping - see the Payments
-section below. Since the pricing rework (2026-10-06) requests are free and the
-renter pays to **lock in** a plan agents have confirmed: the first viewing on
-us, once per WhatsApp number, then the Pass, which covers every confirmed
-viewing for 30 days (SPEC §9). The Pass is the one product; build no other
+section below. Since 2026-10-07 (owner's decision) **having us arrange viewings
+is the Pass's**: without it a renter gets one place, once per WhatsApp number,
+as their free viewing, and anything past that - a second place, adding to an
+open request, asking about a building - needs the Pass, which covers every
+viewing we arrange for 30 days. `requestGate` in `_shared/viewing/intake.ts`
+decides, at the server and in the modal alike (SPEC §9). Calling the agent
+yourself is the free way (invariant 4). The plan is still **locked in** once
+agents confirm (SPEC §9); requests made before the gate run on the rules they
+were made under. The Pass is the one product; build no other
 payment surface for the viewing flow. Hausto is paid by renters only (owner's
 decision, 2026-10-07): no referral share from agents, so build nothing to
 track one.
@@ -489,8 +494,9 @@ coordinations from each.
 Since the pricing rework the viewing flow spends no credits at all, and the
 credit ledger - `passes.viewings_used`, `consume_viewing_credits()`,
 `viewing_trials` - is history. Fast-Track's trigger still charges it, and no
-screen opens Fast-Track any more. What the viewing flow charges is the lock-in,
-and **one function decides cover** - `decideLockIn` in
+screen opens Fast-Track any more. Two functions decide what the viewing flow
+charges: **who may request** - `requestGate` in `_shared/viewing/intake.ts`,
+the Pass past one free place - and **cover at lock-in** - `decideLockIn` in
 `_shared/viewing/lock-in.ts` - for the lock-in page, the payment and a
 WhatsApp "yes" alike:
 
@@ -505,5 +511,7 @@ WhatsApp "yes" alike:
 
 Search for me - an availability request for an area rather than a building
 (SPEC §11) - is the Pass's too, read the same way (`hasPassCover`) when the
-request is made, one open search per account. A building request stays free
-for everyone; it is what fills the agent roster.
+request is made, one open search per account. So is a building request since
+2026-10-07 (owner's decision; it was free for everyone and filled the agent
+roster), signed in, in `_shared/viewing/inquiry-create.ts`. A viewing request
+reads it through `requestGate`, with the one free place.

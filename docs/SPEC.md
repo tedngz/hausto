@@ -230,7 +230,8 @@ the single source for all of it):
   `consume_viewing_credits()`; that function and the ledger stay as history,
   and Fast-Track's trigger still uses them.
 - **One request being worked at a time**, for every renter, Pass holders
-  included - requests are free and each is real operator hours.
+  included - each request is real operator hours. Who may make one at all is
+  `requestGate` (§9): the Pass, past one free place per WhatsApp number.
   `pickBlocking` in `intake.ts` decides: a request blocks a new one while its
   agents are being asked and one of its windows is still ahead, or while its
   plan can still be locked in or is being paid for (§9). A place asked for
@@ -709,8 +710,8 @@ ad is public on its marketplace, and what the Pass sells is dealing with the
 agents, not owning their numbers. It is offered behind "Request viewing", not
 beside it (invariant 8): for one place whose ad lists a number,
 `RequestViewingModal` opens on a choice (`ViewingChoice`), "How do you want to
-see it?" - **We arrange it** (the request, free to make; the first confirmed
-viewing free, then the Pass) or **Call the agent yourself** (free; the agent
+see it?" - **We arrange it** (the Pass's, past one free place - §9) or **Call
+the agent yourself** (free; the agent
 gets the renter's number, and many speak only Vietnamese). Several places, or
 an ad with no number, go straight to the request. The same modal opens from
 every card, the listing page and the listing preview, so there is one place to
@@ -948,18 +949,38 @@ a clock.
 
 ### Lock-in (`_shared/viewing/lock-in.ts`, the pricing rework, 2026-10-06)
 
-**Requests are free; locking in a confirmed plan is the one paid step.**
-Agents confirm a time before anyone pays, and the plan - each stop's place,
-day and time, and no field for an agent - is the pitch, so showing it before
-payment gives nothing away. Nothing confirmed, nothing owed: a request where
-no agent confirms ends with substitutes or offered times, as before.
+**Who may request** (`requestGate` in `intake.ts`; owner's decision,
+2026-10-07). Having us arrange viewings is the Pass's. A renter without it
+gets one taste: a request for one place, on a WhatsApp number whose free
+viewing is unspent, which locks in free as below. Past that, each of these
+needs the Pass, and is refused with `pass_required` and its reason:
 
-Since 2026-10-07 that is not quite true. Where a stop's ad lists the agent's
-number, "Request viewing" offers it (§6), so a renter holding a plan knows which
-places are free and can ring those agents rather than lock in. That is
-accepted: the Pass sells not having to. The number to watch is reveals in
-`contact_reveals` on stops of the renter's own plan, made between delivery and
-a deadline that passed without a lock-in.
+| Refusal | When |
+|---|---|
+| `PASS_FOR_MORE_PLACES` | a request for more than one place |
+| `PASS_TO_ADD` | adding a place to an open request |
+| `FREE_VIEWING_USED` | the number's free viewing is spent |
+| `LAPSED_PLANS` | two plans lapsed without being locked in |
+
+`viewing-request-create` decides at submit, with the number given;
+`viewing-request-open` returns the inputs the modal cannot know (the Pass, the
+lapsed plans, whether any of the account's numbers still has its free
+viewing), and the modal runs the same function on the places it was opened
+for, so it shows the Pass instead of a form the server would refuse. No
+promise is made when no agent confirms: the Pass is the Pass. Requests made
+before the gate run on the rules they were made under, lock-in page included.
+A building (§11) is the Pass's too.
+
+**Locking in a confirmed plan is still a step.** Agents confirm a time before
+the renter commits, and the plan - each stop's place, day and time, and no
+field for an agent - is what they lock in. A request where no agent confirms
+ends with substitutes or offered times, as before.
+
+Where a stop's ad lists the agent's number, "Request viewing" offers it (§6),
+so a renter holding a plan knows which places are free and could ring those
+agents rather than lock in. That is accepted: the Pass sells not having to.
+The number to watch is reveals in `contact_reveals` on stops of the renter's
+own plan, made between delivery and a deadline that passed without a lock-in.
 
 **How a plan is covered** (`decideLockIn`, the one function that decides, for
 the page, the payment and a WhatsApp "yes" alike):
@@ -1261,7 +1282,8 @@ requested the one way there is (invariant 8), from the listing page.
 rather than a building - up to four districts - and is the Pass's: a person
 searches Facebook groups and agents' circles, the first places are promised
 within 48 hours, and every place offered is one an agent confirmed. A building
-request stays free for everyone. See "Search for me" below; everything else in
+request is the Pass's too since 2026-10-07 (owner's decision; it was free for
+everyone), signed in. See "Search for me" below; everything else in
 this section holds for both. Renters see it as **Priority search** (2026-10-07),
 the name the Pass sells it by; "Search for me" stays its name in the code and
 here.
@@ -1277,8 +1299,10 @@ here.
    opts them in, and opens the 24-hour window the concierge's promise is
    measured against.
 
-`complex-inquiry-create` (anonymous or signed in, rate-limited by IP)
-validates (`validateInquiryInput`), writes the request and a `PENDING` complex
+`complex-inquiry-create` (a signed-in Pass holder since 2026-10-07 - it was
+open to anyone - and rate-limited by IP; `pass_required` otherwise, and the
+form shows the Pass instead) validates (`validateInquiryInput`), writes the
+request and a `PENDING` complex
 watch with the same criteria, whose code is the handshake. Browsers can no
 longer insert `complex_inquiries` directly.
 
