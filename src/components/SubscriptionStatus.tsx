@@ -72,8 +72,8 @@ export const SubscriptionStatus = ({ onUpgrade }: SubscriptionStatusProps) => {
             )}
           </> : <>
             <p className="text-sm text-muted-foreground">
-              Requesting viewings is free, and your first confirmed viewing is on us. The Pass covers
-              every one after, plus a Deep Scan on any listing before you spend a Saturday on it.
+              Your first viewing is on us. The Pass has us arrange every one after, plus a Deep Scan
+              on any listing before you spend a Saturday on it.
             </p>
             <Button onClick={onUpgrade} className="w-full h-9 text-sm" size="sm">
               <Crown className="h-3.5 w-3.5 mr-1.5" />

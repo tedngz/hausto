@@ -17,15 +17,17 @@
 // itineraries, three billed messages and no clash warning between viewings
 // that were never in the same plan.
 //
-// **One request at a time** (the pricing rework, SPEC §1, §9). Requests are
-// free and each is real operator hours, so once a request is past joining -
-// its plan assembled or sent - a new one waits until that plan is locked in or
-// lapses. The modal says so before the renter picks anything.
+// **One request at a time** (the pricing rework, SPEC §1, §9). Each is real
+// operator hours, so once a request is past joining - its plan assembled or
+// sent - a new one waits until that plan is locked in or lapses. The modal
+// says so before the renter picks anything.
 //
-// **The price is said here.** Requesting is free; locking a confirmed plan in
-// is the paid step - the first viewing on us, then the Pass. A renter who
-// requested for free and then met a price may report the message, and reports
-// lower the WhatsApp number's quality rating.
+// **Arranging viewings is the Pass's** (owner's decision, 2026-10-07, SPEC
+// §9), with one free place per WhatsApp number. The modal applies the
+// server's own rule (`requestGate`) to the places it was opened for and shows
+// the Pass instead of a form the server would refuse. **The price is said
+// here**: a renter who met a price only after requesting may report the
+// message, and reports lower the WhatsApp number's quality rating.
 //
 // **For one place whose ad lists the agent's number, it opens on a choice**
 // (ViewingChoice, SPEC §6): we arrange it, or call the agent yourself. The
@@ -56,7 +58,10 @@ import {
   DAY_PARTS,
   MAX_DAYS_AHEAD,
   MAX_ITEMS,
+  MAX_LAPSED_WITHOUT_PASS,
   MIN_LEAD_DAYS,
+  requestGate,
+  requestGateMessage,
   addDays,
   hcmcDate,
   toRenterE164,
@@ -106,13 +111,16 @@ interface OpenState {
   /** Two plans lapsed without being locked in, and no Pass. */
   passRequired: boolean;
   hasPass: boolean;
+  /** requestGate's inputs the modal cannot know. Absent from an older function. */
+  lapsedPlans?: number;
+  freeViewingAvailable?: boolean | null;
 }
 
-/** What locking in costs, said on every request screen (SPEC §9). */
+/** What it costs, said on every request screen (SPEC §9). */
 export function lockInPriceLine(hasPass: boolean): string {
   return hasPass
-    ? 'Requesting is free, and your Pass covers every viewing the agents confirm.'
-    : `Requesting is free. Once agents confirm, your first viewing is on us; after that, locking in a plan takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`;
+    ? 'Your Pass covers every viewing we arrange.'
+    : `This is your free viewing: once the agent confirms, lock it in at no cost. Having us arrange more takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`;
 }
 
 function partsOf(iso: string) {
@@ -202,10 +210,23 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const join = openState?.open ?? null;
   // Past joining - its plan assembled or sent - so a new request waits.
   const waitingOn = !join ? openState?.blocking ?? null : null;
-  const passRequired = !join && !waitingOn && !!openState?.passRequired;
   const hasPass = !!openState?.hasPass || !!pass?.active;
   const fresh = places.filter(p => !join?.listingIds.includes(p.listingId));
   const alreadyIn = !!join && places.length > 0 && fresh.length === 0;
+  // The server's own rule (requestGate), with the places this was opened for:
+  // past the one free place, arranging viewings is the Pass's. Not asked while
+  // a request blocks, or for places already in the open one.
+  const gate = openState && !waitingOn && !alreadyIn
+    ? requestGate({
+      hasPass,
+      placeCount: join ? fresh.length : places.length,
+      joining: !!join,
+      freeViewingAvailable: openState.freeViewingAvailable ?? null,
+      lapsedPlans: openState.lapsedPlans ?? (openState.passRequired ? MAX_LAPSED_WITHOUT_PASS : 0),
+    })
+    : null;
+  const passGate = gate && 'reason' in gate ? gate.reason : null;
+  const passRequired = !!passGate;
 
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
@@ -290,7 +311,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
       setError(payload.message ?? payload.error);
       // The request moved on between opening and submitting. Ask again: the
       // modal then shows what is true now.
-      if (payload.error === 'join_closed' || payload.error === 'one_open_request') {
+      if (payload.error === 'join_closed' || payload.error === 'one_open_request' || payload.error === 'pass_required') {
         queryClient.invalidateQueries({ queryKey: ['viewing-open-request'] });
       }
       return;
@@ -378,7 +399,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
             <DialogHeader>
               <DialogTitle>Sign in to request a viewing</DialogTitle>
               <DialogDescription>
-                Requesting is free. Your requests and plans live on your account.
+                Your first viewing is on us. Your requests and plans live on your account.
               </DialogDescription>
             </DialogHeader>
             <Button asChild className="w-full"><Link to="/auth">Sign in</Link></Button>
@@ -408,14 +429,14 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                     more places. Its plan comes on WhatsApp with a link to lock it in.
                   </p>
                 </div>
-              ) : passRequired ? (
+              ) : passGate ? (
                 <div className="space-y-3 rounded-md border bg-muted/40 p-4 text-sm">
-                  <p className="font-medium">Two plans lapsed without being locked in</p>
+                  <p className="font-medium">Having us arrange this takes the Pass</p>
                   <p className="text-muted-foreground">
-                    Agents held times for both. To request again, get the Pass (${PASS_PRICE_USD} for {PASS_DAYS} days):
-                    it covers every viewing we confirm.
+                    {requestGateMessage(passGate, PASS_PRICE_USD, PASS_DAYS)} It covers every viewing we
+                    arrange for {PASS_DAYS} days, one-off.
                   </p>
-                  <Button size="sm" onClick={() => void purchasePass()}>Get the Pass</Button>
+                  <Button size="sm" onClick={() => void purchasePass()}>Get the Pass - ${PASS_PRICE_USD}</Button>
                 </div>
               ) : join ? (
                 <Step
@@ -531,7 +552,8 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
 
             {/* ── Footer: always reachable ───────────────────────────── */}
             <div className="shrink-0 space-y-2 border-t bg-background p-4 sm:p-6 sm:pt-4">
-              <p className="text-xs text-muted-foreground">{priceLine}</p>
+              {/* The Pass box says what it costs when it shows. */}
+              {!passGate && <p className="text-xs text-muted-foreground">{priceLine}</p>}
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button className="w-full" disabled={!canSubmit} onClick={submit}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

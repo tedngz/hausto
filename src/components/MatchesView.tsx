@@ -80,8 +80,8 @@ export const MatchesView = ({
     await removeMatch(matchId);
   };
 
-  // Primary CTA: the request modal. Requests are free (SPEC §9), so there is
-  // nothing to check before it opens.
+  // Primary CTA: the request modal, which says itself whether this takes the
+  // Pass (requestGate, SPEC §9), so there is nothing to check before it opens.
   const handleScheduleViewing = (apartment: Apartment) => {
     if (!user?.id) {
       toast.info('Please sign in to request a viewing.');

@@ -43,6 +43,7 @@ import {
 import { checkOperatorReply } from './thread.ts';
 import { NoWhatsAppError, recordInquiryMessage, sendConciergeWhatsApp } from './concierge.ts';
 import { screenCandidates, type ShortlistCandidate } from './intake.ts';
+import { hasPassCover } from './lock-in-run.ts';
 import {
   CONCIERGE_SOURCE,
   MAX_COMBINED_UNITS,
@@ -102,6 +103,8 @@ interface InquiryRow {
   area_label: string | null;
   full_name: string | null;
   renter_id: string | null;
+  /** The account that asked, when signed in - every request since 2026-10-07. */
+  user_id: string | null;
   watch_id: string | null;
   bedrooms_needed: number;
   budget_max_vnd: number | null;
@@ -115,7 +118,7 @@ async function load(db: Supa, inquiryId: string): Promise<
   if (!/^[0-9a-f-]{36}$/i.test(inquiryId)) return { ok: false, result: refuse(400, 'inquiryId is required') };
   const { data: row } = await db
     .from('complex_inquiries')
-    .select('id, channel, whatsapp_confirmed_at, complex_id, area_district_codes, area_label, full_name, renter_id, watch_id, bedrooms_needed, budget_max_vnd')
+    .select('id, channel, whatsapp_confirmed_at, complex_id, area_district_codes, area_label, full_name, renter_id, user_id, watch_id, bedrooms_needed, budget_max_vnd')
     .eq('id', inquiryId).maybeSingle();
   if (!row) return { ok: false, result: refuse(404, 'not_found', 'No such request.') };
   if (row.channel !== 'WHATSAPP') {
@@ -514,6 +517,8 @@ async function offerUnits(
     message,
     now,
     sections,
+    // Said as it is for them: covered by the Pass, or their free viewing.
+    hasPass: await hasPassCover(db, row.user_id ?? null),
   });
 
   let sent: { messageId: string; status: string };

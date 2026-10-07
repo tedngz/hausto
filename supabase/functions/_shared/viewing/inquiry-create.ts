@@ -7,14 +7,13 @@
 // phone - so there is no phone number in this request at all, and a caller
 // cannot point our messages at somebody else.
 //
-// Two kinds:
-//   * **A building** (`complexId`). Signed-in is optional, as it always was,
-//     and it is free for everyone: it feeds the agent roster and the
-//     operator's volume.
+// Two kinds, both for a signed-in Pass holder (owner's decision, 2026-10-07 -
+// a building was free for anyone until then):
+//   * **A building** (`complexId`).
 //   * **An area** (`areaDistrictCodes`) - Search for me, the Pass's headline
 //     (the pricing rework, step 5). A person searches agents' circles for it,
-//     which costs real hours, so it needs a signed-in Pass holder, one open
-//     search at a time, and promises 48 hours rather than 24.
+//     which costs real hours, so it also takes one open search at a time and
+//     promises 48 hours rather than 24.
 //
 // Neither spends anything: viewings of what is found are requested, and
 // locked in, the one way there is.
@@ -72,14 +71,23 @@ export async function createInquiry(
   if (!input.ok) return refuse(400, 'invalid_request', input.error);
   const v = input.value;
 
+  // ── Who ───────────────────────────────────────────────────────────────────
+  // Both kinds are the Pass's (owner's decision, 2026-10-07): a person's
+  // hours, not a form's. Asking about a building used to be free for anyone.
+  if (!userId) {
+    return refuse(401, 'sign_in_required', v.areaDistrictCodes
+      ? 'Sign in to ask us to search for you.'
+      : 'Sign in to ask us about this building.');
+  }
+  if (!(await hasPassCover(db, userId))) {
+    return refuse(402, 'pass_required', v.areaDistrictCodes
+      ? `Priority search comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`
+      : `Asking us about a building comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`);
+  }
+
   // ── Where ─────────────────────────────────────────────────────────────────
   let place: { complexId: string | null; codes: string[] | null; name: string };
   if (v.areaDistrictCodes) {
-    // Search for me is the Pass's: a person's hours, not a form's.
-    if (!userId) return refuse(401, 'sign_in_required', 'Sign in to ask us to search for you.');
-    if (!(await hasPassCover(db, userId))) {
-      return refuse(402, 'pass_required', `Priority search comes with the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`);
-    }
     const open = await openSearch(db, userId, now);
     if (open) {
       return refuse(409, 'one_open_search',

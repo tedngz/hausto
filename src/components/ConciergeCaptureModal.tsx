@@ -53,9 +53,9 @@ const joinPlaces = (names: string[]) =>
  * "Request availability at Empire City" (SPEC §11), and Search for me - the
  * same ask for an area, which is the Pass's.
  *
- * A person on our team asks the agents and replies on WhatsApp: within 24
- * hours for a building, which is free for everyone, and within 48 for an area,
- * where they search agents' circles and Facebook groups. One form, then one
+ * Both are the Pass's (owner's decision, 2026-10-07). A person on our team
+ * asks the agents and replies on WhatsApp: within 24 hours for a building, and
+ * within 48 for an area, where they search agents' circles and Facebook groups. One form, then one
  * message: the renter sends us the text WhatsApp opens with. That message is
  * the opt-in and proves the number is theirs, so the form never asks for one -
  * any country's works - and the clock starts when it arrives.
@@ -128,7 +128,7 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
   const submit = async () => {
     setSubmitting(true);
     setError(null);
-    const token = isSearch ? (await supabase.auth.getSession()).data.session?.access_token : undefined;
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
     const { data, error: fnError } = await supabase.functions.invoke('complex-inquiry-create', {
       ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
       body: {
@@ -176,9 +176,9 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
   const placeName = isSearch ? joinPlaces(districts) : complexName;
   const hours = REPLY_WITHIN_HOURS[isSearch ? 'AREA' : 'BUILDING'];
 
-  // Search for me is the Pass's: a person's hours, not a form's. The building
-  // request stays free for everyone.
-  const gate = !isSearch || handoff ? null
+  // Both are the Pass's: a person's hours, not a form's. A building was free
+  // for everyone until 2026-10-07 (owner's decision, SPEC §11).
+  const gate = handoff ? null
     : !user ? 'SIGN_IN'
     : passLoading ? 'LOADING'
     : !pass?.active ? 'PASS'
@@ -194,16 +194,21 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
         ) : gate === 'SIGN_IN' || gate === 'PASS' ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Priority search</DialogTitle>
-              <DialogDescription>When the place you want is not in the table</DialogDescription>
+              <DialogTitle className="font-serif text-2xl">{isSearch ? 'Priority search' : 'Request availability'}</DialogTitle>
+              <DialogDescription>
+                {isSearch ? 'When the place you want is not in the table' : complexName}
+              </DialogDescription>
             </DialogHeader>
             <p className="text-sm">
-              A person on our team searches Facebook groups and agents' circles for places that fit, and sends the
-              first ones on WhatsApp within {REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent.
+              {isSearch
+                ? `A person on our team searches Facebook groups and agents' circles for places that fit, and sends the first ones on WhatsApp within ${REPLY_WITHIN_HOURS.AREA} hours - each one confirmed with its agent.`
+                : `A person on our team checks with the agents who hold units at ${complexName} and tells you on WhatsApp what is free, within ${REPLY_WITHIN_HOURS.BUILDING} hours.`}
             </p>
             {gate === 'SIGN_IN' ? (
               <>
-                <p className="text-sm text-muted-foreground">Sign in to ask us to search for you.</p>
+                <p className="text-sm text-muted-foreground">
+                  {isSearch ? 'Sign in to ask us to search for you.' : 'Sign in to ask us about this building.'}
+                </p>
                 <Button className="w-full" size="lg"
                   onClick={() => navigate('/auth', { state: { returnTo: `${location.pathname}${location.search}` } })}>
                   Sign in
@@ -212,8 +217,8 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
-                  It comes with the Pass: ${PASS_PRICE_USD} for {PASS_DAYS} days, one-off. The Pass also covers every
-                  viewing agents confirm.
+                  It comes with the Pass: ${PASS_PRICE_USD} for {PASS_DAYS} days, one-off. The Pass also has us
+                  arrange every viewing you want, with the agents dealt with for you.
                 </p>
                 <DigestOptIn checked={digestOptIn} onChange={setDigestOptIn} />
                 <Button className="w-full" size="lg" onClick={buyPass} disabled={buying}>
@@ -222,9 +227,6 @@ export function ConciergeCaptureModal({ open, onOpenChange, complexId, complexNa
                 </Button>
               </>
             )}
-            <p className="text-xs text-muted-foreground">
-              Asking about one building stays free: use Request availability on its page.
-            </p>
           </div>
         ) : handoff ? (
           <div className="space-y-4">

@@ -269,8 +269,9 @@ export const BrowseTable = ({
   };
 
   // One way to ask for a viewing (invariant 8): the request modal, with every
-  // place selected. Requests are free - nothing to check before it opens - and
-  // one day of viewings holds five places.
+  // place selected. The modal itself says whether this takes the Pass
+  // (requestGate) - nothing to check before it opens - and one day of
+  // viewings holds five places.
   const openRequest = (targets: BrowseRow[]) => {
     if (targets.length === 0) return;
     if (!user) {

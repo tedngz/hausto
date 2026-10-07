@@ -24,10 +24,11 @@ export interface PassStatus {
  * Whether the renter holds a live Hausto Pass, and for how much longer.
  *
  * The Pass is bought outright for 30 days - a rental search is a burst - and
- * simply bought again if the search runs long. Nothing recurs. Since the
- * pricing rework it covers every viewing agents confirm in those 30 days,
- * plus unlimited AI and Deep Scan; requests themselves are free for everyone
- * (SPEC §9). The $10 top-up for two more viewings is retired.
+ * simply bought again if the search runs long. Nothing recurs. Since
+ * 2026-10-07 it is what has us arrange viewings - past one free place per
+ * WhatsApp number - and ask about buildings, and it covers every viewing
+ * agents confirm in those 30 days, plus unlimited AI and Deep Scan (SPEC §9).
+ * The $10 top-up for two more viewings is retired.
  *
  * Admins hold a pass by default so they can walk the paid product without
  * buying one every 30 days. It never expires and is mirrored in SQL by

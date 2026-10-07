@@ -1,8 +1,9 @@
 // Create a concierge availability request (SPEC §11). The complex page's
 // "Request availability" form posts here, and so does Search for me.
 //
-// The rules - a building for anyone, an area for a signed-in Pass holder with
-// no other search open, and the 48 hours an area is promised - are
+// The rules - both kinds for a signed-in Pass holder (a building since
+// 2026-10-07), an area with no other search open, and the 48 hours an area is
+// promised - are
 // `_shared/viewing/inquiry-create.ts`, tested. This is the door: the rate
 // limit, the body, and who is calling.
 //

@@ -7,6 +7,9 @@
 //               worked at a time, SPEC §1). Often the same request; a full one,
 //               or one whose plan has gone out, blocks without being joinable.
 //   passRequired - two plans lapsed without being locked in, and no Pass.
+//   lapsedPlans, freeViewingAvailable - with hasPass, what requestGate needs
+//               that the modal cannot know; it adds the places it was opened
+//               for and whether it is joining (SPEC §9).
 //
 // `viewing-request-create` decides all of it again at submit - this is a
 // preview, not a promise.
@@ -20,7 +23,22 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { clientIp, isRateLimited } from '../_shared/rate-limit.ts';
 import { hcmcDate, MAX_LAPSED_WITHOUT_PASS } from '../_shared/viewing/intake.ts';
 import { countLapsedPlans, findOpenRequests } from '../_shared/viewing/open-request.ts';
-import { hasPassCover } from '../_shared/viewing/lock-in-run.ts';
+import { freeViewingAvailable, hasPassCover } from '../_shared/viewing/lock-in-run.ts';
+
+type Db = ReturnType<typeof createClient>;
+
+/**
+ * Whether the free viewing is still there for this account: true if any of
+ * its WhatsApp numbers has not had it, null if it has no number yet (a first
+ * request). Submit decides again with the number the renter gives.
+ */
+async function accountFreeViewing(db: Db, userId: string): Promise<boolean | null> {
+  const { data } = await db.from('renters').select('phone_e164').eq('user_id', userId);
+  const numbers = (data ?? []).map((r: { phone_e164: string }) => r.phone_e164).filter(Boolean);
+  if (numbers.length === 0) return null;
+  const unspent = await Promise.all(numbers.map((n: string) => freeViewingAvailable(db, n)));
+  return unspent.some(Boolean);
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,10 +75,11 @@ Deno.serve(async (req) => {
 
   try {
     const db = createClient(SUPABASE_URL, SERVICE_ROLE);
-    const [{ joinable, blocking }, lapsed, hasPass] = await Promise.all([
+    const [{ joinable, blocking }, lapsed, hasPass, freeViewing] = await Promise.all([
       findOpenRequests(db, user.id, hcmcDate(new Date())),
       countLapsedPlans(db, user.id),
       hasPassCover(db, user.id),
+      accountFreeViewing(db, user.id),
     ]);
     return json({
       open: joinable
@@ -73,6 +92,10 @@ Deno.serve(async (req) => {
       blocking: blocking ? { ref: blocking.ref, listingIds: blocking.listingIds } : null,
       passRequired: lapsed >= MAX_LAPSED_WITHOUT_PASS && !hasPass,
       hasPass,
+      // The inputs to requestGate the modal cannot know, so it can apply the
+      // same rule with the places it was opened for.
+      lapsedPlans: lapsed,
+      freeViewingAvailable: freeViewing,
     });
   } catch (e) {
     console.error('[viewing-request-open]', e);

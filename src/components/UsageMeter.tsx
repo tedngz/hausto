@@ -86,12 +86,12 @@ export const UsageMeter = () => {
           );
         })}
 
-        {/* Viewings have no meter since the pricing rework: requests are free,
-            and what a renter pays for is locking in a plan agents confirmed. */}
+        {/* Viewings have no meter: one free place per WhatsApp number, then
+            the Pass (requestGate, SPEC §9). */}
         <div className="flex items-start gap-2 text-sm">
           <CalendarCheck className="h-4 w-4 mt-0.5 text-orange-500 shrink-0" />
           <span className="text-muted-foreground">
-            Viewing requests are free. Your first confirmed viewing is on us; the Pass covers every one after.
+            Your first viewing is on us. After that, the Pass has us arrange every one.
           </span>
         </div>
       </CardContent>

@@ -295,12 +295,15 @@ describe('who may ask', () => {
     expect((await create(brief, USER)).status).toBe(200);
   });
 
-  it('keeps asking about one building free, for anyone', async () => {
+  it('asks the Pass for a building too, since 2026-10-07', async () => {
     const CX = '0b6f7a52-5a8e-4c7a-9f4e-2f7b1f0a9c11';
     db.tables.complexes = [{ id: CX, name: 'Empire City', is_published: true }];
-    const r = await create({ ...brief, areaDistrictCodes: undefined, complexId: CX }, null);
+    const building = { ...brief, areaDistrictCodes: undefined, complexId: CX };
+    expect(await create(building, null)).toMatchObject({ status: 401, body: { error: 'sign_in_required' } });
+    expect(await create(building, 'user-without-pass')).toMatchObject({ status: 402, body: { error: 'pass_required' } });
+    const r = await create(building, USER);
     expect(r).toMatchObject({ status: 200, body: { kind: 'BUILDING', complexName: 'Empire City' } });
-    expect(search()).toMatchObject({ complex_id: CX, user_id: null });
+    expect(search()).toMatchObject({ complex_id: CX, user_id: USER });
     expect(db.tables.inquiry_events[0].payload).not.toHaveProperty('reply_within_hours');
   });
 });

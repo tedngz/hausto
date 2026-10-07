@@ -226,6 +226,9 @@ export function renderOfferSections(opts: {
   /** The operator's own line, already checked by checkOperatorReply. */
   message?: string | null;
   now: Date;
+  /** Whether the renter holds the Pass, read by the sender. Left out, a
+   *  search-only offer is taken as the Pass's and a building as not. */
+  hasPass?: boolean;
 }): string {
   const name = opts.firstName?.trim() || 'there';
   const single = opts.sections.length === 1;
@@ -238,14 +241,15 @@ export function renderOfferSections(opts: {
     const heading = placed(section);
     return single ? units : [`${heading.charAt(0).toUpperCase()}${heading.slice(1)}:`, ...units];
   });
-  // A search is the Pass's, so its renter has the Pass: the free viewing is
-  // not theirs to be told about.
-  const searchOnly = opts.sections.every(s => s.kind === 'AREA');
+  // A Pass holder is told the Pass covers it, anyone else about their free
+  // viewing. Since 2026-10-07 every new request, building or area, is a Pass
+  // holder's; a building asked about before then may not be.
+  const covered = opts.hasPass ?? opts.sections.every(s => s.kind === 'AREA');
   return [
     hello,
     ...(opts.message?.trim() ? [opts.message.trim()] : []),
     ...blocks,
-    searchOnly
+    covered
       ? 'To see any of them, open it and tap Request viewing - your Pass covers the viewings. Or reply here with a question.'
       : 'To see any of them, open it and tap Request viewing - your first viewing is free. Or reply here with a question.',
   ].join('\n\n');
