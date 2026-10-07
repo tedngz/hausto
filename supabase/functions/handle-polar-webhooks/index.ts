@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { recordPolarPurchase } from "../_shared/polar-pass.ts";
+import { PASS_DAYS, recordPolarPurchase } from "../_shared/polar-pass.ts";
+import { decideRefund } from "../_shared/polar-refund.ts";
 
 // Polar's order.paid webhook: the path that records a purchase when the browser
 // never comes back.
@@ -13,6 +14,10 @@ import { recordPolarPurchase } from "../_shared/polar-pass.ts";
 //
 // Both paths write the same row keyed on the checkout id, so whichever arrives
 // first wins and the other reports what it found. See _shared/polar-pass.ts.
+//
+// And order.refunded, which takes it back: a refund in full ends the purchase
+// it refunds (the refund policy, 2026-10-08; _shared/polar-refund.ts). Polar
+// sends it only if the event is ticked in its webhook settings.
 
 const POLAR_WEBHOOK_SECRET = Deno.env.get("POLAR_WEBHOOK_SECRET");
 
@@ -123,6 +128,61 @@ async function verifySignature(
   };
 }
 
+/**
+ * order.refunded. A refund in full ends the purchase it refunds; a partial one,
+ * or an order that is not ours, ends nothing and is acknowledged. Only a
+ * failure worth Polar's retry answers 500, as for order.paid.
+ */
+async function handleRefund(event: { timestamp?: unknown; data?: Record<string, unknown> }): Promise<Response> {
+  const decision = decideRefund(event);
+  if (!decision.act) {
+    logStep("Refund ends nothing", { why: decision.why, orderId: decision.orderId });
+    return new Response(JSON.stringify({ ignored: decision.why }), {
+      headers: { "Content-Type": "application/json" },
+      status: 200,
+    });
+  }
+
+  const supabaseClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } },
+  );
+
+  const { data, error } = await supabaseClient.rpc("record_pass_refund", {
+    _provider_order_id: decision.checkoutId,
+    _refunded_at: decision.refundedAt,
+    _pass_days: PASS_DAYS,
+  });
+  if (error) {
+    logStep("ERROR recording refund", { checkoutId: decision.checkoutId, message: error.message });
+    // 500 so Polar retries: a refunded Pass must not go on covering viewings
+    // because the database blinked.
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+
+  const result = (data ?? {}) as Record<string, unknown>;
+  if (result.status === "unknown") {
+    // No pass for this checkout: it was never recorded, or its order.paid is
+    // still being retried. Left to a person rather than retried - one stray
+    // refund failing ten times running would disable the endpoint, and the paid
+    // orders with it.
+    logStep("Refund for a checkout with no pass - check it by hand", {
+      checkoutId: decision.checkoutId,
+      orderId: decision.orderId,
+    });
+  } else {
+    logStep("Refund recorded", { checkoutId: decision.checkoutId, orderId: decision.orderId, ...result });
+  }
+  return new Response(JSON.stringify({ ok: true, status: result.status ?? null }), {
+    headers: { "Content-Type": "application/json" },
+    status: 200,
+  });
+}
+
 serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -146,7 +206,7 @@ serve(async (req) => {
   }
   logStep("Signature verified", { via: verified.via });
 
-  let event: { type?: string; data?: Record<string, unknown> };
+  let event: { type?: string; timestamp?: unknown; data?: Record<string, unknown> };
   try {
     event = JSON.parse(raw);
   } catch {
@@ -155,10 +215,15 @@ serve(async (req) => {
     return new Response("Bad request", { status: 400 });
   }
 
-  // Only order.paid grants anything. Everything else is acknowledged so Polar
-  // stops resending it - an endpoint is disabled after 10 consecutive failures,
-  // so returning an error for events we simply don't act on would eventually
-  // take the ones we do care about down with it.
+  if (event.type === "order.refunded") {
+    return await handleRefund(event);
+  }
+
+  // Only order.paid grants anything, and order.refunded takes it back.
+  // Everything else is acknowledged so Polar stops resending it - an endpoint
+  // is disabled after 10 consecutive failures, so returning an error for
+  // events we simply don't act on would eventually take the ones we do care
+  // about down with it.
   if (event.type !== "order.paid") {
     logStep("Ignoring event", { type: event.type });
     return new Response(JSON.stringify({ ignored: event.type }), {

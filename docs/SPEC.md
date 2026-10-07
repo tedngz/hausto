@@ -1016,6 +1016,18 @@ plan; the second to arrive finds it locked in. A payment that lands after the
 plan was cancelled buys a Pass and keeps nothing - a person refunds or extends
 it under the written policy.
 
+**Refunds** (the refund policy, 2026-10-08). Money back - or 30 more days, the
+renter's choice - when none of the viewings asked for while the Pass runs can
+go ahead: no agent confirms, the agent cancels, or the place is let first. A
+person applies it, in Polar. A refund in full then ends the Pass it refunds:
+Polar's `order.refunded` reaches `handle-polar-webhooks`, which calls
+`record_pass_refund` to stamp `passes.refunded_at` and bring that purchase's
+`expires_at` forward to the refund. That covers refunds Polar makes itself,
+which as merchant of record it may within 60 days whatever our policy says.
+Cover is `expires_at > now()` wherever it is read, so nothing else needs to
+know. A Pass chained onto the refunded one (bought while it was live) loses
+the refunded days too; a partial refund ends nothing (`_shared/polar-refund.ts`).
+
 **The deadline** (`lockInDeadline`): the earlier of 24 hours after the plan
 arrived (held or delivered, whichever came first) and 18:00 the day before the
 first stop, but never less than three hours after the plan itself was

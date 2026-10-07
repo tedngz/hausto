@@ -477,6 +477,14 @@ drift apart. Idempotency comes from the unique `passes.provider_order_id`,
 which both paths set to the Polar checkout id - whichever writes second finds
 the row and reports `already`.
 
+**A refund ends the Pass it refunds.** `order.refunded` (in full - ours, or one
+Polar makes itself to head off a chargeback, which it may within 60 days
+whatever our policy says) calls `record_pass_refund`, which stamps
+`passes.refunded_at` and brings `expires_at` forward to the refund. Cover is
+`expires_at > now()` wherever it is read, so nothing else needs to know. It
+only arrives if `order.refunded` is ticked in Polar's webhook settings. The
+policy itself is SPEC §9, "Refunds".
+
 Entitlements must be counted once. A bought pass draws only on the `passes`
 ledger; the windowed allowance in `base_viewing_allowance_remaining` is for
 holders with no ledger row (complimentary cover, the free trial). Granting both
