@@ -92,7 +92,8 @@ const Privacy = () => (
         </ul>
         <p>
           If you create an account on the website, we also hold the email address you signed
-          up with. If you buy a Pass, our payment processor handles the transaction and we
+          up with. If you look up an agent's number on a listing, we keep a record of which
+          listing and when. If you buy a Pass, our payment processor handles the transaction and we
           keep a record that a purchase happened - <strong>we never see or store your card
           details</strong>.
         </p>
@@ -103,7 +104,8 @@ const Privacy = () => (
           <strong>We never give your phone number or your name to a property agent.</strong>{' '}
           Agents see only the listing and the times being requested. Everything passes
           through us, in both directions, and this is enforced in the software rather than
-          left to staff discretion.
+          left to staff discretion. If you call or message an agent yourself, using the number
+          a listing shows, they will see your number - that contact is between you and them.
         </p>
         <p>
           We do not sell personal data. We do not share it for anyone else's advertising.

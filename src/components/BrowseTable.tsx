@@ -556,9 +556,9 @@ export const BrowseTable = ({
                           {verifiedLabel(r.last_verified_at)}
                         </span>
                       </TableCell>
-                      {/* Provenance only. There is no outbound link anywhere:
-                          the source ad carries the agent's number, and renters
-                          reach agents through a viewing request. */}
+                      {/* Provenance only, no outbound link: the source ad
+                          carries the agent's number, which a renter gets on
+                          the listing page, signed in (AgentContact). */}
                       <TableCell>
                         {(() => {
                           const info = r.source === 'hausto'

@@ -20,8 +20,10 @@ which proposes every step and may take some alone. The system assembles a
 viewing itinerary and delivers it to the renter over WhatsApp. Renter confirms
 with one tap.
 
-The renter never talks to a realtor. The realtor never sees the renter's contact
-details. Everything crosses through us.
+The renter never has to talk to a realtor, and the realtor never gets the
+renter's contact details from us. Everything we handle crosses through us. A
+renter who would rather call an agent can, where the ad lists a number
+(invariant 4) - what we sell is not having to.
 
 All of it is live: WhatsApp on the Cloud API since 2026-09-18, the ops console
 at hausto-ops.vercel.app, and the Zalo bridge since 2026-09-27. PLAN-v3 opens
@@ -68,16 +70,25 @@ generate the training data to automate the realtor side later.
 Write to `messages` with `status='QUEUED'`, then send, then update. Never send
 first. Idempotency key on every send.
 
-**4. Never expose a renter's phone number or name to the ops console realtor
-view, and never put a realtor's phone number in renter-facing output - except
-on the day of a viewing the renter kept, with that agent's consent.**
-Enforce at the query layer, not the template layer. The exception (owner's
-decision, 2026-09-30) lives in one function, `dayStops` in
-`_shared/viewing/viewing-day.ts`, and the viewing-day message is its only
-caller (SPEC §6, §9). Do not add a second path that puts an agent's number in
-front of a renter. The original listing counts as one - its ad carries the
-number - so no renter surface links to it, the contacts functions answer
-admins only, and `public-property-search` returns `source_url` as null.
+**4. Never expose a renter's phone number or name to an agent or to the ops
+console realtor view. An agent's number reaches a renter by exactly two
+paths.** Enforce at the query layer, not the template layer (SPEC §6).
+
+- The number printed on a crawled listing's own ad, and the ad's link, on that
+  listing's page for a signed-in renter: `reveal_listing_contact`, which logs
+  each look-up in `contact_reveals`. Owner's decision, 2026-10-07: Hausto is
+  paid by renters only, and the ad is public anyway. It reads
+  `external_properties.contact_phone_e164` and never `realtors.phone_e164`.
+- Any agent's number on the day of a viewing the renter kept, with that agent's
+  consent: `dayStops` in `_shared/viewing/viewing-day.ts`, whose only caller is
+  the viewing-day message (owner's decision, 2026-09-30).
+
+An agent an operator found - `RECORD_CONTACT`, building agents, Search for me -
+agreed to talk to Hausto, not to be published, so only the second path carries
+their number. Do not add a third. The chat, WhatsApp, cards, Browse and the
+previews carry no number and link nowhere outside Hausto;
+`get-public-property` returns only `has_agent_number`; the contacts functions
+answer admins only; and `public-property-search` returns `source_url` as null.
 
 **5. Partial success is the happy path.**
 Any code that assumes all requested listings will be confirmed is wrong. Three of
@@ -189,7 +200,9 @@ section below. Since the pricing rework (2026-10-06) requests are free and the
 renter pays to **lock in** a plan agents have confirmed: the first viewing on
 us, once per WhatsApp number, then the Pass, which covers every confirmed
 viewing for 30 days (SPEC §9). The Pass is the one product; build no other
-payment surface for the viewing flow.
+payment surface for the viewing flow. Hausto is paid by renters only (owner's
+decision, 2026-10-07): no referral share from agents, so build nothing to
+track one.
 
 ### Conventions
 

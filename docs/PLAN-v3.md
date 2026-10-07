@@ -507,10 +507,11 @@ from the bridge's.
 **Charging:** a building request stays free, and Search for me comes with the
 Pass. Since the pricing rework (2026-10-06, SPEC §9) every viewing request is
 free too: the renter pays to lock in a plan agents
-confirmed - the first viewing on us, then the Pass. The
-natural revenue is agent-side - HCMC agents commonly pay a referral share of the
-landlord's commission on a signed lease - and needs only the `CLOSE` reason
-"lease signed" to track. No new payment surface (CLAUDE.md).
+confirmed - the first viewing on us, then the Pass. Agent-side
+revenue - a referral share of the landlord's commission on a signed lease,
+which this paragraph once called the natural one - is ruled out: Hausto is paid
+by renters only (owner's decision, 2026-10-07), and the number on an ad now goes
+to signed-in renters (SPEC §6). No new payment surface (CLAUDE.md).
 
 **Done when:** a request for a building with a roster goes code → brief → agents
 asked → units captured → one offer message → a viewing request linked back to

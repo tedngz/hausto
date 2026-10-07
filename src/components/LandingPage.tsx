@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { HaustoLogo } from "@/components/HaustoLogo";
 import { Card, CardContent } from "@/components/ui/card";
-import { Home, Heart, Users, Sparkles, ArrowRight, Building2, Search, MessageSquare, LogOut } from "lucide-react";
+import { Home, ShieldCheck, BadgeCheck, Users, Sparkles, ArrowRight, Building2, MessageSquare, LogOut } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
@@ -76,10 +76,15 @@ export const LandingPage = () => {
               address bar cannot push the heading out of sight. A taller hero
               (a phone, a signed-in renter's chat controls) just grows past it. */}
           <div className="flex min-h-[calc(100svh-12.25rem)] flex-col justify-center md:min-h-[calc(100svh-14.5rem)]">
-            <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-6 md:mb-8">
+            {/* The headline is the hook and matches the search box below; the
+                one line under it is what Hausto is for. Keep it one line. */}
+            <h1 className="font-serif text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground mb-4 md:mb-5">
               <span className="text-primary">Vibe check</span>
               <span className="block">your next home</span>
             </h1>
+            <p className="mx-auto mb-6 max-w-2xl text-lg text-muted-foreground md:mb-8 md:text-xl">
+              Let our AI deal with the agents - you just show up.
+            </p>
 
             <div className="mb-4">
               {/* The hero chat takes the question and hands it to the hub, which
@@ -116,60 +121,43 @@ export const LandingPage = () => {
       {/* Features Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-foreground mb-4 font-serif text-4xl font-normal">Elevate your home hunting experience</h2>
-          
+          <h2 className="text-foreground mb-4 font-serif text-4xl font-normal">Renting without the back-and-forth</h2>
         </div>
 
+        {/* What the viewing service saves a renter: chasing agents, agents
+            chasing them, and turning up for a place that was never there.
+            The bait check is the agent's own answer - "already rented" and
+            "different price" are outcomes an operator records (SPEC §4). */}
         <div className="grid md:grid-cols-3 gap-8">
-          <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
-            <CardContent className="p-8 text-center">
-              <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
-                <Heart className="h-8 w-8 text-primary animate-heartbeat" />
-              </div>
-              <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">Vibe Match</h3>
-              <p className="text-muted-foreground leading-relaxed">Our algorithm learns your preferences and finds properties that truly match your lifestyle and needs.</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
-            <CardContent className="p-8 text-center">
-              <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
-                <Search className="h-8 w-8 text-primary animate-gentle-bob" />
-              </div>
-              <h3 className="text-2xl text-foreground mb-4 font-normal font-serif">Smart Search</h3>
-              <p className="text-muted-foreground leading-relaxed">Ask the AI in plain English and get curated properties back, each with detailed insights and a vibe score to find your perfect match.</p>
-            </CardContent>
-          </Card>
-
           <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
             <CardContent className="p-8 text-center">
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors pulse-ring-wrapper">
                 <MessageSquare className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">Unified Listings</h3>
-              <p className="text-muted-foreground leading-relaxed">Access curated property listings from multiple sources, all in one convenient place.</p>
+              <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">No agent chasing</h3>
+              <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">Request viewings for the places you like. We line up times with each agent and come back with one plan.</p>
             </CardContent>
           </Card>
-        </div>
-      </section>
 
-      {/* Stats Section */}
-      <section className="bg-secondary/30 py-20">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">1K+</div>
-              <div className="text-muted-foreground">Properties Listed</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">5K+</div>
-              <div className="text-muted-foreground">Happy Matches</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">10x</div>
-              <div className="text-muted-foreground">Matching Speed</div>
-            </div>
-          </div>
+          <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
+            <CardContent className="p-8 text-center">
+              <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
+                <ShieldCheck className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-2xl text-foreground mb-4 font-normal font-serif">Your number stays private</h3>
+              <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">Agents never get it from us, so no follow-up spam.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
+            <CardContent className="p-8 text-center">
+              <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
+                <BadgeCheck className="h-8 w-8 text-primary animate-gentle-bob" />
+              </div>
+              <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">No bait listings</h3>
+              <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">Before you go, we check with the agent that the place is still free at the listed price.</p>
+            </CardContent>
+          </Card>
         </div>
       </section>
 

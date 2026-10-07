@@ -291,6 +291,24 @@ The primary key is what stops two tabs spending it twice: `lockIn` inserts
 first and takes a `23505` as "already used". Service role only.
 `viewing_trials`, the per-account ledger it replaces, stays as history.
 
+### `contact_reveals`
+
+Each crawled listing whose agent number a signed-in renter looked up, written
+by `reveal_listing_contact` (§6) the first time only. It is the measure of the
+choice the product now offers: renters who call agents themselves against
+renters who ask us.
+
+```
+user_id      uuid not null              -- auth.uid() of the renter
+listing_id   uuid not null references external_properties(id) on delete cascade
+revealed_at  timestamptz default now()
+primary key (user_id, listing_id)
+```
+
+No grants to `anon` or `authenticated`; read it with SQL. The function refuses
+a 31st new listing in any 24 hours for one account - far past anyone flat
+hunting, there so an account cannot be a scraper.
+
 ### `events`
 
 Append-only. The single source of truth for all state. See §3.
@@ -674,22 +692,46 @@ thread, because those are what decide whether the next send is legal.
 
 ## §6 Privacy
 
-**Never expose a renter's phone number or name to the ops console realtor view,
-and never put a realtor's phone number in renter-facing output - except on the
-day of a viewing the renter kept, and only with that agent's consent.**
+**Never expose a renter's phone number or name to an agent or to the ops
+console realtor view. An agent's number reaches a renter by two paths only:
+the number printed on a crawled listing's own ad, on that listing's page for a
+signed-in renter; and any agent's number on the day of a viewing the renter
+kept, with that agent's consent.**
 
 Enforce at the query layer, not the template layer. The ops realtor view reads
 from a view that does not select `renters.phone_e164` or `renters.display_name`
 at all, so a careless template change cannot leak one. Renter-facing itinerary
 rendering takes a DTO with no realtor contact field on it.
 
-**The one exception is the viewing-day message** (§9, decided 2026-09-30). By
-the morning of a viewing the renter confirmed, they are about to meet the agent
-in person, and a renter lost at the gate needs them rather than a thread we
-read later. Hiding the number before then is what stops a renter going round
-us, and it stays hidden before then. The exception is held in one place:
-`dayStops` in `_shared/viewing/viewing-day.ts` is the only function that puts
-a realtor's number in anything a renter reads, and only for a viewing that is
+**The number on the ad** (decided 2026-10-07). Hausto is paid by renters only,
+so the number a crawled ad prints is no longer something to keep from them: the
+ad is public on its marketplace, and what the Pass sells is dealing with the
+agents, not owning their numbers. The listing page offers it under "Request
+viewing" as the way out - "Rather call the agent yourself?" - never beside the
+button (invariant 8), and says what calling costs: the agent gets the renter's
+number. It is held in one place:
+
+- `reveal_listing_contact(listing_id)` answers a signed-in renter only, with
+  `external_properties.contact_phone_e164` and the ad's `source_url`, for an
+  active listing whose ad carries a number. It writes `contact_reveals` (§1) the
+  first time, and refuses a 31st new listing in a day.
+- That column is the ad's own number: written by the crawler and
+  `extract-phone`, or resolved by hand against the ad's masked digits (the
+  contact import, the weekly contact check). `RECORD_CONTACT` sets `realtor_id`
+  and never writes it, and an agent's offered unit (§11) carries no contact.
+  **Never `realtors.phone_e164`**: an agent an operator found - on a request,
+  for a building, for Search for me - agreed to talk to Hausto, not to be
+  published, and reaches a renter only on the viewing day.
+- `get-public-property` says whether there is a number (`has_agent_number`) and
+  strips `contact_name`, `contact_phone`, `contact_phone_e164`, `source_url` and
+  `source_agent_id` - for everyone, signed in or not. Until 2026-10-07 it
+  stripped the first three only and sent `contact_phone_e164` to any caller.
+
+**The viewing-day message** (§9, decided 2026-09-30). By the morning of a
+viewing the renter confirmed, they are about to meet the agent in person, and a
+renter lost at the gate needs them rather than a thread we read later. This is
+the only path for an agent an operator found. It is held in one place:
+`dayStops` in `_shared/viewing/viewing-day.ts`, and only for a viewing that is
 kept, confirmed, on that date, with `share_phone` recorded as the agent's
 answer. `sendViewingDay` reads `realtors.phone_e164` only for agents who said
 yes. An operator cannot type a number in: the meeting point and name refuse
@@ -697,31 +739,29 @@ anything phone-shaped, and the operator's reply check below still refuses a
 Vietnamese number. The renter's number still never reaches an agent - if the
 renter rings them, that is the renter's choice.
 
-**Nothing else hands a renter an agent's number or the original listing**
-(the pricing rework, decided 2026-10-06). The original ad carries the agent's
-number, so a source link is the same leak by one more click. Until then a
-renter reached agents four ways: the chat's daily "listing unlocks", "View
-original" links in the Browse and chat previews, `get_external_property_contacts`
-for any renter matched to the listing (matching is free), and
-`public-property-search`'s `source_url`. All four are closed at the server:
+**Nothing else hands a renter an agent's number or the original listing.** A
+source link is the same number by one more click. The pricing rework
+(2026-10-06) closed the four other ways a renter used to reach agents - the
+chat's daily "listing unlocks", "View original" links in the Browse and chat
+previews, `get_external_property_contacts` for any matched renter, and
+`public-property-search`'s `source_url` - and they stay closed:
 
 - `get_external_property_contacts`, `get_external_property_contact` and
   `admin_external_listing_sources` (the source link and `raw_data`) answer
   admins only; `get_property_contacts` answers admins and the listing's own
-  realtor. They do not open on the viewing day either - that would be a second
-  path beside `dayStops`.
-- `chat-ai` loads no contact or source column it could repeat, scrubs both from
-  every result (`withoutAgentFields`), and points the renter to "Request
-  viewing" instead. `get-public-property` returns them as null to everyone.
+  realtor.
+- `chat-ai` loads no contact or source column it could repeat and scrubs both
+  from every result (`withoutAgentFields`). Asked for an agent, it offers
+  "Request viewing" or the listing page's number, without saying whether a
+  given listing has one. A model repeating a number would be a path with no
+  log, and could repeat one no ad printed.
+- Cards, Browse and the previews link nowhere outside Hausto.
 - `public-property-search` keeps `source_url` in its contract and returns it as
-  null; `url` already points at our page.
-- `source_url` and `raw_data` lose their column grants to `anon` and
-  `authenticated` in a migration that ships after the renter app that stops
-  selecting them is published, so a renter cannot read them with the anon key
-  either.
-
-The ads stay public on the marketplaces, so a determined renter can still find
-an agent. The point is that we do not hand them over.
+  null; `url` already points at our page. It serves AI crawlers, and sending
+  their users to the marketplace earns nothing.
+- `source_url`, `raw_data`, `contact_phone` and `contact_phone_e164` have no
+  SELECT grant for `anon` or `authenticated`, so a renter cannot read them with
+  the anon key.
 
 The console reads the renter's WhatsApp thread through `ops_request_thread()`, a
 `SECURITY DEFINER` function that returns bodies, times, the window expiry and
@@ -906,6 +946,13 @@ Agents confirm a time before anyone pays, and the plan - each stop's place,
 day and time, and no field for an agent - is the pitch, so showing it before
 payment gives nothing away. Nothing confirmed, nothing owed: a request where
 no agent confirms ends with substitutes or offered times, as before.
+
+Since 2026-10-07 that is not quite true. Where a stop's ad lists the agent's
+number, the listing page shows it (§6), so a renter holding a plan knows which
+places are free and can ring those agents rather than lock in. That is
+accepted: the Pass sells not having to. The number to watch is reveals in
+`contact_reveals` on stops of the renter's own plan, made between delivery and
+a deadline that passed without a lock-in.
 
 **How a plan is covered** (`decideLockIn`, the one function that decides, for
 the page, the payment and a WhatsApp "yes" alike):

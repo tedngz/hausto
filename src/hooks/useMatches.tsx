@@ -46,10 +46,10 @@ async function enrichMatchesWithProperties(matches: any[]): Promise<any[]> {
   const internalIds = matches.filter(m => m.property_type !== 'external').map(m => m.property_id);
   const externalIds = matches.filter(m => m.property_type === 'external').map(m => m.property_id);
 
-  // No agent contact or source link, matched or not: a renter reaches the
-  // agent through a viewing request, and the agent's number only on the day of
-  // a viewing they kept (CLAUDE.md invariant 4). The fields stay on the shape,
-  // empty, so the screens that read them need no change.
+  // No agent contact or source link, matched or not: a crawled ad's number is
+  // on the listing page for a signed-in renter (`reveal_listing_contact`), and
+  // nowhere else (CLAUDE.md invariant 4). The fields stay on the shape, empty,
+  // so the screens that read them need no change.
   const [internalResult, externalResult] = await Promise.all([
     internalIds.length > 0
       ? supabase.from('properties').select('id, title, location, price, vibe, images, description, highlights, size, realtor_id, vibe_analysis, amenities').in('id', internalIds)

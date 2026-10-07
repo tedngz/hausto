@@ -8,6 +8,8 @@ import { ListingHistoryNote } from '@/components/ListingHistoryNote';
 import { HomeAI } from '@/components/HomeAI';
 import { ChatDock, RAIL_MIN_VIEWPORT } from '@/components/chat/ChatDock';
 import { RealtorProfileModal } from '@/components/RealtorProfileModal';
+import { AgentContact } from '@/components/AgentContact';
+import { getPropertySourceLogo } from '@/utils/propertySourceLogos';
 import { Button } from '@/components/ui/button';
 import { CurrencyDropdown } from '@/components/CurrencyDropdown';
 import { shareProperty } from '@/utils/shareProperty';
@@ -32,6 +34,10 @@ const PropertyDetail = () => {
   const [source, setSource] = useState<'internal' | 'external'>('internal');
   const [isRelist, setIsRelist] = useState(false);
   const [firstSeenAt, setFirstSeenAt] = useState<string | null>(null);
+  // Whether the original ad carries a number - never the number, which a
+  // signed-in renter asks for (AgentContact).
+  const [hasAgentNumber, setHasAgentNumber] = useState(false);
+  const [marketplace, setMarketplace] = useState<string | undefined>(undefined);
 
   // Opened from an availability request's offer (`?inq=`): remembered so the
   // viewing request made from here links back to it.
@@ -160,6 +166,9 @@ const PropertyDetail = () => {
           const extProperty = data.property;
           setIsRelist(!!extProperty.is_relist);
           setFirstSeenAt(extProperty.created_at ?? null);
+          setHasAgentNumber(extProperty.has_agent_number === true);
+          const sourceName = getPropertySourceLogo(extProperty.source || '').name;
+          setMarketplace(sourceName === 'External Source' ? undefined : sourceName);
           const transformedApartment: Apartment = {
             id: extProperty.id,
             images: extProperty.images || [],
@@ -318,6 +327,9 @@ const PropertyDetail = () => {
               shortlistable={source === 'external'}
             />
 
+            {source === 'external' && hasAgentNumber && (
+              <AgentContact listingId={apartment.id} sourceName={marketplace} />
+            )}
           </div>
 
 

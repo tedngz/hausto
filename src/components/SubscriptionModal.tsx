@@ -23,6 +23,12 @@ interface SubscriptionModalProps {
  * for is a viewing that happens - locked in once agents confirm - so the
  * modal sells confirmed viewings, never request credits or counts.
  *
+ * What Hausto is for - dealing with the agents, in Vietnamese, without the
+ * renter's number reaching them - is true on both plans, so the header says it
+ * rather than the Pass's list. Calling the agent yourself is on Free: the
+ * number on an ad is the renter's to use since 2026-10-07 (SPEC §6), and the
+ * Pass sells not having to.
+ *
  * The Pass lists only what it adds over Free. A row-for-row comparison made
  * every line say "Same" or "No" on one side, which was most of the reading
  * and none of the information. Each line leads with the amount, in bold -
@@ -34,14 +40,15 @@ type Feature = { lead: string; rest?: string };
 const AI_CREDITS = FREE_TIER_LIMITS.dailyAiRequests;
 
 const FREE: Feature[] = [
-  { lead: 'Free viewing requests', rest: ' - we ask the agents' },
+  { lead: 'Free viewing requests', rest: ' - we ask the agents for you' },
   { lead: '1 free confirmed viewing' },
+  { lead: "Agents' numbers", rest: ' - where the ad lists one, to call yourself' },
   { lead: `${AI_CREDITS} AI credits`, rest: ' a day' },
   { lead: 'Basic vibe analysis' },
 ];
 
 const PASS: Feature[] = [
-  { lead: 'Unlimited confirmed viewings' },
+  { lead: 'Unlimited confirmed viewings', rest: ' - every agent dealt with, one plan on WhatsApp' },
   { lead: 'Priority search', rest: ' - our team puts your search first and sends you places that fit' },
   { lead: 'Match alerts', rest: ' - new places that fit you, up to 2 a week on WhatsApp' },
   { lead: 'Unlimited AI credits' },
@@ -106,7 +113,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
               ? reasonMessages[reason]
               : pass?.active
                 ? 'Your Pass covers every viewing we confirm while it runs.'
-                : 'Requesting is free, and so is your first confirmed viewing. The Pass covers every one after that.'}
+                : 'We deal with the agents for you, in Vietnamese, and your number never reaches them. Requesting is free, and so is your first confirmed viewing - the Pass covers every one after that.'}
           </DialogDescription>
         </DialogHeader>
 

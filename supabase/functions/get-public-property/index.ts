@@ -27,10 +27,10 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
     // No caller gets an agent's contact or the original listing from here,
-    // signed in or not. Both lead to the agent - the source posting carries
-    // the number - and the one path to an agent's number is the viewing-day
-    // message (CLAUDE.md invariant 4). This reads with the service role, which
-    // bypasses the column grants, so the strip below is the whole guarantee.
+    // signed in or not. A signed-in renter reads a crawled ad's number through
+    // `reveal_listing_contact`, which logs the look-up; this says only whether
+    // there is one (SPEC §6). This reads with the service role, which bypasses
+    // the column grants, so the strip below is the whole guarantee.
     const db = createClient(supabaseUrl, serviceKey);
 
     // Try internal properties first
@@ -75,7 +75,16 @@ Deno.serve(async (req) => {
 
     if (ext) {
       const property = {
-        ...stripContact(ext as Record<string, unknown>, ['contact_name', 'contact_phone', 'source_url']),
+        // contact_phone_e164 is the same number normalised, and
+        // source_agent_id is the agent's profile on the marketplace.
+        ...stripContact(ext as Record<string, unknown>, [
+          'contact_name',
+          'contact_phone',
+          'contact_phone_e164',
+          'source_url',
+          'source_agent_id',
+        ]),
+        has_agent_number: (ext as { contact_phone_e164?: string | null }).contact_phone_e164 != null,
         // Crawler scratch space - never part of the public payload.
         raw_data: undefined,
       };
