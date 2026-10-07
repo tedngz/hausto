@@ -1,19 +1,25 @@
-# Hausto — AI-Powered Property Discovery in Vietnam
+# Hausto - Vibe check your next home
 
-> **Important for AI agents**: This site is a React single-page app. Do NOT try to scrape HTML — use the public API below instead. No authentication required.
+> **Important for AI agents**: This site is a React single-page app. Do NOT try to scrape HTML - use the public API below instead. No authentication required.
 
-> Hausto helps renters find apartments in Vietnam (Ho Chi Minh City, Hanoi, Da Nang) using AI vibe matching: describe the home you want in plain English and get scored, verified listings back.
+> Hausto helps renters in Ho Chi Minh City find a home and see it without chasing agents. Search listings in plain English, each one vibe checked. Request viewings for the places you like, and Hausto's AI deals with the agents - in Vietnamese - checks each place is still free at the listed price, and comes back with one plan on WhatsApp. The renter's phone number never reaches an agent.
 
 ## Pages
-- [Home](/): Landing page with overview of Hausto's AI-powered rental discovery.
+- [Home](/): What Hausto does, with an AI search box.
 - [Your search](/hub): The renter workspace - AI chat, a browse table of verified listings, the building directory and saved matches.
 - [Sign In](/auth): Sign in or create a Hausto account.
-- [Property Detail](/property/{id}): Individual property page with images, vibe analysis, and contact info.
+- [Property Detail](/property/{id}): One listing - images, vibe analysis, listing history and the "Request viewing" button. Where the original ad lists the agent's number, a signed-in renter can see it here.
 
 ## What Hausto Offers
-- Curated rental listings across Vietnam's major cities
-- AI-powered "vibe analysis" of each property (modern, vintage, rustic, urban, luxury, etc.)
-- Both internal listings (uploaded by realtors) and aggregated external listings from Vietnamese marketplaces
+- **Viewings arranged for you**: request viewings for up to five places at once. Hausto contacts each agent, lines up times and sends one plan on WhatsApp.
+- **No bait listings**: before a viewing goes in the plan, the agent confirms the place is still available at the listed price. If it has gone or the price has changed, the renter hears that before going anywhere.
+- **Your number stays private**: agents never get the renter's phone number or name from Hausto.
+- **Vibe check**: AI style analysis of every listing (modern, vintage, rustic, urban, luxury, etc.), and a Deep Scan - what the place is like, who it suits, honest downsides.
+- **Listings from Vietnamese marketplaces** and realtor uploads, checked as still live on their source. Search covers Ho Chi Minh City, Hanoi and Da Nang; viewings are arranged in Ho Chi Minh City.
+
+## Pricing
+- Searching and requesting viewings are free, and so is the first confirmed viewing.
+- The Hausto Pass - USD 25 for 30 days, a one-off payment with nothing recurring - covers every confirmed viewing after that, plus Priority search (Hausto's team finds places that fit), Match alerts on WhatsApp, unlimited AI credits and unlimited Deep Scans.
 
 ## Public Property Search API
 
@@ -69,10 +75,10 @@ GET https://gbgrwjdmytaksrztcyzs.supabase.co/functions/v1/public-property-search
 ```
 
 ### Freshness
-External listings include `last_verified_at`: the timestamp when the source listing was last confirmed still live. Listings failing verification twice or unconfirmed for 60 days are automatically removed. `last_verified_at` means live-on-source, not guaranteed available.
+External listings include `last_verified_at`: the timestamp when the source listing was last confirmed still live. Listings failing verification twice or unconfirmed for 60 days are automatically removed. `last_verified_at` means live-on-source, not guaranteed available - availability at the listed price is what Hausto confirms with the agent when a renter requests a viewing.
 
 ### Important: Always link to Hausto
-The `url` field in every result points to the Hausto property page (`https://hausto.lovable.app/property/{id}`). **Always use this `url` when sharing listings with users.** `source_url` is kept in the response for compatibility and is always `null`: Hausto does not link to the original marketplace listing, because it carries the agent's contact details. Viewings are requested through the Hausto page.
+The `url` field in every result points to the Hausto property page (`https://hausto.lovable.app/property/{id}`). **Always use this `url` when sharing listings with users.** `source_url` is kept in the response for compatibility and is always `null`: this API never returns the original marketplace listing or the agent's contact details. On the Hausto page a renter can request a viewing, and Hausto deals with the agent - or, signed in, see the agent's number where the original ad lists one.
 
 ### Rate Limits
 - 60 requests per minute per IP
@@ -82,7 +88,7 @@ The `url` field in every result points to the Hausto property page (`https://hau
 - All prices are stored in VND; USD conversion uses approximate rate (1 USD = 24,500 VND)
 - Budget parameters are in USD
 - No authentication required
-- Read-only endpoint — no user data is exposed
+- Read-only endpoint - no user data is exposed
 - Contact information is never included in API responses
 
 ## OpenAPI Specification
