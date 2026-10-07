@@ -1,6 +1,7 @@
 import { TrendingDown, TrendingUp, CalendarClock, RotateCcw } from 'lucide-react';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useListingPriceHistory } from '@/hooks/useListingHistory';
+import { cn } from '@/lib/utils';
 
 // What we know about a single listing over time. This works at n=1 — it makes
 // no claim about the wider market — so it needs no sample-size threshold, unlike
@@ -13,6 +14,8 @@ interface ListingHistoryNoteProps {
   /** When the listing first entered our index — not the first snapshot. */
   firstSeenAt?: string | null;
   isRelist?: boolean;
+  /** Overrides for where it sits - the listing preview puts it on the card's own background. */
+  className?: string;
 }
 
 const DAYS_BEFORE_WORTH_SAYING = 14;
@@ -33,6 +36,7 @@ export function ListingHistoryNote({
   enabled,
   firstSeenAt,
   isRelist,
+  className,
 }: ListingHistoryNoteProps) {
   const { formatPrice } = useCurrency();
   const { data } = useListingPriceHistory(listingId, enabled);
@@ -50,7 +54,7 @@ export function ListingHistoryNote({
   const pct = latestMove ? Math.abs(latestMove.pctChange) : 0;
 
   return (
-    <div className="mt-4 max-w-[760px] mx-auto rounded-xl border border-border/60 bg-white/70 px-4 py-3">
+    <div className={cn('mt-4 max-w-[760px] mx-auto rounded-xl border border-border/60 bg-white/70 px-4 py-3', className)}>
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
         What we've seen on this listing
       </p>

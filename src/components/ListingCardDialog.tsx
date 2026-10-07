@@ -32,7 +32,7 @@ const toApartment = (p: any, external: boolean): Apartment => ({
   vibe_analysis: p.vibe_analysis,
   rooms: p.rooms ?? null,
   // Never the original listing: it carries the agent's number, which only
-  // AgentContact gives out, to a signed-in renter.
+  // ViewingChoice gives out, to a signed-in renter.
   property_source_link: external ? undefined : p.property_source_link,
   last_verified_at: external ? p.last_verified_at ?? null : null,
   realtor: { id: external ? 'external' : p.realtor_id, name: 'Property Owner', phone: '', email: '' },

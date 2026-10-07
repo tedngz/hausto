@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, MapPin, Loader2, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getNormalizedAmenities } from '@/lib/amenities';
@@ -55,9 +55,6 @@ interface PropertyListingCardProps {
    *  requests against `external_properties`, and an internal listing has its
    *  own booking path. */
   shortlistable?: boolean;
-  /** Rendered directly under "Request viewing" - the choice beside it
-   *  (AgentContact). Only with the button. */
-  requestFooter?: ReactNode;
 }
 
 export const PropertyListingCard = ({
@@ -68,7 +65,6 @@ export const PropertyListingCard = ({
   onBookViewing,
   isBooking = false,
   shortlistable = false,
-  requestFooter,
 }: PropertyListingCardProps) => {
   const images = apartment.images && apartment.images.length > 0 ? apartment.images : PLACEHOLDER_IMAGES;
   const [current, setCurrent] = useState(0);
@@ -430,7 +426,6 @@ export const PropertyListingCard = ({
             >
               {isBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Request viewing'}
             </Button>
-            {requestFooter}
             <RequestViewingModal
               open={requestOpen}
               onOpenChange={setRequestOpen}
