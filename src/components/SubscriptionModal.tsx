@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, Crown } from 'lucide-react';
 import { DigestOptIn } from '@/components/DigestOptIn';
+import { RefundPromise } from '@/components/RefundPromise';
 import { useAuth } from '@/hooks/useAuth';
 import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
 import { FREE_TIER_LIMITS } from '@/hooks/useUsageTracking';
@@ -155,6 +156,7 @@ export const SubscriptionModal = ({ isOpen, onClose, reason }: SubscriptionModal
             </p>
             {/* No "cancel anytime" - nothing recurs, which is the better promise. */}
             <p className="mt-1 text-xs text-muted-foreground">One-off payment, nothing recurring</p>
+            <RefundPromise className="mt-1" />
             <div className="my-5 border-t border-primary/20" />
             <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Everything in Free, plus</p>
             <FeatureList features={PASS} accent />

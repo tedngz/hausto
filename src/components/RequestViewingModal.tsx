@@ -38,6 +38,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
+import { RefundPromise } from '@/components/RefundPromise';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -437,6 +438,9 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                     arrange for {PASS_DAYS} days, one-off.
                   </p>
                   <Button size="sm" onClick={() => void purchasePass()}>Get the Pass - ${PASS_PRICE_USD}</Button>
+                  {/* Here more than anywhere: since #171 this is where a renter
+                      pays before any agent has answered. */}
+                  <RefundPromise />
                 </div>
               ) : join ? (
                 <Step

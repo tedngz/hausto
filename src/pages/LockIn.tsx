@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePass } from '@/hooks/usePass';
 import { cn } from '@/lib/utils';
 import { DigestOptIn } from '@/components/DigestOptIn';
+import { RefundPromise } from '@/components/RefundPromise';
 import { formatVnd, hcmcLong } from '../../supabase/functions/_shared/viewing/format.ts';
 import { districtLabel } from '../../supabase/functions/_shared/viewing/place.ts';
 
@@ -218,6 +219,7 @@ export default function LockIn() {
                   ? 'Your first viewing is on us, once per WhatsApp number. The Pass covers every viewing we confirm for its 30 days. One-off payment, nothing recurring.'
                   : 'Your free viewing has been used. The Pass covers every viewing we confirm for its 30 days. One-off payment, nothing recurring.'}
               </p>
+              <RefundPromise />
             </>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}

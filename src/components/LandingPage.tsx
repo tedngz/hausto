@@ -192,6 +192,10 @@ export const LandingPage = () => {
             <Link to="/privacy" className="hover:text-foreground transition-colors underline-offset-4 hover:underline">
               Privacy Policy
             </Link>
+            {' · '}
+            <Link to="/terms" className="hover:text-foreground transition-colors underline-offset-4 hover:underline">
+              Refund policy
+            </Link>
           </p>
         </div>
       </footer>
