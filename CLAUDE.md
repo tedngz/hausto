@@ -74,9 +74,10 @@ first. Idempotency key on every send.
 console realtor view. An agent's number reaches a renter by exactly two
 paths.** Enforce at the query layer, not the template layer (SPEC §6).
 
-- The number printed on a crawled listing's own ad, and the ad's link, on that
-  listing's page for a signed-in renter: `reveal_listing_contact`, which logs
-  each look-up in `contact_reveals`. Owner's decision, 2026-10-07: Hausto is
+- The number printed on a crawled listing's own ad, and the ad's link, for a
+  signed-in renter, directly under that listing's "Request viewing" on its
+  page and in its preview: `AgentContact`, calling `reveal_listing_contact`,
+  which logs each look-up in `contact_reveals`. Owner's decision, 2026-10-07: Hausto is
   paid by renters only, and the ad is public anyway. It reads
   `external_properties.contact_phone_e164` and never `realtors.phone_e164`.
 - Any agent's number on the day of a viewing the renter kept, with that agent's
@@ -85,8 +86,8 @@ paths.** Enforce at the query layer, not the template layer (SPEC §6).
 
 An agent an operator found - `RECORD_CONTACT`, building agents, Search for me -
 agreed to talk to Hausto, not to be published, so only the second path carries
-their number. Do not add a third. The chat, WhatsApp, cards, Browse and the
-previews carry no number and link nowhere outside Hausto;
+their number. Do not add a third. Beyond `AgentContact`, the chat, WhatsApp,
+cards, Browse and the previews carry no number and link nowhere outside Hausto;
 `get-public-property` returns only `has_agent_number`; the contacts functions
 answer admins only; and `public-property-search` returns `source_url` as null.
 
