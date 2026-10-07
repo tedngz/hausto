@@ -325,11 +325,12 @@ const PropertyDetail = () => {
               // `external_properties`. A realtor's own listing has no request
               // path since Fast-Track retired (invariant 8) - none is live.
               shortlistable={source === 'external'}
+              requestFooter={
+                source === 'external' && hasAgentNumber ? (
+                  <AgentContact listingId={apartment.id} sourceName={marketplace} hasNumber />
+                ) : undefined
+              }
             />
-
-            {source === 'external' && hasAgentNumber && (
-              <AgentContact listingId={apartment.id} sourceName={marketplace} />
-            )}
           </div>
 
 

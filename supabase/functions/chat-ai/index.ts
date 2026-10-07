@@ -21,8 +21,9 @@ const WANTS_OTHER_LISTINGS =
   /\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i;
 
 // The chat never hands a renter an agent's number or the original listing,
-// on any tier. A crawled ad's number reaches a renter in one place - the
-// listing page, signed in, through `reveal_listing_contact`, which logs it -
+// on any tier. A crawled ad's number reaches a renter one way - AgentContact,
+// under "Request viewing", signed in, through `reveal_listing_contact`, which
+// logs it -
 // and an operator-found agent's only on the viewing day (CLAUDE.md invariant
 // 4, SPEC §6). A model repeating a number would be a second, unlogged path,
 // and could give out one no ad printed. Listings are loaded with their contact
@@ -2691,7 +2692,7 @@ When the user says "this one", "it", "these", or asks a question without naming 
 
 AGENTS' CONTACT DETAILS AND THE ORIGINAL LISTING:
 - You are not given agents' or owners' numbers, names or the original listing; never write a phone number, an agent's name or a listing URL, and never guess one.
-- When the user asks for one, or the answer needs the agent (live availability, price negotiation, deposit or contract terms, move-in dates): answer what you can from the data, then give them the two ways. Tapping "Request viewing" on the listing has us ask the agent for them - availability, price and times - and set the viewing up, and the agent never gets their number. Or, where the original ad lists the agent's number, the listing's own page shows it to a signed-in renter, to call themselves. Do not say whether a particular listing has one - you do not know.
+- When the user asks for one, or the answer needs the agent (live availability, price negotiation, deposit or contract terms, move-in dates): answer what you can from the data, then give them the two ways. Tapping "Request viewing" on the listing has us ask the agent for them - availability, price and times - and set the viewing up, and the agent never gets their number. Or, where the original ad lists the agent's number, the listing itself - its page, or the card that opens when they tap a result - shows it to a signed-in renter under "Request viewing", to call themselves. Do not say whether a particular listing has one - you do not know.
 ` ;
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.

@@ -866,8 +866,8 @@ export const HomeAI = ({
   };
   // Where the preview says a listing came from. A Hausto listing links to its
   // own page; a crawled one names its marketplace and links nowhere - the
-  // original ad carries the agent's number, which the listing page gives a
-  // signed-in renter (CLAUDE.md invariant 4).
+  // original ad carries the agent's number, which AgentContact, under the
+  // preview's "Request viewing", gives a signed-in renter (CLAUDE.md invariant 4).
   const previewSourceOf = (property: PropertyMatch): { name: string; href?: string | null } => {
     if (!property.isExternal) return { name: 'Hausto', href: `/property/${property.id}` };
     return { name: getPropertySourceLogo(property.source || '').name, href: null };

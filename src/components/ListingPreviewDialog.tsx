@@ -12,6 +12,7 @@ import type { PropertyType } from '@/hooks/useDeepAnalysis';
 import { usePass } from '@/hooks/usePass';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
+import { AgentContact } from '@/components/AgentContact';
 
 // The one way a listing opens over the page it was found on - browse, the AI's
 // results, anywhere a card is clicked. There used to be a second, older modal
@@ -124,9 +125,9 @@ export const ListingPreviewDialog = ({
         ))}
       </ul>
       {/* Our own page only. A crawled listing's original ad carries the
-          agent's number, which only the listing page gives out, signed in
-          (CLAUDE.md invariant 4) - so an outside link is dropped here even
-          if a caller passes one. */}
+          agent's number, which reaches a renter only through AgentContact,
+          signed in and logged (CLAUDE.md invariant 4) - so an outside link
+          is dropped here even if a caller passes one. */}
       {source?.href?.startsWith('/') && (
         <a
           href={source.href}
@@ -137,6 +138,18 @@ export const ListingPreviewDialog = ({
       )}
     </div>
   ) : null;
+
+  // The other choice, under the offer it is the alternative to: call the
+  // agent yourself. Crawled listings only - the number is the one on the
+  // original ad - and only where that ad lists one, which AgentContact asks.
+  const footer = bookingOffer && (
+    <>
+      {bookingOffer}
+      {propertyType === 'external' && apartment?.id && (
+        <AgentContact listingId={apartment.id} sourceName={source?.name} />
+      )}
+    </>
+  );
 
   return (
     <>
@@ -178,7 +191,7 @@ export const ListingPreviewDialog = ({
               onClose={() => onOpenChange(false)}
               onSchedule={onSchedule}
               scheduleLabel="Request viewing"
-              footer={bookingOffer}
+              footer={footer}
             />
           )}
         </DialogContent>
