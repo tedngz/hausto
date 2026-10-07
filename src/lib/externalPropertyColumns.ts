@@ -1,7 +1,8 @@
 // Columns of public.external_properties that are safe to expose to renters.
-// Contact fields (contact_name, contact_phone) and `source_url` are
-// deliberately absent: the source posting carries the agent's number, and
-// renters reach agents only through a viewing request (CLAUDE.md invariant 4).
+// Contact fields (contact_name, contact_phone, contact_phone_e164) and
+// `source_url` are deliberately absent: the source posting carries the agent's
+// number, and a renter gets it in one place only - the listing page, signed
+// in, through `reveal_listing_contact` (CLAUDE.md invariant 4, SPEC §6).
 // Admin screens read them through `get_external_property_contacts` and
 // `admin_external_listing_sources`, which answer admins only.
 //

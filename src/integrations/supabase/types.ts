@@ -2086,6 +2086,7 @@ export type Database = {
       price_confidence_for: { Args: { _price_vnd: number }; Returns: string }
       prune_orphan_listing_group_refs: { Args: never; Returns: number }
       release_job: { Args: { _error: string; _id: string }; Returns: undefined }
+      reveal_listing_contact: { Args: { _listing_id: string }; Returns: Json }
       set_fast_track_archived: {
         Args: { _archived: boolean; _request_id: string }
         Returns: {

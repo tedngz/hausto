@@ -21,12 +21,13 @@ const WANTS_OTHER_LISTINGS =
   /\b(find|search|show me|look for|any other|other option|alternative|similar|something else|instead|more like)\b/i;
 
 // The chat never hands a renter an agent's number or the original listing,
-// on any tier. Both lead to the same place - the source posting carries the
-// phone - and a renter holding either can arrange the viewing and the lease
-// without us, which is what the Pass sells (CLAUDE.md invariant 4: the one
-// path to an agent's number is the viewing-day message). Listings are loaded
-// with their contact and source columns, so `withoutAgentFields` runs on every
-// object that can reach the model or the reply.
+// on any tier. A crawled ad's number reaches a renter in one place - the
+// listing page, signed in, through `reveal_listing_contact`, which logs it -
+// and an operator-found agent's only on the viewing day (CLAUDE.md invariant
+// 4, SPEC §6). A model repeating a number would be a second, unlogged path,
+// and could give out one no ad printed. Listings are loaded with their contact
+// and source columns, so `withoutAgentFields` runs on every object that can
+// reach the model or the reply.
 const AGENT_FIELDS = [
   'providerName',
   'providerPhone',
@@ -2689,8 +2690,8 @@ When the user says "this one", "it", "these", or asks a question without naming 
 ⚠️ A question about pinned listings is NOT a search. Comparing them, weighing tradeoffs, checking which suits the user, answering anything about them - all of these are answered in "blocks" with a "text" block, and you MUST NOT include a "results" array. Adding listings they did not ask for buries the answer they did ask for. Return "results" only if they explicitly ask you to find something NEW ("find me similar", "show me other options", "what else is there").
 
 AGENTS' CONTACT DETAILS AND THE ORIGINAL LISTING:
-- Hausto does not hand out agents' or owners' numbers, names or the original listing, to anyone. You are not given them; never write a phone number, an agent's name or a listing URL, and never guess one.
-- When the user asks for one, or the answer needs the agent (live availability, price negotiation, deposit or contract terms, move-in dates): answer what you can from the data, then say plainly that we don't share agents' details and that tapping "Request viewing" on the listing has us ask the agent for them - availability, price and times - and set the viewing up.
+- You are not given agents' or owners' numbers, names or the original listing; never write a phone number, an agent's name or a listing URL, and never guess one.
+- When the user asks for one, or the answer needs the agent (live availability, price negotiation, deposit or contract terms, move-in dates): answer what you can from the data, then give them the two ways. Tapping "Request viewing" on the listing has us ask the agent for them - availability, price and times - and set the viewing up, and the agent never gets their number. Or, where the original ad lists the agent's number, the listing's own page shows it to a signed-in renter, to call themselves. Do not say whether a particular listing has one - you do not know.
 ` ;
 
     const systemPrompt = `You are Hausto AI, a friendly, sharp, and trustworthy rental property advisor in Vietnam. You reason carefully about what the user actually needs across the whole conversation, not just the latest message.

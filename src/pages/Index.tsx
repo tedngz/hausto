@@ -6,11 +6,11 @@ const Index = () => {
   return (
     <CurrencyProvider>
       <Helmet>
-        <title>Hausto - Rental vibe check</title>
-        <meta name="description" content="Find rental apartments in Ho Chi Minh City, Hanoi, and Da Nang with AI vibe matching. Ask the AI for what you want and get homes that match your style." />
+        <title>Hausto - Vibe check your next home</title>
+        <meta name="description" content="Ho Chi Minh City rentals, vibe checked. Let our AI deal with the agents - you just show up." />
         <link rel="canonical" href="https://hausto.lovable.app/" />
-        <meta property="og:title" content="Hausto - AI-Powered Property Discovery in Vietnam" />
-        <meta property="og:description" content="Find rental apartments in Vietnam with AI vibe matching. Ask the AI for what you want and get properties that match your style." />
+        <meta property="og:title" content="Hausto - Vibe check your next home" />
+        <meta property="og:description" content="Ho Chi Minh City rentals, vibe checked. Let our AI deal with the agents - you just show up." />
         <meta property="og:url" content="https://hausto.lovable.app/" />
       </Helmet>
       <LandingPage />

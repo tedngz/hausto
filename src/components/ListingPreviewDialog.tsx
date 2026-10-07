@@ -124,9 +124,9 @@ export const ListingPreviewDialog = ({
         ))}
       </ul>
       {/* Our own page only. A crawled listing's original ad carries the
-          agent's number, and renters reach agents through a viewing
-          request (CLAUDE.md invariant 4) - so an outside link is dropped
-          here even if a caller passes one. */}
+          agent's number, which only the listing page gives out, signed in
+          (CLAUDE.md invariant 4) - so an outside link is dropped here even
+          if a caller passes one. */}
       {source?.href?.startsWith('/') && (
         <a
           href={source.href}

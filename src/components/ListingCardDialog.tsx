@@ -31,7 +31,8 @@ const toApartment = (p: any, external: boolean): Apartment => ({
   amenities: p.amenities || [],
   vibe_analysis: p.vibe_analysis,
   rooms: p.rooms ?? null,
-  // Never the original listing: it carries the agent's number.
+  // Never the original listing: it carries the agent's number, which only the
+  // listing page gives out (AgentContact).
   property_source_link: external ? undefined : p.property_source_link,
   last_verified_at: external ? p.last_verified_at ?? null : null,
   realtor: { id: external ? 'external' : p.realtor_id, name: 'Property Owner', phone: '', email: '' },
