@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ANALYZE_COUNT } from '../_shared/vibe-policy.ts';
-import { assessRun } from '../_shared/crawl-telemetry.ts';
+import { assessRun, BLIND_STREAK, blindStreak } from '../_shared/crawl-telemetry.ts';
+import { sameBodyHash } from '../_shared/qstash-body-hash.ts';
 
 // The Supabase edge runtime's own global, which Deno's types do not declare.
 // Type-only: erased at compile time, so it changes nothing that runs.
@@ -93,11 +94,11 @@ async function verifyQStashSignature(signature: string, body: string): Promise<b
             console.log('[scheduled-crawl] QStash JWT expired');
             continue;
           }
-          // Verify body hash if present
+          // Verify body hash if present. QStash sends it in base64url, so it is
+          // compared alphabet- and padding-blind (_shared/qstash-body-hash.ts).
           if (payload.body) {
             const bodyHash = await crypto.subtle.digest('SHA-256', encoder.encode(body));
-            const bodyHashB64 = btoa(String.fromCharCode(...new Uint8Array(bodyHash)));
-            if (payload.body !== bodyHashB64) {
+            if (!sameBodyHash(String(payload.body), new Uint8Array(bodyHash))) {
               console.log('[scheduled-crawl] QStash body hash mismatch');
               continue;
             }
@@ -1270,7 +1271,11 @@ Deno.serve(async (req) => {
 
     const newListings = scrapeResult?.newListings || 0;
     const updatedListings = scrapeResult?.updatedListings || 0;
-    const duplicatesSkipped = scrapeResult?.duplicatesSkipped || 0;
+    // Listings the search page showed that the index already holds are
+    // duplicates as much as the ones the saver dedupes, and they are most of
+    // any page. Uncounted, a page full of them read as an empty page.
+    const knownOnPage = scrapeResult?.knownOnPage || 0;
+    const duplicatesSkipped = (scrapeResult?.duplicatesSkipped || 0) + knownOnPage;
     const filtered = scrapeResult?.filtered || 0;
     let vibeAnalyzed = 0;
 
@@ -1452,6 +1457,22 @@ Deno.serve(async (req) => {
         `[scheduled-crawl] UNHEALTHY ${bestTarget.marketplace}/${bestTarget.location}: ` +
         `${assessment.verdict} - ${assessment.message}`,
       );
+    }
+
+    // One empty page is a quiet district; many in a row is a source we have
+    // stopped seeing, which no single run's verdict can say (blindStreak).
+    try {
+      const { data: recent } = await supabase
+        .from('crawl_runs')
+        .select('attempted')
+        .eq('source', bestTarget.marketplace)
+        .not('finished_at', 'is', null)
+        .order('started_at', { ascending: false })
+        .limit(BLIND_STREAK);
+      const blind = blindStreak(bestTarget.marketplace, (recent ?? []) as { attempted: number | null }[]);
+      if (blind) console.error(`[scheduled-crawl] UNHEALTHY ${blind}`);
+    } catch (e) {
+      console.warn('[scheduled-crawl] blind-streak readback failed:', e);
     }
 
     const summary = {
