@@ -179,7 +179,7 @@ One per renter intake. Status is **derived** - see §3.
 id              uuid pk
 ref             text unique not null      -- short human ref, e.g. HV-4KX2
 renter_id       uuid references renters(id)
-availability    jsonb not null            -- chosen windows, Asia/Ho_Chi_Minh
+availability    jsonb not null            -- chosen windows, Asia/Ho_Chi_Minh; the current ones (AVAILABILITY_CHANGED, §9)
 inquiry_id      uuid references complex_inquiries  -- made from an offer link (§11)
 created_at      timestamptz default now()
 ```
@@ -429,7 +429,8 @@ Request states, derived: `DRAFT` → `SUBMITTED` → `CONTACTING` → `ASSEMBLIN
 
 Item states, derived: `PENDING` → `CONTACTED` → one of `CONFIRMED`,
 `ALTERNATIVE_OFFERED`, `UNAVAILABLE`, `ALREADY_RENTED`, `PRICE_CHANGED`,
-`NO_RESPONSE`, `UNREACHABLE`.
+`NO_RESPONSE`, `UNREACHABLE` - and, from any of them, `WITHDRAWN` when the
+renter takes the place out (§9, "Changing a request").
 
 **Partial success is the happy path.** Three confirmed of five requested is the
 normal outcome. Any function signature or UI state that assumes all items resolve
@@ -481,6 +482,8 @@ Event types:
 | `REPLIES_ACKNOWLEDGED` | request | `{message_ids[]}` - replies read and judged to need no answer. Clears waiting replies; no state, no clock |
 | `LOCK_IN_CHECKOUT_OPENED` | request | `{checkout_id, expires_at}` - a Pass checkout opened from the lock-in page (§9). Moves no state; adds to `checkouts` on the view, once per checkout. One opened before the deadline holds the plan until it expires |
 | `REQUEST_CONFIRMED` | request | `{confirmed_item_ids[], cover?, checkout_id?}` - the lock-in (§9). `cover` ∈ `PASS`, `FREE_VIEWING` (`COVERS`); absent on confirmations from before the pricing rework. Sets `confirmedCover` on the view |
+| `ITEM_WITHDRAWN` | item | `{}` - the renter took the place out (§9). Final: the item is `WITHDRAWN` whatever its agent says after; what the agent had said is kept as `withdrawnFrom`. Left out of `summarise` and the itinerary's "3 of 5" |
+| `AVAILABILITY_CHANGED` | request | `{availability, previous}` - the renter's new times, before assembly (§9). Every item whose answer was about the old times (`CONTACTED`, `CONFIRMED`, `ALTERNATIVE_OFFERED`, `UNAVAILABLE`, `NO_RESPONSE`) goes back to `PENDING` with no slots or nudges; rented, re-priced and unreachable stand. Each `PENDING` item counts a `round`; one whose agent was holding time carries `staleHold` until they are asked again or answer. Moves `ASSEMBLING` back to `CONTACTING` |
 | `REQUEST_CANCELLED` | request | `{reason, note?}` - `reason` ∈ `CANCEL_REASONS` (`RENTER_DECLINED`, `RENTER_FOUND_PLACE`, `RENTER_UNRESPONSIVE`, `DUPLICATE`, `NOT_LOCKED_IN`, `OTHER`); who cancelled is the event's `actor` - `SYSTEM` for `NOT_LOCKED_IN` (§9) |
 | `REQUEST_FAILED` | request | `{reason, substitute_listing_ids[]}` |
 
@@ -598,7 +601,12 @@ number") and listed first in the body with their title, the masked number the
 listing shows and its link, because nobody can be asked about them until a
 person finds the number and saves it with `RECORD_CONTACT`.
 
-**A broker is owed the renter's decision once the request closes**
+**A broker is owed the renter's decision once the request closes** - or, for a
+place the renter removed (`WITHDRAWN`, §9), at once: a removed place whose
+agent was holding time is owed `RELEASE` while the rest of the request goes
+on. A broker still holding a slot at times the renter has since changed
+(`staleHold`) is owed `RELEASE` if the request closes before they are asked
+again.
 (`realtorDecisionsOwed` in `reminders.ts`): `CONFIRM` for an item the renter
 kept that reached `CONFIRMED`, `RELEASE` for any other item still holding time
 (`CONFIRMED`, `ALTERNATIVE_OFFERED`, `CONTACTED`). A broker who said no is
@@ -712,7 +720,7 @@ beside it (invariant 8): for one place whose ad lists a number,
 `RequestViewingModal` opens on a choice (`ViewingChoice`), "How do you want to
 see it?" - **We arrange it** (the Pass's, past one free place - §9) or **Call
 the agent yourself** (free; the agent
-gets the renter's number, and many speak only Vietnamese). Several places, or
+gets the renter's number, and many speak only the local language). Several places, or
 an ad with no number, go straight to the request. The same modal opens from
 every card, the listing page and the listing preview, so there is one place to
 change. It is held in one place:
@@ -1073,6 +1081,53 @@ third tripped the 3-in-a-row rule), and never went out once the window had shut.
   case, days after the "yes"): the approved `viewing_reminder` template, with
   every viewing on one line in its place parameter, cut at 700 characters with
   the rest left to the renter's reply.
+
+### Changing a request (the Viewings tab, 2026-10-08)
+
+The hub's Viewings tab shows each of the renter's requests with its places
+and where each stands, and lets them change it. One function,
+`viewing-request-manage`: signed in, for the account a request belongs to
+only, like the lock-in page.
+
+**What they see** (`renter-view.ts`). The log is reduced on the server and
+handed over as words - `events` is not readable from a browser, and a client
+reducing half a log would show a state the system does not agree with. Per
+place: asking the agent, free at a time, locked in, other times offered, not
+free, rented, a new price, no answer, removed. The DTO has no agent field of
+any kind (§6). Closed requests fold away under live ones.
+
+**What they may change** (`renter-edits.ts`), each one an event:
+
+| Change | When | Writes |
+|---|---|---|
+| Remove a place | Until the plan is locked in; after, a kept place whose viewing is still ahead. Never the last place - that is cancelling | `ITEM_WITHDRAWN`, actor `RENTER` |
+| New times | `SUBMITTED` or `CONTACTING`, nothing assembled, held or delivered. Checked by `validateAvailability`, as at intake | `viewing_requests.availability` to the new windows, and `AVAILABILITY_CHANGED` with both |
+| Cancel | As for removing | the console's own `CANCEL_REQUEST` under `RENTER`, reason `RENTER_FOUND_PLACE` or `RENTER_DECLINED` |
+| Add a place | While the request is joinable (§1, `pickJoinable`) | the request modal's join, opened with places from the renter's saved Matches; `requestGate` applies (§9) |
+
+New times live in the column because everything that asks an agent reads it -
+the planner's drafts, paste-parse's windows, the console; the event records
+the change and is what sends agents back to be asked. The AI operator's
+proposals are keyed on the item's `round`, so a second ask is a new proposal
+("one proposal per situation, ever"), and an agent asked before reads that the
+renter changed the time (`draftForRealtor`, `rescheduled`).
+
+Nothing here messages an agent. A removed place makes its agent owed a release
+(§4), new times make agents owed a new ask, and the operator - a person or
+the AI operator - sends those. What it does stop is an ask or chaser still
+`QUEUED` and unclaimed in the bridge's outbox for the place or the request,
+marked `FAILED` with an error starting `superseded:` (the console does not
+offer to retry those).
+
+**WhatsApp.** One line to the renter per change, free-form, while their window
+is open ("Done - HV-4KX2 now asks for Tue 29 Sept afternoon... We are asking
+the agents about the new times."), logged as `HOLDING_UPDATE_SENT`. With the
+window shut, after two unanswered messages, or opted out, nothing is sent and
+the change stands: it is on the page they made it on, and a template saying so
+would be a billed message telling them what they just did.
+
+**Operators** are emailed every change (`ops-alert.ts`): the ref, what
+changed, and what is now owed - nothing about the renter.
 
 ---
 

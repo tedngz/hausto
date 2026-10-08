@@ -156,6 +156,7 @@ export function describeStatus(state: string, slots: unknown[], actualPriceVnd?:
     case 'NO_RESPONSE': return 'the agent never answered';
     case 'UNREACHABLE': return 'we could not reach the agent';
     case 'CONTACTED': return 'we have asked the agent and are waiting for an answer';
+    case 'WITHDRAWN': return 'the renter took this place out of the request';
     default: return 'we have not reached the agent yet';
   }
 }

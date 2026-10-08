@@ -349,3 +349,125 @@ describe('ITINERARY_HELD: a plan waiting on the renter\'s reply', () => {
     expect(view.heldItinerary).toBeUndefined();
   });
 });
+
+describe('ITEM_WITHDRAWN: the renter took a place out', () => {
+  function log() {
+    seq = 0;
+    return [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+      ev('REALTOR_CONTACTED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-09-14T03:00:00.000Z' }] } }),
+      ev('ITEM_WITHDRAWN', { item: 'i1' }),
+    ];
+  }
+
+  it('is final, and keeps what the agent had said underneath', () => {
+    const view = reduceRequest(REQ, log());
+    expect(view.items.i1.state).toBe('WITHDRAWN');
+    expect(view.items.i1.withdrawnFrom).toBe('CONFIRMED');
+    expect(view.items.i2.state).toBe('PENDING');
+  });
+
+  it('stays withdrawn when the agent answers afterwards, and records what they said', () => {
+    const events = [...log().slice(0, 4), ev('ITEM_WITHDRAWN', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'ALTERNATIVE_OFFERED', slots: [{ starts_at: 'x' }] } })];
+    const view = reduceRequest(REQ, events);
+    expect(view.items.i1.state).toBe('WITHDRAWN');
+    expect(view.items.i1.withdrawnFrom).toBe('ALTERNATIVE_OFFERED');
+  });
+
+  it('leaves the place out of what the renter asked for', () => {
+    const s = summarise(reduceRequest(REQ, log()));
+    expect(s.total).toBe(1);
+    expect(s.confirmed).toBe(0);
+    expect(s.unresolved).toBe(1);
+  });
+
+  it('reduces the same forwards, backwards and shuffled', () => {
+    const events = log();
+    const expected = JSON.stringify(reduceRequest(REQ, events));
+    for (const order of permutations(events)) {
+      expect(JSON.stringify(reduceRequest(REQ, order))).toBe(expected);
+    }
+  });
+
+  it('ignores one with no item', () => {
+    const view = reduceRequest(REQ, [ev('REQUEST_SUBMITTED'), ev('ITEM_ADDED', { item: 'i1' }), ev('ITEM_WITHDRAWN')]);
+    expect(view.items.i1.state).toBe('PENDING');
+  });
+});
+
+describe('AVAILABILITY_CHANGED: the renter gave new times', () => {
+  const slot = { starts_at: '2026-09-14T03:00:00.000Z' };
+  function log() {
+    seq = 0;
+    return [
+      ev('REQUEST_SUBMITTED'),
+      ev('ITEM_ADDED', { item: 'i1' }),
+      ev('ITEM_ADDED', { item: 'i2' }),
+      ev('ITEM_ADDED', { item: 'i3' }),
+      ev('ITEM_ADDED', { item: 'i4' }),
+      ev('REALTOR_CONTACTED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [slot] } }),
+      ev('REALTOR_CONTACTED', { item: 'i2' }),
+      ev('ITEM_NUDGED', { item: 'i2' }),
+      ev('REALTOR_CONTACTED', { item: 'i3' }),
+      ev('OUTCOME_RECORDED', { item: 'i3', payload: { outcome: 'ALREADY_RENTED' } }),
+      ev('AVAILABILITY_CHANGED', { payload: { availability: [{ date: '2026-09-20', part: 'MORNING' }] } }),
+    ];
+  }
+
+  it('sends every answer about the old times back to be asked again', () => {
+    const view = reduceRequest(REQ, log());
+    expect(view.items.i1).toMatchObject({ state: 'PENDING', slots: [], round: 1, staleHold: true });
+    expect(view.items.i1.outcome).toBeUndefined();
+    expect(view.items.i2).toMatchObject({ state: 'PENDING', nudges: 0, round: 1, staleHold: true });
+    expect(view.availabilityChanges).toBe(1);
+  });
+
+  it('keeps answers about the place rather than the day', () => {
+    expect(reduceRequest(REQ, log()).items.i3).toMatchObject({ state: 'ALREADY_RENTED', round: 0 });
+  });
+
+  it('counts a round on a place nobody had asked yet, without a hold', () => {
+    const it4 = reduceRequest(REQ, log()).items.i4;
+    expect(it4).toMatchObject({ state: 'PENDING', round: 1 });
+    expect(it4.staleHold).toBeUndefined();
+  });
+
+  it('clears the old hold once the agent is asked again, or answers', () => {
+    const asked = reduceRequest(REQ, [...log(), ev('REALTOR_CONTACTED', { item: 'i1' })]).items.i1;
+    expect(asked.state).toBe('CONTACTED');
+    expect(asked.staleHold).toBeUndefined();
+    const answered = reduceRequest(REQ, [...log(), ev('OUTCOME_RECORDED', { item: 'i2', payload: { outcome: 'UNAVAILABLE_DATE' } })]).items.i2;
+    expect(answered.state).toBe('UNAVAILABLE');
+    expect(answered.staleHold).toBeUndefined();
+  });
+
+  it('applies only to what happened before it', () => {
+    const events = log();
+    const later = ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-09-20T02:00:00.000Z' }] } });
+    expect(reduceRequest(REQ, [...events, later]).items.i1).toMatchObject({ state: 'CONFIRMED', round: 1 });
+  });
+
+  it('pulls an assembled request back to contacting', () => {
+    seq = 0;
+    const view = reduceRequest(REQ, [
+      ev('REQUEST_SUBMITTED'), ev('ITEM_ADDED', { item: 'i1' }),
+      ev('OUTCOME_RECORDED', { item: 'i1', payload: { outcome: 'CONFIRMED', slots: [slot] } }),
+      ev('ITINERARY_ASSEMBLED', { payload: { ordered_item_ids: ['i1'] } }),
+      ev('AVAILABILITY_CHANGED', { payload: {} }),
+    ]);
+    expect(view.state).toBe('CONTACTING');
+  });
+
+  it('reduces the same forwards, backwards and shuffled', () => {
+    const events = log();
+    const expected = JSON.stringify(reduceRequest(REQ, events));
+    for (const order of permutations(events)) {
+      expect(JSON.stringify(reduceRequest(REQ, order))).toBe(expected);
+    }
+  });
+});

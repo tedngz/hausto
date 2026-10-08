@@ -45,9 +45,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { Loader2, Sun, Sunrise, Sunset } from 'lucide-react';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 import { offerInquiryFor } from '@/lib/offerInquiry';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -55,9 +53,8 @@ import { usePass } from '@/hooks/usePass';
 import { useRenterIdentity } from '@/hooks/useRenterIdentity';
 import { useHasAgentNumber } from '@/hooks/useHasAgentNumber';
 import { ViewingChoice } from '@/components/ViewingChoice';
+import { AvailabilityPicker, PART_LABEL, prettyDate } from '@/components/AvailabilityPicker';
 import {
-  DAY_PARTS,
-  MAX_DAYS_AHEAD,
   MAX_ITEMS,
   MAX_LAPSED_WITHOUT_PASS,
   MIN_LEAD_DAYS,
@@ -72,14 +69,6 @@ import {
 } from '../../supabase/functions/_shared/viewing/intake.ts';
 import { PASS_DAYS, PASS_PRICE_USD } from '../../supabase/functions/_shared/viewing/lock-in.ts';
 
-const MAX_WINDOWS = 6;
-
-const PART_LABEL: Record<DayPart, string> = {
-  MORNING: 'Morning', AFTERNOON: 'Afternoon', EVENING: 'Evening',
-};
-const PART_ICON: Record<DayPart, typeof Sun> = {
-  MORNING: Sunrise, AFTERNOON: Sun, EVENING: Sunset,
-};
 
 export interface RequestSeed {
   listingId: string;
@@ -123,19 +112,6 @@ export function lockInPriceLine(hasPass: boolean): string {
     ? 'Your Pass covers every viewing we arrange.'
     : `This is your free viewing: once the agent confirms, lock it in at no cost. Having us arrange more takes the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days).`;
 }
-
-function partsOf(iso: string) {
-  const d = new Date(`${iso}T00:00:00`);
-  return {
-    weekday: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-    day: d.toLocaleDateString('en-GB', { day: 'numeric' }),
-    month: d.toLocaleDateString('en-GB', { month: 'short' }),
-  };
-}
-const prettyDate = (iso: string) => {
-  const p = partsOf(iso);
-  return `${p.weekday} ${p.day} ${p.month}`;
-};
 
 /** A numbered step, so the modal reads in an order. */
 function Step({ n, title, hint, children }: {
@@ -232,16 +208,6 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
   const today = hcmcDate(new Date());
   const earliest = addDays(today, MIN_LEAD_DAYS);
 
-  const days = useMemo(() => {
-    const out: string[] = [];
-    for (let i = MIN_LEAD_DAYS; i <= MAX_DAYS_AHEAD; i++) out.push(addDays(today, i));
-    return out;
-  }, [today]);
-
-  const chosenDates = useMemo(
-    () => [...new Set(picked.map(w => w.date))].sort(), [picked],
-  );
-
   /** The joined request's times still ahead, grouped by day, for display. */
   const joinDays = useMemo(() => {
     if (!join) return [];
@@ -252,31 +218,6 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
     }
     return [...byDate.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
   }, [join, today]);
-
-  const toggleDay = (date: string) => {
-    setPicked(prev => {
-      if (prev.some(w => w.date === date)) return prev.filter(w => w.date !== date);
-      if (prev.length >= MAX_WINDOWS) {
-        toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
-        return prev;
-      }
-      return [...prev, { date, part: 'MORNING' }];
-    });
-  };
-
-  const toggleWindow = (date: string, part: DayPart) => {
-    setPicked(prev => {
-      const exists = prev.some(w => w.date === date && w.part === part);
-      // Removing the last part of a day removes the day: an operator cannot act
-      // on "Saturday, no times".
-      if (exists) return prev.filter(w => !(w.date === date && w.part === part));
-      if (prev.length >= MAX_WINDOWS) {
-        toast.error(`Pick up to ${MAX_WINDOWS} time windows.`);
-        return prev;
-      }
-      return [...prev, { date, part }];
-    });
-  };
 
   const submit = async () => {
     if (places.length === 0) return;
@@ -468,59 +409,7 @@ export function RequestViewingModal({ open, onOpenChange, seed, seeds }: Props) 
                   title="When are you free?"
                   hint={`We need two days to reach the agents, so the soonest is ${prettyDate(earliest)}.`}
                 >
-                  <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
-                    {days.map(date => {
-                      const p = partsOf(date);
-                      const on = chosenDates.includes(date);
-                      return (
-                        <button
-                          key={date}
-                          type="button"
-                          onClick={() => toggleDay(date)}
-                          aria-pressed={on}
-                          className={cn(
-                            'flex flex-col items-center rounded-md border px-1 py-1.5 text-center transition-colors',
-                            on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
-                          )}
-                        >
-                          <span className="text-[10px] uppercase opacity-80">{p.weekday}</span>
-                          <span className="text-sm font-semibold leading-tight">{p.day}</span>
-                          <span className="text-[10px] opacity-80">{p.month}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {chosenDates.length > 0 && (
-                    <ul className="mt-3 space-y-2">
-                      {chosenDates.map(date => (
-                        <li key={date} className="rounded-md border p-2">
-                          <div className="mb-1.5 text-sm font-medium">{prettyDate(date)}</div>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            {DAY_PARTS.map(part => {
-                              const on = picked.some(w => w.date === date && w.part === part);
-                              const Icon = PART_ICON[part];
-                              return (
-                                <button
-                                  key={part}
-                                  type="button"
-                                  aria-pressed={on}
-                                  onClick={() => toggleWindow(date, part)}
-                                  className={cn(
-                                    'flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[11px] transition-colors',
-                                    on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
-                                  )}
-                                >
-                                  <Icon className="h-3.5 w-3.5" />
-                                  {PART_LABEL[part]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <AvailabilityPicker value={picked} onChange={setPicked} />
                 </Step>
               )}
 

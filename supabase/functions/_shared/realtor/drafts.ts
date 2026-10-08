@@ -44,6 +44,8 @@ export function draftForRealtor(opts: {
   listingUrl: string | null;
   priceVnd: number;
   availability: { date: string; part: string }[];
+  /** Asked before, at times the renter has since changed (AVAILABILITY_CHANGED). */
+  rescheduled?: boolean;
 }): string {
   const windows = opts.availability
     .map(w => `${dayMonth(w.date)} ${PART_VI[w.part] ?? w.part.toLowerCase()}`)
@@ -52,7 +54,10 @@ export function draftForRealtor(opts: {
   return [
     'Chào anh/chị,',
     '',
-    `Bên em có khách muốn xem căn: ${opts.listingTitle}` +
+    // Said first, so the agent does not hold both the old time and the new.
+    (opts.rescheduled
+      ? `Khách bên em xin đổi lịch xem căn: ${opts.listingTitle}`
+      : `Bên em có khách muốn xem căn: ${opts.listingTitle}`) +
       (opts.listingUrl ? ` (${opts.listingUrl})` : ''),
     `Giá đang đăng: ${vnd(opts.priceVnd)}/tháng.`,
     '',

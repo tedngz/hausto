@@ -11,7 +11,7 @@
 // just after the deadline - without waiting for it.
 
 import type { RequestView, RealtorDecision } from '../viewing-domain.ts';
-import { summarise } from '../viewing-domain.ts';
+import { summarise, HOLDING_TIME_STATES } from '../viewing-domain.ts';
 import type { DomainEvent } from '../viewing-domain.ts';
 import { viewingDayDue } from './viewing-day.ts';
 import { SERVICE_WINDOW_MS } from '../whatsapp/send.ts';
@@ -240,18 +240,30 @@ export function holdingUpdateOnHold(opts: {
  *
  * Without this the renter's "yes" stopped at us: the broker who offered
  * Saturday at ten was never told to expect anyone, or to stop expecting them.
+ *
+ * Two things do not wait for the request to close (2026-10-08). A place the
+ * renter removed (WITHDRAWN) owes its broker a release at once, if they were
+ * holding time - the renter has decided about that place. And a broker who
+ * was holding a slot at times the renter has since changed (`staleHold`) is
+ * owed one if the request ends before they are asked about the new times.
  */
 export function realtorDecisionsOwed(view: RequestView): { itemId: string; decision: RealtorDecision }[] {
-  if (!CLOSED.has(view.state)) return [];
+  const closed = CLOSED.has(view.state);
   const kept = new Set(view.state === 'CONFIRMED' ? view.confirmedItemIds : []);
   const owed: { itemId: string; decision: RealtorDecision }[] = [];
   for (const item of Object.values(view.items)) {
-    // Kept and actually holding a confirmed slot. A kept id on an item that
-    // never reached CONFIRMED has no time to name, and telling a broker to
-    // hold nothing in particular is a message they cannot act on.
-    const needed: RealtorDecision | null = kept.has(item.itemId) && item.state === 'CONFIRMED'
-      ? 'CONFIRM'
-      : HOLDING_TIME.has(item.state) ? 'RELEASE' : null;
+    let needed: RealtorDecision | null = null;
+    if (item.state === 'WITHDRAWN') {
+      const underneath = item.withdrawnFrom;
+      if ((underneath && HOLDING_TIME.has(underneath)) || item.staleHold) needed = 'RELEASE';
+    } else if (closed) {
+      // Kept and actually holding a confirmed slot. A kept id on an item that
+      // never reached CONFIRMED has no time to name, and telling a broker to
+      // hold nothing in particular is a message they cannot act on.
+      needed = kept.has(item.itemId) && item.state === 'CONFIRMED'
+        ? 'CONFIRM'
+        : HOLDING_TIME.has(item.state) || item.staleHold ? 'RELEASE' : null;
+    }
     // Owed until the broker's last word from us matches. A broker confirmed
     // on Monday for a request cancelled on Tuesday is holding a slot for
     // nobody, and is owed a release despite having been told once already.
@@ -261,7 +273,7 @@ export function realtorDecisionsOwed(view: RequestView): { itemId: string; decis
 }
 
 /** Item states in which a broker is holding a slot, or still looking for one. */
-const HOLDING_TIME = new Set(['CONFIRMED', 'ALTERNATIVE_OFFERED', 'CONTACTED']);
+const HOLDING_TIME: ReadonlySet<string> = HOLDING_TIME_STATES;
 
 function lastEventTime(events: DomainEvent[], itemId: string, types: string[]): number | null {
   let last: number | null = null;
