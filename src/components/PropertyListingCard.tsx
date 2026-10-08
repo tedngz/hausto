@@ -19,6 +19,7 @@ import { openDeepScan } from '@/lib/deepScanEvents';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DeepVibeAnalysis } from '@/components/DeepVibeAnalysis';
 import { RequestViewingModal } from '@/components/RequestViewingModal';
+import { RequestViewingOffer } from '@/components/RequestViewingOffer';
 
 // Full listing card for the individual property page: a 16:9 gallery on top and
 // a details panel below (badges, title/price, vibe tags, description, amenities).
@@ -418,14 +419,19 @@ export const PropertyListingCard = ({
             ended in someone visiting a flat. */}
         {shortlistable && (
           <>
-            <Button
-              className="w-full rounded-full mt-1"
-              size="lg"
-              onClick={e => { e.preventDefault(); e.stopPropagation(); setRequestOpen(true); }}
-              disabled={isBooking}
-            >
-              {isBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Request viewing'}
-            </Button>
+            {/* Held to a pill's width and centred over its small print, as in
+                the listing preview, rather than stretched across the card. */}
+            <div className="flex justify-center mt-1">
+              <Button
+                className="w-full rounded-full sm:w-auto sm:min-w-64 sm:px-12"
+                size="lg"
+                onClick={e => { e.preventDefault(); e.stopPropagation(); setRequestOpen(true); }}
+                disabled={isBooking}
+              >
+                {isBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Request viewing'}
+              </Button>
+            </div>
+            <RequestViewingOffer />
             <RequestViewingModal
               open={requestOpen}
               onOpenChange={setRequestOpen}

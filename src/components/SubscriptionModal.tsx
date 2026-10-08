@@ -41,8 +41,8 @@ const AI_CREDITS = FREE_TIER_LIMITS.dailyAiRequests;
 const FREE: Feature[] = [
   { lead: '1 free viewing', rest: ' - we arrange one place with its agent' },
   { lead: "Agents' numbers", rest: ' - where the ad lists one, to call yourself' },
-  { lead: `${AI_CREDITS} AI credits`, rest: ' a day' },
   { lead: 'Basic vibe analysis' },
+  { lead: `${AI_CREDITS} AI credits`, rest: ' a day' },
 ];
 
 const PASS: Feature[] = [
@@ -50,8 +50,8 @@ const PASS: Feature[] = [
   { lead: 'Availability at any building', rest: ' - we ask the agents who hold units there' },
   { lead: 'Priority search', rest: ' - our team puts your search first and sends you places that fit' },
   { lead: 'Match alerts', rest: ' - new places that fit you, up to 2 a week on WhatsApp' },
+  { lead: 'Deep Scans', rest: ' - an honest read of any place, with its price history and time on the market' },
   { lead: 'Unlimited AI credits' },
-  { lead: 'Unlimited Deep Scans', rest: ' - an honest read of any place, with its price history and time on the market' },
 ];
 
 const reasonMessages = {

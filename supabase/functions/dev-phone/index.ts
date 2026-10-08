@@ -21,6 +21,7 @@ import { decideAction } from '../_shared/viewing/agent.ts';
 import { performAction } from '../_shared/viewing/agent-act.ts';
 import { adapterFromEnv } from '../_shared/whatsapp/adapter.ts';
 import { releaseHeldItinerary } from '../_shared/viewing/deliver.ts';
+import { isAcknowledgement } from '../_shared/whatsapp/send.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -114,6 +115,7 @@ Deno.serve(async (req) => {
     inquiryId: outcome.inquiryId,
     lockIn: outcome.lockIn,
     link: outcome.link,
+    received: outcome.received,
   });
 
   let agent: unknown = { decided: action.kind, reason: action.kind === 'NONE' ? action.reason : undefined };
@@ -146,7 +148,7 @@ async function readThread(db: any, phone: string) {
 
   const { data: messages } = await db
     .from('messages')
-    .select('id, request_id, direction, body, template_name, status, error, created_at, sent_at')
+    .select('id, request_id, direction, body, template_name, status, error, created_at, sent_at, idempotency_key')
     .eq('to_phone', phone)
     .order('created_at', { ascending: true })
     .limit(200);
@@ -154,6 +156,8 @@ async function readThread(db: any, phone: string) {
   let consecutiveOutbound = 0;
   for (const m of [...(messages ?? [])].reverse()) {
     if (m.direction === 'IN') break;
+    // Counted as send.ts counts it: a receipt answers the renter's message.
+    if (isAcknowledgement(m.idempotency_key)) continue;
     consecutiveOutbound++;
   }
 

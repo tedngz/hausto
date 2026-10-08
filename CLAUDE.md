@@ -110,10 +110,10 @@ a window the function will refuse.
 Cards carry a single "Request viewing" button, which opens
 `RequestViewingModal`. "Shortlist" and "Book viewing" used to sit side by side
 and asked the renter to care about a distinction that was ours. For one place
-whose ad lists the agent's number, the modal opens on a choice - we arrange
-it, or call the agent yourself (`ViewingChoice`, invariant 4) - behind the
-button, never beside it; several places, or an ad with no number, go straight
-to the request. Fast-Track is
+the modal opens on a choice - we arrange it, or call the agent yourself
+(`ViewingChoice`, invariant 4) - behind the button, never beside it, and the
+same for every renter, Pass or not (2026-10-08); an ad with no number says so
+under the second. Several places go straight to the request. Fast-Track is
 retired as a renter surface, and since the pricing rework no screen opens its
 scheduler; its plumbing stays for history. The modal requests the place it was
 opened from (or the places selected in Browse); a place asked for while a

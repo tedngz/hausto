@@ -20,7 +20,7 @@
 //      see the top of `decideAction`.
 
 import type { Intent } from './intent.ts';
-import type { LockInPrompt, WatchOutcome } from './routing.ts';
+import type { LockInPrompt, RequestReceived, WatchOutcome } from './routing.ts';
 import type { WatchProblem } from './watch.ts';
 import type { ConfirmedInquiry } from './concierge.ts';
 import type { LinkOutcome } from './account-link.ts';
@@ -52,7 +52,9 @@ export type AgentAction =
   /** They said yes to a plan without the Pass. Say where to lock it in (SPEC §9). */
   | { kind: 'LOCK_IN_LINK'; lockIn: LockInPrompt }
   /** They sent an account link code. Say whether it worked (account-link.ts). */
-  | { kind: 'ACCOUNT_LINKED'; link: LinkOutcome };
+  | { kind: 'ACCOUNT_LINKED'; link: LinkOutcome }
+  /** Their first message on a request still being worked. Say it is in hand. */
+  | { kind: 'REQUEST_RECEIVED'; received: RequestReceived };
 
 export interface AgentInput {
   enabled: boolean;
@@ -76,6 +78,8 @@ export interface AgentInput {
   lockIn?: LockInPrompt;
   /** Set when the message carried an account link code. */
   link?: LinkOutcome;
+  /** Set on the handshake of a request still being worked (routing.ts). */
+  received?: RequestReceived;
 }
 
 /**
@@ -126,6 +130,12 @@ export function decideAction(input: AgentInput): AgentAction {
   // off. Silence here would leave a renter believing they had said yes.
   if (!stopping && input.lockIn) {
     return { kind: 'LOCK_IN_LINK', lockIn: input.lockIn };
+  }
+  // The renter's first message, which the confirmation page told them to
+  // send: answered with the receipt, agent on or off (owner's decision,
+  // 2026-10-08) - they should know a person has the request.
+  if (!stopping && input.received) {
+    return { kind: 'REQUEST_RECEIVED', received: input.received };
   }
 
   if (!input.enabled) return { kind: 'NONE', reason: 'agent disabled' };

@@ -4,6 +4,7 @@ import type { LatLngExpression, LayerGroup, Map as LeafletMap, Marker, PopupEven
 import type { Complex } from '@/hooks/useComplexes';
 import cityDistrictsData from '@/data/cityDistricts.json';
 import { getBasemap } from '@/lib/basemap';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 type City = 'ho_chi_minh' | 'hanoi';
 
@@ -201,7 +202,7 @@ function spanOfRings(rings: [number, number][][]): number {
   return Math.max(maxLat - minLat, maxLng - minLng);
 }
 
-function formatBracket(c: Complex): string | null {
+function formatBracket(c: Complex, fmt: (usd: number) => string): string | null {
   const b = c.average_rent_brackets;
   if (!b) return null;
   // Bracket keys are stored lowercase ("1br"/"2br"/"3br"); match case-insensitively.
@@ -209,7 +210,7 @@ function formatBracket(c: Complex): string | null {
     Object.entries(b).find(([key]) => key.toLowerCase() === k)?.[1];
   const pick = byKey('2br') ?? byKey('1br') ?? byKey('3br') ?? Object.values(b)[0];
   if (!pick || typeof pick.min !== 'number' || typeof pick.max !== 'number') return null;
-  return `$${pick.min.toLocaleString()} — $${pick.max.toLocaleString()}`;
+  return `${fmt(pick.min)} - ${fmt(pick.max)}`;
 }
 
 function esc(s: string) {
@@ -227,6 +228,9 @@ interface Props {
 
 export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideHeader, hideChrome, initialCityOverride }: Props) {
   const navigate = useNavigate();
+  // Rent bands are stored in USD and shown in the renter's currency; the pins
+  // are redrawn when it changes.
+  const { currency, formatUsd } = useCurrency();
   const focusComplex = useMemo(
     () => (focusComplexId ? complexes.find((c) => c.id === focusComplexId) : undefined),
     [complexes, focusComplexId],
@@ -508,7 +512,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
           iconAnchor: isFocus ? [16, 16] : [6, 6],
         });
         const marker = L.marker([c.latitude!, c.longitude!], { icon, title: c.name });
-        const bracket = formatBracket(c);
+        const bracket = formatBracket(c, formatUsd);
         const premium = c.tags?.some((t) => t.toLowerCase() === 'luxury');
         const popupHtml = `
           <div class="hausto-popup-card" style="width:240px;">
@@ -521,7 +525,7 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
               <p style="color:rgba(13,79,74,0.6);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;">${esc(c.district)}</p>
               ${bracket ? `<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;border-top:1px solid rgba(13,79,74,0.05);">
                 <span style="color:#0D4F4A;font-size:12px;font-weight:600;">${esc(bracket)}</span>
-                <span style="color:rgba(13,79,74,0.4);font-size:9px;">USD/mo</span>
+                <span style="color:rgba(13,79,74,0.4);font-size:9px;">/mo</span>
               </div>` : ''}
             </div>
           </div>`;
@@ -540,7 +544,8 @@ export function ComplexMapCanvas({ complexes, focusComplexId, focusLatLng, hideH
 
       [0, 120, 300, 650, 1100].forEach((ms) => window.setTimeout(refitFocus, ms));
     })();
-  }, [city, cityComplexes, focusComplex, focusLatLng, mapReady]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- formatUsd follows currency
+  }, [city, cityComplexes, focusComplex, focusLatLng, mapReady, currency]);
 
   const styleBlock = (
     <style>{`

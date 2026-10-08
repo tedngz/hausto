@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { HaustoLogo } from "@/components/HaustoLogo";
 import { Card, CardContent } from "@/components/ui/card";
-import { Home, ShieldCheck, BadgeCheck, Users, Sparkles, ArrowRight, Building2, MessageSquare, LogOut } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
+import { Home, ShieldHalf, BadgeCheck, Users, Sparkles, ArrowRight, Building2, MessageSquare, LogOut } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { HomeAI } from "@/components/HomeAI";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +19,45 @@ export const LandingPage = () => {
   } = useAuth();
   const { data: complexes } = useComplexes();
   const notableComplexes = (complexes ?? []).slice(0, 6);
+
+  // One rhythm down the page: every section starts as far below the one
+  // above it as "Your curated rental hub" starts below the chat box. That
+  // first gap is not a constant - the hero is centred in the first screen, so
+  // it grows with the screen - so it is measured, and the other gaps follow
+  // it (--section-gap on <main>).
+  // A callback ref rather than an effect: <main> mounts after the page's
+  // first render, and the listings under it after their fetch, so the gap is
+  // measured whenever either changes size.
+  const chatRef = useRef<HTMLDivElement>(null);
+  const cleanup = useRef<(() => void) | null>(null);
+  const mainRef = useCallback((main: HTMLElement | null) => {
+    cleanup.current?.();
+    cleanup.current = null;
+    if (!main) return;
+    const ro = new ResizeObserver(() => measure());
+    let tries = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    function measure() {
+      const chat = chatRef.current;
+      const first = main.querySelector<HTMLElement>('[data-first-section]');
+      const heading = first?.querySelector<HTMLElement>('h2');
+      // The listings arrive after a fetch; until their heading is there, look
+      // again shortly (for up to 15 seconds).
+      if (!chat || !first || !heading) {
+        if (tries++ < 60) retry = setTimeout(measure, 250);
+        return;
+      }
+      ro.observe(chat);
+      ro.observe(first);
+      const gap = heading.getBoundingClientRect().top - chat.getBoundingClientRect().bottom;
+      if (gap > 0) main.style.setProperty('--section-gap', `${Math.round(gap)}px`);
+    }
+    measure();
+    ro.observe(main);
+    window.addEventListener('resize', measure);
+    cleanup.current = () => { clearTimeout(retry); ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+  useEffect(() => () => cleanup.current?.(), []);
   const handleSignOut = async () => {
     await signOut();
     // Force reload to reset any app state
@@ -63,8 +103,8 @@ export const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
-      <main>
-      <section className="container mx-auto px-4 py-8 md:py-12">
+      <main ref={mainRef}>
+      <section className="container mx-auto px-4 pt-8 md:pt-12">
         <div className="text-center max-w-4xl mx-auto w-full">
           {/* The hero owns the first screen. It is centred in what is left of
               the viewport once the header, the section padding and the next
@@ -86,7 +126,7 @@ export const LandingPage = () => {
               Let our AI deal with the agents - you just show up.
             </p>
 
-            <div className="mb-4">
+            <div ref={chatRef} className="mb-4">
               {/* The hero chat takes the question and hands it to the hub, which
                   answers it - results need the width and the tabs beside them. */}
               <HomeAI handoffToHub />
@@ -95,12 +135,14 @@ export const LandingPage = () => {
 
           {/* The verified-listings table is the center of the platform: it gets
               the first content slot, rendered as a live preview of /browse. */}
-          <LiveListingsPreview />
+          <div data-first-section>
+            <LiveListingsPreview />
+          </div>
 
           {/* Secondary discovery: complexes keep their cards but not a
               hero-level CTA - the section header link is enough. */}
           {notableComplexes.length > 0 && (
-            <div className="mt-12 text-left">
+            <div className="text-left" style={{ marginTop: 'var(--section-gap, 3rem)' }}>
               <div className="mb-6 text-center">
                 <h2 className="font-serif text-3xl md:text-4xl tracking-tight">Vetted homes renters love</h2>
                 <Link
@@ -119,7 +161,7 @@ export const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 pb-20" style={{ marginTop: 'var(--section-gap, 5rem)' }}>
         <div className="text-center mb-16">
           <h2 className="text-foreground mb-4 font-serif text-4xl font-normal">Renting without the back-and-forth</h2>
         </div>
@@ -142,7 +184,7 @@ export const LandingPage = () => {
           <Card className="bg-card border-border hover:shadow-xl transition-all duration-300 group">
             <CardContent className="p-8 text-center">
               <div className="bg-primary/10 p-4 rounded-full w-fit mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
-                <ShieldCheck className="h-8 w-8 text-primary" />
+                <ShieldHalf className="h-8 w-8 text-primary" />
               </div>
               <h3 className="text-2xl text-foreground mb-4 font-normal font-serif">Your number stays private</h3>
               <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">Agents never get it from us, so no follow-up spam.</p>

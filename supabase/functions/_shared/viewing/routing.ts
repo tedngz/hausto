@@ -9,6 +9,7 @@
 import { recordInbound, type MessageStore, type StoredMessage } from '../whatsapp/send.ts';
 import { upsertRenterByPhone } from '../whatsapp/store.ts';
 import { refFromMessage } from './intake.ts';
+import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { classifyIntent } from './intent.ts';
 import { parseSelection, resolveSelection, MAX_SELECTED, type Offer } from './selection.ts';
 import { freeViewingAvailable, hasPassCover, loadLockIn, lockIn } from './lock-in-run.ts';
@@ -78,6 +79,40 @@ export interface InboundOutcome {
   inquiryId?: string;
   /** Every availability request it answers - one offer can cover several buildings. */
   inquiryIds?: string[];
+  /**
+   * Set on the wa.me handshake while the request is still being worked: the
+   * one reply it gets is the receipt (agent.ts REQUEST_RECEIVED).
+   */
+  received?: RequestReceived;
+}
+
+/** What the receipt for a request names. */
+export interface RequestReceived {
+  requestId: string;
+  ref: string;
+  /** The places in it, as the renter asked for them. */
+  titles: string[];
+}
+
+/**
+ * The receipt, if this request is owed one: still being worked - its agents
+ * being asked - so "we are asking the agents now" is true. A request whose
+ * plan is ready or delivered, or that has closed, is answered by those.
+ */
+// deno-lint-ignore no-explicit-any
+async function receiptFor(db: any, requestId: string): Promise<RequestReceived | undefined> {
+  const [{ data: request }, { data: events }, { data: items }] = await Promise.all([
+    db.from('viewing_requests').select('ref').eq('id', requestId).maybeSingle(),
+    db.from('events').select('id, request_id, item_id, type, payload, actor, occurred_at').eq('request_id', requestId),
+    db.from('ops_request_items_view').select('id, listing_title').eq('request_id', requestId),
+  ]);
+  if (!request) return undefined;
+  const view = reduceRequest(requestId, (events ?? []) as DomainEvent[]);
+  if (view.state !== 'SUBMITTED' && view.state !== 'CONTACTING') return undefined;
+  const titles = ((items ?? []) as { id: string; listing_title: string | null }[])
+    .filter(i => view.items[i.id]?.state !== 'WITHDRAWN')
+    .map(i => String(i.listing_title ?? 'A place'));
+  return { requestId, ref: String(request.ref), titles };
 }
 
 /** The message of ours a reply is about. */
@@ -345,11 +380,14 @@ export async function handleInbound(
     now: new Date(m.timestamp),
   });
 
+  let received: RequestReceived | undefined;
   if (requestId) {
     // The wa.me handshake - the first message, carrying the ref the deep link
-    // put there - opens the window and answers nothing. Flagged so thread.ts
-    // does not show every new request as a renter waiting on a reply.
+    // put there - opens the window. Flagged so thread.ts does not show every
+    // new request as a renter waiting on a reply; answered with the receipt
+    // (agent.ts), not by an operator.
     const handshake = refFromMessage(m.text) != null && !(await hasReplied(db, requestId));
+    if (handshake && intent !== 'OPT_OUT') received = await receiptFor(db, requestId);
     await db.from('events').insert({
       request_id: requestId,
       type: 'RENTER_REPLIED',
@@ -411,5 +449,6 @@ export async function handleInbound(
     ...(watch ? { watch } : {}),
     ...(alertMessageId ? { alertMessageId } : {}),
     ...(inquiryId ? { inquiryId, inquiryIds } : {}),
+    ...(received && !optedOut ? { received } : {}),
   };
 }

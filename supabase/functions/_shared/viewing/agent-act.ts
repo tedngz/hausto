@@ -20,6 +20,7 @@ import { recordInquiryMessage } from './concierge.ts';
 import { renderLockInReply } from './lock-in.ts';
 import { renderLinkOutcome } from './account-link.ts';
 import { SITE_URL } from './watch.ts';
+import { renderRequestReceived } from './intake.ts';
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -130,6 +131,28 @@ export async function performAction(
         body: renderLockInReply({ siteUrl: SITE_URL, ...action.lockIn }),
       });
       return { performed: action.kind, messageId: result.message.id };
+    }
+
+    if (action.kind === 'REQUEST_RECEIVED') {
+      const r = action.received;
+      const result = await sendFreeForm(store, adapter, {
+        renterId: ctx.renterId,
+        requestId: r.requestId,
+        // Keyed on the request: one receipt however often the renter sends
+        // the link's message, or Meta redelivers it. An acknowledgement, so it
+        // does not count towards three in a row (send.ts).
+        purpose: 'REQUEST_RECEIVED',
+        body: renderRequestReceived({ ref: r.ref, titles: r.titles, siteUrl: SITE_URL }),
+      });
+      // Something the renter heard that was not the plan: it moves the
+      // silence clock and nothing else (SPEC §9).
+      if (!result.deduplicated && result.message.status !== 'FAILED') {
+        await db.from('events').insert({
+          request_id: r.requestId, type: 'HOLDING_UPDATE_SENT',
+          payload: { message_id: result.message.id, purpose: 'REQUEST_RECEIVED' }, actor: 'SYSTEM',
+        });
+      }
+      return { performed: action.kind, messageId: result.message.id, ref: r.ref };
     }
 
     // SEARCH is performed by viewing-agent-search, which owns the OpenAI call,

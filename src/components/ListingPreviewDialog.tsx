@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { CalendarCheck, Languages, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -9,7 +8,7 @@ import {
   type VibeMatchAttributes,
 } from '@/components/EditorialPropertyCard';
 import type { PropertyType } from '@/hooks/useDeepAnalysis';
-import { PASS_DAYS, PASS_PRICE_USD, usePass } from '@/hooks/usePass';
+import { RequestViewingOffer } from '@/components/RequestViewingOffer';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION } from '@/lib/hubLayout';
 import { useHasAgentNumber } from '@/hooks/useHasAgentNumber';
@@ -48,13 +47,6 @@ interface ListingPreviewDialogProps {
   propertyType?: PropertyType;
 }
 
-// Icons in the card's own accent, as its amenities are - a green tick here
-// read as a second design system bolted under the button.
-const OFFER_POINTS = [
-  { icon: CalendarCheck, text: 'We arrange it with the agent' },
-  { icon: Languages, text: 'English-speaking coordination' },
-  { icon: ShieldCheck, text: 'Your contact details stay private' },
-];
 
 export const ListingPreviewDialog = ({
   apartment,
@@ -72,7 +64,6 @@ export const ListingPreviewDialog = ({
   source,
   propertyType = 'internal',
 }: ListingPreviewDialogProps) => {
-  const { pass } = usePass();
 
   // Search truncates descriptions to 300 characters to keep the results
   // payload small, and both surfaces that open this preview - browse and the
@@ -107,49 +98,8 @@ export const ListingPreviewDialog = ({
       ? { ...apartment, description: fullDescription }
       : apartment;
 
-  // Why book through Hausto rather than calling the number on the original
-  // posting. It is the button's small print, so it hangs off the button with
-  // no rules of its own: what it costs first, then what we do, then the way
-  // out to that posting - the offer has to be legible before the exit is.
-  const bookingOffer = onSchedule ? (
-    <div className="flex flex-col items-center gap-2.5 text-center">
-      <p className="text-[12.5px] text-muted-foreground [text-wrap:balance]">
-        {/* Arranging viewings is the Pass's, with one free place per
-            WhatsApp number (requestGate, SPEC §9). */}
-        {pass?.active ? (
-          <>
-            <span className="font-medium text-foreground">Covered by your Pass</span>
-            {' - every viewing we arrange'}
-          </>
-        ) : (
-          <>
-            <span className="font-medium text-foreground">Your first viewing is on us</span>
-            {` - then the Pass ($${PASS_PRICE_USD} for ${PASS_DAYS} days)`}
-          </>
-        )}
-      </p>
-      <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
-        {OFFER_POINTS.map(({ icon: Icon, text }) => (
-          <li key={text} className="flex items-center gap-1.5">
-            <Icon className="w-3.5 h-3.5 flex-shrink-0 text-primary" aria-hidden="true" />
-            <span>{text}</span>
-          </li>
-        ))}
-      </ul>
-      {/* Our own page only. A crawled listing's original ad carries the
-          agent's number, which reaches a renter only through the request
-          modal's choice, signed in and logged (CLAUDE.md invariant 4) - so an
-          outside link is dropped here even if a caller passes one. */}
-      {source?.href?.startsWith('/') && (
-        <a
-          href={source.href}
-          className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-        >
-          View on {source.name}
-        </a>
-      )}
-    </div>
-  ) : null;
+  // The request's small print, as the listing page shows it.
+  const bookingOffer = onSchedule ? <RequestViewingOffer source={source} /> : null;
 
   return (
     <>
@@ -171,7 +121,7 @@ export const ListingPreviewDialog = ({
           // about to ask about. The card carries its own close button, and
           // Escape still works.
           onInteractOutside={embedded ? (e) => e.preventDefault() : undefined}
-          className={`max-w-md sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
+          className={`max-w-md sm:max-w-[760px] max-h-[92dvh] overflow-y-auto overscroll-contain p-0 gap-0 bg-transparent border-0 shadow-none [&>button]:hidden ${
             embedded ? HUB_PANEL_POSITION : ''
           }`}
         >

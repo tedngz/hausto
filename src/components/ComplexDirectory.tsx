@@ -17,18 +17,19 @@ import {
 } from '@/lib/assistantEvents';
 import { HubPanelScrim } from '@/components/hub/HubPanelScrim';
 import { HUB_PANEL_POSITION, HUB_PANE_CENTRED } from '@/lib/hubLayout';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
-/** Rent bands are stored per unit type and quoted in USD, as on the profile. */
-const rentBand = (c: Complex, key: string): string => {
+/** Rent bands are stored per unit type in USD, and shown in the renter's currency. */
+const rentBand = (c: Complex, key: string, fmt: (usd: number) => string): string => {
   const band = c.average_rent_brackets?.[key];
-  return band ? `$${band.min.toLocaleString()} - $${band.max.toLocaleString()}` : '-';
+  return band ? `${fmt(band.min)} - ${fmt(band.max)}` : '-';
 };
 
 // The facts renters actually weigh one building against another on. Deliberately
 // the same shape as the browse table's compare rows: same gesture, same reading.
-const COMPARE_FIELDS: { label: string; get: (c: Complex) => string }[] = [
-  { label: '1BR rent', get: (c) => rentBand(c, '1br') },
-  { label: '2BR rent', get: (c) => rentBand(c, '2br') },
+const COMPARE_FIELDS: { label: string; get: (c: Complex, fmt: (usd: number) => string) => string }[] = [
+  { label: '1BR rent', get: (c, fmt) => rentBand(c, '1br', fmt) },
+  { label: '2BR rent', get: (c, fmt) => rentBand(c, '2br', fmt) },
   { label: 'Completed', get: (c) => (c.year_completed ? String(c.year_completed) : '-') },
   { label: 'Managed by', get: (c) => c.management_company || '-' },
   { label: 'Pets', get: (c) => c.pet_policy || '-' },
@@ -53,6 +54,7 @@ interface ComplexDirectoryProps {
 
 export const ComplexDirectory = ({ embedded = false, onCompareOpenChange }: ComplexDirectoryProps) => {
   const { data: complexes, isLoading } = useComplexes();
+  const { formatUsd } = useCurrency();
   const [city, setCity] = useState<string | null>(null);
   const [district, setDistrict] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
@@ -229,7 +231,7 @@ export const ComplexDirectory = ({ embedded = false, onCompareOpenChange }: Comp
                         {COMPARE_FIELDS.map((f) => (
                           <div key={f.label} className="flex justify-between gap-2">
                             <dt className="text-muted-foreground">{f.label}</dt>
-                            <dd className="text-right font-medium">{f.get(c)}</dd>
+                            <dd className="text-right font-medium">{f.get(c, formatUsd)}</dd>
                           </div>
                         ))}
                       </dl>

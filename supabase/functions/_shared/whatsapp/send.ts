@@ -128,6 +128,21 @@ export const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** More than this many outbound in a row, with no inbound between, is a bug. */
 export const MAX_CONSECUTIVE_OUTBOUND = 2;
 
+/**
+ * Purposes that answer the renter's own message the moment it arrives - the
+ * receipt for their request (agent-act.ts, 2026-10-08). Part of that exchange
+ * rather than the start of a run of ours, so they do not count towards
+ * MAX_CONSECUTIVE_OUTBOUND: without that, the receipt would make the plan or
+ * the viewing-day message a refused third. Keep this list to replies sent at
+ * once, to a message the renter just sent.
+ */
+export const ACKNOWLEDGEMENT_PURPOSES = ['REQUEST_RECEIVED'] as const;
+
+export function isAcknowledgement(idempotencyKey: string | null | undefined): boolean {
+  const purpose = String(idempotencyKey ?? '').split(':')[1] ?? '';
+  return (ACKNOWLEDGEMENT_PURPOSES as readonly string[]).includes(purpose);
+}
+
 export function isWindowOpen(renter: StoredRenter, now: Date): boolean {
   if (!renter.service_window_expires_at) return false;
   return new Date(renter.service_window_expires_at).getTime() > now.getTime();
