@@ -6,6 +6,8 @@ import {
   renderNoSupply,
   renderAlternativesOnly,
   DISTRICT_HOP_MINUTES,
+  busySlots,
+  clashesWith,
   type ItineraryStop,
   type StopListing,
 } from './itinerary.ts';
@@ -354,5 +356,40 @@ describe('other times an agent offered (gap 7)', () => {
     // No plan exists yet, so there is nothing to say YES to.
     expect(text).not.toMatch(/reply yes/i);
     expect(text).toContain('Ref HV-4KX9');
+  });
+});
+
+describe('a clash, found as each agent answers', () => {
+  const view = reduceRequest('r', [
+    ev('REQUEST_SUBMITTED'), ev('ITEM_ADDED', {}, 'a'), ev('ITEM_ADDED', {}, 'b'),
+    ev('OUTCOME_RECORDED', { outcome: 'CONFIRMED', slots: [slot('2026-09-12T02:00:00.000Z', 60)] }, 'a'),
+    ev('OUTCOME_RECORDED', { outcome: 'ALREADY_RENTED' }, 'b'),
+  ]);
+  const busy = busySlots(view, id => `Place ${id}`);
+
+  it('lists the confirmed viewings, each by its first slot', () => {
+    expect(busy).toEqual([{ itemId: 'a', listingTitle: 'Place a', startsAt: '2026-09-12T02:00:00.000Z', durationMinutes: 60 }]);
+  });
+
+  it('finds an overlap either side, and lets back to back through', () => {
+    expect(clashesWith({ startsAt: '2026-09-12T02:30:00.000Z', durationMinutes: 30 }, busy, 'c')).toHaveLength(1);
+    expect(clashesWith({ startsAt: '2026-09-12T01:45:00.000Z', durationMinutes: 30 }, busy, 'c')).toHaveLength(1);
+    expect(clashesWith({ startsAt: '2026-09-12T03:00:00.000Z', durationMinutes: 30 }, busy, 'c')).toHaveLength(0);
+    expect(clashesWith({ startsAt: '2026-09-12T01:30:00.000Z', durationMinutes: 30 }, busy, 'c')).toHaveLength(0);
+  });
+
+  it('agrees with the warning the itinerary gives', () => {
+    const stops = (start: string): ItineraryStop[] => [
+      { itemId: 'a', listingTitle: 'A', districtCode: 'D1', priceVnd: 1, startsAt: '2026-09-12T02:00:00.000Z', durationMinutes: 60 },
+      { itemId: 'c', listingTitle: 'C', districtCode: 'D1', priceVnd: 1, startsAt: start, durationMinutes: 30 },
+    ];
+    for (const start of ['2026-09-12T02:30:00.000Z', '2026-09-12T02:59:00.000Z', '2026-09-12T03:00:00.000Z']) {
+      const overlap = warningsFor(stops(start)).some(w => w.kind === 'OVERLAP');
+      expect(clashesWith({ startsAt: start, durationMinutes: 30 }, busy, 'c').length > 0).toBe(overlap);
+    }
+  });
+
+  it('never counts a place against itself', () => {
+    expect(clashesWith({ startsAt: '2026-09-12T02:00:00.000Z', durationMinutes: 30 }, busy, 'a')).toHaveLength(0);
   });
 });

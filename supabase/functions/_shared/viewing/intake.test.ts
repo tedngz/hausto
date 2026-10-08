@@ -164,11 +164,17 @@ describe('screening candidates', () => {
     expect(rejected[0].reason).toMatch(/price/i);
   });
 
-  it('rejects a row missing any canonical column', () => {
-    for (const missing of [{ price_vnd: null }, { bedrooms: null }, { area_sqm: null }, { district_code: null }]) {
+  it('rejects a row missing a price, a bedroom count or a district', () => {
+    for (const missing of [{ price_vnd: null }, { bedrooms: null }, { district_code: null }]) {
       const { eligible } = screenCandidates(['a'], [ok(missing as Partial<ShortlistCandidate>)]);
       expect(eligible).toHaveLength(0);
     }
+  });
+
+  it('does not ask for a floor area - arranging a viewing never reads it', () => {
+    const { eligible, rejected } = screenCandidates(['a'], [ok({ area_sqm: null })]);
+    expect(eligible).toHaveLength(1);
+    expect(rejected).toHaveLength(0);
   });
 
   it('rejects a listing that went inactive or vanished between shortlist and submit', () => {

@@ -91,7 +91,6 @@ export function isOfferable(c: ShortlistCandidate): boolean {
     && c.price_vnd != null
     && c.price_confidence !== 'LOW'
     && c.bedrooms != null
-    && c.area_sqm != null
     && !!c.district_code;
 }
 

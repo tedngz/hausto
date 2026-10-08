@@ -11,6 +11,7 @@
 
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { planRequest, AGENT_VERSION, type PlanItem, type UnreadReply, type RenterDraft } from './planner.ts';
+import type { BusySlot } from './itinerary.ts';
 import type { ParseContext, ParseSuggestion } from './parse-reply.ts';
 import { describeStatus, type DraftContext, type DraftResult, type ListingFacts, type ThreadLine } from './renter-reply.ts';
 import { waitingReplies } from './thread.ts';
@@ -103,14 +104,23 @@ export async function runPlanner(
     // Unread: a broker's reply stored after the item's last outcome. A reply
     // pasted together with the outcome it produced is older than that outcome
     // and is not unread - it has been read, by the person who recorded it.
+    // So is one we have since written back to the agent about: asked for
+    // another time because theirs clashed, they are waiting on us no longer.
     const lastOutcome = new Map<string, string>();
-    for (const e of events) if (e.type === 'OUTCOME_RECORDED' && e.item_id) lastOutcome.set(e.item_id, e.occurred_at);
+    const lastWrote = new Map<string, string>();
+    for (const e of events) {
+      if (e.type === 'OUTCOME_RECORDED' && e.item_id) lastOutcome.set(e.item_id, e.occurred_at);
+      if (e.type === 'REALTOR_CONTACTED' && e.item_id) lastWrote.set(e.item_id, e.occurred_at);
+    }
 
     const unreadReplies: UnreadReply[] = [];
     for (const r of (replies ?? []) as { id: string; item_id: string | null; body: string; created_at: string }[]) {
       if (!r.item_id) continue;
       const after = lastOutcome.get(r.item_id);
       if (after && r.created_at <= after) continue;
+      // Strictly after: a reply is an answer to our message, never the reverse.
+      const wrote = lastWrote.get(r.item_id);
+      if (wrote && r.created_at < wrote) continue;
       const item = items.find(i => i.itemId === r.item_id);
       if (!item) continue;
       let suggestion: ParseSuggestion | null = null;
@@ -143,8 +153,23 @@ export async function runPlanner(
       renterDraft = { messageId: newest.messageId, draft, ...(blocked ? { blocked } : {}) };
     }
 
+    // Times proposed on an earlier run and not recorded yet: the next agent's
+    // answer is checked against them too, so two replies a run apart cannot
+    // both take the same morning.
+    const proposedSlots: BusySlot[] = [];
+    for (const p of (existing ?? []) as ExistingProposal[]) {
+      const slot = (p.input?.slots as { startsAt?: string; durationMinutes?: number }[] | undefined)?.[0];
+      if (p.status !== 'PENDING' || p.action !== 'OUTCOME' || p.input?.outcome !== 'CONFIRMED' || !slot?.startsAt) continue;
+      const itemId = String(p.input.itemId ?? '');
+      proposedSlots.push({
+        itemId, listingTitle: items.find(i => i.itemId === itemId)?.listingTitle ?? 'another place',
+        startsAt: slot.startsAt, durationMinutes: Number(slot.durationMinutes) || 30,
+      });
+    }
+
     const proposals = planRequest({
-      requestId: req.id, view, events, items, availability, unreadReplies, renterDraft, now: opts.now.getTime(),
+      requestId: req.id, view, events, items, availability, unreadReplies, renterDraft, proposedSlots,
+      now: opts.now.getTime(),
     });
 
     const fresh = proposals.filter(p => !keys.has(p.key));

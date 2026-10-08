@@ -253,10 +253,14 @@ export interface RejectedListing {
 }
 
 /**
- * SPEC §0: a row missing any canonical column is searchable but not
- * shortlistable, and `price_confidence = 'LOW'` is excluded outright. The
- * partial index in the database is the enforcement; this is the explanation,
- * because "constraint violation" is not something to show a renter.
+ * SPEC §0: a row missing a price, a bedroom count or a district is searchable
+ * but cannot be requested, and `price_confidence = 'LOW'` is excluded
+ * outright. The reason is shown to the renter, because "constraint violation"
+ * is not something to show one.
+ *
+ * Floor area is not asked for (owner's decision, 2026-10-08). Arranging a
+ * viewing never reads it - the agent knows their flat - and requiring it kept
+ * one live listing in seven from being requested at all.
  */
 export function screenCandidates(
   requested: string[],
@@ -273,7 +277,6 @@ export function screenCandidates(
     if (c.price_vnd == null) { rejected.push({ listingId: id, reason: 'We do not have a confirmed price for this one.' }); continue; }
     if (c.price_confidence === 'LOW') { rejected.push({ listingId: id, reason: 'The advertised price for this one does not add up, so we cannot request it.' }); continue; }
     if (c.bedrooms == null) { rejected.push({ listingId: id, reason: 'We do not have a bedroom count for this one.' }); continue; }
-    if (c.area_sqm == null) { rejected.push({ listingId: id, reason: 'We do not have a floor area for this one.' }); continue; }
     if (!c.district_code) { rejected.push({ listingId: id, reason: 'We cannot place this one in a district.' }); continue; }
     eligible.push(c);
   }

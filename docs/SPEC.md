@@ -38,8 +38,14 @@ Do not restructure it. Add only:
 | `price_confirmed_at` | `timestamptz` | When the listing's price was last read back from the source and still matched. Only set by sources whose price can be re-read (today: nhatot, whose ad payload carries it), and left NULL elsewhere rather than filled with a check that was never run. `last_verified_at` only ever meant "the URL resolves", which is not the question ops needs answered. |
 | `contact_phone_e164` | `text` | Generated: `normalize_vn_phone(contact_phone)`, stored. NULL for a masked value (`0775 924 ***`) rather than a number nobody can ring, so it is what "has a dialable contact" means. `extract-phone` works through active rows where it is NULL. |
 
-`price_vnd`, `bedrooms`, `area_sqm` and `district_code` are NOT NULL for any row
-eligible for shortlisting. Enforce with a partial index, not application code.
+`price_vnd`, `bedrooms` and `district_code` are NOT NULL for any row that can
+be requested, and `price_confidence` is not `LOW` (`screenCandidates`, §1).
+`area_sqm` is not required (owner's decision, 2026-10-08): arranging a viewing
+never reads it, and requiring it kept 26 of 184 live listings from being
+requested for that reason alone. The partial index
+`external_properties_shortlistable_idx` still lists it - an index, which
+refuses nothing - and so do the building and area "on file" lists in the ops
+console, which are stricter than intake and so offer nothing it would refuse.
 
 **`price` carries two currencies and only its magnitude says which.** housingsgn
 quotes USD, and the display is not a reliable tell - a live row reads
@@ -218,11 +224,16 @@ the single source for all of it):
   and wait for each to answer. Both rules live in `intake.ts` rather than the
   date picker, so a client cannot offer a window the function will refuse.
 - A shortlisted listing must clear the §0 gate - active, `price_vnd`,
-  `bedrooms`, `area_sqm` and `district_code` all present, `price_confidence`
-  not `LOW`. Screening happens at submit rather than at shortlist time, because
-  verification runs every 20 minutes and can deactivate a row in between. A
-  listing that falls through is reported to the renter by name; the request
-  proceeds on the rest as long as `MIN_ITEMS` (1) survives.
+  `bedrooms` and `district_code` present, `price_confidence` not `LOW`; a
+  floor area is not asked for (2026-10-08). Screening happens at submit,
+  because verification runs every 20 minutes and can deactivate a row in
+  between - and, since 2026-10-08, when the modal opens too:
+  `viewing-request-open` takes the places it was opened for and returns the
+  ones the gate would refuse (`unrequestable`, with the reason), so "We
+  arrange it" says it cannot on the first screen rather than in red after the
+  renter picked times. A listing that falls through is reported to the renter
+  by name; the request proceeds on the rest as long as `MIN_ITEMS` (1)
+  survives.
 - Intake requires a signed-in user and **charges nothing** (since the pricing
   rework, 2026-10-06). The renter pays, if at all, when they lock in a plan
   agents have confirmed (§9, "Lock-in"), so a place already rented costs them
@@ -1201,11 +1212,25 @@ numbered; `NO_RESPONSE` after two chases and more silence; the itinerary once
 every agent has answered, ordered by the clock; `CONFIRM`/`RELEASE` to brokers
 owed the renter's decision; `CANCEL_REQUEST` on a renter's decline (low
 confidence - a keyword "no" can mean less). An agent reply stored after the
-item's last outcome is read by paste-parse (`parse-call.ts`, the same call as
-the console's button) and proposed as an outcome. Anything the rules cannot
-settle - a renter's question, no agent number, a reply that settles nothing,
-an itinerary with a clash - is `ESCALATE`, which is a proposal too, and can be
-wrong.
+item's last outcome, and after our last message to that agent, is read by
+paste-parse (`parse-call.ts`, the same call as the console's button) and
+proposed as an outcome. Anything the rules cannot settle - a renter's
+question, no agent number, a reply that settles nothing, an itinerary with a
+clash - is `ESCALATE`, which is a proposal too, and can be wrong.
+
+**A clash is caught as each agent answers** (2026-10-08). A confirmed time is
+checked against the request's other confirmed viewings (`busySlots`,
+`clashesWith` in `itinerary.ts` - overlap, the rule `warningsFor` uses, so
+back to back is fine), including confirmations proposed earlier and not yet
+recorded, and ones proposed earlier in the same pass. Times that clash are
+left out of the outcome. When every time the agent gave clashes, the proposal
+under that reply's `OUTCOME:<item>:<reply>` key is `CONTACTED` instead, with
+`clashDraft`: which stretch is taken, the renter's windows still ahead, and
+nothing about the other place. It runs alone like any message to an agent, and
+the agent's next reply is read afresh. The console's outcome form makes the
+same check as times are ticked and offers the same message. A clash that gets
+to assembly anyway is still `ESCALATE` (`ITINERARY_CLASH`), and the console's
+send stays disabled.
 
 | `operator_proposals` | |
 |---|---|

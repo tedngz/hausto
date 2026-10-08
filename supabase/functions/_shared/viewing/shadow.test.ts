@@ -166,6 +166,48 @@ describe('shadow mode', () => {
   });
 });
 
+describe('a time that clashes', () => {
+  const tick = () => new Promise(r => setTimeout(r, 5));
+
+  it('asks the agent for another time, then reads their next answer afresh', async () => {
+    db.tables.realtors.push({ id: 'realtor-2', phone_e164: '+84907654321' });
+    db.tables.request_items[1].realtor_id = 'realtor-2';
+    await act({ action: 'CONTACTED', itemId: 'i1', message: 'Chào anh' });
+    await act({ action: 'CONTACTED', itemId: 'i2', message: 'Chào chị' });
+    // Căn hộ Thảo Điền is fixed for 9:00-10:00 Tuesday.
+    await act({ action: 'OUTCOME', itemId: 'i1', outcome: 'CONFIRMED',
+      slots: [{ startsAt: '2026-09-29T02:00:00.000Z', durationMinutes: 60 }] });
+    await tick();
+    await act({ action: 'REALTOR_REPLY', itemId: 'i2', message: 'Thứ 3 9h được em' });
+    await plan();
+
+    const first = db.tables.realtor_messages.find(m => m.direction === 'IN')!;
+    const ask = byKey(`OUTCOME:i2:${first.id}`);
+    expect(ask).toMatchObject({ action: 'CONTACTED', status: 'PENDING' });
+    await tick();
+    expect((await act({ action: 'APPROVE_PROPOSAL', proposalId: ask.id })).status).toBe(200);
+    expect(db.tables.realtor_messages.filter(m => m.direction === 'OUT').pop()!.body).toContain('bị trùng');
+
+    // Answered by our message: not read again, nothing more proposed about it.
+    await plan();
+    expect(parses).toBe(1);
+    expect(proposals().filter(p => p.item_id === 'i2')).toHaveLength(1);
+
+    // Their next answer misses the other viewing and is recorded as usual.
+    await tick();
+    await act({ action: 'REALTOR_REPLY', itemId: 'i2', message: 'Vậy 10h30 nhé' });
+    // deno-lint-ignore no-explicit-any
+    await runPlanner(db as any, {
+      now: new Date('2026-09-27T02:00:00Z'),
+      parse: () => Promise.resolve({ ...suggestion, slots: [{ startsAt: '2026-09-29T03:30:00.000Z', durationMinutes: 30 }] }),
+    });
+    const second = db.tables.realtor_messages.filter(m => m.direction === 'IN').pop()!;
+    expect(byKey(`OUTCOME:i2:${second.id}`)).toMatchObject({
+      action: 'OUTCOME', input: { outcome: 'CONFIRMED', slots: [{ startsAt: '2026-09-29T03:30:00.000Z', durationMinutes: 30 }] },
+    });
+  });
+});
+
 describe('drafted renter replies', () => {
   let seen: string[] = [];
   const draftPlan = () =>

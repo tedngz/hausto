@@ -3,6 +3,7 @@ import { planRequest, type PlanItem, type PlanInput, type UnreadReply } from './
 import { reduceRequest, type DomainEvent } from '../viewing-domain.ts';
 import { NUDGE_AFTER_MS, HOUR_MS } from './reminders.ts';
 import type { ParseSuggestion } from './parse-reply.ts';
+import { autoEligible } from './autonomy.ts';
 
 const T0 = Date.parse('2026-09-27T01:00:00Z');
 let seq = 0;
@@ -110,6 +111,71 @@ describe('agent replies', () => {
       const [p] = plan(contacted(), { items: items(1), unreadReplies: [{ itemId: 'i1', messageId: 'rm1', suggestion: s }] });
       expect(p).toMatchObject({ key: 'OUTCOME:i1:rm1', action: 'ESCALATE', confidence: 'LOW' });
     }
+  });
+});
+
+describe('a time that clashes with a viewing already confirmed', () => {
+  // 02:00Z is 09:00 in Ho Chi Minh City.
+  const at = (startsAt: string, durationMinutes = 30) => ({ startsAt, durationMinutes });
+  const reply = (itemId: string, messageId: string, slots: ReturnType<typeof at>[]): UnreadReply => ({
+    itemId, messageId,
+    suggestion: { outcome: 'CONFIRMED', slots, actualPriceVnd: null, note: 'ok', confidence: 'HIGH', problems: [], model: 'm' },
+  });
+  // Căn 1 is fixed for 9:00-10:00 on Tuesday; Căn 2's agent has been asked.
+  const fixed = () => [
+    ...submitted(2),
+    ev('REALTOR_CONTACTED', 0, {}, 'i2'),
+    ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'CONFIRMED', slots: [{ starts_at: '2026-09-29T02:00:00.000Z', duration_minutes: 60 }] }, 'i1'),
+  ];
+
+  it('asks the agent for another time at once, rather than recording it', () => {
+    const p = byKey(plan(fixed(), { unreadReplies: [reply('i2', 'rm2', [at('2026-09-29T02:30:00.000Z')])] }))['OUTCOME:i2:rm2'];
+    expect(p).toMatchObject({ action: 'CONTACTED', confidence: 'HIGH', input: { itemId: 'i2', channel: 'ZALO' } });
+    expect(String(p.input.message)).toContain('09:30 ngày 29/09');
+    expect(String(p.input.message)).toContain('09:00-10:00 ngày 29/09');
+    expect(p.rationale).toContain('Căn 1');
+    // The AI operator may send it alone, like any other message to an agent.
+    expect(autoEligible(p)).toBe(true);
+  });
+
+  it('keeps the times that miss it, and says which it left out', () => {
+    const p = byKey(plan(fixed(), {
+      unreadReplies: [reply('i2', 'rm2', [at('2026-09-29T02:30:00.000Z'), at('2026-09-29T03:30:00.000Z')])],
+    }))['OUTCOME:i2:rm2'];
+    expect(p).toMatchObject({ action: 'OUTCOME', input: { outcome: 'CONFIRMED', slots: [at('2026-09-29T03:30:00.000Z')] } });
+    expect(p.rationale).toContain('Left out 09:30 on 29/09');
+  });
+
+  it('lets back to back through - the same rule as the itinerary', () => {
+    const p = byKey(plan(fixed(), { unreadReplies: [reply('i2', 'rm2', [at('2026-09-29T03:00:00.000Z')])] }))['OUTCOME:i2:rm2'];
+    expect(p.action).toBe('OUTCOME');
+  });
+
+  it('catches two agents giving the same morning in the same run', () => {
+    const events = [...submitted(2), ev('REALTOR_CONTACTED', 0, {}, 'i1'), ev('REALTOR_CONTACTED', 0, {}, 'i2')];
+    const ps = byKey(plan(events, {
+      unreadReplies: [reply('i1', 'rm1', [at('2026-09-29T02:00:00.000Z')]), reply('i2', 'rm2', [at('2026-09-29T02:00:00.000Z')])],
+    }));
+    expect(ps['OUTCOME:i1:rm1'].action).toBe('OUTCOME');
+    expect(ps['OUTCOME:i2:rm2'].action).toBe('CONTACTED');
+  });
+
+  it('checks against a confirmation proposed on an earlier run and not recorded yet', () => {
+    const events = [...submitted(2), ev('REALTOR_CONTACTED', 0, {}, 'i1'), ev('REALTOR_CONTACTED', 0, {}, 'i2')];
+    const p = byKey(plan(events, {
+      unreadReplies: [reply('i2', 'rm2', [at('2026-09-29T02:00:00.000Z')])],
+      proposedSlots: [{ itemId: 'i1', listingTitle: 'Căn 1', ...at('2026-09-29T02:00:00.000Z') }],
+    }))['OUTCOME:i2:rm2'];
+    expect(p.action).toBe('CONTACTED');
+  });
+
+  it('does not count an agent against their own earlier time', () => {
+    const events = [
+      ...submitted(1),
+      ev('OUTCOME_RECORDED', HOUR_MS, { outcome: 'CONFIRMED', slots: slot('2026-09-29T02:00:00.000Z') }, 'i1'),
+    ];
+    const p = byKey(plan(events, { items: items(1), unreadReplies: [reply('i1', 'rm1', [at('2026-09-29T02:00:00.000Z')])] }))['OUTCOME:i1:rm1'];
+    expect(p.action).toBe('OUTCOME');
   });
 });
 

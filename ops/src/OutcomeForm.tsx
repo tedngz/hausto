@@ -13,6 +13,11 @@
 // model for a reading and fills the form in. It fills, never submits - the
 // operator reads it, fixes anything wrong and presses Record, and what the
 // model suggested travels with the event so agreement can be measured.
+//
+// A confirmed time that overlaps another viewing already confirmed on the
+// request says so as it is ticked (`clashesWith`, the AI operator's own
+// check), with the message asking the agent for another time - rather than
+// the clash surfacing once every agent has answered and the plan will not go.
 
 import { useState } from 'react';
 import {
@@ -22,8 +27,10 @@ import {
   type Outcome,
 } from '../../supabase/functions/_shared/viewing/outcomes';
 import type { ParseSuggestion } from '../../supabase/functions/_shared/viewing/parse-reply';
-import { DAY_PART_HOURS } from '../../supabase/functions/_shared/viewing/intake';
+import { DAY_PART_HOURS, hcmcDate } from '../../supabase/functions/_shared/viewing/intake';
 import { hcmc } from '../../supabase/functions/_shared/viewing/triage';
+import { clashesWith, type BusySlot } from '../../supabase/functions/_shared/viewing/itinerary';
+import { clashDraft } from '../../supabase/functions/_shared/realtor/drafts';
 
 const LABEL: Record<Outcome, string> = {
   CONFIRMED: 'Confirmed a slot',
@@ -57,14 +64,24 @@ export function OutcomeForm({
   busy,
   nudges,
   availability,
+  itemId,
+  listingTitle,
+  taken,
   onSubmit,
   onSaveReply,
+  onAskAgain,
   onSuggest,
 }: {
   busy: boolean;
   nudges: number;
   availability: { date: string; part: string }[];
+  itemId: string;
+  listingTitle: string;
+  /** The request's other confirmed viewings. */
+  taken: BusySlot[];
   onSubmit: (body: Record<string, unknown>) => Promise<boolean>;
+  /** Ask the agent for another time, when every time they gave clashes. */
+  onAskAgain: (message: string) => Promise<boolean>;
   /** Store the agent's reply on its own, when it settles nothing yet. */
   onSaveReply: (body: Record<string, unknown>) => Promise<boolean>;
   /** Ask the parser what the reply says. Null when it could not answer. */
@@ -87,6 +104,8 @@ export function OutcomeForm({
   const [suggestion, setSuggestion] = useState<ParseSuggestion | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  // The ask-again message, once the operator has edited it.
+  const [askText, setAskText] = useState<string | null>(null);
 
   const windows = windowOptions(availability);
   const options = [
@@ -97,6 +116,7 @@ export function OutcomeForm({
   const reset = () => {
     setOutcome(null); setSlots([]); setExtra([]); setPrice(''); setNote(''); setDuration(30);
     setReply(''); setReplyKey(crypto.randomUUID()); setSuggestion(null); setSuggestError(null);
+    setAskText(null);
   };
 
   const addCustom = () => {
@@ -140,6 +160,27 @@ export function OutcomeForm({
   // the server would have given - rather than the operator pressing it and
   // being told no.
   const check = body ? validateOutcome(body, { priorNudges: nudges }) : null;
+
+  // Ticked times that overlap a viewing already confirmed on the request.
+  const clashing = outcome === 'CONFIRMED'
+    ? slots
+      .map(s => ({ startsAt: s, with: clashesWith({ startsAt: s, durationMinutes: duration }, taken, itemId) }))
+      .filter(c => c.with.length > 0)
+    : [];
+  const allClash = clashing.length > 0 && clashing.length === slots.length;
+  const today = hcmcDate(new Date());
+  const askDraft = allClash
+    ? clashDraft({
+      listingTitle, offered: clashing[0].startsAt, taken: clashing[0].with,
+      availability: availability.filter(w => w.date >= today),
+    })
+    : '';
+
+  const askAgain = async () => {
+    // The agent's words first, so the reply is on file before the answer to it.
+    if (reply.trim() && !await onSaveReply({ channel: 'ZALO', message: reply, clientKey: replyKey })) return;
+    if (await onAskAgain(askText ?? askDraft)) reset();
+  };
 
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
@@ -222,6 +263,30 @@ export function OutcomeForm({
               {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
             </select>
           </div>
+        </div>
+      )}
+
+      {clashing.length > 0 && (
+        <div className="small age-late" style={{ marginTop: 8 }}>
+          {clashing.map(c => (
+            <div key={c.startsAt}>
+              {hcmc(c.startsAt)} clashes with{' '}
+              {c.with.map(t => `${t.listingTitle} (${hcmc(t.startsAt)}, ${t.durationMinutes} min)`).join(' and ')}.
+            </div>
+          ))}
+          <div>
+            {allClash
+              ? 'Two viewings at once stop the plan going out. Ask the agent for another time instead:'
+              : 'Untick the time that clashes.'}
+          </div>
+        </div>
+      )}
+      {allClash && (
+        <div style={{ marginTop: 6 }}>
+          <textarea rows={6} value={askText ?? askDraft} onChange={e => setAskText(e.target.value)} />
+          <button disabled={busy} onClick={() => void askAgain()} style={{ marginTop: 4 }}>
+            Ask the agent for another time
+          </button>
         </div>
       )}
 
