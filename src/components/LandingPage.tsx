@@ -155,7 +155,7 @@ export const LandingPage = () => {
                 <BadgeCheck className="h-8 w-8 text-primary animate-gentle-bob" />
               </div>
               <h3 className="text-2xl text-foreground mb-4 font-serif font-normal">No bait listings</h3>
-              <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">Before you go, we check with the agent that the place is still free at the listed price.</p>
+              <p className="text-muted-foreground leading-relaxed [text-wrap:balance]">We check it's still free at the listed price before you go.</p>
             </CardContent>
           </Card>
         </div>
